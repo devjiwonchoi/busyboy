@@ -1,8 +1,5 @@
 import React from "react";
-import ReactDOM from "react-dom/client";
 import { createHashHistory, createBrowserHistory } from "@tanstack/react-router";
-
-import "./index.css";
 
 import { prepareProviderAuthDelivery } from "./providerAuthDelivery";
 import { isElectron } from "./env";
@@ -60,19 +57,30 @@ export const startup = Promise.all([
   .then(([ManagedAuthShell]) => {
     // A route chunk failure still resolves router.load(): the error is parked in
     // the lazy component and surfaces through the route error boundary.
-    if (reloadScheduled) return;
-    if (!chunkLoadFailed) clearChunkReloadGuard();
-    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    if (reloadScheduled) {
+      return null;
+    }
+    if (!chunkLoadFailed) {
+      clearChunkReloadGuard();
+    }
+    return (
       <React.StrictMode>
         {ManagedAuthShell && clerkPublishableKey ? (
           <ManagedAuthShell publishableKey={clerkPublishableKey}>{app}</ManagedAuthShell>
         ) : (
           app
         )}
-      </React.StrictMode>,
+      </React.StrictMode>
     );
   })
   .catch((error: unknown) => {
-    if (reloadScheduled) return;
+    if (reloadScheduled) {
+      return null;
+    }
     throw error;
   });
+
+// Next owns the React root; Vite's bootstrap can render the same prepared tree.
+export default function Main() {
+  return React.use(startup);
+}

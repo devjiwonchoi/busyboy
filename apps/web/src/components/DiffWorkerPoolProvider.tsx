@@ -1,6 +1,5 @@
 import { WorkerPoolContext, useWorkerPool } from "@pierre/diffs/react";
 import { WorkerPoolManager } from "@pierre/diffs/worker";
-import DiffsWorker from "@pierre/diffs/worker/worker.js?worker";
 import * as Schema from "effect/Schema";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useStableCallback } from "../hooks/useStableCallback";
@@ -38,7 +37,9 @@ function acquireDiffWorkerPool(themeName: DiffThemeName, poolSize: number) {
       {
         workerFactory: () => {
           try {
-            return new DiffsWorker();
+            return new Worker(new URL("@pierre/diffs/worker/worker.js", import.meta.url), {
+              type: "module",
+            });
           } catch (cause) {
             throw new DiffWorkerError({ operation: "create-worker", themeName, cause });
           }

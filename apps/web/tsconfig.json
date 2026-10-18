@@ -29,6 +29,7 @@
     "src",
     "vite",
     "vite.config.ts",
+    "next.config.ts",
     "test",
     "scripts/warm-dep-cache.ts",
     "../../scripts/lib/public-config.ts",

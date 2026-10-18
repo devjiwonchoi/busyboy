@@ -29,9 +29,19 @@ it("initializes React refresh before a shared UI chunk runs in bundled dev", asy
   try {
     await NodeFSP.mkdir(NodePath.join(root, "src/lib"), { recursive: true });
     await NodeFSP.writeFile(NodePath.join(root, "package.json"), '{"type":"module"}');
-    for (const file of ["index.html", "src/bootstrap.ts", "src/lib/bootError.ts"]) {
+    for (const file of ["index.html", "src/lib/bootError.ts"]) {
       await NodeFSP.copyFile(new URL(`../${file}`, import.meta.url), NodePath.join(root, file));
     }
+    // This Node fixture checks JS refresh ordering; CSS HMR has its own browser fixture below.
+    const bootstrap = await NodeFSP.readFile(new URL("./bootstrap.ts", import.meta.url), "utf8");
+    await NodeFSP.writeFile(
+      NodePath.join(root, "src/bootstrap.ts"),
+      bootstrap.replace('import "./index.css";', ""),
+    );
+    await NodeFSP.writeFile(
+      NodePath.join(root, "src/react-dom-client.ts"),
+      "export function createRoot() { return { render: globalThis.onStarted }; }",
+    );
     await NodeFSP.writeFile(
       NodePath.join(root, "src/shared.tsx"),
       "export function Shared() { return <div>ready</div>; }",
@@ -39,7 +49,7 @@ it("initializes React refresh before a shared UI chunk runs in bundled dev", asy
     await NodeFSP.writeFile(
       NodePath.join(root, "src/main.tsx"),
       `import { Shared } from "./shared";
-export const startup = Promise.resolve().then(() => globalThis.onStarted(Shared()));`,
+export const startup = Promise.resolve().then(() => Shared());`,
     );
 
     server = await createServer({
@@ -48,7 +58,10 @@ export const startup = Promise.resolve().then(() => globalThis.onStarted(Shared(
       publicDir: NodeURL.fileURLToPath(new URL("../public", import.meta.url)),
       logLevel: "silent",
       resolve: {
-        alias: { react: NodePath.dirname(NodeURL.fileURLToPath(import.meta.resolve("react"))) },
+        alias: {
+          "react-dom/client": NodePath.join(root, "src/react-dom-client.ts"),
+          react: NodePath.dirname(NodeURL.fileURLToPath(import.meta.resolve("react"))),
+        },
       },
       experimental: { bundledDev: true },
       plugins: [
