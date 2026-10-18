@@ -825,7 +825,7 @@ async function customEntries(
 ): Promise<ReadonlyArray<ThirdPartyLicenseEntry>> {
   const deviceToolVersions: unknown = JSON.parse(
     await NodeFSP.readFile(
-      new URL("../../apps/server/src/device/deviceToolVersions.json", import.meta.url),
+      new NodeURL.URL("../../apps/server/src/device/deviceToolVersions.json", import.meta.url),
       "utf8",
     ),
   );

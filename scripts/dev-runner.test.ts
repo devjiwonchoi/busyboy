@@ -85,9 +85,20 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   );
 
   describe("getDevRunnerModeArgs", () => {
-    it.effect("lets Vite+ honor the desktop dev task graph", () =>
+    it.effect("defaults desktop and renderer development to matching Next tasks", () =>
       Effect.sync(() => {
-        assert.deepStrictEqual(getDevRunnerModeArgs("dev:desktop"), [
+        assert.deepStrictEqual(getDevRunnerModeArgs("dev:desktop", undefined), [
+          "run",
+          "--filter=@t3tools/desktop",
+          "--filter=@t3tools/web",
+          "dev:next",
+        ]);
+        assert.equal(getDevRunnerModeArgs("dev:desktop", "vite").at(-1), "dev");
+      }),
+    );
+    it.effect("preserves the explicit Vite desktop fallback task graph", () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(getDevRunnerModeArgs("dev:desktop", "vite"), [
           "run",
           "--filter=@t3tools/desktop",
           "--filter=@t3tools/web",
@@ -98,7 +109,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
     it.effect("places Vite+ run flags before the task name", () =>
       Effect.sync(() => {
-        assert.deepStrictEqual(getDevRunnerModeArgs("dev"), [
+        assert.deepStrictEqual(getDevRunnerModeArgs("dev", undefined), [
           "run",
           "--filter=@t3tools/contracts",
           "--filter=@t3tools/web",
