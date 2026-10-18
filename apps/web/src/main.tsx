@@ -1,8 +1,5 @@
 import React from "react";
-import ReactDOM from "react-dom/client";
 import { createHashHistory, createBrowserHistory } from "@tanstack/react-router";
-
-import "./index.css";
 
 import { prepareProviderAuthDelivery } from "./providerAuthDelivery";
 import { isElectron } from "./env";
@@ -44,13 +41,22 @@ const app = <AppRoot router={router} />;
 export const startup = router
   .load()
   .then(() => {
-    if (reloadScheduled) return;
-    if (!chunkLoadFailed) clearChunkReloadGuard();
-    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-      <React.StrictMode>{app}</React.StrictMode>,
-    );
+    if (reloadScheduled) {
+      return null;
+    }
+    if (!chunkLoadFailed) {
+      clearChunkReloadGuard();
+    }
+    return <React.StrictMode>{app}</React.StrictMode>;
   })
   .catch((error: unknown) => {
-    if (reloadScheduled) return;
+    if (reloadScheduled) {
+      return null;
+    }
     throw error;
   });
+
+// Next owns the React root; Vite's bootstrap can render the same prepared tree.
+export default function Main() {
+  return React.use(startup);
+}

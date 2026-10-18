@@ -37,51 +37,49 @@ vi.mock(import("../../hooks/useTheme"), async (original) => ({
   useTheme: (() => ({ resolvedTheme: "dark" })) as never,
 }));
 
-// Wraps Pierre's real worker so the suite can count workers, read requests and hold startup.
-// Vite's `?worker` export is a factory that returns a plain Worker, so this patches the instance.
-vi.mock("@pierre/diffs/worker/worker.js?worker", async (original) => {
-  const actual = await original<{ default: new () => Worker }>();
-  return {
-    ...actual,
-    default: function TestDiffsWorker() {
-      if (testState.failWorkers) throw new Error("Worker creation failed");
-      const worker = new actual.default();
-      testState.workers.push(worker);
-      const addEventListener = worker.addEventListener.bind(worker);
-      const postMessage = worker.postMessage.bind(worker);
-      const terminate = worker.terminate.bind(worker);
-      worker.addEventListener = (type: string, listener: EventListenerOrEventListenerObject) => {
-        if (type !== "message" || typeof listener !== "function") {
-          addEventListener(type, listener);
-          return;
+// Wrap the real browser Worker without depending on a bundler-specific worker import.
+const BrowserWorker = globalThis.Worker;
+function TestDiffsWorker(url: string | URL, options: WorkerOptions | undefined) {
+  if (testState.failWorkers) {
+    throw new Error("Worker creation failed");
+  }
+  const worker = new BrowserWorker(url, options);
+  testState.workers.push(worker);
+  const addEventListener = worker.addEventListener.bind(worker);
+  const postMessage = worker.postMessage.bind(worker);
+  const terminate = worker.terminate.bind(worker);
+  worker.addEventListener = (type: string, listener: EventListenerOrEventListenerObject) => {
+    if (type !== "message" || typeof listener !== "function") {
+      addEventListener(type, listener);
+      return;
+    }
+    addEventListener("message", (event) => {
+      const data = (event as MessageEvent<WorkerResponse>).data;
+      const deliver = () => listener(event);
+      if (
+        testState.holdInitialization &&
+        data.type === "success" &&
+        data.requestType === "initialize"
+      ) {
+        testState.heldResponses.push(deliver);
+        if (testState.heldResponses.length === 2) {
+          testState.onInitializationHeld?.();
         }
-        addEventListener("message", (event) => {
-          const data = (event as MessageEvent<WorkerResponse>).data;
-          const deliver = () => listener(event);
-          if (
-            testState.holdInitialization &&
-            data.type === "success" &&
-            data.requestType === "initialize"
-          ) {
-            testState.heldResponses.push(deliver);
-            if (testState.heldResponses.length === 2) testState.onInitializationHeld?.();
-          } else {
-            deliver();
-          }
-        });
-      };
-      worker.postMessage = (message: WorkerRequest) => {
-        testState.requests.push(message);
-        postMessage(message);
-      };
-      worker.terminate = () => {
-        testState.terminations += 1;
-        terminate();
-      };
-      return worker;
-    },
+      } else {
+        deliver();
+      }
+    });
   };
-});
+  worker.postMessage = (message: WorkerRequest) => {
+    testState.requests.push(message);
+    postMessage(message);
+  };
+  worker.terminate = () => {
+    testState.terminations += 1;
+    terminate();
+  };
+  return worker;
+}
 
 // Pierre's real viewer virtualizes into a shadow root; this stand-in renders each file through
 // the same worker pool and keeps the highlighted HTML readable.
@@ -167,6 +165,7 @@ const loadingViews = () => document.querySelectorAll('[role="status"]').length;
 
 describe("code-view worker lifecycle", () => {
   beforeEach(() => {
+    vi.stubGlobal("Worker", TestDiffsWorker);
     testState.workers = [];
     testState.terminations = 0;
     testState.requests = [];

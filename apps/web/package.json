@@ -6,6 +6,7 @@
   "scripts": {
     "build:ghostty-wasm": "bash scripts/build-libghostty-wasm.sh",
     "dev": "vp dev",
+    "dev:next": "next dev --webpack --hostname 127.0.0.1 --port ${PORT:-5733}",
     "build": "vp build",
     "preview": "vp preview",
     "typecheck": "tsc-rs --noEmit",
@@ -62,6 +63,7 @@
     "lucide-react": "^0.564.0",
     "mermaid": "^11.17.2",
     "morphicons": "^1.7.1",
+    "next": "16.4.2",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
@@ -74,6 +76,7 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@tailwindcss/postcss": "4.3.3",
     "@tailwindcss/vite": "^4.0.0",
     "@tanstack/router-plugin": "^1.161.0",
     "@types/compression": "^1.8.1",

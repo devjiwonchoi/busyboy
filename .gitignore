@@ -1,4 +1,7 @@
 node_modules
+/.jwn/
+/apps/web/.next/
+/apps/web/next-env.d.ts
 .bun
 .turbo
 .DS_Store
