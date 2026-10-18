@@ -1077,7 +1077,7 @@ describe("timeline tooltip scroll dismissal", () => {
         originalUrl="https://example.com"
         target={{
           environmentId: ENVIRONMENT_ID,
-          input: { projectId: "project-1" as never, repository: "pingdotgg/t3code", number: 1 },
+          input: { projectId: "project-1" as never, repository: "devjiwonchoi/busyboy", number: 1 },
         }}
       />
     ) : (

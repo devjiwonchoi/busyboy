@@ -168,7 +168,7 @@ it("routes links from the expanded page through its thread", async () => {
   await click("Open full screen");
   const frame = document.querySelector<HTMLIFrameElement>('[role="dialog"] iframe')!;
   frame.focus();
-  const url = "https://github.com/pingdotgg/t3code/pull/17561";
+  const url = "https://github.com/devjiwonchoi/busyboy/pull/17561";
   await act(() => {
     window.dispatchEvent(
       new MessageEvent("message", {

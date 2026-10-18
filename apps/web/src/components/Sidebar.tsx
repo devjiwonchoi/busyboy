@@ -325,7 +325,7 @@ function sameSidebarProviderEntries(
   return true;
 }
 
-// Threads on non-primary environments (T3 Connect, hosted) resolve their
+// Threads on non-primary environments (legacy hosted connections, hosted) resolve their
 // provider entry from their own environment's config: default instance ids
 // are driver slugs, so a flat map would collide across environments.
 const sidebarProviderEntriesAtom = Atom.make((get) => {

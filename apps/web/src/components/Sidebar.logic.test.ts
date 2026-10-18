@@ -80,16 +80,16 @@ describe("resolveSidebarRowAccessibility", () => {
     {
       title: "Can you audit the UI?",
       statusLabel: "Working",
-      projectDisplayName: "T3 Code",
+      projectDisplayName: "Busyboy",
       isActive: true,
-      expected: { label: "Can you audit the UI?, Working, T3 Code", current: "page" },
+      expected: { label: "Can you audit the UI?, Working, Busyboy", current: "page" },
     },
     {
       title: "The audit is done",
       statusLabel: null,
-      projectDisplayName: "T3 Code",
+      projectDisplayName: "Busyboy",
       isActive: false,
-      expected: { label: "The audit is done, T3 Code", current: undefined },
+      expected: { label: "The audit is done, Busyboy", current: undefined },
     },
     {
       title: "Untitled task",
@@ -994,14 +994,14 @@ describe("resolveSidebarThreadStatus", () => {
 describe("pullRequestMatchesSearchQuery", () => {
   const branchPullRequest = {
     projectId: ProjectId.make("project"),
-    repository: "pingdotgg/t3code",
+    repository: "devjiwonchoi/busyboy",
     number: 123,
-    url: "https://github.com/pingdotgg/t3code/pull/123",
+    url: "https://github.com/devjiwonchoi/busyboy/pull/123",
   };
 
   it("matches when every query token appears in the PR's terms", () => {
     expect(pullRequestMatchesSearchQuery({ branchPullRequest }, "123")).toBe(true);
-    expect(pullRequestMatchesSearchQuery({ branchPullRequest }, "pingdotgg/t3code #123")).toBe(
+    expect(pullRequestMatchesSearchQuery({ branchPullRequest }, "devjiwonchoi/busyboy #123")).toBe(
       true,
     );
   });

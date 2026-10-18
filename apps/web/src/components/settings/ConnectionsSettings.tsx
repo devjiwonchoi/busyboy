@@ -157,9 +157,7 @@ import {
   supportsDesktopAppUpdate,
   supportsServerUpdateThreadContinuation,
 } from "~/versionSkew";
-import { hasCloudPublicConfig } from "~/cloud/publicConfig";
-import { RemoveT3ConnectEnvironmentDialog } from "../clerk/RemoveT3ConnectEnvironmentDialog";
-import { useCloudLinkController } from "~/cloud/useCloudLinkController";
+
 import { authEnvironment } from "~/state/auth";
 import { environmentCatalog } from "~/connection/catalog";
 import {
@@ -198,7 +196,7 @@ import {
   ServerUpdatesAction,
   type ServerUpdateTarget,
 } from "../ServerUpdateAction";
-import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectList";
+
 import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "./itemRows";
 import {
   resolveShortcutCommand,
@@ -1752,219 +1750,7 @@ function SavedBackendListRow({
   );
 }
 
-function CloudLinkSwitch({
-  checked,
-  disabled,
-  disabledReason,
-  onCheckedChange,
-  ariaLabel = "Enable T3 Connect",
-}: {
-  readonly checked: boolean;
-  readonly disabled: boolean;
-  readonly disabledReason: string | null;
-  readonly onCheckedChange?: (enabled: boolean) => void;
-  readonly ariaLabel?: string;
-}) {
-  const control = (
-    <Switch
-      aria-label={ariaLabel}
-      checked={checked}
-      disabled={disabled}
-      {...(onCheckedChange ? { onCheckedChange } : {})}
-    />
-  );
-  return disabledReason ? (
-    <Tooltip>
-      <TooltipTrigger render={<span className="inline-flex">{control}</span>} />
-      <TooltipPopup side="top">{disabledReason}</TooltipPopup>
-    </Tooltip>
-  ) : (
-    control
-  );
-}
-
-function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: boolean }) {
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const {
-    isSignedIn,
-    linkState: primaryCloudLinkState,
-    linkRevoked,
-    managedTunnelActive,
-    managedTunnelOutOfSync,
-    publishAgentActivity,
-    holdWebhooksWhileOffline,
-    operationError,
-    reconcileCloudState,
-  } = useCloudLinkController();
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [isUpdatingPreference, setIsUpdatingPreference] = useState(false);
-
-  const disabledReason = !isSignedIn
-    ? "Sign in to T3 Connect to manage this environment."
-    : !canManageRelay
-      ? "Your session does not have permission to manage T3 Connect access."
-      : null;
-  const isBusy = isUpdating || isUpdatingPreference;
-
-  const updateManagedTunnel = async (enabled: boolean) => {
-    if (
-      primaryEnvironmentId === null ||
-      !readEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope)
-    )
-      return;
-    setIsUpdating(true);
-    const ok = await reconcileCloudState({ managedTunnel: enabled, publish: publishAgentActivity });
-    if (ok) {
-      toastManager.add({
-        type: "success",
-        title: enabled
-          ? "T3 Connect linked"
-          : publishAgentActivity
-            ? "T3 Connect tunnel disabled"
-            : "T3 Connect unlinked",
-        description: enabled
-          ? "This environment is available through T3 Connect."
-          : publishAgentActivity
-            ? "The managed tunnel was removed. Agent activity publishing stays on."
-            : "This environment is no longer available through T3 Connect.",
-      });
-    }
-    setIsUpdating(false);
-  };
-
-  const updatePublishAgentActivity = async (enabled: boolean) => {
-    if (
-      primaryEnvironmentId === null ||
-      !readEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope)
-    )
-      return;
-    setIsUpdatingPreference(true);
-    const ok = await reconcileCloudState({ managedTunnel: managedTunnelActive, publish: enabled });
-    if (ok) {
-      toastManager.add({
-        type: "success",
-        title: enabled ? "Agent activity enabled" : "Agent activity disabled",
-        description: enabled
-          ? "This environment publishes agent activity to your mobile clients."
-          : "This environment will stop publishing agent activity.",
-      });
-    }
-    setIsUpdatingPreference(false);
-  };
-
-  const updateHoldWebhooks = async (enabled: boolean) => {
-    setIsUpdatingPreference(true);
-    const ok = await reconcileCloudState({
-      managedTunnel: managedTunnelActive,
-      publish: publishAgentActivity,
-      holdWebhooksWhileOffline: enabled,
-    });
-    if (ok) {
-      toastManager.add({
-        type: "success",
-        title: enabled ? "Webhooks held while offline" : "Webhooks no longer held",
-        description: enabled
-          ? "T3 Connect keeps webhook requests for up to 24 hours while this environment is offline."
-          : "Requests to an offline environment now fail. Anything already held is still delivered.",
-      });
-    }
-    setIsUpdatingPreference(false);
-  };
-
-  return (
-    <>
-      {window.desktopBridge ? (
-        <SettingsRow
-          title={searchableSetting("t3-connect").title}
-          description={
-            linkRevoked
-              ? "This environment was removed from T3 Connect. Turn it on to link it again."
-              : managedTunnelActive
-                ? "This environment is available to your other devices through T3 Connect."
-                : managedTunnelOutOfSync
-                  ? "T3 Connect is out of sync. This environment is linked only to publish agent activity, so other devices cannot connect. Turn T3 Connect on to repair it."
-                  : "Make this environment available to your other devices through T3 Connect."
-          }
-          status={operationError ?? primaryCloudLinkState.error}
-          control={
-            <CloudLinkSwitch
-              checked={managedTunnelActive}
-              disabled={
-                !canManageRelay ||
-                !isSignedIn ||
-                primaryCloudLinkState.data === null ||
-                primaryCloudLinkState.isPending ||
-                isBusy
-              }
-              disabledReason={disabledReason}
-              onCheckedChange={(enabled) => void updateManagedTunnel(enabled)}
-            />
-          }
-        />
-      ) : linkRevoked ? (
-        <SettingsRow
-          title={searchableSetting("t3-connect").title}
-          description="This environment was removed from T3 Connect. Run `t3 connect link` on the host to link it again."
-        />
-      ) : null}
-      <SettingsRow
-        title={searchableSetting("publish-agent-activity").title}
-        description="Send activity to mobile notifications and Live Activities without T3 Connect."
-        control={
-          <CloudLinkSwitch
-            ariaLabel="Publish agent activity to mobile clients"
-            checked={publishAgentActivity}
-            disabled={
-              !canManageRelay ||
-              !isSignedIn ||
-              primaryCloudLinkState.data === null ||
-              primaryCloudLinkState.isPending ||
-              isBusy
-            }
-            disabledReason={disabledReason}
-            onCheckedChange={(enabled) => void updatePublishAgentActivity(enabled)}
-          />
-        }
-      />
-      {managedTunnelActive ? (
-        <SettingsRow
-          title={searchableSetting("hold-webhooks-while-offline").title}
-          description="Keep webhook requests for up to 24 hours while this environment is offline, then deliver them. Off: T3 Connect only forwards requests and stores nothing."
-          control={
-            <CloudLinkSwitch
-              ariaLabel="Hold webhook requests while this environment is offline"
-              checked={holdWebhooksWhileOffline}
-              disabled={!canManageRelay || !isSignedIn || primaryCloudLinkState.isPending || isBusy}
-              disabledReason={disabledReason}
-              onCheckedChange={(enabled) => void updateHoldWebhooks(enabled)}
-            />
-          }
-        />
-      ) : null}
-    </>
-  );
-}
-
-function CloudLinkRow({
-  canReadRelay,
-  canManageRelay,
-}: {
-  readonly canReadRelay: boolean;
-  readonly canManageRelay: boolean;
-}) {
-  if (!hasCloudPublicConfig()) return null;
-  if (!canReadRelay) {
-    return (
-      <SettingsRow
-        title="T3 Connect"
-        description="To edit these settings, pair this connection with both View relay and Manage relay permissions."
-      />
-    );
-  }
-  return <ConfiguredCloudLinkRow canManageRelay={canManageRelay} />;
-}
-
-function EmptyRemoteEnvironments({ cloudEnabled = true }: { readonly cloudEnabled?: boolean }) {
+function EmptyRemoteEnvironments() {
   return (
     <Empty className="min-h-52">
       <EmptyMedia variant="icon">
@@ -1973,31 +1759,11 @@ function EmptyRemoteEnvironments({ cloudEnabled = true }: { readonly cloudEnable
       <EmptyHeader>
         <EmptyTitle>No saved remote environments</EmptyTitle>
         <EmptyDescription>
-          {cloudEnabled
-            ? "Click “Add environment” to pair another environment, or connect one from T3 Connect."
-            : "Click “Add environment” to pair another environment."}
+          {"Click “Add environment” to pair another environment."}
         </EmptyDescription>
       </EmptyHeader>
     </Empty>
   );
-}
-
-function CloudRemoteEnvironmentRows({
-  primaryEnvironmentId,
-  savedEnvironments,
-}: {
-  readonly primaryEnvironmentId: EnvironmentId | null;
-  readonly savedEnvironments: ReadonlyArray<EnvironmentPresentation>;
-}) {
-  return hasCloudPublicConfig() ? (
-    <CloudEnvironmentConnectRows
-      primaryEnvironmentId={primaryEnvironmentId}
-      savedEnvironments={savedEnvironments}
-      empty={<EmptyRemoteEnvironments />}
-    />
-  ) : savedEnvironments.length === 0 ? (
-    <EmptyRemoteEnvironments cloudEnabled={false} />
-  ) : null;
 }
 
 export function ConnectionsSettings() {
@@ -2678,15 +2444,7 @@ export function ConnectionsSettings() {
     }
   };
 
-  // T3 Connect environments get their own dialog: removing one here leaves its
-  // account registration, so it points to where that can be deregistered.
-  const [pendingT3ConnectRemoval, setPendingT3ConnectRemoval] =
-    useState<EnvironmentPresentation | null>(null);
   const handleRemoveSavedBackend = async (environment: EnvironmentPresentation) => {
-    if (environment.relayManaged && hasCloudPublicConfig()) {
-      setPendingT3ConnectRemoval(environment);
-      return;
-    }
     const confirmed = await requestConfirmDialog(
       `Remove ${environment.label} from this device?\nThis forgets its pairing, credentials, and cached threads here. Switch it off instead to keep it saved.`,
       { variant: "destructive" },
@@ -2801,55 +2559,9 @@ export function ConnectionsSettings() {
       </div>
     </div>
   );
-  const relayRouteOffer =
-    routeTarget !== null &&
-    !routeTarget.relayManaged &&
-    relayDiscoveryState.environments.has(routeTarget.environmentId)
-      ? relayDiscoveryState.environments.get(routeTarget.environmentId)!.environment
-      : null;
-  const addRelayRoute = async () => {
-    if (relayRouteOffer === null || routeTarget === null) return;
-    setIsAddingSavedBackend(true);
-    const result = await registerEnvironment(
-      new RelayConnectionRegistration({
-        target: new RelayConnectionTarget({
-          environmentId: relayRouteOffer.environmentId,
-          label: routeTarget.label,
-        }),
-      }),
-    );
-    setIsAddingSavedBackend(false);
-    if (result._tag === "Failure") {
-      if (!isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        setSavedBackendError(error instanceof Error ? error.message : "Could not add the route.");
-      }
-      return;
-    }
-    setAddBackendDialogOpen(false);
-    toastManager.add({
-      type: "success",
-      title: "Route added",
-      description: `${routeTarget.label} falls back to T3 Connect when its other routes are unreachable.`,
-    });
-  };
+
   const renderRemoteModeBody = () => (
     <div className="space-y-4">
-      {relayRouteOffer !== null ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-          <p className="text-xs text-muted-foreground">
-            This machine is on your T3 Connect account. Use it as a fallback route.
-          </p>
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={isAddingSavedBackend}
-            onClick={() => void addRelayRoute()}
-          >
-            Add T3 Connect
-          </Button>
-        </div>
-      ) : null}
       {renderRemoteFields()}
       {savedBackendError ? <p className="text-xs text-destructive">{savedBackendError}</p> : null}
       <Button
@@ -3243,7 +2955,7 @@ export function ConnectionsSettings() {
         {desktopWslState.enabled ? (
           <SettingsRow
             title="WSL only"
-            description="Run only the WSL backend. T3 Code restarts when this changes."
+            description="Run only the WSL backend. Busyboy restarts when this changes."
             className="bg-muted/20 pl-7 sm:pl-8"
             control={
               <Switch
@@ -3478,17 +3190,9 @@ export function ConnectionsSettings() {
                 {renderEndpointRows("endpoint-rail")}
                 {renderTailscaleRow()}
                 {renderWslRow()}
-                {canReadRelay || canManageRelay ? (
-                  <CloudLinkRow canReadRelay={canReadRelay} canManageRelay={canManageRelay} />
-                ) : null}
               </>
             ) : canManageLocalBackend ? (
-              <>
-                {renderDisabledNetworkAccessRow()}
-                {canReadRelay || canManageRelay ? (
-                  <CloudLinkRow canReadRelay={canReadRelay} canManageRelay={canManageRelay} />
-                ) : null}
-              </>
+              <>{renderDisabledNetworkAccessRow()}</>
             ) : null}
             {primaryEnvironment ? (
               <details className="group px-3 sm:px-4">
@@ -3568,8 +3272,8 @@ export function ConnectionsSettings() {
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {pendingDesktopServerExposureMode === "network-accessible"
-                    ? "Let your other devices connect to T3 Code over the network. Pair devices to give them access. T3 Code will restart."
-                    : "Devices connected over your local network will disconnect. Existing tunnels, such as T3 Connect or Tailscale HTTPS, keep working. T3 Code will restart."}
+                    ? "Let your other devices connect to Busyboy over the network. Pair devices to give them access. Busyboy will restart."
+                    : "Devices connected over your local network will disconnect. Tailscale HTTPS keeps working. Busyboy will restart."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -3625,15 +3329,15 @@ export function ConnectionsSettings() {
                 <AlertDialogDescription>
                   {pendingWslChange?.kind === "disable"
                     ? pendingWslChange.wasWslOnly
-                      ? "T3 Code will restart on the Windows backend. Threads and projects opened against WSL stay safe inside the distro and become available again when you re-enable WSL."
-                      : "The WSL backend will stop. Threads and projects opened against WSL stay safe inside the distro, but they'll be unavailable in T3 Code until you re-enable WSL."
+                      ? "Busyboy will restart on the Windows backend. Threads and projects opened against WSL stay safe inside the distro and become available again when you re-enable WSL."
+                      : "The WSL backend will stop. Threads and projects opened against WSL stay safe inside the distro, but they'll be unavailable in Busyboy until you re-enable WSL."
                     : pendingWslChange?.kind === "distro"
-                      ? "T3 Code will restart the WSL backend on the new distro. Sessions still running on the current distro will be interrupted."
+                      ? "Busyboy will restart the WSL backend on the new distro. Sessions still running on the current distro will be interrupted."
                       : pendingWslChange?.kind === "enable"
                         ? "Run the WSL backend alongside the Windows one, or stop the Windows backend and use only WSL? You can change this later from Settings."
                         : pendingWslChange?.nextValue
-                          ? "T3 Code will restart and start only the WSL backend. Your Windows-side projects won't be accessible until you turn this off again."
-                          : "T3 Code will restart and bring the Windows backend back up alongside WSL."}
+                          ? "Busyboy will restart and start only the WSL backend. Your Windows-side projects won't be accessible until you turn this off again."
+                          : "Busyboy will restart and bring the Windows backend back up alongside WSL."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -3719,7 +3423,7 @@ export function ConnectionsSettings() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Disable Tailscale HTTPS?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  T3 Code will restart the local backend without Tailscale Serve.
+                  Busyboy will restart the local backend without Tailscale Serve.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -3757,7 +3461,7 @@ export function ConnectionsSettings() {
               <DialogHeader>
                 <DialogTitle>Set up Tailscale HTTPS?</DialogTitle>
                 <DialogDescription>
-                  T3 Code will restart the local backend with Tailscale Serve enabled and ask
+                  Busyboy will restart the local backend with Tailscale Serve enabled and ask
                   Tailscale to proxy HTTPS traffic to this backend.
                 </DialogDescription>
               </DialogHeader>
@@ -3826,9 +3530,6 @@ export function ConnectionsSettings() {
             description="Connect an environment to view its settings and access."
           />
           <LocalEnvironmentSetting />
-          {canReadRelay || canManageRelay ? (
-            <CloudLinkRow canReadRelay={canReadRelay} canManageRelay={canManageRelay} />
-          ) : null}
         </SettingsSection>
       )}
     </>
@@ -3925,22 +3626,8 @@ export function ConnectionsSettings() {
             }}
           />
         ))}
-        <CloudRemoteEnvironmentRows
-          primaryEnvironmentId={primaryEnvironmentId}
-          savedEnvironments={savedEnvironments}
-        />
       </SettingsSection>
-      {hasCloudPublicConfig() ? (
-        <RemoveT3ConnectEnvironmentDialog
-          environmentLabel={pendingT3ConnectRemoval?.label ?? null}
-          onCancel={() => setPendingT3ConnectRemoval(null)}
-          onConfirm={() => {
-            if (!pendingT3ConnectRemoval) return;
-            setPendingT3ConnectRemoval(null);
-            void removeSavedBackend(pendingT3ConnectRemoval);
-          }}
-        />
-      ) : null}
+
       <LoadBalancingSettings environments={loadBalancingEnvironments} />
       <GitHubRoutingSettings environments={loadBalancingEnvironments} />
     </SettingsPageContainer>

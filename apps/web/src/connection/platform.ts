@@ -20,7 +20,7 @@ import {
 } from "@t3tools/client-runtime/connection";
 import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
-import { managedRelayAccountChanges, managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
+
 import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
@@ -141,9 +141,6 @@ const layerWakeups = Wakeups.layer({
               document.removeEventListener("visibilitychange", listener);
             }),
         ).pipe(Effect.asVoid),
-      ),
-      managedRelayAccountChanges(appAtomRegistry).pipe(
-        Stream.map(() => "credentials-changed" as const),
       ),
       networkPathChanges,
     ],
@@ -282,34 +279,13 @@ const layerCapabilities = Layer.effectContext(
       metadata: clientMetadata(),
     });
     const cloudSession = ClientCapabilities.CloudSession.of({
-      identity: Effect.sync(() =>
-        Option.fromNullishOr(appAtomRegistry.get(managedRelaySessionAtom)),
+      identity: Effect.succeedNone,
+      clerkToken: Effect.fail(
+        new ConnectionBlockedError({
+          reason: "configuration",
+          detail: "Hosted accounts are not supported. Pair this environment directly.",
+        }),
       ),
-      clerkToken: Effect.gen(function* () {
-        const session = appAtomRegistry.get(managedRelaySessionAtom);
-        if (session === null) {
-          return yield* new ConnectionBlockedError({
-            reason: "authentication",
-            detail: "Sign in to T3 Connect to connect this environment.",
-          });
-        }
-        const token = yield* session.readClerkToken().pipe(
-          Effect.mapError(
-            (error) =>
-              new ConnectionTransientError({
-                reason: "network",
-                detail: error.message,
-              }),
-          ),
-        );
-        if (token === null) {
-          return yield* new ConnectionBlockedError({
-            reason: "authentication",
-            detail: "The T3 Connect session is unavailable.",
-          });
-        }
-        return token;
-      }),
     });
     const identity = ClientCapabilities.RelayDeviceIdentity.of({
       deviceId: Effect.succeedNone,

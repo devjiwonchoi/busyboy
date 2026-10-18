@@ -138,7 +138,7 @@ describe("makeComposerMentionDragHandlers", () => {
     const pullRequest = {
       number: 18094,
       title: "fix(server): queued runs land on the timeline where they started",
-      url: "https://github.com/pingdotgg/t3code/pull/18094",
+      url: "https://github.com/devjiwonchoi/busyboy/pull/18094",
       headBranch: "fix/run-timeline-position",
       baseBranch: "main",
       state: "open",

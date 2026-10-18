@@ -14,7 +14,9 @@ describe("buildT3ProjectFileJsonSchema", () => {
     const schema = buildT3ProjectFileJsonSchema();
 
     expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
-    expect(schema.$id).toBe("https://t3.codes/schema/t3.json");
+    expect(schema.$id).toBe(
+      "https://raw.githubusercontent.com/devjiwonchoi/busyboy/main/schema/project.schema.json",
+    );
     expect(schema.type).toBe("object");
     expect(schema.additionalProperties).toBe(false);
   });

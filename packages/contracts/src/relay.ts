@@ -649,10 +649,7 @@ export class RelayEnvironmentPrincipal extends Context.Service<
 >()("@t3tools/contracts/relay/RelayEnvironmentPrincipal") {}
 
 const RelayClientBearerAuthorization = HttpApiSecurity.http({ scheme: "bearer" }).pipe(
-  HttpApiSecurity.annotate(
-    OpenApi.Description,
-    "Clerk session or OAuth bearer token for the signed-in T3 Connect user.",
-  ),
+  HttpApiSecurity.annotate(OpenApi.Description, "Legacy hosted session bearer token."),
 );
 
 export class RelayClientAuth extends HttpApiMiddleware.Service<

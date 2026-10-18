@@ -3,15 +3,15 @@ import {
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
 
-export interface SavedCloudEnvironmentConnectionPresentation {
+export interface SavedEnvironmentConnectionPresentation {
   readonly buttonLabel: string;
   readonly statusText: string;
   readonly tone: "connected" | "connecting" | "error" | "idle";
 }
 
-export function presentSavedCloudEnvironmentConnection(
+export function presentSavedEnvironmentConnection(
   connection: EnvironmentConnectionPresentation,
-): SavedCloudEnvironmentConnectionPresentation {
+): SavedEnvironmentConnectionPresentation {
   switch (connection.phase) {
     case "connected":
       return {

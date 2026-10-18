@@ -40,7 +40,7 @@ import {
 
 /**
  * Every URL is derived from the request's own origin, so the same server
- * answers correctly over loopback, Tailscale Serve and a T3 Connect tunnel.
+ * answers correctly over loopback, Tailscale Serve and a legacy hosted connections tunnel.
  * Client registration is stateless: a client id is its signed metadata, so an
  * unauthenticated caller cannot grow server state.
  */
@@ -77,7 +77,7 @@ export const protectedResourceMetadata = (
   authorization_servers: [urls.issuer],
   scopes_supported: MCP_OAUTH_SCOPES,
   bearer_methods_supported: ["header"],
-  resource_name: "T3 Code",
+  resource_name: "Busyboy",
 });
 
 export const authorizationServerMetadata = (

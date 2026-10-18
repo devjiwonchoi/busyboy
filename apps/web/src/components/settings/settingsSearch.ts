@@ -531,18 +531,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["cli terminal shell path install command line"],
     desktopOnly: true,
   },
-  {
-    id: "mobile-app",
-    title: "Mobile app",
-    to: "/settings/general",
-    searchTerms: ["phone tablet iPhone iPad iOS Android App Store Google Play QR"],
-  },
-  {
-    id: "privacy-policy",
-    title: "Privacy policy",
-    to: "/settings/general",
-    searchTerms: ["telemetry analytics usage data tracking legal opt out"],
-  },
+
   {
     id: "telemetry-export",
     title: "OpenTelemetry export",
@@ -747,7 +736,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "pull-request-links-open-in-app",
-    title: "Open pull requests in T3 Code",
+    title: "Open pull requests in Busyboy",
     to: "/settings/integrations",
     searchTerms: ["pr links github browser external click default pull request view panel"],
   },
@@ -918,35 +907,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     localBackendManagementOnly: true,
     wslAvailableOnly: true,
   },
-  {
-    id: "t3-connect",
-    localEnvironmentOnly: true,
-    title: "T3 Connect",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["managed tunnel cloud other devices remote"],
-    desktopOnly: true,
-    cloudOnly: true,
-  },
-  {
-    id: "hold-webhooks-while-offline",
-    localEnvironmentOnly: true,
-    title: "Hold webhooks while offline",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["webhook automations offline queue mailbox t3 connect"],
-    cloudOnly: true,
-    managedTunnelOnly: true,
-  },
-  {
-    id: "publish-agent-activity",
-    localEnvironmentOnly: true,
-    title: "Publish agent activity",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["mobile push notifications live activities cloud tunnel"],
-    cloudOnly: true,
-  },
+
   {
     id: "connections-environment",
     title: "This machine",

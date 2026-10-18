@@ -21,7 +21,6 @@ import {
 } from "../state/entities";
 import { useEnvironments } from "../state/environments";
 import { APP_DISPLAY_NAME } from "~/branding";
-import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 
 function ChatIndexRouteView() {
   const { authGateState } = Route.useRouteContext();
@@ -119,13 +118,10 @@ export const Route = createFileRoute("/_chat/")({
 });
 
 function HostedStaticOnboardingState() {
-  const cloudEnabled = hasCloudPublicConfig();
   const localEnvironmentOff = isLocalEnvironmentDisabled();
   const description = localEnvironmentOff
     ? "The local environment is turned off. Connect a remote environment, or turn the local environment back on in Connections."
-    : cloudEnabled
-      ? "Enable T3 Connect on that machine, then open Connections here to sign in with the same account. You can also add the machine using a pairing link."
-      : "Open Connections and add that machine using its pairing link. This app must be able to reach it.";
+    : "Open Connections and add that machine using its pairing link. This app must be able to reach it.";
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -144,9 +140,9 @@ function HostedStaticOnboardingState() {
               <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-xl border border-border/70 bg-background/70 text-muted-foreground">
                 <LinkIcon className="size-5" />
               </div>
-              <EmptyTitle>Connect to a computer running T3 Code</EmptyTitle>
+              <EmptyTitle>Connect to a computer running Busyboy</EmptyTitle>
               <EmptyDescription>
-                This app connects to T3 Code running on your computer or a server. Start the T3 Code
+                This app connects to Busyboy running on your computer or a server. Start the Busyboy
                 desktop app or command-line server on that machine and keep it running.
               </EmptyDescription>
               <EmptyDescription>{description}</EmptyDescription>
