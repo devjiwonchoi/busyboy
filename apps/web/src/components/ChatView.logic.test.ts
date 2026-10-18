@@ -1918,14 +1918,14 @@ describe("threadShellHasStarted", () => {
 it("follows a changed server PR link without replacing an unrelated open panel", () => {
   const previous = {
     projectId: ProjectId.make("project-1"),
-    repository: "pingdotgg/t3code",
+    repository: "devjiwonchoi/busyboy",
     number: 42,
-    url: "https://github.com/pingdotgg/t3code/pull/42",
+    url: "https://github.com/devjiwonchoi/busyboy/pull/42",
   };
   const current = {
     ...previous,
     number: 43,
-    url: "https://github.com/pingdotgg/t3code/pull/43",
+    url: "https://github.com/devjiwonchoi/busyboy/pull/43",
   };
   const surface = {
     id: "pull-request:previous",

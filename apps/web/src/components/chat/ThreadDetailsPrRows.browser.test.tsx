@@ -39,9 +39,9 @@ function link(
 ): ThreadPullRequestLink {
   return {
     host: "github.com",
-    repository: "pingdotgg/t3code",
+    repository: "devjiwonchoi/busyboy",
     number,
-    url: `https://github.com/pingdotgg/t3code/pull/${number}`,
+    url: `https://github.com/devjiwonchoi/busyboy/pull/${number}`,
     source: "manual",
     linkedAt: updatedAt,
     snapshot: {
@@ -160,7 +160,7 @@ it("lets only watched pull requests stop their watch", () => {
     input: {
       threadId: ThreadId.make("thread"),
       host: "github.com",
-      repository: "pingdotgg/t3code",
+      repository: "devjiwonchoi/busyboy",
       number: 1,
       watching: false,
     },

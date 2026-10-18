@@ -51,10 +51,7 @@ vi.mock(import("@t3tools/client-runtime/state/session"), async (original) => {
     })) as never,
   };
 });
-vi.mock(import("../../cloud/publicConfig"), async (original) => ({
-  ...(await original()),
-  hasCloudPublicConfig: () => false,
-}));
+
 vi.mock(import("../../onboarding/firstRun"), async (original) => ({
   ...(await original()),
   useCompleteOnboarding: () => state.completeOnboarding,

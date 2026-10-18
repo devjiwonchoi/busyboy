@@ -63,9 +63,9 @@ function entry(
     host: "github.com",
     projectId: "project-1",
     projectTitle: "t3code",
-    repository: "pingdotgg/t3code",
+    repository: "devjiwonchoi/busyboy",
     title: "Add the pull requests page",
-    url: `https://github.com/pingdotgg/t3code/pull/${overrides.number}`,
+    url: `https://github.com/devjiwonchoi/busyboy/pull/${overrides.number}`,
     author: { login: "octocat", name: null, avatarUrl: null },
     headBranch: `feat/branch-${overrides.number}`,
     baseBranch: "main",
@@ -98,7 +98,7 @@ describe("visible pull request line-count targets", () => {
     );
 
     expect(pullRequestStatsBatches(entriesByKey, keys)[0]?.input.refs).toEqual([
-      { projectId: "project-1", repository: "pingdotgg/t3code", number: 3 },
+      { projectId: "project-1", repository: "devjiwonchoi/busyboy", number: 3 },
     ]);
   });
 
@@ -128,7 +128,7 @@ describe("visible pull request line-count targets", () => {
     );
     expect([...keys]).toEqual([secondKey]);
     expect(pullRequestStatsBatches(entriesByKey, keys)[0]?.input.refs).toEqual([
-      { projectId: "project-1", repository: "pingdotgg/t3code", number: 2 },
+      { projectId: "project-1", repository: "devjiwonchoi/busyboy", number: 2 },
     ]);
   });
 
@@ -1016,7 +1016,7 @@ describe("the list snapshot across a reload", () => {
     providers: [],
     errors: [{ projectId: "project-1", message: "boom" }],
     truncated: true,
-    nextCursors: { "pingdotgg/t3code": "cursor-1" },
+    nextCursors: { "devjiwonchoi/busyboy": "cursor-1" },
   } as never;
 
   it("hydrates the retained rows so ghosts never replace them", () => {
@@ -1263,11 +1263,11 @@ describe("merging the environments' own listings", () => {
 
   it("keeps each environment's continuation to itself", () => {
     const merged = mergePullRequestLists([
-      [ENV_1, answer({ nextCursors: { "github.com pingdotgg/t3code": "cursor-1" } })],
+      [ENV_1, answer({ nextCursors: { "github.com devjiwonchoi/busyboy": "cursor-1" } })],
       [ENV_2, answer()],
     ]);
     expect(merged?.nextCursors).toEqual({
-      [ENV_1]: { "github.com pingdotgg/t3code": "cursor-1" },
+      [ENV_1]: { "github.com devjiwonchoi/busyboy": "cursor-1" },
     });
   });
 
@@ -1456,7 +1456,7 @@ describe("pull request list overrides", () => {
   const entry = (number: number, state: "open" | "closed" | "merged") =>
     ({
       host: "github.com",
-      repository: "pingdotgg/t3code",
+      repository: "devjiwonchoi/busyboy",
       number,
       state,
       isDraft: false,
