@@ -38,6 +38,12 @@ export default defineConfig({
           "node scripts/build-browser-secret.mjs && node scripts/build-preview-annotation-css.mjs && vp pack --watch",
         cache: false,
       },
+      "dev:next": {
+        command:
+          "node scripts/build-browser-secret.mjs && node scripts/build-preview-annotation-css.mjs && cross-env T3CODE_DESKTOP_DEV=1 vp pack --watch",
+        dependsOn: ["t3#build"],
+        cache: false,
+      },
       "dev:electron": {
         command: "node scripts/dev-electron.mjs",
         dependsOn: ["t3#build"],

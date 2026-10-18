@@ -7,6 +7,7 @@
     "dev:server": "node scripts/dev-runner.ts dev:server",
     "dev:web": "node scripts/dev-runner.ts dev:web",
     "dev:desktop": "node scripts/dev-runner.ts dev:desktop",
+    "dev:desktop:vite": "T3CODE_WEB_RUNTIME=vite node scripts/dev-runner.ts dev:desktop",
     "start": "vp run --filter t3 start",
     "start:desktop": "vp run --filter @t3tools/desktop start",
     "build:resource-monitor": "cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml",

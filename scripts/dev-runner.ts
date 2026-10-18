@@ -92,7 +92,13 @@ type PortAvailabilityCheck<R = never> = (
 
 const DEV_RUNNER_MODES = Object.keys(MODE_ARGS) as Array<DevMode>;
 
-export function getDevRunnerModeArgs(mode: DevMode): ReadonlyArray<string> {
+export function getDevRunnerModeArgs(
+  mode: DevMode,
+  webRuntime: string | undefined,
+): ReadonlyArray<string> {
+  if (mode === "dev:desktop" && webRuntime !== "vite") {
+    return [...MODE_ARGS[mode].slice(0, -1), "dev:next"];
+  }
   return MODE_ARGS[mode];
 }
 
@@ -729,7 +735,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       }
     }
 
-    const args = [...MODE_ARGS[input.mode], ...input.runArgs];
+    const args = [...getDevRunnerModeArgs(input.mode, env.T3CODE_WEB_RUNTIME), ...input.runArgs];
     const spawnCommand = yield* resolveSpawnCommand("vp", args, { env });
     const processContext = {
       mode: input.mode,

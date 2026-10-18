@@ -67,6 +67,7 @@ export class ElectronProtocol extends Context.Service<
 >()("@t3tools/desktop/electron/ElectronProtocol") {}
 
 export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrationInput): string {
+  const isDevelopmentProxy = input.scheme === DESKTOP_DEVELOPMENT_SCHEME && "targetOrigin" in input;
   const clerkOrigin = input.clerkFrontendApiHostname
     ? `https://${input.clerkFrontendApiHostname}`
     : undefined;
@@ -76,6 +77,8 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
     "'wasm-unsafe-eval'",
     ...(clerkOrigin ? [clerkOrigin] : []),
     "https://challenges.cloudflare.com",
+    // Only a development proxy serves changing Next chunks and React debug code.
+    ...(isDevelopmentProxy ? ["'unsafe-eval'"] : []),
   ];
 
   // The renderer connects directly to user-configured environments in addition to
