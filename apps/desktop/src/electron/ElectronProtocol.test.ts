@@ -24,6 +24,22 @@ import * as ElectronProtocol from "./ElectronProtocol.ts";
 const layerProtocol = ElectronProtocol.layer.pipe(Layer.provide(NodeServices.layer));
 
 describe("ElectronProtocol", () => {
+  it("permits Next debug scripts only through the development proxy", () => {
+    const development = ElectronProtocol.makeDesktopContentSecurityPolicy({
+      scheme: "t3code-dev",
+      targetOrigin: new URL("http://127.0.0.1:7964"),
+    });
+    const production = ElectronProtocol.makeDesktopContentSecurityPolicy({
+      scheme: "t3code",
+      assetDirectory: "/app/client",
+    });
+
+    assert.include(development, "'unsafe-eval'");
+    assert.notInclude(development, "http://127.0.0.1:7964");
+    assert.notInclude(production, "'unsafe-eval'");
+    assert.notInclude(production, "http://127.0.0.1:7964");
+  });
+
   beforeEach(() => {
     handleMock.mockReset();
     netFetchMock.mockReset();
