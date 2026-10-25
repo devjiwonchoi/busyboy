@@ -3852,8 +3852,6 @@ function toolGroupSummaryIconName(
       return "t3-code";
     case "browser":
       return "browser";
-    case "device":
-      return "device";
     case "search":
       return "globe";
     case "code-search":
@@ -4742,7 +4740,6 @@ type WorkEntryIconName =
   | "circle-alert"
   | "computer"
   | "code"
-  | "device"
   | "eye"
   | "globe"
   | "hammer"
@@ -4942,8 +4939,6 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
       return <BrowserAppIcon className={className} />;
     case "code":
       return <Code2Icon className={className} aria-hidden />;
-    case "device":
-      return <SmartphoneIcon className={className} aria-hidden />;
     case "t3-code":
       return <T3Wordmark className={className} aria-hidden />;
     case "check":

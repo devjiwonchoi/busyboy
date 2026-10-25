@@ -15,10 +15,6 @@
       "types": "./src/handoff.ts",
       "default": "./src/handoff.ts"
     },
-    "./device/stream": {
-      "types": "./src/device/stream.ts",
-      "default": "./src/device/stream.ts"
-    },
     "./device/hub-access": {
       "types": "./src/device/hubAccess.ts",
       "default": "./src/device/hubAccess.ts"
@@ -186,10 +182,6 @@
     "./state/presentation": {
       "types": "./src/state/presentation.ts",
       "default": "./src/state/presentation.ts"
-    },
-    "./state/device": {
-      "types": "./src/state/device.ts",
-      "default": "./src/state/device.ts"
     },
     "./state/deviceHubAccess": {
       "types": "./src/state/deviceHubAccess.ts",
@@ -363,38 +355,6 @@
       "types": "./src/filePreview.ts",
       "default": "./src/filePreview.ts"
     },
-    "./device/frame": {
-      "types": "./src/device/frame.ts",
-      "default": "./src/device/frame.ts"
-    },
-    "./device/phone-viewer": {
-      "types": "./src/device/phoneViewer.ts",
-      "default": "./src/device/phoneViewer.ts"
-    },
-    "./device/phone-interaction": {
-      "types": "./src/device/phoneInteraction.ts",
-      "default": "./src/device/phoneInteraction.ts"
-    },
-    "./device/shape-profile": {
-      "types": "./src/device/shapeProfile.ts",
-      "default": "./src/device/shapeProfile.ts"
-    },
-    "./device/screenshot": {
-      "types": "./src/device/screenshot.ts",
-      "default": "./src/device/screenshot.ts"
-    },
-    "./device/model": {
-      "types": "./src/device/model.ts",
-      "default": "./src/device/model.ts"
-    },
-    "./device/duo-viewer": {
-      "types": "./src/device/duoViewer.ts",
-      "default": "./src/device/duoViewer.ts"
-    },
-    "./device/duo-control": {
-      "types": "./src/device/duoControl.ts",
-      "default": "./src/device/duoControl.ts"
-    },
     "./diff-count": {
       "types": "./src/diffCount.ts",
       "default": "./src/diffCount.ts"
@@ -438,8 +398,7 @@
     "@t3tools/shared": "workspace:*",
     "@t3tools/source-control-core": "workspace:*",
     "@t3tools/source-control-github": "workspace:*",
-    "effect": "catalog:",
-    "three": "0.180.0"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
