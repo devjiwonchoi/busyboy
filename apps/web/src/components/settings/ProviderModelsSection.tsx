@@ -22,9 +22,6 @@ import { CustomModelEditor } from "./CustomModelEditor";
 const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Partial<Record<ProviderDriverKind, string>> = {
   [ProviderDriverKind.make("codex")]: "gpt-6.7-codex-ultra-preview",
   [ProviderDriverKind.make("claudeAgent")]: "claude-sonnet-5",
-  [ProviderDriverKind.make("cursor")]: "claude-sonnet-4-6",
-  [ProviderDriverKind.make("opencode")]: "openai/gpt-5",
-  [ProviderDriverKind.make("pi")]: "anthropic/claude-sonnet-5",
 };
 
 const FILTER_THRESHOLD = 8;
@@ -178,7 +175,7 @@ export function ProviderModelsSection({
     builtInModels.length > 0 && builtInModels.every((model) => hiddenModels.includes(model.slug));
 
   const handleAdd = () => {
-    if (!canManageCustomModels || driverKind === "antigravity") return;
+    if (!canManageCustomModels) return;
     const normalized = normalizeCustomModelSlug(input);
     if (!normalized) {
       setError("Enter a model slug.");
@@ -333,7 +330,7 @@ export function ProviderModelsSection({
             {hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}
           </span>
         </div>
-        {driverKind !== "antigravity" && !isAdding ? (
+        {!isAdding ? (
           <Button
             type="button"
             size="xs"
@@ -391,7 +388,7 @@ export function ProviderModelsSection({
         })}
       </div>
 
-      {driverKind === "antigravity" || !canManageCustomModels ? null : isAdding ? (
+      {!canManageCustomModels ? null : isAdding ? (
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <Input
             id={`provider-instance-${instanceId}-custom-model`}
@@ -426,9 +423,7 @@ export function ProviderModelsSection({
         </div>
       ) : null}
 
-      {driverKind !== "antigravity" && error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
-      ) : null}
+      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

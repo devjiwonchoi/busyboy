@@ -4,13 +4,12 @@ import { isLocalEnvironmentDisabled } from "~/localEnvironment";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentScope } from "~/state/session";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
-import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
 } from "./settingsSearch";
 
-export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch = {}) {
+export function useAvailableSettingsSearchItems() {
   const { environments } = useEnvironments();
   // The filtered list must be cached on boolean flags so it stays stable for the search and
   // the command palette while environments update. The compiler cannot tell that `.some()`
@@ -24,16 +23,6 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
         connectionPhase: environment.connection.phase,
         hasServerConfig: environment.serverConfig !== null,
       }),
-    ) === true;
-  const hasMacProviderSettingsEnvironment =
-    environments.some(
-      (environment) =>
-        (scopeSearch.machine === undefined || environment.environmentId === scopeSearch.machine) &&
-        environment.serverConfig?.environment.platform.os === "darwin" &&
-        isProviderSettingsEnvironmentAvailable({
-          connectionPhase: environment.connection.phase,
-          hasServerConfig: true,
-        }),
     ) === true;
   const hasThreadAutoSettlement =
     getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0;
@@ -49,7 +38,6 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
     hasCloudPublicConfig: false,
     hasEnvironment,
     hasProviderSettingsEnvironment,
-    hasMacProviderSettingsEnvironment,
     canManageLocalBackend,
     hasThreadAutoSettlement,
     managedTunnelActive: false,

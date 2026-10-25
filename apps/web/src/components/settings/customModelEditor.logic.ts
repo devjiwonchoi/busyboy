@@ -74,41 +74,8 @@ export const DESCRIPTOR_PRESETS_BY_KIND: Partial<
     { id: "fastMode", label: "Fast Mode", type: "boolean" },
     { id: "thinking", label: "Thinking", type: "boolean" },
   ],
-  [ProviderDriverKind.make("cursor")]: [
-    { id: "reasoning", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
-    { id: "fastMode", label: "Fast Mode", type: "boolean" },
-    { id: "thinking", label: "Thinking", type: "boolean" },
-  ],
   [ProviderDriverKind.make("grok")]: [
     { id: "reasoningEffort", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
-  ],
-  [ProviderDriverKind.make("pi")]: [
-    {
-      id: "thinking",
-      label: "Thinking",
-      type: "select",
-      choices: [
-        { id: "off", label: "Off" },
-        { id: "minimal", label: "Minimal" },
-        { id: "low", label: "Low" },
-        { id: "medium", label: "Medium", isDefault: true },
-        { id: "high", label: "High" },
-        { id: "xhigh", label: "Extra High" },
-        { id: "max", label: "Max" },
-      ],
-    },
-  ],
-  [ProviderDriverKind.make("opencode")]: [
-    { id: "variant", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
-    {
-      id: "agent",
-      label: "Agent",
-      type: "select",
-      choices: [
-        { id: "build", label: "Build", isDefault: true },
-        { id: "plan", label: "Plan" },
-      ],
-    },
   ],
 };
 

@@ -14,7 +14,7 @@ import {
   TOOL_CALL_READ_ONLY_PROMPT,
 } from "../shared.ts";
 
-export function assertToolCallReadOnlyCursorOutput(
+export function assertToolCallReadOnlyAcpOutput(
   result: OrchestratorV2ScenarioResult,
   transcript: ProviderReplayTranscript,
 ) {
@@ -35,7 +35,7 @@ export function assertToolCallReadOnlyCursorOutput(
     // Trailing newlines after the progress line vary between recordings.
     assistantMessages.map((item) => item.text.trimEnd()),
     ["Reading both files now.", "read only tool fixture complete"],
-    "Cursor progress text and the final response must be separate messages",
+    "ACP progress text and the final response must be separate messages",
   );
 
   const reads = projection.turnItems.filter((item) => item.type === "dynamic_tool");
@@ -53,6 +53,6 @@ export function assertToolCallReadOnlyCursorOutput(
   assert.deepEqual(
     reads.map((item) => (item.input as { path: string }).path).toSorted(),
     expectedPaths,
-    "Cursor read paths must match the files named in the recorded prompt",
+    "ACP read paths must match the files named in the recorded prompt",
   );
 }

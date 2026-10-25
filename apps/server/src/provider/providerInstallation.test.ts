@@ -14,14 +14,13 @@ import * as Stream from "effect/Stream";
 
 import * as ServerSettings from "../serverSettings.ts";
 import * as CodexInstallation from "./CodexInstallation.ts";
-import * as AntigravityInstallation from "./AntigravityInstallation.ts";
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
 import { makeProviderInstallation } from "./providerInstallation.ts";
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import * as ProviderRegistry from "./ProviderRegistry.ts";
 
-const instanceId = ProviderInstanceId.make("antigravity");
-const driver = ProviderDriverKind.make("antigravity");
+const instanceId = ProviderInstanceId.make("codex");
+const driver = ProviderDriverKind.make("codex");
 const state: ProviderInstallState = {
   driver,
   operationId: null,
@@ -53,6 +52,14 @@ function instance(kind = driver, id = instanceId): ProviderInstance {
   };
 }
 
+const managedInstances = (config: Record<string, unknown> = {}) => ({
+  [instanceId]: { driver, config: { setupMode: "managed", ...config } },
+});
+
+const managedSettings = (config: Record<string, unknown> = {}) => ({
+  providerInstances: managedInstances(config),
+});
+
 const makeHarness = Effect.fn("providerInstallation.test.makeHarness")(function* (
   input: {
     instance?: ProviderInstance;
@@ -65,7 +72,7 @@ const makeHarness = Effect.fn("providerInstallation.test.makeHarness")(function*
   const router = yield* makeProviderInstallation().pipe(
     Effect.provide(
       Layer.mergeAll(
-        ServerSettings.layerTest(input.settings),
+        ServerSettings.layerTest(input.settings ?? managedSettings()),
         Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
           getInstance: (id) =>
             Effect.succeed(id === configured.instanceId ? configured : undefined),
@@ -80,25 +87,6 @@ const makeHarness = Effect.fn("providerInstallation.test.makeHarness")(function*
         }),
         Layer.mock(CodexInstallation.CodexInstallation)({
           managedDirectory: "/unused-managed-codex",
-          start: Effect.sync(() => {
-            calls.push("codex-start");
-            return { ...state, driver: ProviderDriverKind.make("codex") };
-          }),
-          cancel: () =>
-            Effect.sync(() => {
-              calls.push("codex-cancel");
-              return { ...state, driver: ProviderDriverKind.make("codex") };
-            }),
-          state: Effect.succeed({ ...state, driver: ProviderDriverKind.make("codex") }),
-          changes: Stream.succeed({ ...state, driver: ProviderDriverKind.make("codex") }),
-          remove: (paths) =>
-            Effect.sync(() => {
-              protectedPaths = paths ?? [];
-              calls.push("codex-remove");
-            }),
-        }),
-        Layer.mock(AntigravityInstallation.AntigravityInstallation)({
-          managedDirectory: "/unused-managed-runtime",
           start: Effect.sync(() => {
             calls.push("start");
             return state;
@@ -133,7 +121,7 @@ describe("provider installation routing", () => {
 
   it.effect("rejects another driver and unknown instances before installation", () =>
     Effect.gen(function* () {
-      const harness = yield* makeHarness({ instance: instance(ProviderDriverKind.make("codex")) });
+      const harness = yield* makeHarness({ instance: instance(ProviderDriverKind.make("grok")) });
       const wrongDriver = yield* Effect.flip(harness.router.start({ instanceId }));
       const missing = yield* Effect.flip(
         harness.router.start({ instanceId: ProviderInstanceId.make("missing") }),
@@ -147,14 +135,7 @@ describe("provider installation routing", () => {
   it.effect("keeps external installs manual without hiding shared install status", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({
-        settings: {
-          providerInstances: {
-            [ProviderInstanceId.make("antigravity")]: {
-              driver: ProviderDriverKind.make("antigravity"),
-              config: { binaryPath: "/external/agy" },
-            },
-          },
-        },
+        settings: managedSettings({ binaryPath: "/external/codex" }),
       });
       const start = yield* Effect.flip(harness.router.start({ instanceId }));
       const remove = yield* Effect.flip(harness.router.remove({ instanceId }));
@@ -166,45 +147,29 @@ describe("provider installation routing", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("routes a managed Codex instance through its own installer and refreshes removal", () =>
+  it.effect("routes a managed Codex instance through its installer and refreshes removal", () =>
     Effect.gen(function* () {
-      const codexId = ProviderInstanceId.make("codex");
-      const harness = yield* makeHarness({
-        instance: instance(ProviderDriverKind.make("codex"), codexId),
-        settings: {
-          providerInstances: {
-            [ProviderInstanceId.make("codex")]: {
-              driver: ProviderDriverKind.make("codex"),
-              config: { setupMode: "managed" },
-            },
-          },
-        },
-      });
-      assert.equal((yield* harness.router.start({ instanceId: codexId })).driver, "codex");
-      yield* harness.router.cancel({ instanceId: codexId, operationId: "operation" });
-      const observed = yield* Stream.runCollect(harness.router.subscribe({ instanceId: codexId }));
+      const harness = yield* makeHarness();
+      assert.equal((yield* harness.router.start({ instanceId })).driver, "codex");
+      yield* harness.router.cancel({ instanceId, operationId: "operation" });
+      const observed = yield* Stream.runCollect(harness.router.subscribe({ instanceId }));
       assert.equal(Array.from(observed)[0]?.driver, "codex");
-      yield* harness.router.remove({ instanceId: codexId });
-      assert.deepEqual(harness.calls, ["codex-start", "codex-cancel", "codex-remove", "refresh"]);
+      yield* harness.router.remove({ instanceId });
+      assert.deepEqual(harness.calls, ["start", "cancel", "remove", "refresh"]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("keeps native Codex installation outside managed setup", () =>
     Effect.gen(function* () {
-      const codexId = ProviderInstanceId.make("codex");
       const harness = yield* makeHarness({
-        instance: instance(ProviderDriverKind.make("codex"), codexId),
         settings: {
           providerInstances: {
-            [ProviderInstanceId.make("codex")]: {
-              driver: ProviderDriverKind.make("codex"),
-              config: { setupMode: "existing" },
-            },
+            [instanceId]: { driver, config: { setupMode: "existing" } },
           },
         },
       });
       assert.include(
-        (yield* Effect.flip(harness.router.start({ instanceId: codexId }))).detail,
+        (yield* Effect.flip(harness.router.start({ instanceId }))).detail,
         "Choose managed setup",
       );
       assert.deepEqual(harness.calls, []);
@@ -217,14 +182,15 @@ describe("provider installation routing", () => {
       const path = yield* Path.Path;
       const platform = yield* HostProcess.Platform;
       const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-provider-install-route-" });
-      const binary = platform === "win32" ? "agy-test.exe" : "agy-test";
+      const binary = platform === "win32" ? "codex-test.exe" : "codex-test";
       const executable = path.join(directory, binary);
       yield* fs.writeFileString(executable, "test");
       yield* fs.chmod(executable, 0o755);
-      const other = ProviderInstanceId.make("antigravity-work");
+      const other = ProviderInstanceId.make("codex-work");
       const harness = yield* makeHarness({
         settings: {
           providerInstances: {
+            ...managedInstances(),
             [other]: {
               driver,
               config: { binaryPath: binary },
@@ -248,7 +214,8 @@ describe("provider installation routing", () => {
       const harness = yield* makeHarness({
         settings: {
           providerInstances: {
-            [ProviderInstanceId.make("antigravity-work")]: {
+            ...managedInstances(),
+            [ProviderInstanceId.make("codex-work")]: {
               driver,
               config: { binaryPath },
             },

@@ -668,83 +668,6 @@ export const ClaudeSettings = makeProviderSettingsSchema(
 );
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
-export const ANTIGRAVITY_AUTH_METHODS = [
-  { value: "oauth-personal", label: "Google account" },
-  { value: "oauth-business", label: "Gemini Enterprise" },
-  { value: "gemini-api-key", label: "Gemini API key" },
-  { value: "agent-platform", label: "Agent Platform (Vertex AI)" },
-] as const satisfies ReadonlyArray<ProviderSettingsFormOption>;
-export const AntigravityAuthMethod = Schema.Literals(
-  ANTIGRAVITY_AUTH_METHODS.map((method) => method.value),
-);
-export type AntigravityAuthMethod = typeof AntigravityAuthMethod.Type;
-
-export const AntigravitySettings = makeProviderSettingsSchema(
-  {
-    enabled: Schema.Boolean.pipe(
-      Schema.withDecodingDefault(Effect.succeed(false)),
-      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
-    ),
-    authMethod: AntigravityAuthMethod.pipe(
-      Schema.withDecodingDefault(Effect.succeed("oauth-personal" as const)),
-      Schema.annotateKey({
-        title: "Sign-in method",
-        description:
-          "Google accounts use your subscription; API keys and Agent Platform bill usage.",
-        providerSettingsForm: {
-          control: "select",
-          options: ANTIGRAVITY_AUTH_METHODS,
-          clearWhenEmpty: "omit",
-        },
-      }),
-    ),
-    apiKey: TrimmedString.pipe(
-      secretSetting,
-      Schema.withDecodingDefault(Effect.succeed("")),
-      Schema.annotateKey({
-        title: "API key",
-        description: "Gemini or Vertex AI express key. Stored separately on the host.",
-        providerSettingsForm: {
-          control: "password",
-          placeholder: "Optional",
-          clearWhenEmpty: "omit",
-        },
-      }),
-    ),
-    gcpProject: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed("")),
-      Schema.annotateKey({
-        title: "GCP project",
-        description:
-          "Required for Gemini Enterprise. Agent Platform uses it when no API key is set.",
-        providerSettingsForm: { placeholder: "my-project-id", clearWhenEmpty: "omit" },
-      }),
-    ),
-    gcpLocation: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed("")),
-      Schema.annotateKey({
-        title: "GCP location",
-        description: "Region for Gemini Enterprise or Agent Platform.",
-        providerSettingsForm: { placeholder: "us-central1", clearWhenEmpty: "omit" },
-      }),
-    ),
-    binaryPath: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed("")),
-      Schema.annotateKey({
-        title: "Binary path",
-        description: "Custom ACP executable. Leave empty to select automatically.",
-        providerSettingsForm: { placeholder: "Automatic", clearWhenEmpty: "persist" },
-      }),
-    ),
-    customModels: Schema.Array(CustomModelSetting).pipe(
-      Schema.withDecodingDefault(Effect.succeed([])),
-      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
-    ),
-  },
-  { order: ["authMethod", "apiKey", "gcpProject", "gcpLocation", "binaryPath"] },
-);
-export type AntigravitySettings = typeof AntigravitySettings.Type;
-
 export const UsageLimitSourceConfig = Schema.Struct({
   kind: Schema.Literal("cliproxy"),
   label: Schema.optional(TrimmedNonEmptyString),
@@ -1196,9 +1119,6 @@ export const ServerSettings = Schema.Struct({
   usageLimitSources: Schema.Record(UsageLimitSourceId, UsageLimitSourceConfig).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
-  cursorKeychainUsageEnabled: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
-  ),
 
   usagePriceOverrides: Schema.Record(TrimmedNonEmptyString, UsageModelPriceOverride).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
@@ -1224,9 +1144,7 @@ export const providerInstanceConfigEnabledFlag = (config: unknown): boolean | un
  * Matches the `enabled` decoding default of each driver's settings schema.
  */
 const DEFAULT_DISABLED_PROVIDER_DRIVERS: ReadonlySet<ProviderDriverKind> = new Set(
-  ["cursor", "grok", "muse", "pi", "opencode", "antigravity"].map((driver) =>
-    ProviderDriverKind.make(driver),
-  ),
+  ["grok"].map((driver) => ProviderDriverKind.make(driver)),
 );
 
 const DEFAULT_ENABLED_DEFAULT_INSTANCES: ReadonlySet<ProviderInstanceId> = new Set(
@@ -1455,7 +1373,6 @@ export const ServerSettingsPatch = Schema.Struct({
   usageLimitSources: Schema.optionalKey(
     Schema.Record(UsageLimitSourceId, Schema.NullOr(UsageLimitSourceConfig)),
   ),
-  cursorKeychainUsageEnabled: Schema.optionalKey(Schema.Boolean),
 
   usagePriceOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, Schema.NullOr(UsageModelPriceOverride)),

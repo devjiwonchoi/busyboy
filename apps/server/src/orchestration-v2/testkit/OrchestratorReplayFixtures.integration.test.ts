@@ -11,23 +11,11 @@ import * as Path from "effect/Path";
 
 import { ClaudeOrchestratorReplayHarness } from "../Adapters/ClaudeAdapterV2.testkit.ts";
 import { CodexOrchestratorReplayHarness } from "../Adapters/CodexAdapterV2.testkit.ts";
-import { CursorOrchestratorReplayHarness } from "../Adapters/CursorAdapterV2.testkit.ts";
 import { AcpRegistryOrchestratorReplayHarness } from "../Adapters/AcpRegistryAdapterV2.testkit.ts";
 import { GrokOrchestratorReplayHarness } from "../Adapters/GrokAdapterV2.testkit.ts";
-import { OpenCodeOrchestratorReplayHarness } from "../Adapters/OpenCodeAdapterV2.testkit.ts";
-import {
-  OPENCODE2_HTTP_PROTOCOL,
-  OpenCode2OrchestratorReplayHarness,
-} from "../Adapters/OpenCode2AdapterV2.testkit.ts";
-import {
-  materializeMuseReplayWorkspace,
-  MuseOrchestratorReplayHarness,
-} from "../Adapters/MuseAdapterV2.testkit.ts";
-import { PiOrchestratorReplayHarness } from "../Adapters/PiAdapterV2.testkit.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { provideDeterministicTestRuntime } from "./DeterministicRuntime.ts";
 import { ORCHESTRATOR_REPLAY_FIXTURES } from "./fixtures/index.ts";
-import { messageRestartInput } from "./fixtures/message_steering/input.ts";
 import {
   assertProviderNativeSubagentRootTurns,
   materializeFixtureInput,
@@ -107,9 +95,7 @@ const runFixtureProvider = Effect.fn("runOrchestratorReplayFixture")(function* <
   const transcript = yield* input.harness.decodeTranscript(
     input.driver.driver === "codex"
       ? materializeReplayTranscriptWorkspace(replayTranscript, workspace)
-      : input.driver.driver === "muse"
-        ? yield* materializeMuseReplayWorkspace(replayTranscript, workspace)
-        : replayTranscript,
+      : replayTranscript,
   );
   const materialized = yield* materializeFixtureInput({
     scenario: input.fixtureName,
@@ -189,11 +175,6 @@ function runFixtureProviderWithRegisteredHarness(input: {
         ...input,
         harness: ClaudeOrchestratorReplayHarness,
       }).pipe(Effect.mapError(normalizeTestError), Effect.scoped);
-    case "cursor":
-      return runFixtureProvider({
-        ...input,
-        harness: CursorOrchestratorReplayHarness,
-      }).pipe(Effect.mapError(normalizeTestError), Effect.scoped);
     case "grok":
       return runFixtureProvider({
         ...input,
@@ -203,26 +184,6 @@ function runFixtureProviderWithRegisteredHarness(input: {
       return runFixtureProvider({
         ...input,
         harness: AcpRegistryOrchestratorReplayHarness,
-      }).pipe(Effect.mapError(normalizeTestError), Effect.scoped);
-    case "opencode":
-      return readTranscript(input.driver.transcriptFile).pipe(
-        Effect.flatMap((transcript) =>
-          transcript.protocol === OPENCODE2_HTTP_PROTOCOL
-            ? runFixtureProvider({ ...input, harness: OpenCode2OrchestratorReplayHarness })
-            : runFixtureProvider({ ...input, harness: OpenCodeOrchestratorReplayHarness }),
-        ),
-        Effect.mapError(normalizeTestError),
-        Effect.scoped,
-      );
-    case "pi":
-      return runFixtureProvider({
-        ...input,
-        harness: PiOrchestratorReplayHarness,
-      }).pipe(Effect.mapError(normalizeTestError), Effect.scoped);
-    case "muse":
-      return runFixtureProvider({
-        ...input,
-        harness: MuseOrchestratorReplayHarness,
       }).pipe(Effect.mapError(normalizeTestError), Effect.scoped);
     default:
       return Effect.die(
@@ -244,55 +205,6 @@ describe("orchestrator replay fixtures", () => {
       buildInput: fixture.buildInput,
       driver: provider,
     }),
-  );
-
-  const steeringFixture = ORCHESTRATOR_REPLAY_FIXTURES.find(
-    (fixture) => fixture.name === "message_steering",
-  );
-  const cursorSteeringProvider = steeringFixture?.providers.find(
-    (provider) => provider.driver === "cursor",
-  );
-  if (cursorSteeringProvider !== undefined) {
-    it.effect("executes explicit Cursor restart_active through the recorded SDK boundary", () =>
-      runFixtureProviderWithRegisteredHarness({
-        fixtureName: "message_steering",
-        buildInput: messageRestartInput,
-        driver: cursorSteeringProvider,
-      }),
-    );
-  }
-
-  it.effect.each(
-    (
-      [
-        ["opencode2_subagent", "session.execution.started.2"],
-        ["opencode2_background", "session.execution.started.3"],
-      ] as const
-    ).flatMap(([fixtureName, label]) => {
-      const fixture = ORCHESTRATOR_REPLAY_FIXTURES.find(
-        (candidate) => candidate.name === fixtureName,
-      );
-      const provider = fixture?.providers[0];
-      return fixture === undefined || provider === undefined
-        ? []
-        : [[fixtureName, label, fixture, provider] as const];
-    }),
-  )(
-    "runs %s when %s is an execution start this build cannot decode",
-    ([fixtureName, label, fixture, provider]) =>
-      runFixtureProviderWithRegisteredHarness({
-        fixtureName,
-        buildInput: fixture.buildInput,
-        driver: provider,
-        transformTranscript: (transcript) => ({
-          ...transcript,
-          entries: transcript.entries.map((entry) =>
-            entry.type === "emit_inbound" && entry.label === label
-              ? undecodableEvent(entry)
-              : entry,
-          ),
-        }),
-      }),
   );
 
   const afterRootFixture = ORCHESTRATOR_REPLAY_FIXTURES.find(
@@ -507,9 +419,3 @@ describe("orchestrator replay fixtures", () => {
     );
   }
 });
-
-function undecodableEvent(entry: ProviderReplayEntry): ProviderReplayEntry {
-  if (entry.type !== "emit_inbound") return entry;
-  const frame = entry.frame as { readonly event: Record<string, unknown> };
-  return { ...entry, frame: { ...frame, event: { ...frame.event, durable: "not-an-envelope" } } };
-}

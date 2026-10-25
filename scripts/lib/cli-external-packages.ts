@@ -12,8 +12,6 @@
  * exists only inside the emitted bundle and is unreachable there.
  */
 export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
-  // Cursor ships computed Webpack imports and platform helper packages.
-  "@cursor/sdk",
   // Playwright reads package.json and browsers.json beside its runtime modules.
   "playwright-core",
   "node-pty",
@@ -27,24 +25,14 @@ export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
   "utf-8-validate",
 ] as const;
 
-// These are Cursor's disk-backed dependency closure. Match package boundaries
-// so "zod" does not also externalize unrelated packages such as zod-to-json-schema.
-const CURSOR_RUNTIME_DEPENDENCIES = [
-  "@bufbuild/protobuf",
-  "@connectrpc/connect",
-  "@connectrpc/connect-node",
-  "@connectrpc/connect-web",
-  "@statsig/js-client",
-  "@statsig/client-core",
-  "zod",
-  "undici",
-  "@fastify/busboy",
-] as const;
+// Disk-backed runtime dependencies. Match package boundaries so a name does not
+// also externalize unrelated packages that share its prefix.
+const RUNTIME_DEPENDENCIES = ["undici", "@fastify/busboy"] as const;
 
 export function isRuntimeExternalCliDependency(id: string): boolean {
   return (
     CLI_RUNTIME_EXTERNAL_PREFIXES.some((prefix) => id.startsWith(prefix)) ||
-    CURSOR_RUNTIME_DEPENDENCIES.some((name) => id === name || id.startsWith(`${name}/`))
+    RUNTIME_DEPENDENCIES.some((name) => id === name || id.startsWith(`${name}/`))
   );
 }
 

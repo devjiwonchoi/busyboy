@@ -77,10 +77,6 @@ minimumReleaseAgeExclude:
   - "@legendapp/list@3.3.5"
   - electron@44.4.5
   - "@anthropic-ai/claude-agent-sdk@0.3.276"
-  - "@opencode/client@2.0.28"
-  - "@opencode/protocol@2.0.28"
-  - "@opencode/schema@2.0.28"
-  - "@muse-code/sdk@1.4.6"
 overrides:
   "@exodus/bytes>@noble/hashes": 1.8.0
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-darwin-arm64": "-"
@@ -103,8 +99,6 @@ overrides:
   "@tailwindcss/vite": "catalog:"
   "@types/node": "catalog:"
   effect: "catalog:"
-  "@opencode/protocol>effect": "catalog:"
-  "@opencode/schema>effect": "catalog:"
   node-abi: 4.33.0
   electron-webauthn>@electron-webauthn/macos: "catalog:"
   "@electron-webauthn/macos>objc-js": "catalog:"
@@ -131,5 +125,3 @@ peerDependencyRules:
     - vite
   allowedVersions:
     vite: "*"
-publicHoistPattern:
-  - "@cursor/sdk-*"

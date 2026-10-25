@@ -111,8 +111,6 @@ describe("searchSettings", () => {
     );
     expect(searchSettings("battery saver")[0]?.id).toBe("background-activity");
     expect(searchSettings("binary path")[0]?.id).toBe("providers");
-    expect(searchSettings("Antigravity")[0]?.id).toBe("providers");
-    expect(searchSettings("Google sign in")[0]?.id).toBe("providers");
     expect(searchSettings("authorized clients")[0]?.id).toBe("connections-environment");
     expect(searchSettings("administrative access")[0]?.id).toBe("connections-environment");
   });
@@ -168,7 +166,6 @@ describe("searchSettings", () => {
       hasCloudPublicConfig: false,
       hasEnvironment: false,
       hasProviderSettingsEnvironment: false,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       hasThreadAutoSettlement: false,
     });
@@ -179,7 +176,6 @@ describe("searchSettings", () => {
       "network-access",
       "publish-agent-activity",
       "provider-health-check-interval",
-      "cursor-keychain-usage",
       "source-control-writer-model",
       "review-guide-model",
       "review-guide-instructions",
@@ -194,30 +190,11 @@ describe("searchSettings", () => {
     expect(available.map((item) => item.id).filter((id) => gatedIds.has(id))).toEqual([]);
   });
 
-  it("offers Cursor Keychain settings only when a macOS provider environment is available", () => {
-    const availability = {
-      hasCloudPublicConfig: false,
-      hasEnvironment: true,
-      hasProviderSettingsEnvironment: true,
-      hasMacProviderSettingsEnvironment: false,
-      canManageLocalBackend: false,
-      hasThreadAutoSettlement: false,
-    };
-    const itemIds = (macAvailable: boolean) =>
-      filterAvailableSettingsSearchItems({
-        ...availability,
-        hasMacProviderSettingsEnvironment: macAvailable,
-      }).map((item) => item.id);
-    expect(itemIds(false)).not.toContain("cursor-keychain-usage");
-    expect(itemIds(true)).toContain("cursor-keychain-usage");
-  });
-
   it("keeps the local toggle searchable without offering hidden host publishing controls", () => {
     const availability = {
       hasCloudPublicConfig: true,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       hasThreadAutoSettlement: false,
     };
@@ -237,7 +214,6 @@ describe("searchSettings", () => {
       hasCloudPublicConfig: true,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: true,
       hasThreadAutoSettlement: false,
     };
@@ -254,7 +230,6 @@ describe("searchSettings", () => {
       hasCloudPublicConfig: false,
       hasEnvironment: false,
       hasProviderSettingsEnvironment: false,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       hasThreadAutoSettlement: true,
     });
@@ -384,7 +359,6 @@ describe("searchSettings", () => {
       hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       hasThreadAutoSettlement: true,
     });
@@ -487,7 +461,6 @@ describe("auto-settlement search availability", () => {
       hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       hasThreadAutoSettlement: availability.eligibleEnvironmentIds.length > 0,
     });

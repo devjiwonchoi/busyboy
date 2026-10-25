@@ -1,5 +1,4 @@
 import {
-  ANTIGRAVITY_DEFAULT_MODEL,
   type ProviderInstanceId,
   type EnvironmentId,
   type ProviderDriverKind,
@@ -85,35 +84,7 @@ export function resolveModelPickerSelectedModel(input: {
   model: string;
   options: ReadonlyArray<ModelEsque>;
 }) {
-  if (input.driverKind === "antigravity" && input.model === ANTIGRAVITY_DEFAULT_MODEL) {
-    const availableModels = input.options.filter(
-      (option) => option.slug !== ANTIGRAVITY_DEFAULT_MODEL && !option.isUnavailable,
-    );
-    return (
-      availableModels.find((option) => option.aliases?.includes(ANTIGRAVITY_DEFAULT_MODEL)) ??
-      availableModels.find((option) => option.isDefault)
-    );
-  }
   return input.options.find((option) => option.slug === input.model);
-}
-
-export function shouldIncludeModelPickerOption(input: {
-  readonly entry: ProviderInstanceEntry;
-  readonly option: ModelEsque;
-  readonly activeInstanceId: ProviderInstanceId;
-  readonly activeModel: string;
-}): boolean {
-  if (input.entry.driverKind === "antigravity" && input.option.slug === ANTIGRAVITY_DEFAULT_MODEL) {
-    return false;
-  }
-  if (isProviderInstancePickerReady(input.entry)) return true;
-  return (
-    input.entry.enabled &&
-    (input.entry.driverKind === "opencode" || input.entry.driverKind === "antigravity") &&
-    input.entry.instanceId === input.activeInstanceId &&
-    input.option.slug === input.activeModel &&
-    input.option.isUnavailable === true
-  );
 }
 
 export function shouldOfferModelPickerSetup(
@@ -382,8 +353,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     model: props.model,
     options: modelOptionsByInstance.get(props.activeInstanceId) ?? [],
   });
-  const activeModelSlug =
-    activeModel?.slug ?? (props.model === ANTIGRAVITY_DEFAULT_MODEL ? "" : props.model);
+  const activeModelSlug = activeModel?.slug ?? props.model;
   const activeModelKey = activeModelSlug
     ? modelPickerModelKey(props.activeInstanceId, activeModelSlug)
     : null;
@@ -399,17 +369,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const selectedModelKeySet = new Set(
     selectedModelKeys ?? (activeModelKey ? [activeModelKey] : []),
   );
-  const activeInstanceHasSelectableUnavailableModel =
-    activeEntry !== undefined &&
-    (modelOptionsByInstance.get(props.activeInstanceId) ?? []).some((option) =>
-      shouldIncludeModelPickerOption({
-        entry: activeEntry,
-        option,
-        activeInstanceId: props.activeInstanceId,
-        activeModel: activeModelSlug,
-      }),
-    ) &&
-    !isProviderInstancePickerReady(activeEntry);
   const activeInstanceNeedsSetup =
     onOpenProviderSetup !== undefined &&
     activeEntry !== undefined &&
@@ -419,11 +378,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     );
   const [selectedInstanceId, setSelectedInstanceId] = useState<ProviderInstanceId | "favorites">(
     () => {
-      if (
-        props.lockedProvider !== null ||
-        activeInstanceHasSelectableUnavailableModel ||
-        activeInstanceNeedsSetup
-      ) {
+      if (props.lockedProvider !== null || activeInstanceNeedsSetup) {
         return props.activeInstanceId;
       }
       return favorites.length > 0 ? "favorites" : props.activeInstanceId;
@@ -531,9 +486,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   const selectableUnavailableInstanceIds = (() => {
     const instanceIds = new Set<ProviderInstanceId>();
-    if (activeInstanceHasSelectableUnavailableModel) {
-      instanceIds.add(props.activeInstanceId);
-    }
     if (canOpenProviderSetup) {
       for (const entry of instanceEntries) {
         if (
@@ -553,17 +505,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       if (!entry) {
         continue;
       }
+      if (!isProviderInstancePickerReady(entry)) {
+        continue;
+      }
       for (const model of models) {
-        if (
-          !shouldIncludeModelPickerOption({
-            entry,
-            option: model,
-            activeInstanceId: props.activeInstanceId,
-            activeModel: activeModelSlug,
-          })
-        ) {
-          continue;
-        }
         out.push({
           slug: model.slug,
           name: model.name,

@@ -29,14 +29,7 @@ const mergeProviderModels = (
   ];
 };
 
-const BUILT_IN_DRIVER_ORDER: ReadonlyArray<string> = [
-  "codex",
-  "claudeAgent",
-  "cursor",
-  "grok",
-  "opencode",
-  "antigravity",
-];
+const BUILT_IN_DRIVER_ORDER: ReadonlyArray<string> = ["codex", "claudeAgent", "grok"];
 
 const driverRank = (driver: string): number => {
   const index = BUILT_IN_DRIVER_ORDER.indexOf(driver);

@@ -4,7 +4,7 @@ import {
   ProviderDriverKind,
   type ProviderOptionDescriptor,
 } from "@t3tools/contracts";
-import { buildTraitsTriggerDisplay, buildUnavailableModelOptionDescriptors } from "./TraitsPicker";
+import { buildTraitsTriggerDisplay } from "./TraitsPicker";
 
 function selectDescriptor(
   id: string,
@@ -248,39 +248,6 @@ describe("buildTraitsTriggerDisplay", () => {
         ultrathinkPromptControlled: true,
       }),
     ).toEqual({ label: "Ultrathink Fast" });
-  });
-});
-
-describe("buildUnavailableModelOptionDescriptors", () => {
-  it("shows only saved values without inventing alternatives", () => {
-    expect(
-      buildUnavailableModelOptionDescriptors([
-        { id: "variant", value: "max" },
-        { id: "agent", value: "build" },
-        { id: "fastMode", value: true },
-      ]),
-    ).toEqual([
-      {
-        id: "variant",
-        label: "Reasoning",
-        type: "select",
-        options: [{ id: "max", label: "max" }],
-        currentValue: "max",
-      },
-      {
-        id: "agent",
-        label: "Agent",
-        type: "select",
-        options: [{ id: "build", label: "build" }],
-        currentValue: "build",
-      },
-      {
-        id: "fastMode",
-        label: "Fast Mode",
-        type: "boolean",
-        currentValue: true,
-      },
-    ]);
   });
 });
 

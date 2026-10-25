@@ -26,32 +26,10 @@ function warningProvider(): ServerProvider {
 }
 
 describe("ProviderStatusBanner", () => {
-  it("waits for an Antigravity auth result before showing a sign-in warning", () => {
+  it("shows installation and startup failures before auth is checked", () => {
     const status: ServerProvider = {
       ...warningProvider(),
-      instanceId: ProviderInstanceId.make("google_work"),
-      driver: ProviderDriverKind.make("antigravity"),
-      auth: { status: "unknown" },
-      message: "Antigravity is installed. Google account access is not checked yet.",
-    };
-
-    expect(shouldShowProviderStatusBanner(status, null)).toBe(false);
-    expect(
-      shouldShowProviderStatusBanner(
-        {
-          ...status,
-          auth: { status: "unauthenticated" },
-          message: "Sign in with Google to use Antigravity.",
-        },
-        null,
-      ),
-    ).toBe(true);
-  });
-
-  it("shows Antigravity installation and startup failures before auth is checked", () => {
-    const status: ServerProvider = {
-      ...warningProvider(),
-      driver: ProviderDriverKind.make("antigravity"),
+      driver: ProviderDriverKind.make("grok"),
       auth: { status: "unknown" },
     };
 
@@ -72,11 +50,11 @@ describe("ProviderStatusBanner", () => {
 
 describe("getProviderStatusMessage", () => {
   it("preserves the environment's authentication error", () => {
-    const message = "SUBSCRIPTION_REQUIRED: This Google account cannot use Antigravity.";
+    const message = "SUBSCRIPTION_REQUIRED: This account cannot use Grok.";
     expect(
       getProviderStatusMessage({
         ...warningProvider(),
-        driver: ProviderDriverKind.make("antigravity"),
+        driver: ProviderDriverKind.make("grok"),
         status: "error",
         auth: { status: "unauthenticated" },
         message,
@@ -84,30 +62,19 @@ describe("getProviderStatusMessage", () => {
     ).toBe(message);
   });
 
-  it("points a signed-out Antigravity account to Google sign-in without a CLI command", () => {
-    expect(
-      getProviderStatusMessage({
-        ...warningProvider(),
-        driver: ProviderDriverKind.make("antigravity"),
-        status: "error",
-        auth: { status: "unauthenticated" },
-        message: "",
-      }),
-    ).toBe("Open provider setup to sign in with Google.");
-  });
-
   it("requires installation on the environment before sign-in", () => {
     expect(
       getProviderStatusMessage({
         ...warningProvider(),
-        driver: ProviderDriverKind.make("antigravity"),
-        displayName: "Google work account",
+        driver: ProviderDriverKind.make("grok"),
+        displayName: "Grok work account",
         installed: false,
         status: "error",
         auth: { status: "unauthenticated" },
+        setup: { canAuthenticate: false, canInstall: true },
         message: "",
       }),
-    ).toBe("Open provider setup to install Antigravity on this environment.");
+    ).toBe("Open provider setup to install Grok on this environment.");
   });
 
   it("keeps CLI sign-in advice for a provider without integrated setup", () => {

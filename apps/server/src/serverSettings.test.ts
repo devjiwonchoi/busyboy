@@ -1041,9 +1041,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           providers: {
             codex: { binaryPath: "/opt/guard/bin/codex" },
             claudeAgent: { enabled: false },
-            cursor: { enabled: false },
             grok: { enabled: false },
-            opencode: { enabled: false },
           },
         }),
       );
@@ -1105,30 +1103,25 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       yield* fileSystem.writeFileString(
         serverConfig.settingsPath,
         JSON.stringify({
-          providers: { opencode: { serverUrl: "http://127.0.0.1:4096" }, cursor: {} },
+          providers: { grok: { binaryPath: "/opt/grok" } },
           providerInstances: {
-            cursor_work: { driver: "cursor", config: {} },
-            opencode_unused: { driver: "opencode", config: {} },
+            grok_work: { driver: "grok", config: {} },
+            grok_unused: { driver: "grok", config: {} },
           },
         }),
       );
-      yield* recordProviderUsage("opencode");
-      yield* recordProviderUsage("grok", null);
-      yield* recordProviderUsage("cursor", "cursor_work");
+      yield* recordProviderUsage("grok");
+      yield* recordProviderUsage("grok", "grok_work");
 
       const settings = yield* serverSettings.getSettings;
 
-      assert.deepEqual(settings.providerInstances[ProviderInstanceId.make("opencode")], {
-        driver: ProviderDriverKind.make("opencode"),
+      assert.deepEqual(settings.providerInstances[ProviderInstanceId.make("grok")], {
+        driver: ProviderDriverKind.make("grok"),
         enabled: true,
-        config: { serverUrl: "http://127.0.0.1:4096" },
+        config: { binaryPath: "/opt/grok" },
       });
-
-      assert.isTrue(settings.providerInstances[ProviderInstanceId.make("grok")]?.enabled);
-      assert.isTrue(settings.providerInstances[ProviderInstanceId.make("cursor_work")]?.enabled);
-
-      assert.isTrue(settings.providerInstances[ProviderInstanceId.make("cursor")]?.enabled);
-      const unused = settings.providerInstances[ProviderInstanceId.make("opencode_unused")];
+      assert.isTrue(settings.providerInstances[ProviderInstanceId.make("grok_work")]?.enabled);
+      const unused = settings.providerInstances[ProviderInstanceId.make("grok_unused")];
       assert.isDefined(unused);
       assert.isFalse(resolveProviderInstanceEnabled(unused));
     }).pipe(Effect.provide(layerServerSettings())),
@@ -1494,19 +1487,19 @@ it.layer(NodeServices.layer)("server settings", (it) => {
   );
 
   it.effect(
-    "uses the same secret lifecycle for provider config, environment, host tokens, and quota keys",
+    "uses the same secret lifecycle for provider environment, host tokens, and quota keys",
     () =>
       Effect.gen(function* () {
         const service = yield* ServerSettingsModule.ServerSettingsService;
         const config = yield* ServerConfig.ServerConfig;
         const fs = yield* FileSystem.FileSystem;
         const store = yield* ServerSecretStore.ServerSecretStore;
-        const instanceId = ProviderInstanceId.make("antigravity_secrets");
+        const instanceId = ProviderInstanceId.make("codex_secrets");
         const saved = yield* service.updateSettings({
           providerInstances: {
             [instanceId]: {
-              driver: ProviderDriverKind.make("antigravity"),
-              config: { apiKey: "config-secret" },
+              driver: ProviderDriverKind.make("codex"),
+              config: {},
               environment: [
                 { name: "API_TOKEN", value: "env-secret", sensitive: true },
                 { name: "BASE_URL", value: "https://example.test", sensitive: false },
@@ -1515,8 +1508,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           },
           sourceControlHosts: {
             github: { tokens: { "github.com": "github-secret" } },
-            bitbucket: { email: "me@example.test", accessToken: "bitbucket-secret" },
-            gitcafe: { token: "gitcafe-secret" },
           },
           usageLimitSources: {
             [UsageLimitSourceId.make("hub")]: {
@@ -1527,14 +1518,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
             },
           },
         });
-        const values = [
-          "config-secret",
-          "env-secret",
-          "github-secret",
-          "bitbucket-secret",
-          "gitcafe-secret",
-          "quota-secret",
-        ];
+        const values = ["env-secret", "github-secret", "quota-secret"];
         const client = ServerSettingsModule.redactServerSettingsForClient(saved);
         const disk = yield* fs.readFileString(config.settingsPath);
         for (const value of values) {
@@ -1543,7 +1527,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           assert.notInclude(disk, value);
         }
         assert.include(JSON.stringify(client), "https://example.test");
-        assert.include(JSON.stringify(client), "me@example.test");
         const echoed = yield* service.updateSettings({
           providerInstances: client.providerInstances,
           sourceControlHosts: client.sourceControlHosts,
@@ -1555,47 +1538,15 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           instanceId,
           instance: { ...client.providerInstances[instanceId]!, displayName: "Renamed" },
         });
-        assert.propertyVal(
-          renamed.providerInstances[instanceId]?.config,
-          "apiKey",
-          "config-secret",
-        );
-
-        for (const apiKey of ["replacement-secret", ""]) {
-          const changed = yield* service.updateProviderInstance({
-            operation: "upsert",
-            instanceId,
-            instance: { ...client.providerInstances[instanceId]!, config: { apiKey } },
-          });
-          assert.propertyVal(changed.providerInstances[instanceId]?.config, "apiKey", apiKey);
-          const redacted = ServerSettingsModule.redactServerSettingsForClient(changed);
-          assert.propertyVal(
-            redacted.providerInstances[instanceId]?.config,
-            "apiKey",
-            apiKey ? "••••••" : "",
-          );
-        }
-
-        yield* service.updateProviderInstance({
-          operation: "upsert",
-          instanceId,
-          instance: saved.providerInstances[instanceId]!,
-        });
+        assert.equal(renamed.providerInstances[instanceId]?.environment?.[0]?.value, "env-secret");
 
         const secretNames = [
-          "provider-config-YW50aWdyYXZpdHlfc2VjcmV0cw-YW50aWdyYXZpdHk-YXBpS2V5",
-          "provider-env-YW50aWdyYXZpdHlfc2VjcmV0cw-QVBJX1RPS0VO",
+          "provider-env-Y29kZXhfc2VjcmV0cw-QVBJX1RPS0VO",
           sourceControlHostSecretName({
             kind: "github",
             field: "tokens",
             serverHost: "github.com",
           }),
-          sourceControlHostSecretName({
-            kind: "bitbucket",
-            field: "accessToken",
-            serverHost: null,
-          }),
-          sourceControlHostSecretName({ kind: "gitcafe", field: "token", serverHost: null }),
           "usage-limit-source-aHVi",
         ];
         for (const name of secretNames) {
@@ -1603,68 +1554,13 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         }
         yield* service.updateSettings({
           providerInstances: {},
-          sourceControlHosts: {
-            github: { tokens: {} },
-            bitbucket: { accessToken: "" },
-            gitcafe: { token: "" },
-          },
+          sourceControlHosts: { github: { tokens: {} } },
           usageLimitSources: { [UsageLimitSourceId.make("hub")]: null },
         });
         for (const name of secretNames) {
           assert.isTrue(Option.isNone(yield* store.get(name)));
         }
       }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
-  );
-
-  it.effect("moves saved provider credentials to the secret store when settings load", () =>
-    Effect.gen(function* () {
-      const service = yield* ServerSettingsModule.ServerSettingsService;
-      const config = yield* ServerConfig.ServerConfig;
-      const fs = yield* FileSystem.FileSystem;
-      yield* fs.writeFileString(
-        config.settingsPath,
-        JSON.stringify({
-          providerInstances: {
-            antigravity: { driver: "antigravity", config: { apiKey: "legacy-api-key" } },
-            opencode: {
-              driver: "opencode",
-              config: { serverUrl: "http://127.0.0.1:4096", serverPassword: "legacy-password" },
-            },
-          },
-        }),
-      );
-      const saved = yield* service.getSettings;
-      const opencode = ProviderInstanceId.make("opencode");
-      assert.propertyVal(
-        saved.providerInstances[ProviderInstanceId.make("antigravity")]?.config,
-        "apiKey",
-        "legacy-api-key",
-      );
-      assert.propertyVal(
-        saved.providerInstances[opencode]?.config,
-        "serverPassword",
-        "legacy-password",
-      );
-      const client = ServerSettingsModule.redactServerSettingsForClient(saved);
-      for (const value of ["legacy-api-key", "legacy-password"]) {
-        assert.notInclude(yield* fs.readFileString(config.settingsPath), value);
-        assert.notInclude(JSON.stringify(client), value);
-      }
-      // Editing another field from the client's copy keeps the saved password.
-      const clientConfig = client.providerInstances[opencode]?.config as Record<string, unknown>;
-      const edited = yield* service.updateProviderInstance({
-        operation: "upsert",
-        instanceId: opencode,
-        instance: {
-          ...client.providerInstances[opencode]!,
-          config: { ...clientConfig, serverUrl: "http://127.0.0.1:4097" },
-        },
-      });
-      assert.deepInclude(edited.providerInstances[opencode]?.config, {
-        serverUrl: "http://127.0.0.1:4097",
-        serverPassword: "legacy-password",
-      });
-    }).pipe(Effect.provide(layerServerSettings())),
   );
 
   it.effect("stores sensitive provider instance environment values outside settings.json", () =>
@@ -1741,65 +1637,55 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
         const saved = yield* serverSettings.updateSettings({
           sourceControlHosts: {
-            bitbucket: { email: "me@example.com", accessToken: "bb-access" },
-            github: { tokens: { "github.com": "ghp_dotcom", "ghe.acme.test": "ghp_ghe" } },
+            github: {
+              hosts: { "github.com": { account: "work" } },
+              tokens: { "github.com": "ghp_dotcom", "ghe.acme.test": "ghp_ghe" },
+            },
           },
         });
-        assert.deepEqual(saved.sourceControlHosts.bitbucket, {
-          email: "me@example.com",
-          accessToken: "bb-access",
-        });
         const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
-        for (const secret of ["bb-access", "ghp_dotcom", "ghp_ghe"]) assert.notInclude(raw, secret);
-        assert.include(raw, "me@example.com");
+        for (const secret of ["ghp_dotcom", "ghp_ghe"]) assert.notInclude(raw, secret);
+        assert.include(raw, "work");
 
         const forClient =
           ServerSettingsModule.redactServerSettingsForClient(saved).sourceControlHosts;
-        assert.equal(forClient.bitbucket?.email, "me@example.com");
-        assert.notInclude(String(forClient.bitbucket?.accessToken), "bb-access");
-        assert.isAbove(String(forClient.bitbucket?.accessToken).length, 0);
+        const clientTokens = forClient.github!.tokens as Record<string, string>;
+        assert.notInclude(clientTokens["github.com"], "ghp_dotcom");
+        assert.isAbove(clientTokens["github.com"]!.length, 0);
 
         yield* serverSettings.updateSettings({ sourceControlHosts: forClient });
-        yield* serverSettings.updateSettings({
-          sourceControlHosts: { bitbucket: { email: "other@example.com" } },
-        });
         const kept = (yield* serverSettings.getSettings).sourceControlHosts;
-        assert.deepEqual(kept.bitbucket, { email: "other@example.com", accessToken: "bb-access" });
         assert.deepEqual(kept.github?.tokens, {
           "github.com": "ghp_dotcom",
           "ghe.acme.test": "ghp_ghe",
         });
 
-        const cleared = yield* serverSettings.updateSettings({
+        yield* serverSettings.updateSettings({
           sourceControlHosts: {
-            bitbucket: { accessToken: "" },
             github: {
               tokens: {
                 "github.com": "",
-                "ghe.acme.test": (forClient.github!.tokens as Record<string, string>)[
-                  "ghe.acme.test"
-                ],
+                "ghe.acme.test": clientTokens["ghe.acme.test"],
               },
             },
           },
         });
-        assert.equal(cleared.sourceControlHosts.bitbucket?.accessToken, "");
         const stored = (kind: string, field: string, serverHost: string | null) =>
           secrets.get(sourceControlHostSecretName({ kind, field, serverHost }));
-        assert.isTrue(Option.isNone(yield* stored("bitbucket", "accessToken", null)));
         assert.isTrue(Option.isNone(yield* stored("github", "tokens", "github.com")));
         assert.isTrue(Option.isSome(yield* stored("github", "tokens", "ghe.acme.test")));
       }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
   );
 
   it.effect("keeps the retired keys for another load when a token cannot be copied", () => {
+    const legacySecretName = `github-token-${Buffer.from("github.com", "utf8").toString("base64url")}`;
     const cause = new ServerSecretStore.SecretStoreReadError({
-      resource: "bitbucket-access-token",
+      resource: legacySecretName,
       cause: PlatformError.systemError({
         _tag: "PermissionDenied",
         module: "FileSystem",
         method: "readFile",
-        pathOrDescriptor: "bitbucket-access-token",
+        pathOrDescriptor: legacySecretName,
         description: "Secret backend unavailable.",
       }),
     });
@@ -1819,7 +1705,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const fileSystem = yield* FileSystem.FileSystem;
       const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
       const legacy = JSON.stringify({
-        bitbucket: { email: "me@example.com", accessToken: "\u2022\u2022\u2022\u2022\u2022\u2022" },
+        github: { tokens: { "github.com": "\u2022\u2022\u2022\u2022\u2022\u2022" } },
       });
       yield* fileSystem.writeFileString(serverConfig.settingsPath, legacy);
 
@@ -1829,22 +1715,18 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(layerSettings));
   });
 
-  it.effect("moves the retired bitbucket and github keys and their secrets on load", () =>
+  it.effect("moves the retired github keys and their secrets on load", () =>
     Effect.gen(function* () {
       const serverConfig = yield* ServerConfig.ServerConfig;
       const fileSystem = yield* FileSystem.FileSystem;
       const secrets = yield* ServerSecretStore.ServerSecretStore;
       const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
       const marker = "\u2022\u2022\u2022\u2022\u2022\u2022";
-      yield* secrets.set("bitbucket-access-token", new TextEncoder().encode("bb-saved"));
-      yield* secrets.set(
-        `github-token-${Buffer.from("github.com", "utf8").toString("base64url")}`,
-        new TextEncoder().encode("ghp_saved"),
-      );
+      const legacySecretName = `github-token-${Buffer.from("github.com", "utf8").toString("base64url")}`;
+      yield* secrets.set(legacySecretName, new TextEncoder().encode("ghp_saved"));
       yield* fileSystem.writeFileString(
         serverConfig.settingsPath,
         JSON.stringify({
-          bitbucket: { email: "me@example.com", accessToken: marker },
           github: {
             hosts: { "github.com": { account: "work" } },
             tokens: { "github.com": marker },
@@ -1854,13 +1736,11 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
       const loaded = (yield* serverSettings.getSettings).sourceControlHosts;
 
-      assert.deepEqual(loaded.bitbucket, { email: "me@example.com", accessToken: "bb-saved" });
       assert.deepEqual(loaded.github?.tokens, { "github.com": "ghp_saved" });
       assert.deepEqual(loaded.github?.hosts, { "github.com": { account: "work" } });
       const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
-      assert.notInclude(raw, '"bitbucket":{"email"');
       assert.include(raw, "sourceControlHosts");
-      assert.isTrue(Option.isNone(yield* secrets.get("bitbucket-access-token")));
+      assert.isTrue(Option.isNone(yield* secrets.get(legacySecretName)));
     }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
   );
 
@@ -1873,12 +1753,14 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
         yield* fileSystem.writeFileString(
           serverConfig.settingsPath,
-          '{"sourceControlHosts":{"bitbucket":{"accessToken":"hand-edited-token"}}}',
+          '{"sourceControlHosts":{"github":{"tokens":{"github.com":"hand-edited-token"}}}}',
         );
 
         const loaded = yield* serverSettings.getSettings;
 
-        assert.equal(loaded.sourceControlHosts.bitbucket?.accessToken, "hand-edited-token");
+        assert.deepEqual(loaded.sourceControlHosts.github?.tokens, {
+          "github.com": "hand-edited-token",
+        });
         assert.notInclude(
           yield* fileSystem.readFileString(serverConfig.settingsPath),
           "hand-edited-token",
