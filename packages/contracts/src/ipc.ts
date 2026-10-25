@@ -217,6 +217,8 @@ export interface DesktopUpdateState {
   errorContext: "check" | "download" | "install" | null;
   canRetry: boolean;
   notAppliedVersion?: string;
+  /** The app updates by building origin/main from its own source checkout. */
+  localApp?: boolean;
 }
 
 export interface DesktopUpdateReleaseNote {
@@ -249,6 +251,7 @@ export const DesktopUpdateStateSchema = Schema.Struct({
   errorContext: Schema.NullOr(Schema.Literals(["check", "download", "install"])),
   canRetry: Schema.Boolean,
   notAppliedVersion: Schema.optionalKey(Schema.String),
+  localApp: Schema.optionalKey(Schema.Boolean),
 });
 
 export const DesktopCliCommandStateSchema = Schema.Struct({

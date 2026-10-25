@@ -18,6 +18,7 @@ import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as DesktopUpdates from "./DesktopUpdates.ts";
+import * as LocalAppUpdater from "./LocalAppUpdater.ts";
 import { flushCallbacks, makeHarness } from "./updatesTestHarness.ts";
 
 describe("DesktopUpdates", () => {
@@ -105,6 +106,44 @@ describe("DesktopUpdates", () => {
       assert.equal(unmarked.status, "disabled");
     }),
   );
+
+  it.effect("enables local-app updates without a feed and shows their failure reason", () => {
+    const harness = makeHarness({
+      env: {
+        T3CODE_DESKTOP_MOCK_UPDATES: "false",
+        T3CODE_LOCAL_APP_ROOT: "/Users/me/.busyboy/source",
+        T3CODE_LOCAL_APP_LAUNCHER: "/Users/me/Applications/Busyboy.app/Contents/MacOS/Launcher",
+        T3CODE_LOCAL_APP_COMMIT: "abcdef1234567890abcdef1234567890abcdef12",
+      },
+      checkForUpdates: Effect.fail(
+        new ElectronUpdater.ElectronUpdaterCheckForUpdatesError({
+          channel: null,
+          cause: new LocalAppUpdater.LocalAppUpdateError({
+            command: "check",
+            detail: "git fetch --quiet origin main failed: offline",
+          }),
+        }),
+      ),
+    });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const updates = yield* DesktopUpdates.DesktopUpdates;
+        yield* updates.configure;
+
+        const configured = yield* updates.getState;
+        assert.equal(configured.status, "idle");
+        assert.equal(configured.localApp, true);
+        assert.equal(configured.currentVersion, "1.2.3+abcdef1");
+
+        yield* updates.check("manual");
+
+        const failed = yield* updates.getState;
+        assert.equal(failed.status, "error");
+        assert.equal(failed.message, "git fetch --quiet origin main failed: offline");
+      }),
+    ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+  });
 
   it.effect("subscribe delivers the latest state plus subsequent changes", () => {
     const harness = makeHarness();

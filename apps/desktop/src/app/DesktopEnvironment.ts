@@ -64,6 +64,8 @@ export class DesktopEnvironment extends Context.Service<
     readonly devRemoteT3ServerEntryPath: Option.Option<string>;
     readonly configuredBackendPort: Option.Option<number>;
     readonly commitHashOverride: Option.Option<string>;
+    /** Set when the app runs from the local app's source checkout and updates from origin/main. */
+    readonly localApp: Option.Option<{ readonly root: string; readonly launcherPath: string }>;
     readonly otlpTracesUrl: Option.Option<string>;
     readonly otlpMetricsUrl: Option.Option<string>;
     readonly otlpLogsUrl: Option.Option<string>;
@@ -147,6 +149,16 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const homeDirectory = input.homeDirectory;
   const devServerUrl = config.devServerUrl;
   const isDevelopment = Option.isSome(devServerUrl);
+  // The local app (apps/desktop/scripts/local-app.mjs) runs a source checkout,
+  // so its commit is what tells one build from the next.
+  const localApp = isDevelopment
+    ? Option.none()
+    : Option.all({ root: config.localAppRoot, launcherPath: config.localAppLauncher });
+  const localAppCommit = Option.filter(config.localAppCommit, () => Option.isSome(localApp));
+  const appVersion = Option.match(localAppCommit, {
+    onNone: () => input.appVersion,
+    onSome: (commit) => `${input.appVersion}+${commit.slice(0, 7)}`,
+  });
   const appDataDirectory =
     input.platform === "win32"
       ? Option.getOrElse(config.appDataDirectory, () =>
@@ -168,7 +180,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
       : appRoot;
   const branding = resolveDesktopAppBranding({
     isDevelopment,
-    appVersion: input.appVersion,
+    appVersion,
   });
   const displayName = branding.displayName;
   const stateDir = resolveDesktopStateDir({
@@ -190,7 +202,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     processArch: input.processArch,
     isPackaged: input.isPackaged,
     isDevelopment,
-    appVersion: input.appVersion,
+    appVersion,
     appPath: input.appPath,
     resourcesPath,
     homeDirectory,
@@ -216,7 +228,8 @@ const make = Effect.fn("desktop.environment.make")(function* (
     devServerUrl,
     devRemoteT3ServerEntryPath: config.devRemoteT3ServerEntryPath,
     configuredBackendPort: config.configuredBackendPort,
-    commitHashOverride: config.commitHashOverride,
+    commitHashOverride: Option.orElse(config.commitHashOverride, () => localAppCommit),
+    localApp,
     otlpTracesUrl: config.otlpTracesUrl,
     otlpMetricsUrl: config.otlpMetricsUrl,
     otlpLogsUrl: config.otlpLogsUrl,
@@ -232,7 +245,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     linuxWmClass: isDevelopment ? "busyboy-dev" : "busyboy",
     linuxApplicationsDir,
     appImagePath: config.appImagePath,
-    defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
+    defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(appVersion),
     runtimeInfo: resolveDesktopRuntimeInfo({
       platform: input.platform,
       processArch: input.processArch,

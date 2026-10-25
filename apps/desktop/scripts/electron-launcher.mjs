@@ -475,3 +475,39 @@ export function resolveDevProtocolClient() {
     appBundleId: APP_BUNDLE_ID,
   };
 }
+
+/**
+ * Builds a standalone app bundle whose executable is `launcherScript`, next to
+ * the copied Electron binary (`Contents/MacOS/Electron`). The local app
+ * (scripts/local-app.mjs) uses it so macOS permissions stay attached to one
+ * bundle while the code it runs changes underneath.
+ */
+export function buildMacAppBundle({ targetAppBundlePath, launcherScript, metadata }) {
+  const electronBinaryPath = resolveElectronBinaryPath();
+  const sourceAppBundlePath = NodePath.resolve(NodePath.dirname(electronBinaryPath), "../..");
+  const iconPath = ensureMacIconIcns(NodePath.join(desktopDir, ".electron-runtime"));
+  const stagingAppBundlePath = `${targetAppBundlePath}.staging`;
+  const { launcherExecutableName, launcherBinaryPath } =
+    resolveMacLauncherPaths(stagingAppBundlePath);
+
+  NodeFS.rmSync(stagingAppBundlePath, { recursive: true, force: true });
+  NodeFS.mkdirSync(NodePath.dirname(targetAppBundlePath), { recursive: true });
+  NodeFS.cpSync(sourceAppBundlePath, stagingAppBundlePath, {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  patchMainBundleInfoPlist(stagingAppBundlePath, iconPath, launcherExecutableName);
+  patchHelperBundleInfoPlists(stagingAppBundlePath);
+  const infoPlistPath = NodePath.join(stagingAppBundlePath, "Contents", "Info.plist");
+  for (const [key, value] of Object.entries(metadata)) {
+    setPlistString(infoPlistPath, key, value);
+  }
+  NodeFS.writeFileSync(launcherBinaryPath, launcherScript);
+  NodeFS.chmodSync(launcherBinaryPath, 0o755);
+  signMacLauncherBundle(stagingAppBundlePath);
+
+  // Swap the finished bundle in; a running copy keeps its open files until it relaunches.
+  NodeFS.rmSync(targetAppBundlePath, { recursive: true, force: true });
+  NodeFS.renameSync(stagingAppBundlePath, targetAppBundlePath);
+  registerMacLauncherBundle(targetAppBundlePath);
+}

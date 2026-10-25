@@ -7,6 +7,7 @@
     "dev:server": "node scripts/dev-runner.ts dev:server",
     "dev:web": "node scripts/dev-runner.ts dev:web",
     "dev:desktop": "node scripts/dev-runner.ts dev:desktop",
+    "local-app:install": "node apps/desktop/scripts/local-app.mjs install",
     "dev:mobile": "vp run --filter @t3tools/mobile dev:client",
     "start": "vp run --filter t3 start",
     "start:desktop": "vp run --filter @t3tools/desktop start",
