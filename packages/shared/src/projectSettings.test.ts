@@ -51,12 +51,6 @@ describe("resolveProjectSettings", () => {
     ).toBe(false);
   });
 
-  it("treats a null project like an absent one before the shell snapshot arrives", () => {
-    expect(resolveProjectSettings(DEFAULT_SERVER_SETTINGS, null, null).settings).toBe(
-      DEFAULT_SERVER_SETTINGS,
-    );
-  });
-
   it("applies overrides per key and reports their source", () => {
     const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       defaultAutoPull: true,
@@ -93,39 +87,6 @@ describe("resolveProjectSettings", () => {
       settings.textGenerationModelSelection,
     );
     expect(resolved.sources.textGenerationModelSelection).toBe("environment");
-  });
-
-  it("honours the aggregate's own fields only until the server has folded them", () => {
-    const aggregateModel = createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.5");
-    const project = {
-      defaultModelSelection: aggregateModel,
-      defaultThreadEnvMode: "local" as const,
-    };
-    const unfolded = resolveProjectSettings(
-      { ...DEFAULT_SERVER_SETTINGS, projectSettingsFolded: false },
-      projectId,
-      project,
-    );
-    expect(unfolded.settings.defaultModelSelection).toEqual(aggregateModel);
-    expect(unfolded.settings.defaultThreadEnvMode).toBe("local");
-    expect(unfolded.sources.defaultModelSelection).toBe("project");
-    const overridden = resolveProjectSettings(
-      {
-        ...DEFAULT_SERVER_SETTINGS,
-        projectSettingsFolded: false,
-        projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: "worktree" } },
-      },
-      projectId,
-      project,
-    );
-    expect(overridden.settings.defaultThreadEnvMode).toBe("worktree");
-    const folded = resolveProjectSettings(
-      { ...DEFAULT_SERVER_SETTINGS, projectSettingsFolded: true },
-      projectId,
-      project,
-    );
-    expect(folded.settings.defaultModelSelection).toBeNull();
-    expect(folded.sources.defaultModelSelection).toBe("environment");
   });
 
   it("keeps the environment default model when the override's provider is disabled", () => {
@@ -192,7 +153,6 @@ describe("resolveProjectSettings with a t3.json", () => {
         projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: "local" } },
       },
       projectId,
-      null,
       file,
     );
     expect(fromOverride.settings.defaultThreadEnvMode).toBe("local");
@@ -201,17 +161,16 @@ describe("resolveProjectSettings with a t3.json", () => {
     const fromEnvironment = resolveProjectSettings(
       { ...DEFAULT_SERVER_SETTINGS, defaultThreadEnvMode: "local" },
       projectId,
-      null,
       file,
     );
     expect(fromEnvironment.settings.defaultThreadEnvMode).toBe("local");
     expect(fromEnvironment.sources.defaultThreadEnvMode).toBe("environment");
 
-    const fromFile = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, file);
+    const fromFile = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, file);
     expect(fromFile.settings.defaultThreadEnvMode).toBe("worktree");
     expect(fromFile.sources.defaultThreadEnvMode).toBe("t3.json");
 
-    const builtIn = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, null);
+    const builtIn = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null);
     expect(builtIn.settings.defaultThreadEnvMode).toBe("local");
     expect(builtIn.sources.defaultThreadEnvMode).toBe("environment");
     const nullOverride = resolveProjectSettings(
@@ -220,14 +179,12 @@ describe("resolveProjectSettings with a t3.json", () => {
         projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: null } as never },
       },
       projectId,
-      null,
       file,
     );
     expect(nullOverride.settings.defaultThreadEnvMode).toBe("worktree");
     expect(nullOverride.sources.defaultThreadEnvMode).toBe("t3.json");
     expect(
-      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, {}).sources
-        .defaultThreadEnvMode,
+      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, {}).sources.defaultThreadEnvMode,
     ).toBe("environment");
   });
 
@@ -259,7 +216,6 @@ describe("resolveNewThreadEnvMode", () => {
   const worktreeEnvironment = resolveProjectSettings(
     { ...DEFAULT_SERVER_SETTINGS, defaultThreadEnvMode: "worktree" },
     projectId,
-    null,
     null,
   );
   const newProject = {
@@ -303,9 +259,8 @@ describe("resolveNewThreadEnvMode", () => {
         },
         projectId,
         null,
-        null,
       ),
-      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, {
+      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, {
         defaultThreadEnvMode: "worktree",
       }),
     ]) {
@@ -341,47 +296,6 @@ describe("projectSettingsOverrides patches", () => {
       [otherProjectId]: { defaultAutoPull: false },
     });
     expect(hasProjectSettingsOverrides(DEFAULT_SERVER_SETTINGS)).toBe(false);
-  });
-
-  it("derives the legacy per-key maps from the generic record", () => {
-    const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      projectSettingsOverrides: {
-        [projectId]: { defaultAutoPull: true, enableAgentBrowserAccess: false },
-        [otherProjectId]: { defaultProjectScripts: [] },
-      },
-    });
-    expect(settings.projectAutoPullOverrides).toEqual({ [projectId]: true });
-    expect(settings.projectAgentBrowserAccessOverrides).toEqual({ [projectId]: false });
-    expect(settings.projectScriptOverrides).toEqual({ [otherProjectId]: [] });
-  });
-
-  it("translates legacy per-key patches into the generic record", () => {
-    const written = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      projectAutoPullOverrides: { [projectId]: true },
-      projectAgentBrowserAccessOverrides: { [projectId]: false, [otherProjectId]: true },
-    });
-    expect(written.projectSettingsOverrides).toEqual({
-      [projectId]: { defaultAutoPull: true, enableAgentBrowserAccess: false },
-      [otherProjectId]: { enableAgentBrowserAccess: true },
-    });
-    const cleared = applyServerSettingsPatch(written, {
-      projectAgentBrowserAccessOverrides: { [projectId]: null, [otherProjectId]: null },
-    });
-    expect(cleared.projectSettingsOverrides).toEqual({ [projectId]: { defaultAutoPull: true } });
-  });
-
-  it("lets a canonical entry win over a legacy map for the same project", () => {
-    const current = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      projectSettingsOverrides: { [projectId]: { defaultAutoPull: true } },
-    });
-    const next = applyServerSettingsPatch(current, {
-      projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: "local" } },
-      projectAutoPullOverrides: { [projectId]: true, [otherProjectId]: false },
-    });
-    expect(next.projectSettingsOverrides).toEqual({
-      [projectId]: { defaultThreadEnvMode: "local" },
-      [otherProjectId]: { defaultAutoPull: false },
-    });
   });
 
   it("builds replacement entries and clears individual keys", () => {

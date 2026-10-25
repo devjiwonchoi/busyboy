@@ -301,7 +301,7 @@ export function useThreadActions() {
     (store) => store.clearProjectDraftThreadById,
   );
   const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
-  const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
+  const acknowledgeThreadWoke = useAcknowledgeThreadWoke();
   const router = useRouter();
   const handleNewThread = useNewThreadHandler();
 
@@ -371,7 +371,7 @@ export function useThreadActions() {
     }
     const wokeAt = threadWokeAt(thread, { now: new Date().toISOString() });
     if (wokeAt !== null) {
-      markThreadVisited(scopedThreadKey(threadRef), wokeAt);
+      acknowledgeThreadWoke(threadRef, wokeAt);
     }
     refreshArchivedThreadsForEnvironment(threadRef.environmentId);
     opts.onArchived?.();
@@ -724,7 +724,7 @@ export function useThreadActions() {
       return result;
     }
     if (wokeAt !== null) {
-      markThreadVisited(scopedThreadKey(target), wokeAt);
+      acknowledgeThreadWoke(target, wokeAt);
     }
     showThreadUndoNotice({
       action: "Settled",

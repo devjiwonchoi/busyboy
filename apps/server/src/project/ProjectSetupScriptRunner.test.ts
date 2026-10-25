@@ -41,6 +41,23 @@ it.effect("resolves setup scripts through the standalone project service", () =>
       return () => undefined;
     });
   const projectId = ProjectId.make("project:setup-runner-v2");
+  const scripts = [
+    {
+      id: "setup",
+      name: "Setup",
+      command: "vp install",
+      icon: "configure" as const,
+      runOnWorktreeCreate: true,
+    },
+    {
+      id: "clean",
+      name: "Clean",
+      command: "cargo clean",
+      icon: "build" as const,
+      runOnWorktreeCreate: false,
+      runOnSettle: true,
+    },
+  ];
   const project = {
     id: projectId,
     title: "Project",
@@ -48,23 +65,7 @@ it.effect("resolves setup scripts through the standalone project service", () =>
     repositoryIdentity: null,
     faviconPath: null,
     defaultModelSelection: null,
-    scripts: [
-      {
-        id: "setup",
-        name: "Setup",
-        command: "vp install",
-        icon: "configure" as const,
-        runOnWorktreeCreate: true,
-      },
-      {
-        id: "clean",
-        name: "Clean",
-        command: "cargo clean",
-        icon: "build" as const,
-        runOnWorktreeCreate: false,
-        runOnSettle: true,
-      },
-    ],
+    scripts: [],
     createdAt: "2026-06-20T00:00:00.000Z",
     updatedAt: "2026-06-20T00:00:00.000Z",
     deletedAt: null,
@@ -76,7 +77,9 @@ it.effect("resolves setup scripts through the standalone project service", () =>
           getById: () => Effect.succeed(Option.some(project)),
         }),
         Layer.mock(TerminalManager.TerminalManager)({ open, write, subscribe, closeIdle }),
-        ServerSettings.layerTest(),
+        ServerSettings.layerTest({
+          projectSettingsOverrides: { [projectId]: { defaultProjectScripts: scripts } },
+        }),
         NodeCrypto.layer,
       ),
     ),

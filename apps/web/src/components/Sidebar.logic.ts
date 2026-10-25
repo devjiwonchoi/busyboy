@@ -760,23 +760,20 @@ export function orderItemsByPreferredIds<TItem, TId>(input: {
   items: readonly TItem[];
   preferredIds: readonly TId[];
   getId: (item: TItem) => TId;
-  getPreferenceIds?: (item: TItem) => readonly TId[];
 }): TItem[] {
-  const { getId, getPreferenceIds, items, preferredIds } = input;
+  const { getId, items, preferredIds } = input;
   if (preferredIds.length === 0) {
     return [...items];
   }
 
   const indexesByPreferenceId = new Map<TId, number[]>();
   for (const [index, item] of items.entries()) {
-    const preferenceIds = getPreferenceIds?.(item) ?? [getId(item)];
-    for (const preferenceId of new Set(preferenceIds)) {
-      const indexes = indexesByPreferenceId.get(preferenceId);
-      if (indexes) {
-        indexes.push(index);
-      } else {
-        indexesByPreferenceId.set(preferenceId, [index]);
-      }
+    const id = getId(item);
+    const indexes = indexesByPreferenceId.get(id);
+    if (indexes) {
+      indexes.push(index);
+    } else {
+      indexesByPreferenceId.set(id, [index]);
     }
   }
 

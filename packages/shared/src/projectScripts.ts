@@ -2,34 +2,24 @@ import type { ProjectId, ProjectScript, ServerSettings } from "@t3tools/contract
 
 type ProjectScriptSettings = Pick<
   ServerSettings,
-  | "defaultProjectScripts"
-  | "projectScriptOverrides"
-  | "projectSettingsOverrides"
-  | "projectSettingsFolded"
+  "defaultProjectScripts" | "projectSettingsOverrides"
 >;
 
 export function resolveProjectScripts(
   settings: ProjectScriptSettings,
-  project: { id: ProjectId; scripts: readonly ProjectScript[] },
+  project: { id: ProjectId },
 ): readonly ProjectScript[] {
-  const override = settings.projectSettingsOverrides[project.id]?.defaultProjectScripts;
-  if (override !== undefined) return override;
-  if (settings.projectSettingsFolded) return settings.defaultProjectScripts;
-  const legacy = settings.projectScriptOverrides[project.id];
-  if (legacy === null) return settings.defaultProjectScripts;
-  return legacy ?? (project.scripts.length > 0 ? project.scripts : settings.defaultProjectScripts);
+  return (
+    settings.projectSettingsOverrides[project.id]?.defaultProjectScripts ??
+    settings.defaultProjectScripts
+  );
 }
 
 export function projectScriptsInheritDefaults(
   settings: ProjectScriptSettings,
-  project: { id: ProjectId; scripts: readonly ProjectScript[] },
+  project: { id: ProjectId },
 ): boolean {
-  if (settings.projectSettingsOverrides[project.id]?.defaultProjectScripts !== undefined) {
-    return false;
-  }
-  if (settings.projectSettingsFolded) return true;
-  const legacy = settings.projectScriptOverrides[project.id];
-  return legacy === null || (legacy === undefined && project.scripts.length === 0);
+  return settings.projectSettingsOverrides[project.id]?.defaultProjectScripts === undefined;
 }
 
 interface ProjectScriptRuntimeEnvInput {

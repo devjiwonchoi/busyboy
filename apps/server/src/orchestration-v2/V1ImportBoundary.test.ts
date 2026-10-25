@@ -10,9 +10,7 @@ const forbiddenImport =
 const legacyTable =
   /\bprojection_(?:threads|thread_messages|thread_activities|thread_proposed_plans|thread_pull_requests|thread_sessions|turns|pending_approvals|state)\b/;
 const legacyReaders = ["orchestration-v2/legacy/", "persistence/Migrations/"] as const;
-const legacyReaderFiles: Record<string, string> = {
-  "serverSettings.ts": "one-time provider history for settings migration",
-};
+const legacyReaderFiles: Record<string, string> = {};
 const retiredPaths = [
   "orchestration",
   "orchestration/Layers/ProviderCommandReactor.ts",

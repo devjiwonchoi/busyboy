@@ -38,7 +38,7 @@ import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentServerConfigsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
-import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
+import { useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
 import { useThreadRouteTarget } from "./useThreadRouteTarget";
 
@@ -123,11 +123,7 @@ export function useNewThreadHandler() {
     );
     const abandonedSinceRequest = () =>
       routeChangedSinceRequest() || (project !== undefined && readProject(projectRef) === null);
-    const projectSettings = resolveProjectSettings(
-      targetServerSettings,
-      project?.id ?? null,
-      project,
-    );
+    const projectSettings = resolveProjectSettings(targetServerSettings, project?.id ?? null);
     const projectDefaultModelSelection = projectSettings.settings.defaultModelSelection;
     const defaultRuntimeMode = projectSettings.settings.defaultRuntimeMode;
     const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
@@ -148,7 +144,6 @@ export function useNewThreadHandler() {
         projectSettings: resolveProjectSettings(
           targetServerSettings,
           project?.id ?? null,
-          project,
           projectFile,
         ),
         workspaceRoot: project?.workspaceRoot ?? null,
@@ -403,10 +398,6 @@ export function useHandleNewThread() {
     items: projects,
     preferredIds: projectOrder,
     getId: getProjectOrderKey,
-    getPreferenceIds: (project) => [
-      getProjectOrderKey(project),
-      legacyProjectCwdPreferenceKey(project.workspaceRoot),
-    ],
   });
   const defaultProjectRef = defaultProject
     ? scopeProjectRef(defaultProject.environmentId, defaultProject.id)
