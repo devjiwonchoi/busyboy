@@ -95,37 +95,25 @@ describe("resolveProjectSettings", () => {
     expect(resolved.sources.textGenerationModelSelection).toBe("environment");
   });
 
-  it("honours the aggregate's own fields only until the server has folded them", () => {
+  it("uses the aggregate's own fields under the project's override entry", () => {
     const aggregateModel = createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.5");
     const project = {
       defaultModelSelection: aggregateModel,
       defaultThreadEnvMode: "local" as const,
     };
-    const unfolded = resolveProjectSettings(
-      { ...DEFAULT_SERVER_SETTINGS, projectSettingsFolded: false },
-      projectId,
-      project,
-    );
-    expect(unfolded.settings.defaultModelSelection).toEqual(aggregateModel);
-    expect(unfolded.settings.defaultThreadEnvMode).toBe("local");
-    expect(unfolded.sources.defaultModelSelection).toBe("project");
+    const fromAggregate = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, project);
+    expect(fromAggregate.settings.defaultModelSelection).toEqual(aggregateModel);
+    expect(fromAggregate.settings.defaultThreadEnvMode).toBe("local");
+    expect(fromAggregate.sources.defaultModelSelection).toBe("project");
     const overridden = resolveProjectSettings(
       {
         ...DEFAULT_SERVER_SETTINGS,
-        projectSettingsFolded: false,
         projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: "worktree" } },
       },
       projectId,
       project,
     );
     expect(overridden.settings.defaultThreadEnvMode).toBe("worktree");
-    const folded = resolveProjectSettings(
-      { ...DEFAULT_SERVER_SETTINGS, projectSettingsFolded: true },
-      projectId,
-      project,
-    );
-    expect(folded.settings.defaultModelSelection).toBeNull();
-    expect(folded.sources.defaultModelSelection).toBe("environment");
   });
 
   it("keeps the environment default model when the override's provider is disabled", () => {
@@ -341,47 +329,6 @@ describe("projectSettingsOverrides patches", () => {
       [otherProjectId]: { defaultAutoPull: false },
     });
     expect(hasProjectSettingsOverrides(DEFAULT_SERVER_SETTINGS)).toBe(false);
-  });
-
-  it("derives the legacy per-key maps from the generic record", () => {
-    const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      projectSettingsOverrides: {
-        [projectId]: { defaultAutoPull: true, enableAgentBrowserAccess: false },
-        [otherProjectId]: { defaultProjectScripts: [] },
-      },
-    });
-    expect(settings.projectAutoPullOverrides).toEqual({ [projectId]: true });
-    expect(settings.projectAgentBrowserAccessOverrides).toEqual({ [projectId]: false });
-    expect(settings.projectScriptOverrides).toEqual({ [otherProjectId]: [] });
-  });
-
-  it("translates legacy per-key patches into the generic record", () => {
-    const written = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      projectAutoPullOverrides: { [projectId]: true },
-      projectAgentBrowserAccessOverrides: { [projectId]: false, [otherProjectId]: true },
-    });
-    expect(written.projectSettingsOverrides).toEqual({
-      [projectId]: { defaultAutoPull: true, enableAgentBrowserAccess: false },
-      [otherProjectId]: { enableAgentBrowserAccess: true },
-    });
-    const cleared = applyServerSettingsPatch(written, {
-      projectAgentBrowserAccessOverrides: { [projectId]: null, [otherProjectId]: null },
-    });
-    expect(cleared.projectSettingsOverrides).toEqual({ [projectId]: { defaultAutoPull: true } });
-  });
-
-  it("lets a canonical entry win over a legacy map for the same project", () => {
-    const current = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      projectSettingsOverrides: { [projectId]: { defaultAutoPull: true } },
-    });
-    const next = applyServerSettingsPatch(current, {
-      projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: "local" } },
-      projectAutoPullOverrides: { [projectId]: true, [otherProjectId]: false },
-    });
-    expect(next.projectSettingsOverrides).toEqual({
-      [projectId]: { defaultThreadEnvMode: "local" },
-      [otherProjectId]: { defaultAutoPull: false },
-    });
   });
 
   it("builds replacement entries and clears individual keys", () => {

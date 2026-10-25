@@ -1,16 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import {
-  DEFAULT_SERVER_SETTINGS,
-  ModelSelection,
-  ProjectId,
-  ProjectScript,
-  ProviderDriverKind,
-  ProviderInstanceId,
-  resolveProviderInstanceEnabled,
-  ServerSettings,
-  ServerSettingsPatch,
-  UsageLimitSourceId,
-} from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, ProviderDriverKind, ProviderInstanceId, resolveProviderInstanceEnabled, ServerSettings, ServerSettingsPatch, UsageLimitSourceId } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
@@ -25,7 +14,6 @@ import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as SqlClient from "effect/sql/SqlClient";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import { sourceControlHostSecretName } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as ServerConfig from "./config.ts";
@@ -75,27 +63,6 @@ const layerFailingSecretStore = (cause: ServerSecretStore.SecretStoreError) =>
       remove: () => Effect.void,
     }),
   );
-
-const recordProviderUsage = (provider: string, instanceId: string | null = provider) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
-      INSERT INTO projection_thread_sessions (
-        thread_id,
-        status,
-        provider_name,
-        provider_instance_id,
-        updated_at
-      )
-      VALUES (
-        ${`thread-${instanceId ?? provider}`},
-        ${"ready"},
-        ${provider},
-        ${instanceId},
-        ${"2026-08-25T00:00:00.000Z"}
-      )
-    `;
-  });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
   it.effect("serializes concurrent model preference edits without cancelling duplicate adds", () =>
@@ -179,41 +146,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         assert.deepEqual(migrated.providerModelPreferences, {});
       }),
     ).pipe(Effect.provide(layerServerSettings())),
-  );
-  it.effect("migrates saved token delivery to paragraph buffering without resetting settings", () =>
-    Effect.gen(function* () {
-      const config = yield* ServerConfig.ServerConfig;
-      const fs = yield* FileSystem.FileSystem;
-      const service = yield* ServerSettingsModule.ServerSettingsService;
-      yield* fs.writeFileString(
-        config.settingsPath,
-        `{
-          "responseStreamingMode": "token",
-          "enableAgentBrowserAccess": false,
-          "projectSettingsOverrides": {
-            "legacy": { "responseStreamingMode": "token", "defaultAutoPull": true },
-            "buffered": { "responseStreamingMode": "turn" },
-            "inherited": { "defaultAutoPull": false }
-          }
-        }`,
-      );
-
-      const settings = yield* service.getSettings;
-      assert.equal(settings.responseStreamingMode, "paragraph");
-      assert.isFalse(settings.enableAgentBrowserAccess);
-      assert.deepEqual(settings.projectSettingsOverrides, {
-        [ProjectId.make("legacy")]: { responseStreamingMode: "paragraph", defaultAutoPull: true },
-        [ProjectId.make("buffered")]: { responseStreamingMode: "turn" },
-        [ProjectId.make("inherited")]: { defaultAutoPull: false },
-      });
-
-      yield* service.updateSettings({ responseStreamingMode: "turn" });
-      const persisted = yield* decodeServerSettingsJson(
-        yield* fs.readFileString(config.settingsPath),
-      );
-      assert.equal(persisted.responseStreamingMode, "turn");
-      assert.deepEqual(persisted.projectSettingsOverrides, settings.projectSettingsOverrides);
-    }).pipe(Effect.provide(layerServerSettings())),
   );
 
   it.effect("saves through a symlinked settings file without replacing the link", () =>
@@ -368,23 +300,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.notInclude(error.message, cause.message);
     }).pipe(Effect.provide(layerSettings));
   });
-
-  it.effect("identifies provider history query failures", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`DROP TABLE projection_thread_sessions`;
-
-      const error = yield* Effect.flip(serverSettings.getSettings);
-
-      assert.deepInclude(error, {
-        _tag: "ServerSettingsError",
-        operation: "read-provider-history",
-        settingsPath: serverConfig.settingsPath,
-      });
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
 
   it.effect("retries a failed settings read instead of keeping the failure", () =>
     Effect.gen(function* () {
@@ -1029,47 +944,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
-  it.effect("moves customized legacy provider settings into default instances on load", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      yield* fileSystem.writeFileString(
-        serverConfig.settingsPath,
-        JSON.stringify({
-          addProjectBaseDirectory: "~/Development",
-          providers: {
-            codex: { binaryPath: "/opt/guard/bin/codex" },
-            claudeAgent: { enabled: false },
-            grok: { enabled: false },
-          },
-        }),
-      );
-
-      const settings = yield* serverSettings.getSettings;
-
-      assert.deepEqual(settings.providerInstances, {
-        [ProviderInstanceId.make("codex")]: {
-          driver: ProviderDriverKind.make("codex"),
-          config: { binaryPath: "/opt/guard/bin/codex" },
-        },
-        [ProviderInstanceId.make("claudeAgent")]: {
-          driver: ProviderDriverKind.make("claudeAgent"),
-          enabled: false,
-          config: {},
-        },
-      });
-
-      const persisted = JSON.parse(yield* fileSystem.readFileString(serverConfig.settingsPath));
-      assert.isUndefined(persisted.providers);
-      assert.equal(persisted.addProjectBaseDirectory, "~/Development");
-      assert.deepEqual(persisted.providerInstances.codex, {
-        driver: "codex",
-        config: { binaryPath: "/opt/guard/bin/codex" },
-      });
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
   it.effect("keeps an explicit default instance over the legacy blob for its driver", () =>
     Effect.gen(function* () {
       const serverConfig = yield* ServerConfig.ServerConfig;
@@ -1092,94 +966,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         enabled: true,
         config: { binaryPath: "/explicit/codex" },
       });
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("enables previously used optional providers while migrating legacy settings", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      yield* fileSystem.writeFileString(
-        serverConfig.settingsPath,
-        JSON.stringify({
-          providers: { grok: { binaryPath: "/opt/grok" } },
-          providerInstances: {
-            grok_work: { driver: "grok", config: {} },
-            grok_unused: { driver: "grok", config: {} },
-          },
-        }),
-      );
-      yield* recordProviderUsage("grok");
-      yield* recordProviderUsage("grok", "grok_work");
-
-      const settings = yield* serverSettings.getSettings;
-
-      assert.deepEqual(settings.providerInstances[ProviderInstanceId.make("grok")], {
-        driver: ProviderDriverKind.make("grok"),
-        enabled: true,
-        config: { binaryPath: "/opt/grok" },
-      });
-      assert.isTrue(settings.providerInstances[ProviderInstanceId.make("grok_work")]?.enabled);
-      const unused = settings.providerInstances[ProviderInstanceId.make("grok_unused")];
-      assert.isDefined(unused);
-      assert.isFalse(resolveProviderInstanceEnabled(unused));
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("keeps explicit legacy disables even when provider history shows use", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      yield* fileSystem.writeFileString(
-        serverConfig.settingsPath,
-        JSON.stringify({ providers: { grok: { enabled: false, binaryPath: "/opt/grok" } } }),
-      );
-      yield* recordProviderUsage("grok");
-
-      const settings = yield* serverSettings.getSettings;
-
-      assert.deepEqual(settings.providerInstances[ProviderInstanceId.make("grok")], {
-        driver: ProviderDriverKind.make("grok"),
-        enabled: false,
-        config: { binaryPath: "/opt/grok" },
-      });
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("runs provider history only for files that still carry the legacy map", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      yield* fileSystem.writeFileString(serverConfig.settingsPath, "{}");
-      yield* recordProviderUsage("grok");
-
-      const settings = yield* serverSettings.getSettings;
-
-      assert.deepEqual(settings.providerInstances, {});
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("migrates legacy providers from an invalid file without rewriting it", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      const raw =
-        '{"addProjectBaseDirectory":42,"continueThreadsAfterServerUpdate":"false","providers":{"codex":{"binaryPath":"/x"}}}';
-      yield* fileSystem.writeFileString(serverConfig.settingsPath, raw);
-
-      const settings = yield* serverSettings.getSettings;
-
-      assert.deepEqual(settings.providerInstances[ProviderInstanceId.make("codex")], {
-        driver: ProviderDriverKind.make("codex"),
-        config: { binaryPath: "/x" },
-      });
-
-      assert.isFalse(settings.continueThreadsAfterServerUpdate);
-      assert.equal(yield* fileSystem.readFileString(serverConfig.settingsPath), raw);
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
@@ -1220,63 +1006,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const persisted = JSON.parse(yield* fileSystem.readFileString(serverConfig.settingsPath));
       assert.isUndefined(persisted.providers);
       assert.isUndefined(persisted.providerInstances.grok.enabled);
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("folds a legacy in-config enabled flag into the envelope on load", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-
-      yield* fileSystem.writeFileString(
-        serverConfig.settingsPath,
-        '{"providerInstances":{"grok":{"driver":"grok","enabled":true,"config":{"enabled":false}},"codex_work":{"driver":"codex","config":{"enabled":true,"homePath":"~/.codex"}},"cursor":{"driver":"cursor","config":{"enabled":"nope"}}}}',
-      );
-
-      const settings = yield* serverSettings.getSettings;
-
-      const grokId = ProviderInstanceId.make("grok");
-      const codexWorkId = ProviderInstanceId.make("codex_work");
-      assert.deepEqual(settings.providerInstances[grokId], {
-        driver: ProviderDriverKind.make("grok"),
-        enabled: false,
-        config: {},
-      });
-
-      assert.deepEqual(settings.providerInstances[codexWorkId], {
-        driver: ProviderDriverKind.make("codex"),
-        enabled: true,
-        config: { homePath: "~/.codex" },
-      });
-
-      assert.deepEqual(settings.providerInstances[ProviderInstanceId.make("cursor")], {
-        driver: ProviderDriverKind.make("cursor"),
-        config: { enabled: "nope" },
-      });
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("folds in-config enabled flags arriving through updates", () =>
-    Effect.gen(function* () {
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      const grokId = ProviderInstanceId.make("grok");
-
-      const next = yield* serverSettings.updateSettings({
-        providerInstances: {
-          [grokId]: {
-            driver: ProviderDriverKind.make("grok"),
-            enabled: true,
-            config: { enabled: false, binaryPath: "/opt/grok" },
-          },
-        },
-      });
-
-      assert.deepEqual(next.providerInstances[grokId], {
-        driver: ProviderDriverKind.make("grok"),
-        enabled: false,
-        config: { binaryPath: "/opt/grok" },
-      });
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
@@ -1715,35 +1444,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(layerSettings));
   });
 
-  it.effect("moves the retired github keys and their secrets on load", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const secrets = yield* ServerSecretStore.ServerSecretStore;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      const marker = "\u2022\u2022\u2022\u2022\u2022\u2022";
-      const legacySecretName = `github-token-${Buffer.from("github.com", "utf8").toString("base64url")}`;
-      yield* secrets.set(legacySecretName, new TextEncoder().encode("ghp_saved"));
-      yield* fileSystem.writeFileString(
-        serverConfig.settingsPath,
-        JSON.stringify({
-          github: {
-            hosts: { "github.com": { account: "work" } },
-            tokens: { "github.com": marker },
-          },
-        }),
-      );
-
-      const loaded = (yield* serverSettings.getSettings).sourceControlHosts;
-
-      assert.deepEqual(loaded.github?.tokens, { "github.com": "ghp_saved" });
-      assert.deepEqual(loaded.github?.hosts, { "github.com": { account: "work" } });
-      const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
-      assert.include(raw, "sourceControlHosts");
-      assert.isTrue(Option.isNone(yield* secrets.get(legacySecretName)));
-    }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
-  );
-
   it.effect(
     "moves a hand-edited source control token into the secret store when settings load",
     () =>
@@ -1993,103 +1693,15 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     },
   );
 
-  it.effect("folds legacy project overrides into projectSettingsOverrides once", () =>
+  it.effect("leaves an unreadable settings.json untouched", () =>
     Effect.gen(function* () {
       const serverConfig = yield* ServerConfig.ServerConfig;
       const fileSystem = yield* FileSystem.FileSystem;
-      const sql = yield* SqlClient.SqlClient;
       const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      const legacyProject = ProjectId.make("project-legacy");
-      const scriptedProject = ProjectId.make("project-scripted");
-      const script: ProjectScript = {
-        id: "check",
-        name: "Check",
-        command: "npm test",
-        icon: "play",
-        runOnWorktreeCreate: false,
-      };
-      const model = createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.5");
-      const modelJson = yield* Schema.encodeEffect(Schema.fromJsonString(ModelSelection))(model);
-      const scriptsJson = yield* Schema.encodeEffect(
-        Schema.fromJsonString(Schema.Array(ProjectScript)),
-      )([script]);
-      for (const [projectId, modelColumn, envMode, autoPull, scripts] of [
-        [legacyProject, modelJson, "worktree", 1, scriptsJson],
-        [scriptedProject, null, null, 0, scriptsJson],
-      ] as const) {
-        yield* sql`
-          INSERT INTO projection_projects (
-            project_id, title, workspace_root, default_model_selection_json,
-            default_thread_env_mode, auto_pull, scripts_json, created_at, updated_at
-          )
-          VALUES (
-            ${projectId}, ${"Project"}, ${`/tmp/${projectId}`}, ${modelColumn},
-            ${envMode}, ${autoPull}, ${scripts},
-            ${"2026-08-25T00:00:00.000Z"}, ${"2026-08-25T00:00:00.000Z"}
-          )
-        `;
-      }
-      yield* fileSystem.writeFileString(
-        serverConfig.settingsPath,
-        `{"projectAgentBrowserAccessOverrides":{"${legacyProject}":false},"projectAutoPullOverrides":{"${scriptedProject}":true},"projectScriptOverrides":{"${legacyProject}":null}}`,
-      );
-
-      const settings = yield* serverSettings.getSettings;
-      assert.isTrue(settings.projectSettingsFolded);
-      assert.deepEqual<ServerSettings["projectSettingsOverrides"]>(
-        settings.projectSettingsOverrides,
-        {
-          [legacyProject]: {
-            enableAgentBrowserAccess: false,
-            defaultModelSelection: model,
-            defaultThreadEnvMode: "worktree",
-            defaultAutoPull: true,
-          },
-          [scriptedProject]: { defaultAutoPull: true, defaultProjectScripts: [script] },
-        },
-      );
-
-      assert.deepEqual<ServerSettings["projectAutoPullOverrides"]>(
-        settings.projectAutoPullOverrides,
-        {
-          [legacyProject]: true,
-          [scriptedProject]: true,
-        },
-      );
-      assert.deepEqual<ServerSettings["projectScriptOverrides"]>(settings.projectScriptOverrides, {
-        [scriptedProject]: [script],
-      });
-
-      yield* serverSettings.updateSettings({
-        projectSettingsOverrides: { [legacyProject]: null },
-      });
-      const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
-      const persisted = yield* decodeServerSettings(JSON.parse(raw));
-      assert.isTrue(persisted.projectSettingsFolded);
-      assert.isUndefined(persisted.projectSettingsOverrides[legacyProject]);
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("leaves an unreadable settings.json untouched instead of folding over it", () =>
-    Effect.gen(function* () {
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const sql = yield* SqlClient.SqlClient;
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      yield* sql`
-        INSERT INTO projection_projects (
-          project_id, title, workspace_root, auto_pull, scripts_json, created_at, updated_at
-        )
-        VALUES (
-          ${"project-broken"}, ${"Project"}, ${"/tmp/project-broken"}, ${1}, ${"[]"},
-          ${"2026-08-25T00:00:00.000Z"}, ${"2026-08-25T00:00:00.000Z"}
-        )
-      `;
       const broken = '{"defaultAutoPull": tru';
       yield* fileSystem.writeFileString(serverConfig.settingsPath, broken);
 
       const settings = yield* serverSettings.getSettings;
-      assert.isFalse(settings.projectSettingsFolded);
       assert.isFalse(settings.continueThreadsAfterServerUpdate);
       assert.deepEqual(settings.projectSettingsOverrides, {});
 

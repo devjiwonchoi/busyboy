@@ -786,24 +786,6 @@ describe("orderItemsByPreferredIds", () => {
     ]);
   });
 
-  it("resolves legacy preference aliases without materializing project state", () => {
-    const ordered = orderItemsByPreferredIds({
-      items: [
-        { id: "physical-a", cwd: "/work/a" },
-        { id: "physical-b", cwd: "/work/b" },
-        { id: "physical-c", cwd: "/work/c" },
-      ],
-      preferredIds: ["legacy:/work/c", "legacy:/work/a"],
-      getId: (project) => project.id,
-      getPreferenceIds: (project) => [project.id, `legacy:${project.cwd}`],
-    });
-
-    expect(ordered.map((project) => project.id)).toEqual([
-      "physical-c",
-      "physical-a",
-      "physical-b",
-    ]);
-  });
 });
 
 describe("resolveAdjacentThreadId", () => {

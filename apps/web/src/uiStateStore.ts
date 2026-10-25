@@ -5,26 +5,10 @@ import { normalizeProjectPathForComparison } from "./lib/projectPaths";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
 const THREAD_CHANGED_FILES_EXPANSION_VERSION = 2;
-const LEGACY_PERSISTED_STATE_KEYS = [
-  "t3code:renderer-state:v8",
-  "t3code:renderer-state:v7",
-  "t3code:renderer-state:v6",
-  "t3code:renderer-state:v5",
-  "t3code:renderer-state:v4",
-  "t3code:renderer-state:v3",
-  "codething:renderer-state:v4",
-  "codething:renderer-state:v3",
-  "codething:renderer-state:v2",
-  "codething:renderer-state:v1",
-] as const;
-
 export interface PersistedUiState {
   projectExpandedById?: Record<string, boolean>;
   projectOrder?: string[];
   threadLastVisitedAtById?: Record<string, string>;
-  collapsedProjectCwds?: string[];
-  expandedProjectCwds?: string[];
-  projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
   sidebarProjectScopeKey?: string | null;
   threadChangedFilesExpansionVersion?: number;
@@ -63,14 +47,6 @@ const initialState: UiState = {
   defaultAdvertisedEndpointKey: null,
   pullRequestMergeMethod: "merge",
 };
-
-const LEGACY_PROJECT_CWD_PREFERENCE_PREFIX = "legacy-project-cwd:";
-const LEGACY_PROJECT_EXPANSION_DEFAULT_KEY = "legacy-project-expansion-default";
-let legacyKeysCleanedUp = false;
-
-export function legacyProjectCwdPreferenceKey(cwd: string): string {
-  return `${LEGACY_PROJECT_CWD_PREFERENCE_PREFIX}${normalizeProjectPathForComparison(cwd)}`;
-}
 
 function sanitizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -118,28 +94,8 @@ function isPullRequestMergeMethod(value: unknown): value is PullRequestMergeMeth
 }
 
 export function parsePersistedState(parsed: PersistedUiState): UiState {
-  const projectExpandedById =
-    parsed.projectExpandedById === undefined
-      ? (() => {
-          const migrated: Record<string, boolean> = {};
-          const collapsedProjectCwds = sanitizeStringArray(parsed.collapsedProjectCwds);
-          const expandedProjectCwds = sanitizeStringArray(parsed.expandedProjectCwds);
-          for (const cwd of collapsedProjectCwds) {
-            migrated[legacyProjectCwdPreferenceKey(cwd)] = false;
-          }
-          for (const cwd of expandedProjectCwds) {
-            migrated[legacyProjectCwdPreferenceKey(cwd)] = true;
-          }
-          if (!Array.isArray(parsed.collapsedProjectCwds) && expandedProjectCwds.length > 0) {
-            migrated[LEGACY_PROJECT_EXPANSION_DEFAULT_KEY] = false;
-          }
-          return migrated;
-        })()
-      : sanitizeBooleanRecord(parsed.projectExpandedById);
-  const projectOrder =
-    parsed.projectOrder === undefined
-      ? sanitizeStringArray(parsed.projectOrderCwds).map(legacyProjectCwdPreferenceKey)
-      : sanitizeStringArray(parsed.projectOrder);
+  const projectExpandedById = sanitizeBooleanRecord(parsed.projectExpandedById);
+  const projectOrder = sanitizeStringArray(parsed.projectOrder);
 
   return {
     projectExpandedById,
@@ -164,13 +120,6 @@ function readPersistedState(): UiState {
   try {
     const raw = window.localStorage.getItem(PERSISTED_STATE_KEY);
     if (!raw) {
-      for (const legacyKey of LEGACY_PERSISTED_STATE_KEYS) {
-        const legacyRaw = window.localStorage.getItem(legacyKey);
-        if (!legacyRaw) {
-          continue;
-        }
-        return parsePersistedState(JSON.parse(legacyRaw) as PersistedUiState);
-      }
       return initialState;
     }
     return parsePersistedState(JSON.parse(raw) as PersistedUiState);
@@ -212,15 +161,10 @@ export function persistState(state: UiState): void {
     return;
   }
   try {
-    const projectExpandedById = Object.fromEntries(
-      Object.entries(state.projectExpandedById).filter(
-        ([key]) => key !== LEGACY_PROJECT_EXPANSION_DEFAULT_KEY,
-      ),
-    );
     window.localStorage.setItem(
       PERSISTED_STATE_KEY,
       JSON.stringify({
-        projectExpandedById,
+        projectExpandedById: state.projectExpandedById,
         projectOrder: state.projectOrder,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
@@ -230,12 +174,6 @@ export function persistState(state: UiState): void {
         pullRequestMergeMethod: state.pullRequestMergeMethod,
       } satisfies PersistedUiState),
     );
-    if (!legacyKeysCleanedUp) {
-      legacyKeysCleanedUp = true;
-      for (const legacyKey of LEGACY_PERSISTED_STATE_KEYS) {
-        window.localStorage.removeItem(legacyKey);
-      }
-    }
   } catch {}
 }
 
@@ -350,7 +288,7 @@ export function resolveProjectExpanded(
       return expanded;
     }
   }
-  return projectExpandedById[LEGACY_PROJECT_EXPANSION_DEFAULT_KEY] ?? true;
+  return true;
 }
 
 export function setProjectExpanded(

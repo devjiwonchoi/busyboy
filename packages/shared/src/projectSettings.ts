@@ -46,12 +46,10 @@ export function hasProjectSettingsOverrides(
 }
 
 /**
- * The project aggregate's own model and workspace fields. They remain the
- * source of truth until the server has folded them into the override record;
- * after the fold the record alone decides, so a reset there cannot be undone
- * by a stale aggregate value.
+ * The project aggregate's own model and workspace fields. A project's entry in
+ * the override record takes precedence over them.
  */
-export interface LegacyProjectSettingsFields {
+export interface ProjectAggregateSettingsFields {
   readonly defaultModelSelection?: ModelSelection | null | undefined;
   readonly defaultThreadEnvMode?: ThreadEnvMode | null | undefined;
 }
@@ -59,18 +57,18 @@ export interface LegacyProjectSettingsFields {
 export function resolveProjectSettings(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project?: LegacyProjectSettingsFields | null,
+  project?: ProjectAggregateSettingsFields | null,
 ): ResolvedProjectSettings;
 export function resolveProjectSettings(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project: LegacyProjectSettingsFields | null | undefined,
+  project: ProjectAggregateSettingsFields | null | undefined,
   projectFile: T3ProjectFile | null,
 ): ResolvedProjectSettings<ResolvedServerSettings>;
 export function resolveProjectSettings(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project?: LegacyProjectSettingsFields | null,
+  project?: ProjectAggregateSettingsFields | null,
   projectFile?: T3ProjectFile | null,
 ): ResolvedProjectSettings {
   const resolved = resolveProjectOverrides(settings, projectId, project);
@@ -114,11 +112,11 @@ export function resolveProjectFileBackedSetting<K extends ProjectFileBackedSetti
 function resolveProjectOverrides(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project?: LegacyProjectSettingsFields | null,
+  project?: ProjectAggregateSettingsFields | null,
 ): ResolvedProjectSettings {
   const stored = projectId === null ? undefined : settings.projectSettingsOverrides[projectId];
   const overrides: ProjectSettingsOverrides =
-    project == null || settings.projectSettingsFolded
+    project == null
       ? (stored ?? EMPTY_OVERRIDES)
       : {
           ...(project.defaultModelSelection != null

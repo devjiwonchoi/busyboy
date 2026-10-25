@@ -2,7 +2,6 @@ import { ProjectId, ThreadId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
-  legacyProjectCwdPreferenceKey,
   markThreadUnread,
   markThreadVisited,
   parsePersistedState,
@@ -56,9 +55,8 @@ describe("uiStateStore pure functions", () => {
     expect(markThreadUnread(next, threadId, null)).toBe(next);
   });
 
-  it("resolves project expansion from logical, physical, and legacy preference keys", () => {
+  it("resolves project expansion from logical and physical preference keys", () => {
     const physicalKey = "environment:/repo/project";
-    const legacyKey = legacyProjectCwdPreferenceKey("/repo/project");
 
     expect(resolveProjectExpanded({ logical: false, [physicalKey]: true }, ["logical"])).toBe(
       false,
@@ -66,7 +64,6 @@ describe("uiStateStore pure functions", () => {
     expect(resolveProjectExpanded({ [physicalKey]: false }, ["new-logical", physicalKey])).toBe(
       false,
     );
-    expect(resolveProjectExpanded({ [legacyKey]: false }, ["new-logical", legacyKey])).toBe(false);
     expect(resolveProjectExpanded({}, ["new-logical"])).toBe(true);
   });
 
@@ -224,38 +221,6 @@ describe("parsePersistedState", () => {
 
     expect(parsed.threadChangedFilesExpandedById).toEqual({});
   });
-
-  it("migrates legacy CWD project preferences into local alias keys", () => {
-    const parsed = parsePersistedState({
-      collapsedProjectCwds: ["/repo/b"],
-      expandedProjectCwds: ["/repo/a"],
-      projectOrderCwds: ["/repo/b", "/repo/a"],
-    });
-    const projectAKey = legacyProjectCwdPreferenceKey("/repo/a");
-    const projectBKey = legacyProjectCwdPreferenceKey("/repo/b");
-
-    expect(parsed.projectOrder).toEqual([projectBKey, projectAKey]);
-    expect(resolveProjectExpanded(parsed.projectExpandedById, [projectAKey])).toBe(true);
-    expect(resolveProjectExpanded(parsed.projectExpandedById, [projectBKey])).toBe(false);
-    expect(resolveProjectExpanded(parsed.projectExpandedById, ["unknown"])).toBe(true);
-  });
-
-  it("preserves legacy expanded-only semantics for one-way migration", () => {
-    const parsed = parsePersistedState({
-      expandedProjectCwds: ["/repo/a"],
-    });
-
-    expect(
-      resolveProjectExpanded(parsed.projectExpandedById, [
-        legacyProjectCwdPreferenceKey("/repo/a"),
-      ]),
-    ).toBe(true);
-    expect(
-      resolveProjectExpanded(parsed.projectExpandedById, [
-        legacyProjectCwdPreferenceKey("/repo/b"),
-      ]),
-    ).toBe(false);
-  });
 });
 
 function createLocalStorageStub(): Storage {
@@ -348,19 +313,5 @@ describe("uiStateStore persistence", () => {
     expect(parsePersistedState(persisted).sidebarProjectScopeKey).toBe(
       "github.com/devjiwonchoi/busyboy",
     );
-  });
-
-  it("drops the temporary expanded-only migration fallback when rewriting state", () => {
-    const migrated = parsePersistedState({
-      expandedProjectCwds: ["/repo/a"],
-    });
-
-    persistState(migrated);
-
-    const persisted = JSON.parse(
-      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
-    ) as PersistedUiState;
-    expect(resolveProjectExpanded(persisted.projectExpandedById ?? {}, ["unknown"])).toBe(true);
-    expect(persisted).not.toHaveProperty("threadPanelOpen");
   });
 });

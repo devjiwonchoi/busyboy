@@ -3,7 +3,7 @@ import { getProjectOrderKey, selectProjectGroupingSettings } from "../logicalPro
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import { useEnvironmentIdentities, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useThreadShells } from "../state/entities";
-import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
+import { useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
 
 export function useSidebarProjectGroups() {
@@ -18,10 +18,6 @@ export function useSidebarProjectGroups() {
     items: projects,
     preferredIds: projectOrder,
     getId: getProjectOrderKey,
-    getPreferenceIds: (project) => [
-      getProjectOrderKey(project),
-      legacyProjectCwdPreferenceKey(project.workspaceRoot),
-    ],
   });
   const labels = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),

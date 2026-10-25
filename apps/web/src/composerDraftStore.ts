@@ -1,7 +1,5 @@
 import { stripInlineContextReferences } from "./lib/composerContextReferences";
-import { elementContextToPreviewAnnotation } from "./lib/elementContext";
 import {
-  ElementContextDetails,
   DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
   defaultInstanceIdForDriver,
@@ -81,7 +79,6 @@ import {
 } from "@t3tools/shared/composerContextReferences";
 import { UnifiedSettings } from "@t3tools/contracts/settings";
 
-const isElementContextDetails = Schema.is(ElementContextDetails);
 import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewCommentContext";
 const isRuntimeMode = Schema.is(RuntimeMode);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
@@ -247,50 +244,14 @@ type ProviderOptionSelectionsByProvider = Partial<
   Record<string, ReadonlyArray<ProviderOptionSelection>>
 >;
 
-type LegacyCodexFields = {
-  effort?: unknown;
-  codexFastMode?: unknown;
-  serviceTier?: unknown;
+type UnvalidatedPersistedComposerDraftStoreState = {
+  readonly draftsByThreadKey?: unknown;
+  readonly draftThreadsByThreadKey?: unknown;
+  readonly logicalProjectDraftThreadKeyByLogicalProjectKey?: unknown;
+  readonly stickyModelSelectionByProvider?: unknown;
+  readonly stickyActiveProvider?: unknown;
+  readonly stickyOptionsByModelByProvider?: PersistedComposerDraftStoreState["stickyOptionsByModelByProvider"];
 };
-
-type LegacyThreadModelFields = {
-  provider?: unknown;
-  model?: unknown;
-  modelOptions?: unknown;
-};
-
-type LegacyV2ThreadDraftFields = {
-  modelSelection?: ModelSelection | null;
-  modelOptions?: unknown;
-};
-
-type LegacyPersistedComposerThreadDraftState = PersistedComposerThreadDraftState &
-  LegacyCodexFields &
-  LegacyThreadModelFields &
-  LegacyV2ThreadDraftFields;
-
-type LegacyStickyModelFields = {
-  stickyProvider?: unknown;
-  stickyModel?: unknown;
-  stickyModelOptions?: unknown;
-};
-
-type LegacyV2StoreFields = {
-  stickyModelSelection?: ModelSelection | null;
-  stickyModelOptions?: unknown;
-  projectDraftThreadIdByProjectId?: Record<string, string> | null;
-  draftsByThreadId?: Record<string, PersistedComposerThreadDraftState> | null;
-  draftThreadsByThreadId?: Record<string, PersistedDraftThreadState> | null;
-  projectDraftThreadIdByProjectKey?: Record<string, string> | null;
-  draftsByThreadKey?: Record<string, PersistedComposerThreadDraftState> | null;
-  draftThreadsByThreadKey?: Record<string, PersistedDraftThreadState> | null;
-  projectDraftThreadKeyByProjectKey?: Record<string, string> | null;
-  logicalProjectDraftThreadKeyByLogicalProjectKey?: Record<string, string> | null;
-};
-
-type LegacyPersistedComposerDraftStoreState = PersistedComposerDraftStoreState &
-  LegacyStickyModelFields &
-  LegacyV2StoreFields;
 
 const PersistedDraftThreadState = Schema.Struct({
   threadId: ThreadId,
@@ -689,28 +650,6 @@ function compactStickyOptionsByModel(
   return result as NonNullable<PersistedComposerDraftStoreState["stickyOptionsByModelByProvider"]>;
 }
 
-/**
- * Storage written before per-model memory existed carries the last sticky
- * selection only. Seed the map from it so an upgrade keeps that model's
- * remembered options instead of clearing them on the first switch.
- */
-function seedStickyOptionsByModel(
-  stickySelections: Partial<Record<ProviderInstanceId, ModelSelection>>,
-): NonNullable<PersistedComposerDraftStoreState["stickyOptionsByModelByProvider"]> {
-  const result: Record<string, Record<string, ReadonlyArray<ProviderOptionSelection>>> = {};
-  for (const [instanceId, selection] of Object.entries(stickySelections)) {
-    if (
-      selection === undefined ||
-      selection.options === undefined ||
-      selection.options.length === 0
-    ) {
-      continue;
-    }
-    result[instanceId] = { [selection.model]: selection.options };
-  }
-  return result as NonNullable<PersistedComposerDraftStoreState["stickyOptionsByModelByProvider"]>;
-}
-
 const EMPTY_PERSISTED_DRAFT_STORE_STATE = Object.freeze<PersistedComposerDraftStoreState>({
   draftsByThreadKey: {},
   draftThreadsByThreadKey: {},
@@ -918,166 +857,29 @@ function coerceProviderOptionSelections(
   return undefined;
 }
 
-function normalizeProviderModelOptions(
-  value: unknown,
-  provider?: ProviderDriverKind | null,
-  legacy?: LegacyCodexFields,
-): ProviderOptionSelectionsByProvider | null {
+function normalizeModelSelection(value: unknown): NormalizedModelSelection | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-  const result: ProviderOptionSelectionsByProvider = {};
-  for (const providerKey of ["codex", "claudeAgent"] as const) {
-    const selections = coerceProviderOptionSelections(candidate?.[providerKey]);
-    if (selections) {
-      result[providerKey] = selections;
-    }
-  }
-
-  if (provider === "codex" && legacy) {
-    const codexExtras: ProviderOptionSelection[] = [];
-    if (typeof legacy.effort === "string" && legacy.effort.length > 0) {
-      codexExtras.push({ id: "reasoningEffort", value: legacy.effort });
-    }
-    const fastMode =
-      legacy.codexFastMode === true ||
-      (typeof legacy.serviceTier === "string" && legacy.serviceTier === "fast");
-    if (fastMode) {
-      codexExtras.push({ id: "fastMode", value: true });
-    }
-    if (codexExtras.length > 0) {
-      const existing = result.codex ?? [];
-      const existingIds = new Set(existing.map((entry) => entry.id));
-      const merged = [...existing];
-      for (const extra of codexExtras) {
-        if (!existingIds.has(extra.id)) merged.push(extra);
-      }
-      result.codex = merged;
-    }
-  }
-
-  return Object.keys(result).length > 0 ? result : null;
-}
-
-function normalizeModelSelection(
-  value: unknown,
-  legacy?: {
-    provider?: unknown;
-    model?: unknown;
-    modelOptions?: unknown;
-    legacyCodex?: LegacyCodexFields;
-  },
-): NormalizedModelSelection | null {
-  const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-  const instanceId = normalizeProviderInstanceId(
-    candidate?.instanceId ?? candidate?.provider ?? legacy?.provider,
-  );
+  const instanceId = normalizeProviderInstanceId(candidate?.instanceId);
   if (instanceId === null) {
     return null;
   }
-  const rawModel = candidate?.model ?? legacy?.model;
+  const rawModel = candidate?.model;
   if (typeof rawModel !== "string") {
     return null;
   }
   const driverKindHint =
-    normalizeProviderDriverKind(candidate?.provider ?? legacy?.provider) ??
-    ProviderDriverKind.make("codex");
+    normalizeProviderDriverKind(instanceId) ?? ProviderDriverKind.make("codex");
   const model = normalizeModelSlug(rawModel, driverKindHint);
   if (!model) {
     return null;
   }
-  if (Array.isArray(candidate?.options)) {
-    const selections = coerceProviderOptionSelections(candidate.options);
-    return createModelSelection(instanceId, model, selections) as NormalizedModelSelection;
-  }
-  const kindForLegacyOptions = normalizeProviderDriverKind(instanceId);
-  const modelOptions = kindForLegacyOptions
-    ? normalizeProviderModelOptions(
-        candidate?.options ? { [kindForLegacyOptions]: candidate.options } : legacy?.modelOptions,
-        kindForLegacyOptions,
-        kindForLegacyOptions === "codex" ? legacy?.legacyCodex : undefined,
-      )
-    : null;
-  const options = kindForLegacyOptions ? modelOptions?.[kindForLegacyOptions] : undefined;
-  return createModelSelection(instanceId, model, options) as NormalizedModelSelection;
+  const selections = coerceProviderOptionSelections(candidate?.options);
+  return createModelSelection(instanceId, model, selections) as NormalizedModelSelection;
 }
 
 type NormalizedModelSelection = Omit<ModelSelection, "instanceId"> & {
   readonly instanceId: ProviderInstanceId;
 };
-
-function legacySyncModelSelectionOptions(
-  modelSelection: NormalizedModelSelection | null,
-  modelOptions: ProviderOptionSelectionsByProvider | null | undefined,
-): NormalizedModelSelection | null {
-  if (modelSelection === null) {
-    return null;
-  }
-  const kind = normalizeProviderDriverKind(modelSelection.instanceId);
-  const options = kind ? modelOptions?.[kind] : undefined;
-  return createModelSelection(
-    modelSelection.instanceId,
-    modelSelection.model,
-    options,
-  ) as NormalizedModelSelection;
-}
-
-function legacyMergeModelSelectionIntoProviderModelOptions(
-  modelSelection: NormalizedModelSelection | null,
-  currentModelOptions: ProviderOptionSelectionsByProvider | null | undefined,
-): ProviderOptionSelectionsByProvider | null {
-  if (!modelSelection?.options || modelSelection.options.length === 0) {
-    return normalizeProviderModelOptions(currentModelOptions);
-  }
-  const kind = normalizeProviderDriverKind(modelSelection.instanceId);
-  if (!kind) {
-    return normalizeProviderModelOptions(currentModelOptions);
-  }
-  return legacyReplaceProviderModelOptions(
-    normalizeProviderModelOptions(currentModelOptions),
-    kind,
-    modelSelection.options,
-  );
-}
-
-function legacyReplaceProviderModelOptions(
-  currentModelOptions: ProviderOptionSelectionsByProvider | null | undefined,
-  provider: ProviderDriverKind,
-  nextProviderOptions: ReadonlyArray<ProviderOptionSelection> | null | undefined,
-): ProviderOptionSelectionsByProvider | null {
-  const { [provider]: _discardedProviderModelOptions, ...otherProviderModelOptions } =
-    currentModelOptions ?? {};
-  const merged: ProviderOptionSelectionsByProvider = { ...otherProviderModelOptions };
-  if (nextProviderOptions && nextProviderOptions.length > 0) {
-    merged[provider] = nextProviderOptions;
-  }
-  return Object.keys(merged).length > 0 ? merged : null;
-}
-
-function legacyToModelSelectionByProvider(
-  modelSelection: NormalizedModelSelection | null,
-  modelOptions: ProviderOptionSelectionsByProvider | null | undefined,
-): Partial<Record<ProviderInstanceId, ModelSelection>> {
-  const result: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
-  if (modelOptions) {
-    for (const provider of ["codex", "claudeAgent"] as const) {
-      const options = modelOptions[provider];
-      if (options && options.length > 0) {
-        const driverKind = ProviderDriverKind.make(provider);
-        const instanceKey = defaultInstanceIdForDriver(driverKind);
-        result[instanceKey] = createModelSelection(
-          instanceKey,
-          modelSelection?.instanceId === instanceKey
-            ? modelSelection.model
-            : (DEFAULT_MODEL_BY_PROVIDER[driverKind] ?? DEFAULT_MODEL),
-          options,
-        );
-      }
-    }
-  }
-  if (modelSelection) {
-    result[modelSelection.instanceId] = modelSelection as ModelSelection;
-  }
-  return result;
-}
 
 export function deriveEffectiveComposerModelState(input: {
   draft:
@@ -1763,25 +1565,6 @@ function normalizePersistedDraftsByThreadId(
     const previewAnnotations = Array.isArray(draftCandidate.previewAnnotations)
       ? draftCandidate.previewAnnotations.filter(isPreviewAnnotationPayload)
       : [];
-    const legacyElements =
-      "elementContexts" in draftValue && Array.isArray(draftValue.elementContexts)
-        ? draftValue.elementContexts
-        : [];
-    for (const element of legacyElements) {
-      if (
-        !isElementContextDetails(element) ||
-        !("id" in element) ||
-        typeof element.id !== "string" ||
-        !("pickedAt" in element) ||
-        typeof element.pickedAt !== "string"
-      )
-        continue;
-      if (!previewAnnotations.some((annotation) => annotation.id === element.id)) {
-        previewAnnotations.push(
-          elementContextToPreviewAnnotation(element, element.id, element.pickedAt),
-        );
-      }
-    }
     const runtimeMode = isRuntimeMode(draftCandidate.runtimeMode)
       ? draftCandidate.runtimeMode
       : null;
@@ -1821,7 +1604,6 @@ function normalizePersistedDraftsByThreadId(
       migrateLegacyTerminalContextPlaceholders(migratedPrompt, terminalContexts),
       terminalContexts.map((context) => terminalContextReference({ ...context, text: "" })),
     );
-    const legacyDraftCandidate = draftValue as LegacyPersistedComposerThreadDraftState;
     let modelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
     let activeProvider: ProviderInstanceId | null = null;
     let modelSelectionExplicit: true | undefined = undefined;
@@ -1835,35 +1617,6 @@ function normalizePersistedDraftsByThreadId(
       >;
       activeProvider = normalizeProviderInstanceId(draftCandidate.activeProvider);
       modelSelectionExplicit = draftCandidate.modelSelectionExplicit === true ? true : undefined;
-    } else {
-      const normalizedModelOptions =
-        normalizeProviderModelOptions(
-          legacyDraftCandidate.modelOptions,
-          undefined,
-          legacyDraftCandidate,
-        ) ?? null;
-      const normalizedModelSelection = normalizeModelSelection(
-        legacyDraftCandidate.modelSelection,
-        {
-          provider: legacyDraftCandidate.provider,
-          model: legacyDraftCandidate.model,
-          modelOptions: normalizedModelOptions ?? (legacyDraftCandidate.modelOptions as unknown),
-          legacyCodex: legacyDraftCandidate,
-        },
-      );
-      const mergedModelOptions = legacyMergeModelSelectionIntoProviderModelOptions(
-        normalizedModelSelection,
-        normalizedModelOptions,
-      );
-      const modelSelection = legacySyncModelSelectionOptions(
-        normalizedModelSelection,
-        mergedModelOptions,
-      );
-      modelSelectionByProvider = legacyToModelSelectionByProvider(
-        modelSelection,
-        mergedModelOptions,
-      );
-      activeProvider = modelSelection?.instanceId ?? null;
     }
 
     const hasModelData =
@@ -1917,54 +1670,10 @@ function normalizePersistedDraftsByThreadId(
   return nextDraftsByThreadKey;
 }
 
-function persistedComposerDraftHasUserContent(draft: PersistedComposerThreadDraftState): boolean {
-  return (
-    draft.prompt.trim().length > 0 ||
-    draft.attachments.length > 0 ||
-    (draft.files?.length ?? 0) > 0 ||
-    (draft.terminalContexts?.length ?? 0) > 0 ||
-    (draft.previewAnnotations?.length ?? 0) > 0 ||
-    (draft.reviewComments?.length ?? 0) > 0 ||
-    (draft.threadContexts?.length ?? 0) > 0
-  );
-}
-
-function stripLegacyModelSeedsFromEmptyDraftSessions(
-  draftsByThreadKey: PersistedComposerDraftStoreState["draftsByThreadKey"],
-  draftThreadsByThreadKey: PersistedComposerDraftStoreState["draftThreadsByThreadKey"],
-): PersistedComposerDraftStoreState["draftsByThreadKey"] {
-  return Object.fromEntries(
-    Object.entries(draftsByThreadKey).flatMap(([threadKey, draft]) => {
-      if (
-        draftThreadsByThreadKey[threadKey] === undefined ||
-        draft.modelSelectionExplicit === true ||
-        persistedComposerDraftHasUserContent(draft)
-      ) {
-        return [[threadKey, draft]];
-      }
-
-      const {
-        activeProvider: _activeProvider,
-        modelSelectionByProvider: _modelSelectionByProvider,
-        modelSelectionExplicit: _modelSelectionExplicit,
-        ...retained
-      } = draft;
-      return retained.runtimeMode || retained.interactionMode ? [[threadKey, retained]] : [];
-    }),
-  );
-}
-
 function migratePersistedComposerDraftStoreState(
   persistedState: unknown,
 ): PersistedComposerDraftStoreState {
-  const normalized = normalizeCurrentPersistedComposerDraftStoreState(persistedState);
-  return {
-    ...normalized,
-    draftsByThreadKey: stripLegacyModelSeedsFromEmptyDraftSessions(
-      normalized.draftsByThreadKey,
-      normalized.draftThreadsByThreadKey,
-    ),
-  };
+  return normalizeCurrentPersistedComposerDraftStoreState(persistedState);
 }
 
 export function partializeComposerDraftStoreState(
@@ -2103,15 +1812,11 @@ function normalizeCurrentPersistedComposerDraftStoreState(
   if (!persistedState || typeof persistedState !== "object") {
     return EMPTY_PERSISTED_DRAFT_STORE_STATE;
   }
-  const normalizedPersistedState = persistedState as LegacyPersistedComposerDraftStoreState;
+  const normalizedPersistedState = persistedState as UnvalidatedPersistedComposerDraftStoreState;
   const { draftThreadsByThreadKey, logicalProjectDraftThreadKeyByLogicalProjectKey } =
     normalizePersistedDraftThreads(
-      normalizedPersistedState.draftThreadsByThreadKey ??
-        normalizedPersistedState.draftThreadsByThreadId,
-      normalizedPersistedState.logicalProjectDraftThreadKeyByLogicalProjectKey ??
-        normalizedPersistedState.projectDraftThreadKeyByProjectKey ??
-        normalizedPersistedState.projectDraftThreadIdByProjectKey ??
-        normalizedPersistedState.projectDraftThreadIdByProjectId,
+      normalizedPersistedState.draftThreadsByThreadKey,
+      normalizedPersistedState.logicalProjectDraftThreadKeyByLogicalProjectKey,
     );
 
   let stickyModelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
@@ -2127,44 +1832,19 @@ function normalizeCurrentPersistedComposerDraftStoreState(
     stickyActiveProvider = normalizeProviderInstanceId(
       normalizedPersistedState.stickyActiveProvider,
     );
-  } else {
-    const stickyModelOptions =
-      normalizeProviderModelOptions(normalizedPersistedState.stickyModelOptions) ?? {};
-    const normalizedStickyModelSelection = normalizeModelSelection(
-      normalizedPersistedState.stickyModelSelection,
-      {
-        provider: normalizedPersistedState.stickyProvider ?? "codex",
-        model: normalizedPersistedState.stickyModel,
-        modelOptions: stickyModelOptions,
-      },
-    );
-    const nextStickyModelOptions = legacyMergeModelSelectionIntoProviderModelOptions(
-      normalizedStickyModelSelection,
-      stickyModelOptions,
-    );
-    const stickyModelSelection = legacySyncModelSelectionOptions(
-      normalizedStickyModelSelection,
-      nextStickyModelOptions,
-    );
-    stickyModelSelectionByProvider = legacyToModelSelectionByProvider(
-      stickyModelSelection,
-      nextStickyModelOptions,
-    );
-    stickyActiveProvider = normalizeProviderInstanceId(normalizedPersistedState.stickyProvider);
   }
 
   return {
     draftsByThreadKey: normalizePersistedDraftsByThreadId(
-      normalizedPersistedState.draftsByThreadKey ?? normalizedPersistedState.draftsByThreadId,
+      normalizedPersistedState.draftsByThreadKey,
       draftThreadsByThreadKey,
     ),
     draftThreadsByThreadKey,
     logicalProjectDraftThreadKeyByLogicalProjectKey,
     stickyModelSelectionByProvider: compactModelSelectionByProvider(stickyModelSelectionByProvider),
-    stickyOptionsByModelByProvider:
-      normalizedPersistedState.stickyOptionsByModelByProvider === undefined
-        ? seedStickyOptionsByModel(stickyModelSelectionByProvider)
-        : compactStickyOptionsByModel(normalizedPersistedState.stickyOptionsByModelByProvider),
+    stickyOptionsByModelByProvider: compactStickyOptionsByModel(
+      normalizedPersistedState.stickyOptionsByModelByProvider ?? {},
+    ),
     stickyActiveProvider,
   };
 }

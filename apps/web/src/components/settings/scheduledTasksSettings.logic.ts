@@ -12,7 +12,7 @@ import {
 
 import {
   resolveProjectSettings,
-  type LegacyProjectSettingsFields,
+  type ProjectAggregateSettingsFields,
 } from "@t3tools/shared/projectSettings";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 
@@ -157,7 +157,7 @@ export function taskToDraft(task: ScheduledTask): DraftState {
 
 export function scheduledTaskDefaultModel(
   settings: ServerSettings,
-  project: (LegacyProjectSettingsFields & { readonly id: ProjectId }) | null,
+  project: (ProjectAggregateSettingsFields & { readonly id: ProjectId }) | null,
   entries: readonly ProviderInstanceEntry[],
 ): ModelSelection | null {
   const available = entries.filter(

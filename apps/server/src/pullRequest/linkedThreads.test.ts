@@ -126,18 +126,6 @@ it.effect(
           project_id, title, workspace_root, scripts_json, created_at, updated_at
         ) VALUES ('project-1', 'Project', '/tmp/project', '[]', ${createdAt}, ${createdAt})
       `;
-      yield* sql`
-        INSERT INTO projection_threads (
-          thread_id, project_id, title, model_selection_json, created_at, updated_at
-        ) VALUES ('v1-only', 'project-1', 'v1-only',
-          '{"instanceId":"codex","model":"gpt-5.4"}', ${createdAt}, ${createdAt})
-      `;
-      yield* sql`
-        INSERT INTO projection_thread_pull_requests (
-          thread_id, host, repository, number, url, source, linked_at
-        ) VALUES ('v1-only', 'github.com', 'acme/web', 7,
-          'https://github.com/acme/web/pull/7', 'manual', ${createdAt})
-      `;
 
       expect(
         (yield* listLinkedPullRequestThreads({
