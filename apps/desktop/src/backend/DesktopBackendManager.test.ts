@@ -56,7 +56,6 @@ const baseConfig: DesktopBackendManager.DesktopBackendStartConfig = {
     desktopTelemetryFd: 4,
     desktopTelemetryControlFd: 5,
   },
-  bootstrapDelivery: "fd3",
   extendEnv: true,
   httpBaseUrl: new URL("http://127.0.0.1:3773"),
   captureOutput: true,

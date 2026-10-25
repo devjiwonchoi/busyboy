@@ -11,7 +11,6 @@ import {
   accessibleWindowText,
   compactAccessibilityTree,
   findAccessibleWindow,
-  isWaylandSession,
 } from "./snapShot.ts";
 
 const ACCESSIBILITY_TIMEOUT_MS = 3_000;
@@ -108,7 +107,7 @@ async function windowsForPid(
     .catch(() => []);
 }
 
-/** Flatpak apps reach AT-SPI through xdg-dbus-proxy, so the compositor PID misses. */
+/** Falls back to every app when the captured process exposes no windows. */
 async function windowsFromAppList(App: AccessibilityApp): Promise<readonly AccessibilityElement[]> {
   const apps = await App.list().catch(() => []);
   return (await Promise.all(apps.map((app) => app.children().catch(() => [])))).flat();
@@ -128,7 +127,6 @@ async function readCapturedWindowAccessibility(
         ? [foreground.asElement()]
         : []
       : await windowsForPid(App, active.owner.processId);
-  const matchMode = isWaylandSession(platform, process.env) ? "wayland" : "screen-bounds";
   const captured = {
     title: active.title,
     sourceTitle,
@@ -138,7 +136,6 @@ async function readCapturedWindowAccessibility(
   const window = findAccessibleWindow(
     pidWindows.length > 0 || foreground !== undefined ? pidWindows : await windowsFromAppList(App),
     captured,
-    matchMode,
     { allowUntitledUniqueBounds: foreground === undefined && pidWindows.length > 0 },
   );
   if (!window) {
@@ -146,20 +143,7 @@ async function readCapturedWindowAccessibility(
     return undefined;
   }
   const accessibleBounds = window.bounds;
-  const matchingBounds =
-    matchMode === "wayland" &&
-    active.clientBounds &&
-    accessibleBounds &&
-    Math.abs(accessibleBounds.width - active.clientBounds.width) <= 2 &&
-    Math.abs(accessibleBounds.height - active.clientBounds.height) <= 2
-      ? active.clientBounds
-      : active.bounds;
-  const locationsReliable =
-    active.accessibilityBoundsReliable !== false &&
-    (matchMode === "screen-bounds" ||
-      (accessibleBounds !== null &&
-        Math.abs(accessibleBounds.x - matchingBounds.x) <= 2 &&
-        Math.abs(accessibleBounds.y - matchingBounds.y) <= 2));
+  const locationsReliable = active.accessibilityBoundsReliable !== false;
   const flatRead = window
     .tree()
     .then((tree) => {
@@ -172,10 +156,7 @@ async function readCapturedWindowAccessibility(
     });
   // A decorated screenshot contains more than the accessibility client area. Keep its
   // frame origin/scale so element coordinates include the actual decoration offset.
-  const sourceBounds =
-    matchMode === "wayland" && active.clientBounds
-      ? active.bounds
-      : (accessibleBounds ?? active.bounds);
+  const sourceBounds = accessibleBounds ?? active.bounds;
   const richRead = accessibleWindowElementTree(window, sourceBounds, imageSize, {
     locationsReliable,
     onProgress: (root, truncated, descendantLocationsReliable) => {
@@ -184,7 +165,6 @@ async function readCapturedWindowAccessibility(
       progress.richTruncated = truncated;
     },
     shouldContinue: () => !progress.timedOut,
-    verifyDescendantLocations: matchMode === "wayland",
   })
     .then((rich) => {
       progress.richComplete = true;

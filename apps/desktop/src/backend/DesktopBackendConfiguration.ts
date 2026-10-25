@@ -238,7 +238,6 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       },
       extendEnv: true,
       bootstrap,
-      bootstrapDelivery: "fd3",
       httpBaseUrl: backendExposure.httpBaseUrl,
       captureOutput: true,
       preflightFailure: Option.none(),
