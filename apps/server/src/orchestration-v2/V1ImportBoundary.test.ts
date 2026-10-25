@@ -64,7 +64,8 @@ it("reads the V1 tables only from the legacy importer", () => {
   }
 });
 
-it("keeps the legacy importer out of reach of new code", () => {
+it("keeps the removed legacy importer from coming back", () => {
+  assert.isFalse(NodeFS.existsSync(NodePath.join(sourceRoot, "orchestration-v2/legacy")));
   const importers = relativeSources
     .filter(
       ({ path, source }) =>
@@ -72,10 +73,5 @@ it("keeps the legacy importer out of reach of new code", () => {
     )
     .map(({ path }) => path)
     .toSorted();
-  assert.deepEqual(importers, [
-    "orchestration-v2/ThreadManagementService.ts",
-    "orchestration-v2/runtimeLayer.ts",
-    "project/ProjectService.ts",
-    "serverRuntimeStartup.ts",
-  ]);
+  assert.deepEqual(importers, []);
 });
