@@ -43,6 +43,10 @@ export const DesktopConfig = Config.all({
   devRemoteT3ServerEntryPath: trimmedString("T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH"),
   configuredBackendPort: Config.Port("T3CODE_PORT").pipe(Config.option),
   commitHashOverride: trimmedString("T3CODE_COMMIT_HASH"),
+  // Set by the local app's launcher (apps/desktop/scripts/local-app.mjs).
+  localAppRoot: trimmedString("T3CODE_LOCAL_APP_ROOT"),
+  localAppLauncher: trimmedString("T3CODE_LOCAL_APP_LAUNCHER"),
+  localAppCommit: trimmedString("T3CODE_LOCAL_APP_COMMIT"),
   desktopLanHostOverride: trimmedString("T3CODE_DESKTOP_LAN_HOST"),
   desktopHttpsEndpointUrls: commaSeparatedStrings("T3CODE_DESKTOP_HTTPS_ENDPOINTS"),
   otlpTracesUrl: trimmedString("T3CODE_OTLP_TRACES_URL"),

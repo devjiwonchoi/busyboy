@@ -33,6 +33,7 @@ import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import { isLocalAppUpdateError } from "./LocalAppUpdater.ts";
 import { normalizeDesktopUpdateReleaseNotes } from "./releaseNotes.ts";
 import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
 import {
@@ -280,7 +281,13 @@ function createBaseUpdateState(
     ...createInitialDesktopUpdateState(environment.appVersion, environment.runtimeInfo, channel),
     enabled,
     status: enabled ? "idle" : "disabled",
+    ...(Option.isSome(environment.localApp) ? { localApp: true } : {}),
   };
+}
+
+// A local-app failure carries the script's own reason, including the log path.
+function updateErrorMessage(error: { readonly message: string; readonly cause: unknown }): string {
+  return isLocalAppUpdateError(error.cause) ? error.cause.message : error.message;
 }
 
 function getCanRetryFromState(state: DesktopUpdateState): boolean {
@@ -313,7 +320,14 @@ function getAutoUpdateDisabledReason(args: {
   isDebPackage: boolean;
   disabledByEnv: boolean;
   hasUpdateFeedConfig: boolean;
+  isLocalApp: boolean;
 }): string | null {
+  // The local app updates from its own checkout, with no feed or package.
+  if (args.isLocalApp) {
+    return args.disabledByEnv
+      ? "Automatic updates are disabled by the T3CODE_DISABLE_AUTO_UPDATE setting."
+      : null;
+  }
   if (!args.hasUpdateFeedConfig) {
     return "Automatic updates are not available because no update feed is configured.";
   }
@@ -421,6 +435,7 @@ export const make = Effect.gen(function* () {
         isDebPackage,
         disabledByEnv: config.disableAutoUpdate,
         hasUpdateFeedConfig: hasFeedConfig,
+        isLocalApp: Option.isSome(environment.localApp),
       }),
     );
   });
@@ -499,7 +514,7 @@ export const make = Effect.gen(function* () {
           )(function* (error) {
             const failedAt = yield* currentIsoTimestamp;
             yield* updateState((current) =>
-              reduceDesktopUpdateStateOnCheckFailure(current, error.message, failedAt),
+              reduceDesktopUpdateStateOnCheckFailure(current, updateErrorMessage(error), failedAt),
             );
             yield* logUpdaterError(error.message, {
               errorTag: error._tag,
@@ -543,7 +558,7 @@ export const make = Effect.gen(function* () {
         ElectronUpdaterDownloadUpdateError: Effect.fn("desktop.updates.handleDownloadFailure")(
           function* (error) {
             yield* updateState((current) =>
-              reduceDesktopUpdateStateOnDownloadFailure(current, error.message),
+              reduceDesktopUpdateStateOnDownloadFailure(current, updateErrorMessage(error)),
             );
             yield* logUpdaterError(error.message, {
               errorTag: error._tag,
@@ -744,7 +759,7 @@ export const make = Effect.gen(function* () {
           Effect.catchTags({
             ElectronUpdaterQuitAndInstallError: Effect.fn("desktop.updates.handleInstallFailure")(
               function* (error) {
-                yield* recoverFailedInstall(error.message);
+                yield* recoverFailedInstall(updateErrorMessage(error));
                 yield* logUpdaterError(error.message, {
                   errorTag: error._tag,
                   cause: describeUpdateErrorCause(error.cause),
