@@ -142,17 +142,4 @@ describe("RemoteEnvironmentAuthorization", () => {
       ).toHaveLength(2);
     }),
   );
-
-  it.effect("rejects removed hosted authorization without fetching credentials", () =>
-    Effect.gen(function* () {
-      const harness = yield* makeHarness({ responses: [] });
-      const result = yield* RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization.pipe(
-        Effect.flatMap((auth) => auth.authorizeDpop({ expectedEnvironmentId: ENVIRONMENT_ID })),
-        Effect.flip,
-        Effect.provide(harness.layer),
-      );
-      expect(result._tag).toBe("ConnectionBlockedError");
-      expect(harness.fetch.calls).toHaveLength(0);
-    }),
-  );
 });

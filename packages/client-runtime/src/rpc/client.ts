@@ -1,7 +1,6 @@
 import {
   EnvironmentAuthorizationError,
   clientRpcRequiredScopes,
-  authScopeRequiredResponse,
   type EnvironmentId,
   type ClientGuardedRpcTag,
   ORCHESTRATION_V2_WS_METHODS,
@@ -167,7 +166,7 @@ export class RpcPermissionGuard extends Context.Reference<{
         ? Effect.void
         : Effect.fail(
             new EnvironmentAuthorizationError({
-              ...authScopeRequiredResponse(scope),
+              requiredScope: scope,
               message: `This connection requires ${scope}.`,
             }),
           );

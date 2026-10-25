@@ -5,7 +5,6 @@ import * as Schema from "effect/Schema";
 import {
   BearerConnectionTarget,
   PrimaryConnectionTarget,
-  RelayConnectionTarget,
   SshConnectionTarget,
   type ConnectionTarget,
 } from "./model.ts";
@@ -23,7 +22,6 @@ export class BearerConnectionProfile extends Schema.TaggedClass<BearerConnection
     httpBaseUrl: Schema.String,
     wsBaseUrl: Schema.String,
     learned: Schema.optionalKey(Schema.Literal(true)),
-    authorization: Schema.optionalKey(Schema.Literal("t3-connect")),
     /**
      * "tailscale" on a learned route the server found on its Tailscale
      * interface. A bare 100.64.0.0/10 address could belong to any VPN.
@@ -74,13 +72,6 @@ export class PrimaryConnectionRegistration extends Schema.TaggedClass<PrimaryCon
   },
 ) {}
 
-export class RelayConnectionRegistration extends Schema.TaggedClass<RelayConnectionRegistration>()(
-  "RelayConnectionRegistration",
-  {
-    target: RelayConnectionTarget,
-  },
-) {}
-
 export class BearerConnectionRegistration extends Schema.TaggedClass<BearerConnectionRegistration>()(
   "BearerConnectionRegistration",
   {
@@ -101,30 +92,20 @@ export class SshConnectionRegistration extends Schema.TaggedClass<SshConnectionR
 ) {}
 
 export const ConnectionRegistration = Schema.Union([
-  RelayConnectionRegistration,
   BearerConnectionRegistration,
   SshConnectionRegistration,
 ]);
 export type ConnectionRegistration = typeof ConnectionRegistration.Type;
 
-/**
- * The primary stays on same-origin cookie auth
- * (`PrimaryConnectionRegistration`); secondary local backends live on a
- * separate loopback origin and authenticate with a bearer token minted from
- * their bootstrap credential (`BearerConnectionRegistration`).
- */
-export const PlatformConnectionRegistration = Schema.Union([
-  PrimaryConnectionRegistration,
-  BearerConnectionRegistration,
-]);
-export type PlatformConnectionRegistration = typeof PlatformConnectionRegistration.Type;
+/** The platform registers only the primary, which stays on same-origin cookie auth. */
+export const PlatformConnectionRegistration = PrimaryConnectionRegistration;
+export type PlatformConnectionRegistration = PrimaryConnectionRegistration;
 
 export function connectionRegistrationCatalogEntry(
   registration: ConnectionRegistration | PrimaryConnectionRegistration,
 ): ConnectionCatalogEntry {
   switch (registration._tag) {
     case "PrimaryConnectionRegistration":
-    case "RelayConnectionRegistration":
       return {
         target: registration.target,
         profile: Option.none(),

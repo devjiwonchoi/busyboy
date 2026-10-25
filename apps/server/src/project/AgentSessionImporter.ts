@@ -258,7 +258,7 @@ const make = Effect.gen(function* () {
                 actualProjectId: existing.value.thread.projectId,
               });
             }
-            if (existing.value.thread.historyOrigin !== "v1_import") {
+            if (existing.value.thread.historyOrigin !== "imported") {
               return yield* new AgentSessionThreadModifiedError({ threadId });
             }
             yield* runtimes.recordImportedTranscript({ threadId, source });
@@ -288,7 +288,7 @@ const make = Effect.gen(function* () {
             linkedPullRequest: null,
             branchPullRequest: null,
             activeProviderThreadId: providerThreadId,
-            historyOrigin: "v1_import",
+            historyOrigin: "imported",
             lineage: {
               parentThreadId: null,
               relationshipToParent: null,

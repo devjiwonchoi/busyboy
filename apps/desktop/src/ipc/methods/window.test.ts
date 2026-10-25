@@ -26,14 +26,14 @@ import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as DesktopAppSettings from "../../settings/DesktopAppSettings.ts";
 import {
-  getLocalEnvironmentBootstraps,
+  getLocalEnvironmentBootstrap,
   getWindowFullscreenState,
   pasteAsText,
   pickProjectFavicon,
   probeRemoteEditors,
 } from "./window.ts";
 
-const readySecondaryConfig: DesktopBackendManager.DesktopBackendStartConfig = {
+const readyPrimaryConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   executablePath: "node",
   args: ["/app/bin.mjs"],
   entryPath: "/app/bin.mjs",
@@ -54,12 +54,12 @@ const readySecondaryConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   preflightFailure: Option.none(),
 };
 
-const secondaryInstance: DesktopBackendManager.DesktopBackendInstance = {
-  id: DesktopBackendManager.BackendInstanceId("secondary"),
-  label: Effect.succeed("Secondary"),
+const primaryInstance: DesktopBackendManager.DesktopBackendInstance = {
+  id: DesktopBackendManager.PRIMARY_INSTANCE_ID,
+  label: Effect.succeed("Windows"),
   start: Effect.void,
   stop: () => Effect.void,
-  currentConfig: Effect.succeedSome(readySecondaryConfig),
+  currentConfig: Effect.succeedSome(readyPrimaryConfig),
   snapshot: Effect.succeed({
     desiredRunning: true,
     ready: true,
@@ -79,116 +79,69 @@ const backendConfigurationLayer = Layer.succeed(
   } satisfies DesktopBackendConfiguration.DesktopBackendConfiguration["Service"],
 );
 
-const bootstrapsLayer = (instances: ReadonlyArray<DesktopBackendManager.DesktopBackendInstance>) =>
-  Layer.merge(DesktopBackendPool.layerTest([...instances]), backendConfigurationLayer);
+const bootstrapLayer = (instance: DesktopBackendManager.DesktopBackendInstance) =>
+  Layer.merge(DesktopBackendPool.layerTest(instance), backendConfigurationLayer);
 
-describe("getLocalEnvironmentBootstraps", () => {
-  it.effect("publishes a ready secondary backend", () =>
+describe("getLocalEnvironmentBootstrap", () => {
+  it.effect("publishes the ready primary backend", () =>
     Effect.gen(function* () {
-      const result = yield* getLocalEnvironmentBootstraps.handler();
+      const result = yield* getLocalEnvironmentBootstrap.handler();
 
-      assert.deepEqual(result, [
-        {
-          id: "secondary",
-          label: "Secondary",
-          httpBaseUrl: "http://127.0.0.1:3774/",
-          wsBaseUrl: "ws://127.0.0.1:3774/",
-          bootstrapToken: "bootstrap-token",
-        },
-      ]);
-    }).pipe(Effect.provide(bootstrapsLayer([secondaryInstance]))),
+      assert.deepEqual(result, {
+        label: "Windows",
+        httpBaseUrl: "http://127.0.0.1:3774/",
+        wsBaseUrl: "ws://127.0.0.1:3774/",
+        bootstrapToken: "bootstrap-token",
+      });
+    }).pipe(Effect.provide(bootstrapLayer(primaryInstance))),
   );
 
   it.effect("hands out the current window's token to a backend launched with the secret", () =>
     Effect.gen(function* () {
-      const result = yield* getLocalEnvironmentBootstraps.handler();
+      const result = yield* getLocalEnvironmentBootstrap.handler();
 
-      assert.deepEqual(result, [
-        {
-          id: "secondary",
-          label: "Secondary",
-          httpBaseUrl: "http://127.0.0.1:3774/",
-          wsBaseUrl: "ws://127.0.0.1:3774/",
-          bootstrapToken: "current-window-token",
-        },
-      ]);
+      assert.deepEqual(result, {
+        label: "Windows",
+        httpBaseUrl: "http://127.0.0.1:3774/",
+        wsBaseUrl: "ws://127.0.0.1:3774/",
+        bootstrapToken: "current-window-token",
+      });
     }).pipe(
       Effect.provide(
-        bootstrapsLayer([
-          {
-            ...secondaryInstance,
-            currentConfig: Effect.succeedSome({
-              ...readySecondaryConfig,
-              bootstrap: {
-                ...readySecondaryConfig.bootstrap,
-                desktopBootstrapSecret: "desktop-secret",
-              },
-            }),
-          },
-        ]),
+        bootstrapLayer({
+          ...primaryInstance,
+          currentConfig: Effect.succeedSome({
+            ...readyPrimaryConfig,
+            bootstrap: {
+              ...readyPrimaryConfig.bootstrap,
+              desktopBootstrapSecret: "desktop-secret",
+            },
+          }),
+        }),
       ),
     ),
   );
 
-  it.effect("publishes a pending bootstrap only while a transient retry is scheduled", () => {
-    const retryingConfig: DesktopBackendManager.DesktopBackendStartConfig = {
-      ...readySecondaryConfig,
-      preflightFailure: Option.some({
-        reason: "Probe timed out",
-        fatal: false,
-        retryLimit: 12,
-      }),
-    };
-    const retryingInstance: DesktopBackendManager.DesktopBackendInstance = {
-      ...secondaryInstance,
-      currentConfig: Effect.succeedSome(retryingConfig),
-      snapshot: Effect.succeed({
-        desiredRunning: true,
-        ready: false,
-        activePid: Option.none(),
-        restartAttempt: 2,
-        restartScheduled: true,
-      }),
-    };
-
-    return Effect.gen(function* () {
-      const result = yield* getLocalEnvironmentBootstraps.handler();
-      assert.deepEqual(result, [
-        {
-          id: "secondary",
-          label: "Secondary",
-          httpBaseUrl: null,
-          wsBaseUrl: null,
-        },
-      ]);
-    }).pipe(Effect.provide(bootstrapsLayer([retryingInstance])));
-  });
-
-  it.effect("omits a bounded transient bootstrap after retries stop", () => {
-    const stoppedInstance: DesktopBackendManager.DesktopBackendInstance = {
-      ...secondaryInstance,
-      currentConfig: Effect.succeedSome({
-        ...readySecondaryConfig,
-        preflightFailure: Option.some({
-          reason: "Probe timed out",
-          fatal: false,
-          retryLimit: 12,
+  it.effect("publishes nothing while preflight fails", () =>
+    Effect.gen(function* () {
+      const result = yield* getLocalEnvironmentBootstrap.handler();
+      assert.isNull(result);
+    }).pipe(
+      Effect.provide(
+        bootstrapLayer({
+          ...primaryInstance,
+          currentConfig: Effect.succeedSome({
+            ...readyPrimaryConfig,
+            preflightFailure: Option.some({
+              reason: "Probe timed out",
+              fatal: false,
+              retryLimit: 12,
+            }),
+          }),
         }),
-      }),
-      snapshot: Effect.succeed({
-        desiredRunning: false,
-        ready: false,
-        activePid: Option.none(),
-        restartAttempt: 12,
-        restartScheduled: false,
-      }),
-    };
-
-    return Effect.gen(function* () {
-      const result = yield* getLocalEnvironmentBootstraps.handler();
-      assert.deepEqual(result, []);
-    }).pipe(Effect.provide(bootstrapsLayer([stoppedInstance])));
-  });
+      ),
+    ),
+  );
 });
 
 describe("getWindowFullscreenState", () => {

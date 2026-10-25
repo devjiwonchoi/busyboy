@@ -542,9 +542,9 @@ export const OrchestratorMcpScheduledTask = Schema.Struct({
   schedule: ScheduledTaskSchedule,
   nextRunAt: Schema.NullOr(IsoDateTime),
   lastRunStatus: ScheduledTaskRunStatus,
-  webhookUrl: Schema.optional(Schema.String).annotate({
+  webhookPath: Schema.optional(Schema.String).annotate({
     description:
-      "Public URL when configured. Otherwise use the webhook path with an environment address reachable by the sender.",
+      "Webhook path, including its secret token. Combine it with an environment address the sender can reach.",
   }),
   webhookSignature: Schema.optional(Schema.Literals(["none", "set"])).annotate({
     description: "Whether requests must carry a valid signature.",

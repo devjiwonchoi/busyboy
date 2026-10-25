@@ -163,7 +163,6 @@ describe("searchSettings", () => {
 
   it("hides settings whose controls are unavailable", () => {
     const available = filterAvailableSettingsSearchItems({
-      hasCloudPublicConfig: false,
       hasEnvironment: false,
       hasProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
@@ -174,14 +173,11 @@ describe("searchSettings", () => {
       "follow-change-request-templates",
       "git-fetch-interval",
       "network-access",
-      "publish-agent-activity",
       "provider-health-check-interval",
       "source-control-writer-model",
       "review-guide-model",
       "review-guide-instructions",
       "source-control-writing-style",
-      "t3-connect",
-      "hold-webhooks-while-offline",
       "tailscale-https",
       "auto-settle-inactive-threads",
       "auto-settle-merged-threads",
@@ -192,7 +188,6 @@ describe("searchSettings", () => {
 
   it("keeps the local toggle searchable without offering hidden host publishing controls", () => {
     const availability = {
-      hasCloudPublicConfig: true,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
       canManageLocalBackend: false,
@@ -203,7 +198,6 @@ describe("searchSettings", () => {
       localEnvironmentDisabled: true,
     }).map((item) => item.id);
     expect(remoteOnly).toContain("local-environment");
-    expect(remoteOnly).not.toContain("t3-connect");
     expect(remoteOnly).not.toContain("publish-agent-activity");
     const browser = filterAvailableSettingsSearchItems(availability).map((item) => item.id);
     expect(browser).not.toContain("publish-agent-activity");
@@ -211,7 +205,6 @@ describe("searchSettings", () => {
 
   it("offers webhook holding only while the managed tunnel is on, like its row", () => {
     const availability = {
-      hasCloudPublicConfig: true,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
       canManageLocalBackend: true,
@@ -227,7 +220,6 @@ describe("searchSettings", () => {
 
   it("shows automatic settlement settings when the server supports them", () => {
     const available = filterAvailableSettingsSearchItems({
-      hasCloudPublicConfig: false,
       hasEnvironment: false,
       hasProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
@@ -356,7 +348,6 @@ describe("searchSettings", () => {
 
   it("keeps environment settings discoverable without a primary environment", () => {
     const available = filterAvailableSettingsSearchItems({
-      hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
       canManageLocalBackend: false,
@@ -458,7 +449,6 @@ describe("auto-settlement search availability", () => {
     const availability = getThreadAutoSettlementSearchAvailability(environments);
     expect(availability.eligibleEnvironmentIds).toEqual([capable.environmentId]);
     const items = filterAvailableSettingsSearchItems({
-      hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
       canManageLocalBackend: false,

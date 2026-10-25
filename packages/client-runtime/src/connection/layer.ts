@@ -1,17 +1,11 @@
-import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Option from "effect/Option";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 
-import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
 import * as ConnectionResolver from "./resolver.ts";
 import * as ConnectionDriver from "./driver.ts";
 import * as EnvironmentRegistry from "./registry.ts";
 import * as ConnectionOnboarding from "./onboarding.ts";
-import { connectionRoutes, hasRelayRoute } from "./routes.ts";
 import * as PlatformConnectionSource from "../platform/source.ts";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
@@ -25,7 +19,6 @@ export function layerWithOptions(options: RpcSession.RpcSessionOptions) {
   const layerOnboarding = ConnectionOnboarding.layer.pipe(Layer.provide(layerRegistry));
   const layerConnectionServices = Layer.mergeAll(
     layerRegistry,
-    RelayEnvironmentDiscovery.layer,
     layerOnboarding,
     ConnectionResolver.layer,
   );

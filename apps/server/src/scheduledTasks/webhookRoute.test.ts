@@ -1,10 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
-// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no generateKeyPairSync.
-import * as NodeCrypto from "node:crypto";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
@@ -12,10 +8,8 @@ import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 
-import { RELAY_HOOK_DELIVERY_TYP, signRelayJwt } from "@t3tools/shared/relayJwt";
 import {
   EnvironmentHttpApi,
-  EnvironmentId,
   ScheduledTaskWebhookDeliveryId,
   ScheduledTaskError,
 } from "@t3tools/contracts";
@@ -29,8 +23,6 @@ import { WEBHOOK_MAX_BODY_BYTES } from "./webhookRoute.ts";
 import * as WebhookRoute from "./webhookRoute.ts";
 
 class WebhookTestApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.webhooks) {}
-
-const environmentId = EnvironmentId.make("env-1");
 
 const handlerFor = (
   trigger: (
@@ -88,18 +80,16 @@ describe("webhook route", () => {
     }
   });
 
-  it("maps service outcomes to status codes and names each outcome for the relay", async () => {
+  it("maps service outcomes to status codes and names each outcome", async () => {
     const deliveryId = ScheduledTaskWebhookDeliveryId.make("delivery:1");
     const cases: ReadonlyArray<[WebhookTriggerResult, number, string]> = [
       [{ _tag: "accepted", deliveryId, outcome: "accepted" }, 202, "accepted"],
-      [{ _tag: "accepted", deliveryId, outcome: "duplicate" }, 202, "duplicate"],
       [{ _tag: "accepted", deliveryId, outcome: "prompt_too_long" }, 202, "prompt_too_long"],
       [{ _tag: "not_found" }, 404, "not_found"],
       [{ _tag: "rejected_signature" }, 401, "rejected_signature"],
       [{ _tag: "disabled" }, 409, "disabled"],
       [{ _tag: "rate_limited", outcome: "rate_limited" }, 429, "rate_limited"],
       [{ _tag: "rate_limited", outcome: "queue_full" }, 429, "queue_full"],
-      [{ _tag: "expired" }, 410, "expired"],
     ];
     for (const [result, status, outcome] of cases) {
       const { handler, dispose } = handlerFor(() => Effect.succeed(result));

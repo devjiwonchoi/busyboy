@@ -1,5 +1,4 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as HttpObservability from "@t3tools/shared/httpObservability";
 import { makeLocalFileTracer, makeTraceSink } from "@t3tools/shared/observability";
 import * as SharedObservability from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
@@ -35,7 +34,6 @@ export const layer = Layer.unwrap(
       // Keeps each SQL statement's span current while it waits for a connection,
       // so the client can record the lock wait on it.
       Layer.succeed(Statement.SpanPropagationEnabled, true),
-      HttpObservability.layer,
     );
 
     const layerTracer = Layer.unwrap(

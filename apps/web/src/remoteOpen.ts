@@ -11,7 +11,6 @@ import { Atom } from "effect/reactivity";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useState } from "react";
 
-import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isLoopbackHostname } from "~/environments/primary/target";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { environmentPresentations } from "~/state/presentation";
@@ -68,8 +67,6 @@ export function resolveRemoteOpenState(input: {
     if (hostname !== null && isLoopbackHostname(hostname)) {
       return LOCAL_EXEC;
     }
-  } else if (isDesktopLocalConnectionTarget(target)) {
-    return LOCAL_EXEC;
   }
 
   if (input.sshAlias !== null && input.sshAlias.length > 0) {

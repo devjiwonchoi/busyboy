@@ -71,7 +71,7 @@ import {
 
 const decodeSessionState = Schema.decodeUnknownSync(AuthSessionState);
 
-const legacyAuth = {
+const sessionAuth = {
   policy: "remote-reachable",
   bootstrapMethods: ["one-time-token"],
   sessionMethods: ["bearer-access-token"],
@@ -81,10 +81,7 @@ const legacyAuth = {
 const currentSession = {
   authenticated: true,
   scopes: ["environment:maintain"],
-  auth: {
-    ...legacyAuth,
-    serverUpdateScope: "environment:maintain",
-  },
+  auth: sessionAuth,
 } as const satisfies AuthSessionState;
 
 const success = (method: "boot-service" | "desktop-app" = "boot-service", version = "0.0.31") =>
@@ -154,33 +151,12 @@ afterEach(async () => {
 
 describe("ServerUpdateAction", () => {
   it.each([
-    { serverUpdateScope: undefined, scopes: ["orchestration:operate"], allowed: true },
-    { serverUpdateScope: undefined, scopes: ["orchestration:read"], allowed: false },
-    {
-      serverUpdateScope: "environment:maintain",
-      scopes: ["orchestration:operate"],
-      allowed: false,
-    },
-    {
-      serverUpdateScope: "environment:maintain",
-      scopes: ["environment:maintain"],
-      allowed: true,
-    },
+    { scopes: ["orchestration:operate"], allowed: false },
+    { scopes: ["environment:maintain"], allowed: true },
   ] as const)(
-    "uses the advertised update scope $serverUpdateScope with grant $scopes",
-    async ({ serverUpdateScope, scopes, allowed }) => {
-      setSession(
-        AsyncResult.success(
-          decodeSessionState({
-            ...currentSession,
-            scopes,
-            auth: {
-              ...legacyAuth,
-              ...(serverUpdateScope === undefined ? {} : { serverUpdateScope }),
-            },
-          }),
-        ),
-      );
+    "requires environment:maintain to update with grant $scopes",
+    async ({ scopes, allowed }) => {
+      setSession(AsyncResult.success(decodeSessionState({ ...currentSession, scopes })));
       testState.updateServer.mockResolvedValue(success());
 
       await renderAction();

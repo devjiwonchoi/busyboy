@@ -74,7 +74,7 @@ function makeParentThread(): OrchestrationV2AppThread {
     snoozedUntil,
     snoozedAt,
     deletedAt: null,
-    historyOrigin: "v1_import",
+    historyOrigin: "imported",
   };
 }
 

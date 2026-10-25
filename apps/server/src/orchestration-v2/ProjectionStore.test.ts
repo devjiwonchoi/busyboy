@@ -450,7 +450,7 @@ it("includes imported runless history when selecting fork context through a run"
 
   assert.isTrue(
     ProjectionStore.isTurnItemAtOrBeforeRun({
-      historyOrigin: "v1_import",
+      historyOrigin: "imported",
       itemRunId: null,
       runOrdinalById,
       sourceRunOrdinal: 1,
@@ -466,7 +466,7 @@ it("includes imported runless history when selecting fork context through a run"
   );
   assert.isTrue(
     ProjectionStore.isTurnItemAtOrBeforeRun({
-      historyOrigin: "v1_import",
+      historyOrigin: "imported",
       itemRunId: firstRunId,
       runOrdinalById,
       sourceRunOrdinal: 1,
@@ -474,7 +474,7 @@ it("includes imported runless history when selecting fork context through a run"
   );
   assert.isFalse(
     ProjectionStore.isTurnItemAtOrBeforeRun({
-      historyOrigin: "v1_import",
+      historyOrigin: "imported",
       itemRunId: secondRunId,
       runOrdinalById,
       sourceRunOrdinal: 1,
@@ -4355,7 +4355,7 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
           branch: null,
           worktreePath: null,
           activeProviderThreadId: null,
-          historyOrigin: "v1_import",
+          historyOrigin: "imported",
           lineage: {
             parentThreadId: null,
             relationshipToParent: null,
@@ -5747,13 +5747,13 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
             messageId: MessageId.make("message:projection-fork-source-rollback:legacy-import"),
             text: "legacy import before empty fork",
             streaming: false,
-            historyOrigin: "v1_import",
+            historyOrigin: "imported",
           })}
         )
       `;
       yield* sql`
         UPDATE orchestration_v2_projection_threads
-        SET payload_json = json_set(payload_json, '$.historyOrigin', 'v1_import')
+        SET payload_json = json_set(payload_json, '$.historyOrigin', 'imported')
         WHERE thread_id = ${sourceThreadId}
       `;
       yield* sql`

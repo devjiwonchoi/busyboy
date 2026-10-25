@@ -1,7 +1,6 @@
 import {
   BearerConnectionTarget,
   PrimaryConnectionTarget,
-  RelayConnectionTarget,
   SshConnectionTarget,
 } from "@t3tools/client-runtime/connection";
 import { buildRemoteOpenUrl, EnvironmentId } from "@t3tools/contracts";
@@ -63,21 +62,6 @@ describe("resolveRemoteOpenState", () => {
     ).toEqual({ mode: "local-exec" });
   });
 
-  it("keeps exec behavior for desktop-local secondary backends", () => {
-    expect(
-      resolveRemoteOpenState({
-        target: new BearerConnectionTarget({
-          environmentId,
-          label: "WSL (Ubuntu)",
-          connectionId: "local:wsl-1",
-        }),
-        sshAlias: null,
-        isDesktopRenderer: false,
-        remoteOpenTargets: TAILSCALE_TARGETS,
-      }),
-    ).toEqual({ mode: "local-exec" });
-  });
-
   it("prefers the desktop SSH alias over server-advertised hosts", () => {
     expect(
       resolveRemoteOpenState({
@@ -97,7 +81,11 @@ describe("resolveRemoteOpenState", () => {
     for (const remoteOpenTargets of [[], undefined] as const) {
       expect(
         resolveRemoteOpenState({
-          target: new RelayConnectionTarget({ environmentId, label: "sol" }),
+          target: new BearerConnectionTarget({
+            environmentId,
+            label: "sol",
+            connectionId: "remote-1",
+          }),
           sshAlias: null,
           isDesktopRenderer: false,
           remoteOpenTargets,

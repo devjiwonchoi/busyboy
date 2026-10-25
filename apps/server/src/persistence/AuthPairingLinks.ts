@@ -22,7 +22,6 @@ export const AuthPairingLinkRecord = Schema.Struct({
   scopes: Schema.fromJsonString(AuthEnvironmentScopes),
   subject: Schema.String,
   label: Schema.NullOr(Schema.String),
-  proofKeyThumbprint: Schema.NullOr(Schema.String),
   createdAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
   consumedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
@@ -37,7 +36,6 @@ export const CreateAuthPairingLinkInput = Schema.Struct({
   scopes: AuthEnvironmentScopes,
   subject: Schema.String,
   label: Schema.NullOr(Schema.String),
-  proofKeyThumbprint: Schema.NullOr(Schema.String),
   createdAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
 });
@@ -45,7 +43,6 @@ export type CreateAuthPairingLinkInput = typeof CreateAuthPairingLinkInput.Type;
 
 export const ConsumeAuthPairingLinkInput = Schema.Struct({
   credential: Schema.String,
-  proofKeyThumbprint: Schema.NullOr(Schema.String),
   requestedScopes: Schema.optionalKey(AuthEnvironmentScopes),
   consumedAt: Schema.DateTimeUtcFromString,
   now: Schema.DateTimeUtcFromString,
@@ -75,7 +72,6 @@ const AuthPairingLinkRawDbRow = Schema.Struct({
   scopes: Schema.Unknown,
   subject: Schema.Unknown,
   label: Schema.Unknown,
-  proofKeyThumbprint: Schema.Unknown,
   createdAt: Schema.Unknown,
   expiresAt: Schema.Unknown,
   consumedAt: Schema.Unknown,
@@ -135,7 +131,6 @@ export const make = Effect.gen(function* () {
           scopes,
           subject,
           label,
-          proof_key_thumbprint,
           created_at,
           expires_at,
           consumed_at,
@@ -148,7 +143,6 @@ export const make = Effect.gen(function* () {
           ${JSON.stringify(input.scopes)},
           ${input.subject},
           ${input.label},
-          ${input.proofKeyThumbprint},
           ${input.createdAt},
           ${input.expiresAt},
           NULL,
@@ -160,7 +154,7 @@ export const make = Effect.gen(function* () {
   const consumeAvailablePairingLinkRow = SqlSchema.findOneOption({
     Request: ConsumeAuthPairingLinkInput,
     Result: AuthPairingLinkRawDbRow,
-    execute: ({ credential, proofKeyThumbprint, requestedScopes, consumedAt, now }) =>
+    execute: ({ credential, requestedScopes, consumedAt, now }) =>
       sql`
         UPDATE auth_pairing_links
         SET consumed_at = ${consumedAt}
@@ -168,10 +162,6 @@ export const make = Effect.gen(function* () {
           AND revoked_at IS NULL
           AND consumed_at IS NULL
           AND expires_at > ${now}
-          AND (
-            proof_key_thumbprint IS NULL
-            OR proof_key_thumbprint = ${proofKeyThumbprint}
-          )
           AND (${requestedScopes === undefined ? 1 : 0} OR EXISTS (
             SELECT 1
             FROM json_each(${JSON.stringify(requestedScopes ?? [])}) AS requested
@@ -186,7 +176,6 @@ export const make = Effect.gen(function* () {
           scopes AS "scopes",
           subject AS "subject",
           label AS "label",
-          proof_key_thumbprint AS "proofKeyThumbprint",
           created_at AS "createdAt",
           expires_at AS "expiresAt",
           consumed_at AS "consumedAt",
@@ -206,7 +195,6 @@ export const make = Effect.gen(function* () {
           scopes AS "scopes",
           subject AS "subject",
           label AS "label",
-          proof_key_thumbprint AS "proofKeyThumbprint",
           created_at AS "createdAt",
           expires_at AS "expiresAt",
           consumed_at AS "consumedAt",
@@ -245,7 +233,6 @@ export const make = Effect.gen(function* () {
           scopes AS "scopes",
           subject AS "subject",
           label AS "label",
-          proof_key_thumbprint AS "proofKeyThumbprint",
           created_at AS "createdAt",
           expires_at AS "expiresAt",
           consumed_at AS "consumedAt",

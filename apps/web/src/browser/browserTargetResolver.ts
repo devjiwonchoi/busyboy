@@ -8,7 +8,6 @@ import { isLocalLoopbackHost, isPrivateNetworkHost } from "@t3tools/shared/hostC
 
 import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 
-import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isElectron } from "~/env";
 import { readPreparedConnection } from "~/state/session";
 
@@ -80,13 +79,12 @@ export function resolveBrowserNavigationTarget(
 }
 
 /**
- * The desktop app draws tabs on the machine that runs its primary backend and
- * any desktop-local backend. Its connection URL can still be a LAN address,
- * but a dev server bound to loopback only answers on `localhost` there.
+ * The desktop app draws tabs on the machine that runs its primary backend. Its
+ * connection URL can still be a LAN address, but a dev server bound to
+ * loopback only answers on `localhost` there.
  */
 const reachesEnvironmentLoopback = (target: ConnectionTarget): boolean =>
-  isElectron &&
-  (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
+  isElectron && target._tag === "PrimaryConnectionTarget";
 
 export function resolveDiscoveredServerUrl(environmentId: EnvironmentId, rawUrl: string): string {
   try {

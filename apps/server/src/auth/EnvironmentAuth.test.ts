@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { authScopeResponse, AuthStandardClientScopes } from "@t3tools/contracts";
+import { AuthStandardClientScopes } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -99,7 +99,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       const authenticated = yield* serverAuth.authenticateHttpRequest(request);
       expect(devExchange.cookieName).toMatch(/^t3_dev_session_/);
       expect(devExchange.expireNormalCookie).toBe(true);
-      expect(devExchange.response).toMatchObject(authScopeResponse(AuthStandardClientScopes));
+      expect(devExchange.response).toMatchObject({ scopes: AuthStandardClientScopes });
       expect(authenticated.scopes).toEqual(["orchestration:read"]);
     }).pipe(
       Effect.provide(
@@ -187,17 +187,6 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
 
       expect(exchanged.access_token).not.toBe(token);
       expect(exchanged.scope).toBe("orchestration:read");
-      const dpop = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
-        token,
-        ["orchestration:read"],
-        requestMetadata,
-        { proofKeyThumbprint: "test-proof-key" },
-      );
-      expect(dpop.access_token).not.toBe(token);
-      expect(dpop.access_token).not.toBe(exchanged.access_token);
-      expect(dpop.token_type).toBe("DPoP");
-      expect(dpop.scope).toBe("orchestration:read");
-
       const secondBearer = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
         token,
         ["orchestration:read"],
@@ -213,10 +202,6 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       expect(secondSession.subject).toBe("reusable-dev-token-child");
       expect((yield* sessions.verify(token)).subject).toBe("reusable-dev-token");
       const before = yield* serverAuth.listClientSessions(firstSession.sessionId);
-      const denied = yield* serverAuth
-        .exchangeBootstrapCredentialForAccessToken(token, ["review:write"], requestMetadata)
-        .pipe(Effect.flip);
-      expect(denied._tag).toBe("ServerAuthScopeNotGrantedError");
       const empty = yield* serverAuth
         .exchangeBootstrapCredentialForAccessToken(token, [], requestMetadata)
         .pipe(Effect.flip);
@@ -249,7 +234,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       expect((yield* Effect.flip(sessions.verify(token)))._tag).toBe("SessionTokenRevokedError");
       expect(
         (yield* serverAuth.createBrowserSession(recovery.credential, requestMetadata)).response,
-      ).toMatchObject({ authenticated: true, ...authScopeResponse(AuthStandardClientScopes) });
+      ).toMatchObject({ authenticated: true, scopes: AuthStandardClientScopes });
     }).pipe(
       Effect.provide(
         layerEnvironmentAuth({
@@ -339,20 +324,6 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       expect(verified.scopes).toEqual(AuthStandardClientScopes);
       expect(verified.subject).toBe("one-time-token");
     }).pipe(Effect.provide(layerEnvironmentAuth())),
-  );
-
-  it.effect("prefers a bearer token over a stale legacy cookie", () =>
-    Effect.gen(function* () {
-      const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-      const sessions = yield* SessionStore.SessionStore;
-      const bearer = yield* serverAuth.issueSession();
-      const verified = yield* serverAuth.authenticateHttpRequest({
-        cookies: { [sessions.legacyCookieName ?? "t3_session"]: "stale" },
-        headers: { authorization: `Bearer ${bearer.token}` },
-      } as never);
-
-      expect(verified.sessionId).toBe(bearer.sessionId);
-    }).pipe(Effect.provide(layerEnvironmentAuth({ mode: "web", host: "192.168.1.50" }))),
   );
 
   it.effect("preserves pairing grants after rejecting scopes they do not grant", () =>
