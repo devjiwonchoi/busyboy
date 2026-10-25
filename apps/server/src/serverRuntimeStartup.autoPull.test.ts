@@ -16,7 +16,6 @@ import * as ServerConfig from "./config.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as EffectWorker from "./orchestration-v2/EffectWorker.ts";
-import * as LegacyV1ThreadImporter from "./orchestration-v2/legacy/LegacyV1ThreadImporter.ts";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as ProviderRuntimeRecovery from "./orchestration-v2/ProviderRuntimeRecoveryService.ts";
@@ -66,7 +65,6 @@ it.effect("parks automatic pull until activation without delaying command readin
         retiredEffects: 0,
         requeuedEffects: 0,
       };
-      const importSummary = { importedThreadCount: 0, importedMessageCount: 0 };
       const dependencies: Layer.Layer<
         Layer.Services<ReturnType<typeof ServerRuntimeStartup.layerWithOptions>>
       > = Layer.mergeAll(
@@ -104,11 +102,6 @@ it.effect("parks automatic pull until activation without delaying command readin
           autoBootstrapProjectFromCwd: false,
         }),
         Layer.mock(Keybindings.Keybindings)({ start: Effect.void }),
-        Layer.mock(LegacyV1ThreadImporter.LegacyV1ThreadImporter)({
-          pendingThreadCount: Effect.succeed(0),
-          reconcileShells: Effect.succeed(importSummary),
-          importPendingTranscripts: Effect.succeed(importSummary),
-        }),
         Layer.mock(ProviderRuntimeRecovery.ProviderRuntimeRecoveryService)({
           recover: Effect.succeed(recovery),
           prepareForShutdown: Effect.void,
