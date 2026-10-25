@@ -883,32 +883,12 @@ describe("provider update launch notification logic", () => {
     it("labels environments by platform so they are distinguishable", () => {
       expect(
         deriveEnvironmentDisplayLabel({
-          isWsl: false,
-          wslDistro: null,
           platformOs: "windows",
           fallbackLabel: "Jgratton24",
         }),
       ).toBe("Windows");
       expect(
         deriveEnvironmentDisplayLabel({
-          isWsl: true,
-          wslDistro: null,
-          platformOs: "linux",
-          fallbackLabel: "Jgratton24",
-        }),
-      ).toBe("WSL");
-      expect(
-        deriveEnvironmentDisplayLabel({
-          isWsl: true,
-          wslDistro: "ubuntu",
-          platformOs: "linux",
-          fallbackLabel: "Jgratton24",
-        }),
-      ).toBe("WSL · ubuntu");
-      expect(
-        deriveEnvironmentDisplayLabel({
-          isWsl: false,
-          wslDistro: null,
           platformOs: undefined,
           fallbackLabel: "My Device",
         }),

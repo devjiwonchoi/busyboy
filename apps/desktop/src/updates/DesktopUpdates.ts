@@ -734,11 +734,9 @@ export const make = Effect.gen(function* () {
           yield* writeUpdateRestartMarker;
           const { downloadedVersion } = yield* Ref.get(updateStateRef);
           if (downloadedVersion !== null) yield* writeInstallRecord(downloadedVersion);
-          // Stop every backend in the pool, not just the primary. With parallel
-          // WSL + Windows backends, leaving the WSL instance up means
-          // quitAndInstall's app.quit() exits before the pool's scope cascade
-          // has a chance to run its stop finalizer, so the WSL child gets
-          // hard-killed by the OS instead of receiving SIGTERM + grace.
+          // Stop every backend in the pool, not just the primary. A backend left
+          // up when quitAndInstall's app.quit() exits gets hard-killed by the OS
+          // instead of receiving SIGTERM + grace.
           const instances = yield* pool.list;
           yield* Effect.forEach(
             instances,

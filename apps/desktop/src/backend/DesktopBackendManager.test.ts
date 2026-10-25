@@ -29,7 +29,6 @@ import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
-import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 
 const decodeDesktopBackendBootstrap = Schema.decodeEffect(
   Schema.fromJsonString(DesktopBackendBootstrap),
@@ -138,7 +137,6 @@ interface MakeInstanceInput {
   readonly desktopTelemetryPublisher?: Partial<
     DesktopTelemetryPublisher.DesktopTelemetryPublisher["Service"]
   >;
-  readonly pruneRuntimes?: (distro: string | null, runtimeId: string) => Effect.Effect<void>;
 }
 
 function makeTestInstance(input: MakeInstanceInput) {
@@ -172,9 +170,6 @@ function makeTestInstance(input: MakeInstanceInput) {
       ...input.desktopTelemetryPublisher,
     }),
     DesktopBrowserHost.layer,
-    DesktopWslEnvironment.layerTest(
-      input.pruneRuntimes === undefined ? {} : { pruneRuntimes: input.pruneRuntimes },
-    ),
   );
 
   const instance = DesktopBackendManager.makeBackendInstance({
@@ -656,13 +651,11 @@ describe("DesktopBackendManager", () => {
     Effect.scoped(
       Effect.gen(function* () {
         const requestUrls: Array<string> = [];
-        const prunedRuntimes: Array<[string | null, string]> = [];
         const statuses = [503, 200];
         let readyCount = 0;
         const firstRequest = yield* Deferred.make<void>();
         const backendReady = yield* Deferred.make<void>();
         const processExit = yield* Deferred.make<void>();
-        const pruneComplete = yield* Deferred.make<void>();
         const exited = yield* Queue.unbounded<void>();
 
         const layerSpawner = Layer.succeed(
@@ -680,15 +673,7 @@ describe("DesktopBackendManager", () => {
 
         const instance = yield* makeTestInstance({
           spawnerLayer: layerSpawner,
-          config: {
-            ...baseConfig,
-            runningDistro: "Ubuntu",
-            wslRuntimeId: "1.2.3-x64",
-          },
-          pruneRuntimes: (distro, runtimeId) =>
-            Effect.sync(() => {
-              prunedRuntimes.push([distro, runtimeId]);
-            }).pipe(Effect.andThen(Deferred.succeed(pruneComplete, void 0)), Effect.asVoid),
+          config: baseConfig,
           httpClientLayer: layerHttpClient((request) =>
             Effect.gen(function* () {
               const status = statuses.shift();
@@ -710,17 +695,14 @@ describe("DesktopBackendManager", () => {
         yield* Deferred.await(firstRequest);
 
         assert.equal(readyCount, 0);
-        assert.deepEqual(prunedRuntimes, []);
         assert.deepEqual(requestUrls, ["http://127.0.0.1:3773/.well-known/t3/environment"]);
 
         yield* TestClock.adjust(Duration.millis(100));
         yield* Deferred.await(backendReady);
-        yield* Deferred.await(pruneComplete);
         yield* Deferred.succeed(processExit, void 0);
         yield* Queue.take(exited);
 
         assert.equal(readyCount, 1);
-        assert.deepEqual(prunedRuntimes, [["Ubuntu", "1.2.3-x64"]]);
         assert.deepEqual(requestUrls, [
           "http://127.0.0.1:3773/.well-known/t3/environment",
           "http://127.0.0.1:3773/.well-known/t3/environment",

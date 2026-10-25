@@ -1,12 +1,8 @@
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
 
-import { isElectron } from "~/env";
 import { isLocalEnvironmentDisabled } from "~/localEnvironment";
-import { desktopWslStateAtom } from "~/state/desktopWslState";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
-import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
-import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
 import type { SettingsScopeSearch } from "./settingsScope";
 import {
@@ -48,13 +44,6 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
 
   const localEnvironmentDisabled = isLocalEnvironmentDisabled() === true;
   const canManageLocalBackend = !localEnvironmentDisabled && canMaintain;
-  const desktopWsl = useEnvironmentQuery(
-    isElectron && canManageLocalBackend ? desktopWslStateAtom : null,
-  );
-
-  const wslSettingsRowVisible =
-    isWslSettingsRowVisible({ state: desktopWsl.data, error: desktopWsl.error }) === true;
-
   return filterAvailableSettingsSearchItems({
     localEnvironmentDisabled,
     hasCloudPublicConfig: false,
@@ -62,7 +51,6 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
     hasProviderSettingsEnvironment,
     hasMacProviderSettingsEnvironment,
     canManageLocalBackend,
-    isWslSettingsRowVisible: wslSettingsRowVisible,
     hasThreadAutoSettlement,
     managedTunnelActive: false,
   });
