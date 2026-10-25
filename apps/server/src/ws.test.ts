@@ -326,7 +326,6 @@ it.live.each(["thread", "shell"] as const)(
       });
       const items = yield* subscription.pipe(
         Effect.provideService(ThreadManagement.ThreadManagementService, {
-          ensureLegacyTranscript: () => Effect.void,
           streamStoredEventsFrom: (
             input: Parameters<
               ThreadManagement.ThreadManagementService["Service"]["streamStoredEventsFrom"]
@@ -428,7 +427,6 @@ it.effect("thread resume across compacted history keeps message order and final 
         ),
       ),
       Effect.provideService(ThreadManagement.ThreadManagementService, {
-        ensureLegacyTranscript: () => Effect.void,
         streamStoredEventsFrom: () => Stream.never,
       } as unknown as ThreadManagement.ThreadManagementService["Service"]),
     );

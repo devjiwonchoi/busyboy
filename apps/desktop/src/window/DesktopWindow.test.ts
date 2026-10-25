@@ -261,12 +261,7 @@ function layerTest(input: {
     setServerExposureMode: () => Effect.die("unexpected server exposure update"),
     setTailscaleServe: () => Effect.die("unexpected Tailscale Serve update"),
     setUpdateChannel: () => Effect.die("unexpected update channel change"),
-    setWslBackendEnabled: () => Effect.die("unexpected WSL backend toggle"),
-    setWslDistro: () => Effect.die("unexpected WSL distro change"),
-    setWslOnly: () => Effect.die("unexpected WSL-only toggle"),
     setLocalEnvironmentEnabled: () => Effect.die("unexpected local environment toggle"),
-    applyWslWindowsFallback: Effect.die("unexpected WSL Windows fallback"),
-    applyWslWindowsFallbackInMemory: Effect.die("unexpected WSL Windows fallback"),
   } satisfies DesktopAppSettings.DesktopAppSettings["Service"]);
 
   const layerElectronWindow = Layer.succeed(ElectronWindow.ElectronWindow, {
@@ -347,7 +342,7 @@ function layerTest(input: {
   );
 }
 
-const makeSplashScenario = (createOutcomes: readonly (Electron.BrowserWindow | null)[]) =>
+const makeWindowScenario = (createOutcomes: readonly (Electron.BrowserWindow | null)[]) =>
   Effect.gen(function* () {
     const createdWindows = yield* Ref.make<Electron.BrowserWindow[]>([]);
     const createCalls = yield* Ref.make(0);
@@ -1444,70 +1439,41 @@ describe("DesktopWindow", () => {
     }),
   );
 
-  it.effect(
-    "retries opening the real main on activate when a failed post-readiness open left only the splash",
-    () =>
-      Effect.gen(function* () {
-        const splash = makeFakeBrowserWindow();
-        const main = makeFakeBrowserWindow();
-        const scenario = yield* makeSplashScenario([splash.window, null, main.window]);
-
-        yield* Effect.gen(function* () {
-          const desktopWindow = yield* DesktopWindow.DesktopWindow;
-
-          yield* desktopWindow.showConnectingSplash;
-          assert.equal(yield* Ref.get(scenario.createCalls), 1);
-
-          const readyExit = yield* Effect.exit(
-            desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773")),
-          );
-          assert.equal(readyExit._tag, "Failure");
-          assert.equal(yield* Ref.get(scenario.createCalls), 2);
-          assert.isTrue(Option.isNone(yield* Ref.get(scenario.mainWindow)));
-
-          yield* desktopWindow.activate;
-          assert.equal(yield* Ref.get(scenario.createCalls), 3);
-          const registeredMain = yield* Ref.get(scenario.mainWindow);
-          assert.isTrue(Option.isSome(registeredMain));
-          assert.equal(Option.getOrThrow(registeredMain), main.window);
-        }).pipe(Effect.provide(scenario.layer));
-      }),
-  );
-
-  it.effect(
-    "re-reveals the connecting splash on activate while the backend is still cold-booting",
-    () =>
-      Effect.gen(function* () {
-        const splash = makeFakeBrowserWindow();
-        const scenario = yield* makeSplashScenario([splash.window]);
-
-        yield* Effect.gen(function* () {
-          const desktopWindow = yield* DesktopWindow.DesktopWindow;
-
-          yield* desktopWindow.showConnectingSplash;
-          assert.equal(yield* Ref.get(scenario.createCalls), 1);
-
-          yield* desktopWindow.activate;
-          assert.equal(yield* Ref.get(scenario.createCalls), 1);
-          assert.deepEqual(yield* Ref.get(scenario.revealedWindows), [splash.window]);
-        }).pipe(Effect.provide(scenario.layer));
-      }),
-  );
-
-  it.effect("does not dispatch menu actions to the splash before the backend is ready", () =>
+  it.effect("retries opening the real main on activate after a failed post-readiness open", () =>
     Effect.gen(function* () {
-      const splash = makeFakeBrowserWindow();
       const main = makeFakeBrowserWindow();
-      const scenario = yield* makeSplashScenario([splash.window, main.window]);
+      const scenario = yield* makeWindowScenario([null, main.window]);
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
 
-        yield* desktopWindow.showConnectingSplash;
+        const readyExit = yield* Effect.exit(
+          desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773")),
+        );
+        assert.equal(readyExit._tag, "Failure");
+        assert.equal(yield* Ref.get(scenario.createCalls), 1);
+        assert.isTrue(Option.isNone(yield* Ref.get(scenario.mainWindow)));
+
+        yield* desktopWindow.activate;
+        assert.equal(yield* Ref.get(scenario.createCalls), 2);
+        const registeredMain = yield* Ref.get(scenario.mainWindow);
+        assert.isTrue(Option.isSome(registeredMain));
+        assert.equal(Option.getOrThrow(registeredMain), main.window);
+      }).pipe(Effect.provide(scenario.layer));
+    }),
+  );
+
+  it.effect("does not dispatch menu actions before the backend is ready", () =>
+    Effect.gen(function* () {
+      const main = makeFakeBrowserWindow();
+      const scenario = yield* makeWindowScenario([main.window]);
+
+      yield* Effect.gen(function* () {
+        const desktopWindow = yield* DesktopWindow.DesktopWindow;
+
         yield* desktopWindow.dispatchMenuAction("open-settings");
 
-        assert.equal(yield* Ref.get(scenario.createCalls), 1);
-        assert.equal(splash.send.mock.calls.length, 0);
+        assert.equal(yield* Ref.get(scenario.createCalls), 0);
         assert.equal(main.send.mock.calls.length, 0);
       }).pipe(Effect.provide(scenario.layer));
     }),
@@ -1515,14 +1481,12 @@ describe("DesktopWindow", () => {
 
   it.effect("dispatches menu actions after backend readiness when no main window exists", () =>
     Effect.gen(function* () {
-      const splash = makeFakeBrowserWindow();
       const main = makeFakeBrowserWindow();
-      const scenario = yield* makeSplashScenario([splash.window, null, main.window]);
+      const scenario = yield* makeWindowScenario([null, main.window]);
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
 
-        yield* desktopWindow.showConnectingSplash;
         const readyExit = yield* Effect.exit(
           desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773")),
         );
@@ -1530,7 +1494,7 @@ describe("DesktopWindow", () => {
 
         yield* desktopWindow.dispatchMenuAction("open-settings");
 
-        assert.equal(yield* Ref.get(scenario.createCalls), 3);
+        assert.equal(yield* Ref.get(scenario.createCalls), 2);
         assert.deepEqual(main.send.mock.calls, [[MENU_ACTION_CHANNEL, "open-settings"]]);
       }).pipe(Effect.provide(scenario.layer));
     }),
@@ -1604,18 +1568,17 @@ describe("DesktopWindow", () => {
     }),
   );
 
-  it.effect("leaves a completed capture pending while only the connecting splash exists", () =>
+  it.effect("leaves a completed capture pending before the backend is ready", () =>
     Effect.gen(function* () {
-      const splash = makeFakeBrowserWindow();
-      const scenario = yield* makeSplashScenario([splash.window]);
+      const main = makeFakeBrowserWindow();
+      const scenario = yield* makeWindowScenario([main.window]);
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.showConnectingSplash;
         yield* desktopWindow.dispatchSnapShotEvent({ type: "ready", id: captureOne });
 
-        assert.equal(yield* Ref.get(scenario.createCalls), 1);
-        assert.equal(splash.send.mock.calls.length, 0);
+        assert.equal(yield* Ref.get(scenario.createCalls), 0);
+        assert.equal(main.send.mock.calls.length, 0);
         assert.deepEqual(yield* Ref.get(scenario.revealedWindows), []);
       }).pipe(Effect.provide(scenario.layer));
     }),

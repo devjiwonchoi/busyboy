@@ -11,15 +11,7 @@ export const USAGE_CONTRACT_VERSION = 6 as const;
 
 export const USAGE_MERGE_COMPATIBLE_SINCE = 4 as const;
 
-export const UsageProviderKind = Schema.Literals([
-  "claude",
-  "codex",
-  "grok",
-  "cursor",
-  "opencode",
-  "antigravity",
-  "pi",
-]);
+export const UsageProviderKind = Schema.Literals(["claude", "codex", "grok"]);
 export type UsageProviderKind = typeof UsageProviderKind.Type;
 
 const USAGE_DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -108,7 +100,6 @@ export const UsageSource = Schema.Struct({
    */
   distinctSessions: NonNegativeInt,
   message: Schema.NullOr(TrimmedNonEmptyString),
-  action: Schema.optionalKey(Schema.Literal("enableCursorKeychain")),
   /**
    * Present when this source answered from its cache while a slow refresh (an
    * account API, for example) runs. Repeat the request with `awaitRefresh` to

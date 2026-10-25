@@ -996,12 +996,7 @@ function ScheduledTaskEditorForm({
   const activeInstanceId =
     activeSelection?.instanceId ?? firstInstance?.instanceId ?? ("" as ProviderInstanceId);
   const activeModel = activeSelection?.model ?? "";
-  const modelOptionsByInstance = getCustomModelOptionsByInstance(
-    settings,
-    providers,
-    activeInstanceId,
-    activeModel,
-  );
+  const modelOptionsByInstance = getCustomModelOptionsByInstance(settings, providers);
 
   const reportFailure = (title: string, error: unknown) => {
     toastManager.add(

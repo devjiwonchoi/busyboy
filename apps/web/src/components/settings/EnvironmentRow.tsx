@@ -37,7 +37,7 @@ export function environmentTransportLabel(
       : `via ${connectionRouteLabel(active)}`;
   }
   if (environment.relayManaged) return "Legacy hosted connection";
-  if (isDesktopLocalConnectionTarget(entry.target)) return "WSL";
+  if (isDesktopLocalConnectionTarget(entry.target)) return "Local backend";
   if (
     entry.target._tag === "SshConnectionTarget" &&
     Option.isSome(entry.profile) &&

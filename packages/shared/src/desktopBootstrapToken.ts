@@ -4,7 +4,7 @@ import * as NodeCrypto from "node:crypto";
 /**
  * A backend accepts the previous, current and next window's token: the previous
  * one so a token works for between one and two windows, and the next one
- * because a WSL backend's clock can trail the Windows clock that derived the
+ * because a backend's clock can trail the desktop clock that derived the
  * token, which would otherwise reject every fresh token for a moment after each
  * boundary.
  */

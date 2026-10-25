@@ -41,14 +41,11 @@ import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
-import * as AntigravityInstallation from "./AntigravityInstallation.ts";
 import * as ModelManifest from "./ModelManifest.ts";
 import { applyProviderCompatibility } from "./providerCompatibility.ts";
 import * as ResetCreditCoordinator from "./resetCreditCoordinator.ts";
 import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
-import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as ProviderInstanceRegistryHydration from "./ProviderInstanceRegistryHydration.ts";
 import * as ServerConfig from "../config.ts";
@@ -86,8 +83,6 @@ const decodeCodexSettings = Schema.decodeSync(CodexSettings);
 const disabledCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({
   enabled: false,
 });
-
-process.env.T3CODE_CURSOR_ENABLED = "1";
 
 const encoder = new TextEncoder();
 const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
@@ -699,8 +694,8 @@ it.layer(
 
     it("preserves previously discovered provider models when a refresh returns none", () => {
       const previousProvider = {
-        instanceId: ProviderInstanceId.make("cursor"),
-        driver: ProviderDriverKind.make("cursor"),
+        instanceId: ProviderInstanceId.make("grok"),
+        driver: ProviderDriverKind.make("grok"),
         status: "ready",
         enabled: true,
         installed: true,
@@ -903,217 +898,6 @@ it.layer(
       );
     });
 
-    it("drops stale OpenCode models missing from a successful refresh", () => {
-      const previousProvider = {
-        instanceId: ProviderInstanceId.make("opencode"),
-        driver: ProviderDriverKind.make("opencode"),
-        status: "ready",
-        enabled: true,
-        installed: true,
-        auth: { status: "authenticated" },
-        checkedAt: "2026-07-17T00:00:00.000Z",
-        version: "1.0.0",
-        models: [
-          {
-            slug: "github/gpt-5",
-            name: "GPT-5",
-            subProvider: "GitHub",
-            isCustom: false,
-            capabilities: null,
-          },
-          {
-            slug: "removed-plugin/model",
-            name: "Removed Plugin Model",
-            subProvider: "Removed Plugin",
-            isCustom: false,
-            capabilities: null,
-          },
-        ],
-        slashCommands: [],
-        skills: [],
-      } as const satisfies ServerProvider;
-      const refreshedProvider = {
-        ...previousProvider,
-        checkedAt: "2026-07-17T00:01:00.000Z",
-        models: [
-          {
-            slug: "github/gpt-5",
-            name: "GPT-5",
-            subProvider: "GitHub",
-            isCustom: false,
-            capabilities: null,
-          },
-        ],
-      } satisfies ServerProvider;
-
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, refreshedProvider).models,
-        [...refreshedProvider.models],
-      );
-    });
-
-    it("retains stale OpenCode models when a refresh fails", () => {
-      const previousProvider = {
-        instanceId: ProviderInstanceId.make("opencode"),
-        driver: ProviderDriverKind.make("opencode"),
-        status: "ready",
-        enabled: true,
-        installed: true,
-        auth: { status: "authenticated" },
-        checkedAt: "2026-07-17T00:00:00.000Z",
-        version: "1.0.0",
-        models: [
-          {
-            slug: "github/gpt-5",
-            name: "GPT-5",
-            subProvider: "GitHub",
-            isCustom: false,
-            capabilities: null,
-          },
-        ],
-        slashCommands: [{ name: "review", description: "Review changes" }],
-        skills: [
-          {
-            name: "typescript",
-            description: "TypeScript help",
-            path: "/skills/typescript/SKILL.md",
-            enabled: true,
-          },
-        ],
-      } as const satisfies ServerProvider;
-      const refreshedProvider = {
-        ...previousProvider,
-        status: "error",
-        auth: { status: "unknown" },
-        checkedAt: "2026-07-17T00:01:00.000Z",
-        models: [],
-        message: "Failed to refresh OpenCode models.",
-      } satisfies ServerProvider;
-
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, refreshedProvider).models,
-        [...previousProvider.models],
-      );
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, refreshedProvider).slashCommands,
-        previousProvider.slashCommands,
-      );
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, refreshedProvider).skills,
-        previousProvider.skills,
-      );
-    });
-
-    it("classifies pending, logout, uninstall, and reconnect OpenCode inventories", () => {
-      const previousProvider = {
-        instanceId: ProviderInstanceId.make("opencode"),
-        driver: ProviderDriverKind.make("opencode"),
-        status: "ready",
-        enabled: true,
-        installed: true,
-        auth: { status: "authenticated" },
-        checkedAt: "2026-07-17T00:00:00.000Z",
-        version: "1.0.0",
-        models: [
-          {
-            slug: "github/gpt-5",
-            name: "GPT-5",
-            subProvider: "GitHub",
-            isCustom: false,
-            capabilities: null,
-          },
-          {
-            slug: "removed-plugin/model",
-            name: "Removed Plugin Model",
-            subProvider: "Removed Plugin",
-            isCustom: false,
-            capabilities: null,
-          },
-        ],
-        slashCommands: [{ name: "review", description: "Review changes" }],
-        skills: [
-          {
-            name: "typescript",
-            description: "TypeScript help",
-            path: "/skills/typescript/SKILL.md",
-            enabled: true,
-          },
-        ],
-      } as const satisfies ServerProvider;
-      const pendingProvider = {
-        ...previousProvider,
-        status: "warning",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: "2026-07-17T00:01:00.000Z",
-        version: null,
-        models: [],
-        message: "OpenCode provider status has not been checked in this session yet.",
-      } satisfies ServerProvider;
-      const loggedOutProvider = {
-        ...previousProvider,
-        status: "warning",
-        auth: { status: "unknown" },
-        checkedAt: "2026-07-17T00:02:00.000Z",
-        models: [],
-        slashCommands: [],
-        skills: [],
-        message: "OpenCode is available, but it did not report any connected upstream providers.",
-      } satisfies ServerProvider;
-      const missingProvider = {
-        ...previousProvider,
-        status: "error",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: "2026-07-17T00:03:00.000Z",
-        version: null,
-        models: [],
-        message: "OpenCode CLI (`opencode`) is not installed or not on PATH.",
-      } satisfies ServerProvider;
-      const authoritativeProvider = {
-        ...previousProvider,
-        checkedAt: "2026-07-17T00:04:00.000Z",
-        models: [previousProvider.models[0]!],
-      } satisfies ServerProvider;
-      const failedProvider = {
-        ...authoritativeProvider,
-        status: "error",
-        auth: { status: "unknown" },
-        checkedAt: "2026-07-17T00:05:00.000Z",
-        models: [],
-        message: "Failed to refresh OpenCode models.",
-      } satisfies ServerProvider;
-
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, pendingProvider).models,
-        [...previousProvider.models],
-      );
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, loggedOutProvider).models,
-        [],
-      );
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, loggedOutProvider).slashCommands,
-        [],
-      );
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, loggedOutProvider).skills,
-        [],
-      );
-      assert.deepStrictEqual(
-        ProviderRegistry.mergeProviderSnapshot(previousProvider, missingProvider).models,
-        [],
-      );
-
-      const afterRemoval = ProviderRegistry.mergeProviderSnapshot(
-        previousProvider,
-        authoritativeProvider,
-      );
-      const afterFailure = ProviderRegistry.mergeProviderSnapshot(afterRemoval, failedProvider);
-
-      assert.deepStrictEqual(afterFailure.models, [authoritativeProvider.models[0]!]);
-    });
-
     describe("Codex model inventories", () => {
       const cachedProvider = {
         instanceId: ProviderInstanceId.make("codex-personal"),
@@ -1290,237 +1074,10 @@ it.layer(
       );
     });
 
-    describe("Antigravity model inventories", () => {
-      const previousProvider = {
-        instanceId: ProviderInstanceId.make("antigravity-personal"),
-        driver: ProviderDriverKind.make("antigravity"),
-        status: "ready",
-        enabled: true,
-        installed: true,
-        auth: { status: "authenticated" },
-        checkedAt: "2026-09-02T00:00:00.000Z",
-        version: "0.1.3",
-        models: [
-          {
-            slug: "gemini-3.1-pro-high",
-            name: "Gemini 3.1 Pro High",
-            isCustom: false,
-            capabilities: null,
-          },
-          {
-            slug: "gemini-3-flash",
-            name: "Gemini 3 Flash",
-            isCustom: false,
-            capabilities: null,
-          },
-        ],
-        slashCommands: [],
-        skills: [],
-      } as const satisfies ServerProvider;
-
-      it("removes unavailable models after a successful refresh", () => {
-        for (const status of ["ready", "warning"] as const) {
-          const refreshedProvider = {
-            ...previousProvider,
-            status,
-            checkedAt: "2026-09-02T00:01:00.000Z",
-            models: [previousProvider.models[1]],
-          } satisfies ServerProvider;
-          const afterRefresh = ProviderRegistry.mergeProviderSnapshot(
-            previousProvider,
-            refreshedProvider,
-          );
-
-          assert.deepStrictEqual(afterRefresh.models, refreshedProvider.models);
-
-          const afterFailure = ProviderRegistry.mergeProviderSnapshot(afterRefresh, {
-            ...refreshedProvider,
-            status: "error",
-            auth: { status: "unknown" },
-            models: [],
-          });
-          assert.deepStrictEqual(afterFailure.models, refreshedProvider.models);
-        }
-      });
-
-      it("keeps cached models during health checks and temporary failures", () => {
-        for (const installed of [false, true]) {
-          const pendingProvider = {
-            ...previousProvider,
-            status: "warning",
-            installed,
-            auth: { status: "unknown" },
-            checkedAt: "2026-09-02T00:01:00.000Z",
-            version: installed ? previousProvider.version : null,
-            models: [],
-          } satisfies ServerProvider;
-
-          assert.deepStrictEqual(
-            ProviderRegistry.mergeProviderSnapshot(previousProvider, pendingProvider).models,
-            previousProvider.models,
-          );
-        }
-
-        for (const authStatus of ["unknown", "authenticated"] as const) {
-          const failedProvider = {
-            ...previousProvider,
-            status: "error",
-            auth: { status: authStatus },
-            checkedAt: "2026-09-02T00:02:00.000Z",
-            models: [],
-          } satisfies ServerProvider;
-
-          assert.deepStrictEqual(
-            ProviderRegistry.mergeProviderSnapshot(previousProvider, failedProvider).models,
-            previousProvider.models,
-          );
-        }
-      });
-
-      it("clears models after sign-out, disable, uninstall, or an empty successful refresh", () => {
-        const emptyProvider = {
-          ...previousProvider,
-          checkedAt: "2026-09-02T00:01:00.000Z",
-          models: [],
-        } satisfies ServerProvider;
-        const clearedProviders = [
-          { ...emptyProvider, status: "warning", auth: { status: "unauthenticated" } },
-          { ...emptyProvider, status: "error", auth: { status: "unauthenticated" } },
-          { ...emptyProvider, status: "disabled", enabled: false },
-          { ...emptyProvider, status: "error", enabled: false },
-          { ...emptyProvider, status: "error", installed: false, auth: { status: "unknown" } },
-          emptyProvider,
-        ] satisfies ReadonlyArray<ServerProvider>;
-
-        for (const provider of clearedProviders) {
-          const afterRemoval = ProviderRegistry.mergeProviderSnapshot(previousProvider, provider);
-          assert.deepStrictEqual(afterRemoval.models, []);
-
-          const afterFailure = ProviderRegistry.mergeProviderSnapshot(afterRemoval, {
-            ...emptyProvider,
-            status: "error",
-            auth: { status: "unknown" },
-          });
-          assert.deepStrictEqual(afterFailure.models, []);
-        }
-      });
-    });
-
-    describe("Antigravity saved account", () => {
-      const signedIn = {
-        instanceId: ProviderInstanceId.make("antigravity-personal"),
-        driver: ProviderDriverKind.make("antigravity"),
-        status: "ready",
-        enabled: true,
-        installed: true,
-        auth: { status: "authenticated", type: "oauth-personal", label: "Google account" },
-        checkedAt: "2026-09-05T00:00:00.000Z",
-        version: "agy_acp_server_1.1.1",
-        models: [
-          {
-            slug: "gemini-3.7-flash-high",
-            name: "Gemini 3.7 Flash",
-            isCustom: false,
-            capabilities: null,
-          },
-        ],
-        slashCommands: [{ name: "plan" }],
-        skills: [],
-      } as const satisfies ServerProvider;
-      const uncheckedMessage =
-        "Antigravity is installed. Google account access is not checked yet.";
-      const restartProbe = {
-        ...signedIn,
-        status: "warning",
-        auth: { status: "unknown" },
-        checkedAt: "2026-09-05T00:01:00.000Z",
-        message: uncheckedMessage,
-        models: [],
-      } as const satisfies ServerProvider;
-
-      it("keeps the saved Google account through restart health checks", () => {
-        const merged = ProviderRegistry.mergeProviderSnapshot(signedIn, restartProbe);
-        const { message: _uncheckedMessage, ...probeWithoutMessage } = restartProbe;
-        assert.deepStrictEqual(merged, {
-          ...probeWithoutMessage,
-          status: "ready",
-          auth: signedIn.auth,
-          models: signedIn.models,
-        });
-        assert.equal("message" in merged, false);
-        assert.deepStrictEqual(
-          ProviderRegistry.mergeProviderSnapshot(merged, restartProbe),
-          merged,
-        );
-      });
-
-      it("carries the account through the boot probe and a failed probe without hiding them", () => {
-        const booting = {
-          ...restartProbe,
-          installed: false,
-          version: null,
-          message: "Checking Antigravity availability.",
-        } satisfies ServerProvider;
-        assert.deepStrictEqual(ProviderRegistry.mergeProviderSnapshot(signedIn, booting), {
-          ...booting,
-          auth: signedIn.auth,
-          models: signedIn.models,
-        });
-
-        const failed = {
-          ...restartProbe,
-          status: "error",
-          message: "Antigravity did not respond to its local health check within 90 seconds.",
-        } satisfies ServerProvider;
-        assert.deepStrictEqual(ProviderRegistry.mergeProviderSnapshot(signedIn, failed), {
-          ...failed,
-          auth: signedIn.auth,
-          models: signedIn.models,
-        });
-      });
-
-      it("does not invent an account after sign-out, disable, uninstall, or for other providers", () => {
-        const untouched = [
-          { ...restartProbe, auth: { status: "unauthenticated" } },
-          { ...restartProbe, status: "disabled", enabled: false },
-          { ...restartProbe, status: "error", installed: false },
-          { ...restartProbe, driver: ProviderDriverKind.make("codex") },
-          { ...restartProbe, auth: { status: "unknown", type: "gemini-api-key" } },
-        ] satisfies ReadonlyArray<ServerProvider>;
-        for (const next of untouched) {
-          const merged = ProviderRegistry.mergeProviderSnapshot(signedIn, next);
-          assert.deepStrictEqual(merged.auth, next.auth);
-          assert.equal(merged.status, next.status);
-          assert.equal(merged.message, next.message);
-        }
-        assert.deepStrictEqual(
-          ProviderRegistry.mergeProviderSnapshot(
-            { ...signedIn, auth: { status: "unknown" } },
-            restartProbe,
-          ).auth,
-          { status: "unknown" },
-        );
-        assert.equal(
-          ProviderRegistry.mergeProviderSnapshot(
-            { ...signedIn, driver: ProviderDriverKind.make("codex") },
-            restartProbe,
-          ).auth.status,
-          "unknown",
-        );
-        assert.deepStrictEqual(
-          ProviderRegistry.mergeProviderSnapshot(signedIn, {
-            ...restartProbe,
-            auth: { status: "unknown", type: "oauth-personal" },
-          }).auth,
-          signedIn.auth,
-        );
-      });
-    });
-
     it("fills missing capabilities from the previous provider snapshot", () => {
       const previousProvider = {
-        instanceId: ProviderInstanceId.make("cursor"),
-        driver: ProviderDriverKind.make("cursor"),
+        instanceId: ProviderInstanceId.make("grok"),
+        driver: ProviderDriverKind.make("grok"),
         status: "ready",
         enabled: true,
         installed: true,
@@ -1891,193 +1448,11 @@ it.layer(
       }),
     );
 
-    it.effect("refreshes OpenCode catalogs and preserves other providers", () =>
-      Effect.gen(function* () {
-        const codexDriver = ProviderDriverKind.make("codex");
-        const openCodeDriver = ProviderDriverKind.make("opencode");
-        const codexInstanceId = ProviderInstanceId.make("codex");
-        const openCodeInstanceId = ProviderInstanceId.make("opencode");
-        const codexRefreshCalls = yield* Ref.make(0);
-        const openCodeRefreshCalls = yield* Ref.make(0);
-        const codexProvider = {
-          instanceId: codexInstanceId,
-          driver: codexDriver,
-          status: "ready",
-          enabled: true,
-          installed: true,
-          auth: { status: "authenticated" },
-          checkedAt: "2026-06-10T00:00:00.000Z",
-          version: "1.0.0",
-          models: [],
-          slashCommands: [],
-          skills: [],
-        } as const satisfies ServerProvider;
-        const failedOpenCodeProvider = {
-          instanceId: openCodeInstanceId,
-          driver: openCodeDriver,
-          status: "error",
-          enabled: true,
-          installed: true,
-          auth: { status: "unknown" },
-          checkedAt: "2026-06-10T00:00:00.000Z",
-          version: "1.0.0",
-          message: "Failed to refresh OpenCode models.",
-          models: [],
-          slashCommands: [],
-          skills: [],
-        } as const satisfies ServerProvider;
-        const recoveredOpenCodeProvider = {
-          ...failedOpenCodeProvider,
-          status: "ready",
-          auth: { status: "authenticated" },
-          checkedAt: "2026-06-10T00:01:00.000Z",
-          message: "One upstream provider connected through OpenCode.",
-          models: [
-            {
-              slug: "github/gpt-5",
-              name: "GPT-5",
-              subProvider: "GitHub",
-              isCustom: false,
-              capabilities: null,
-            },
-          ],
-        } as const satisfies ServerProvider;
-        const changedCatalogProvider = {
-          ...recoveredOpenCodeProvider,
-          checkedAt: "2026-06-10T00:02:00.000Z",
-          models: [
-            {
-              slug: "anthropic/claude-sonnet-4",
-              name: "Claude Sonnet 4",
-              subProvider: "Anthropic",
-              isCustom: false,
-              capabilities: null,
-            },
-          ],
-        } as const satisfies ServerProvider;
-        const catalogSnapshot = yield* Ref.make<ServerProvider>(recoveredOpenCodeProvider);
-        const instances = [
-          {
-            instanceId: codexInstanceId,
-            driverKind: codexDriver,
-            continuationIdentity: {
-              driverKind: codexDriver,
-              continuationKey: "codex:instance:codex",
-            },
-            displayName: undefined,
-            enabled: true,
-            snapshot: {
-              resolveMaintenance: () =>
-                Effect.succeed(
-                  makeManualOnlyProviderMaintenanceCapabilities({
-                    provider: codexDriver,
-                    packageName: null,
-                  }),
-                ),
-              getSnapshot: Effect.succeed(codexProvider),
-              refresh: Ref.update(codexRefreshCalls, (count) => count + 1).pipe(
-                Effect.as(codexProvider),
-              ),
-              streamChanges: Stream.empty,
-              applyUsageLimits: () => Effect.void,
-            },
-            orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
-            textGeneration: {} as ProviderInstance["textGeneration"],
-          },
-          {
-            instanceId: openCodeInstanceId,
-            driverKind: openCodeDriver,
-            continuationIdentity: {
-              driverKind: openCodeDriver,
-              continuationKey: "opencode:instance:opencode",
-            },
-            displayName: undefined,
-            enabled: true,
-            snapshot: {
-              resolveMaintenance: () =>
-                Effect.succeed(
-                  makeManualOnlyProviderMaintenanceCapabilities({
-                    provider: openCodeDriver,
-                    packageName: null,
-                  }),
-                ),
-              getSnapshot: Effect.succeed(failedOpenCodeProvider),
-              refresh: Ref.update(openCodeRefreshCalls, (count) => count + 1).pipe(
-                Effect.andThen(Ref.get(catalogSnapshot)),
-              ),
-              streamChanges: Stream.empty,
-              applyUsageLimits: () => Effect.void,
-            },
-            orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
-            textGeneration: {} as ProviderInstance["textGeneration"],
-          },
-        ] satisfies ReadonlyArray<ProviderInstance>;
-        const layerInstanceRegistry = Layer.succeed(
-          ProviderInstanceRegistry.ProviderInstanceRegistry,
-          {
-            getInstance: (instanceId) =>
-              Effect.succeed(instances.find((instance) => instance.instanceId === instanceId)),
-            listInstances: Effect.succeed(instances),
-            listUnavailable: Effect.succeed([]),
-            streamChanges: Stream.empty,
-            subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), PubSub.subscribe),
-          },
-        );
-        const scope = yield* Scope.make();
-        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-        const runtimeServices = yield* Layer.build(
-          ProviderRegistry.layer.pipe(
-            Layer.provideMerge(layerInstanceRegistry),
-            Layer.provideMerge(
-              ServerConfig.layerTest(process.cwd(), {
-                prefix: "t3-provider-registry-reconnect-refresh-",
-              }),
-            ),
-            Layer.provideMerge(NodeServices.layer),
-          ),
-        ).pipe(Scope.provide(scope));
-
-        yield* Effect.gen(function* () {
-          const registry = yield* ProviderRegistry.ProviderRegistry;
-          const initialProviders = yield* registry.getProviders;
-          assert.strictEqual(
-            initialProviders.find((provider) => provider.instanceId === openCodeInstanceId)?.status,
-            "error",
-          );
-
-          const recoveredProviders = yield* registry.refresh();
-          assert.deepStrictEqual(
-            recoveredProviders.find((provider) => provider.instanceId === openCodeInstanceId)
-              ?.models,
-            recoveredOpenCodeProvider.models,
-          );
-          assert.deepStrictEqual(
-            recoveredProviders.find((provider) => provider.instanceId === codexInstanceId),
-            withBundledCompatibility(codexProvider),
-          );
-
-          yield* Ref.set(catalogSnapshot, changedCatalogProvider);
-          const changedProviders = yield* registry.refresh();
-          assert.deepStrictEqual(
-            changedProviders.find((provider) => provider.instanceId === openCodeInstanceId)?.models,
-            changedCatalogProvider.models,
-          );
-          assert.deepStrictEqual(
-            changedProviders.find((provider) => provider.instanceId === codexInstanceId),
-            withBundledCompatibility(codexProvider),
-          );
-        }).pipe(Effect.provide(runtimeServices));
-
-        assert.strictEqual(yield* Ref.get(codexRefreshCalls), 2);
-        assert.strictEqual(yield* Ref.get(openCodeRefreshCalls), 2);
-      }),
-    );
-
     it("persists merged provider snapshots for the providers that were refreshed", () => {
       const previousProviders = [
         {
-          instanceId: ProviderInstanceId.make("cursor"),
-          driver: ProviderDriverKind.make("cursor"),
+          instanceId: ProviderInstanceId.make("grok"),
+          driver: ProviderDriverKind.make("grok"),
           status: "ready",
           enabled: true,
           installed: true,
@@ -2117,23 +1492,23 @@ it.layer(
           skills: [],
         },
       ] as const satisfies ReadonlyArray<ServerProvider>;
-      const refreshedCursor = {
+      const refreshedGrok = {
         ...previousProviders[0],
         checkedAt: "2026-04-14T00:01:00.000Z",
         models: [],
       } satisfies ServerProvider;
 
       const mergedProviders = ProviderRegistry.mergeProviderSnapshots(previousProviders, [
-        refreshedCursor,
+        refreshedGrok,
       ]);
       const persistedProviders = ProviderRegistry.selectProvidersByKind(
         mergedProviders,
-        new Set([ProviderDriverKind.make("cursor")]),
+        new Set([ProviderDriverKind.make("grok")]),
       );
 
       assert.deepStrictEqual(persistedProviders, [
         {
-          ...refreshedCursor,
+          ...refreshedGrok,
           models: [...previousProviders[0].models],
         },
       ]);
@@ -2233,11 +1608,11 @@ it.layer(
 
     it.effect("persists the merged snapshot when a live update has empty models", () =>
       Effect.gen(function* () {
-        const cursorDriver = ProviderDriverKind.make("cursor");
-        const cursorInstanceId = ProviderInstanceId.make("cursor");
+        const grokDriver = ProviderDriverKind.make("grok");
+        const grokInstanceId = ProviderInstanceId.make("grok");
         const initialProvider = {
-          instanceId: cursorInstanceId,
-          driver: cursorDriver,
+          instanceId: grokInstanceId,
+          driver: grokDriver,
           status: "ready",
           enabled: true,
           installed: true,
@@ -2268,11 +1643,11 @@ it.layer(
         } satisfies ServerProvider;
         const changes = yield* PubSub.unbounded<ServerProvider>();
         const instance = {
-          instanceId: cursorInstanceId,
-          driverKind: cursorDriver,
+          instanceId: grokInstanceId,
+          driverKind: grokDriver,
           continuationIdentity: {
-            driverKind: cursorDriver,
-            continuationKey: "cursor:instance:cursor",
+            driverKind: grokDriver,
+            continuationKey: "grok:instance:grok",
           },
           displayName: undefined,
           enabled: true,
@@ -2280,7 +1655,7 @@ it.layer(
             resolveMaintenance: () =>
               Effect.succeed(
                 makeManualOnlyProviderMaintenanceCapabilities({
-                  provider: cursorDriver,
+                  provider: grokDriver,
                   packageName: null,
                 }),
               ),
@@ -2296,7 +1671,7 @@ it.layer(
           ProviderInstanceRegistry.ProviderInstanceRegistry,
           {
             getInstance: (instanceId) =>
-              Effect.succeed(instanceId === cursorInstanceId ? instance : undefined),
+              Effect.succeed(instanceId === grokInstanceId ? instance : undefined),
             listInstances: Effect.succeed([instance]),
             listUnavailable: Effect.succeed([]),
             streamChanges: Stream.empty,
@@ -2325,7 +1700,7 @@ it.layer(
           const config = yield* ServerConfig.ServerConfig;
           const filePath = yield* resolveProviderStatusCachePath({
             cacheDir: config.providerStatusCacheDir,
-            instanceId: cursorInstanceId,
+            instanceId: grokInstanceId,
           });
 
           assert.deepStrictEqual((yield* registry.getProviders)[0]?.models, [
@@ -2345,140 +1720,6 @@ it.layer(
           );
         }).pipe(Effect.provide(runtimeServices));
       }),
-    );
-
-    it.effect(
-      "persists authoritative OpenCode removals without resurrecting them on a failed live refresh",
-      () =>
-        Effect.gen(function* () {
-          const openCodeDriver = ProviderDriverKind.make("opencode");
-          const openCodeInstanceId = ProviderInstanceId.make("opencode");
-          const initialProvider = {
-            instanceId: openCodeInstanceId,
-            driver: openCodeDriver,
-            status: "ready",
-            enabled: true,
-            installed: true,
-            auth: { status: "authenticated" },
-            checkedAt: "2026-07-17T00:00:00.000Z",
-            version: "1.0.0",
-            models: [
-              {
-                slug: "github/gpt-5",
-                name: "GPT-5",
-                subProvider: "GitHub",
-                isCustom: false,
-                capabilities: null,
-              },
-              {
-                slug: "removed-plugin/model",
-                name: "Removed Plugin Model",
-                subProvider: "Removed Plugin",
-                isCustom: false,
-                capabilities: null,
-              },
-            ],
-            slashCommands: [],
-            skills: [],
-          } as const satisfies ServerProvider;
-          const authoritativeProvider = {
-            ...initialProvider,
-            checkedAt: "2026-07-17T00:01:00.000Z",
-            models: [initialProvider.models[0]!],
-          } satisfies ServerProvider;
-          const failedProvider = {
-            ...authoritativeProvider,
-            status: "error",
-            auth: { status: "unknown" },
-            checkedAt: "2026-07-17T00:02:00.000Z",
-            models: [],
-            message: "Failed to refresh OpenCode models.",
-          } satisfies ServerProvider;
-          const changes = yield* PubSub.unbounded<ServerProvider>();
-          const instance = {
-            instanceId: openCodeInstanceId,
-            driverKind: openCodeDriver,
-            continuationIdentity: {
-              driverKind: openCodeDriver,
-              continuationKey: "opencode:instance:opencode",
-            },
-            displayName: undefined,
-            enabled: true,
-            snapshot: {
-              resolveMaintenance: () =>
-                Effect.succeed(
-                  makeManualOnlyProviderMaintenanceCapabilities({
-                    provider: openCodeDriver,
-                    packageName: null,
-                  }),
-                ),
-              getSnapshot: Effect.succeed(initialProvider),
-              refresh: Effect.succeed(authoritativeProvider),
-              streamChanges: Stream.fromPubSub(changes),
-              applyUsageLimits: () => Effect.void,
-            },
-            orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
-            textGeneration: {} as ProviderInstance["textGeneration"],
-          } satisfies ProviderInstance;
-          const layerInstanceRegistry = Layer.succeed(
-            ProviderInstanceRegistry.ProviderInstanceRegistry,
-            {
-              getInstance: (instanceId) =>
-                Effect.succeed(instanceId === openCodeInstanceId ? instance : undefined),
-              listInstances: Effect.succeed([instance]),
-              listUnavailable: Effect.succeed([]),
-              streamChanges: Stream.empty,
-              subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
-                PubSub.subscribe(pubsub),
-              ),
-            },
-          );
-          const scope = yield* Scope.make();
-          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-          const runtimeServices = yield* Layer.build(
-            ProviderRegistry.layer.pipe(
-              Layer.provideMerge(layerInstanceRegistry),
-              Layer.provideMerge(
-                ServerConfig.layerTest(process.cwd(), {
-                  prefix: "t3-provider-registry-opencode-authoritative-persist-",
-                }),
-              ),
-              Layer.provideMerge(NodeServices.layer),
-            ),
-          ).pipe(Scope.provide(scope));
-
-          yield* Effect.gen(function* () {
-            const registry = yield* ProviderRegistry.ProviderRegistry;
-            const config = yield* ServerConfig.ServerConfig;
-            const filePath = yield* resolveProviderStatusCachePath({
-              cacheDir: config.providerStatusCacheDir,
-              instanceId: openCodeInstanceId,
-            });
-
-            const authoritativePersisted = yield* awaitPersistedProvider(
-              registry,
-              authoritativeProvider.checkedAt,
-            );
-            yield* PubSub.publish(changes, authoritativeProvider);
-            yield* Fiber.join(authoritativePersisted);
-            let cachedProvider = yield* readProviderStatusCache(filePath);
-
-            assert.deepStrictEqual(cachedProvider?.models, [authoritativeProvider.models[0]!]);
-
-            const failedPersisted = yield* awaitPersistedProvider(
-              registry,
-              failedProvider.checkedAt,
-            );
-            yield* PubSub.publish(changes, failedProvider);
-            yield* Fiber.join(failedPersisted);
-            cachedProvider = yield* readProviderStatusCache(filePath);
-
-            assert.deepStrictEqual(cachedProvider?.models, [authoritativeProvider.models[0]!]);
-            assert.deepStrictEqual((yield* registry.getProviders)[0]?.models, [
-              authoritativeProvider.models[0]!,
-            ]);
-          }).pipe(Effect.provide(runtimeServices));
-        }),
     );
 
     it.effect("returns the cached provider list when a manual refresh fails", () =>
@@ -2704,7 +1945,7 @@ it.layer(
           decodeServerSettings(
             deepMerge(encodedDefaultServerSettings, {
               providerInstances: {
-                ...disabledDefaultSlots("codex", "claudeAgent", "cursor", "grok", "opencode"),
+                ...disabledDefaultSlots("codex", "claudeAgent", "grok"),
                 codex_personal: {
                   driver: "codex",
                   displayName: "Codex Personal",
@@ -2722,7 +1963,6 @@ it.layer(
         yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
         const layerProviderRegistry = ProviderRegistry.layer.pipe(
           Layer.provideMerge(ProviderInstanceRegistryHydration.layer),
-          Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
           Layer.provideMerge(
             Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
           ),
@@ -2743,9 +1983,6 @@ it.layer(
           Layer.provideMerge(McpProviderSessions.layer),
           Layer.provideMerge(ModelManifest.layerTest),
           Layer.provideMerge(ResetCreditCoordinator.layerTest),
-          Layer.provideMerge(
-            OpenCodeRuntime.layer.pipe(Layer.provide(OpenCodeServerLedger.layerTest)),
-          ),
           Layer.provideMerge(layerBackgroundPolicyAlwaysRun),
         );
         const runtimeServices = yield* Layer.build(layerProviderRegistry).pipe(
@@ -2799,7 +2036,7 @@ it.layer(
           decodeServerSettings(
             deepMerge(encodedDefaultServerSettings, {
               providerInstances: {
-                ...disabledDefaultSlots("claudeAgent", "cursor", "grok", "opencode"),
+                ...disabledDefaultSlots("claudeAgent", "grok"),
                 [ProviderInstanceId.make("codex")]: {
                   driver: ProviderDriverKind.make("codex"),
                   enabled: true,
@@ -2821,7 +2058,6 @@ it.layer(
         yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
         const layerProviderRegistry = ProviderRegistry.layer.pipe(
           Layer.provideMerge(ProviderInstanceRegistryHydration.layer),
-          Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
           Layer.provideMerge(
             Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
           ),
@@ -2842,9 +2078,6 @@ it.layer(
           Layer.provideMerge(McpProviderSessions.layer),
           Layer.provideMerge(ModelManifest.layerTest),
           Layer.provideMerge(ResetCreditCoordinator.layerTest),
-          Layer.provideMerge(
-            OpenCodeRuntime.layer.pipe(Layer.provide(OpenCodeServerLedger.layerTest)),
-          ),
           Layer.updateService(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
             ChildProcessSpawner.make((command) => {
               if (command._tag !== "StandardCommand") return spawner.spawn(command);
@@ -2892,7 +2125,7 @@ it.layer(
           );
           yield* serverSettings.updateSettings({
             providerInstances: {
-              ...disabledDefaultSlots("claudeAgent", "cursor", "grok", "opencode"),
+              ...disabledDefaultSlots("claudeAgent", "grok"),
               [ProviderInstanceId.make("codex")]: {
                 driver: ProviderDriverKind.make("codex"),
                 enabled: true,
@@ -2922,7 +2155,7 @@ it.layer(
           decodeServerSettings(
             deepMerge(encodedDefaultServerSettings, {
               providerInstances: {
-                ...disabledDefaultSlots("codex", "claudeAgent", "cursor", "grok", "opencode"),
+                ...disabledDefaultSlots("codex", "claudeAgent", "grok"),
                 ghost_main: {
                   driver: "ghostDriver",
                   displayName: "A fork-only driver we don't ship",
@@ -2937,7 +2170,6 @@ it.layer(
         yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
         const layerProviderRegistry = ProviderRegistry.layer.pipe(
           Layer.provideMerge(ProviderInstanceRegistryHydration.layer),
-          Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
           Layer.provideMerge(
             Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
           ),
@@ -2958,9 +2190,6 @@ it.layer(
           Layer.provideMerge(McpProviderSessions.layer),
           Layer.provideMerge(ModelManifest.layerTest),
           Layer.provideMerge(ResetCreditCoordinator.layerTest),
-          Layer.provideMerge(
-            OpenCodeRuntime.layer.pipe(Layer.provide(OpenCodeServerLedger.layerTest)),
-          ),
           Layer.provideMerge(NodeServices.layer),
           Layer.provideMerge(layerBackgroundPolicyAlwaysRun),
         );
@@ -2982,22 +2211,21 @@ it.layer(
     );
 
     it.effect(
-      "keeps Cursor disabled and skips provider probing when settings use their defaults",
+      "keeps Grok disabled and skips provider probing when settings use their defaults",
       () =>
         Effect.gen(function* () {
           const serverSettings = yield* makeMutableServerSettingsService(
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
-                providerInstances: disabledDefaultSlots("codex", "grok"),
+                providerInstances: disabledDefaultSlots("codex"),
               }),
             ),
           );
-          let cursorSpawned = false;
+          let grokSpawned = false;
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const layerProviderRegistry = ProviderRegistry.layer.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydration.layer),
-            Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
             Layer.provideMerge(
               Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
             ),
@@ -3018,14 +2246,11 @@ it.layer(
             Layer.provideMerge(McpProviderSessions.layer),
             Layer.provideMerge(ModelManifest.layerTest),
             Layer.provideMerge(ResetCreditCoordinator.layerTest),
-            Layer.provideMerge(
-              OpenCodeRuntime.layer.pipe(Layer.provide(OpenCodeServerLedger.layerTest)),
-            ),
             Layer.provideMerge(layerBackgroundPolicyAlwaysRun),
             Layer.provideMerge(
               layerMockCommandSpawner((command, args) => {
-                if (command === "cursor-agent") {
-                  cursorSpawned = true;
+                if (command === "grok") {
+                  grokSpawned = true;
                 }
                 const joined = args.join(" ");
                 if (joined === "--version") {
@@ -3056,27 +2281,19 @@ it.layer(
           yield* Effect.gen(function* () {
             const registry = yield* ProviderRegistry.ProviderRegistry;
             const providers = yield* registry.getProviders;
-            const cursorProvider = providers.find(
-              (provider) => provider.instanceId === ProviderInstanceId.make("cursor"),
+            const grokProvider = providers.find(
+              (provider) => provider.instanceId === ProviderInstanceId.make("grok"),
             );
 
             assert.deepStrictEqual(providers.map((provider) => provider.instanceId).toSorted(), [
-              "antigravity",
               "claudeAgent",
               "codex",
-              "cursor",
               "grok",
-              "muse",
-              "opencode",
-              "pi",
             ]);
-            assert.strictEqual(cursorProvider?.enabled, false);
-            assert.strictEqual(cursorProvider?.status, "disabled");
-            assert.strictEqual(cursorProvider?.message, "Cursor is disabled in Busyboy settings.");
-            const museProvider = providers.find((provider) => provider.driver === "muse");
-            assert.strictEqual(museProvider?.enabled, false);
-            assert.strictEqual(museProvider?.status, "disabled");
-            assert.strictEqual(cursorSpawned, false);
+            assert.strictEqual(grokProvider?.enabled, false);
+            assert.strictEqual(grokProvider?.status, "disabled");
+            assert.include(grokProvider?.message ?? "", "is disabled in");
+            assert.strictEqual(grokSpawned, false);
           }).pipe(Effect.provide(runtimeServices));
         }),
     );

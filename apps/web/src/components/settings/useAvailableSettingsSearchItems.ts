@@ -1,20 +1,15 @@
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
 
-import { isElectron } from "~/env";
 import { isLocalEnvironmentDisabled } from "~/localEnvironment";
-import { desktopWslStateAtom } from "~/state/desktopWslState";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
-import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
-import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
-import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
 } from "./settingsSearch";
 
-export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch = {}) {
+export function useAvailableSettingsSearchItems() {
   const { environments } = useEnvironments();
   // The filtered list must be cached on boolean flags so it stays stable for the search and
   // the command palette while environments update. The compiler cannot tell that `.some()`
@@ -29,16 +24,6 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
         hasServerConfig: environment.serverConfig !== null,
       }),
     ) === true;
-  const hasMacProviderSettingsEnvironment =
-    environments.some(
-      (environment) =>
-        (scopeSearch.machine === undefined || environment.environmentId === scopeSearch.machine) &&
-        environment.serverConfig?.environment.platform.os === "darwin" &&
-        isProviderSettingsEnvironmentAvailable({
-          connectionPhase: environment.connection.phase,
-          hasServerConfig: true,
-        }),
-    ) === true;
   const hasThreadAutoSettlement =
     getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -48,21 +33,12 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
 
   const localEnvironmentDisabled = isLocalEnvironmentDisabled() === true;
   const canManageLocalBackend = !localEnvironmentDisabled && canMaintain;
-  const desktopWsl = useEnvironmentQuery(
-    isElectron && canManageLocalBackend ? desktopWslStateAtom : null,
-  );
-
-  const wslSettingsRowVisible =
-    isWslSettingsRowVisible({ state: desktopWsl.data, error: desktopWsl.error }) === true;
-
   return filterAvailableSettingsSearchItems({
     localEnvironmentDisabled,
     hasCloudPublicConfig: false,
     hasEnvironment,
     hasProviderSettingsEnvironment,
-    hasMacProviderSettingsEnvironment,
     canManageLocalBackend,
-    isWslSettingsRowVisible: wslSettingsRowVisible,
     hasThreadAutoSettlement,
     managedTunnelActive: false,
   });

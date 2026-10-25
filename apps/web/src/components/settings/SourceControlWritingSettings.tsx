@@ -148,8 +148,6 @@ export function SourceControlWritingSettingsSection() {
   const modelOptionsByInstance = getCustomModelOptionsByInstance(
     settings,
     projectEffectiveTextGenerationProviders,
-    activeSelection.instanceId,
-    activeSelection.model,
   );
   const writerModelDisabledReason = useScopedModelDisabledReason(settings, instanceEntries);
   const writerInstanceEntry = instanceEntries.find(
@@ -170,8 +168,6 @@ export function SourceControlWritingSettingsSection() {
   const reviewGuideModelOptionsByInstance = getCustomModelOptionsByInstance(
     settings,
     textGenerationProviders,
-    reviewGuideSelection.instanceId,
-    reviewGuideSelection.model,
   );
   const reviewGuideInstanceEntry = instanceEntries.find(
     (entry) => entry.instanceId === reviewGuideSelection.instanceId,

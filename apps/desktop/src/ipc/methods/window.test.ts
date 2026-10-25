@@ -33,9 +33,9 @@ import {
   probeRemoteEditors,
 } from "./window.ts";
 
-const readyWslConfig: DesktopBackendManager.DesktopBackendStartConfig = {
-  executablePath: "wsl.exe",
-  args: ["-d", "Ubuntu", "--", "node", "/app/bin.mjs"],
+const readySecondaryConfig: DesktopBackendManager.DesktopBackendStartConfig = {
+  executablePath: "node",
+  args: ["/app/bin.mjs"],
   entryPath: "/app/bin.mjs",
   cwd: "/app",
   env: {},
@@ -49,19 +49,17 @@ const readyWslConfig: DesktopBackendManager.DesktopBackendStartConfig = {
     tailscaleServeEnabled: false,
     tailscaleServePort: 443,
   },
-  bootstrapDelivery: "stdin",
   httpBaseUrl: new URL("http://127.0.0.1:3774"),
   captureOutput: true,
   preflightFailure: Option.none(),
-  runningDistro: "Ubuntu",
 };
 
-const defaultWslInstance: DesktopBackendManager.DesktopBackendInstance = {
-  id: DesktopBackendManager.BackendInstanceId("wsl:default"),
-  label: Effect.succeed("WSL (default distro)"),
+const secondaryInstance: DesktopBackendManager.DesktopBackendInstance = {
+  id: DesktopBackendManager.BackendInstanceId("secondary"),
+  label: Effect.succeed("Secondary"),
   start: Effect.void,
   stop: () => Effect.void,
-  currentConfig: Effect.succeedSome(readyWslConfig),
+  currentConfig: Effect.succeedSome(readySecondaryConfig),
   snapshot: Effect.succeed({
     desiredRunning: true,
     ready: true,
@@ -77,7 +75,6 @@ const backendConfigurationLayer = Layer.succeed(
   {
     resolvePrimary: Effect.die("unexpected resolvePrimary"),
     resolvePrimaryLabel: Effect.succeed("Windows"),
-    resolveWsl: () => Effect.die("unexpected resolveWsl"),
     currentBootstrapToken: Effect.succeed("current-window-token"),
   } satisfies DesktopBackendConfiguration.DesktopBackendConfiguration["Service"],
 );
@@ -86,21 +83,20 @@ const bootstrapsLayer = (instances: ReadonlyArray<DesktopBackendManager.DesktopB
   Layer.merge(DesktopBackendPool.layerTest([...instances]), backendConfigurationLayer);
 
 describe("getLocalEnvironmentBootstraps", () => {
-  it.effect("publishes the concrete running distro without replacing the stable instance id", () =>
+  it.effect("publishes a ready secondary backend", () =>
     Effect.gen(function* () {
       const result = yield* getLocalEnvironmentBootstraps.handler();
 
       assert.deepEqual(result, [
         {
-          id: "wsl:default",
-          label: "WSL (Ubuntu)",
-          runningDistro: "Ubuntu",
+          id: "secondary",
+          label: "Secondary",
           httpBaseUrl: "http://127.0.0.1:3774/",
           wsBaseUrl: "ws://127.0.0.1:3774/",
           bootstrapToken: "bootstrap-token",
         },
       ]);
-    }).pipe(Effect.provide(bootstrapsLayer([defaultWslInstance]))),
+    }).pipe(Effect.provide(bootstrapsLayer([secondaryInstance]))),
   );
 
   it.effect("hands out the current window's token to a backend launched with the secret", () =>
@@ -109,9 +105,8 @@ describe("getLocalEnvironmentBootstraps", () => {
 
       assert.deepEqual(result, [
         {
-          id: "wsl:default",
-          label: "WSL (Ubuntu)",
-          runningDistro: "Ubuntu",
+          id: "secondary",
+          label: "Secondary",
           httpBaseUrl: "http://127.0.0.1:3774/",
           wsBaseUrl: "ws://127.0.0.1:3774/",
           bootstrapToken: "current-window-token",
@@ -121,11 +116,11 @@ describe("getLocalEnvironmentBootstraps", () => {
       Effect.provide(
         bootstrapsLayer([
           {
-            ...defaultWslInstance,
+            ...secondaryInstance,
             currentConfig: Effect.succeedSome({
-              ...readyWslConfig,
+              ...readySecondaryConfig,
               bootstrap: {
-                ...readyWslConfig.bootstrap,
+                ...readySecondaryConfig.bootstrap,
                 desktopBootstrapSecret: "desktop-secret",
               },
             }),
@@ -137,15 +132,15 @@ describe("getLocalEnvironmentBootstraps", () => {
 
   it.effect("publishes a pending bootstrap only while a transient retry is scheduled", () => {
     const retryingConfig: DesktopBackendManager.DesktopBackendStartConfig = {
-      ...readyWslConfig,
+      ...readySecondaryConfig,
       preflightFailure: Option.some({
-        reason: "WSL probe timed out",
+        reason: "Probe timed out",
         fatal: false,
         retryLimit: 12,
       }),
     };
     const retryingInstance: DesktopBackendManager.DesktopBackendInstance = {
-      ...defaultWslInstance,
+      ...secondaryInstance,
       currentConfig: Effect.succeedSome(retryingConfig),
       snapshot: Effect.succeed({
         desiredRunning: true,
@@ -160,9 +155,8 @@ describe("getLocalEnvironmentBootstraps", () => {
       const result = yield* getLocalEnvironmentBootstraps.handler();
       assert.deepEqual(result, [
         {
-          id: "wsl:default",
-          label: "WSL (default distro)",
-          runningDistro: null,
+          id: "secondary",
+          label: "Secondary",
           httpBaseUrl: null,
           wsBaseUrl: null,
         },
@@ -172,11 +166,11 @@ describe("getLocalEnvironmentBootstraps", () => {
 
   it.effect("omits a bounded transient bootstrap after retries stop", () => {
     const stoppedInstance: DesktopBackendManager.DesktopBackendInstance = {
-      ...defaultWslInstance,
+      ...secondaryInstance,
       currentConfig: Effect.succeedSome({
-        ...readyWslConfig,
+        ...readySecondaryConfig,
         preflightFailure: Option.some({
-          reason: "WSL probe timed out",
+          reason: "Probe timed out",
           fatal: false,
           retryLimit: 12,
         }),

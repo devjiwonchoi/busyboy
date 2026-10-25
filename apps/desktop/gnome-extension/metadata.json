@@ -1,8 +1,0 @@
-{
-  "uuid": "snapshot@busyboy.local",
-  "name": "Busyboy SnapShots",
-  "description": "Allows Busyboy to capture the focused window, identify it for optional accessibility text, and animate it into Busyboy. Disable this extension to revoke access.",
-  "shell-version": ["45", "46", "47", "48", "49", "50"],
-  "version": 2,
-  "url": "https://github.com/devjiwonchoi/busyboy"
-}

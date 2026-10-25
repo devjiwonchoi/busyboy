@@ -166,7 +166,7 @@ describe("matchesLinkedPullRequestUrl", () => {
     expect(
       matchesLinkedPullRequestUrl(
         linkedPullRequest,
-        "https://github.com/PingDotGG/T3Code/pull/42/files",
+        "https://github.com/DevJiwonChoi/Busyboy/pull/42/files",
       ),
     ).toBe(true);
   });
@@ -251,34 +251,6 @@ describe("findProjectOnChangeRequestHost", () => {
     name: "backend",
   });
 
-  it.each([
-    "ssh.dev.azure.com/v3/org-a/project/web",
-    "vs-ssh.visualstudio.com/v3/org-a/project/web",
-    "org-a.visualstudio.com/defaultcollection/project/_git/web",
-    "dev.azure.com/org-a/project/_git/web",
-  ])("matches Azure browser references against %s", (canonicalKey) => {
-    const checkout = project("azure", {
-      canonicalKey,
-      provider: "azure-devops",
-      displayName: canonicalKey.split("/").slice(1).join("/"),
-    });
-    const reference = { host: "dev.azure.com", repository: "org-a/project/_git/web", number: 42 };
-    expect(findProjectForChangeRequest([checkout], reference)).toBe(checkout);
-    expect(findProjectOnChangeRequestHost([checkout], reference)).toBe(checkout);
-    expect(
-      findProjectOnChangeRequestHost([checkout], {
-        ...reference,
-        repository: "org-b/project/_git/web",
-      }),
-    ).toBeUndefined();
-    expect(
-      findProjectOnChangeRequestHost([checkout], {
-        ...reference,
-        repository: "org-a/other-project/_git/web",
-      }),
-    ).toBeUndefined();
-  });
-
   it("prefers the project checked out from the link's own repository", () => {
     expect(
       findProjectOnChangeRequestHost([frontend, backend], {
@@ -306,40 +278,6 @@ describe("findProjectOnChangeRequestHost", () => {
     ).toBe(projects[1]);
     expect(findProjectForChangeRequest([projects[0]!], reference)).toBeUndefined();
     expect(findProjectOnChangeRequestHost([projects[0]!], reference)).toBeUndefined();
-  });
-
-  it("lets tea resolve the web port for Forgejo SSH remotes", () => {
-    const checkout = project("forgejo-ssh", {
-      canonicalKey: "forge.example/git/team/repo",
-      provider: "forgejo",
-      displayName: "git/team/repo",
-      locator: { remoteUrl: "git@forge.example:git/team/repo.git" },
-    });
-    const reference = parseChangeRequestUrl("http://forge.example:4000/git/team/repo/pulls/42")!;
-    expect(findProjectForChangeRequest([checkout], reference)).toBe(checkout);
-    const aliased = project("forgejo-alias", {
-      canonicalKey: "ssh.forge.example/team/repo",
-      provider: "forgejo",
-      displayName: "team/repo",
-      locator: { remoteUrl: "git@ssh.forge.example:team/repo.git" },
-      webUrl: "http://forge.example:4000/git/team/repo",
-    });
-    expect(findProjectForChangeRequest([aliased], reference)).toBe(aliased);
-    expect(findProjectOnChangeRequestHost([aliased], reference)).toBe(aliased);
-    expect(
-      findProjectOnChangeRequestHost([aliased], { ...reference, repository: "git/team/other" }),
-    ).toBe(aliased);
-    for (const url of [
-      "http://other.example:4000/git/team/repo/pulls/42",
-      "http://forge.example:3000/git/team/repo/pulls/42",
-    ]) {
-      const other = parseChangeRequestUrl(url)!;
-      expect(findProjectForChangeRequest([aliased], other)).toBeUndefined();
-      expect(findProjectOnChangeRequestHost([aliased], other)).toBeUndefined();
-    }
-    const otherMount = parseChangeRequestUrl("http://forge.example:4000/other/team/repo/pulls/42")!;
-    expect(findProjectForChangeRequest([aliased], otherMount)).toBeUndefined();
-    expect(findProjectOnChangeRequestHost([aliased], otherMount)).toBeUndefined();
   });
 
   it("lends any project on the host to a repository nobody has checked out", () => {

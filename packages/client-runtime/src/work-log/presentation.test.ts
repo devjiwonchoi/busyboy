@@ -484,19 +484,6 @@ describe("resolveWorkEntryToolPresentation", () => {
     });
   });
 
-  it("labels device tools with the device icon", () => {
-    expect(
-      resolveWorkEntryToolPresentation({
-        label: "mcp__t3-code__device_open",
-        toolLifecycleStatus: "completed",
-      }),
-    ).toEqual({ displayName: "Opened a device in the Device panel", icon: "device" });
-    expect(resolveWorkEntryToolPresentation({ label: "t3-code · device_screenshot" })).toEqual({
-      displayName: "Taking a screenshot of the device",
-      icon: "device",
-    });
-  });
-
   it("uses structured MCP identity when the provider supplies a custom title", () => {
     expect(
       resolveWorkEntryToolPresentation({
@@ -983,65 +970,6 @@ describe("pull request tool presentation", () => {
     expect(
       resolveWorkEntryToolPresentation({ label: "mcp__another-server__link_pull_request" }),
     ).toBeNull();
-  });
-});
-
-describe("device group summaries", () => {
-  const deviceEntry = (tool: string): WorkLogPresentationEntry => ({
-    id: tool,
-    createdAt: "2026-09-10T00:00:00.000Z",
-    label: "MCP tool call",
-    toolData: { server: "t3-code", tool },
-    itemType: "dynamic_tool",
-    toolLifecycleStatus: "completed",
-    tone: "tool",
-  });
-
-  it.each(["device_list", "device_open", "device_screenshot", "device_close"])(
-    "recognizes %s as device controls",
-    (tool) => {
-      const entry = deviceEntry(tool);
-      expect(summarizeToolGroup([entry]).summary).toBe("Used device controls 1 time");
-      expect(toolGroupSummaryKind([entry])).toBe("device");
-    },
-  );
-
-  it("summarizes device calls alongside shell commands", () => {
-    expect(
-      summarizeToolGroup([
-        {
-          id: "command",
-          createdAt: "2026-09-10T00:00:00.000Z",
-          label: "Ran command",
-          itemType: "command_execution",
-          command: "pwd",
-          tone: "tool",
-        },
-        deviceEntry("device_list"),
-        deviceEntry("device_open"),
-      ]).summary,
-    ).toBe("Ran 1 command and used device controls 2 times");
-  });
-
-  it("recognizes Claude tool names and preserves screenshot previews", () => {
-    const entry = {
-      ...deviceEntry("device_screenshot"),
-      toolData: { toolName: "mcp__t3_code__device_screenshot" },
-      viewedImagePath: "/workspace/device.png",
-    };
-    expect(summarizeToolGroup([entry]).summary).toBe("Used device controls 1 time");
-    expect(workEntryViewedImagePath(entry)).toBe("/workspace/device.png");
-  });
-
-  it("does not classify another server's tools as T3 device controls", () => {
-    expect(
-      summarizeToolGroup([
-        {
-          ...deviceEntry("device_open"),
-          toolData: { server: "another-server", tool: "device_open" },
-        },
-      ]).summary,
-    ).toBe("Used 1 tool");
   });
 });
 

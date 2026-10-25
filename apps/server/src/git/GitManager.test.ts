@@ -47,7 +47,6 @@ import {
 import * as DateTime from "effect/DateTime";
 import { decodeGitHubPullRequestListJson } from "@t3tools/source-control-github/server/gitHubPullRequests";
 import * as GitHubChangeRequestTemplate from "@t3tools/source-control-github/server/gitHubChangeRequestTemplate";
-import * as GitLabCli from "@t3tools/source-control-gitlab/server/GitLabCli";
 import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
@@ -58,12 +57,6 @@ import * as VcsProjectConfig from "../vcs/VcsProjectConfig.ts";
 import * as VcsStatusBroadcaster from "../vcs/VcsStatusBroadcaster.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitWorkflowService from "./GitWorkflowService.ts";
-import * as ForgejoSourceControlProvider from "@t3tools/source-control-forgejo/server/ForgejoSourceControlProvider";
-import * as GitLabSourceControlProvider from "@t3tools/source-control-gitlab/server/GitLabSourceControlProvider";
-import {
-  ForgejoPullRequestSchema,
-  toForgejoChangeRequest,
-} from "@t3tools/source-control-forgejo/server/forgejoPullRequests";
 import type { SourceControlProvider } from "@t3tools/source-control-core/server/SourceControlProvider";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as ServerConfig from "../config.ts";
@@ -76,7 +69,6 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as GitManager from "./GitManager.ts";
 
 const encodeCliJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
-const decodeForgejoPullRequest = Schema.decodeEffect(ForgejoPullRequestSchema);
 
 interface FakeGhScenario {
   prListSequence?: string[];
@@ -2521,104 +2513,6 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     }),
   );
 
-  it.effect.each([
-    { remoteUrl: "git@gitlab.com:Group/Subgroup/Fork.git", setUpstream: true },
-    { remoteUrl: "git@gitlab.com:Group/Subgroup/Fork.git", setUpstream: false },
-    { remoteUrl: "https://gitlab.com/Group/Subgroup/Fork.git", setUpstream: true },
-    { remoteUrl: "https://gitlab.com/Group/Subgroup/Fork.git", setUpstream: false },
-  ] as const)("matches GitLab forks for $remoteUrl/$setUpstream", ({ remoteUrl, setUpstream }) =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      const originDir = yield* createBareRemote();
-      const forkDir = yield* createBareRemote();
-      const branch = "feature/NestedGroups";
-      yield* runGit(repoDir, ["remote", "add", "origin", originDir]);
-      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
-      yield* runGit(repoDir, ["remote", "add", "fork", forkDir]);
-      yield* runGit(repoDir, ["checkout", "-b", branch]);
-      yield* runGit(repoDir, ["push", ...(setUpstream ? ["-u"] : []), "fork", branch]);
-      const upstream = yield* runGit(repoDir, [
-        "for-each-ref",
-        "--format=%(upstream:short)",
-        `refs/heads/${branch}`,
-      ]);
-      expect(upstream.stdout.trim()).toBe(setUpstream ? `fork/${branch}` : "");
-      yield* configureVisibleRemoteUrlWithLocalRewrite(
-        repoDir,
-        "origin",
-        "git@gitlab.com:Group/Upstream/Repository.git",
-        originDir,
-      );
-      yield* configureVisibleRemoteUrlWithLocalRewrite(repoDir, "fork", remoteUrl, forkDir);
-      const output = encodeCliJson([
-        {
-          iid: 2,
-          title: "Another subgroup's fork",
-          web_url: "https://gitlab.com/Group/Upstream/Repository/-/merge_requests/2",
-          target_branch: "main",
-          source_branch: branch,
-          state: "opened",
-          updated_at: "2026-04-08T15:00:00Z",
-          source_project_id: 102,
-          target_project_id: 100,
-          source_project: { path_with_namespace: "Group/Other/Fork" },
-        },
-        {
-          iid: 1,
-          title: "This subgroup's fork",
-          web_url: "https://gitlab.com/Group/Upstream/Repository/-/merge_requests/1",
-          target_branch: "main",
-          source_branch: branch,
-          state: "opened",
-          updated_at: "2026-04-07T15:00:00Z",
-          source_project_id: 101,
-          target_project_id: 100,
-          source_project: { path_with_namespace: "Group/Subgroup/Fork" },
-        },
-      ]);
-      const calls: SourceControlHost.SourceControlProcessInput[] = [];
-      const provider = yield* GitLabSourceControlProvider.make.pipe(
-        Effect.provide(
-          GitLabCli.layer.pipe(
-            Layer.provide(
-              TestSourceControlHost.layer({
-                process: {
-                  run: (input) =>
-                    Effect.sync(() => {
-                      calls.push(input);
-                      return fakeGhOutput(output);
-                    }),
-                },
-              }),
-            ),
-          ),
-        ),
-      );
-      const { manager } = yield* makeManager({ sourceControlProvider: provider });
-
-      expect(yield* manager.branchPullRequest({ cwd: repoDir, branch })).toMatchObject({
-        number: 1,
-        repositoryKey: "gitlab.com/group/upstream/repository",
-      });
-      expect(calls.length).toBeGreaterThan(0);
-      for (const call of calls) {
-        expect(call.command).toBe("glab");
-        expect(call.args).toEqual([
-          "mr",
-          "list",
-          "--source-branch",
-          branch,
-          "--all",
-          "--per-page",
-          "20",
-          "--output",
-          "json",
-        ]);
-      }
-    }),
-  );
-
   it.effect(
     "status ignores unrelated fork PRs when the current branch tracks the same repository",
     () =>
@@ -4700,69 +4594,6 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         expect(ghCalls.some((call) => call.startsWith("pr create "))).toBe(true);
       }),
     20_000,
-  );
-
-  it.effect("matches mounted Forgejo heads without confusing forks sharing a branch", () =>
-    Effect.gen(function* () {
-      for (const owner of ["maria", "reviewer"]) {
-        const mapped = toForgejoChangeRequest(
-          yield* decodeForgejoPullRequest({
-            number: 42,
-            title: "Greeting",
-            html_url: "https://forgejo.example/forgejo/maria/project/pulls/42",
-            state: "open",
-            merged: false,
-            base: {
-              ref: "main",
-              sha: "base",
-              repo: { full_name: "maria/project", owner: { login: "maria" } },
-            },
-            head: {
-              ref: "greeting",
-              sha: "head",
-              repo: { full_name: `${owner}/project`, owner: { login: owner } },
-            },
-          }),
-        );
-        const pr = {
-          ...mapped,
-          isDraft: mapped.isDraft ?? false,
-          closedAt: mapped.closedAt ?? null,
-          mergedAt: mapped.mergedAt ?? null,
-        };
-        const repository = GitManager.parseRepositoryNameWithOwnerFromRemoteUrl(
-          `https://forgejo.example/forgejo/${owner}/project.git`,
-          { repositoryNameFromRemoteUrl: ForgejoSourceControlProvider.repositoryNameFromRemoteUrl },
-        );
-        expect(repository).toBe(`${owner}/project`);
-        const context = {
-          headBranch: "greeting",
-          headRepositoryNameWithOwner: repository,
-          headRepositoryOwnerLogin: repository?.split("/")[0] ?? null,
-          isCrossRepository: owner !== "maria",
-        };
-        expect(GitManager.matchesBranchHeadContext(pr, context)).toBe(true);
-        expect(
-          GitManager.matchesBranchHeadContext(pr, {
-            ...context,
-            headRepositoryNameWithOwner: "other/project",
-            headRepositoryOwnerLogin: "other",
-          }),
-        ).toBe(false);
-      }
-      expect(
-        GitManager.parseRepositoryNameWithOwnerFromRemoteUrl(
-          "git@forgejo.example:maria/project.git",
-          { repositoryNameFromRemoteUrl: ForgejoSourceControlProvider.repositoryNameFromRemoteUrl },
-        ),
-      ).toBe("maria/project");
-      expect(
-        GitManager.parseRepositoryNameWithOwnerFromRemoteUrl(
-          "https://gitlab.example/group/maria/project.git",
-          {},
-        ),
-      ).toBe("group/maria/project");
-    }),
   );
 
   it.effect("rejects same-repo PR metadata when matching a cross-repo head context", () =>

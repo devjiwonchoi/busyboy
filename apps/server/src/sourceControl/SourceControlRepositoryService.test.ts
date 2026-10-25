@@ -14,8 +14,6 @@ import { GitCommandError, SourceControlProviderError } from "@t3tools/contracts"
 
 import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
-import * as BitbucketSourceControlProvider from "@t3tools/source-control-bitbucket/server/BitbucketSourceControlProvider";
 import type * as SourceControlProvider from "@t3tools/source-control-core/server/SourceControlProvider";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
 import * as SourceControlRepositoryService from "./SourceControlRepositoryService.ts";
@@ -160,115 +158,6 @@ it.effect("preserves provider failures without deriving the repository message f
     assert.strictEqual(error.cause, providerCause);
   }).pipe(Effect.provide(layer({ provider })));
 });
-
-it.effect(
-  "reports the safe Bitbucket locator detail through repository lookup and publishing",
-  () =>
-    Effect.gen(function* () {
-      const locatorCause = new BitbucketApi.BitbucketRepositoryLocatorError({
-        repository: "credential-token-abc123",
-      });
-      const provider = yield* BitbucketSourceControlProvider.make.pipe(
-        Effect.provide(
-          Layer.mock(BitbucketApi.BitbucketApi)({
-            getRepositoryCloneUrls: () => Effect.fail(locatorCause),
-            createRepository: () => Effect.fail(locatorCause),
-          }),
-        ),
-      );
-
-      yield* Effect.gen(function* () {
-        const service = yield* SourceControlRepositoryService.SourceControlRepositoryService;
-        const input = {
-          provider: SourceControlProviderKind.make("bitbucket"),
-          repository: locatorCause.repository,
-          cwd: "/workspace",
-        };
-        for (const operation of [
-          service.lookupRepository(input).pipe(Effect.asVoid),
-          service.publishRepository({ ...input, visibility: "private" }).pipe(Effect.asVoid),
-        ]) {
-          const error = yield* Effect.flip(operation);
-
-          assert.strictEqual(error.provider, "bitbucket");
-          assert.strictEqual(
-            error.detail,
-            "Bitbucket repositories must be specified as workspace/repository.",
-          );
-          assert.notInclude(error.message, locatorCause.repository);
-          assert.instanceOf(error.cause, SourceControlProviderError);
-          assert.strictEqual(
-            isSourceControlProviderError(error.cause) ? error.cause.cause : null,
-            locatorCause,
-          );
-        }
-      }).pipe(Effect.provide(layer({ provider })));
-    }),
-);
-
-it.effect("keeps a plain Bitbucket locator lookalike out of the repository message", () => {
-  const provider = makeProvider({
-    kind: SourceControlProviderKind.make("bitbucket"),
-    getRepositoryCloneUrls: () =>
-      Effect.fail(
-        new SourceControlProviderError({
-          provider: SourceControlProviderKind.make("bitbucket"),
-          operation: "getRepositoryCloneUrls",
-          cwd: "/workspace",
-          detail: "credential token abc123 was rejected",
-          cause: {
-            _tag: "BitbucketRepositoryLocatorError",
-            repository: "t3code",
-            detail: "credential token abc123 was rejected",
-          },
-        }),
-      ),
-  });
-
-  return Effect.gen(function* () {
-    const service = yield* SourceControlRepositoryService.SourceControlRepositoryService;
-    const error = yield* Effect.flip(
-      service.lookupRepository({
-        provider: SourceControlProviderKind.make("bitbucket"),
-        repository: "t3code",
-      }),
-    );
-
-    assert.strictEqual(error.detail, "The source control operation could not be completed.");
-    assert.notInclude(error.message, "abc123");
-  }).pipe(Effect.provide(layer({ provider })));
-});
-
-it.effect("keeps arbitrary Bitbucket request failures out of the repository message", () =>
-  Effect.gen(function* () {
-    const cause = new BitbucketApi.BitbucketRequestError({
-      operation: "getRepository",
-      cause: new Error("credential token abc123 was rejected"),
-    });
-    const provider = yield* BitbucketSourceControlProvider.make.pipe(
-      Effect.provide(
-        Layer.mock(BitbucketApi.BitbucketApi)({
-          getRepositoryCloneUrls: () => Effect.fail(cause),
-        }),
-      ),
-    );
-
-    yield* Effect.gen(function* () {
-      const service = yield* SourceControlRepositoryService.SourceControlRepositoryService;
-      const error = yield* Effect.flip(
-        service.lookupRepository({
-          provider: SourceControlProviderKind.make("bitbucket"),
-          repository: "pingdotgg/t3code",
-          cwd: "/workspace",
-        }),
-      );
-
-      assert.strictEqual(error.detail, "The source control operation could not be completed.");
-      assert.notInclude(error.message, "abc123");
-      assert.notInclude(error.message, cause.detail);
-    }).pipe(Effect.provide(layer({ provider })));
-  }),
-);
 
 it.effect("clones a looked-up repository into the requested destination", () =>
   Effect.gen(function* () {

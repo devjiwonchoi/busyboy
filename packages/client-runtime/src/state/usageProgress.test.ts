@@ -79,15 +79,15 @@ describe("usageProgress", () => {
   });
 
   it("names a slow source without dimming once its environment answers from cache", () => {
-    const partway = environment("a", { isPending: true, summary: summary(["cursor"]) });
-    expect(usageEnvironmentProgress(partway)).toEqual({ phase: "partway", providers: ["cursor"] });
+    const partway = environment("a", { isPending: true, summary: summary(["claude"]) });
+    expect(usageEnvironmentProgress(partway)).toEqual({ phase: "partway", providers: ["claude"] });
     expect(usageProgress([partway, environment("b")], options)).toEqual({
       dimmed: false,
-      label: "Updating cursor label…",
+      label: "Updating claude label…",
     });
     expect(
       usageProgress(
-        [partway, environment("b", { isPending: true, summary: summary(["cursor", "grok"]) })],
+        [partway, environment("b", { isPending: true, summary: summary(["claude", "grok"]) })],
         options,
       ),
     ).toEqual({ dimmed: false, label: "Updating 2 providers…" });
@@ -125,10 +125,10 @@ describe("usageProgress", () => {
 describe("usageLoadingState", () => {
   it("marks only refreshing providers while the rest have answered", () => {
     const state = usageLoadingState([
-      environment("a", { isPending: true, summary: summary(["cursor"]) }),
+      environment("a", { isPending: true, summary: summary(["claude"]) }),
       environment("b"),
     ]);
-    expect(state).toEqual({ partial: true, everyProvider: false, providers: new Set(["cursor"]) });
+    expect(state).toEqual({ partial: true, everyProvider: false, providers: new Set(["claude"]) });
   });
 
   it("marks every provider while an environment has not answered", () => {

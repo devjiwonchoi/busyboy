@@ -64,18 +64,8 @@ export function resolveProviderCompatibility(
     (entry) => entry.driver === driver && satisfiesSemverRange(t3CodeVersion, entry.t3CodeRange),
   );
   if (!policy) return undefined;
-  const unprefixed = version?.replace(/^v/, "");
-  // Cursor appends a build hash to its date; Google's ACP runtime uses a release prefix;
-  // Muse appends a release revision. Strip only these driver-specific forms, keeping
-  // semver prereleases unknown.
-  const stable =
-    driver === "cursor"
-      ? unprefixed?.replace(/^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/, "$1")
-      : driver === "antigravity"
-        ? unprefixed?.replace(/^agy_acp_server_(\d+\.\d+\.\d+)$/, "$1")
-        : driver === "muse"
-          ? unprefixed?.replace(/^(\d+\.\d+\.\d+)-R\d+(?:\.\d+)?$/, "$1")
-          : unprefixed;
+  // Semver prereleases stay unknown.
+  const stable = version?.replace(/^v/, "");
   const status =
     stable && /^\d+\.\d+\.\d+$/.test(stable)
       ? (policy.ranges.find((entry) => satisfiesSemverRange(stable, entry.range))?.status ??

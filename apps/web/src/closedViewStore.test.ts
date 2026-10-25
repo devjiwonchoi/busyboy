@@ -62,12 +62,6 @@ describe("closedViewStore", () => {
       id: "bad",
       kind: "panel-tab",
       threadRef: refA,
-      surface: { kind: "device", id: "device:x", target: {} },
-    },
-    {
-      id: "bad",
-      kind: "panel-tab",
-      threadRef: refA,
       surface: { kind: "pull-request", id: "pull-request:x", repository: "owner/repo", number: 1 },
     },
   ])("discards incomplete saved views %j while retaining valid history", async (entry) => {
@@ -90,13 +84,6 @@ describe("closedViewStore", () => {
       { kind: "pull-requests", id: "pull-requests" },
       { kind: "preview", id: "browser:new", resourceId: null },
       { kind: "preview", id: "browser:saved", resourceId: "saved" },
-      { kind: "device", id: "device" },
-      {
-        kind: "device",
-        id: "device:phone",
-        title: "My phone",
-        target: { hostId: "mac", deviceId: "phone", platform: "ios", name: "iPhone" },
-      },
       { kind: "file", id: "file:x", relativePath: "x", revealLine: 12, revealRequestId: 1 },
       {
         kind: "file",

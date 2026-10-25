@@ -13,7 +13,6 @@ import {
 import * as Effect from "effect/Effect";
 
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
-import { CursorProviderCapabilitiesV2 } from "@t3tools/provider-cursor/testing";
 import { GrokProviderCapabilitiesV2 } from "@t3tools/provider-grok/testing";
 import * as CommandPolicy from "./CommandPolicy.ts";
 
@@ -516,25 +515,6 @@ layer("CommandPolicyV2", (it) => {
     }),
   );
 
-  it.effect("falls back to portable context when Cursor cannot fork natively", () =>
-    Effect.gen(function* () {
-      const policy = yield* CommandPolicy.CommandPolicyV2;
-
-      const result = yield* policy.decideForkExecution({
-        commandId,
-        threadId,
-        providerInstanceId: ProviderInstanceId.make("cursor"),
-        capabilities: CursorProviderCapabilitiesV2,
-        sameProvider: true,
-        hasStrongNativeSource: true,
-        sourceRunStatus: "completed",
-        fromSpecificTurn: true,
-      });
-
-      assert.equal(result, "portable_context");
-    }),
-  );
-
   it.effect("falls back to portable context when Grok ACP cannot fork natively", () =>
     Effect.gen(function* () {
       const policy = yield* CommandPolicy.CommandPolicyV2;
@@ -562,7 +542,7 @@ layer("CommandPolicyV2", (it) => {
         .decideForkExecution({
           commandId,
           threadId,
-          providerInstanceId: ProviderInstanceId.make("cursor"),
+          providerInstanceId: ProviderInstanceId.make("grok"),
           capabilities: capabilities((current) => ({
             ...current,
             threads: {
