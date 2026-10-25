@@ -51,12 +51,6 @@ describe("resolveProjectSettings", () => {
     ).toBe(false);
   });
 
-  it("treats a null project like an absent one before the shell snapshot arrives", () => {
-    expect(resolveProjectSettings(DEFAULT_SERVER_SETTINGS, null, null).settings).toBe(
-      DEFAULT_SERVER_SETTINGS,
-    );
-  });
-
   it("applies overrides per key and reports their source", () => {
     const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       defaultAutoPull: true,
@@ -93,27 +87,6 @@ describe("resolveProjectSettings", () => {
       settings.textGenerationModelSelection,
     );
     expect(resolved.sources.textGenerationModelSelection).toBe("environment");
-  });
-
-  it("uses the aggregate's own fields under the project's override entry", () => {
-    const aggregateModel = createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.5");
-    const project = {
-      defaultModelSelection: aggregateModel,
-      defaultThreadEnvMode: "local" as const,
-    };
-    const fromAggregate = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, project);
-    expect(fromAggregate.settings.defaultModelSelection).toEqual(aggregateModel);
-    expect(fromAggregate.settings.defaultThreadEnvMode).toBe("local");
-    expect(fromAggregate.sources.defaultModelSelection).toBe("project");
-    const overridden = resolveProjectSettings(
-      {
-        ...DEFAULT_SERVER_SETTINGS,
-        projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: "worktree" } },
-      },
-      projectId,
-      project,
-    );
-    expect(overridden.settings.defaultThreadEnvMode).toBe("worktree");
   });
 
   it("keeps the environment default model when the override's provider is disabled", () => {
@@ -180,7 +153,6 @@ describe("resolveProjectSettings with a t3.json", () => {
         projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: "local" } },
       },
       projectId,
-      null,
       file,
     );
     expect(fromOverride.settings.defaultThreadEnvMode).toBe("local");
@@ -189,17 +161,16 @@ describe("resolveProjectSettings with a t3.json", () => {
     const fromEnvironment = resolveProjectSettings(
       { ...DEFAULT_SERVER_SETTINGS, defaultThreadEnvMode: "local" },
       projectId,
-      null,
       file,
     );
     expect(fromEnvironment.settings.defaultThreadEnvMode).toBe("local");
     expect(fromEnvironment.sources.defaultThreadEnvMode).toBe("environment");
 
-    const fromFile = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, file);
+    const fromFile = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, file);
     expect(fromFile.settings.defaultThreadEnvMode).toBe("worktree");
     expect(fromFile.sources.defaultThreadEnvMode).toBe("t3.json");
 
-    const builtIn = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, null);
+    const builtIn = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null);
     expect(builtIn.settings.defaultThreadEnvMode).toBe("local");
     expect(builtIn.sources.defaultThreadEnvMode).toBe("environment");
     const nullOverride = resolveProjectSettings(
@@ -208,14 +179,12 @@ describe("resolveProjectSettings with a t3.json", () => {
         projectSettingsOverrides: { [projectId]: { defaultThreadEnvMode: null } as never },
       },
       projectId,
-      null,
       file,
     );
     expect(nullOverride.settings.defaultThreadEnvMode).toBe("worktree");
     expect(nullOverride.sources.defaultThreadEnvMode).toBe("t3.json");
     expect(
-      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, {}).sources
-        .defaultThreadEnvMode,
+      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, {}).sources.defaultThreadEnvMode,
     ).toBe("environment");
   });
 
@@ -247,7 +216,6 @@ describe("resolveNewThreadEnvMode", () => {
   const worktreeEnvironment = resolveProjectSettings(
     { ...DEFAULT_SERVER_SETTINGS, defaultThreadEnvMode: "worktree" },
     projectId,
-    null,
     null,
   );
   const newProject = {
@@ -291,9 +259,8 @@ describe("resolveNewThreadEnvMode", () => {
         },
         projectId,
         null,
-        null,
       ),
-      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, null, {
+      resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId, {
         defaultThreadEnvMode: "worktree",
       }),
     ]) {

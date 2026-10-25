@@ -45,33 +45,21 @@ export function hasProjectSettingsOverrides(
   return false;
 }
 
-/**
- * The project aggregate's own model and workspace fields. A project's entry in
- * the override record takes precedence over them.
- */
-export interface ProjectAggregateSettingsFields {
-  readonly defaultModelSelection?: ModelSelection | null | undefined;
-  readonly defaultThreadEnvMode?: ThreadEnvMode | null | undefined;
-}
-
 export function resolveProjectSettings(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project?: ProjectAggregateSettingsFields | null,
 ): ResolvedProjectSettings;
 export function resolveProjectSettings(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project: ProjectAggregateSettingsFields | null | undefined,
   projectFile: T3ProjectFile | null,
 ): ResolvedProjectSettings<ResolvedServerSettings>;
 export function resolveProjectSettings(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project?: ProjectAggregateSettingsFields | null,
   projectFile?: T3ProjectFile | null,
 ): ResolvedProjectSettings {
-  const resolved = resolveProjectOverrides(settings, projectId, project);
+  const resolved = resolveProjectOverrides(settings, projectId);
   return projectFile === undefined ? resolved : applyProjectFile(resolved, projectFile);
 }
 
@@ -112,21 +100,10 @@ export function resolveProjectFileBackedSetting<K extends ProjectFileBackedSetti
 function resolveProjectOverrides(
   settings: ServerSettings,
   projectId: ProjectId | null,
-  project?: ProjectAggregateSettingsFields | null,
 ): ResolvedProjectSettings {
-  const stored = projectId === null ? undefined : settings.projectSettingsOverrides[projectId];
   const overrides: ProjectSettingsOverrides =
-    project == null
-      ? (stored ?? EMPTY_OVERRIDES)
-      : {
-          ...(project.defaultModelSelection != null
-            ? { defaultModelSelection: project.defaultModelSelection }
-            : {}),
-          ...(project.defaultThreadEnvMode != null
-            ? { defaultThreadEnvMode: project.defaultThreadEnvMode }
-            : {}),
-          ...stored,
-        };
+    (projectId === null ? undefined : settings.projectSettingsOverrides[projectId]) ??
+    EMPTY_OVERRIDES;
   if (Object.keys(overrides).length === 0) {
     return { settings, sources: ENVIRONMENT_SOURCES, overrides: EMPTY_OVERRIDES };
   }

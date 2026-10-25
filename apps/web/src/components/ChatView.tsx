@@ -1433,11 +1433,8 @@ export default function ChatView(props: ChatViewProps) {
     ? buildLocalDraftThread(
         threadId,
         draftThread,
-        resolveProjectSettings(
-          settings,
-          fallbackDraftProject?.id ?? null,
-          fallbackDraftProject ?? undefined,
-        ).settings.defaultModelSelection ?? NO_PROVIDER_MODEL_SELECTION,
+        resolveProjectSettings(settings, fallbackDraftProject?.id ?? null).settings
+          .defaultModelSelection ?? NO_PROVIDER_MODEL_SELECTION,
       )
     : undefined;
   const isServerThread = serverThread !== null;
@@ -1753,11 +1750,7 @@ export default function ChatView(props: ChatViewProps) {
       ? scopeProjectRef(activeThreadEnvironmentId, activeThreadProjectId)
       : null;
   const activeProject = useProject(activeProjectRef);
-  const activeProjectSettings = resolveProjectSettings(
-    settings,
-    activeProject?.id ?? null,
-    activeProject ?? undefined,
-  );
+  const activeProjectSettings = resolveProjectSettings(settings, activeProject?.id ?? null);
   const activeProjectScripts = activeProject ? resolveProjectScripts(settings, activeProject) : [];
   const activeProjectClone = useProjectClone(activeProjectRef);
   const cancelProjectClone = useAtomCommand(sourceControlEnvironment.cancelProjectClone, {
@@ -2082,8 +2075,7 @@ export default function ChatView(props: ChatViewProps) {
     setLogicalProjectDraftThreadId(logicalProjectKey, activeProjectRef, nextDraftId, {
       threadId: nextThreadId,
       createdAt: new Date().toISOString(),
-      runtimeMode: resolveProjectSettings(settings, activeProject.id, activeProject).settings
-        .defaultRuntimeMode,
+      runtimeMode: resolveProjectSettings(settings, activeProject.id).settings.defaultRuntimeMode,
       interactionMode: DEFAULT_INTERACTION_MODE,
       ...input,
     });

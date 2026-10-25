@@ -246,9 +246,6 @@ describe("scheduled task model defaults", () => {
     expect(resolve(config, { id: projectId })).toEqual(environmentSelection);
   });
   it("prefers the project's configured model", () => {
-    expect(resolve(config, { id: projectId, defaultModelSelection: projectSelection })).toEqual(
-      projectSelection,
-    );
     expect(
       resolve(
         {

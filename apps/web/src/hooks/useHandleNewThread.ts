@@ -123,11 +123,7 @@ export function useNewThreadHandler() {
     );
     const abandonedSinceRequest = () =>
       routeChangedSinceRequest() || (project !== undefined && readProject(projectRef) === null);
-    const projectSettings = resolveProjectSettings(
-      targetServerSettings,
-      project?.id ?? null,
-      project,
-    );
+    const projectSettings = resolveProjectSettings(targetServerSettings, project?.id ?? null);
     const projectDefaultModelSelection = projectSettings.settings.defaultModelSelection;
     const defaultRuntimeMode = projectSettings.settings.defaultRuntimeMode;
     const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
@@ -148,7 +144,6 @@ export function useNewThreadHandler() {
         projectSettings: resolveProjectSettings(
           targetServerSettings,
           project?.id ?? null,
-          project,
           projectFile,
         ),
         workspaceRoot: project?.workspaceRoot ?? null,

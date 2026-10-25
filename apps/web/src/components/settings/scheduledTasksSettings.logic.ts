@@ -10,10 +10,7 @@ import {
   type ServerSettings,
 } from "@t3tools/contracts";
 
-import {
-  resolveProjectSettings,
-  type ProjectAggregateSettingsFields,
-} from "@t3tools/shared/projectSettings";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 
 import type { ResolvedSettingsScope } from "./settingsScope";
@@ -157,7 +154,7 @@ export function taskToDraft(task: ScheduledTask): DraftState {
 
 export function scheduledTaskDefaultModel(
   settings: ServerSettings,
-  project: (ProjectAggregateSettingsFields & { readonly id: ProjectId }) | null,
+  project: { readonly id: ProjectId } | null,
   entries: readonly ProviderInstanceEntry[],
 ): ModelSelection | null {
   const available = entries.filter(
@@ -167,7 +164,7 @@ export function scheduledTaskDefaultModel(
       entry.isAvailable &&
       entry.snapshot.auth.status !== "unauthenticated",
   );
-  const configured = resolveProjectSettings(settings, project?.id ?? null, project).settings
+  const configured = resolveProjectSettings(settings, project?.id ?? null).settings
     .defaultModelSelection;
   for (const selection of [configured, settings.defaultModelSelection]) {
     if (

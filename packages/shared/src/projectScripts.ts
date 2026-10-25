@@ -7,21 +7,19 @@ type ProjectScriptSettings = Pick<
 
 export function resolveProjectScripts(
   settings: ProjectScriptSettings,
-  project: { id: ProjectId; scripts: readonly ProjectScript[] },
+  project: { id: ProjectId },
 ): readonly ProjectScript[] {
-  const override = settings.projectSettingsOverrides[project.id]?.defaultProjectScripts;
-  if (override !== undefined) return override;
-  return project.scripts.length > 0 ? project.scripts : settings.defaultProjectScripts;
+  return (
+    settings.projectSettingsOverrides[project.id]?.defaultProjectScripts ??
+    settings.defaultProjectScripts
+  );
 }
 
 export function projectScriptsInheritDefaults(
   settings: ProjectScriptSettings,
-  project: { id: ProjectId; scripts: readonly ProjectScript[] },
+  project: { id: ProjectId },
 ): boolean {
-  if (settings.projectSettingsOverrides[project.id]?.defaultProjectScripts !== undefined) {
-    return false;
-  }
-  return project.scripts.length === 0;
+  return settings.projectSettingsOverrides[project.id]?.defaultProjectScripts === undefined;
 }
 
 interface ProjectScriptRuntimeEnvInput {

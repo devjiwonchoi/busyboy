@@ -191,8 +191,7 @@ export function DraftHeroHeadline({
         (environment) => environment.environmentId === project.environmentId,
       )?.serverConfig?.settings;
       const defaultModelSelection = environmentSettings
-        ? resolveProjectSettings(environmentSettings, project.id, project).settings
-            .defaultModelSelection
+        ? resolveProjectSettings(environmentSettings, project.id).settings.defaultModelSelection
         : project.defaultModelSelection;
       if (defaultModelSelection) {
         setModelSelection(draftId, defaultModelSelection, {

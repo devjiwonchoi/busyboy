@@ -81,7 +81,7 @@ describe("serverSettings helpers", () => {
       tokens: {},
     });
   });
-  it("inherits actions, preserves existing actions, and supports empty overrides and reset", () => {
+  it("inherits actions, ignores the project record, and supports empty overrides and reset", () => {
     const project = { id: ProjectId.make("project-actions"), scripts: [] };
     const action = {
       id: "check",
@@ -94,8 +94,8 @@ describe("serverSettings helpers", () => {
     const defaults = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       defaultProjectScripts: [action],
     });
-    expect(resolveProjectScripts(defaults, existing)).toEqual(existing.scripts);
-    expect(projectScriptsInheritDefaults(defaults, existing)).toBe(false);
+    expect(resolveProjectScripts(defaults, existing)).toEqual([action]);
+    expect(projectScriptsInheritDefaults(defaults, existing)).toBe(true);
     expect(resolveProjectScripts(defaults, project)).toEqual([action]);
     expect(projectScriptsInheritDefaults(defaults, project)).toBe(true);
     const disabled = applyServerSettingsPatch(defaults, {
