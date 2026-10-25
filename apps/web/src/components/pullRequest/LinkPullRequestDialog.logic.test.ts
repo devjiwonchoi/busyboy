@@ -47,28 +47,6 @@ describe("resolveLinkPullRequestInput", () => {
     ).toMatchObject({ error: expect.stringContaining("org-b/project/_git/web") });
   });
 
-  it("resolves bare Azure numbers into canonical browser URLs", () => {
-    expect(
-      resolveLinkPullRequestInput({
-        reference: "#42",
-        project: {
-          host: "ssh.dev.azure.com",
-          repository: "v3/org/project/web",
-          webUrl: (number) =>
-            changeRequestWebUrl("azure-devops", "ssh.dev.azure.com", "v3/org/project/web", number),
-        },
-        hasProject: () => true,
-      }),
-    ).toMatchObject({
-      link: {
-        host: "dev.azure.com",
-        repository: "org/project/_git/web",
-        number: 42,
-        url: "https://dev.azure.com/org/project/_git/web/pullrequest/42",
-      },
-    });
-  });
-
   it("returns null for input that is not a reference", () => {
     expect(
       resolveLinkPullRequestInput({ reference: "hello", project, hasProject: () => true }),
@@ -132,10 +110,11 @@ describe("resolveLinkPullRequestInput", () => {
 });
 
 describe("changeRequestWebUrl", () => {
-  it("knows the four hosts and nothing else", () => {
-    expect(changeRequestWebUrl("gitlab", "gitlab.com", "g/sub/repo", 5)).toBe(
-      "https://gitlab.com/g/sub/repo/-/merge_requests/5",
+  it("knows GitHub and nothing else", () => {
+    expect(changeRequestWebUrl("github", "github.com", "acme/web", 5)).toBe(
+      "https://github.com/acme/web/pull/5",
     );
+    expect(changeRequestWebUrl("gitlab", "gitlab.com", "g/sub/repo", 5)).toBeNull();
     expect(changeRequestWebUrl("unknown", "x", "a/b", 1)).toBeNull();
   });
 });

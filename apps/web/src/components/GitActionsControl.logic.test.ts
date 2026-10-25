@@ -339,32 +339,6 @@ describe("when: ref is clean, ahead, and has no open PR", () => {
   });
 });
 
-describe("when: source control provider uses merge requests", () => {
-  it("uses GitLab MR terminology in quick actions and menu items", () => {
-    const gitlabStatus = status({
-      aheadCount: 2,
-      sourceControlProvider: {
-        kind: SourceControlProviderKind.make("gitlab"),
-        name: "GitLab",
-        baseUrl: "https://gitlab.com",
-      },
-    });
-
-    const quick = resolveQuickAction(gitlabStatus, false);
-    const items = buildMenuItems(gitlabStatus, false);
-
-    assert.deepInclude(quick, {
-      kind: "run_action",
-      action: "create_pr",
-      label: "Push & create MR",
-    });
-    assert.deepInclude(items[2], {
-      id: "pr",
-      label: "Create MR",
-    });
-  });
-});
-
 describe("when: ref is clean, up to date, and has no open PR", () => {
   it("enables create PR when synced with upstream but ahead of default, even with local changes", () => {
     const syncedFeature = status({

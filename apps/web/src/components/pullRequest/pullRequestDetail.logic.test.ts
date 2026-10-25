@@ -88,48 +88,13 @@ it("groups checks needing attention before running and completed checks without 
 describe("pull request checkout commands", () => {
   it.each([
     ["github", "feature", null, "gh pr checkout 42"],
-    ["gitlab", "feature", null, "glab mr checkout 42"],
-    ["forgejo", "feature", null, null],
-    ["azure-devops", "feature", null, "az repos pr checkout --id 42"],
-    [
-      "bitbucket",
-      "feature/checkout",
-      "maria/t3code",
-      "git clone --single-branch --branch feature/checkout https://bitbucket.org/maria/t3code.git t3code-pr-42",
-    ],
+    ["gitlab", "feature", null, null],
     ["unknown", "feature", null, null],
   ] as const)("builds the %s command", (provider, branch, repository, expected) => {
     expect(
       pullRequestCheckoutCommand(SourceControlProviderKind.make(provider), 42, branch, repository),
     ).toBe(expected);
   });
-  it("fetches Forgejo pull refs from the actual repository, including a mounted host and port", () => {
-    expect(
-      pullRequestCheckoutCommand(
-        SourceControlProviderKind.make("forgejo"),
-        42,
-        "feature",
-        null,
-        "https://forgejo.local:3000/git/maria/repo",
-      ),
-    ).toBe(
-      "git fetch 'https://forgejo.local:3000/git/maria/repo' refs/pull/42/head && git checkout -B pulls/42 FETCH_HEAD",
-    );
-  });
-  it("quotes shell metacharacters in Forgejo repository URLs", () => {
-    expect(
-      pullRequestCheckoutCommand(
-        SourceControlProviderKind.make("forgejo"),
-        42,
-        "feature",
-        null,
-        "https://forgejo.local/maria/repo'$(echo nope)",
-      ),
-    ).toBe(
-      "git fetch 'https://forgejo.local/maria/repo'\\''$(echo nope)' refs/pull/42/head && git checkout -B pulls/42 FETCH_HEAD",
-    );
-  });
-
   const reference = (host?: string): PullRequestRef => ({
     projectId: ProjectId.make("project-1"),
     ...(host === undefined ? {} : { host }),
@@ -150,9 +115,7 @@ describe("pull request checkout commands", () => {
     expect(loadingPullRequestCheckoutCommand(reference("github.com"), undefined)).toBe(
       "gh pr checkout 42",
     );
-    expect(loadingPullRequestCheckoutCommand(reference("gitlab.com"), null)).toBe(
-      "glab mr checkout 42",
-    );
+    expect(loadingPullRequestCheckoutCommand(reference("gitlab.com"), null)).toBeNull();
   });
 
   it("uses a matching enterprise identity and rejects an explicit host mismatch", () => {
@@ -1533,9 +1496,9 @@ describe("pull request panel context beside a thread", () => {
 
   it("recognizes an unsynced manual link, and matches host and repository case-insensitively", () => {
     const thread = { projectId: "proj-a", pullRequests: [link(7, { host: "GitHub.com" })] };
-    expect(pullRequestPanelContext(thread, surface(7, { repository: "PingDotGG/T3Code" }))).toBe(
-      "thread",
-    );
+    expect(
+      pullRequestPanelContext(thread, surface(7, { repository: "DevJiwonChoi/Busyboy" })),
+    ).toBe("thread");
     expect(pullRequestPanelContext(thread, surface(7, { host: undefined }))).toBe("thread");
     expect(pullRequestPanelContext(thread, surface(7, { host: "gitlab.com" }))).toBe("page");
   });
@@ -1898,29 +1861,6 @@ describe("cached pull request detail", () => {
       readPullRequestDetailSnapshot(storage, "env-1", {
         ...reference,
         host: "github.example.com",
-      }),
-    ).toBeNull();
-  });
-
-  it("keeps Forgejo ports isolated when recovering legacy snapshots", () => {
-    const storage = makeStorage();
-    const cached = detail({
-      provider: SourceControlProviderKind.make("forgejo"),
-      url: "https://forge.example:8443/acme/web/pulls/7",
-    });
-    writePullRequestDetailSnapshot(storage, "env-1", reference, cached);
-    const resolved = { ...reference, host: "forge.example:8443" };
-    expect(readPullRequestDetailSnapshot(storage, "env-1", resolved)?.title).toBe(cached.title);
-    expect(
-      readPullRequestDetailSnapshot(storage, "env-1", {
-        ...reference,
-        host: "forge.example:9443",
-      }),
-    ).toBeNull();
-    expect(
-      readPullRequestDetailSnapshot(storage, "env-1", {
-        ...reference,
-        host: "forge.example",
       }),
     ).toBeNull();
   });
