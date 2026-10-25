@@ -62,7 +62,7 @@ const layerEnvironmentFor = (
       Layer.mergeAll(
         NodeServices.layer,
         DesktopConfig.layerTest({
-          T3CODE_HOME: baseDir,
+          BUSYBOY_HOME: baseDir,
           VITE_DEV_SERVER_URL: isDevelopment ? "http://127.0.0.1:5733" : undefined,
           ...env,
         }),
@@ -392,8 +392,8 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
-        T3CODE_OTLP_HEADERS: "x-scope=desktop",
+        BUSYBOY_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
+        BUSYBOY_OTLP_HEADERS: "x-scope=desktop",
       });
       const tracePath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -436,7 +436,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_HEADERS: "x-scope=desktop",
+        BUSYBOY_OTLP_HEADERS: "x-scope=desktop",
       });
       yield* writeObservabilitySettings(layerEnvironment, {
         otlpLogsUrl: "https://settings.example.com/v1/logs",
@@ -482,7 +482,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
+        BUSYBOY_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
       });
 
       yield* Effect.scoped(
@@ -493,7 +493,7 @@ describe("DesktopObservability", () => {
 
       assert.lengthOf(requests, 1);
       const body = requests[0]?.body ?? "";
-      assert.include(body, '"stringValue":"t3code-desktop"');
+      assert.include(body, '"stringValue":"busyboy-desktop"');
       assert.include(body, "deployment.environment.name");
       assert.include(body, '"key":"service.namespace","value":{"stringValue":"t3code"}');
       assert.notInclude(body, "renamed");
@@ -525,7 +525,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_HEADERS: "x-scope=desktop",
+        BUSYBOY_OTLP_HEADERS: "x-scope=desktop",
       });
       yield* writeObservabilitySettings(layerEnvironment, {
         otlpLogsUrl: "https://settings.example.com/v1/logs",
@@ -565,7 +565,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
+        BUSYBOY_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
       });
 
       yield* Effect.scoped(

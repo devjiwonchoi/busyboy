@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/provider-acp-registry",
+  "name": "@busyboy/provider-acp-registry",
   "private": true,
   "type": "module",
   "exports": {
@@ -34,16 +34,16 @@
   },
   "dependencies": {
     "@noble/hashes": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/provider-acp": "workspace:*",
-    "@t3tools/provider-core": "workspace:*",
-    "@t3tools/shared": "workspace:*",
+    "@busyboy/contracts": "workspace:*",
+    "@busyboy/provider-acp": "workspace:*",
+    "@busyboy/provider-core": "workspace:*",
+    "@busyboy/shared": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
-    "@t3tools/provider-testing": "workspace:*",
+    "@busyboy/provider-testing": "workspace:*",
     "@types/node": "catalog:",
     "effect-acp": "workspace:*",
     "vite-plus": "catalog:"

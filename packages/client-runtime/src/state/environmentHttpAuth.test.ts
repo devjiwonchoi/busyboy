@@ -11,7 +11,7 @@ import {
   OrchestrationV2ThreadBoundedSnapshot,
   OrchestrationV2ThreadTranscript,
   type OrchestrationV2ThreadHistoryPage,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type { HttpClient } from "effect/http";
@@ -60,7 +60,7 @@ const AUTH = {
   policy: "remote-reachable",
   bootstrapMethods: ["one-time-token"],
   sessionMethods: ["bearer-access-token"],
-  sessionCookieName: "t3_session",
+  sessionCookieName: "busyboy_session",
 } satisfies AuthSessionState["auth"];
 const SESSION = {
   authenticated: true,

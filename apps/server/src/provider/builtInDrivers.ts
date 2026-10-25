@@ -1,14 +1,14 @@
 import {
   AcpRegistryDriver,
   type AcpRegistryDriverEnv,
-} from "@t3tools/provider-acp-registry/server";
+} from "@busyboy/provider-acp-registry/server";
 import { ClaudeDriver, type ClaudeDriverEnv } from "./Drivers/ClaudeDriver.ts";
 import { CodexDriver, type CodexDriverEnv } from "./Drivers/CodexDriver.ts";
-import { GrokDriver, type GrokDriverEnv } from "@t3tools/provider-grok/server";
+import { GrokDriver, type GrokDriverEnv } from "@busyboy/provider-grok/server";
 import type {
   AnyProviderDriver,
   ProviderUsageReaderEnv,
-} from "@t3tools/provider-core/server/driver";
+} from "@busyboy/provider-core/server/driver";
 
 export type BuiltInDriversEnv =
   | AcpRegistryDriverEnv

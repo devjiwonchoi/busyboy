@@ -44,17 +44,17 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          T3CODE_HOME: " /tmp/t3 ",
-          T3CODE_COMMIT_HASH: " 0123456789abcdef ",
-          T3CODE_PORT: "4949",
+          BUSYBOY_HOME: " /tmp/t3 ",
+          BUSYBOY_COMMIT_HASH: " 0123456789abcdef ",
+          BUSYBOY_PORT: "4949",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
-          T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH: " /remote/server.mjs ",
-          T3CODE_OTLP_TRACES_URL: " http://127.0.0.1:4318/v1/traces ",
-          T3CODE_OTLP_METRICS_URL: " http://127.0.0.1:4318/v1/metrics ",
-          T3CODE_OTLP_LOGS_URL: " http://127.0.0.1:4318/v1/logs ",
-          T3CODE_OTLP_EXPORT_INTERVAL_MS: "2500",
-          T3CODE_OTLP_HEADERS: "authorization=Basic%20abc%3D%3D,x-tenant=t3",
-          T3CODE_OTLP_PROTOCOL: "http/protobuf",
+          BUSYBOY_DEV_REMOTE_T3_SERVER_ENTRY_PATH: " /remote/server.mjs ",
+          BUSYBOY_OTLP_TRACES_URL: " http://127.0.0.1:4318/v1/traces ",
+          BUSYBOY_OTLP_METRICS_URL: " http://127.0.0.1:4318/v1/metrics ",
+          BUSYBOY_OTLP_LOGS_URL: " http://127.0.0.1:4318/v1/logs ",
+          BUSYBOY_OTLP_EXPORT_INTERVAL_MS: "2500",
+          BUSYBOY_OTLP_HEADERS: "authorization=Basic%20abc%3D%3D,x-tenant=t3",
+          BUSYBOY_OTLP_PROTOCOL: "http/protobuf",
         },
       );
 
@@ -79,7 +79,7 @@ describe("DesktopEnvironment", () => {
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
       );
-      assert.deepEqual(environment.devRemoteT3ServerEntryPath, Option.some("/remote/server.mjs"));
+      assert.deepEqual(environment.devRemoteBusyboyServerEntryPath, Option.some("/remote/server.mjs"));
       assert.deepEqual(environment.configuredBackendPort, Option.some(4949));
       assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
       assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
@@ -102,7 +102,7 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          T3CODE_HOME: "/tmp/t3",
+          BUSYBOY_HOME: "/tmp/t3",
         },
       );
 
@@ -158,8 +158,8 @@ describe("DesktopEnvironment", () => {
       );
       const production = yield* makeEnvironment();
 
-      assert.equal(development.stateDir, "/Users/alice/.t3/dev");
-      assert.equal(production.stateDir, "/Users/alice/.t3/userdata");
+      assert.equal(development.stateDir, "/Users/alice/.busyboy/dev");
+      assert.equal(production.stateDir, "/Users/alice/.busyboy/userdata");
     }),
   );
 
@@ -168,7 +168,7 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          T3CODE_DESKTOP_APP_USER_MODEL_ID: " dev.jiwon.busyboy.dev.local ",
+          BUSYBOY_DESKTOP_APP_USER_MODEL_ID: " dev.jiwon.busyboy.dev.local ",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
         },
       );

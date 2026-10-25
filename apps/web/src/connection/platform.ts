@@ -2,7 +2,7 @@ import {
   ClientCapabilities,
   PlatformConnectionSource,
   Persistence,
-} from "@t3tools/client-runtime/platform";
+} from "@busyboy/client-runtime/platform";
 import {
   ConnectionBlockedError,
   ConnectionTransientError,
@@ -12,17 +12,17 @@ import {
   PrimaryConnectionRegistration,
   PrimaryConnectionTarget,
   Wakeups,
-} from "@t3tools/client-runtime/connection";
-import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
+} from "@busyboy/client-runtime/connection";
+import { fetchRemoteEnvironmentDescriptor } from "@busyboy/client-runtime/environment";
 
-import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
+import { EnvironmentRpcRequestObserver } from "@busyboy/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
   type DesktopBridge,
   type DesktopSshEnvironmentTarget,
   type EnvironmentId,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

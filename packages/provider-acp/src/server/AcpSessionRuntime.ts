@@ -26,11 +26,11 @@ import * as EffectAcpClient from "effect-acp/client";
 import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/compat";
 import type * as EffectAcpProtocol from "effect-acp/protocol";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import { AgentScope, AgentScopeThreadId, RAISE_OOM_SCORE_LINE } from "@t3tools/shared/AgentScope";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { resolveSpawnCommand } from "@busyboy/shared/shell";
+import { AgentScope, AgentScopeThreadId, RAISE_OOM_SCORE_LINE } from "@busyboy/shared/AgentScope";
+import * as HostProcess from "@busyboy/shared/HostProcess";
 
-import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
+import { signalProcessGroup } from "@busyboy/provider-core/server/processGroup";
 import { appendAcpStderrTail, sanitizeAcpStderrExcerpt } from "./stderr.ts";
 import {
   collectSessionConfigOptionValues,
@@ -277,7 +277,7 @@ export function wrapCommandForLinuxCgroup(
         '  case "$line" in 0::*) [ -z "$actual" ] || exit 126; actual=${line#0::};; esac',
         "done < /proc/self/cgroup || exit 125",
         '[ "$actual" = "$expected" ] || exit 126',
-        "unset ELECTRON_RUN_AS_NODE T3_ACP_CGROUP_WRAPPER",
+        "unset ELECTRON_RUN_AS_NODE BUSYBOY_ACP_CGROUP_WRAPPER",
         "trap 'exit 125' 0",
         // The trap alone does not cover a failed `exec`: bash — which is
         // /bin/sh on Arch derivatives — exits 127 without running the EXIT
@@ -1216,7 +1216,7 @@ export class AcpSessionRuntime extends Context.Service<
       payload: unknown,
     ) => Effect.Effect<void, EffectAcpErrors.AcpError>;
   }
->()("@t3tools/provider-acp/server/AcpSessionRuntime") {}
+>()("@busyboy/provider-acp/server/AcpSessionRuntime") {}
 
 interface AcpStartedState extends AcpSessionRuntimeStartResult {}
 
@@ -1466,7 +1466,7 @@ export const make = (
         : {
             ...options.spawn.env,
             ELECTRON_RUN_AS_NODE: "1",
-            T3_ACP_CGROUP_WRAPPER: "1",
+            BUSYBOY_ACP_CGROUP_WRAPPER: "1",
           };
     const child = yield* spawner
       .spawn(
@@ -1901,7 +1901,7 @@ export const make = (
           meta !== null &&
           typeof meta === "object" &&
           !Array.isArray(meta) &&
-          (meta as { readonly t3SessionLoadReady?: unknown }).t3SessionLoadReady === "replay_idle";
+          (meta as { readonly busyboySessionLoadReady?: unknown }).busyboySessionLoadReady === "replay_idle";
         const extractedModelConfigId = extractModelConfigId(sessionSetupResult);
         const nextModelConfigId =
           extractedModelConfigId ?? (syntheticReplayIdle ? current.modelConfigId : undefined);

@@ -1,5 +1,5 @@
-import type { PullRequestReviewGuideExcerpt, PullRequestReviewGuideStop } from "@t3tools/contracts";
-import type { ReviewGuideGenerationResult } from "@t3tools/provider-core/server/textGeneration";
+import type { PullRequestReviewGuideExcerpt, PullRequestReviewGuideStop } from "@busyboy/contracts";
+import type { ReviewGuideGenerationResult } from "@busyboy/provider-core/server/textGeneration";
 
 const MAX_EXCERPT_LINES = 25;
 

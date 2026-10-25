@@ -1,13 +1,13 @@
-import type { ClaudeSettings, ServerProviderSkill } from "@t3tools/contracts";
+import type { ClaudeSettings, ServerProviderSkill } from "@busyboy/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { fromLenientJson } from "@t3tools/shared/schemaJson";
+import * as HostProcess from "@busyboy/shared/HostProcess";
+import { fromLenientJson } from "@busyboy/shared/schemaJson";
 import { parse as parseYamlDocument } from "yaml";
 
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { expandHomePath } from "@busyboy/provider-core/server/pathExpansion";
 
 type ClaudeSkillScope = "user" | "project";
 

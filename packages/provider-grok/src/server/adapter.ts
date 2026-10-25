@@ -1,17 +1,17 @@
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import { makeProviderFailure } from "@busyboy/provider-core/server/failure";
 import {
   XAiPromptFailureText,
   isXAiTaskCompletedWakeNotification,
   xAiRateLimitedErrorCode,
 } from "./xaiAcpExtension.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveSelfInvocation, type SelfInvocation } from "@t3tools/shared/nodeRuntime";
+import * as HostProcess from "@busyboy/shared/HostProcess";
+import { resolveSelfInvocation, type SelfInvocation } from "@busyboy/shared/nodeRuntime";
 import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
   type OrchestrationV2ProviderCapabilities,
   type RuntimeMode,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import { GrokSettings } from "../settings.ts";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -23,9 +23,9 @@ import type * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EffectAcpErrors from "effect-acp/errors";
 
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
+import * as McpProviderSessions from "@busyboy/provider-core/server/McpProviderSessions";
+import * as ProviderHost from "@busyboy/provider-core/server/ProviderHost";
+import { makeAcpNativeLoggerFactory } from "@busyboy/provider-acp/server/nativeLogging";
 import {
   applyGrokAcpModelSelection,
   currentGrokModelIdFromSessionSetup,
@@ -54,25 +54,25 @@ import {
   XAiAskUserQuestionRequest,
   XAiExitPlanModeRequest,
 } from "./xaiAcpExtension.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import { acpPermissionDisposition } from "@t3tools/provider-acp/server/clientPolicy";
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { mergeProviderInstanceEnvironment } from "@busyboy/provider-core/server/instanceEnvironment";
+import { acpPermissionDisposition } from "@busyboy/provider-acp/server/clientPolicy";
+import * as AcpSessionRuntime from "@busyboy/provider-acp/server/AcpSessionRuntime";
+import * as ProviderEventLoggers from "@busyboy/provider-core/server/ProviderEventLoggers";
+import * as IdAllocator from "@busyboy/provider-core/server/IdAllocator";
+import * as ProviderContinuationRequests from "@busyboy/provider-core/server/ProviderContinuationRequests";
+import * as ProviderAdapter from "@busyboy/provider-core/server/ProviderAdapter";
 import {
   ProviderAdapterDriverCreateError,
   type ProviderAdapterDriver,
   type ProviderAdapterDriverCreateInput,
-} from "@t3tools/provider-core/server/adapterDriver";
+} from "@busyboy/provider-core/server/adapterDriver";
 import {
   AcpProviderCapabilitiesV2,
   makeAcpAdapterV2,
   type AcpAdapterV2ExtensionContext,
   type AcpAdapterV2Flavor,
   type AcpAdapterV2RuntimeInput,
-} from "@t3tools/provider-acp/server/adapter";
+} from "@busyboy/provider-acp/server/adapter";
 
 export const GROK_PROVIDER = ProviderDriverKind.make("grok");
 const GROK_DRIVER_KIND = GROK_PROVIDER;

@@ -8,7 +8,7 @@ import {
   ProviderInstanceId,
   type ProviderReplayTranscript,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -18,7 +18,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import { ClaudeOrchestratorReplayHarness } from "../Adapters/ClaudeAdapterV2.testkit.ts";
 import { CodexOrchestratorReplayHarness } from "../Adapters/CodexAdapterV2.testkit.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as IdAllocator from "@busyboy/provider-core/server/IdAllocator";
 import { provideDeterministicTestRuntime } from "./DeterministicRuntime.ts";
 import {
   THREAD_FORK_NATIVE_PRIOR_TURN_ALPHA_PROMPT,
@@ -31,7 +31,7 @@ import { runOrchestratorV2ProviderReplayScenario } from "./ProviderReplayHarness
 import {
   decodeProviderReplayNdjson,
   materializeReplayTranscriptWorkspace,
-} from "@t3tools/provider-testing/replayTranscript";
+} from "@busyboy/provider-testing/replayTranscript";
 
 const CODEX_MODEL_SELECTION = {
   instanceId: ProviderInstanceId.make("codex"),
@@ -93,7 +93,7 @@ const makeCheckpointWorkspace = Effect.gen(function* () {
   const cwd = yield* fs.makeTempDirectory({ prefix: "t3-orchestrator-v2-thread-fork-" });
   yield* runGit(cwd, ["init"]);
   yield* runGit(cwd, ["config", "user.name", "Busyboy Test"]);
-  yield* runGit(cwd, ["config", "user.email", "t3code-test@example.com"]);
+  yield* runGit(cwd, ["config", "user.email", "busyboy-test@example.com"]);
   yield* fs.writeFileString(path.join(cwd, "README.md"), "# thread fork\n");
   yield* runGit(cwd, ["add", "README.md"]);
   yield* runGit(cwd, ["commit", "-m", "initial"]);

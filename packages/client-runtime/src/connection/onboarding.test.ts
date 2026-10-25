@@ -3,7 +3,7 @@ import {
   EnvironmentId,
   type AuthEnvironmentScope,
   ORCHESTRATION_PROTOCOL_VERSION,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -66,7 +66,7 @@ function layerPairingHttp(
     const url = String(input);
     calls.push({ url, init });
 
-    if (url.endsWith("/.well-known/t3/environment")) {
+    if (url.endsWith("/.well-known/busyboy/environment")) {
       if (options?.failDescriptor === true) {
         return Promise.resolve(
           Response.json({ message: "descriptor unavailable" }, { status: 503 }),
@@ -140,7 +140,7 @@ function layerPairingHttp(
             policy: "remote-reachable",
             bootstrapMethods: ["one-time-token"],
             sessionMethods: ["bearer-access-token"],
-            sessionCookieName: "t3_session",
+            sessionCookieName: "busyboy_session",
           },
           scopes: sessionScopes,
           sessionMethod: "bearer-access-token",
@@ -251,7 +251,7 @@ describe("connection onboarding", () => {
         },
       });
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "https://remote.example.test/.well-known/busyboy/environment",
         "https://remote.example.test/oauth/token",
       ]);
 
@@ -416,7 +416,7 @@ describe("connection onboarding", () => {
       );
       expect(error).toMatchObject({ reason: "unsupported" });
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "https://remote.example.test/.well-known/busyboy/environment",
       ]);
     }),
   );
@@ -456,7 +456,7 @@ describe("connection onboarding", () => {
       expect(error).toMatchObject({ reason: "configuration" });
       expect(error.message).toContain("different machine");
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "https://remote.example.test/.well-known/busyboy/environment",
       ]);
     }),
   );
@@ -501,7 +501,7 @@ describe("connection onboarding", () => {
       expect(error).toMatchObject({ reason: "unsupported" });
       expect(error).not.toHaveProperty("serverUpdateRequired");
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "https://remote.example.test/.well-known/busyboy/environment",
       ]);
     }),
   );
@@ -524,7 +524,7 @@ describe("connection onboarding", () => {
       );
 
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "https://remote.example.test/.well-known/busyboy/environment",
       ]);
     }),
   );

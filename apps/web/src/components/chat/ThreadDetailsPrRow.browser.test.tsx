@@ -1,4 +1,4 @@
-import { EnvironmentId, type PullRequestCheck } from "@t3tools/contracts";
+import { EnvironmentId, type PullRequestCheck } from "@busyboy/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";

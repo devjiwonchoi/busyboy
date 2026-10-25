@@ -1,5 +1,5 @@
-import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
-import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { type ServerLifecycleWelcomePayload } from "@busyboy/contracts";
+import { scopedProjectKey, scopeProjectRef } from "@busyboy/client-runtime/environment";
 import {
   Outlet,
   Link,

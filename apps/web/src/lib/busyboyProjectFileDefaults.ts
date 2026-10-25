@@ -1,6 +1,6 @@
-import { T3_PROJECT_FILE_NAME, type EnvironmentId, type T3ProjectFile } from "@t3tools/contracts";
-import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
-import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
+import { BUSYBOY_PROJECT_FILE_NAME, type EnvironmentId, type BusyboyProjectFile } from "@busyboy/contracts";
+import { parseBusyboyProjectFile } from "@busyboy/shared/busyboyProjectFile";
+import { executeAtomQuery } from "@busyboy/client-runtime/state/runtime";
 
 import {
   getProjectFileQueryAtom,
@@ -8,21 +8,21 @@ import {
 } from "~/components/files/projectFilesQueryState";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 
-export async function readT3ProjectFile(
+export async function readBusyboyProjectFile(
   environmentId: EnvironmentId,
   workspaceRoot: string,
-): Promise<T3ProjectFile | null> {
+): Promise<BusyboyProjectFile | null> {
   const result = await executeAtomQuery(
     appAtomRegistry,
-    getProjectFileQueryAtom(environmentId, workspaceRoot, T3_PROJECT_FILE_NAME),
+    getProjectFileQueryAtom(environmentId, workspaceRoot, BUSYBOY_PROJECT_FILE_NAME),
     { reportDefect: false, reportFailure: false },
   );
   const data = resolveProjectFileQueryData(
     environmentId,
     workspaceRoot,
-    T3_PROJECT_FILE_NAME,
+    BUSYBOY_PROJECT_FILE_NAME,
     result._tag === "Success" ? result.value : null,
   );
   if (data === null || data.truncated) return null;
-  return parseT3ProjectFile(data.contents);
+  return parseBusyboyProjectFile(data.contents);
 }

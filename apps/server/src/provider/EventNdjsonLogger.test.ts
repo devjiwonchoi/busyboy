@@ -3,10 +3,10 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId } from "@busyboy/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { RotatingFileSinkError } from "@t3tools/shared/logging";
+import { RotatingFileSinkError } from "@busyboy/shared/logging";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";

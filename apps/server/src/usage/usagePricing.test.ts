@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import type { UsageSpeed } from "@t3tools/provider-core/server/usage";
+import type { UsageSpeed } from "@busyboy/provider-core/server/usage";
 import {
   cacheSavingsUsd,
   createOverrideRateTable,

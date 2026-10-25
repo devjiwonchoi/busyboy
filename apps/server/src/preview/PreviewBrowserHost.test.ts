@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@busyboy/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -62,7 +62,7 @@ const diagnose = (input: {
     version: input.version ?? LOADER_ERROR,
   });
   return PreviewBrowserHost.diagnoseLaunchFailure({
-    executable: "/home/me/.t3/tools/chrome-headless-shell/linux64/154/chrome-headless-shell",
+    executable: "/home/me/.busyboy/tools/chrome-headless-shell/linux64/154/chrome-headless-shell",
     output: input.output,
     setupCommand: "sudo t3 browser setup",
   }).pipe(

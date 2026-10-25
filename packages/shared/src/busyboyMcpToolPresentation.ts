@@ -1,11 +1,11 @@
-export type T3McpToolLogo = "t3-code";
+export type BusyboyMcpToolLogo = "t3-code";
 
-export interface T3McpToolPresentation {
+export interface BusyboyMcpToolPresentation {
   readonly displayName: string;
-  readonly logo: T3McpToolLogo;
+  readonly logo: BusyboyMcpToolLogo;
 }
 
-export type T3McpToolSummaryAction =
+export type BusyboyMcpToolSummaryAction =
   | "capabilities"
   | "delegate"
   | "task-status"
@@ -65,25 +65,25 @@ export type T3McpToolSummaryAction =
   | "html-preview"
   | "html-render";
 
-export interface T3McpToolDefinition {
+export interface BusyboyMcpToolDefinition {
   readonly displayName: string;
   readonly labels: readonly [action: string, running: string, completed: string, detail: string];
   readonly icon: "t3-code" | "browser" | "pull-request";
-  readonly summaryAction: T3McpToolSummaryAction;
+  readonly summaryAction: BusyboyMcpToolSummaryAction;
 }
 
 function tool(
-  labels: T3McpToolDefinition["labels"],
-  summaryAction: T3McpToolSummaryAction,
-  icon: T3McpToolDefinition["icon"] = "t3-code",
+  labels: BusyboyMcpToolDefinition["labels"],
+  summaryAction: BusyboyMcpToolSummaryAction,
+  icon: BusyboyMcpToolDefinition["icon"] = "t3-code",
   displayName = `${labels[0]} ${labels[3]}`,
-): T3McpToolDefinition {
+): BusyboyMcpToolDefinition {
   return { displayName, labels, icon, summaryAction };
 }
 
-const T3_MCP_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code"]);
+const BUSYBOY_MCP_SERVER_ALIASES = new Set(["t3-code", "t3_code", "busyboy"]);
 
-const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
+const BUSYBOY_MCP_TOOLS: Readonly<Record<string, BusyboyMcpToolDefinition>> = {
   link_pull_request: tool(
     ["Link", "Linking", "Linked", "a pull request"],
     "link-pr",
@@ -320,9 +320,9 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
 };
 
-export const T3_MCP_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(T3_MCP_TOOLS));
+export const BUSYBOY_MCP_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(BUSYBOY_MCP_TOOLS));
 
-function normalizeT3McpToolLabel(value: string): string {
+function normalizeBusyboyMcpToolLabel(value: string): string {
   return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
 }
 
@@ -333,60 +333,60 @@ function normalizeT3McpToolLabel(value: string): string {
  * agents. The prefix match is deliberately loose because the display-name
  * inventory is the real gate; unknown tools stay on the generic renderer.
  */
-function resolveT3McpToolName(value: string): string | null {
-  const label = normalizeT3McpToolLabel(value);
+function resolveBusyboyMcpToolName(value: string): string | null {
+  const label = normalizeBusyboyMcpToolLabel(value);
   const mcpMatch = /^mcp__(?<server>.+?)__(?<tool>.+)$/i.exec(label);
   if (mcpMatch?.groups) {
     const { server, tool } = mcpMatch.groups;
     return server !== undefined &&
       tool !== undefined &&
-      T3_MCP_SERVER_ALIASES.has(server.toLowerCase())
+      BUSYBOY_MCP_SERVER_ALIASES.has(server.toLowerCase())
       ? tool
       : null;
   }
 
-  const namespaceMatch = /^(?<server>t3-code|t3_code|t3code)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
+  const namespaceMatch = /^(?<server>t3-code|t3_code|busyboy)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
     label,
   );
   if (namespaceMatch?.groups) {
     return namespaceMatch.groups.tool ?? null;
   }
 
-  const prefixed = /^(?:mcp[-_]{1,2})?t3[-_ ]?code(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);
+  const prefixed = /^(?:mcp[-_]{1,2})?busyboy[-_ ]?code(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);
   const candidate = prefixed?.groups?.tool ?? label;
-  if (Object.hasOwn(T3_MCP_TOOLS, candidate)) return candidate;
+  if (Object.hasOwn(BUSYBOY_MCP_TOOLS, candidate)) return candidate;
   // OpenCode 2 registers one server per thread, `t3-code-<thread>`, and joins
   // it to the tool with `_`. Thread ids can hold `_` too, so take the longest
   // known tool name that ends the label.
   if (!/^t3-code-/i.test(label)) return null;
   let longest: string | null = null;
-  for (const tool of Object.keys(T3_MCP_TOOLS)) {
+  for (const tool of Object.keys(BUSYBOY_MCP_TOOLS)) {
     if (label.endsWith(`_${tool}`) && tool.length > (longest?.length ?? 0)) longest = tool;
   }
   return longest;
 }
 
-export function resolveT3McpToolId(toolName: string | null | undefined): string | null {
-  const name = toolName == null ? null : resolveT3McpToolName(toolName);
-  return name !== null && Object.hasOwn(T3_MCP_TOOLS, name) ? name : null;
+export function resolveBusyboyMcpToolId(toolName: string | null | undefined): string | null {
+  const name = toolName == null ? null : resolveBusyboyMcpToolName(toolName);
+  return name !== null && Object.hasOwn(BUSYBOY_MCP_TOOLS, name) ? name : null;
 }
 
-export function resolveT3McpToolDefinition(
+export function resolveBusyboyMcpToolDefinition(
   toolName: string | null | undefined,
-): T3McpToolDefinition | null {
-  const name = toolName == null ? null : resolveT3McpToolName(toolName);
-  return name !== null && Object.hasOwn(T3_MCP_TOOLS, name) ? T3_MCP_TOOLS[name]! : null;
+): BusyboyMcpToolDefinition | null {
+  const name = toolName == null ? null : resolveBusyboyMcpToolName(toolName);
+  return name !== null && Object.hasOwn(BUSYBOY_MCP_TOOLS, name) ? BUSYBOY_MCP_TOOLS[name]! : null;
 }
 
-export function resolveT3McpToolPresentation(
+export function resolveBusyboyMcpToolPresentation(
   toolName: string | null | undefined,
-): T3McpToolPresentation | null {
-  const definition = resolveT3McpToolDefinition(toolName);
+): BusyboyMcpToolPresentation | null {
+  const definition = resolveBusyboyMcpToolDefinition(toolName);
   return definition === null ? null : { displayName: definition.displayName, logo: "t3-code" };
 }
 
-export function resolveT3McpToolSummaryAction(
+export function resolveBusyboyMcpToolSummaryAction(
   toolName: string | null | undefined,
-): T3McpToolSummaryAction | null {
-  return resolveT3McpToolDefinition(toolName)?.summaryAction ?? null;
+): BusyboyMcpToolSummaryAction | null {
+  return resolveBusyboyMcpToolDefinition(toolName)?.summaryAction ?? null;
 }

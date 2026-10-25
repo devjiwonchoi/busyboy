@@ -45,7 +45,7 @@ it.effect.each(["t3code", "Busyboy (Alpha)"])(
       const path = yield* Path.Path;
       const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-v2-profile-" });
       const source = path.join(directory, sourceName);
-      const destination = path.join(directory, "t3code-v2");
+      const destination = path.join(directory, "busyboy-v2");
       const state = '{"os_crypt":{"encrypted_key":"test-encrypted-key"}}';
       yield* fs.makeDirectory(path.join(directory, "Busyboy (Alpha)"), { recursive: true });
       yield* fs.makeDirectory(path.join(source, "IndexedDB"), { recursive: true });

@@ -1,7 +1,7 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef } from "@busyboy/contracts";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import { resolvePathLinkTarget } from "@busyboy/shared/fileLinks";
 
 export function FileMarkdownPreview(props: {
   readonly cwd: string;

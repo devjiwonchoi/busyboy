@@ -1,5 +1,5 @@
-import type { RunId, ScopedThreadRef, ThreadLinkedPullRequest } from "@t3tools/contracts";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import type { RunId, ScopedThreadRef, ThreadLinkedPullRequest } from "@busyboy/contracts";
+import { scopedThreadKey } from "@busyboy/client-runtime/environment";
 import { useEffect, useRef } from "react";
 import { useDiffPanelStore } from "../diffPanelStore";
 import {

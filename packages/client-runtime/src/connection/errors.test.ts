@@ -1,4 +1,4 @@
-import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
+import { EnvironmentAuthInvalidError } from "@busyboy/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
 import { mapRemoteEnvironmentError } from "./errors.ts";

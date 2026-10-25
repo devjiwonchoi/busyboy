@@ -5,7 +5,7 @@ import type {
   ProviderApprovalOption,
   ProviderRequestKind,
   RuntimeRequestId,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as DateTime from "effect/DateTime";
 
 export interface ThreadPendingApproval {

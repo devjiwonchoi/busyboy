@@ -17,7 +17,7 @@ import {
   TurnItemId,
   type OrchestrationV2ProjectedTurnItem,
   type OrchestrationV2ThreadShell,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
@@ -74,11 +74,11 @@ const declaredFailure = (result: McpSchema.CallToolResult) => {
 import { PullRequestsToolkit } from "./pullRequests/tools.ts";
 import { HtmlToolkit } from "./html/tools.ts";
 import {
-  resolveT3McpToolDefinition,
-  resolveT3McpToolPresentation,
-  resolveT3McpToolSummaryAction,
-} from "@t3tools/shared/t3McpToolPresentation";
-import { htmlRenderFromToolItem } from "@t3tools/shared/toolOutput";
+  resolveBusyboyMcpToolDefinition,
+  resolveBusyboyMcpToolPresentation,
+  resolveBusyboyMcpToolSummaryAction,
+} from "@busyboy/shared/busyboyMcpToolPresentation";
+import { htmlRenderFromToolItem } from "@busyboy/shared/toolOutput";
 
 const decodeMcpAttachmentInput = Schema.decodeUnknownEffect(McpAttachmentInput);
 const decodeThreadReadResult = Schema.decodeUnknownEffect(OrchestratorMcpThreadReadResult);
@@ -108,15 +108,15 @@ it("publishes unique tool names with reference-free object-root inputs", () => {
       const schema = Tool.getJsonSchema(tool);
       expect(schema).toMatchObject({ type: "object" });
       expect(JSON.stringify(schema), tool.name).not.toContain('"$ref"');
-      const definition = resolveT3McpToolDefinition(tool.name);
+      const definition = resolveBusyboyMcpToolDefinition(tool.name);
       expect(definition, tool.name).not.toBeNull();
       expect(
         definition?.labels.every((label) => label.trim().length > 0),
         tool.name,
       ).toBe(true);
       for (const name of [tool.name, `mcp__t3-code__${tool.name}`, `T3-code.${tool.name}`]) {
-        expect(resolveT3McpToolPresentation(name)?.logo, name).toBe("t3-code");
-        expect(resolveT3McpToolSummaryAction(name), name).not.toBeNull();
+        expect(resolveBusyboyMcpToolPresentation(name)?.logo, name).toBe("t3-code");
+        expect(resolveBusyboyMcpToolSummaryAction(name), name).not.toBeNull();
       }
     }
   }

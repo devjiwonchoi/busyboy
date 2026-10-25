@@ -10,13 +10,13 @@ export const DesktopBackendBootstrap = Schema.Struct({
   noBrowser: Schema.Boolean,
   port: PortSchema,
   // Omitted when the backend should use its own default home directory.
-  t3Home: Schema.optional(Schema.String),
+  busyboyHome: Schema.optional(Schema.String),
   host: Schema.String,
   desktopBootstrapToken: Schema.String,
   // Present when the desktop rotates the renderer's bootstrap token: the
   // backend derives the accepted tokens from this secret instead of trusting
   // `desktopBootstrapToken` for its whole run. See
-  // `@t3tools/shared/desktopBootstrapToken`.
+  // `@busyboy/shared/desktopBootstrapToken`.
   desktopBootstrapSecret: Schema.optionalKey(Schema.String),
   // Set only when the desktop already merged the user's shell environment into
   // the environment it hands this backend. Absent means the backend hydrates
@@ -36,7 +36,7 @@ export const DesktopBackendBootstrap = Schema.Struct({
 
 export type DesktopBackendBootstrap = typeof DesktopBackendBootstrap.Type;
 
-/** Written to `<t3Home>/runtime` just before the desktop app stops its
+/** Written to `<busyboyHome>/runtime` just before the desktop app stops its
     backend to install an update. The updated app starts a new backend right
     away, so a backend that sees a fresh marker at shutdown keeps its managed
     tunnel. */

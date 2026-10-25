@@ -7,15 +7,15 @@ import * as NodePath from "node:path";
 
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { mergeUsage } from "@t3tools/shared/usageMerge";
+import * as HostProcess from "@busyboy/shared/HostProcess";
+import { mergeUsage } from "@busyboy/shared/usageMerge";
 import {
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
   UsageDay,
   type UsageSummaryInput,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Duration from "effect/Duration";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

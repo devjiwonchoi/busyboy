@@ -1,4 +1,4 @@
-import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/promptLinks";
+import { DEFAULT_HOSTED_APP_URL } from "@busyboy/shared/promptLinks";
 
 import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
 

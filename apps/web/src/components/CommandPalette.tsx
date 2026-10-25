@@ -1,9 +1,9 @@
 "use client";
 
-import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
-import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
+import { threadPullRequestLinkMode } from "@busyboy/client-runtime/thread-pull-request-compatibility";
+import { visibleThreadPullRequests } from "@busyboy/shared/threadPullRequests";
 
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@busyboy/client-runtime/environment";
 import {
   canCreateProjectInEnvironment,
   getCloneDestinationBrowsePath,
@@ -23,22 +23,22 @@ import {
   sortAddProjectProviderSources,
   type AddProjectRemoteSource,
   type AddProjectRemoteSourceReadiness,
-} from "@t3tools/client-runtime/operations/projects";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { connectionStatusText } from "@t3tools/client-runtime/connection";
-import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
+} from "@busyboy/client-runtime/operations/projects";
+import { sourceControlClients } from "@busyboy/client-runtime/source-control-clients";
+import { connectionStatusText } from "@busyboy/client-runtime/connection";
+import { threadSearchMatchKey } from "@busyboy/client-runtime/state/thread-search";
+import { resolveThreadReferenceCopyTarget } from "@busyboy/shared/threadReference";
 import {
   canPreloadBrowsePath,
   createBrowseNavigationCoordinator,
   filterFilesystemBrowseEntries,
   getFilesystemBrowsePath,
-} from "@t3tools/client-runtime/state/filesystem";
+} from "@busyboy/client-runtime/state/filesystem";
 import {
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@busyboy/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -52,7 +52,7 @@ import {
   SourceControlProviderKind,
   type SourceControlRepositoryInfo,
   resolveEnvironmentMachineKind,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
@@ -104,7 +104,7 @@ import { useStableCallback } from "../hooks/useStableCallback";
 import { useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
-import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import { BUILT_IN_THEMES } from "@busyboy/shared/themePalettes";
 import { getThemeDefinition } from "../themePalette";
 import {
   STANDARD_THEME_CARDS,
@@ -123,7 +123,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
-import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { isScratchProject } from "@busyboy/client-runtime/state/projects";
 import {
   useEnvironmentProviders,
   useEnvironments,
@@ -368,7 +368,7 @@ function useThemeCards(
   customThemes: ReturnType<typeof useCustomThemes>,
   environmentThemes: ReturnType<typeof useEnvironmentThemeDefinitions>,
 ) {
-  // oxlint-disable-next-line t3code/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
+  // oxlint-disable-next-line busyboy/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
   "use memo";
   const seen = new Set<string>();
   return [
@@ -384,7 +384,7 @@ function useThemeCards(
 }
 
 function useThreadContentMatchByKey(matches: ReturnType<typeof useThreadSearch>["matches"]) {
-  // oxlint-disable-next-line t3code/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
+  // oxlint-disable-next-line busyboy/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
   "use memo";
   return new Map(
     matches.flatMap((match) =>
@@ -396,7 +396,7 @@ function useThreadContentMatchByKey(matches: ReturnType<typeof useThreadSearch>[
 }
 
 function useEnvironmentLookups(environments: ReturnType<typeof useEnvironments>["environments"]) {
-  // oxlint-disable-next-line t3code/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
+  // oxlint-disable-next-line busyboy/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
   "use memo";
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
@@ -418,7 +418,7 @@ function useEnvironmentLookups(environments: ReturnType<typeof useEnvironments>[
 }
 
 function useProjectLookups(projects: ReturnType<typeof useProjects>) {
-  // oxlint-disable-next-line t3code/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
+  // oxlint-disable-next-line busyboy/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
   "use memo";
   const projectCwdById = new Map<ProjectId, string>(
     projects.map((project) => [project.id, project.workspaceRoot]),
@@ -455,7 +455,7 @@ function useSortedProjectGroups({
   readonly environmentLabelById: ReadonlyMap<EnvironmentId, string>;
   readonly threads: ReturnType<typeof useThreadShells>;
 }) {
-  // oxlint-disable-next-line t3code/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
+  // oxlint-disable-next-line busyboy/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
   "use memo";
   const projectGroupingSettings = {
     sidebarProjectGroupingMode: clientSettings.sidebarProjectGroupingMode,
@@ -2035,7 +2035,7 @@ function OpenCommandPaletteDialog(props: {
         "grouping",
         "checkout",
         "remove",
-        "t3.json",
+        "busyboy.json",
       ],
       title: "Project settings",
       description: contextualProjectGroup.displayName,

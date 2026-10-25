@@ -18,10 +18,10 @@
       Connect from desktop, web, or mobile to continue working remotely.
     </p>
   </description>
-  <launchable type="desktop-id">t3code.desktop</launchable>
-  <icon type="stock">t3code</icon>
+  <launchable type="desktop-id">busyboy.desktop</launchable>
+  <icon type="stock">busyboy</icon>
   <provides>
-    <binary>t3code</binary>
+    <binary>busyboy</binary>
   </provides>
   <categories>
     <category>Development</category>

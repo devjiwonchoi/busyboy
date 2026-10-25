@@ -1,13 +1,13 @@
-import type { ProviderInteractionMode } from "@t3tools/contracts";
+import type { ProviderInteractionMode } from "@busyboy/contracts";
 import type { V2TurnStartParams__AdditionalContextEntry } from "effect-codex-app-server/schema";
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import { buildRuntimeInstructions } from "@busyboy/provider-core/server/runtimeInstructions";
 
 import {
-  T3_CODE_BROWSER_TOOL_INSTRUCTIONS,
-  T3_CODE_ORCHESTRATION_INSTRUCTIONS,
-} from "@t3tools/provider-core/server/orchestrationInstructions";
+  BUSYBOY_BROWSER_TOOL_INSTRUCTIONS,
+  BUSYBOY_ORCHESTRATION_INSTRUCTIONS,
+} from "@busyboy/provider-core/server/orchestrationInstructions";
 
-export interface T3CodeToolAvailability {
+export interface BusyboyToolAvailability {
   readonly browser: boolean;
 }
 
@@ -16,9 +16,9 @@ export interface T3CodeToolAvailability {
  * nothing: the instructions actively steer the model away from Playwright and agent-browser, so
  * leaving them in would talk it out of the only automation it still has.
  */
-const toolInstructions = (availability: boolean | T3CodeToolAvailability): string =>
+const toolInstructions = (availability: boolean | BusyboyToolAvailability): string =>
   (typeof availability === "boolean" ? availability : availability.browser)
-    ? T3_CODE_BROWSER_TOOL_INSTRUCTIONS
+    ? BUSYBOY_BROWSER_TOOL_INSTRUCTIONS
     : "";
 
 const CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Plan Mode (Conversational)
@@ -183,12 +183,12 @@ export function buildCodexDeveloperInstructions(interactionMode: ProviderInterac
  */
 export function buildCodexAdditionalContext(
   runtime: CodexRuntimeInfo,
-  toolsAvailable: boolean | T3CodeToolAvailability = true,
+  toolsAvailable: boolean | BusyboyToolAvailability = true,
 ): Record<string, V2TurnStartParams__AdditionalContextEntry> {
   const tools = toolInstructions(toolsAvailable);
   // Separate keys keep each value under Codex's per-entry token cap.
   return {
-    t3_code_orchestration: { kind: "application", value: T3_CODE_ORCHESTRATION_INSTRUCTIONS },
+    t3_code_orchestration: { kind: "application", value: BUSYBOY_ORCHESTRATION_INSTRUCTIONS },
     t3_code_runtime: {
       kind: "application",
       value: buildRuntimeInstructions({ harness: "Codex", ...runtime }),

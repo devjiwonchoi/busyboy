@@ -3,7 +3,7 @@ import {
   DesktopBackendBootstrap,
   type DesktopBackendBootstrap as DesktopBackendBootstrapValue,
   DesktopTelemetryControlMessage,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -48,7 +48,7 @@ const baseConfig: DesktopBackendManager.DesktopBackendStartConfig = {
     mode: "desktop",
     noBrowser: true,
     port: 3773,
-    t3Home: "/tmp/t3",
+    busyboyHome: "/tmp/t3",
     host: "127.0.0.1",
     desktopBootstrapToken: "token",
     tailscaleServeEnabled: false,
@@ -288,7 +288,7 @@ describe("DesktopBackendManager", () => {
         }).pipe(Effect.flip, Effect.forkChild);
 
         const request = yield* Deferred.await(requested);
-        assert.equal(request.url, "http://127.0.0.1:3773/.well-known/t3/environment");
+        assert.equal(request.url, "http://127.0.0.1:3773/.well-known/busyboy/environment");
 
         yield* TestClock.adjust(Duration.millis(50));
         const error = yield* Fiber.join(readiness);
@@ -298,12 +298,12 @@ describe("DesktopBackendManager", () => {
         assert.equal(error.entryPath, "/server/bin.mjs");
         assert.equal(error.cwd, "/server");
         assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3773/");
-        assert.equal(error.readinessUrl.href, "http://127.0.0.1:3773/.well-known/t3/environment");
+        assert.equal(error.readinessUrl.href, "http://127.0.0.1:3773/.well-known/busyboy/environment");
         assert.equal(error.timeoutMs, 50);
         assert.isDefined(error.cause);
         assert.equal(
           error.message,
-          "Timed out after 50ms waiting for desktop backend readiness at http://127.0.0.1:3773/.well-known/t3/environment.",
+          "Timed out after 50ms waiting for desktop backend readiness at http://127.0.0.1:3773/.well-known/busyboy/environment.",
         );
       }).pipe(Effect.provide(layer));
     }),
@@ -694,7 +694,7 @@ describe("DesktopBackendManager", () => {
         yield* Deferred.await(firstRequest);
 
         assert.equal(readyCount, 0);
-        assert.deepEqual(requestUrls, ["http://127.0.0.1:3773/.well-known/t3/environment"]);
+        assert.deepEqual(requestUrls, ["http://127.0.0.1:3773/.well-known/busyboy/environment"]);
 
         yield* TestClock.adjust(Duration.millis(100));
         yield* Deferred.await(backendReady);
@@ -703,8 +703,8 @@ describe("DesktopBackendManager", () => {
 
         assert.equal(readyCount, 1);
         assert.deepEqual(requestUrls, [
-          "http://127.0.0.1:3773/.well-known/t3/environment",
-          "http://127.0.0.1:3773/.well-known/t3/environment",
+          "http://127.0.0.1:3773/.well-known/busyboy/environment",
+          "http://127.0.0.1:3773/.well-known/busyboy/environment",
         ]);
       }).pipe(Effect.provide(TestClock.layer())),
     ),

@@ -2,13 +2,13 @@ import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
   type ThreadId,
-} from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+} from "@busyboy/contracts";
+import { scopeThreadRef } from "@busyboy/client-runtime/environment";
+import type { EnvironmentProject } from "@busyboy/client-runtime/state/shell";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@busyboy/client-runtime/state/runtime";
 import { ChevronDownIcon } from "lucide-react";
 import {
   memo,

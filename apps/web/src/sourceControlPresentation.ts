@@ -1,10 +1,10 @@
 import type { ElementType } from "react";
-import type { SourceControlProviderInfo } from "@t3tools/contracts";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import type { SourceControlProviderInfo } from "@busyboy/contracts";
+import { sourceControlClients } from "@busyboy/client-runtime/source-control-clients";
 import type {
   ChangeRequestTerminology,
   SourceControlClientDefinition,
-} from "@t3tools/client-runtime/source-control-clients";
+} from "@busyboy/client-runtime/source-control-clients";
 import {
   AzureDevOpsIcon,
   BitbucketIcon,
@@ -15,7 +15,7 @@ import {
 } from "./components/Icons";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
-export type { ChangeRequestTerminology } from "@t3tools/client-runtime/source-control-clients";
+export type { ChangeRequestTerminology } from "@busyboy/client-runtime/source-control-clients";
 
 type SourceControlIcon = ElementType<{ className?: string }>;
 

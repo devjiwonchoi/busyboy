@@ -1,6 +1,6 @@
 import { useAtomCommand } from "~/state/use-atom-command";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { scopeProjectRef } from "@busyboy/client-runtime/environment";
+import { squashAtomCommandFailure } from "@busyboy/client-runtime/state/runtime";
 import type {
   EnvironmentId,
   ProjectId,
@@ -8,9 +8,9 @@ import type {
   PullRequestDetail,
   PullRequestMergeMethod,
   PullRequestRef,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import { useRef, useState } from "react";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { resolveProjectSettings } from "@busyboy/shared/projectSettings";
 import { useClientSettings, useEnvironmentSettings } from "~/hooks/useSettings";
 import {
   deriveLogicalProjectKeyFromSettings,

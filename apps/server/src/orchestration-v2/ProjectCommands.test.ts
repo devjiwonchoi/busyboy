@@ -6,7 +6,7 @@ import {
   ProviderInstanceId,
   type ModelSelection,
   type ProjectScript,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Result from "effect/Result";
 

@@ -42,11 +42,11 @@ describe("ElectronProtocol", () => {
       });
       const protocol = yield* ElectronProtocol.ElectronProtocol;
       yield* protocol.registerDesktopProtocol({
-        scheme: "t3code",
+        scheme: "busyboy",
         assetDirectory: directory,
       });
       const request = (pathname: string, init?: RequestInit) =>
-        Effect.promise(() => handler!(new Request(`t3code://app${pathname}`, init)));
+        Effect.promise(() => handler!(new Request(`busyboy://app${pathname}`, init)));
 
       const page = yield* request("/settings/connections");
       assert.equal(yield* Effect.promise(() => page.text()), "<html>app</html>");
@@ -80,18 +80,18 @@ describe("ElectronProtocol", () => {
         Effect.gen(function* () {
           const protocol = yield* ElectronProtocol.ElectronProtocol;
           yield* protocol.registerDesktopProtocol({
-            scheme: "t3code-dev",
+            scheme: "busyboy-dev",
             targetOrigin: new URL("http://127.0.0.1:3773/"),
           });
           assert.isDefined(handler);
 
           const response = yield* Effect.promise(() =>
             handler!(
-              new Request("t3code-dev://app/api/health?verbose=1", {
+              new Request("busyboy-dev://app/api/health?verbose=1", {
                 headers: {
                   accept: "application/json",
-                  origin: "t3code-dev://app",
-                  referer: "t3code-dev://app/",
+                  origin: "busyboy-dev://app",
+                  referer: "busyboy-dev://app/",
                   "sec-fetch-site": "same-origin",
                 },
               }),
@@ -119,7 +119,7 @@ describe("ElectronProtocol", () => {
 
       assert.deepEqual(
         handleMock.mock.calls.map((call) => call[0]),
-        ["t3code-dev"],
+        ["busyboy-dev"],
       );
       assert.equal(netFetchMock.mock.calls[0]?.[0], "http://127.0.0.1:3773/api/health?verbose=1");
       const forwardedHeaders = new Headers(netFetchMock.mock.calls[0]?.[1]?.headers);
@@ -127,7 +127,7 @@ describe("ElectronProtocol", () => {
       assert.isNull(forwardedHeaders.get("origin"));
       assert.isNull(forwardedHeaders.get("referer"));
       assert.isNull(forwardedHeaders.get("sec-fetch-site"));
-      assert.deepEqual(unhandleMock.mock.calls, [["t3code-dev"]]);
+      assert.deepEqual(unhandleMock.mock.calls, [["busyboy-dev"]]);
     }).pipe(Effect.provide(layerProtocol)),
   );
 
@@ -142,10 +142,10 @@ describe("ElectronProtocol", () => {
         Effect.gen(function* () {
           const protocol = yield* ElectronProtocol.ElectronProtocol;
           yield* protocol.registerDesktopProtocol({
-            scheme: "t3code",
+            scheme: "busyboy",
             targetOrigin: new URL("http://127.0.0.1:3773/"),
           });
-          return yield* Effect.promise(() => handler!(new Request("t3code://other/")));
+          return yield* Effect.promise(() => handler!(new Request("busyboy://other/")));
         }),
       );
 
@@ -168,11 +168,11 @@ describe("ElectronProtocol", () => {
         Effect.gen(function* () {
           const protocol = yield* ElectronProtocol.ElectronProtocol;
           yield* protocol.registerDesktopProtocol({
-            scheme: "t3code-dev",
+            scheme: "busyboy-dev",
             targetOrigin: new URL("http://127.0.0.1:5733/"),
           });
           const fiber = yield* Effect.forkChild(
-            Effect.promise(() => handler!(new Request("t3code-dev://app/"))),
+            Effect.promise(() => handler!(new Request("busyboy-dev://app/"))),
           );
           yield* TestClock.adjust("50 millis");
           return yield* Fiber.join(fiber);
@@ -200,12 +200,12 @@ describe("ElectronProtocol", () => {
         Effect.gen(function* () {
           const protocol = yield* ElectronProtocol.ElectronProtocol;
           yield* protocol.registerDesktopProtocol({
-            scheme: "t3code-dev",
+            scheme: "busyboy-dev",
             targetOrigin: new URL("http://127.0.0.1:5733/"),
           });
           const fiber = yield* Effect.forkChild(
             Effect.promise(() =>
-              handler!(new Request("t3code-dev://app/")).then(
+              handler!(new Request("busyboy-dev://app/")).then(
                 () => null,
                 (error: unknown) => error,
               ),
@@ -237,15 +237,15 @@ describe("ElectronProtocol", () => {
       const protocol = yield* ElectronProtocol.ElectronProtocol;
       const error = yield* Effect.scoped(
         protocol.registerDesktopProtocol({
-          scheme: "t3code-dev",
+          scheme: "busyboy-dev",
           targetOrigin: new URL("http://127.0.0.1:3773/"),
         }),
       ).pipe(Effect.flip);
 
       assert.instanceOf(error, ElectronProtocol.ElectronProtocolRegistrationError);
-      assert.equal(error.scheme, "t3code-dev");
+      assert.equal(error.scheme, "busyboy-dev");
       assert.strictEqual(error.cause, cause);
-      assert.equal(error.message, 'Failed to register Electron protocol scheme "t3code-dev".');
+      assert.equal(error.message, 'Failed to register Electron protocol scheme "busyboy-dev".');
     }).pipe(Effect.provide(layerProtocol)),
   );
 
@@ -260,7 +260,7 @@ describe("ElectronProtocol", () => {
       const exit = yield* Effect.exit(
         Effect.scoped(
           protocol.registerDesktopProtocol({
-            scheme: "t3code",
+            scheme: "busyboy",
             targetOrigin: new URL("http://127.0.0.1:3773/"),
           }),
         ),
@@ -279,7 +279,7 @@ describe("ElectronProtocol", () => {
 
   it("keeps executable sources host-restricted while allowing runtime network resources", () => {
     const policy = ElectronProtocol.makeDesktopContentSecurityPolicy({
-      scheme: "t3code",
+      scheme: "busyboy",
       targetOrigin: new URL("http://127.0.0.1:3773/"),
     });
     const directives = Object.fromEntries(
@@ -300,14 +300,14 @@ describe("ElectronProtocol", () => {
     ]);
     assert.deepEqual(directives["img-src"], [
       "'self'",
-      "t3code:",
+      "busyboy:",
       "blob:",
       "data:",
       "http:",
       "https:",
     ]);
-    assert.deepEqual(directives["media-src"], ["'self'", "t3code:", "blob:", "http:", "https:"]);
+    assert.deepEqual(directives["media-src"], ["'self'", "busyboy:", "blob:", "http:", "https:"]);
     assert.deepEqual(directives["frame-src"], ["'self'", "blob:", "http:", "https:"]);
-    assert.deepEqual(directives["font-src"], ["'self'", "t3code:", "data:"]);
+    assert.deepEqual(directives["font-src"], ["'self'", "busyboy:", "data:"]);
   });
 });

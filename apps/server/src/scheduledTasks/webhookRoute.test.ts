@@ -12,7 +12,7 @@ import {
   EnvironmentHttpApi,
   ScheduledTaskWebhookDeliveryId,
   ScheduledTaskError,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import {
   ScheduledTaskService,
   type WebhookTriggerRequest,
@@ -96,7 +96,7 @@ describe("webhook route", () => {
       try {
         const response = await handler(post("/api/hooks/id/tok", "{}"));
         expect(response.status).toBe(status);
-        expect(response.headers.get("x-t3-hook-outcome")).toBe(outcome);
+        expect(response.headers.get("x-busyboy-hook-outcome")).toBe(outcome);
       } finally {
         await dispose();
       }

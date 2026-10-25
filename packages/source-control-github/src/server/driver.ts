@@ -1,5 +1,5 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
-import { defineSourceControlDriver } from "@t3tools/source-control-core/server/driver";
+import { SourceControlProviderKind } from "@busyboy/contracts";
+import { defineSourceControlDriver } from "@busyboy/source-control-core/server/driver";
 import * as Effect from "effect/Effect";
 
 import * as GitHubPullRequestProvider from "./GitHubPullRequestProvider.ts";

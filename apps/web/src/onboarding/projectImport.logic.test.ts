@@ -1,4 +1,4 @@
-import { EnvironmentId, ProjectId, type AgentSessionProjectCandidate } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, type AgentSessionProjectCandidate } from "@busyboy/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -356,7 +356,7 @@ describe("splitOnboardingProjectPath", () => {
     const left = splitOnboardingProjectPath("/Users/me/Projects/clients/acme/t3code");
     const right = splitOnboardingProjectPath("/Users/me/Projects/clients/acme/t3code-worktree");
     expect(left).toEqual({ name: "t3code", parent: "/Users/me/Projects/clients/acme/" });
-    expect(right).toEqual({ name: "t3code-worktree", parent: "/Users/me/Projects/clients/acme/" });
+    expect(right).toEqual({ name: "busyboy-worktree", parent: "/Users/me/Projects/clients/acme/" });
     expect(left.name).not.toBe(right.name);
   });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ThreadId, TurnItemId, type OrchestrationV2TurnItem } from "@t3tools/contracts";
+import { ThreadId, TurnItemId, type OrchestrationV2TurnItem } from "@busyboy/contracts";
 import * as DateTime from "effect/DateTime";
-import { T3_MCP_TOOL_NAMES } from "@t3tools/shared/t3McpToolPresentation";
+import { BUSYBOY_MCP_TOOL_NAMES } from "@busyboy/shared/busyboyMcpToolPresentation";
 
 import {
   commandDetailRepeatsCommand,
@@ -296,7 +296,7 @@ describe("summarizeToolGroup", () => {
         entry("inspect-app", {
           label: "Inspect app",
           toolSource: {
-            key: "native-app:com.t3tools.t3code",
+            key: "native-app:com.busyboy.app",
             name: "Computer Use",
             kind: "computer",
           },
@@ -312,7 +312,7 @@ describe("summarizeToolGroup", () => {
 
 describe("resolveWorkEntryToolPresentation", () => {
   it("presents and summarizes every T3 tool using the same structured identity", () => {
-    for (const tool of T3_MCP_TOOL_NAMES) {
+    for (const tool of BUSYBOY_MCP_TOOL_NAMES) {
       const entry: WorkLogPresentationEntry = {
         id: tool,
         createdAt: "2026-09-19T00:00:00.000Z",
@@ -862,7 +862,7 @@ describe("resolveViewedImageAsset", () => {
   const threadId = ThreadId.make("thread-1");
 
   it("serves t3 attachment paths in place like any other host path", () => {
-    const path = "/Users/demo/.t3/dev/attachments/11111111-1111-4111-8111-111111111111.png";
+    const path = "/Users/demo/.busyboy/dev/attachments/11111111-1111-4111-8111-111111111111.png";
     expect(resolveViewedImageAsset(path, { threadId, workspaceRoot: "/workspace" })).toEqual({
       resource: { _tag: "media-file", threadId, path },
       alt: "11111111-1111-4111-8111-111111111111.png",

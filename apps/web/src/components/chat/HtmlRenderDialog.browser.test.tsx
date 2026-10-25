@@ -2,9 +2,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
-import { htmlRenderTheme, HTML_RENDER_DEFAULT_FONTS } from "@t3tools/shared/htmlRender";
-import { T3_CODE_DARK_THEME_COLORS } from "@t3tools/shared/themePalettes";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { htmlRenderTheme, HTML_RENDER_DEFAULT_FONTS } from "@busyboy/shared/htmlRender";
+import { BUSYBOY_DARK_THEME_COLORS } from "@busyboy/shared/themePalettes";
+import { EnvironmentId, ThreadId } from "@busyboy/contracts";
 
 import "~/index.css";
 
@@ -42,7 +42,7 @@ vi.mock(import("../ui/toast"), async (original) => {
 vi.mock(import("~/hooks/useHtmlRenderTheme"), async (original) => ({
   ...(await original()),
   useHtmlRenderTheme: () =>
-    htmlRenderTheme(T3_CODE_DARK_THEME_COLORS, "dark", HTML_RENDER_DEFAULT_FONTS),
+    htmlRenderTheme(BUSYBOY_DARK_THEME_COLORS, "dark", HTML_RENDER_DEFAULT_FONTS),
 }));
 
 let root: Root;

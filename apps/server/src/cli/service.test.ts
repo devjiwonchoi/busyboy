@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, it } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as NetService from "@t3tools/shared/Net";
+import * as HostProcess from "@busyboy/shared/HostProcess";
+import * as NetService from "@busyboy/shared/Net";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -26,8 +26,8 @@ const status = {
   supported: true,
   installed: true,
   current: true,
-  unitPath: "/home/me/.config/systemd/user/t3code.service",
-  logPath: "/home/me/.t3/userdata/logs/boot-service.log",
+  unitPath: "/home/me/.config/systemd/user/busyboy.service",
+  logPath: "/home/me/.busyboy/userdata/logs/boot-service.log",
 } as const;
 
 it("reports the installed service version and host paths", () => {
@@ -36,8 +36,8 @@ it("reports the installed service version and host paths", () => {
     [
       "Busyboy service",
       "  Status: installed · t3@0.0.29",
-      "  Unit: /home/me/.config/systemd/user/t3code.service",
-      "  Logs: /home/me/.t3/userdata/logs/boot-service.log",
+      "  Unit: /home/me/.config/systemd/user/busyboy.service",
+      "  Logs: /home/me/.busyboy/userdata/logs/boot-service.log",
     ].join("\n"),
   );
 });
@@ -45,7 +45,7 @@ it("reports the installed service version and host paths", () => {
 it("gives a direct repair command for a stale service", () => {
   assert.include(
     formatServiceStatus({ ...status, current: false }, "0.0.29"),
-    "Next: Run `t3 service install` to repair it.",
+    "Next: Run `busyboy service install` to repair it.",
   );
 });
 
@@ -64,7 +64,7 @@ it("explains an incomplete nightly installation and keeps repair on its installe
   expect(output).toContain("last login session ends");
   expect(output).toContain('sudo loginctl enable-linger "$(id -un)"');
   expect(output).toContain("[service-stopped]");
-  expect(output).toContain("Run `t3 service install` to repair it.");
+  expect(output).toContain("Run `busyboy service install` to repair it.");
   expect(output).not.toContain("npx");
 });
 
@@ -73,7 +73,7 @@ it("points an older service at a repair, never at npx", () => {
     { ...status, current: false, installedVersion: "0.0.28" },
     "0.0.29",
   );
-  expect(output).toContain("Run `t3 service install` to repair it.");
+  expect(output).toContain("Run `busyboy service install` to repair it.");
   expect(output).not.toContain("npx");
 });
 
@@ -91,7 +91,7 @@ it("reports a newer installed service and tells the CLI to catch up to it", () =
   );
 
   assert.include(output, "t3@0.0.32-nightly.1 (newer than this t3@0.0.31 CLI)");
-  assert.include(output, "Run `t3 update 0.0.32-nightly.1` to match it");
+  assert.include(output, "Run `busyboy update 0.0.32-nightly.1` to match it");
   assert.notInclude(output, "npx");
 });
 

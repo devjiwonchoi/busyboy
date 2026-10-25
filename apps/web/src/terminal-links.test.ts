@@ -1,4 +1,4 @@
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import { resolvePathLinkTarget } from "@busyboy/shared/fileLinks";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

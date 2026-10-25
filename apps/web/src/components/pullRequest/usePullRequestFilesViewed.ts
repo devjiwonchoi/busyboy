@@ -1,5 +1,5 @@
-import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId, PullRequestRef } from "@t3tools/contracts";
+import { isAtomCommandInterrupted } from "@busyboy/client-runtime/state/runtime";
+import type { EnvironmentId, PullRequestRef } from "@busyboy/contracts";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { pullRequestEnvironment } from "~/state/pullRequests";

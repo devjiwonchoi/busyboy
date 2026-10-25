@@ -2,8 +2,8 @@ import {
   parseScopedThreadKey,
   scopedThreadKey,
   scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
-import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
+} from "@busyboy/client-runtime/environment";
+import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@busyboy/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -70,7 +70,7 @@ export type RightPanelSurface =
     }
   | { id: "pull-requests"; kind: "pull-requests" };
 
-const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
+const RIGHT_PANEL_STORAGE_KEY = "busyboy:right-panel-state:v2";
 const RIGHT_PANEL_STORAGE_VERSION = 14;
 
 export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(

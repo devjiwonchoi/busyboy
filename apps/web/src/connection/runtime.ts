@@ -1,10 +1,10 @@
-import { Connection } from "@t3tools/client-runtime/connection";
-import { ShellSnapshotLoader } from "@t3tools/client-runtime/state/shell";
+import { Connection } from "@busyboy/client-runtime/connection";
+import { ShellSnapshotLoader } from "@busyboy/client-runtime/state/shell";
 import {
   BoundedThreadSnapshotLoader,
   ThreadHistoryController,
-} from "@t3tools/client-runtime/state/threads";
-import { PullRequestDiffLoader } from "@t3tools/client-runtime/state/pull-requests";
+} from "@busyboy/client-runtime/state/threads";
+import { PullRequestDiffLoader } from "@busyboy/client-runtime/state/pull-requests";
 import * as Layer from "effect/Layer";
 import { Atom } from "effect/reactivity";
 

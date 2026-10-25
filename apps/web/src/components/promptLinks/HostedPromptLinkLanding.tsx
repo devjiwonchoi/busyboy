@@ -4,7 +4,7 @@ import {
   parseThreadLinkPrompt,
   promptLinkAppPath,
   promptLinkDeepLink,
-} from "@t3tools/shared/promptLinks";
+} from "@busyboy/shared/promptLinks";
 import { useLocation } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -19,7 +19,7 @@ import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { StandalonePage, StandalonePageHeader } from "../ui/standalone-page";
 
-const OPENER_STORAGE_KEY = "t3code:prompt-link-opener";
+const OPENER_STORAGE_KEY = "busyboy:prompt-link-opener";
 const Opener = Schema.NullOr(Schema.Literals(["app", "browser"]));
 const DOWNLOAD_URL = "https://github.com/devjiwonchoi/busyboy/releases";
 

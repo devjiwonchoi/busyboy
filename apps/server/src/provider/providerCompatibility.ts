@@ -4,8 +4,8 @@ import {
   type ProviderDriverKind,
   type ServerProvider,
   type ServerProviderCompatibilityAdvisory,
-} from "@t3tools/contracts";
-import { satisfiesSemverRange } from "@t3tools/shared/semver";
+} from "@busyboy/contracts";
+import { satisfiesSemverRange } from "@busyboy/shared/semver";
 import * as Schema from "effect/Schema";
 import packageJson from "../../package.json" with { type: "json" };
 
@@ -24,7 +24,7 @@ const VersionRange = TrimmedNonEmptyString.pipe(
 );
 const Policy = Schema.Struct({
   driver: TrimmedNonEmptyString,
-  t3CodeRange: VersionRange,
+  busyboyRange: VersionRange,
   recommendedRange: Schema.optionalKey(VersionRange),
   recommendedVersion: Schema.optionalKey(StableVersion),
   ranges: Schema.Array(
@@ -58,10 +58,10 @@ export function resolveProviderCompatibility(
   policies: ReadonlyArray<ProviderCompatibilityPolicy> | undefined,
   driver: ProviderDriverKind,
   version: string | null,
-  t3CodeVersion = packageJson.version,
+  busyboyVersion = packageJson.version,
 ): ServerProviderCompatibilityAdvisory | undefined {
   const policy = policies?.find(
-    (entry) => entry.driver === driver && satisfiesSemverRange(t3CodeVersion, entry.t3CodeRange),
+    (entry) => entry.driver === driver && satisfiesSemverRange(busyboyVersion, entry.busyboyRange),
   );
   if (!policy) return undefined;
   // Semver prereleases stay unknown.

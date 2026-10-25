@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it as effectIt } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { CommandAvailability, WindowsShellEnvironment } from "@t3tools/shared/shell";
+import * as HostProcess from "@busyboy/shared/HostProcess";
+import { CommandAvailability, WindowsShellEnvironment } from "@busyboy/shared/shell";
 import * as Effect from "effect/Effect";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Observe the existing synchronous shell probe without launching the user's login shell.
 import * as NodeChildProcess from "node:child_process";
@@ -79,7 +79,7 @@ effectIt.effect("hydrates PATH when the desktop handoff is absent", () =>
     Effect.sync(() =>
       vi
         .spyOn(NodeChildProcess, "execFileSync")
-        .mockReturnValue("__T3CODE_ENV_PATH_START__\n/opt/tools/bin\n__T3CODE_ENV_PATH_END__\n"),
+        .mockReturnValue("__BUSYBOY_ENV_PATH_START__\n/opt/tools/bin\n__BUSYBOY_ENV_PATH_END__\n"),
     ),
     (probe) =>
       Effect.gen(function* () {
@@ -105,12 +105,12 @@ effectIt.effect("keeps mise's PATH record with the login shell PATH", () =>
         .spyOn(NodeChildProcess, "execFileSync")
         .mockReturnValue(
           [
-            "__T3CODE_ENV_PATH_START__",
+            "__BUSYBOY_ENV_PATH_START__",
             "/home/me/.local/bin:/mise/installs/claude/latest:/mise/shims",
-            "__T3CODE_ENV_PATH_END__",
-            "__T3CODE_ENV___MISE_DIFF_START__",
+            "__BUSYBOY_ENV_PATH_END__",
+            "__BUSYBOY_ENV___MISE_DIFF_START__",
             "mise-diff",
-            "__T3CODE_ENV___MISE_DIFF_END__",
+            "__BUSYBOY_ENV___MISE_DIFF_END__",
           ].join("\n"),
         ),
     ),

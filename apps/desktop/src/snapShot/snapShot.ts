@@ -10,7 +10,7 @@ import {
   type SnapShotKeyChord,
   type SnapShotModifier,
   type SnapShotShortcut,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 
 interface AccessibilityTreeNode {
   readonly name?: string;

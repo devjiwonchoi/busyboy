@@ -2,7 +2,7 @@ import { RegistryContext } from "@effect/atom-react";
 import {
   BearerConnectionTarget,
   PrimaryConnectionTarget,
-} from "@t3tools/client-runtime/connection";
+} from "@busyboy/client-runtime/connection";
 import {
   AuthTerminalOperateScope,
   DEFAULT_SERVER_SETTINGS,
@@ -17,8 +17,8 @@ import {
   type TerminalCloseInput,
   type TerminalOpenInput,
   type TerminalWriteInput,
-} from "@t3tools/contracts";
-import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+} from "@busyboy/contracts";
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@busyboy/shared/keybindings";
 import * as Cause from "effect/Cause";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { act } from "react";
@@ -54,7 +54,7 @@ const state = vi.hoisted(() => ({
 // Session grants come from per-test atoms so a test can revoke or regrant mid-flow; the
 // real scope checks in ~/state/session read them through the app registry, which the
 // wizard is also rendered with.
-vi.mock(import("@t3tools/client-runtime/state/session"), async (original) => {
+vi.mock(import("@busyboy/client-runtime/state/session"), async (original) => {
   const actual = await original();
   return {
     ...actual,
@@ -187,7 +187,7 @@ const session = (scopes: readonly AuthEnvironmentScope[]): AuthSessionState => (
     policy: "remote-reachable",
     bootstrapMethods: ["one-time-token"],
     sessionMethods: ["bearer-access-token"],
-    sessionCookieName: "t3_session",
+    sessionCookieName: "busyboy_session",
   },
 });
 function setAccess(environmentId: EnvironmentId, allowed: boolean) {

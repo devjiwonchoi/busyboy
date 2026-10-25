@@ -7,7 +7,7 @@ import {
   DesktopSnapShotState,
   DesktopSnapShotSetupAction,
   SnapShotShortcut,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";

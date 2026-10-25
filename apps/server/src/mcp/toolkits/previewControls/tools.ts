@@ -4,7 +4,7 @@ import {
   PreviewAutomationUnavailableError,
   PreviewListResult,
   PreviewTabId,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";

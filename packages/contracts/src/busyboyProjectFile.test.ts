@@ -1,16 +1,16 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { T3ProjectFile, type T3ProjectFile as T3ProjectFileType } from "./t3ProjectFile.ts";
+import { BusyboyProjectFile, type BusyboyProjectFile as T3ProjectFileType } from "./busyboyProjectFile.ts";
 
-const decode = Schema.decodeUnknownSync(T3ProjectFile as never) as (
+const decode = Schema.decodeUnknownSync(BusyboyProjectFile as never) as (
   input: unknown,
 ) => T3ProjectFileType;
 
-describe("T3ProjectFile", () => {
+describe("BusyboyProjectFile", () => {
   it("decodes a full project file", () => {
     const decoded = decode({
-      $schema: "https://t3.codes/schema/t3.json",
+      $schema: "https://t3.codes/schema/busyboy.json",
       iconPath: "assets/logo.svg",
       scripts: [
         {

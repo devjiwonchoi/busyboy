@@ -1,5 +1,5 @@
 import type { SVGProps } from "react";
-export function T3Wordmark(props: SVGProps<SVGSVGElement>) {
+export function BusyboyWordmark(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 132 28" role="img" aria-label="Busyboy" {...props}>
       <text

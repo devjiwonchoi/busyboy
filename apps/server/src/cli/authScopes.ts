@@ -1,4 +1,4 @@
-import { AuthEnvironmentScope } from "@t3tools/contracts";
+import { AuthEnvironmentScope } from "@busyboy/contracts";
 import { Flag } from "effect/cli";
 
 export const authScopesFlag = (defaults: ReadonlyArray<AuthEnvironmentScope>) =>

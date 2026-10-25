@@ -1,4 +1,4 @@
-import type { AdvertisedEndpoint } from "@t3tools/contracts";
+import type { AdvertisedEndpoint } from "@busyboy/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import {
   canRevokeOtherClients,

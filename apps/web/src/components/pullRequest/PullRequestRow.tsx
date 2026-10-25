@@ -1,5 +1,5 @@
-import type { PullRequestAction } from "@t3tools/contracts";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import type { PullRequestAction } from "@busyboy/contracts";
+import { sourceControlClients } from "@busyboy/client-runtime/source-control-clients";
 import { SearchIcon } from "lucide-react";
 import { PullRequestStackPopover } from "./PullRequestStackPopover";
 import {

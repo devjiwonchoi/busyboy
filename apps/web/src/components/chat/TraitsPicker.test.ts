@@ -3,7 +3,7 @@ import {
   ProviderInstanceId,
   ProviderDriverKind,
   type ProviderOptionDescriptor,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import { buildTraitsTriggerDisplay } from "./TraitsPicker";
 
 function selectDescriptor(

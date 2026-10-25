@@ -14,7 +14,7 @@ import {
   AuthSourceControlWriteScope,
   AuthTerminalOperateScope,
   AuthTerminalReadScope,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 
 export const AUTH_SCOPE_OPTIONS: ReadonlyArray<{
   readonly scope: AuthEnvironmentScope;

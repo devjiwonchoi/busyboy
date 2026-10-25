@@ -11,11 +11,11 @@ import * as PlatformError from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@busyboy/shared/HostProcess";
 
-import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
-import { readSourceControlHostSettings } from "@t3tools/source-control-core/client/definition";
-import type { ServerSettings } from "@t3tools/contracts";
+import * as SourceControlHost from "@busyboy/source-control-core/server/SourceControlHost";
+import { readSourceControlHostSettings } from "@busyboy/source-control-core/client/definition";
+import type { ServerSettings } from "@busyboy/contracts";
 
 import * as GitHubClient from "../client/definition.ts";
 
@@ -84,7 +84,7 @@ export class GitHubCredentials extends Context.Service<
     ) => Effect.Effect<GitHubCredential, GitHubCredentialUnavailableError>;
     readonly invalidate: (host: string) => Effect.Effect<void>;
   }
->()("@t3tools/source-control-github/server/GitHubCredentials") {}
+>()("@busyboy/source-control-github/server/GitHubCredentials") {}
 
 function normalizeHost(host: string): string {
   return host.trim().toLowerCase();

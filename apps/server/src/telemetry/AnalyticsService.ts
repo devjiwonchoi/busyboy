@@ -12,7 +12,7 @@ export class AnalyticsService extends Context.Service<
     ) => Effect.Effect<void>;
     readonly flush: Effect.Effect<void>;
   }
->()("t3/telemetry/AnalyticsService") {
+>()("busyboy/telemetry/AnalyticsService") {
   static readonly layerTest = Layer.succeed(
     AnalyticsService,
     AnalyticsService.of({ record: () => Effect.void, flush: Effect.void }),

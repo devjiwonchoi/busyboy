@@ -1,4 +1,4 @@
-import type { EnvironmentId, MessageId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, MessageId, ScopedThreadRef, ThreadId } from "@busyboy/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
 import { useEffect } from "react";

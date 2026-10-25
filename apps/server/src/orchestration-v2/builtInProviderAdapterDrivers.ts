@@ -1,16 +1,16 @@
-import type { ProviderDriverKind } from "@t3tools/contracts";
+import type { ProviderDriverKind } from "@busyboy/contracts";
 
 import {
   AcpRegistryAdapterV2Driver,
   type AcpRegistryAdapterV2DriverEnv,
-} from "@t3tools/provider-acp-registry/server";
+} from "@busyboy/provider-acp-registry/server";
 import {
   ClaudeAdapterV2Driver,
   type ClaudeAdapterV2DriverEnv,
 } from "./Adapters/ClaudeAdapterV2.ts";
 import { CodexAdapterV2Driver, type CodexAdapterV2DriverEnv } from "./Adapters/CodexAdapterV2.ts";
-import { GrokAdapterV2Driver, type GrokAdapterV2DriverEnv } from "@t3tools/provider-grok/server";
-import type { AnyProviderAdapterDriver } from "@t3tools/provider-core/server/adapterDriver";
+import { GrokAdapterV2Driver, type GrokAdapterV2DriverEnv } from "@busyboy/provider-grok/server";
+import type { AnyProviderAdapterDriver } from "@busyboy/provider-core/server/adapterDriver";
 
 export type BuiltInProviderAdapterDriversV2Env =
   | AcpRegistryAdapterV2DriverEnv

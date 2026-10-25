@@ -8,8 +8,8 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
-} from "@t3tools/contracts";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+} from "@busyboy/contracts";
+import { resolveProjectSettings } from "@busyboy/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
@@ -76,7 +76,7 @@ export class ServerRuntimeStartup extends Context.Service<
       effect: Effect.Effect<A, E>,
     ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
   }
->()("t3/serverRuntimeStartup") {}
+>()("busyboy/serverRuntimeStartup") {}
 
 interface QueuedCommand {
   readonly run: Effect.Effect<void, never>;
@@ -325,7 +325,7 @@ const resolveStartupBrowserTarget = Effect.gen(function* () {
 });
 
 /**
- * Prints the startup pairing URL to stdout, where `t3` users and the dev runner
+ * Prints the startup pairing URL to stdout, where `busyboy` users and the dev runner
  * read it. The URL carries a one-time admin token, so it skips the logger: log
  * records also land in the trace file and any configured OTLP collector.
  */

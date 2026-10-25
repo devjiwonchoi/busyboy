@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/shared",
+  "name": "@busyboy/shared",
   "private": true,
   "type": "module",
   "exports": {
@@ -151,9 +151,9 @@
       "types": "./src/projectSettings.ts",
       "import": "./src/projectSettings.ts"
     },
-    "./t3ProjectFile": {
-      "types": "./src/t3ProjectFile.ts",
-      "import": "./src/t3ProjectFile.ts"
+    "./busyboyProjectFile": {
+      "types": "./src/busyboyProjectFile.ts",
+      "import": "./src/busyboyProjectFile.ts"
     },
     "./orchestrationTiming": {
       "types": "./src/orchestrationTiming.ts",
@@ -347,9 +347,9 @@
       "types": "./src/orchestrationV2Timeline.ts",
       "import": "./src/orchestrationV2Timeline.ts"
     },
-    "./t3McpToolPresentation": {
-      "types": "./src/t3McpToolPresentation.ts",
-      "import": "./src/t3McpToolPresentation.ts"
+    "./busyboyMcpToolPresentation": {
+      "types": "./src/busyboyMcpToolPresentation.ts",
+      "import": "./src/busyboyMcpToolPresentation.ts"
     },
     "./Array": {
       "types": "./src/Array.ts",
@@ -459,7 +459,7 @@
   "dependencies": {
     "@noble/curves": "catalog:",
     "@noble/hashes": "catalog:",
-    "@t3tools/contracts": "workspace:*",
+    "@busyboy/contracts": "workspace:*",
     "effect": "catalog:",
     "mdast-util-directive": "catalog:",
     "micromark-extension-directive": "catalog:",

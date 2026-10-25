@@ -1,7 +1,7 @@
-import { type RemoteOpenTarget } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as NetService from "@t3tools/shared/Net";
-import { readTailscaleSshEnabled, readTailscaleStatus } from "@t3tools/tailscale";
+import { type RemoteOpenTarget } from "@busyboy/contracts";
+import * as HostProcess from "@busyboy/shared/HostProcess";
+import * as NetService from "@busyboy/shared/Net";
+import { readTailscaleSshEnabled, readTailscaleStatus } from "@busyboy/tailscale";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -14,7 +14,7 @@ export class RemoteOpenTargets extends Context.Service<
   {
     readonly resolveTargets: () => Effect.Effect<ReadonlyArray<RemoteOpenTarget>>;
   }
->()("t3/environment/RemoteOpenTargets") {}
+>()("busyboy/environment/RemoteOpenTargets") {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {

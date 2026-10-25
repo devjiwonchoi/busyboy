@@ -1,4 +1,4 @@
-import { EnvironmentId, RuntimeRequestId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, RuntimeRequestId, ThreadId } from "@busyboy/contracts";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vite-plus/test";

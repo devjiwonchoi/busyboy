@@ -1,4 +1,4 @@
-import { imageMimeType } from "@t3tools/shared/image";
+import { imageMimeType } from "@busyboy/shared/image";
 import type {
   ChatFileAttachment as ContractChatFileAttachment,
   ChatImageAttachment as ContractChatImageAttachment,
@@ -15,17 +15,17 @@ import type {
   RuntimeMode,
   ScheduledTaskId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
   ThreadRunSummary,
   ThreadRuntimeSummary,
-} from "@t3tools/client-runtime/state/shell";
-import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
-import { videoMimeType } from "@t3tools/shared/video";
+} from "@busyboy/client-runtime/state/shell";
+import type { ThreadCheckpointSummary } from "@busyboy/client-runtime/state/thread-checkpoints";
+import { videoMimeType } from "@busyboy/shared/video";
 
-export { videoMimeType } from "@t3tools/shared/video";
+export { videoMimeType } from "@busyboy/shared/video";
 
 export type SessionPhase = "disconnected" | "connecting" | "ready" | "running";
 export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
@@ -81,7 +81,7 @@ export function isVideoAttachment(attachment: ChatFileAttachment): boolean {
 }
 
 export interface ChatMessage {
-  readonly context?: import("@t3tools/contracts").OrchestrationMessageContext | undefined;
+  readonly context?: import("@busyboy/contracts").OrchestrationMessageContext | undefined;
   readonly id: MessageId;
   readonly role: "user" | "assistant" | "system";
   readonly text: string;

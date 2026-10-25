@@ -1,7 +1,7 @@
 import * as NodePath from "@effect/platform-node/NodePath";
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeOS from "node:os";
-import { ExternalLauncherBrowserSpawnError } from "@t3tools/contracts";
+import { ExternalLauncherBrowserSpawnError } from "@busyboy/contracts";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -13,8 +13,8 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as TestConsole from "effect/testing/TestConsole";
 
-import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
-import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
+import { DEFAULT_SIGNAL_EXPORT } from "@busyboy/shared/observability";
+import * as OtelEnvironment from "@busyboy/shared/otelEnvironment";
 
 import * as ServerConfig from "./config.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -158,7 +158,7 @@ describe("ServerLoggerLive", () => {
       const [request] = requests;
       assert.strictEqual(request?.url, "https://collector.example.com/v1/logs");
       assert.include(request?.body ?? "", "server logger under test");
-      assert.include(request?.body ?? "", "t3code-server");
+      assert.include(request?.body ?? "", "busyboy-server");
       assert.include(request?.body ?? "", "service.runtime");
     }),
   );
@@ -183,7 +183,7 @@ describe("ServerLoggerLive", () => {
 
       assert.lengthOf(requests, 1);
       const body = requests[0]?.body ?? "";
-      assert.include(body, '"stringValue":"t3code-server"');
+      assert.include(body, '"stringValue":"busyboy-server"');
       assert.include(body, "deployment.environment.name");
       assert.include(body, '"key":"service.namespace","value":{"stringValue":"t3code"}');
       assert.notInclude(body, "renamed");

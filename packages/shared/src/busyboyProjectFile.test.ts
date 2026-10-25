@@ -2,16 +2,16 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  buildT3ProjectFileJsonSchema,
-  parseT3ProjectFile,
-  T3ProjectFileFromJson,
-} from "./t3ProjectFile.ts";
+  buildBusyboyProjectFileJsonSchema,
+  parseBusyboyProjectFile,
+  BusyboyProjectFileFromJson,
+} from "./busyboyProjectFile.ts";
 
-const decodeJson = Schema.decodeUnknownSync(T3ProjectFileFromJson);
+const decodeJson = Schema.decodeUnknownSync(BusyboyProjectFileFromJson);
 
-describe("buildT3ProjectFileJsonSchema", () => {
+describe("buildBusyboyProjectFileJsonSchema", () => {
   it("emits a draft 2020-12 schema with the published $id", () => {
-    const schema = buildT3ProjectFileJsonSchema();
+    const schema = buildBusyboyProjectFileJsonSchema();
 
     expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
     expect(schema.$id).toBe(
@@ -22,7 +22,7 @@ describe("buildT3ProjectFileJsonSchema", () => {
   });
 
   it("documents every supported field", () => {
-    const schema = buildT3ProjectFileJsonSchema() as {
+    const schema = buildBusyboyProjectFileJsonSchema() as {
       properties: Record<
         string,
         {
@@ -59,12 +59,12 @@ describe("buildT3ProjectFileJsonSchema", () => {
   });
 
   it("stays JSON-serializable", () => {
-    const schema = buildT3ProjectFileJsonSchema();
+    const schema = buildBusyboyProjectFileJsonSchema();
     expect(JSON.parse(JSON.stringify(schema))).toEqual(schema);
   });
 });
 
-describe("T3ProjectFileFromJson", () => {
+describe("BusyboyProjectFileFromJson", () => {
   it("decodes lenient JSONC with comments and trailing commas", () => {
     const decoded = decodeJson(`{
       // team scripts
@@ -83,15 +83,15 @@ describe("T3ProjectFileFromJson", () => {
   });
 });
 
-describe("parseT3ProjectFile", () => {
+describe("parseBusyboyProjectFile", () => {
   it("returns the decoded file for valid contents", () => {
-    expect(parseT3ProjectFile('{ "defaultThreadEnvMode": "worktree" }')).toEqual({
+    expect(parseBusyboyProjectFile('{ "defaultThreadEnvMode": "worktree" }')).toEqual({
       defaultThreadEnvMode: "worktree",
     });
   });
 
   it("returns null for malformed or invalid contents", () => {
-    expect(parseT3ProjectFile("{ not json")).toBeNull();
-    expect(parseT3ProjectFile('{ "defaultThreadEnvMode": "spaceship" }')).toBeNull();
+    expect(parseBusyboyProjectFile("{ not json")).toBeNull();
+    expect(parseBusyboyProjectFile('{ "defaultThreadEnvMode": "spaceship" }')).toBeNull();
   });
 });

@@ -8,12 +8,12 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
-import { codexAuthDeliveryUrl, readCodexAuthHandoff } from "@t3tools/shared/codexAuthHandoff";
+import { codexAuthDeliveryUrl, readCodexAuthHandoff } from "@busyboy/shared/codexAuthHandoff";
 import { receiveCodexAuthCallback, CodexAuthCallbackError } from "./CodexAuthCallback.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
-import { providerAuthReturnUrl } from "@t3tools/shared/providerAuthReturnUrl";
-import { promptLinkAppPath } from "@t3tools/shared/promptLinks";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { providerAuthReturnUrl } from "@busyboy/shared/providerAuthReturnUrl";
+import { promptLinkAppPath } from "@busyboy/shared/promptLinks";
+import * as HostProcess from "@busyboy/shared/HostProcess";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
@@ -34,7 +34,7 @@ export class DesktopDeepLinks extends Context.Service<
       | Scope.Scope
     >;
   }
->()("@t3tools/desktop/app/DesktopDeepLinks") {}
+>()("@busyboy/desktop/app/DesktopDeepLinks") {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {

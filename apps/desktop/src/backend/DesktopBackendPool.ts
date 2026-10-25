@@ -23,7 +23,7 @@ export class DesktopBackendPool extends Context.Service<
   {
     readonly primary: Effect.Effect<DesktopBackendInstance>;
   }
->()("@t3tools/desktop/backend/DesktopBackendPool") {}
+>()("@busyboy/desktop/backend/DesktopBackendPool") {}
 
 export const layer = Layer.effect(
   DesktopBackendPool,
@@ -52,7 +52,7 @@ export const layer = Layer.effect(
         electronDialog
           .showErrorBox(
             "This T3 home is unavailable",
-            "Another Busyboy server, such as the background service, is using this data directory. Stop that server and reopen Busyboy, or set a separate T3CODE_HOME and pair with the running server.",
+            "Another Busyboy server, such as the background service, is using this data directory. Stop that server and reopen Busyboy, or set a separate BUSYBOY_HOME and pair with the running server.",
           )
           .pipe(Effect.andThen(electronApp.quit)),
     });

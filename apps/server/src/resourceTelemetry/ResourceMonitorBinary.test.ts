@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as HostProcess from "@busyboy/shared/HostProcess";
 import { afterEach, assert, describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -33,7 +33,7 @@ describe("ResourceMonitorBinary", () => {
         Effect.provideService(HostProcess.Platform, "win32"),
         Effect.provideService(HostProcess.Architecture, "arm64"),
         Effect.provideService(HostProcess.Environment, {
-          T3CODE_RESOURCE_MONITOR_PATH: binaryPath,
+          BUSYBOY_RESOURCE_MONITOR_PATH: binaryPath,
         }),
       );
 
@@ -58,7 +58,7 @@ describe("ResourceMonitorBinary", () => {
         Effect.provideService(HostProcess.Architecture, "x64"),
         Effect.provideService(ResourceMonitorBinary.ResourceMonitorHostLinuxLibc, "musl"),
         Effect.provideService(HostProcess.Environment, {
-          T3CODE_RESOURCE_MONITOR_PATH: binaryPath,
+          BUSYBOY_RESOURCE_MONITOR_PATH: binaryPath,
         }),
       );
 
@@ -81,7 +81,7 @@ describe("ResourceMonitorBinary", () => {
         Effect.provideService(HostProcess.Platform, "freebsd"),
         Effect.provideService(HostProcess.Architecture, "ia32"),
         Effect.provideService(HostProcess.Environment, {
-          T3CODE_RESOURCE_MONITOR_PATH: binaryPath,
+          BUSYBOY_RESOURCE_MONITOR_PATH: binaryPath,
         }),
       );
 
@@ -105,7 +105,7 @@ describe("ResourceMonitorBinary", () => {
         Effect.provideService(HostProcess.Architecture, "x64"),
         Effect.provideService(ResourceMonitorBinary.ResourceMonitorHostLinuxLibc, "gnu"),
         Effect.provideService(HostProcess.Environment, {
-          T3CODE_RESOURCE_MONITOR_PATH: binaryPath,
+          BUSYBOY_RESOURCE_MONITOR_PATH: binaryPath,
         }),
       );
       const error = yield* Effect.flip(service.resolve);
@@ -127,7 +127,7 @@ describe("ResourceMonitorBinary", () => {
         Effect.provideService(HostProcess.Platform, "win32"),
         Effect.provideService(HostProcess.Architecture, "arm64"),
         Effect.provideService(HostProcess.Environment, {
-          T3CODE_RESOURCE_MONITOR_PATH: baseDir,
+          BUSYBOY_RESOURCE_MONITOR_PATH: baseDir,
         }),
       );
       const error = yield* Effect.flip(service.resolve);

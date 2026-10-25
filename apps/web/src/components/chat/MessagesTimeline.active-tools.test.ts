@@ -1,4 +1,4 @@
-import { RunId } from "@t3tools/contracts";
+import { RunId } from "@busyboy/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { deriveMessagesTimelineRows, liveWorkEntryLabel } from "./MessagesTimeline.logic";
 

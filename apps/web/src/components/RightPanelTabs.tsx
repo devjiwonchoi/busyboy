@@ -1,10 +1,10 @@
-import { pullRequestHostOf, type SourceControlProviderKind } from "@t3tools/contracts";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { pullRequestHostOf, type SourceControlProviderKind } from "@busyboy/contracts";
+import type { EnvironmentThreadShell } from "@busyboy/client-runtime/state/shell";
 import { useProjects, useServerConfigs, useThreadShells } from "~/state/entities";
 import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
-} from "@t3tools/shared/threadPullRequests";
+} from "@busyboy/shared/threadPullRequests";
 import type {
   ContextMenuItem,
   EnvironmentId,
@@ -12,8 +12,8 @@ import type {
   ProjectId,
   PullRequestState,
   ResolvedKeybindingsConfig,
-} from "@t3tools/contracts";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+} from "@busyboy/contracts";
+import { getTerminalLabel } from "@busyboy/shared/terminalLabels";
 import {
   closestCenter,
   DndContext,

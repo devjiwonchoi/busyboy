@@ -1,5 +1,5 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
+import { EnvironmentId } from "@busyboy/contracts";
+import type { ServerUpdateState } from "@busyboy/client-runtime/state/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const branding = vi.hoisted(() => ({ APP_VERSION: "0.0.34" }));
@@ -35,10 +35,10 @@ describe("versionSkew", () => {
   });
 
   it("keeps runner and unknown commands as relaunches", () => {
-    expect(manualServerUpdateCommand("0.0.45")).toBe("npx t3@0.0.45");
-    expect(manualServerUpdateCommand("0.0.45", { kind: "npx" })).toBe("npx t3@0.0.45");
-    expect(manualServerUpdateCommand("0.0.45", { kind: "pnpm-dlx" })).toBe("pnpm dlx t3@0.0.45");
-    expect(manualServerUpdateCommand("0.0.45", { kind: "bunx" })).toBe("bunx t3@0.0.45");
+    expect(manualServerUpdateCommand("0.0.45")).toBe("npx busyboy@0.0.45");
+    expect(manualServerUpdateCommand("0.0.45", { kind: "npx" })).toBe("npx busyboy@0.0.45");
+    expect(manualServerUpdateCommand("0.0.45", { kind: "pnpm-dlx" })).toBe("pnpm dlx busyboy@0.0.45");
+    expect(manualServerUpdateCommand("0.0.45", { kind: "bunx" })).toBe("bunx busyboy@0.0.45");
   });
   beforeEach(() => {
     branding.APP_VERSION = "0.0.34";

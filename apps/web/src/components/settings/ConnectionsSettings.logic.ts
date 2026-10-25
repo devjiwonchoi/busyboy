@@ -3,7 +3,7 @@ import {
   type AuthEnvironmentScope,
   AuthTerminalOperateScope,
   AuthTerminalReadScope,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 
 /**
  * Operating terminals without being able to list them leaves a client

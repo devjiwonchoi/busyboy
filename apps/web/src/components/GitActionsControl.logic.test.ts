@@ -1,5 +1,5 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
-import type { VcsStatusResult } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@busyboy/contracts";
+import type { VcsStatusResult } from "@busyboy/contracts";
 import { assert, describe, it } from "vite-plus/test";
 import {
   buildGitActionProgressStages,

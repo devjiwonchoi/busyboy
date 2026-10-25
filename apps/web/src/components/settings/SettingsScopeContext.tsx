@@ -1,5 +1,5 @@
-import { type EnvironmentId, T3_PROJECT_FILE_NAME, type T3ProjectFile } from "@t3tools/contracts";
-import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
+import { type EnvironmentId, BUSYBOY_PROJECT_FILE_NAME, type BusyboyProjectFile } from "@busyboy/contracts";
+import { parseBusyboyProjectFile } from "@busyboy/shared/busyboyProjectFile";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -22,18 +22,18 @@ type ProjectFileMember = readonly [
 const memberProjectFilesAtom = Atom.family((membersKey: string) => {
   const members = JSON.parse(membersKey) as ReadonlyArray<ProjectFileMember>;
   return Atom.make((get) => {
-    const files = new Map<string, T3ProjectFile | null>();
+    const files = new Map<string, BusyboyProjectFile | null>();
     for (const [environmentId, workspaceRoot, physicalProjectKey] of members) {
       const result = get(
-        getProjectFileQueryAtom(environmentId, workspaceRoot, T3_PROJECT_FILE_NAME),
+        getProjectFileQueryAtom(environmentId, workspaceRoot, BUSYBOY_PROJECT_FILE_NAME),
       );
       if (result.waiting) continue;
       const data =
-        get(optimisticFileAtom(environmentId, workspaceRoot, T3_PROJECT_FILE_NAME))?.data ??
+        get(optimisticFileAtom(environmentId, workspaceRoot, BUSYBOY_PROJECT_FILE_NAME))?.data ??
         Option.getOrNull(AsyncResult.value(result));
       files.set(
         physicalProjectKey,
-        data === null || data.truncated ? null : parseT3ProjectFile(data.contents),
+        data === null || data.truncated ? null : parseBusyboyProjectFile(data.contents),
       );
     }
     return files;

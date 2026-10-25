@@ -1,14 +1,14 @@
 // @effect-diagnostics nodeBuiltinImport:off - plain local servers stand in for LAN services.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import { ThreadId } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { ThreadId } from "@busyboy/contracts";
+import * as HostProcess from "@busyboy/shared/HostProcess";
 import {
   HTML_RENDER_MEASURE_FONTS,
   HTML_RENDER_MEASURE_WIDTHS,
   htmlRenderTheme,
-} from "@t3tools/shared/htmlRender";
-import { T3_CODE_DARK_THEME_COLORS } from "@t3tools/shared/themePalettes";
+} from "@busyboy/shared/htmlRender";
+import { BUSYBOY_DARK_THEME_COLORS } from "@busyboy/shared/themePalettes";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
@@ -26,7 +26,7 @@ import * as ServerConfig from "../config.ts";
 import * as HtmlRender from "./HtmlRender.ts";
 import * as PreviewBrowser from "../preview/PreviewBrowser.ts";
 
-const TEST_BROWSER_ENV = "T3CODE_TEST_HEADLESS_SHELL";
+const TEST_BROWSER_ENV = "BUSYBOY_TEST_HEADLESS_SHELL";
 
 const layerHtmlRender = (
   executable?: string,
@@ -270,7 +270,7 @@ describe("HtmlRender", () => {
               { level: "info", text: HTML_RENDER_MEASURE_FONTS.sans },
               {
                 level: "warning",
-                text: htmlRenderTheme(T3_CODE_DARK_THEME_COLORS, "dark").variables["--background"],
+                text: htmlRenderTheme(BUSYBOY_DARK_THEME_COLORS, "dark").variables["--background"],
               },
               { level: "error", text: "boom" },
               {

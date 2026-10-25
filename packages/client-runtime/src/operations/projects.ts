@@ -7,9 +7,9 @@ import type {
   ServerConfig,
   SourceControlDiscoveryResult,
   SourceControlRepositoryInfo,
-} from "@t3tools/contracts";
-import { SourceControlProviderKind } from "@t3tools/contracts";
-import { newProjectFolderName } from "@t3tools/shared/path";
+} from "@busyboy/contracts";
+import { SourceControlProviderKind } from "@busyboy/contracts";
+import { newProjectFolderName } from "@busyboy/shared/path";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";

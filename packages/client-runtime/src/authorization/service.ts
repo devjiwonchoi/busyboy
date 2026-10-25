@@ -2,7 +2,7 @@ import {
   type ClientConnectionMethod,
   EnvironmentId,
   type ExecutionEnvironmentDescriptor,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 
 import { resolveRemoteWebSocketConnectionUrl } from "./remote.ts";
 import { environmentMismatchError, mapRemoteEnvironmentError } from "../connection/errors.ts";
@@ -36,7 +36,7 @@ export class RemoteEnvironmentAuthorization extends Context.Service<
       readonly connectionMethod: ClientConnectionMethod;
     }) => Effect.Effect<AuthorizedRemoteEnvironment, ConnectionAttemptError>;
   }
->()("@t3tools/client-runtime/authorization/service/RemoteEnvironmentAuthorization") {}
+>()("@busyboy/client-runtime/authorization/service/RemoteEnvironmentAuthorization") {}
 
 const BEARER_DESCRIPTOR_CACHE_TTL_MS = 10_000;
 

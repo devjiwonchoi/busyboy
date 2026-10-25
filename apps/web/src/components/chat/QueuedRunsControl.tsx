@@ -1,13 +1,13 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { deriveThreadQueueWorkflowState } from "@t3tools/client-runtime/state/thread-workflows";
-import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { scopeThreadRef } from "@busyboy/client-runtime/environment";
+import { deriveThreadQueueWorkflowState } from "@busyboy/client-runtime/state/thread-workflows";
+import { replaceComposerContextReferences } from "@busyboy/shared/composerContextReferences";
 import type {
   ChatAttachment as ContractChatAttachment,
   EnvironmentId,
   MessageId,
   RunId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import {
   Clock3Icon,
   CornerUpRightIcon,
@@ -40,7 +40,7 @@ interface QueuedRowThumbnail {
   readonly url: string | null;
 }
 
-const QUEUED_RUN_DRAG_TYPE = "application/x-t3code-queued-run";
+const QUEUED_RUN_DRAG_TYPE = "application/x-busyboy-queued-run";
 
 export interface QueuedRunsControlHandle {
   steerNext: (repeat: boolean) => boolean;

@@ -17,11 +17,11 @@ const APP_DISPLAY_NAME = isDevelopment ? "Busyboy (Dev)" : "Busyboy (Beta)";
 const APP_BUNDLE_ID = isDevelopment
   ? `dev.jiwon.busyboy.dev.${devBundleIdSuffix || "local"}`
   : "dev.jiwon.busyboy";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
+const APP_PROTOCOL_SCHEMES = isDevelopment ? ["busyboy-dev"] : ["busyboy"];
 const LAUNCHER_VERSION = 20;
 const developmentMacIconPngPath = NodePath.join(repoRoot, "assets", "busyboy.png");
 const productionMacIconPngPath = developmentMacIconPngPath;
-// oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone launcher script has no Effect runtime.
+// oxlint-disable-next-line busyboy/no-global-process-runtime -- Standalone launcher script has no Effect runtime.
 const hostPlatform = NodeOS.platform();
 
 function setPlistString(plistPath, key, value) {
@@ -104,14 +104,14 @@ function shellSingleQuote(value) {
 export function makeDevelopmentEnvironmentScript(environment) {
   const envEntries = [
     ["VITE_DEV_SERVER_URL", environment.VITE_DEV_SERVER_URL],
-    ["T3CODE_PORT", environment.T3CODE_PORT],
-    ["T3CODE_HOME", environment.T3CODE_HOME],
-    ["T3CODE_COMMIT_HASH", environment.T3CODE_COMMIT_HASH],
-    ["T3CODE_OTLP_TRACES_URL", environment.T3CODE_OTLP_TRACES_URL],
-    ["T3CODE_OTLP_EXPORT_INTERVAL_MS", environment.T3CODE_OTLP_EXPORT_INTERVAL_MS],
-    ["T3CODE_OTLP_HEADERS", environment.T3CODE_OTLP_HEADERS],
-    ["T3CODE_OTLP_PROTOCOL", environment.T3CODE_OTLP_PROTOCOL],
-    ["T3CODE_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
+    ["BUSYBOY_PORT", environment.BUSYBOY_PORT],
+    ["BUSYBOY_HOME", environment.BUSYBOY_HOME],
+    ["BUSYBOY_COMMIT_HASH", environment.BUSYBOY_COMMIT_HASH],
+    ["BUSYBOY_OTLP_TRACES_URL", environment.BUSYBOY_OTLP_TRACES_URL],
+    ["BUSYBOY_OTLP_EXPORT_INTERVAL_MS", environment.BUSYBOY_OTLP_EXPORT_INTERVAL_MS],
+    ["BUSYBOY_OTLP_HEADERS", environment.BUSYBOY_OTLP_HEADERS],
+    ["BUSYBOY_OTLP_PROTOCOL", environment.BUSYBOY_OTLP_PROTOCOL],
+    ["BUSYBOY_DESKTOP_APP_USER_MODEL_ID", APP_BUNDLE_ID],
   ].filter((entry) => typeof entry[1] === "string" && entry[1].trim().length > 0);
   return [
     ...envEntries.map(
@@ -131,7 +131,7 @@ export function makeDevelopmentLauncherScript({
   return [
     "#!/bin/sh",
     `if [ -f ${shellSingleQuote(environmentFilePath)} ]; then . ${shellSingleQuote(environmentFilePath)}; fi`,
-    `exec ${shellSingleQuote(electronBinaryPath)} --t3code-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
+    `exec ${shellSingleQuote(electronBinaryPath)} --busyboy-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
     "",
   ].join("\n");
 }

@@ -1,5 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
-import { AuthSessionState, type EnvironmentId, type ServerInstallation } from "@t3tools/contracts";
+import { AuthSessionState, type EnvironmentId, type ServerInstallation } from "@busyboy/contracts";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -75,7 +75,7 @@ const sessionAuth = {
   policy: "remote-reachable",
   bootstrapMethods: ["one-time-token"],
   sessionMethods: ["bearer-access-token"],
-  sessionCookieName: "t3_session",
+  sessionCookieName: "busyboy_session",
 } as const;
 
 const currentSession = {
@@ -196,14 +196,14 @@ describe("ServerUpdateAction", () => {
     [
       { kind: "npx" },
       "Copy relaunch command",
-      "npx t3@0.0.45",
+      "npx busyboy@0.0.45",
       "Relaunch command copied",
       "This does not update an installed t3 command.",
     ],
     [
       undefined,
       "Copy relaunch command",
-      "npx t3@0.0.45",
+      "npx busyboy@0.0.45",
       "Relaunch command copied",
       "This does not update an installed t3 command.",
     ],

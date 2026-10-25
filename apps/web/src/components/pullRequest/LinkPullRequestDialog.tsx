@@ -1,7 +1,7 @@
-import { pullRequestHostOf, type ScopedThreadRef } from "@t3tools/contracts";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { pullRequestHostOf, type ScopedThreadRef } from "@busyboy/contracts";
+import { sourceControlClients } from "@busyboy/client-runtime/source-control-clients";
 import { useAtomValue } from "@effect/atom-react";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise, squashAtomCommandFailure } from "@busyboy/client-runtime/state/runtime";
 import { useEffect, useRef, useState } from "react";
 
 import { parseChangeRequestUrl } from "~/lib/openPullRequestLink";

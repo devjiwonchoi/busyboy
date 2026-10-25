@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { PullRequestActivity, PullRequestReviewThread } from "@t3tools/contracts";
+import type { PullRequestActivity, PullRequestReviewThread } from "@busyboy/contracts";
 
 import { settledReviewSummary } from "./pullRequestReviewGuideInput.ts";
 

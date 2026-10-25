@@ -1,10 +1,10 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@busyboy/contracts";
 import { assert, it } from "@effect/vitest";
 
-import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
-import * as GitHubRequestPolicy from "@t3tools/source-control-github/server/GitHubRequestPolicy";
-import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
-import { gitHubProviderFailure } from "@t3tools/source-control-github/server/GitHubPullRequestProvider";
+import * as GitHubRest from "@busyboy/source-control-github/server/GitHubRest";
+import * as GitHubRequestPolicy from "@busyboy/source-control-github/server/GitHubRequestPolicy";
+import * as SourceControlRateLimit from "@busyboy/source-control-core/server/SourceControlRateLimit";
+import { gitHubProviderFailure } from "@busyboy/source-control-github/server/GitHubPullRequestProvider";
 
 const cause = new Error("redacted provider failure");
 

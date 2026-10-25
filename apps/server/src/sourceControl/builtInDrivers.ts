@@ -1,7 +1,7 @@
-import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
-import * as GitHubPullRequestApi from "@t3tools/source-control-github/server/GitHubPullRequestApi";
-import * as GitHubDriver from "@t3tools/source-control-github/server/driver";
-import type { SourceControlDriver } from "@t3tools/source-control-core/server/driver";
+import * as GitHubRest from "@busyboy/source-control-github/server/GitHubRest";
+import * as GitHubPullRequestApi from "@busyboy/source-control-github/server/GitHubPullRequestApi";
+import * as GitHubDriver from "@busyboy/source-control-github/server/driver";
+import type { SourceControlDriver } from "@busyboy/source-control-core/server/driver";
 import * as Layer from "effect/Layer";
 
 import * as ServerSourceControlHost from "./ServerSourceControlHost.ts";

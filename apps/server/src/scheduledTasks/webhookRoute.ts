@@ -1,4 +1,4 @@
-import { EnvironmentHttpApi } from "@t3tools/contracts";
+import { EnvironmentHttpApi } from "@busyboy/contracts";
 import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -15,7 +15,7 @@ import * as ScheduledTaskService from "./ScheduledTaskService.ts";
 export const WEBHOOK_MAX_BODY_BYTES = 1024 * 1024;
 
 /** Response header naming what happened to the request. */
-const WEBHOOK_OUTCOME_HEADER = "x-t3-hook-outcome";
+const WEBHOOK_OUTCOME_HEADER = "x-busyboy-hook-outcome";
 
 const json = (status: number, body: Record<string, string>, outcome: string) =>
   HttpServerResponse.jsonUnsafe(body, { status, headers: { [WEBHOOK_OUTCOME_HEADER]: outcome } });

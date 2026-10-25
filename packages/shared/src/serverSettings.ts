@@ -1,5 +1,5 @@
-import type { ModelPreferences } from "@t3tools/contracts/settings";
-import { DEFAULT_MODEL_BY_PROVIDER, DEFAULT_TEXT_GENERATION_MODEL, DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER, defaultInstanceIdForDriver, isProviderAvailable, isUnconfiguredDefaultInstanceEnabled, resolveProjectProviderInstanceEnabled, resolveProviderInstanceEnabled, isProviderTextGenerationCapable, type ModelSelection, type ProjectId, type ProjectSettingsOverrides, ProviderDriverKind, ProviderInstanceId, type ServerProvider, ServerSettings, type ServerSettingsPatch } from "@t3tools/contracts";
+import type { ModelPreferences } from "@busyboy/contracts/settings";
+import { DEFAULT_MODEL_BY_PROVIDER, DEFAULT_TEXT_GENERATION_MODEL, DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER, defaultInstanceIdForDriver, isProviderAvailable, isUnconfiguredDefaultInstanceEnabled, resolveProjectProviderInstanceEnabled, resolveProviderInstanceEnabled, isProviderTextGenerationCapable, type ModelSelection, type ProjectId, type ProjectSettingsOverrides, ProviderDriverKind, ProviderInstanceId, type ServerProvider, ServerSettings, type ServerSettingsPatch } from "@busyboy/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { deepMerge } from "./Struct.ts";

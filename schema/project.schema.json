@@ -75,5 +75,5 @@
   },
   "additionalProperties": false,
   "title": "Busyboy project file",
-  "description": "Checked-in project configuration for Busyboy (t3.json at the repository root). See https://github.com/devjiwonchoi/busyboy for documentation."
+  "description": "Checked-in project configuration for Busyboy (busyboy.json at the repository root). See https://github.com/devjiwonchoi/busyboy for documentation."
 }

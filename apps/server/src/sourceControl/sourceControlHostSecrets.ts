@@ -1,6 +1,6 @@
-import { secretSettingsFields } from "@t3tools/contracts";
-import type { SourceControlClientDefinition } from "@t3tools/source-control-core/client/definition";
-import * as GitHub from "@t3tools/source-control-github/client/definition";
+import { secretSettingsFields } from "@busyboy/contracts";
+import type { SourceControlClientDefinition } from "@busyboy/source-control-core/client/definition";
+import * as GitHub from "@busyboy/source-control-github/client/definition";
 
 const definitions: ReadonlyArray<SourceControlClientDefinition> = [GitHub.definition];
 

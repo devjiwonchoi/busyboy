@@ -5,14 +5,14 @@ import {
   type ServerProvider,
   type ThreadLinkedPullRequest,
   type ThreadPullRequestLink,
-} from "@t3tools/contracts";
-import { resolveSelectableModel, type SelectableModelOption } from "@t3tools/shared/model";
-import type { PromptLinkPullRequest, PromptLinkRepository } from "@t3tools/shared/promptLinks";
+} from "@busyboy/contracts";
+import { resolveSelectableModel, type SelectableModelOption } from "@busyboy/shared/model";
+import type { PromptLinkPullRequest, PromptLinkRepository } from "@busyboy/shared/promptLinks";
 import {
   threadPullRequestKeyOf,
   threadPullRequestsOf,
   visibleThreadPullRequests,
-} from "@t3tools/shared/threadPullRequests";
+} from "@busyboy/shared/threadPullRequests";
 
 const repositoryKey = (repository: PromptLinkRepository) =>
   `github.com/${repository.owner}/${repository.name}`.toLowerCase();

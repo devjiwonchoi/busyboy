@@ -4,9 +4,9 @@ import {
   type ServerSettings,
   UsageLimitSourceConfig,
   secretSettingsFields,
-} from "@t3tools/contracts";
-import { acpRegistryClient } from "@t3tools/provider-acp-registry/client";
-import { grokClient } from "@t3tools/provider-grok/client";
+} from "@busyboy/contracts";
+import { acpRegistryClient } from "@busyboy/provider-acp-registry/client";
+import { grokClient } from "@busyboy/provider-grok/client";
 import {
   readSecretFieldValues,
   SOURCE_CONTROL_HOST_SECRET_FIELDS,

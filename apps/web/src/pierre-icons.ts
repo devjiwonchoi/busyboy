@@ -3,17 +3,17 @@ import {
   getBuiltInSpriteSheet,
   type FileTreeIcons,
 } from "@pierre/trees";
-import { VIDEO_FILE_EXTENSIONS } from "@t3tools/shared/video";
-import { fileIconPathForMimeType } from "@t3tools/shared/filePreview";
+import { VIDEO_FILE_EXTENSIONS } from "@busyboy/shared/video";
+import { fileIconPathForMimeType } from "@busyboy/shared/filePreview";
 
 export interface PierreIconResolution {
   name: string;
   token?: string;
 }
 
-const PIERRE_ICON_SPRITE_ID = "t3code-pierre-file-icon-sprite";
+const PIERRE_ICON_SPRITE_ID = "busyboy-pierre-file-icon-sprite";
 
-const T3_FILE_ICON_SPRITE = `
+const BUSYBOY_FILE_ICON_SPRITE = `
 <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true">
   <!-- Lucide Film icon, ISC license. -->
   <symbol id="t3-file-icon-video" viewBox="0 0 24 24">
@@ -80,10 +80,10 @@ const T3_FILE_ICON_SPRITE = `
   </symbol>
 </svg>`;
 
-export const T3_PIERRE_ICONS = {
+export const BUSYBOY_PIERRE_ICONS = {
   set: "complete",
   colored: true,
-  spriteSheet: T3_FILE_ICON_SPRITE,
+  spriteSheet: BUSYBOY_FILE_ICON_SPRITE,
   byFileName: {
     "package.json": "file-tree-builtin-npm",
     "tsconfig.json": "file-tree-builtin-typescript",
@@ -119,7 +119,7 @@ export const T3_PIERRE_ICONS = {
   },
 } satisfies FileTreeIcons;
 
-const completeIconResolver = createFileTreeIconResolver(T3_PIERRE_ICONS);
+const completeIconResolver = createFileTreeIconResolver(BUSYBOY_PIERRE_ICONS);
 
 const LANGUAGE_EXTENSION_ALIASES: Record<string, string> = {
   bash: "sh",
@@ -190,6 +190,6 @@ export function ensurePierreIconSprite(): void {
   container.style.height = "0";
   container.style.overflow = "hidden";
   container.style.pointerEvents = "none";
-  container.innerHTML = `${getBuiltInSpriteSheet("complete")}${T3_FILE_ICON_SPRITE}`;
+  container.innerHTML = `${getBuiltInSpriteSheet("complete")}${BUSYBOY_FILE_ICON_SPRITE}`;
   document.body.prepend(container);
 }

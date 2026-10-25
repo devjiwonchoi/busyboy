@@ -1,4 +1,4 @@
-import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
+import { AuthEnvironmentMaintainScope } from "@busyboy/contracts";
 
 import { isLocalEnvironmentDisabled } from "~/localEnvironment";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";

@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/provider-testing",
+  "name": "@busyboy/provider-testing",
   "private": true,
   "type": "module",
   "exports": {
@@ -30,9 +30,9 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/provider-core": "workspace:*",
-    "@t3tools/shared": "workspace:*",
+    "@busyboy/contracts": "workspace:*",
+    "@busyboy/provider-core": "workspace:*",
+    "@busyboy/shared": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

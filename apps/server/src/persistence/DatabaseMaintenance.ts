@@ -1,4 +1,4 @@
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import * as NodeSqliteClient from "@busyboy/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -56,7 +56,7 @@ export class DatabaseCompactError extends Schema.TaggedError<DatabaseCompactErro
   }
 }
 
-/** Offline inspection and repair of a T3 state database, for `t3 doctor`. */
+/** Offline inspection and repair of a T3 state database, for `busyboy doctor`. */
 export class DatabaseMaintenance extends Context.Service<
   DatabaseMaintenance,
   {
@@ -81,7 +81,7 @@ export class DatabaseMaintenance extends Context.Service<
       | DatabaseCompactError
     >;
   }
->()("t3/persistence/DatabaseMaintenance") {}
+>()("busyboy/persistence/DatabaseMaintenance") {}
 
 const isDomainError = Schema.is(
   Schema.Union([DatabaseMissingError, DatabaseInUseError, DatabaseProjectionsInvalidError]),

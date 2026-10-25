@@ -1,6 +1,6 @@
-import type { T3McpToolSummaryAction } from "@t3tools/shared/t3McpToolPresentation";
+import type { BusyboyMcpToolSummaryAction } from "@busyboy/shared/busyboyMcpToolPresentation";
 
-export interface T3ToolSummaryCall {
+export interface BusyboyToolSummaryCall {
   readonly input: unknown;
   readonly output: unknown;
   readonly outcome: "completed" | "failed" | "unfinished";
@@ -64,7 +64,7 @@ function readInput(value: unknown): Record<string, unknown> | undefined {
 }
 
 /** MCP errors can be returned as data even when the provider completed the tool call. */
-export function t3ToolResultIndicatesFailure(output: unknown): boolean {
+export function busyboyToolResultIndicatesFailure(output: unknown): boolean {
   return readResult(output).failed;
 }
 
@@ -79,9 +79,9 @@ function quantity(count: number, noun: string, plural = `${noun}s`): string {
   return `${count} ${count === 1 ? noun : plural}`;
 }
 
-export function summarizeT3ToolCalls(
-  action: T3McpToolSummaryAction,
-  calls: ReadonlyArray<T3ToolSummaryCall>,
+export function summarizeBusyboyToolCalls(
+  action: BusyboyMcpToolSummaryAction,
+  calls: ReadonlyArray<BusyboyToolSummaryCall>,
 ): { label: string; failedCount: number } {
   const results = calls.map((call) => {
     const result = readResult(call.output);

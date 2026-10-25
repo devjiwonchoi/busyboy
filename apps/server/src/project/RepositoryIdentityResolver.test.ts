@@ -1,8 +1,8 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { SourceControlProviderKind } from "@busyboy/contracts";
 // @effect-diagnostics nodeBuiltinImport:off - realpathSync.native resolves Windows 8.3 short names, which the Effect realPath does not.
 import * as NodeFS from "node:fs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { SourceControlProviderError } from "@t3tools/contracts";
+import { SourceControlProviderError } from "@busyboy/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -401,7 +401,7 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
       expect(refreshedIdentity).not.toBeNull();
       expect(refreshedIdentity?.canonicalKey).toBe("github.com/t3tools/t3code-next");
       expect(refreshedIdentity?.displayName).toBe("t3tools/t3code-next");
-      expect(refreshedIdentity?.name).toBe("t3code-next");
+      expect(refreshedIdentity?.name).toBe("busyboy-next");
     }).pipe(
       Effect.provide(
         Layer.merge(

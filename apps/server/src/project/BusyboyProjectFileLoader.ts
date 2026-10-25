@@ -6,13 +6,13 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import { T3_PROJECT_FILE_NAME, type T3ProjectFile } from "@t3tools/contracts";
-import { T3ProjectFileFromJson } from "@t3tools/shared/t3ProjectFile";
+import { BUSYBOY_PROJECT_FILE_NAME, type BusyboyProjectFile } from "@busyboy/contracts";
+import { BusyboyProjectFileFromJson } from "@busyboy/shared/busyboyProjectFile";
 
-const decodeT3ProjectFileJson = Schema.decodeEffect(T3ProjectFileFromJson);
+const decodeBusyboyProjectFileJson = Schema.decodeEffect(BusyboyProjectFileFromJson);
 
-export class T3ProjectFileLoadError extends Schema.TaggedError<T3ProjectFileLoadError>()(
-  "T3ProjectFileLoadError",
+export class BusyboyProjectFileLoadError extends Schema.TaggedError<BusyboyProjectFileLoadError>()(
+  "BusyboyProjectFileLoadError",
   {
     operation: Schema.Literals(["read", "decode"]),
     workspaceRoot: Schema.String,
@@ -21,22 +21,22 @@ export class T3ProjectFileLoadError extends Schema.TaggedError<T3ProjectFileLoad
   },
 ) {
   override get message(): string {
-    return `Failed to ${this.operation} ${T3_PROJECT_FILE_NAME} at ${this.filePath}.`;
+    return `Failed to ${this.operation} ${BUSYBOY_PROJECT_FILE_NAME} at ${this.filePath}.`;
   }
 }
 
-export class T3ProjectFileLoader extends Context.Service<
-  T3ProjectFileLoader,
+export class BusyboyProjectFileLoader extends Context.Service<
+  BusyboyProjectFileLoader,
   {
     /**
      * Never fails: missing, unreadable, or invalid files resolve to `Option.none` (invalid files
      * are logged as warnings).
      */
-    readonly load: (workspaceRoot: string) => Effect.Effect<Option.Option<T3ProjectFile>>;
+    readonly load: (workspaceRoot: string) => Effect.Effect<Option.Option<BusyboyProjectFile>>;
   }
->()("t3/project/T3ProjectFileLoader") {}
+>()("busyboy/project/BusyboyProjectFileLoader") {}
 
-const logT3ProjectFileLoadError = (error: T3ProjectFileLoadError) =>
+const logBusyboyProjectFileLoadError = (error: BusyboyProjectFileLoadError) =>
   Effect.logWarning(error).pipe(
     Effect.annotateLogs({
       operation: error.operation,
@@ -51,17 +51,17 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
-  const load: T3ProjectFileLoader["Service"]["load"] = Effect.fn("T3ProjectFileLoader.load")(
+  const load: BusyboyProjectFileLoader["Service"]["load"] = Effect.fn("BusyboyProjectFileLoader.load")(
     function* (workspaceRoot) {
-      const filePath = path.join(workspaceRoot, T3_PROJECT_FILE_NAME);
+      const filePath = path.join(workspaceRoot, BUSYBOY_PROJECT_FILE_NAME);
       const raw = yield* fileSystem.readFileString(filePath).pipe(
         Effect.asSome,
         Effect.catchTags({
           PlatformError: (error) =>
             error.reason._tag === "NotFound"
               ? Effect.succeed(Option.none<string>())
-              : logT3ProjectFileLoadError(
-                  new T3ProjectFileLoadError({
+              : logBusyboyProjectFileLoadError(
+                  new BusyboyProjectFileLoadError({
                     operation: "read",
                     workspaceRoot,
                     filePath,
@@ -71,26 +71,26 @@ export const make = Effect.gen(function* () {
         }),
       );
       if (Option.isNone(raw)) {
-        return Option.none<T3ProjectFile>();
+        return Option.none<BusyboyProjectFile>();
       }
-      return yield* decodeT3ProjectFileJson(raw.value).pipe(
+      return yield* decodeBusyboyProjectFileJson(raw.value).pipe(
         Effect.asSome,
         Effect.catchTags({
           SchemaError: (error) =>
-            logT3ProjectFileLoadError(
-              new T3ProjectFileLoadError({
+            logBusyboyProjectFileLoadError(
+              new BusyboyProjectFileLoadError({
                 operation: "decode",
                 workspaceRoot,
                 filePath,
                 cause: error,
               }),
-            ).pipe(Effect.as(Option.none<T3ProjectFile>())),
+            ).pipe(Effect.as(Option.none<BusyboyProjectFile>())),
         }),
       );
     },
   );
 
-  return T3ProjectFileLoader.of({ load });
+  return BusyboyProjectFileLoader.of({ load });
 });
 
-export const layer = Layer.effect(T3ProjectFileLoader, make);
+export const layer = Layer.effect(BusyboyProjectFileLoader, make);

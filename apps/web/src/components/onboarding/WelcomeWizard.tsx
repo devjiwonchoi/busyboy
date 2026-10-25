@@ -7,12 +7,12 @@ import type {
   ScopedProjectRef,
   ServerConfig,
   ServerProvider,
-} from "@t3tools/contracts";
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+} from "@busyboy/contracts";
+import { scopeProjectRef, scopeThreadRef } from "@busyboy/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@busyboy/client-runtime/state/runtime";
 import {
   AuthTerminalOperateScope,
   CommandId,
@@ -20,7 +20,7 @@ import {
   AuthOrchestrationOperateScope,
   ProviderDriverKind,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@busyboy/contracts";
 import * as Schema from "effect/Schema";
 import {
   ArrowRightIcon,
@@ -78,7 +78,7 @@ import { TerminalViewport } from "../ThreadTerminalDrawer";
 
 import { presentSavedEnvironmentConnection } from "../settings/connectionPresentation";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-import { T3Wordmark } from "../T3Wordmark";
+import { BusyboyWordmark } from "../BusyboyWordmark";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CommandBlock } from "../CommandBlock";
@@ -223,7 +223,7 @@ export function WelcomeWizard({
           title="Set up Busyboy"
           identity={
             <div className="flex items-baseline gap-1.5" role="img" aria-label="Busyboy">
-              <T3Wordmark className="h-4 w-auto shrink-0" aria-hidden />
+              <BusyboyWordmark className="h-4 w-auto shrink-0" aria-hidden />
               <span className="text-2xl font-medium tracking-tight text-muted-foreground">
                 Code
               </span>
@@ -517,9 +517,9 @@ function PairingForm({
             <p className="pt-3 text-sm text-muted-foreground">
               Run this on the computer with your code.
             </p>
-            <CommandBlock command="npx t3 pair" className="mt-2" />
+            <CommandBlock command="npx busyboy pair" className="mt-2" />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Start Busyboy first, or run <code className="font-mono">npx t3 serve</code>. Add{" "}
+              Start Busyboy first, or run <code className="font-mono">npx busyboy serve</code>. Add{" "}
               <code className="font-mono">--tailscale</code> to use your tailnet.
             </p>
           </CollapsiblePanel>

@@ -1,4 +1,4 @@
-import { SecretRequestError, ThreadId, TurnItemId } from "@t3tools/contracts";
+import { SecretRequestError, ThreadId, TurnItemId } from "@busyboy/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
