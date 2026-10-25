@@ -13,6 +13,15 @@ describe("hostedPairing", () => {
     vi.unstubAllEnvs();
   });
 
+  it("keeps the local server available without a configured hosted deployment", () => {
+    vi.stubEnv("VITE_HOSTED_APP_URL", "");
+    vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "");
+    vi.stubEnv("VITE_HTTP_URL", "");
+    vi.stubEnv("VITE_WS_URL", "");
+    expect(isHostedStaticApp(new URL("http://localhost:3773/"))).toBe(false);
+    expect(isHostedStaticApp(new URL("https://app.t3.codes/"))).toBe(false);
+  });
+
   it("reads hosted pairing host and query token parameters", () => {
     const url = new URL("https://app.t3.codes/pair?host=100.64.1.2:3773&token=ABCD1234");
 

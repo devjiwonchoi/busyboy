@@ -2,7 +2,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentAuthorizationError,
   EnvironmentId,
-  type RelayClientInstallProgressEvent,
+  type ServerSelfUpdateProgressEvent,
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
   WS_METHODS,
@@ -45,11 +45,11 @@ const TARGET = new PrimaryConnectionTarget({
   wsBaseUrl: "wss://environment.example.test",
 });
 
-const INSTALL_CHECKING: RelayClientInstallProgressEvent = {
+const INSTALL_CHECKING: ServerSelfUpdateProgressEvent = {
   type: "progress",
-  stage: "checking",
+  stage: "installing",
 };
-const INSTALL_DOWNLOADING: RelayClientInstallProgressEvent = {
+const INSTALL_DOWNLOADING: ServerSelfUpdateProgressEvent = {
   type: "progress",
   stage: "downloading",
 };
@@ -126,13 +126,12 @@ describe("environment RPC", () => {
     Effect.gen(function* () {
       const observations: string[] = [];
       const client = {
-        [WS_METHODS.cloudGetRelayClientStatus]: () =>
-          Effect.succeed({ status: "available", version: "2026.6.0" }),
+        [WS_METHODS.serverProbe]: () => Effect.succeed({}),
       } as unknown as WsRpcProtocolClient;
       const { activeSession, supervisor } = yield* makeHarness();
       yield* SubscriptionRef.set(activeSession, Option.some(session(client)));
 
-      const result = yield* request(WS_METHODS.cloudGetRelayClientStatus, {}).pipe(
+      const result = yield* request(WS_METHODS.serverProbe, {}).pipe(
         Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
         Effect.provideService(
           EnvironmentRpcRequestObserver,
@@ -148,28 +147,30 @@ describe("environment RPC", () => {
         ),
       );
 
-      expect(result).toEqual({ status: "available", version: "2026.6.0" });
+      expect(result).toEqual({});
       expect(observations).toEqual([
-        `start:${TARGET.environmentId}:${WS_METHODS.cloudGetRelayClientStatus}`,
-        `finish:${TARGET.environmentId}:${WS_METHODS.cloudGetRelayClientStatus}`,
+        `start:${TARGET.environmentId}:${WS_METHODS.serverProbe}`,
+        `finish:${TARGET.environmentId}:${WS_METHODS.serverProbe}`,
       ]);
     }),
   );
 
   it.effect("binds finite streaming commands to one active session", () =>
     Effect.gen(function* () {
-      const firstEvents = yield* Queue.unbounded<RelayClientInstallProgressEvent>();
-      const secondEvents = yield* Queue.unbounded<RelayClientInstallProgressEvent>();
+      const firstEvents = yield* Queue.unbounded<ServerSelfUpdateProgressEvent>();
+      const secondEvents = yield* Queue.unbounded<ServerSelfUpdateProgressEvent>();
       const firstClient = {
-        [WS_METHODS.cloudInstallRelayClient]: () => Stream.fromQueue(firstEvents),
+        [WS_METHODS.serverUpdateServerWithProgress]: () => Stream.fromQueue(firstEvents),
       } as unknown as WsRpcProtocolClient;
       const secondClient = {
-        [WS_METHODS.cloudInstallRelayClient]: () => Stream.fromQueue(secondEvents),
+        [WS_METHODS.serverUpdateServerWithProgress]: () => Stream.fromQueue(secondEvents),
       } as unknown as WsRpcProtocolClient;
       const { activeSession, supervisor } = yield* makeHarness();
 
       yield* SubscriptionRef.set(activeSession, Option.some(session(firstClient)));
-      const resultFiber = yield* runStream(WS_METHODS.cloudInstallRelayClient, {}).pipe(
+      const resultFiber = yield* runStream(WS_METHODS.serverUpdateServerWithProgress, {
+        targetVersion: "1.0.0",
+      }).pipe(
         Stream.take(2),
         Stream.runCollect,
         Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),

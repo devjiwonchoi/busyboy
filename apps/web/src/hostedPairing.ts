@@ -1,4 +1,4 @@
-import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
+import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/promptLinks";
 
 import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
 
@@ -44,7 +44,8 @@ export function isHostedStaticApp(url?: URL): boolean {
     return false;
   }
 
-  const hostedOrigin = originFromUrl(configuredHostedAppUrl());
+  const explicitHostedUrl = import.meta.env.VITE_HOSTED_APP_URL?.trim();
+  const hostedOrigin = explicitHostedUrl ? originFromUrl(explicitHostedUrl) : null;
   return hostedOrigin !== null && (url ?? new URL(window.location.href)).origin === hostedOrigin;
 }
 
