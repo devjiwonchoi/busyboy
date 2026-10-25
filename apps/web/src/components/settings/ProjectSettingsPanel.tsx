@@ -508,6 +508,8 @@ function ProjectDetail({
                   projectNameEditedRef.current = true;
                 }}
                 onBlur={(event) => {
+                  // Keep a pending edit while access is missing so it saves once access returns.
+                  if (!canEditGroup) return;
                   const wasEdited = projectNameEditedRef.current;
                   projectNameEditedRef.current = false;
                   void renameGroup(event.currentTarget.value, wasEdited);
