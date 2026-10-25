@@ -27,7 +27,6 @@ import {
   useRemoteConnections,
 } from "../../state/use-remote-environment-registry";
 import { SymbolView } from "../../components/ui/AppSymbol";
-import { splitEnvironmentSections } from "./environmentSections";
 
 type ConnectionsNewRouteParams = {
   readonly mode?: string;

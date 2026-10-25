@@ -4,8 +4,7 @@ import * as Socket from "effect/socket/Socket";
 
 import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
 
-import * as Dpop from "../connection/dpop";
-import * as Tracing from "../features/observability/tracing";
+import * as CryptoLayer from "./crypto";
 import * as Persistence from "../persistence/layer";
 import { disposeOnFoundationReplace, type FoundationHotModule } from "./foundation-fast-refresh";
 
@@ -15,15 +14,13 @@ const layerHttpClient = layerRemoteHttpClient(fetch);
 
 type RuntimeLayerSource =
   | typeof Socket.layerWebSocketConstructorGlobal
-  | typeof Dpop.layer
+  | typeof CryptoLayer.layer
   | typeof layerHttpClient
-  | typeof Persistence.layer
-  | typeof Tracing.layer;
+  | typeof Persistence.layer;
 
 const layerRuntime = Socket.layerWebSocketConstructorGlobal.pipe(
-  Layer.provideMerge(Dpop.layer),
+  Layer.provideMerge(CryptoLayer.layer),
   Layer.provideMerge(layerHttpClient),
-  Layer.provideMerge(Tracing.layer.pipe(Layer.provide(layerHttpClient))),
   Layer.provideMerge(Persistence.layer),
 );
 

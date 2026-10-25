@@ -56,10 +56,7 @@ import { newProjectId, randomUUID } from "../../lib/utils";
 import { agentSessionImport } from "../../state/agentSessions";
 import { readProjects, useProjects } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
-import {
-  isOnboardingRelayEnvironment,
-  resolveOnboardingSetup,
-} from "../../onboarding/targetEnvironment.logic";
+import { resolveOnboardingSetup } from "../../onboarding/targetEnvironment.logic";
 import { useProjectScans } from "../../onboarding/useProjectScans";
 import { projectEnvironment } from "../../state/projects";
 import { serverEnvironment } from "../../state/server";
@@ -302,9 +299,6 @@ function ConnectionStep({
 }) {
   const { environments } = useEnvironments();
 
-  const directEnvironments = environments.filter(
-    (environment) => !isOnboardingRelayEnvironment(environment),
-  );
   const [pairingOpen, setPairingOpen] = useState(expandPairingInitially);
   const [isPairing, setIsPairing] = useState(false);
   const { ready, skippedIds } = resolveOnboardingSetup(environments, selectedIds);
@@ -329,10 +323,10 @@ function ConnectionStep({
       <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
         Choose one or more computers. We’ll set up agents and projects on each.
       </p>
-      {directEnvironments.length > 0 ? (
+      {environments.length > 0 ? (
         <fieldset className="mt-5 space-y-2">
           <legend className="sr-only">Computers to set up</legend>
-          {directEnvironments.map((environment) => (
+          {environments.map((environment) => (
             <label
               key={environment.environmentId}
               className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-background px-3 py-3"

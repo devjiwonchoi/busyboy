@@ -43,7 +43,6 @@ const grant = (allowed: boolean): AuthSessionState => ({
     sessionCookieName: "test",
   },
   scopes: allowed ? [AuthOrchestrationOperateScope] : [],
-  permissions: allowed ? [AuthOrchestrationOperateScope] : [],
 });
 const runtime = Atom.runtime(
   Layer.succeed(EnvironmentRegistry, {
@@ -74,7 +73,6 @@ describe("command permissions", () => {
           AsyncResult.success({
             ...grant(true),
             scopes: [AuthSettingsWriteScope],
-            permissions: [AuthSettingsWriteScope],
           }),
         );
         expect(registry.get(cleanup.permissionAtom(env))).toBe(true);
@@ -97,7 +95,6 @@ describe("command permissions", () => {
           AsyncResult.success({
             ...grant(false),
             scopes: [AuthSettingsWriteScope],
-            permissions: [AuthSettingsWriteScope],
           }),
         );
         expect(registry.get(check.permissionAtom(env))).toBe(true);
@@ -216,7 +213,7 @@ it.effect(
         const registry = yield* setup;
         registry.set(sessions(env), AsyncResult.success(grant(true)));
         const git = createCommandPermissions(runtime, WS_METHODS.vcsInit);
-        expect((yield* git.authorize(registry, env).pipe(Effect.flip)).requiredPermission).toBe(
+        expect((yield* git.authorize(registry, env).pipe(Effect.flip)).requiredScope).toBe(
           AuthSourceControlWriteScope,
         );
         registry.set(
@@ -224,7 +221,6 @@ it.effect(
           AsyncResult.success({
             ...grant(false),
             scopes: [AuthSourceControlWriteScope],
-            permissions: [AuthSourceControlWriteScope],
           }),
         );
         yield* git.authorize(registry, env);
@@ -245,33 +241,12 @@ it.effect(
           AsyncResult.success({
             ...grant(true),
             scopes: [AuthSourceControlWriteScope, AuthOrchestrationOperateScope],
-            permissions: [AuthSourceControlWriteScope, AuthOrchestrationOperateScope],
           }),
         );
         expect(registry.get(prepare.permissionAtom(env, input))).toBe(true);
         yield* prepare.authorize(registry, env, input);
       }),
     ),
-);
-
-it.effect("honors exact empty permissions and preserves legacy parent grants", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const registry = yield* setup;
-      const git = createCommandPermissions(runtime, WS_METHODS.vcsInit);
-      registry.set(sessions(env), AsyncResult.success({ ...grant(true), permissions: [] }));
-      expect(registry.get(git.permissionAtom(env))).toBe(false);
-      const denied = yield* git.authorize(registry, env).pipe(Effect.flip);
-      expect(denied).toMatchObject({
-        requiredPermission: AuthSourceControlWriteScope,
-        requiredScope: AuthOrchestrationOperateScope,
-      });
-      const { permissions: _exact, ...legacy } = grant(true);
-      registry.set(sessions(env), AsyncResult.success(legacy));
-      expect(registry.get(git.permissionAtom(env))).toBe(true);
-      yield* git.authorize(registry, env);
-    }),
-  ),
 );
 
 it.effect("rejects protected unary and streamed RPCs outside a guarded command", () =>

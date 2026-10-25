@@ -11,9 +11,6 @@ export function webhookAddress(
   endpoint: ScheduledTaskWebhookEndpoint,
   httpBaseUrl: string | null,
 ): WebhookAddress {
-  if (endpoint.url !== null) {
-    return { address: endpoint.url, copyable: true, note: null };
-  }
   if (httpBaseUrl === null) {
     return {
       address: endpoint.path,

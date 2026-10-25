@@ -9,12 +9,8 @@ import {
   type ProviderInteractionMode,
   type ServerSettings,
 } from "@t3tools/contracts";
-import { parseMaxDeliveryAge } from "@t3tools/client-runtime/scheduled-task-webhook";
 
-import {
-  resolveProjectSettings,
-  type LegacyProjectSettingsFields,
-} from "@t3tools/shared/projectSettings";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 
 import type { ResolvedSettingsScope } from "./settingsScope";
@@ -76,7 +72,6 @@ export interface DraftState {
   readonly signaturePrefix: string;
   /** Write-only: empty keeps the secret already stored on the server. */
   readonly signatureSecret: string;
-  readonly maxDeliveryAgeMinutes: string;
 }
 
 export const WEBHOOK_SIGNATURE_DEFAULTS = {
@@ -85,10 +80,8 @@ export const WEBHOOK_SIGNATURE_DEFAULTS = {
   signaturePrefix: "sha256=",
 } as const;
 
-export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedule | null {
+export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedule {
   if (draft.scheduleMode === "webhook") {
-    const maxDeliveryAgeMinutes = parseMaxDeliveryAge(draft.maxDeliveryAgeMinutes);
-    if (maxDeliveryAgeMinutes === undefined) return null;
     const secret = draft.signatureSecret.trim();
     return {
       type: "webhook",
@@ -100,7 +93,6 @@ export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedul
             ...(secret ? { secret } : {}),
           }
         : null,
-      maxDeliveryAgeMinutes,
     };
   }
   if (draft.scheduleMode === "interval") {
@@ -157,16 +149,12 @@ export function taskToDraft(task: ScheduledTask): DraftState {
         }
       : { signatureEnabled: false, ...WEBHOOK_SIGNATURE_DEFAULTS }),
     signatureSecret: "",
-    maxDeliveryAgeMinutes:
-      schedule.type === "webhook" && schedule.maxDeliveryAgeMinutes != null
-        ? String(schedule.maxDeliveryAgeMinutes)
-        : "",
   };
 }
 
 export function scheduledTaskDefaultModel(
   settings: ServerSettings,
-  project: (LegacyProjectSettingsFields & { readonly id: ProjectId }) | null,
+  project: { readonly id: ProjectId } | null,
   entries: readonly ProviderInstanceEntry[],
 ): ModelSelection | null {
   const available = entries.filter(
@@ -176,7 +164,7 @@ export function scheduledTaskDefaultModel(
       entry.isAvailable &&
       entry.snapshot.auth.status !== "unauthenticated",
   );
-  const configured = resolveProjectSettings(settings, project?.id ?? null, project).settings
+  const configured = resolveProjectSettings(settings, project?.id ?? null).settings
     .defaultModelSelection;
   for (const selection of [configured, settings.defaultModelSelection]) {
     if (

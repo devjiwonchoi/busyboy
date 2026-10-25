@@ -1,6 +1,6 @@
 import {
   type AdvertisedEndpoint,
-  type AuthGrantScope,
+  type AuthEnvironmentScope,
   AuthTerminalOperateScope,
   AuthTerminalReadScope,
 } from "@t3tools/contracts";
@@ -11,11 +11,11 @@ import {
  * form keeps `terminal:read` alongside `terminal:operate`.
  */
 export function togglePairingScopeSelection(
-  current: ReadonlyArray<AuthGrantScope>,
-  scope: AuthGrantScope,
+  current: ReadonlyArray<AuthEnvironmentScope>,
+  scope: AuthEnvironmentScope,
   checked: boolean,
-): ReadonlyArray<AuthGrantScope> {
-  const without = (scopes: ReadonlyArray<AuthGrantScope>) =>
+): ReadonlyArray<AuthEnvironmentScope> {
+  const without = (scopes: ReadonlyArray<AuthEnvironmentScope>) =>
     scopes.filter((currentScope) => currentScope !== scope);
   if (!checked) {
     return scope === AuthTerminalReadScope

@@ -1,7 +1,6 @@
 import {
   clientRpcRequiredScopes,
   sessionGrantsScope,
-  authScopeRequiredResponse,
   EnvironmentAuthorizationError,
   type EnvironmentId,
   type AuthSessionState,
@@ -61,7 +60,7 @@ function makeCommandPermissions<R, E>(
           if (missing !== undefined)
             return yield* Effect.fail(
               new EnvironmentAuthorizationError({
-                ...authScopeRequiredResponse(missing),
+                requiredScope: missing,
                 message: `This connection requires ${missing}.`,
               }),
             );

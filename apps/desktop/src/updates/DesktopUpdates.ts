@@ -663,14 +663,11 @@ export const make = Effect.gen(function* () {
     yield* removeUpdateRestartMarker;
     yield* removeInstallRecord;
     yield* Effect.gen(function* () {
-      const instances = yield* pool.list;
-      const restartExit = yield* Effect.forEach(instances, (instance) => instance.start, {
-        concurrency: "unbounded",
-        discard: true,
-      }).pipe(Effect.exit);
+      const primary = yield* pool.primary;
+      const restartExit = yield* primary.start.pipe(Effect.exit);
       yield* updateState((current) => reduceDesktopUpdateStateOnInstallFailure(current, message));
       if (Exit.isFailure(restartExit)) {
-        yield* logUpdaterError("Desktop update install recovery could not restart every backend.");
+        yield* logUpdaterError("Desktop update install recovery could not restart the backend.");
       }
     }).pipe(
       Effect.catchCause(() =>
@@ -734,15 +731,10 @@ export const make = Effect.gen(function* () {
           yield* writeUpdateRestartMarker;
           const { downloadedVersion } = yield* Ref.get(updateStateRef);
           if (downloadedVersion !== null) yield* writeInstallRecord(downloadedVersion);
-          // Stop every backend in the pool, not just the primary. A backend left
-          // up when quitAndInstall's app.quit() exits gets hard-killed by the OS
-          // instead of receiving SIGTERM + grace.
-          const instances = yield* pool.list;
-          yield* Effect.forEach(
-            instances,
-            (instance) => instance.stop({ timeout: Duration.seconds(5) }),
-            { concurrency: "unbounded" },
-          );
+          // A backend left up when quitAndInstall's app.quit() exits gets
+          // hard-killed by the OS instead of receiving SIGTERM + grace.
+          const primary = yield* pool.primary;
+          yield* primary.stop({ timeout: Duration.seconds(5) });
           yield* electronUpdater.quitAndInstall({
             isSilent: true,
             isForceRunAfter: true,

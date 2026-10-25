@@ -1,22 +1,33 @@
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Crypto from "effect/Crypto";
+import * as Effect from "effect/Effect";
 import * as Socket from "effect/socket/Socket";
 
 import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
-import * as RelayTracing from "@t3tools/shared/relayTracing";
 import * as PrimaryEnvironmentHttpClient from "../environments/primary/httpClient";
 import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
-
-import * as Dpop from "../cloud/dpop";
 
 import * as ClientTracer from "../observability/clientTracer";
 
 const layerHttpClient = layerRemoteHttpClient((input, init) => globalThis.fetch(input, init));
 
+const layerCrypto = Layer.succeed(
+  Crypto.Crypto,
+  Crypto.make({
+    randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
+    digest: (algorithm, data) =>
+      Effect.promise(async () => {
+        const input = new Uint8Array(data.length);
+        input.set(data);
+        return new Uint8Array(await globalThis.crypto.subtle.digest(algorithm, input.buffer));
+      }),
+  }),
+);
+
 type RuntimeLayerSource =
   | typeof layerHttpClient
-  | typeof Dpop.layer
+  | typeof layerCrypto
   | typeof Socket.layerWebSocketConstructorGlobal
   | typeof ClientTracer.layer;
 
@@ -43,7 +54,7 @@ export function __setPrimaryHttpRunnerForTests(runner?: PrimaryHttpEffectRunner)
 
 const layerRuntime = Layer.mergeAll(
   layerHttpClient,
-  Dpop.layer,
+  layerCrypto,
   Socket.layerWebSocketConstructorGlobal,
   ClientTracer.layer,
 );

@@ -72,7 +72,6 @@ vi.mock("../state/use-atom-query-runner", () => ({
       : AsyncResult.success({
           authenticated: true,
           scopes: [...(state.scopes.get(environmentId) ?? [])],
-          auth: { serverUpdateScope: "environment:maintain" },
         }),
 }));
 vi.mock("../state/threads", () => ({

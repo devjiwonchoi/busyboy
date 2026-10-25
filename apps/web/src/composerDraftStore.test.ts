@@ -798,7 +798,7 @@ describe("composerDraftStore syncPersistedAttachments", () => {
       {
         version: 2,
         state: {
-          draftsByThreadId: {
+          draftsByThreadKey: {
             [threadId]: {
               attachments: "not-an-array",
             },
@@ -988,7 +988,7 @@ describe("composerDraftStore terminal contexts", () => {
     };
     const mergedState = persistApi.getOptions().merge(
       {
-        draftsByThreadId: {
+        draftsByThreadKey: {
           [threadId]: {
             prompt: INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
             attachments: [],
@@ -1037,7 +1037,7 @@ describe("composerDraftStore terminal contexts", () => {
     };
     const mergedState = persistApi.getOptions().merge(
       {
-        draftsByThreadId: {
+        draftsByThreadKey: {
           [threadId]: {
             prompt: "",
             attachments: "not-an-array",
@@ -2391,36 +2391,6 @@ describe("composerDraftStore per-model sticky options", () => {
 
     expect(useComposerDraftStore.getState().stickyOptionsByModelByProvider).toEqual({});
   });
-
-  it("seeds per-model memory from a persisted sticky selection on upgrade", () => {
-    const persistApi = useComposerDraftStore.persist as unknown as {
-      getOptions: () => {
-        merge: (
-          persistedState: unknown,
-          currentState: ReturnType<typeof useComposerDraftStore.getState>,
-        ) => Pick<
-          ReturnType<typeof useComposerDraftStore.getState>,
-          "stickyModelSelectionByProvider" | "stickyOptionsByModelByProvider"
-        >;
-      };
-    };
-    const mergedState = persistApi.getOptions().merge(
-      {
-        stickyModelSelectionByProvider: {
-          [CODEX_INSTANCE]: {
-            instanceId: CODEX_INSTANCE,
-            model: "gpt-5.3-codex",
-            options: [{ id: "reasoningEffort", value: "low" }],
-          },
-        },
-      },
-      useComposerDraftStore.getInitialState(),
-    );
-
-    expect(mergedState.stickyOptionsByModelByProvider).toEqual({
-      [CODEX_INSTANCE]: { "gpt-5.3-codex": [{ id: "reasoningEffort", value: "low" }] },
-    });
-  });
 });
 
 describe("composerDraftStore setModelSelection", () => {
@@ -2561,257 +2531,6 @@ describe("composerDraftStore sticky composer settings", () => {
     store.applyStickyState(draftId);
 
     expect(draftByKey(draftId)).toBeUndefined();
-  });
-});
-
-describe("composerDraftStore model seed migration", () => {
-  const staleDraftId = DraftId.make("draft-legacy-stale-model");
-  const explicitDraftId = DraftId.make("draft-legacy-explicit-model");
-  const typedDraftId = DraftId.make("draft-legacy-typed-model");
-  const staleThreadId = ThreadId.make("thread-legacy-stale-model");
-  const explicitThreadId = ThreadId.make("thread-legacy-explicit-model");
-  const typedThreadId = ThreadId.make("thread-legacy-typed-model");
-  const serverThreadId = ThreadId.make("thread-server-model");
-  const serverThreadKey = scopedThreadKey(scopeThreadRef(TEST_ENVIRONMENT_ID, serverThreadId));
-  const projectId = ProjectId.make("project-model-migration");
-  const logicalProjectKey = `${TEST_ENVIRONMENT_ID}:/tmp/project-model-migration`;
-
-  const draftThread = (threadId: ThreadId) => ({
-    threadId,
-    environmentId: TEST_ENVIRONMENT_ID,
-    projectId,
-    logicalProjectKey,
-    createdAt: "2026-08-01T00:00:00.000Z",
-    runtimeMode: "full-access",
-    interactionMode: "default",
-    branch: null,
-    worktreePath: null,
-    envMode: "local",
-    startFromOrigin: false,
-    promotedTo: null,
-  });
-
-  beforeEach(async () => {
-    resetComposerDraftStore();
-    await useComposerDraftStore.persist.clearStorage();
-  });
-
-  afterEach(async () => {
-    await useComposerDraftStore.persist.clearStorage();
-  });
-
-  it.each([1, 2])(
-    "keeps the legacy sticky Codex selection when v%s storage omitted the provider",
-    async (version) => {
-      vi.useFakeTimers();
-      try {
-        const stickySelection = modelSelection(CODEX_DRIVER, "gpt-5.6-terra", {
-          reasoningEffort: "xhigh",
-        });
-        const storage = useComposerDraftStore.persist.getOptions().storage;
-        expect(storage).toBeDefined();
-        storage?.setItem(COMPOSER_DRAFT_STORAGE_KEY, {
-          version,
-          state: {
-            draftsByThreadId: {},
-            draftThreadsByThreadId: {},
-            projectDraftThreadIdByProjectId: {},
-            stickyModel: stickySelection.model,
-            stickyModelOptions: providerModelOptions({
-              [CODEX_DRIVER]: { reasoningEffort: "xhigh" },
-            }),
-          },
-        } as never);
-        await vi.advanceTimersByTimeAsync(300);
-
-        await useComposerDraftStore.persist.rehydrate();
-
-        expect(useComposerDraftStore.getState()).toMatchObject({
-          stickyModelSelectionByProvider: { [CODEX_INSTANCE]: stickySelection },
-          stickyActiveProvider: null,
-        });
-      } finally {
-        vi.useRealTimers();
-      }
-    },
-  );
-
-  it("strips seeded models only from empty draft sessions when upgrading storage", async () => {
-    vi.useFakeTimers();
-    try {
-      const staleSelection = modelSelection(CODEX_DRIVER, "gpt-5.4");
-      const stickySelection = modelSelection(CODEX_DRIVER, "gpt-5.6-terra", {
-        reasoningEffort: "xhigh",
-      });
-      const storage = useComposerDraftStore.persist.getOptions().storage;
-      expect(storage).toBeDefined();
-      storage?.setItem(COMPOSER_DRAFT_STORAGE_KEY, {
-        version: 8,
-        state: {
-          draftsByThreadKey: {
-            [staleDraftId]: {
-              prompt: "",
-              attachments: [],
-              modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-              activeProvider: CODEX_INSTANCE,
-              runtimeMode: "approval-required",
-            },
-            [typedDraftId]: {
-              prompt: "keep this prompt",
-              attachments: [],
-              modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-              activeProvider: CODEX_INSTANCE,
-            },
-            [explicitDraftId]: {
-              prompt: "",
-              attachments: [],
-              modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-              activeProvider: CODEX_INSTANCE,
-              modelSelectionExplicit: true,
-            },
-            [serverThreadKey]: {
-              prompt: "",
-              attachments: [],
-              modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-              activeProvider: CODEX_INSTANCE,
-            },
-          },
-          draftThreadsByThreadKey: {
-            [staleDraftId]: draftThread(staleThreadId),
-            [explicitDraftId]: draftThread(explicitThreadId),
-            [typedDraftId]: draftThread(typedThreadId),
-          },
-          logicalProjectDraftThreadKeyByLogicalProjectKey: {
-            [logicalProjectKey]: staleDraftId,
-          },
-          stickyModelSelectionByProvider: { [CODEX_INSTANCE]: stickySelection },
-          stickyActiveProvider: CODEX_INSTANCE,
-        },
-      } as never);
-      await vi.advanceTimersByTimeAsync(300);
-
-      await useComposerDraftStore.persist.rehydrate();
-
-      expect(draftByKey(staleDraftId)).toMatchObject({
-        modelSelectionByProvider: {},
-        activeProvider: null,
-        runtimeMode: "approval-required",
-      });
-      expect(draftByKey(typedDraftId)).toMatchObject({
-        prompt: "keep this prompt",
-        modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-        activeProvider: CODEX_INSTANCE,
-      });
-      expect(draftByKey(explicitDraftId)).toMatchObject({
-        modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-        activeProvider: CODEX_INSTANCE,
-        modelSelectionExplicit: true,
-      });
-      expect(draftByKey(serverThreadKey)).toMatchObject({
-        modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-        activeProvider: CODEX_INSTANCE,
-      });
-      expect(useComposerDraftStore.getState().draftThreadsByThreadKey[staleDraftId]).toMatchObject({
-        environmentId: TEST_ENVIRONMENT_ID,
-        projectId,
-        logicalProjectKey,
-      });
-      expect(useComposerDraftStore.getState()).toMatchObject({
-        stickyModelSelectionByProvider: { [CODEX_INSTANCE]: stickySelection },
-        stickyActiveProvider: CODEX_INSTANCE,
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("keeps v8 file-only draft sessions and their seeded models", async () => {
-    vi.useFakeTimers();
-    try {
-      const uploadedDraftId = DraftId.make("draft-legacy-uploaded-file");
-      const markerDraftId = DraftId.make("draft-legacy-file-marker");
-      const uploadedThreadId = ThreadId.make("thread-legacy-uploaded-file");
-      const markerThreadId = ThreadId.make("thread-legacy-file-marker");
-      const staleSelection = modelSelection(CODEX_DRIVER, "gpt-5.4");
-      const storage = useComposerDraftStore.persist.getOptions().storage;
-      expect(storage).toBeDefined();
-      storage?.setItem(COMPOSER_DRAFT_STORAGE_KEY, {
-        version: 8,
-        state: {
-          draftsByThreadKey: {
-            [uploadedDraftId]: {
-              prompt: "",
-              attachments: [],
-              files: [
-                {
-                  id: "file-uploaded",
-                  name: "uploaded-report.pdf",
-                  mimeType: "application/pdf",
-                  sizeBytes: 128,
-                  attachmentId: "attachment-uploaded",
-                  environmentId: TEST_ENVIRONMENT_ID,
-                },
-              ],
-              modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-              activeProvider: CODEX_INSTANCE,
-            },
-            [markerDraftId]: {
-              prompt: "",
-              attachments: [],
-              files: [
-                {
-                  id: "file-needs-reattach",
-                  name: "local-notes.txt",
-                  mimeType: "text/plain",
-                  sizeBytes: 64,
-                },
-              ],
-              modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-              activeProvider: CODEX_INSTANCE,
-              runtimeMode: "approval-required",
-            },
-          },
-          draftThreadsByThreadKey: {
-            [uploadedDraftId]: draftThread(uploadedThreadId),
-            [markerDraftId]: draftThread(markerThreadId),
-          },
-          logicalProjectDraftThreadKeyByLogicalProjectKey: {},
-          stickyModelSelectionByProvider: {},
-          stickyActiveProvider: null,
-        },
-      } as never);
-      await vi.advanceTimersByTimeAsync(300);
-
-      await useComposerDraftStore.persist.rehydrate();
-
-      expect(draftByKey(uploadedDraftId)).toMatchObject({
-        files: [
-          {
-            id: "file-uploaded",
-            name: "uploaded-report.pdf",
-            uploadedAttachmentId: "attachment-uploaded",
-            uploadEnvironmentId: TEST_ENVIRONMENT_ID,
-          },
-        ],
-        modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-        activeProvider: CODEX_INSTANCE,
-      });
-      expect(draftByKey(markerDraftId)).toMatchObject({
-        files: [
-          {
-            id: "file-needs-reattach",
-            name: "local-notes.txt",
-            file: null,
-          },
-        ],
-        modelSelectionByProvider: { [CODEX_INSTANCE]: staleSelection },
-        activeProvider: CODEX_INSTANCE,
-        runtimeMode: "approval-required",
-      });
-      expect(draftByKey(markerDraftId)?.files.every(composerFileNeedsReattach)).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 
@@ -3269,7 +2988,7 @@ describe("composerDraftStore inline context references", () => {
     };
     const mergedState = persistApi.getOptions().merge(
       {
-        draftsByThreadId: {
+        draftsByThreadKey: {
           [threadId]: {
             prompt: "old draft",
             attachments: [],
@@ -3423,42 +3142,6 @@ describe("composerDraftStore attachment references", () => {
     },
   );
 
-  it.each(["", "Fix this"])("migrates saved element context with prompt %j", (prompt) => {
-    const element = {
-      id: "old-element",
-      threadId,
-      pickedAt: "2026-01-01T00:00:00Z",
-      pageUrl: "https://example.com",
-      pageTitle: "Example",
-      tagName: "button",
-      selector: "#save",
-      htmlPreview: "<button>Save</button>",
-      componentName: "SaveButton",
-      source: null,
-      styles: "color: red;",
-    };
-    const merged = useComposerDraftStore.persist.getOptions().merge!(
-      {
-        draftsByThreadKey: {
-          [threadKeyFor(threadId, TEST_ENVIRONMENT_ID)]: {
-            prompt,
-            attachments: [],
-            elementContexts: [element],
-          },
-        },
-      },
-      useComposerDraftStore.getInitialState(),
-    );
-    const draft = merged.draftsByThreadKey[threadKeyFor(threadId, TEST_ENVIRONMENT_ID)]!;
-    expect(draft.previewAnnotations[0]?.elements[0]?.element).toMatchObject({
-      htmlPreview: element.htmlPreview,
-      styles: element.styles,
-      selector: element.selector,
-    });
-    expect(draft.prompt).toContain("t3-context://v1/preview-annotation/");
-    expect(draft.prompt).toContain(prompt);
-  });
-
   it("appends chips for persisted files that predate references", () => {
     const persistApi = useComposerDraftStore.persist as unknown as {
       getOptions: () => {
@@ -3470,7 +3153,7 @@ describe("composerDraftStore attachment references", () => {
     };
     const mergedState = persistApi.getOptions().merge(
       {
-        draftsByThreadId: {
+        draftsByThreadKey: {
           [threadId]: {
             prompt: "old",
             attachments: [],

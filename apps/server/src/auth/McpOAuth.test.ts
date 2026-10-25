@@ -418,23 +418,6 @@ it.live(
         const approveWith = (code: string) =>
           decide(handler, params, { _tag: "pairing-code", access: "auto", code });
 
-        const bound = yield* auth.createPairingLink({
-          proofKeyThumbprint: "device-key-thumbprint",
-        });
-        expect((yield* approveWith(bound.credential)).status).toBe(400);
-        const stillValid = yield* auth
-          .exchangeBootstrapCredentialForAccessToken(
-            bound.credential,
-            undefined,
-            { deviceType: "mobile" },
-            { proofKeyThumbprint: "device-key-thumbprint" },
-          )
-          .pipe(
-            Effect.as(true),
-            Effect.orElseSucceed(() => false),
-          );
-        expect(stillValid).toBe(true);
-
         const readOnly = yield* auth.issuePairingCredential({ scopes: ["orchestration:read"] });
         const readOnlyResponse = yield* approveWith(readOnly.credential);
         expect(readOnlyResponse.status).toBe(400);

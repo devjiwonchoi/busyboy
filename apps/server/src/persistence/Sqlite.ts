@@ -6,7 +6,6 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { runMigrations } from "./Migrations.ts";
-import { initializeV2Database } from "./initializeV2Database.ts";
 import * as ServerConfig from "../config.ts";
 
 export const WAL_SIZE_LIMIT_BYTES = 32 * 1024 * 1024;
@@ -70,7 +69,6 @@ export const layerMemory = Layer.provideMerge(
 export const layerConfig = Layer.unwrap(
   Effect.gen(function* () {
     const { dbPath } = yield* ServerConfig.ServerConfig;
-    yield* initializeV2Database(dbPath);
     return layerFromPath(dbPath);
   }),
 );

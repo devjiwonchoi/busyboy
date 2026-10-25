@@ -63,13 +63,11 @@ describe("DesktopLocalEnvironmentAuth", () => {
         ),
       );
       const layerPool = Layer.succeed(DesktopBackendPool.DesktopBackendPool, {
-        list: Effect.succeed([
-          {
-            id: PRIMARY_LOCAL_ENVIRONMENT_ID,
-            label: Effect.succeed("Windows"),
-            currentConfig: Effect.succeedSome(config),
-          },
-        ]),
+        primary: Effect.succeed({
+          id: PRIMARY_LOCAL_ENVIRONMENT_ID,
+          label: Effect.succeed("Windows"),
+          currentConfig: Effect.succeedSome(config),
+        }),
       } as unknown as DesktopBackendPool.DesktopBackendPool["Service"]);
       const layerTest = DesktopLocalEnvironmentAuth.layer.pipe(
         Layer.provide(Layer.mergeAll(layerPool, layerHttpClient)),
@@ -116,16 +114,14 @@ describe("DesktopLocalEnvironmentAuth", () => {
           }),
         );
         const poolLayer = Layer.succeed(DesktopBackendPool.DesktopBackendPool, {
-          list: Effect.succeed([
-            {
-              id: PRIMARY_LOCAL_ENVIRONMENT_ID,
-              label: Effect.succeed("Windows"),
-              currentConfig: Effect.succeedSome({
-                ...config,
-                bootstrap: { ...config.bootstrap, desktopBootstrapSecret: "desktop-secret" },
-              }),
-            },
-          ]),
+          primary: Effect.succeed({
+            id: PRIMARY_LOCAL_ENVIRONMENT_ID,
+            label: Effect.succeed("Windows"),
+            currentConfig: Effect.succeedSome({
+              ...config,
+              bootstrap: { ...config.bootstrap, desktopBootstrapSecret: "desktop-secret" },
+            }),
+          }),
         } as unknown as DesktopBackendPool.DesktopBackendPool["Service"]);
 
         yield* TestClock.setTime(DESKTOP_BOOTSTRAP_TOKEN_WINDOW_MS * 2 + 1);
@@ -162,13 +158,11 @@ describe("DesktopLocalEnvironmentAuth", () => {
       ),
     );
   const layerPool = Layer.succeed(DesktopBackendPool.DesktopBackendPool, {
-    list: Effect.succeed([
-      {
-        id: PRIMARY_LOCAL_ENVIRONMENT_ID,
-        label: Effect.succeed("Windows"),
-        currentConfig: Effect.succeedSome(config),
-      },
-    ]),
+    primary: Effect.succeed({
+      id: PRIMARY_LOCAL_ENVIRONMENT_ID,
+      label: Effect.succeed("Windows"),
+      currentConfig: Effect.succeedSome(config),
+    }),
   } as unknown as DesktopBackendPool.DesktopBackendPool["Service"]);
   const makeExchange = (failures: number, failure: () => Response) =>
     Effect.gen(function* () {

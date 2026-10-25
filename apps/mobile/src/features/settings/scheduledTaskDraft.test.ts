@@ -36,20 +36,6 @@ describe("scheduleDraftForTask", () => {
     expect(scheduleFromDraft(draft)).toEqual({
       type: "webhook",
       signature: null,
-      maxDeliveryAgeMinutes: null,
-    });
-  });
-
-  it("round-trips a webhook max age and treats blank input as no limit", () => {
-    const draft = scheduleDraftForTask({
-      schedule: { type: "webhook", signature: null, maxDeliveryAgeMinutes: 45 },
-    });
-    expect(draft.maxDeliveryAgeMinutes).toBe("45");
-    expect(scheduleFromDraft(draft)).toMatchObject({ maxDeliveryAgeMinutes: 45 });
-    expect(scheduleFromDraft({ ...draft, maxDeliveryAgeMinutes: "1.5" })).toBeNull();
-    expect(scheduleFromDraft({ ...draft, maxDeliveryAgeMinutes: "0" })).toBeNull();
-    expect(scheduleFromDraft({ ...draft, maxDeliveryAgeMinutes: "" })).toMatchObject({
-      maxDeliveryAgeMinutes: null,
     });
   });
 
@@ -62,7 +48,7 @@ describe("scheduleDraftForTask", () => {
     const saved = scheduleFromDraft(
       scheduleDraftForTask({ schedule: { type: "webhook", signature } }),
     );
-    expect(saved).toEqual({ type: "webhook", signature, maxDeliveryAgeMinutes: null });
+    expect(saved).toEqual({ type: "webhook", signature });
     expect(saved?.type === "webhook" && saved.signature && "secret" in saved.signature).toBe(false);
   });
 });
@@ -300,9 +286,6 @@ describe("scheduled task model defaults", () => {
     expect(resolve(config, { id: projectId })).toEqual(environmentSelection);
   });
   it("prefers the project's configured model", () => {
-    expect(resolve(config, { id: projectId, defaultModelSelection: projectSelection })).toEqual(
-      projectSelection,
-    );
     expect(
       resolve(
         {
@@ -325,13 +308,23 @@ describe("scheduled task model defaults", () => {
   });
   it("falls back to the environment default when the project provider is unavailable", () => {
     expect(
-      resolve(config, {
-        id: projectId,
-        defaultModelSelection: {
-          instanceId: ProviderInstanceId.make("unavailable"),
-          model: "missing",
+      resolve(
+        {
+          ...config,
+          settings: {
+            ...config.settings,
+            projectSettingsOverrides: {
+              [projectId]: {
+                defaultModelSelection: {
+                  instanceId: ProviderInstanceId.make("unavailable"),
+                  model: "missing",
+                },
+              },
+            },
+          },
         },
-      }),
+        { id: projectId },
+      ),
     ).toEqual(environmentSelection);
   });
   it("does not choose an implicit model on a disabled provider", () => {

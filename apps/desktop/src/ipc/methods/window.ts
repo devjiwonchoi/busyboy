@@ -7,7 +7,6 @@ import {
   EditorId,
   PickedThemeFileSchema,
   PickFolderOptionsSchema,
-  PRIMARY_LOCAL_ENVIRONMENT_ID,
   REMOTE_CAPABLE_EDITOR_IDS,
   SystemSettingsPaneSchema,
   type DesktopEnvironmentBootstrap,
@@ -83,53 +82,31 @@ export const getWindowFullscreenState = DesktopIpc.makeSyncIpcMethod({
   }),
 });
 
-export const getLocalEnvironmentBootstraps = DesktopIpc.makeSyncIpcMethod({
-  channel: IpcChannels.GET_LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANNEL,
-  result: Schema.Array(DesktopEnvironmentBootstrapSchema),
-  handler: Effect.fn("desktop.ipc.window.getLocalEnvironmentBootstraps")(function* () {
+export const getLocalEnvironmentBootstrap = DesktopIpc.makeSyncIpcMethod({
+  channel: IpcChannels.GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL,
+  result: Schema.NullOr(DesktopEnvironmentBootstrapSchema),
+  handler: Effect.fn("desktop.ipc.window.getLocalEnvironmentBootstrap")(function* () {
     const pool = yield* DesktopBackendPool.DesktopBackendPool;
     const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
-    const instances = yield* pool.list;
-    const bootstraps: DesktopEnvironmentBootstrap[] = [];
-    for (const instance of instances) {
-      const isPrimary = instance.id === PRIMARY_LOCAL_ENVIRONMENT_ID;
-      const config = yield* instance.currentConfig;
-      const snapshot = yield* instance.snapshot;
-      if (Option.isNone(config) || Option.isSome(config.value.preflightFailure)) {
-        const fatalPreflight =
-          Option.isSome(config) &&
-          Option.isSome(config.value.preflightFailure) &&
-          config.value.preflightFailure.value.fatal;
-        const stoppedPreflight =
-          Option.isSome(config) &&
-          Option.isSome(config.value.preflightFailure) &&
-          (!snapshot.desiredRunning || !snapshot.restartScheduled);
-        if (isPrimary || fatalPreflight || stoppedPreflight) continue;
-        bootstraps.push({
-          id: instance.id,
-          label: yield* instance.label,
-          httpBaseUrl: null,
-          wsBaseUrl: null,
-        });
-        continue;
-      }
-      const { bootstrap, httpBaseUrl } = config.value;
-      bootstraps.push({
-        id: instance.id,
-        label: yield* instance.label,
-        httpBaseUrl: httpBaseUrl.href,
-        wsBaseUrl: toWebSocketBaseUrl(httpBaseUrl),
-        // A backend launched with the desktop secret accepts whichever token the secret derives
-        // for the current window, so hand out that one rather than the token frozen into its
-        // launch config.
-        ...(bootstrap.desktopBootstrapSecret
-          ? { bootstrapToken: yield* configuration.currentBootstrapToken }
-          : bootstrap.desktopBootstrapToken
-            ? { bootstrapToken: bootstrap.desktopBootstrapToken }
-            : {}),
-      });
+    const primary = yield* pool.primary;
+    const config = yield* primary.currentConfig;
+    if (Option.isNone(config) || Option.isSome(config.value.preflightFailure)) {
+      return null;
     }
-    return bootstraps;
+    const { bootstrap, httpBaseUrl } = config.value;
+    return {
+      label: yield* primary.label,
+      httpBaseUrl: httpBaseUrl.href,
+      wsBaseUrl: toWebSocketBaseUrl(httpBaseUrl),
+      // A backend launched with the desktop secret accepts whichever token the secret derives
+      // for the current window, so hand out that one rather than the token frozen into its
+      // launch config.
+      ...(bootstrap.desktopBootstrapSecret
+        ? { bootstrapToken: yield* configuration.currentBootstrapToken }
+        : bootstrap.desktopBootstrapToken
+          ? { bootstrapToken: bootstrap.desktopBootstrapToken }
+          : {}),
+    } satisfies DesktopEnvironmentBootstrap;
   }),
 });
 

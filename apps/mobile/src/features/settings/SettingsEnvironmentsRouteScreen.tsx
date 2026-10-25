@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { LocalEnvironmentList } from "../connection/LocalEnvironmentList";
 import { GitHubRoutingSettings } from "../connection/GitHubRoutingSettings";
-import { splitEnvironmentSections } from "../connection/environmentSections";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import {
@@ -27,13 +26,9 @@ export function SettingsEnvironmentsRouteScreen() {
   } = useRemoteConnections();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const environmentSections = splitEnvironmentSections({
-    connectedEnvironments,
-    cloudEnvironments: null,
-  });
   const localEnvironments = SHOWCASE_ENABLED
-    ? applyShowcaseLocalEnvironmentDisplayUrls(environmentSections.localEnvironments)
-    : environmentSections.localEnvironments;
+    ? applyShowcaseLocalEnvironmentDisplayUrls(connectedEnvironments)
+    : connectedEnvironments;
   const headerIconColor = useUniwindTheme()["--color-icon"];
   const openEnvironment = useCallback(
     (environmentId: EnvironmentId) => {
@@ -50,7 +45,7 @@ export function SettingsEnvironmentsRouteScreen() {
       updates: { readonly label: string; readonly displayUrl: string },
     ) => {
       if (!SHOWCASE_ENABLED) return onUpdateEnvironment(environmentId, updates);
-      const actualEnvironment = environmentSections.localEnvironments.find(
+      const actualEnvironment = connectedEnvironments.find(
         (environment) => environment.environmentId === environmentId,
       );
       const presentedEnvironment = localEnvironments.find(
@@ -68,7 +63,7 @@ export function SettingsEnvironmentsRouteScreen() {
             : updates.displayUrl,
       });
     },
-    [environmentSections.localEnvironments, localEnvironments, onUpdateEnvironment],
+    [connectedEnvironments, localEnvironments, onUpdateEnvironment],
   );
 
   return (

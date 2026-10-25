@@ -1503,7 +1503,7 @@ describe("DesktopBackendManager", () => {
     ),
   );
 
-  it.effect("stopAllPoolInstances bounds the quit finalizer when backends hang", () =>
+  it.effect("stopBackend bounds the quit finalizer when the backend hangs", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const teardownStarted = yield* Queue.unbounded<string>();
@@ -1532,34 +1532,25 @@ describe("DesktopBackendManager", () => {
             httpClientLayer: layerHttpClient(() => Effect.never),
           });
 
-        const instance1 = yield* makeInstance("instance1");
-        const instance2 = yield* makeInstance("instance2");
+        const instance = yield* makeInstance("primary");
+        yield* instance.start;
 
-        yield* instance1.start;
-        yield* instance2.start;
-
-        const layerMockPool = Layer.succeed(DesktopBackendPool.DesktopBackendPool, {
-          list: Effect.succeed([instance1, instance2]),
-          get: () => Effect.succeedNone,
-          primary: Effect.die(new Error("primary not implemented")),
-          register: () => Effect.die(new Error("register not implemented")),
-          unregister: () => Effect.die(new Error("unregister not implemented")),
-        });
+        const layerMockPool = DesktopBackendPool.layerTest(instance);
 
         const quitFiber = yield* Effect.scoped(
-          Effect.addFinalizer(() => DesktopApp.stopAllPoolInstances()),
+          Effect.addFinalizer(() => DesktopApp.stopBackend()),
         ).pipe(Effect.provide(layerMockPool), Effect.forkChild);
 
-        const started = yield* Queue.takeN(teardownStarted, 2);
-        assert.deepEqual(started.toSorted(), ["instance1", "instance2"]);
+        const started = yield* Queue.takeN(teardownStarted, 1);
+        assert.deepEqual(started, ["primary"]);
 
         yield* TestClock.adjust(Duration.seconds(5));
         yield* Fiber.join(quitFiber);
         assert.equal(yield* Queue.size(teardownFinished), 0);
 
         yield* Deferred.succeed(allowTeardown, undefined);
-        const finished = yield* Queue.takeN(teardownFinished, 2);
-        assert.deepEqual(finished.toSorted(), ["instance1", "instance2"]);
+        const finished = yield* Queue.takeN(teardownFinished, 1);
+        assert.deepEqual(finished, ["primary"]);
       }).pipe(Effect.provide(TestClock.layer())),
     ),
   );

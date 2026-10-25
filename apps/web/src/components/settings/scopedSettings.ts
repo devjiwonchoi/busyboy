@@ -95,7 +95,7 @@ export function resolveScopedSettingsTargets(
       const resolved =
         projectFile === undefined
           ? resolveProjectSettings(environment.serverConfig.settings, member.id)
-          : resolveProjectSettings(environment.serverConfig.settings, member.id, null, projectFile);
+          : resolveProjectSettings(environment.serverConfig.settings, member.id, projectFile);
       return [
         {
           environmentId: member.environmentId,

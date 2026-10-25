@@ -287,11 +287,10 @@ const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
         projectId: project.id,
         title: "New thread",
         modelSelection:
-          resolveProjectSettings(settings, project.id, project).settings.defaultModelSelection ??
+          resolveProjectSettings(settings, project.id).settings.defaultModelSelection ??
           threadModelSelection,
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: resolveProjectSettings(settings, project.id, project).settings
-          .defaultRuntimeMode,
+        runtimeMode: resolveProjectSettings(settings, project.id).settings.defaultRuntimeMode,
         workspaceStrategy: { type: "root" },
         createdBy: "system",
         creationSource: "server",

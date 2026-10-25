@@ -1,17 +1,9 @@
 import {
   DEFAULT_SERVER_SETTINGS,
   ModelSelection,
-  ProjectId,
-  ProjectScript,
-  ProjectSettingsOverrides,
-  type ProviderInstanceConfig,
   type ProviderInstanceMutation,
-  defaultInstanceIdForDriver,
-  isProviderDriverKind,
   ProviderDriverKind,
-  ProviderInstanceId,
   resolveProviderInstanceEnabled,
-  ResponseStreamingMode,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
@@ -31,11 +23,9 @@ import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as SqlClient from "effect/sql/SqlClient";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 import * as ServerConfig from "./config.ts";
@@ -43,17 +33,12 @@ import { type DeepPartial, deepMerge } from "@t3tools/shared/Struct";
 import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
 import {
   applyServerSettingsPatch,
-  deriveLegacyProjectOverrides,
   fallbackTextGenerationModelSelection,
   isModelSelectionProviderEnabled,
 } from "@t3tools/shared/serverSettings";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
-import {
-  readSecretFieldValues,
-  sourceControlHostSecretName,
-} from "./sourceControl/sourceControlHostSecrets.ts";
 
-import { mapSettingsSecrets, SECRET_REDACTED, type SettingsSecret } from "./settingsSecrets.ts";
+import { mapSettingsSecrets, type SettingsSecret } from "./settingsSecrets.ts";
 
 export {
   resolveReviewGuideModelSelection,
@@ -67,57 +52,11 @@ const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-/**
- * Old settings files can hold both flags with conflicting values; an explicit false on either
- * side wins so a user's disable is never silently undone.
- */
-const foldProviderInstanceEnabledFlags = (settings: ServerSettings): ServerSettings => {
-  let changed = false;
-  const providerInstances: Record<string, ProviderInstanceConfig> = {};
-  for (const [instanceId, instance] of Object.entries(settings.providerInstances)) {
-    const config = instance.config;
-    // Only fold boolean flags: a malformed `enabled` (e.g. `"false"`) must
-    // stay in the blob so driver schema validation flags it instead of the
-    // fold silently repairing the config.
-    if (
-      config === null ||
-      typeof config !== "object" ||
-      Array.isArray(config) ||
-      typeof (config as { readonly enabled?: unknown }).enabled !== "boolean"
-    ) {
-      providerInstances[instanceId] = instance;
-      continue;
-    }
-    const { enabled: configEnabled, ...restConfig } = config as Record<string, unknown> & {
-      readonly enabled: boolean;
-    };
-    const resolved =
-      instance.enabled === false || configEnabled === false
-        ? false
-        : (instance.enabled ?? configEnabled);
-    changed = true;
-    providerInstances[instanceId] = {
-      ...instance,
-      enabled: resolved,
-      config: restConfig,
-    } satisfies ProviderInstanceConfig;
-  }
-  if (!changed) {
-    return settings;
-  }
-  return {
-    ...settings,
-    providerInstances: providerInstances as ServerSettings["providerInstances"],
-  };
-};
-
 const normalizeServerSettings = (
   settings: ServerSettings,
 ): Effect.Effect<ServerSettings, ServerSettingsError> =>
   encodeServerSettings(settings).pipe(
     Effect.flatMap(decodeServerSettings),
-    Effect.map(foldProviderInstanceEnabledFlags),
-    Effect.map((next) => ({ ...next, ...deriveLegacyProjectOverrides(next) })),
     Effect.mapError(
       (cause) =>
         new ServerSettingsError({
@@ -263,135 +202,8 @@ const makeTest = (overrides: DeepPartial<ServerSettings> = {}) =>
 export const layerTest = (overrides: DeepPartial<ServerSettings> = {}) =>
   Layer.effect(ServerSettingsService, makeTest(overrides));
 
-// Migrate saved token delivery without accepting it in settings writes or
-// letting one retired value reset the rest of the environment's settings.
-const PersistedResponseStreamingMode = Schema.Union([
-  ResponseStreamingMode,
-  Schema.Literal("token"),
-]).pipe(
-  Schema.decodeTo(
-    ResponseStreamingMode,
-    SchemaTransformation.transform({
-      decode: (mode) => (mode === "token" ? "paragraph" : mode),
-      encode: (mode) => mode,
-    }),
-  ),
-);
-const ServerSettingsJson = fromLenientJson(
-  Schema.Struct({
-    ...ServerSettings.fields,
-    responseStreamingMode: PersistedResponseStreamingMode.pipe(
-      Schema.withDecodingDefault(Effect.succeed("paragraph" as const)),
-    ),
-    projectSettingsOverrides: Schema.Record(
-      ProjectId,
-      Schema.Struct({
-        ...ProjectSettingsOverrides.fields,
-        responseStreamingMode: Schema.optionalKey(PersistedResponseStreamingMode),
-      }),
-    ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
-  }),
-);
+const ServerSettingsJson = fromLenientJson(ServerSettings);
 const decodeServerSettingsJsonExit = Schema.decodeUnknownExit(ServerSettingsJson);
-const LegacyProviderSettingsJson = fromLenientJson(
-  Schema.Struct({
-    providers: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
-    github: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
-  }),
-);
-const decodeLegacyProviderSettingsJsonExit = Schema.decodeUnknownExit(LegacyProviderSettingsJson);
-
-const legacyGitHubTokenSecretName = (host: string) =>
-  `github-token-${Buffer.from(host.trim().toLowerCase(), "utf8").toString("base64url")}`;
-
-function migrateLegacySourceControlSettings(
-  settings: ServerSettings,
-  legacy: {
-    readonly github?: Readonly<Record<string, unknown>> | undefined;
-  },
-): {
-  readonly settings: ServerSettings;
-  readonly secretMoves: ReadonlyArray<{ readonly from: string; readonly to: string }>;
-} {
-  const sourceControlHosts = { ...settings.sourceControlHosts };
-  const secretMoves: Array<{ readonly from: string; readonly to: string }> = [];
-  if (legacy.github !== undefined && sourceControlHosts.github === undefined) {
-    sourceControlHosts.github = legacy.github;
-    for (const [serverHost, value] of readSecretFieldValues(legacy.github.tokens)) {
-      if (serverHost === null || value !== SECRET_REDACTED) continue;
-      secretMoves.push({
-        from: legacyGitHubTokenSecretName(serverHost),
-        to: sourceControlHostSecretName({ kind: "github", field: "tokens", serverHost }),
-      });
-    }
-  }
-  return { settings: { ...settings, sourceControlHosts }, secretMoves };
-}
-
-const HISTORY_RESTORED_DRIVERS: ReadonlySet<ProviderDriverKind> = new Set(
-  ["grok"].map((driver) => ProviderDriverKind.make(driver)),
-);
-
-function migrateLegacyProviderSettings(
-  settings: ServerSettings,
-  legacyProviders: Readonly<Record<string, unknown>>,
-  providerHistory: ReadonlyArray<{
-    readonly providerName: string;
-    readonly providerInstanceId: string | null;
-  }>,
-): ServerSettings {
-  const usedProviders = new Set<string>(providerHistory.map(({ providerName }) => providerName));
-  const usedProviderInstances = new Set<string>(
-    providerHistory.map(
-      ({ providerName, providerInstanceId }) => providerInstanceId ?? providerName,
-    ),
-  );
-
-  const providerInstances: Record<ProviderInstanceId, ProviderInstanceConfig> = {};
-  for (const [instanceId, instance] of Object.entries(settings.providerInstances) as Array<
-    [ProviderInstanceId, ProviderInstanceConfig]
-  >) {
-    providerInstances[instanceId] =
-      instance.enabled === undefined &&
-      HISTORY_RESTORED_DRIVERS.has(instance.driver) &&
-      usedProviderInstances.has(instanceId)
-        ? { ...instance, enabled: true }
-        : instance;
-  }
-
-  const legacyEntries = new Map(Object.entries(legacyProviders));
-  for (const driver of HISTORY_RESTORED_DRIVERS) {
-    if (!legacyEntries.has(driver)) legacyEntries.set(driver, {});
-  }
-  for (const [kind, blob] of legacyEntries) {
-    if (!isProviderDriverKind(kind) || blob === null || typeof blob !== "object") continue;
-    if (Array.isArray(blob)) continue;
-    const driver = kind;
-    const instanceId = defaultInstanceIdForDriver(driver);
-    if (Object.hasOwn(providerInstances, instanceId)) continue;
-
-    const { enabled: rawEnabled, ...config } = blob as Record<string, unknown>;
-    const explicitEnabled = typeof rawEnabled === "boolean" ? rawEnabled : undefined;
-    const enabled =
-      explicitEnabled ??
-      (HISTORY_RESTORED_DRIVERS.has(driver) && usedProviders.has(driver) ? true : undefined);
-    const driverDefault = resolveProviderInstanceEnabled({ driver, config: {} });
-    if (Object.keys(config).length === 0 && (enabled === undefined || enabled === driverDefault)) {
-      continue;
-    }
-    providerInstances[instanceId] = {
-      driver,
-      ...(enabled === undefined ? {} : { enabled }),
-      config,
-    } satisfies ProviderInstanceConfig;
-  }
-
-  return {
-    ...settings,
-    providerInstances,
-  };
-}
-
 const ACP_REGISTRY_DRIVER = ProviderDriverKind.make("acpRegistry");
 
 function selectionSupportsTextGeneration(
@@ -464,94 +276,11 @@ function stripDefaultServerSettings(current: unknown, defaults: unknown): unknow
   return Object.is(current, defaults) ? undefined : current;
 }
 
-const decodeProjectScriptsJson = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Array(ProjectScript)),
-);
-const decodeModelSelectionJson = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.NullOr(ModelSelection)),
-);
-
-interface LegacyProjectSettingsRow {
-  readonly projectId: string;
-  readonly defaultModelSelection: string | null;
-  readonly defaultThreadEnvMode: string | null;
-  readonly autoPull: number;
-  readonly scripts: string;
-}
-
-/**
- * Marked with `projectSettingsFolded` so a later reset in the UI survives restarts.
- */
-function foldLegacyProjectSettings(
-  settings: ServerSettings,
-  rows: ReadonlyArray<LegacyProjectSettingsRow>,
-): ServerSettings {
-  if (settings.projectSettingsFolded) return settings;
-  if (
-    rows.length === 0 &&
-    Object.keys(settings.projectAgentBrowserAccessOverrides).length === 0 &&
-    Object.keys(settings.projectAutoPullOverrides).length === 0 &&
-    Object.keys(settings.projectScriptOverrides).length === 0
-  ) {
-    return settings;
-  }
-  const entries: Record<string, ProjectSettingsOverrides> = {
-    ...settings.projectSettingsOverrides,
-  };
-  const set = <K extends keyof ProjectSettingsOverrides>(
-    projectId: string,
-    key: K,
-    value: ProjectSettingsOverrides[K] | undefined,
-  ) => {
-    if (value === undefined) return;
-    const entry = entries[projectId] ?? {};
-    if (Object.hasOwn(entry, key)) return;
-    entries[projectId] = { ...entry, [key]: value };
-  };
-  for (const [projectId, value] of Object.entries(settings.projectAgentBrowserAccessOverrides)) {
-    set(projectId, "enableAgentBrowserAccess", value);
-  }
-  for (const [projectId, value] of Object.entries(settings.projectAutoPullOverrides)) {
-    set(projectId, "defaultAutoPull", value);
-  }
-  // A stored null meant "reset to machine defaults", which is now plain
-  // inheritance; the project's own aggregate scripts must not resurface.
-  const resetScripts = new Set<string>();
-  for (const [projectId, value] of Object.entries(settings.projectScriptOverrides)) {
-    if (value === null) resetScripts.add(projectId);
-    else set(projectId, "defaultProjectScripts", value);
-  }
-  for (const row of rows) {
-    const model = decodeModelSelectionJson(row.defaultModelSelection ?? "null");
-    if (Option.isSome(model) && model.value !== null) {
-      set(row.projectId, "defaultModelSelection", model.value);
-    }
-    if (row.defaultThreadEnvMode === "local" || row.defaultThreadEnvMode === "worktree") {
-      set(row.projectId, "defaultThreadEnvMode", row.defaultThreadEnvMode);
-    }
-    if (row.autoPull === 1) set(row.projectId, "defaultAutoPull", true);
-    const scripts = decodeProjectScriptsJson(row.scripts);
-    if (Option.isSome(scripts) && scripts.value.length > 0 && !resetScripts.has(row.projectId)) {
-      set(row.projectId, "defaultProjectScripts", scripts.value);
-    }
-  }
-  const projectSettingsOverrides = Object.fromEntries(
-    Object.entries(entries).filter(([, entry]) => Object.keys(entry).length > 0),
-  );
-  return {
-    ...settings,
-    projectSettingsOverrides,
-    projectSettingsFolded: true,
-    ...deriveLegacyProjectOverrides({ projectSettingsOverrides }),
-  };
-}
-
 const make = Effect.gen(function* () {
   const { settingsPath } = yield* ServerConfig.ServerConfig;
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
-  const sql = yield* SqlClient.SqlClient;
   const writeSemaphore = yield* Semaphore.make(1);
   const cacheKey = "settings" as const;
   const changesPubSub = yield* PubSub.unbounded<ServerSettings>();
@@ -640,8 +369,6 @@ const make = Effect.gen(function* () {
 
   const loadSettingsFromDisk = Effect.gen(function* () {
     let settings = DEFAULT_SERVER_SETTINGS;
-    let legacyProviders: Readonly<Record<string, unknown>> | undefined;
-    let legacySourceControl: Parameters<typeof migrateLegacySourceControlSettings>[1] = {};
     // A file that failed to decode must stay on disk for the user to repair;
     // the fold below only writes when it started from the file's real contents.
     let settingsFileTrusted = true;
@@ -649,122 +376,23 @@ const make = Effect.gen(function* () {
     if (yield* readConfigExists) {
       const raw = yield* readRawConfig;
       const decoded = decodeServerSettingsJsonExit(raw);
-      const legacySettings = decodeLegacyProviderSettingsJsonExit(raw);
-      if (legacySettings._tag === "Success") {
-        legacyProviders = legacySettings.value.providers;
-        legacySourceControl = { github: legacySettings.value.github };
-      }
-      if (decoded._tag === "Failure" || legacySettings._tag === "Failure") {
-        const failure = decoded._tag === "Failure" ? decoded : legacySettings;
+      if (decoded._tag === "Failure") {
         settingsFileTrusted = false;
         // The file may hold an opt-out we can no longer read; never resume threads on a guess.
         settings = { ...DEFAULT_SERVER_SETTINGS, continueThreadsAfterServerUpdate: false };
-        if (failure._tag === "Failure") {
-          yield* Effect.logWarning("failed to parse settings.json, using defaults", {
-            path: settingsPath,
-            issues: Cause.pretty(failure.cause),
-            cause: failure.cause,
-          });
-        }
+        yield* Effect.logWarning("failed to parse settings.json, using defaults", {
+          path: settingsPath,
+          issues: Cause.pretty(decoded.cause),
+          cause: decoded.cause,
+        });
       } else {
         settings = decoded.value;
       }
     }
 
-    const providerHistory = yield* sql<{
-      readonly providerName: string;
-      readonly providerInstanceId: string | null;
-    }>`
-      SELECT DISTINCT
-        provider_name AS "providerName",
-        provider_instance_id AS "providerInstanceId"
-      FROM projection_thread_sessions
-      WHERE provider_name = 'grok'
-      UNION
-      SELECT DISTINCT
-        provider_name AS "providerName",
-        provider_instance_id AS "providerInstanceId"
-      FROM provider_session_runtime
-      WHERE provider_name = 'grok'
-    `.pipe(
-      Effect.mapError(
-        (cause) =>
-          new ServerSettingsError({
-            settingsPath,
-            operation: "read-provider-history",
-            cause,
-          }),
-      ),
-    );
-
-    const legacyProjectRows =
-      settings.projectSettingsFolded || !settingsFileTrusted
-        ? []
-        : yield* sql<LegacyProjectSettingsRow>`
-          SELECT
-            project_id AS "projectId",
-            default_model_selection_json AS "defaultModelSelection",
-            default_thread_env_mode AS "defaultThreadEnvMode",
-            auto_pull AS "autoPull",
-            scripts_json AS "scripts"
-          FROM projection_projects
-          WHERE deleted_at IS NULL
-        `.pipe(
-            Effect.mapError(
-              (cause) =>
-                new ServerSettingsError({
-                  settingsPath,
-                  operation: "read-project-settings",
-                  cause,
-                }),
-            ),
-          );
-
-    const loaded = foldProviderInstanceEnabledFlags(
-      legacyProviders === undefined
-        ? settings
-        : migrateLegacyProviderSettings(settings, legacyProviders, providerHistory),
-    );
-    const folded = settingsFileTrusted
-      ? foldLegacyProjectSettings(loaded, legacyProjectRows)
-      : loaded;
-    // Copied, not moved: the old entry is removed only after the new file is written. A token
-    // that cannot be read or copied leaves the retired keys in place, so the migration runs again
-    // on the next load instead of dropping it.
-    const legacySecretsCopied = yield* Effect.forEach(
-      settingsFileTrusted
-        ? migrateLegacySourceControlSettings(folded, legacySourceControl).secretMoves
-        : [],
-      (move) =>
-        secretStore.get(move.from).pipe(
-          Effect.flatMap((secret) =>
-            Option.isNone(secret) ? Effect.void : secretStore.set(move.to, secret.value),
-          ),
-          Effect.as(true),
-          Effect.catch(() =>
-            Effect.logWarning("failed to copy a source control secret to its new name", {
-              secretName: move.to,
-            }).pipe(Effect.as(false)),
-          ),
-        ),
-    ).pipe(Effect.map((copied) => copied.every(Boolean)));
-    const hasLegacySourceControl =
-      settingsFileTrusted && legacySecretsCopied && legacySourceControl.github !== undefined;
-    const sourceControlMigration = hasLegacySourceControl
-      ? migrateLegacySourceControlSettings(folded, legacySourceControl)
-      : { settings: folded, secretMoves: [] };
-    const migrated = settingsFileTrusted
-      ? yield* moveInlineSettingsSecrets(sourceControlMigration.settings)
-      : folded;
-    if (
-      migrated !== loaded ||
-      (settingsFileTrusted && legacyProviders !== undefined) ||
-      hasLegacySourceControl
-    ) {
+    const migrated = settingsFileTrusted ? yield* moveInlineSettingsSecrets(settings) : settings;
+    if (migrated !== settings) {
       yield* writeSettingsAtomically(migrated);
-      for (const move of sourceControlMigration.secretMoves) {
-        yield* secretStore.remove(move.from).pipe(Effect.ignore);
-      }
     }
     return migrated;
   });

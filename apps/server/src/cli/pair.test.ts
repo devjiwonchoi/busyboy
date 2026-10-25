@@ -215,7 +215,7 @@ describe("t3 pair", () => {
             "--scope",
             "orchestration:read",
             "--scope",
-            "relay:read",
+            "access:read",
             "--scope",
             "orchestration:read",
           ]),
@@ -227,7 +227,7 @@ describe("t3 pair", () => {
           readonly scopes: ReadonlyArray<string>;
         }>;
         assert.lengthOf(credentials, 1);
-        assert.deepEqual(credentials[0]?.scopes, ["orchestration:read", "relay:read"]);
+        assert.deepEqual(credentials[0]?.scopes, ["orchestration:read", "access:read"]);
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
   );

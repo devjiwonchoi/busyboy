@@ -2,13 +2,12 @@ import type {
   AuthBrowserSessionResult,
   AuthClientMetadata,
   AuthEnvironmentScope,
-  AuthGrantScope,
   AuthPairingCredentialResult,
   ServerAuthSessionMethod,
   AuthSessionId,
   AuthSessionState,
 } from "@t3tools/contracts";
-import { EnvironmentHttpCommonError, PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
+import { EnvironmentHttpCommonError } from "@t3tools/contracts";
 import type { EnvironmentHttpCommonError as EnvironmentHttpCommonErrorType } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -168,10 +167,7 @@ export function takePairingTokenFromUrl(): string | null {
 }
 
 function getDesktopBootstrapCredential(): string | null {
-  // Desktop-local backends share one bootstrap token, so the primary entry's
-  // token is the one to use.
-  const bootstraps = window.desktopBridge?.getLocalEnvironmentBootstraps() ?? [];
-  const primary = bootstraps.find((entry) => entry.id === PRIMARY_LOCAL_ENVIRONMENT_ID);
+  const primary = window.desktopBridge?.getLocalEnvironmentBootstrap() ?? null;
   return typeof primary?.bootstrapToken === "string" && primary.bootstrapToken.length > 0
     ? primary.bootstrapToken
     : null;
@@ -354,7 +350,7 @@ export async function submitServerAuthCredential(credential: string): Promise<vo
 
 export async function createServerPairingCredential(input?: {
   readonly label?: string;
-  readonly scopes?: ReadonlyArray<AuthGrantScope>;
+  readonly scopes?: ReadonlyArray<AuthEnvironmentScope>;
 }): Promise<AuthPairingCredentialResult> {
   const trimmedLabel = input?.label?.trim();
   try {

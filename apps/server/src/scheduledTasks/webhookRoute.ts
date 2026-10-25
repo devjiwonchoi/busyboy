@@ -2,11 +2,9 @@ import { EnvironmentHttpApi } from "@t3tools/contracts";
 import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Tracer from "effect/Tracer";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HttpTraceContext from "effect/http/HttpTraceContext";
 
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 
@@ -14,10 +12,9 @@ import * as Metrics from "../observability/Metrics.ts";
 
 import * as ScheduledTaskService from "./ScheduledTaskService.ts";
 
-/** The relay enforces the same cap. */
 export const WEBHOOK_MAX_BODY_BYTES = 1024 * 1024;
 
-/** Response header naming what happened to the request; the relay records it. */
+/** Response header naming what happened to the request. */
 const WEBHOOK_OUTCOME_HEADER = "x-t3-hook-outcome";
 
 const json = (status: number, body: Record<string, string>, outcome: string) =>
@@ -55,10 +52,9 @@ export const layer = HttpApiBuilder.group(
           Effect.option,
         );
         const tooLarge = (error: string) =>
-          Metrics.increment(Metrics.webhookDeliveriesTotal, {
-            outcome: "body_too_large",
-            source: request.headers["x-t3-relay-delivery-id"] ? "relay" : "direct",
-          }).pipe(Effect.as(json(413, { error }, "body_too_large")));
+          Metrics.increment(Metrics.webhookDeliveriesTotal, { outcome: "body_too_large" }).pipe(
+            Effect.as(json(413, { error }, "body_too_large")),
+          );
         if (Option.isNone(body)) return yield* tooLarge("body_too_large_or_unreadable");
         if (body.value.byteLength > WEBHOOK_MAX_BODY_BYTES) {
           return yield* tooLarge("body_too_large");
@@ -69,13 +65,6 @@ export const layer = HttpApiBuilder.group(
           if (typeof value === "string") headers[name.toLowerCase()] = value;
         }
         const queryIndex = request.url.indexOf("?");
-        // The relay's delivery id and receive time count only with its signed
-        // proof; the URL can also be called directly. The receive time matters
-        // for requests the relay held while we were offline.
-
-        // A relay delivery joins the relay's trace, and goes to the T3 Connect
-        // tracer with it. Anyone else's traceparent is never trusted.
-
         const result = yield* scheduledTasks
           .triggerWebhook({
             hookId: params.hookId,
@@ -108,8 +97,6 @@ export const layer = HttpApiBuilder.group(
             return json(409, { error: "hook_disabled" }, "disabled");
           case "rate_limited":
             return json(429, { error: "rate_limited" }, result.outcome);
-          case "expired":
-            return json(410, { error: "delivery_too_old" }, "expired");
           case "error":
             return json(500, { error: "internal_error" }, "error");
         }

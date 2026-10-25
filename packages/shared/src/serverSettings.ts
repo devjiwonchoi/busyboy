@@ -11,7 +11,6 @@ import {
   isProviderTextGenerationCapable,
   type ModelSelection,
   type ProjectId,
-  type ProjectScopedServerSettingKey,
   type ProjectSettingsOverrides,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -33,35 +32,6 @@ import {
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 const decodeServerSettingsJson = Schema.decodeUnknownOption(ServerSettingsJson);
-
-export function resolveProjectAgentBrowserAccess(
-  settings: Pick<
-    ServerSettings,
-    "enableAgentBrowserAccess" | "projectAgentBrowserAccessOverrides" | "projectSettingsOverrides"
-  >,
-  projectId: ProjectId,
-): boolean {
-  return (
-    settings.projectSettingsOverrides[projectId]?.enableAgentBrowserAccess ??
-    settings.projectAgentBrowserAccessOverrides[projectId] ??
-    settings.enableAgentBrowserAccess
-  );
-}
-
-export function resolveProjectAutoPull(
-  settings: Pick<
-    ServerSettings,
-    "defaultAutoPull" | "projectAutoPullOverrides" | "projectSettingsOverrides"
-  >,
-  projectId: ProjectId,
-  legacyAutoPull: boolean | undefined,
-): boolean {
-  return (
-    settings.projectSettingsOverrides[projectId]?.defaultAutoPull ??
-    settings.projectAutoPullOverrides[projectId] ??
-    (legacyAutoPull === true || settings.defaultAutoPull)
-  );
-}
 
 export function isModelSelectionProviderEnabled(
   settings: ServerSettings,
@@ -277,86 +247,10 @@ function mergeProjectSettingsOverridesPatch(
   return Object.fromEntries(next);
 }
 
-export function deriveLegacyProjectOverrides(
-  settings: Pick<ServerSettings, "projectSettingsOverrides">,
-): Pick<
-  ServerSettings,
-  "projectAgentBrowserAccessOverrides" | "projectAutoPullOverrides" | "projectScriptOverrides"
-> {
-  const projectAgentBrowserAccessOverrides: Record<string, boolean> = {};
-  const projectAutoPullOverrides: Record<string, boolean> = {};
-  const projectScriptOverrides: Record<string, ServerSettings["defaultProjectScripts"] | null> = {};
-  for (const [projectId, entry] of Object.entries(settings.projectSettingsOverrides)) {
-    if (entry.enableAgentBrowserAccess !== undefined) {
-      projectAgentBrowserAccessOverrides[projectId] = entry.enableAgentBrowserAccess;
-    }
-    if (entry.defaultAutoPull !== undefined) {
-      projectAutoPullOverrides[projectId] = entry.defaultAutoPull;
-    }
-    if (entry.defaultProjectScripts !== undefined) {
-      projectScriptOverrides[projectId] = entry.defaultProjectScripts;
-    }
-  }
-  return { projectAgentBrowserAccessOverrides, projectAutoPullOverrides, projectScriptOverrides };
-}
-
-function translateLegacyProjectOverridePatch(
-  current: Pick<ServerSettings, "projectSettingsOverrides">,
-  patch: ServerSettingsPatch,
-): ServerSettingsPatch {
-  const {
-    projectAgentBrowserAccessOverrides,
-    projectAutoPullOverrides,
-    projectScriptOverrides,
-    ...rest
-  } = patch;
-  if (
-    projectAgentBrowserAccessOverrides === undefined &&
-    projectAutoPullOverrides === undefined &&
-    projectScriptOverrides === undefined
-  ) {
-    return patch;
-  }
-  const currentEntries: Readonly<Record<string, ProjectSettingsOverrides>> =
-    current.projectSettingsOverrides;
-  const entries = new Map<string, ProjectSettingsOverrides | null>(
-    Object.entries(rest.projectSettingsOverrides ?? {}),
-  );
-  // A canonical entry in the same patch is the newer representation; a legacy
-  // map must not resurrect a key that entry deliberately omits.
-  const canonicalProjectIds = new Set(Object.keys(rest.projectSettingsOverrides ?? {}));
-  const applyKey = <K extends ProjectScopedServerSettingKey>(
-    map: Readonly<Record<string, ProjectSettingsOverrides[K] | null>> | undefined,
-    key: K,
-  ) => {
-    if (map === undefined) return;
-    for (const [projectId, value] of Object.entries(map)) {
-      if (canonicalProjectIds.has(projectId)) continue;
-      const entry: ProjectSettingsOverrides = {
-        ...(entries.get(projectId) ?? currentEntries[projectId] ?? {}),
-      };
-      if (value === null || value === undefined) {
-        delete entry[key];
-      } else {
-        entry[key] = value;
-      }
-      entries.set(projectId, Object.keys(entry).length === 0 ? null : entry);
-    }
-  };
-  applyKey(projectAgentBrowserAccessOverrides, "enableAgentBrowserAccess");
-  applyKey(projectAutoPullOverrides, "defaultAutoPull");
-  applyKey(projectScriptOverrides, "defaultProjectScripts");
-  return {
-    ...rest,
-    projectSettingsOverrides: Object.fromEntries(entries),
-  } as ServerSettingsPatch;
-}
-
 export function applyServerSettingsPatch(
   current: ServerSettings,
-  rawPatch: ServerSettingsPatch,
+  patch: ServerSettingsPatch,
 ): ServerSettings {
-  const patch = translateLegacyProjectOverridePatch(current, rawPatch);
   const selectionPatch = patch.textGenerationModelSelection;
   const {
     migrateModelPreferences,
@@ -376,9 +270,6 @@ export function applyServerSettingsPatch(
     usageModelAliases: usageModelAliasesPatch,
     // Entry replacement: deepMerge would keep keys the client meant to clear.
     projectSettingsOverrides: projectSettingsOverridesPatch,
-    projectAgentBrowserAccessOverrides: _legacyBrowserAccess,
-    projectAutoPullOverrides: _legacyAutoPull,
-    projectScriptOverrides: _legacyScripts,
     ...patchForMerge
   } = patch;
   const currentBackgroundActivity = normalizeServerBackgroundActivitySettings(current);
@@ -592,7 +483,6 @@ export function applyServerSettingsPatch(
   );
   const nextWithReplacements = {
     ...nextWithReplacementsBase,
-    ...deriveLegacyProjectOverrides(nextWithReplacementsBase),
     backgroundActivity: normalizedBackgroundActivity,
     automaticGitFetchInterval: resolvedBackgroundActivity.automaticGitFetchInterval,
     providerHealthRefreshInterval: resolvedBackgroundActivity.providerHealthRefreshInterval,

@@ -342,7 +342,7 @@ export function OutdatedServerUpdateAction({
 }: {
   readonly environmentId: EnvironmentId;
   readonly serverLabel: string;
-  readonly fromVersion: string | undefined;
+  readonly fromVersion?: string | undefined;
   readonly targetVersion: string;
   readonly label?: string;
 }) {

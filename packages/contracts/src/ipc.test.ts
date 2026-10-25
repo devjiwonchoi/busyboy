@@ -9,27 +9,14 @@ describe("DesktopEnvironmentBootstrapSchema", () => {
   it("decodes a running backend bootstrap", () => {
     expect(
       decode({
-        id: "primary",
         label: "Local environment",
         httpBaseUrl: "http://127.0.0.1:3774/",
         wsBaseUrl: "ws://127.0.0.1:3774/",
       }),
     ).toEqual({
-      id: "primary",
       label: "Local environment",
       httpBaseUrl: "http://127.0.0.1:3774/",
       wsBaseUrl: "ws://127.0.0.1:3774/",
     });
-  });
-
-  it("allows a backend that is not running to report no URLs", () => {
-    expect(
-      decode({
-        id: "primary",
-        label: "Windows",
-        httpBaseUrl: null,
-        wsBaseUrl: null,
-      }).httpBaseUrl,
-    ).toBeNull();
   });
 });

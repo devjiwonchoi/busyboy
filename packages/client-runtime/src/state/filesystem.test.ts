@@ -9,8 +9,6 @@ import {
   resolveFilesystemReadAccess,
 } from "./filesystem.ts";
 
-const SPLIT_SCOPES_SERVER = { serverUpdateScope: "environment:maintain" } as const;
-
 describe("filesystem read access", () => {
   it("waits for the initial catalog before declaring a missing environment disconnected", () => {
     expect(
@@ -102,8 +100,8 @@ describe("filesystem read access", () => {
   );
 
   it.each([
-    { authenticated: true, scopes: [AuthOrchestrationReadScope], auth: SPLIT_SCOPES_SERVER },
-    { authenticated: false, scopes: [AuthFilesystemReadScope], auth: SPLIT_SCOPES_SERVER },
+    { authenticated: true, scopes: [AuthOrchestrationReadScope] },
+    { authenticated: false, scopes: [AuthFilesystemReadScope] },
   ] as const)("does not infer file access from an ungranted session", (session) => {
     expect(
       resolveFilesystemReadAccess({
@@ -113,17 +111,6 @@ describe("filesystem read access", () => {
         sessionError: null,
       }),
     ).toEqual({ canReadFiles: false, isPending: false, error: null });
-  });
-
-  it("falls back to the orchestration grant on a server that predates filesystem:read", () => {
-    expect(
-      resolveFilesystemReadAccess({
-        isCatalogReady: true,
-        connection: { phase: "connected", error: null },
-        session: { authenticated: true, scopes: [AuthOrchestrationReadScope], auth: {} },
-        sessionError: null,
-      }),
-    ).toEqual({ canReadFiles: true, isPending: false, error: null });
   });
 });
 

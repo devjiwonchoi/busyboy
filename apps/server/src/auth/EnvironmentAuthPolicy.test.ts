@@ -34,7 +34,6 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
 
       expect(descriptor.policy).toBe("desktop-managed-local");
       expect(descriptor.bootstrapMethods).toEqual(["desktop-bootstrap"]);
-      expect(descriptor.serverUpdateScope).toBe("environment:maintain");
       expect(descriptor.sessionCookieName).toBe("t3_session_3773");
     }).pipe(
       Effect.provide(
@@ -86,7 +85,6 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
 
       expect(descriptor.policy).toBe("loopback-browser");
       expect(descriptor.bootstrapMethods).toEqual(["one-time-token"]);
-      expect(descriptor.serverUpdateScope).toBe("environment:maintain");
       expect(descriptor.sessionCookieName).toMatch(/^t3_session_3773_[a-f0-9]{12}$/);
     }).pipe(
       Effect.provide(

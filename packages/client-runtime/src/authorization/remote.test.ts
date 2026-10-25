@@ -9,9 +9,7 @@ import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
 import {
   appendClientConnectionParams,
   bootstrapRemoteBearerSession,
-  exchangeRemoteDpopAccessToken,
   fetchRemoteSessionState,
-  issueRemoteDpopWebSocketTicket,
   issueRemoteWebSocketTicket,
   RemoteEnvironmentAuthInvalidJsonError,
   RemoteEnvironmentAuthTimeoutError,
@@ -99,8 +97,7 @@ describe("remote environment authorization", () => {
             issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
             token_type: "Bearer",
             expires_in: 3600,
-            scope:
-              "orchestration:read orchestration:operate terminal:operate review:write relay:read",
+            scope: "orchestration:read orchestration:operate terminal:operate access:read",
           },
           { status: 200 },
         ),
@@ -114,7 +111,7 @@ describe("remote environment authorization", () => {
       expect(result).toMatchObject({
         token_type: "Bearer",
         access_token: "bearer-token",
-        scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
+        scope: "orchestration:read orchestration:operate terminal:operate access:read",
       });
       expectFetchCall(fetch.calls, 1, {
         url: "https://remote.example.com/oauth/token",
@@ -123,55 +120,6 @@ describe("remote environment authorization", () => {
           "content-type": "application/x-www-form-urlencoded",
         },
         body: "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&subject_token=pairing-token&subject_token_type=urn%3At3%3Aparams%3Aoauth%3Atoken-type%3Aenvironment-bootstrap&requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token",
-      });
-    }),
-  );
-
-  it.effect("exchanges managed credentials and admits websocket requests with DPoP", () =>
-    Effect.gen(function* () {
-      const fetch = recordedFetch(
-        Response.json({
-          access_token: "dpop-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
-          token_type: "DPoP",
-          expires_in: 3600,
-          scope: "orchestration:read orchestration:operate terminal:operate review:write",
-        }),
-        Response.json({
-          ticket: "ws-ticket",
-          expiresAt: "2026-05-01T12:05:00.000Z",
-        }),
-      );
-
-      const token = yield* exchangeRemoteDpopAccessToken({
-        httpBaseUrl: "https://remote.example.com/",
-        credential: "one-time-credential",
-        dpopProof: "token-proof",
-        clientMetadata: {
-          label: "T3 Code Mobile",
-          deviceType: "mobile",
-          os: "iOS",
-        },
-      }).pipe(provideRemoteHttp(fetch.fetchFn));
-      yield* issueRemoteDpopWebSocketTicket({
-        httpBaseUrl: "https://remote.example.com/",
-        accessToken: token.access_token,
-        dpopProof: "resource-proof",
-      }).pipe(provideRemoteHttp(fetch.fetchFn));
-
-      expectFetchCall(fetch.calls, 1, {
-        url: "https://remote.example.com/oauth/token",
-        method: "POST",
-        headers: { dpop: "token-proof", "content-type": "application/x-www-form-urlencoded" },
-        body: "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&subject_token=one-time-credential&subject_token_type=urn%3At3%3Aparams%3Aoauth%3Atoken-type%3Aenvironment-bootstrap&requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token&client_label=T3+Code+Mobile&client_device_type=mobile&client_os=iOS",
-      });
-      expectFetchCall(fetch.calls, 2, {
-        url: "https://remote.example.com/api/auth/websocket-ticket",
-        method: "POST",
-        headers: {
-          authorization: "DPoP dpop-access-token",
-          dpop: "resource-proof",
-        },
       });
     }),
   );
@@ -185,8 +133,7 @@ describe("remote environment authorization", () => {
             issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
             token_type: "Bearer",
             expires_in: 3600,
-            scope:
-              "orchestration:read orchestration:operate terminal:operate review:write relay:read",
+            scope: "orchestration:read orchestration:operate terminal:operate access:read",
           },
           { status: 200 },
         ),
@@ -311,8 +258,7 @@ describe("remote environment authorization", () => {
               "orchestration:read",
               "orchestration:operate",
               "terminal:operate",
-              "review:write",
-              "relay:read",
+              "access:read",
             ],
             sessionMethod: "bearer-access-token",
             expiresAt: "2026-05-01T12:00:00.000Z",
@@ -342,13 +288,7 @@ describe("remote environment authorization", () => {
       }).pipe(provideRemoteHttp(fetch.fetchFn));
       expect(session).toMatchObject({
         authenticated: true,
-        scopes: [
-          "orchestration:read",
-          "orchestration:operate",
-          "terminal:operate",
-          "review:write",
-          "relay:read",
-        ],
+        scopes: ["orchestration:read", "orchestration:operate", "terminal:operate", "access:read"],
       });
 
       const ticket = yield* issueRemoteWebSocketTicket({
@@ -435,8 +375,7 @@ describe("remote environment authorization", () => {
             issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
             token_type: "Bearer",
             expires_in: 3600,
-            scope:
-              "orchestration:read orchestration:operate terminal:operate review:write relay:read",
+            scope: "orchestration:read orchestration:operate terminal:operate access:read",
           },
           { status: 200 },
         ),
@@ -478,11 +417,11 @@ describe("remote environment authorization", () => {
           osMajorVersion: 15,
           deviceModel: "Pixel 9",
         },
-        connectionMethod: "relay",
+        connectionMethod: "ssh",
       }).pipe(provideRemoteHttp(fetch.fetchFn));
 
       expect(url).toBe(
-        "wss://remote.example.com/ws?wsTicket=ws-ticket&clientSurface=mobile&clientAppVersion=1.2.3&clientDeviceType=phone&clientOs=Android&clientOsMajorVersion=15&clientDeviceModel=Pixel+9&connectionMethod=relay",
+        "wss://remote.example.com/ws?wsTicket=ws-ticket&clientSurface=mobile&clientAppVersion=1.2.3&clientDeviceType=phone&clientOs=Android&clientOsMajorVersion=15&clientDeviceModel=Pixel+9&connectionMethod=ssh",
       );
     }),
   );

@@ -1,4 +1,4 @@
-import { PRIMARY_LOCAL_ENVIRONMENT_ID, type DesktopEnvironmentBootstrap } from "@t3tools/contracts";
+import type { DesktopEnvironmentBootstrap } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
@@ -43,22 +43,6 @@ export class PrimaryEnvironmentProtocolUnsupportedError extends Schema.TaggedErr
   }
 }
 
-export class DesktopEnvironmentBootstrapIncompleteError extends Schema.TaggedError<DesktopEnvironmentBootstrapIncompleteError>()(
-  "DesktopEnvironmentBootstrapIncompleteError",
-  {
-    hasHttpBaseUrl: Schema.Boolean,
-    hasWsBaseUrl: Schema.Boolean,
-  },
-) {
-  override get message(): string {
-    const missing = [
-      ...(this.hasHttpBaseUrl ? [] : ["httpBaseUrl"]),
-      ...(this.hasWsBaseUrl ? [] : ["wsBaseUrl"]),
-    ];
-    return `Desktop bootstrap is missing ${missing.join(" and ")} for the local environment.`;
-  }
-}
-
 export class PrimaryEnvironmentDisabledError extends Schema.TaggedError<PrimaryEnvironmentDisabledError>()(
   "PrimaryEnvironmentDisabledError",
   {},
@@ -72,9 +56,6 @@ export const isPrimaryEnvironmentUrlInvalidError = Schema.is(PrimaryEnvironmentU
 export const isPrimaryEnvironmentProtocolUnsupportedError = Schema.is(
   PrimaryEnvironmentProtocolUnsupportedError,
 );
-export const isDesktopEnvironmentBootstrapIncompleteError = Schema.is(
-  DesktopEnvironmentBootstrapIncompleteError,
-);
 
 export interface PrimaryEnvironmentTarget {
   readonly source: PrimaryEnvironmentTargetSource;
@@ -87,8 +68,7 @@ export interface PrimaryEnvironmentTarget {
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 
 function getDesktopLocalEnvironmentBootstrap(): DesktopEnvironmentBootstrap | null {
-  const bootstraps = window.desktopBridge?.getLocalEnvironmentBootstraps() ?? [];
-  return bootstraps.find((entry) => entry.id === PRIMARY_LOCAL_ENVIRONMENT_ID) ?? null;
+  return window.desktopBridge?.getLocalEnvironmentBootstrap() ?? null;
 }
 
 function parseTargetUrl(input: {
@@ -251,15 +231,6 @@ function resolveDesktopPrimaryTarget(): PrimaryEnvironmentTarget | null {
   const desktopBootstrap = getDesktopLocalEnvironmentBootstrap();
   if (!desktopBootstrap) {
     return null;
-  }
-  if (!desktopBootstrap.httpBaseUrl && !desktopBootstrap.wsBaseUrl) {
-    return null;
-  }
-  if (!desktopBootstrap.httpBaseUrl || !desktopBootstrap.wsBaseUrl) {
-    throw new DesktopEnvironmentBootstrapIncompleteError({
-      hasHttpBaseUrl: Boolean(desktopBootstrap.httpBaseUrl),
-      hasWsBaseUrl: Boolean(desktopBootstrap.wsBaseUrl),
-    });
   }
 
   return {

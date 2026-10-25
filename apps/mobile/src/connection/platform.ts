@@ -3,12 +3,7 @@ import {
   PlatformConnectionSource,
   Persistence,
 } from "@t3tools/client-runtime/platform";
-import {
-  ConnectionBlockedError,
-  ConnectionTransientError,
-  Connectivity,
-  Wakeups,
-} from "@t3tools/client-runtime/connection";
+import { ConnectionBlockedError, Connectivity, Wakeups } from "@t3tools/client-runtime/connection";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -21,7 +16,6 @@ import { AppState } from "react-native";
 
 import { authClientMetadata } from "../lib/authClientMetadata";
 import * as Runtime from "../lib/runtime";
-import * as MobileStorage from "../persistence/mobile-storage";
 import { appAtomRegistry } from "../state/atom-registry";
 import { clearThreadOutboxEnvironment } from "../state/thread-outbox-removal";
 import { clearComposerDraftsEnvironment } from "../state/use-composer-drafts";
@@ -151,41 +145,13 @@ const layerWakeups = Wakeups.layer({
 });
 
 const layerCapabilities = Layer.effectContext(
-  Effect.gen(function* () {
-    const storage = yield* MobileStorage.MobileStorage;
-    return Context.make(
-      ClientCapabilities.CloudSession,
-      ClientCapabilities.CloudSession.of({
-        identity: Effect.succeedNone,
-        clerkToken: Effect.fail(
-          new ConnectionBlockedError({
-            reason: "configuration",
-            detail: "Hosted accounts are not supported. Pair this environment directly.",
-          }),
-        ),
+  Effect.sync(() =>
+    Context.make(
+      ClientCapabilities.PrimaryEnvironmentAuth,
+      ClientCapabilities.PrimaryEnvironmentAuth.of({
+        bearerToken: Effect.succeed(Option.none()),
       }),
     ).pipe(
-      Context.add(
-        ClientCapabilities.PrimaryEnvironmentAuth,
-        ClientCapabilities.PrimaryEnvironmentAuth.of({
-          bearerToken: Effect.succeed(Option.none()),
-        }),
-      ),
-      Context.add(
-        ClientCapabilities.RelayDeviceIdentity,
-        ClientCapabilities.RelayDeviceIdentity.of({
-          deviceId: storage.loadOrCreateAgentAwarenessDeviceId.pipe(
-            Effect.mapError(
-              (cause) =>
-                new ConnectionTransientError({
-                  reason: "remote-unavailable",
-                  detail: `Could not load the mobile device identity: ${String(cause)}`,
-                }),
-            ),
-            Effect.map(Option.some),
-          ),
-        }),
-      ),
       Context.add(
         ClientCapabilities.ClientPresentation,
         ClientCapabilities.ClientPresentation.of({
@@ -212,8 +178,8 @@ const layerCapabilities = Layer.effectContext(
           disconnect: () => Effect.void,
         }),
       ),
-    );
-  }),
+    ),
+  ),
 );
 
 const layerPlatformConnectionSource = Layer.succeed(

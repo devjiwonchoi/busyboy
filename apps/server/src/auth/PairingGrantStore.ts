@@ -28,7 +28,6 @@ export interface BootstrapGrant {
   readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
   readonly subject: string;
   readonly label?: string;
-  readonly proofKeyThumbprint?: string;
   readonly expiresAt: DateTime.DateTime;
 }
 
@@ -47,15 +46,6 @@ export class ExpiredBootstrapCredentialError extends Schema.TaggedError<ExpiredB
 ) {
   override get message(): string {
     return "Bootstrap credential expired.";
-  }
-}
-
-export class BootstrapCredentialProofKeyMismatchError extends Schema.TaggedError<BootstrapCredentialProofKeyMismatchError>()(
-  "BootstrapCredentialProofKeyMismatchError",
-  {},
-) {
-  override get message(): string {
-    return "Bootstrap credential proof key mismatch.";
   }
 }
 
@@ -80,7 +70,6 @@ export class BootstrapCredentialScopeNotGrantedError extends Schema.TaggedError<
 export const BootstrapCredentialInvalidError = Schema.Union([
   UnknownBootstrapCredentialError,
   ExpiredBootstrapCredentialError,
-  BootstrapCredentialProofKeyMismatchError,
   UnavailableBootstrapCredentialError,
 ]);
 export type BootstrapCredentialInvalidError = typeof BootstrapCredentialInvalidError.Type;
@@ -190,7 +179,6 @@ export interface IssuedBootstrapCredential {
   readonly id: string;
   readonly credential: string;
   readonly label?: string;
-  readonly proofKeyThumbprint?: string;
   readonly expiresAt: DateTime.Utc;
 }
 
@@ -212,7 +200,6 @@ export class PairingGrantStore extends Context.Service<
       readonly scopes?: ReadonlyArray<AuthEnvironmentScope>;
       readonly subject?: string;
       readonly label?: string;
-      readonly proofKeyThumbprint?: string;
       readonly purpose?: "startup";
     }) => Effect.Effect<IssuedBootstrapCredential, BootstrapCredentialInternalError>;
     readonly listActive: () => Effect.Effect<
@@ -224,7 +211,6 @@ export class PairingGrantStore extends Context.Service<
     readonly consume: (
       credential: string,
       input?: {
-        readonly proofKeyThumbprint?: string;
         readonly requestedScopes?: ReadonlyArray<AuthEnvironmentScope>;
       },
     ) => Effect.Effect<BootstrapGrant, BootstrapCredentialError>;
@@ -396,7 +382,6 @@ export const make = Effect.gen(function* () {
       id,
       credential,
       ...(input?.label ? { label: input.label } : {}),
-      ...(input?.proofKeyThumbprint ? { proofKeyThumbprint: input.proofKeyThumbprint } : {}),
       expiresAt,
     };
     const subject = input?.subject ?? "one-time-token";
@@ -408,7 +393,6 @@ export const make = Effect.gen(function* () {
         scopes: input?.scopes ?? AuthStandardClientScopes,
         subject,
         label: input?.label ?? null,
-        proofKeyThumbprint: input?.proofKeyThumbprint ?? null,
         createdAt: now,
         expiresAt: expiresAt,
       })
@@ -475,17 +459,6 @@ export const make = Effect.gen(function* () {
             ];
           }
 
-          if (grant.proofKeyThumbprint && grant.proofKeyThumbprint !== input?.proofKeyThumbprint) {
-            return [
-              {
-                _tag: "error",
-                reason: "not-found",
-                error: new BootstrapCredentialProofKeyMismatchError({}),
-              },
-              next,
-            ];
-          }
-
           if (
             input?.requestedScopes !== undefined &&
             !input.requestedScopes.some((scope) => grant.scopes.includes(scope))
@@ -520,9 +493,6 @@ export const make = Effect.gen(function* () {
                 scopes: grant.scopes,
                 subject: grant.subject,
                 ...(grant.label ? { label: grant.label } : {}),
-                ...(grant.proofKeyThumbprint
-                  ? { proofKeyThumbprint: grant.proofKeyThumbprint }
-                  : {}),
                 expiresAt: grant.expiresAt,
               } satisfies BootstrapGrant,
             },
@@ -544,7 +514,6 @@ export const make = Effect.gen(function* () {
       const consumed = yield* pairingLinks
         .consumeAvailable({
           credential,
-          proofKeyThumbprint: input?.proofKeyThumbprint ?? null,
           ...(input?.requestedScopes !== undefined
             ? { requestedScopes: input.requestedScopes }
             : {}),
@@ -560,9 +529,6 @@ export const make = Effect.gen(function* () {
           scopes: consumed.value.scopes,
           subject: consumed.value.subject,
           ...(consumed.value.label ? { label: consumed.value.label } : {}),
-          ...(consumed.value.proofKeyThumbprint
-            ? { proofKeyThumbprint: consumed.value.proofKeyThumbprint }
-            : {}),
           expiresAt: consumed.value.expiresAt,
         } satisfies BootstrapGrant;
       }
@@ -584,13 +550,6 @@ export const make = Effect.gen(function* () {
 
       if (DateTime.isGreaterThanOrEqualTo(now, matching.value.expiresAt)) {
         return yield* new ExpiredBootstrapCredentialError({});
-      }
-
-      if (
-        matching.value.proofKeyThumbprint !== null &&
-        matching.value.proofKeyThumbprint !== input?.proofKeyThumbprint
-      ) {
-        return yield* new BootstrapCredentialProofKeyMismatchError({});
       }
 
       if (
