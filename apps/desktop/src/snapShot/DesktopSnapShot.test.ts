@@ -18,13 +18,9 @@ import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import type * as Electron from "electron";
-import type { PortalShortcutState } from "./PortalCaptureShortcut.ts";
 import { beforeEach, vi } from "vite-plus/test";
 
 beforeEach(() => {
-  portalShortcutInstances.length = 0;
-  nextPortalState.value = undefined;
-  vi.stubEnv("NIRI_SOCKET", "");
   vi.stubEnv("XDG_CURRENT_DESKTOP", "test-desktop");
   transitionCapturePageMock.mockReset().mockResolvedValue(undefined);
   transitionSnapshotMock.mockReset().mockResolvedValue(undefined);
@@ -49,17 +45,11 @@ const {
   getFileIconMock,
   getSourcesMock,
   macCaptureMock,
-  linuxCaptureMock,
-  linuxBackendMock,
-  niriShortcutMock,
-  niriShortcutStopMock,
   mediaAccessStatusMock,
   openExternalMock,
   registerShortcutMock,
   unregisterShortcutMock,
-  portalShortcutInstances,
   prepareCaptureRevealMock,
-  nextPortalState,
   regionCaptureMock,
   screenToDipRectMock,
   shortcutForkArgs,
@@ -117,26 +107,10 @@ const {
   getFileIconMock: vi.fn(),
   getSourcesMock: vi.fn(),
   macCaptureMock: vi.fn(),
-  linuxCaptureMock: vi.fn<
-    () => Promise<import("./LinuxSnapShot.ts").LinuxWindowSnapshot | undefined>
-  >(async () => undefined),
-  linuxBackendMock: vi.fn(async () => "picker"),
-  niriShortcutStopMock: vi.fn(),
-  niriShortcutMock:
-    vi.fn<(appId: string, trigger: () => void, fail: () => void) => Promise<() => void>>(),
   mediaAccessStatusMock: vi.fn(() => "not-determined"),
   openExternalMock: vi.fn(() => Promise.resolve()),
   registerShortcutMock: vi.fn(),
   unregisterShortcutMock: vi.fn(),
-  nextPortalState: { value: undefined as PortalShortcutState | undefined },
-  portalShortcutInstances: [] as Array<{
-    state: PortalShortcutState;
-    onCapture: () => Promise<void>;
-    onStateChanged: () => void;
-    close: ReturnType<typeof vi.fn>;
-    configure: ReturnType<typeof vi.fn>;
-    hasSession: boolean;
-  }>,
   prepareCaptureRevealMock: vi.fn(),
   regionCaptureMock:
     vi.fn<
@@ -189,43 +163,6 @@ vi.mock("./WindowsCaptureFeedback.ts", () => ({
   showWindowsCaptureOverlay: (window: Electron.BaseWindow) => window.showInactive(),
 }));
 vi.mock("./MacSnapShot.ts", () => ({ captureMacWindowSnapshot: macCaptureMock }));
-vi.mock("./LinuxSnapShot.ts", () => ({
-  captureLinuxWindow: linuxCaptureMock,
-  getLinuxCaptureSupport: async () => ({
-    linuxBackend: await linuxBackendMock(),
-    linuxFeedbackAvailable: false,
-  }),
-}));
-vi.mock("./NiriCaptureShortcut.ts", async (original) => ({
-  ...(await original<typeof import("./NiriCaptureShortcut.ts")>()),
-  startNiriCaptureShortcut: niriShortcutMock,
-}));
-vi.mock("./PortalCaptureShortcut.ts", async (original) => ({
-  ...(await original<typeof import("./PortalCaptureShortcut.ts")>()),
-  PortalCaptureShortcut: class {
-    state: PortalShortcutState = nextPortalState.value ?? {
-      shortcutRegistered: true,
-      shortcutPending: false,
-      shortcutLabel: "Ctrl+Shift+2",
-      shortcutMessage: "Desktop shortcut: Ctrl+Shift+2",
-    };
-    close = vi.fn();
-    configure = vi.fn(async () => {});
-    hasSession = true;
-    onCapture: () => Promise<void>;
-    onStateChanged: () => void;
-    constructor(
-      _appId: string,
-      _shortcut: unknown,
-      onCapture: () => Promise<void>,
-      onStateChanged: () => void,
-    ) {
-      this.onCapture = onCapture;
-      this.onStateChanged = onStateChanged;
-      portalShortcutInstances.push(this);
-    }
-  },
-}));
 vi.mock("node:child_process", () => ({
   spawn: (_command: string, args: ReadonlyArray<string>) => {
     const stderrListeners: Array<(chunk: Buffer) => void> = [];
@@ -463,15 +400,6 @@ accessibilityProcessReadMock.mockImplementation((request) => ({
     request.imageSize,
   ),
 }));
-vi.mock("./GnomeCaptureSetup.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./GnomeCaptureSetup.ts")>()),
-  GnomeCaptureSetup: class {
-    state = async () => ({ status: "enabled" as const, message: "Extension running" });
-    perform = async () => undefined;
-    close = () => undefined;
-  },
-}));
-
 const decodePendingMetadata = Schema.decodeUnknownEffect(
   Schema.fromJsonString(DesktopPendingSnapShot),
 );
@@ -560,14 +488,6 @@ function concurrentCaptureFixture(platform: NodeJS.Platform, animations: boolean
     handoff: Promise.withResolvers<void>(),
     context: Promise.withResolvers<SnapShotAccessibility.CapturedWindowAccessibilityContext>(),
     oldOverlaysCleared: false,
-    oldNativeFeedbackClosed: false,
-    feedback: {
-      animationStarted: animations,
-      activate: async () => undefined,
-      animateTo: async () => undefined,
-      complete: vi.fn(async () => undefined),
-      close: vi.fn(),
-    },
   }));
   const [first, second, extra] = captures;
   extra!.pixels.resolve();
@@ -588,9 +508,6 @@ function concurrentCaptureFixture(platform: NodeJS.Platform, animations: boolean
     const index = state.snapshots++;
     const capture = captures[Math.min(index, captures.length - 1)]!;
     capture.oldOverlaysCleared = flashWindows.every((window) => window.destroyed);
-    capture.oldNativeFeedbackClosed = captures
-      .slice(0, index)
-      .every((previous) => previous.feedback.close.mock.calls.length > 0);
     capture.started.resolve();
     await capture.pixels.promise;
     return capture;
@@ -613,20 +530,6 @@ function concurrentCaptureFixture(platform: NodeJS.Platform, animations: boolean
     const capture = await takeSnapshot();
     images.set(imagePath, capture.png);
     return { source: { name: capture.title }, png: capture.png };
-  });
-  linuxCaptureMock.mockReset().mockImplementation(async () => {
-    const capture = await takeSnapshot();
-    return {
-      png: capture.png,
-      window: {
-        title: capture.title,
-        appName: capture.title,
-        appIdentifier: `test.capture.${capture.id}`,
-        processId: capture.processId,
-        bounds,
-      },
-      feedback: capture.feedback,
-    };
   });
   const readAccessibility = accessibilityProcessReadMock.getMockImplementation()!;
   accessibilityProcessReadMock.mockImplementation(({ active }) => ({
@@ -735,10 +638,7 @@ function concurrentCaptureFixture(platform: NodeJS.Platform, animations: boolean
         modKey: false,
       },
     },
-    trigger: () =>
-      platform === "linux"
-        ? portalShortcutInstances.at(-1)!.onCapture()
-        : (registerShortcutMock.mock.calls.at(-1)![1] as () => Promise<void>)(),
+    trigger: () => (registerShortcutMock.mock.calls.at(-1)![1] as () => Promise<void>)(),
     releaseAll: () => {
       for (const capture of captures) {
         capture.pixels.resolve();
@@ -747,7 +647,6 @@ function concurrentCaptureFixture(platform: NodeJS.Platform, animations: boolean
     },
     reset: () => {
       focusedWindowMock.mockReset();
-      linuxCaptureMock.mockReset().mockResolvedValue(undefined);
       accessibilityProcessReadMock.mockReset().mockImplementation(readAccessibility);
       mediaAccessStatusMock.mockReturnValue("not-determined");
       animationSettingsMock.mockReturnValue({
@@ -758,24 +657,6 @@ function concurrentCaptureFixture(platform: NodeJS.Platform, animations: boolean
     },
   };
 }
-
-it.effect("rejects desktop config changes outside Niri or Hyprland", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      const previewError = yield* service
-        .previewConfig({ operation: "install", chooseFile: false })
-        .pipe(Effect.flip);
-      const applyError = yield* service.applyConfig("unapproved-preview").pipe(Effect.flip);
-      assert.equal(previewError.action, "preview-config");
-      assert.equal(applyError.action, "apply-config");
-      for (const error of [previewError, applyError]) {
-        assert.equal(error.reason, "unsupported-session");
-        assert.equal(error.message, "Config setup requires a Niri or Hyprland session.");
-      }
-    }),
-  ).pipe(Effect.provide(layerTest("win32"))),
-);
 
 it.effect("reads and acknowledges queued captures through Effect services", () => {
   const captureId = "12345678-1234-1234-1234-123456789abc";
@@ -923,7 +804,7 @@ it.effect.each([
   },
 );
 
-it.effect.each(["win32", "darwin", "linux"] as const)(
+it.effect.each(["win32", "darwin"] as const)(
   "captures the foreground window in place from the shortcut on %s",
   (platform) => {
     vi.stubEnv("XDG_SESSION_TYPE", "wayland");
@@ -965,24 +846,6 @@ it.effect.each(["win32", "darwin", "linux"] as const)(
       images.push(t3.png);
       return { source: { name: t3.title }, png: t3.png };
     });
-    const activate = vi.fn<(title: string) => Promise<void>>().mockResolvedValue(undefined);
-    linuxCaptureMock.mockResolvedValueOnce({
-      png: t3.png,
-      window: {
-        title: t3.title,
-        appName: t3.owner.name,
-        appIdentifier: t3.appIdentifier,
-        processId: t3.owner.processId,
-        bounds,
-      },
-      feedback: {
-        animationStarted: true,
-        activate,
-        animateTo: async () => undefined,
-        complete: async () => undefined,
-        close: () => undefined,
-      },
-    });
     const readAccessibility = accessibilityProcessReadMock.getMockImplementation()!;
     accessibilityProcessReadMock.mockImplementation(({ active }) => ({
       started: Promise.resolve(),
@@ -1006,10 +869,7 @@ it.effect.each(["win32", "darwin", "linux"] as const)(
             },
           }),
         );
-        const trigger =
-          platform === "linux"
-            ? portalShortcutInstances.at(-1)!.onCapture
-            : registerShortcutMock.mock.calls.at(-1)![1];
+        const trigger = registerShortcutMock.mock.calls.at(-1)![1];
         yield* Effect.promise(trigger);
 
         const saved = yield* decodePendingMetadata(metadata);
@@ -1018,10 +878,6 @@ it.effect.each(["win32", "darwin", "linux"] as const)(
         assert.equal(saved.source.accessibleText, `Window from process ${t3.owner.processId}`);
         assert.deepEqual(images, [t3.png]);
         assert.equal(prepareCaptureRevealMock.mock.calls.length, platform === "win32" ? 1 : 0);
-        if (platform === "linux") {
-          assert.equal(saved.source.appIdentifier, t3.appIdentifier);
-          assert.deepEqual(activate.mock.calls, [[t3.title]]);
-        }
       }),
     ).pipe(
       Effect.provide(
@@ -1041,7 +897,6 @@ it.effect.each(["win32", "darwin", "linux"] as const)(
       Effect.ensuring(
         Effect.sync(() => {
           focusedWindowMock.mockReset();
-          linuxCaptureMock.mockReset().mockResolvedValue(undefined);
           accessibilityProcessReadMock.mockReset().mockImplementation(readAccessibility);
           mediaAccessStatusMock.mockReturnValue("not-determined");
           animationSettingsMock.mockReturnValue({
@@ -1055,7 +910,7 @@ it.effect.each(["win32", "darwin", "linux"] as const)(
   },
 );
 
-it.effect.each(["win32", "darwin", "linux"] as const)(
+it.effect.each(["win32", "darwin"] as const)(
   "ignores shortcut repeats for 200 ms without delaying the first capture on %s",
   (platform) => {
     const fixture = concurrentCaptureFixture(platform, false);
@@ -1094,7 +949,6 @@ it.effect.each(["win32", "darwin", "linux"] as const)(
 it.effect.each([
   { platform: "win32", animations: true },
   { platform: "darwin", animations: false },
-  { platform: "linux", animations: true },
 ] as const)(
   "captures again while accessibility is pending on $platform (animations: $animations)",
   ({ platform, animations }) => {
@@ -1123,9 +977,8 @@ it.effect.each([
         assert.isTrue(fixture.second.oldOverlaysCleared);
         assert.equal(fixture.state.preparations, platform === "win32" ? 2 : 0);
         assert.isTrue(fixture.state.preparedWithoutOverlay);
-        if (platform === "linux") assert.isTrue(fixture.second.oldNativeFeedbackClosed);
         const secondOverlays = flashWindows.filter((window) => !window.destroyed);
-        if (platform !== "linux") assert.isNotEmpty(secondOverlays);
+        assert.isNotEmpty(secondOverlays);
 
         fixture.second.context.resolve({ accessibleText: "Explorer accessibility" });
         yield* Fiber.join(second);
@@ -1152,10 +1005,6 @@ it.effect.each([
 
         yield* service.acknowledge(fixture.readyIds[1]!);
         assert.isTrue(secondOverlays.every((window) => !window.destroyed));
-        if (platform === "linux") {
-          assert.lengthOf(fixture.second.feedback.close.mock.calls, 0);
-          assert.lengthOf(fixture.second.feedback.complete.mock.calls, 0);
-        }
       }).pipe(Effect.ensuring(Effect.sync(fixture.releaseAll))),
     ).pipe(Effect.provide(fixture.layer), Effect.ensuring(Effect.sync(fixture.reset)));
   },
@@ -1203,41 +1052,6 @@ it.effect.each(["succeeds", "fails"] as const)(
     ).pipe(Effect.provide(fixture.layer), Effect.ensuring(Effect.sync(fixture.reset)));
   },
 );
-
-it.effect("keeps newer native feedback when older accessibility persistence fails", () => {
-  const fixture = concurrentCaptureFixture("linux", true);
-  fixture.state.failFirstPersistence = true;
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure(fixture.settings);
-      fixture.first.pixels.resolve();
-      const first = yield* Effect.promise(fixture.trigger).pipe(
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* Effect.promise(() => fixture.first.handoff.promise);
-      yield* TestClock.adjust("200 millis");
-      fixture.second.pixels.resolve();
-      const second = yield* Effect.promise(fixture.trigger).pipe(
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* Effect.promise(() => fixture.second.handoff.promise);
-      fixture.first.context.resolve({ accessibleText: "Discord accessibility" });
-      yield* Fiber.join(first);
-
-      assert.lengthOf(fixture.readyIds, 0);
-      assert.lengthOf(fixture.second.feedback.close.mock.calls, 0);
-      assert.lengthOf(fixture.second.feedback.complete.mock.calls, 0);
-      fixture.second.context.resolve({ accessibleText: "Explorer accessibility" });
-      yield* Fiber.join(second);
-      assert.lengthOf(fixture.readyIds, 1);
-      const newer = yield* service.read(fixture.readyIds[0]!);
-      assert.equal(newer.source.windowTitle, fixture.second.title);
-      yield* service.acknowledge(fixture.readyIds[0]!);
-      assert.lengthOf(fixture.second.feedback.complete.mock.calls, 1);
-    }).pipe(Effect.ensuring(Effect.sync(fixture.releaseAll))),
-  ).pipe(Effect.provide(fixture.layer), Effect.ensuring(Effect.sync(fixture.reset)));
-});
 
 it.effect("matches Windows accessibility windows on a scaled display", () => {
   const png = Buffer.from([1, 2, 3]);
@@ -1363,343 +1177,6 @@ it.effect("keeps an accessibility helper warm only while capture data is enabled
       assert.lengthOf(accessibilityProcessCoolMock.mock.calls, 1);
     }),
   ).pipe(Effect.provide(layerTest("win32")));
-});
-
-it.effect("rejects X11 capture without registering shortcuts or loading capture backends", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "x11");
-  vi.stubEnv("WAYLAND_DISPLAY", "");
-  linuxCaptureMock.mockClear();
-  activeWindowMock.mockClear();
-  registerShortcutMock.mockClear();
-  shortcutProcesses.length = 0;
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure({ ...DEFAULT_CLIENT_SETTINGS, snapShotEnabled: true });
-      const state = yield* service.state;
-      assert.equal(state.mode, "unavailable");
-      assert.include(state.message, "Wayland");
-      const result = yield* Effect.flip(service.capture);
-      assert.equal(result.operation, "unsupported");
-      assert.lengthOf(registerShortcutMock.mock.calls, 0);
-      assert.lengthOf(shortcutProcesses, 0);
-      assert.lengthOf(linuxCaptureMock.mock.calls, 0);
-      assert.lengthOf(activeWindowMock.mock.calls, 0);
-    }),
-  ).pipe(
-    Effect.provide(layerTest("linux")),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect.each(["gnome", "niri", "kde", "hyprland"] as const)(
-  "persists %s text without inventing AT-SPI screen coordinates",
-  (backend) => {
-    vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-    flashWindows.length = 0;
-    const window = {
-      title: "Editor",
-      appName: "Text Editor",
-      appIdentifier: "org.gnome.TextEditor.desktop",
-      processId: 123,
-      bounds: {
-        x: backend === "niri" ? 0 : 479,
-        y: backend === "niri" ? 0 : 342,
-        width: 700,
-        height: backend === "kde" ? 549 : 520,
-      },
-      ...(backend === "niri" ? { accessibilityBoundsReliable: false } : {}),
-      ...(backend === "kde" ? { clientBounds: { x: 479, y: 371, width: 700, height: 520 } } : {}),
-    };
-    linuxCaptureMock.mockResolvedValueOnce({ png: Buffer.from([1, 2, 3]), window });
-    activeWindowMock.mockClear();
-    getSourcesMock.mockClear();
-    accessibilityByPidMock.mockReset().mockResolvedValue({
-      children: async () => [
-        {
-          role: "window",
-          name: "Editor",
-          bounds: { x: 0, y: 0, width: 700, height: 520 },
-          active: true,
-          children: async () => [
-            {
-              role: "button",
-              name: "Save",
-              bounds: { x: 10, y: 20, width: 80, height: 24 },
-              focused: true,
-              actions: ["press"],
-              children: async () => [],
-            },
-          ],
-          tree: async () => ({ name: "Editor", value: "Verified text", children: [] }),
-        },
-      ],
-    });
-    let metadata = "";
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* DesktopSnapShot.make;
-        yield* service.configure(enabledSettings());
-        yield* service.capture;
-        assert.lengthOf(activeWindowMock.mock.calls, 0);
-        assert.lengthOf(getSourcesMock.mock.calls, 0);
-        assert.deepEqual(accessibilityByPidMock.mock.calls, [[123, { timeout: 0 }]]);
-        const saved = yield* decodePendingMetadata(metadata);
-        assert.equal(saved.source.appName, "Text Editor");
-        assert.equal(saved.source.appIdentifier, window.appIdentifier);
-        assert.include(saved.source.accessibleText, "Verified text");
-        assert.deepInclude(saved.source.accessibility, {
-          format: "element-tree",
-          coordinateSpace: "captured-image",
-          imageSize: { width: 700, height: window.bounds.height },
-          truncated: false,
-        });
-        assert.deepInclude(
-          saved.source.accessibility?.format === "element-tree"
-            ? saved.source.accessibility.root
-            : undefined,
-          {
-            role: "window",
-            name: "Editor",
-            bounds: { x: 0, y: 0, width: 700, height: window.bounds.height },
-            state: { active: true },
-          },
-        );
-        assert.isNull(
-          saved.source.accessibility?.format === "element-tree"
-            ? saved.source.accessibility.root.children[0]?.bounds
-            : undefined,
-        );
-        assert.lengthOf(flashWindows, 0);
-      }),
-    ).pipe(
-      Effect.provide(
-        layerTest("linux", {
-          makeDirectory: () => Effect.void,
-          rename: () => Effect.void,
-          writeFile: () => Effect.void,
-          writeFileString: (_, text) =>
-            Effect.sync(() => {
-              metadata = text;
-            }),
-        }),
-      ),
-      Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-    );
-  },
-);
-
-it.effect("persists a window capture from a portal activation without a setup test", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  linuxCaptureMock.mockClear().mockResolvedValueOnce({
-    png: Buffer.from([1, 2, 3]),
-    window: {
-      title: "Shortcut capture",
-      appName: "Text Editor",
-      appIdentifier: "org.kde.kwrite",
-      processId: 123,
-      bounds: { x: 0, y: 0, width: 700, height: 520 },
-    },
-  });
-  let metadata = "";
-  const writes: Uint8Array[] = [];
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure({
-        ...DEFAULT_CLIENT_SETTINGS,
-        snapShotEnabled: true,
-        snapShotIncludeAccessibility: false,
-        snapShotShortcut: {
-          key: "2",
-          ctrlKey: true,
-          shiftKey: true,
-          altKey: false,
-          metaKey: false,
-          modKey: false,
-        },
-      });
-      yield* Effect.promise(portalShortcutInstances[0]!.onCapture);
-      assert.lengthOf(linuxCaptureMock.mock.calls, 1);
-      assert.deepEqual(writes, [Buffer.from([1, 2, 3])]);
-      const saved = yield* decodePendingMetadata(metadata);
-      assert.equal(saved.source.windowTitle, "Shortcut capture");
-      assert.equal(saved.source.appIdentifier, "org.kde.kwrite");
-      const state = yield* service.state;
-      assert.isTrue(state.shortcutVerified);
-      assert.isNull(state.message);
-      const portal = portalShortcutInstances[0]!;
-      portal.state = {
-        shortcutRegistered: false,
-        shortcutPending: false,
-        shortcutMessage: "Permission revoked",
-      };
-      portal.onStateChanged();
-      const revoked = yield* service.state;
-      assert.isFalse(revoked.shortcutVerified);
-      assert.isFalse(revoked.shortcutRegistered);
-    }),
-  ).pipe(
-    Effect.provide(
-      layerTest("linux", {
-        makeDirectory: () => Effect.void,
-        rename: () => Effect.void,
-        writeFile: (_, bytes) =>
-          Effect.sync(() => {
-            writes.push(bytes);
-          }),
-        writeFileString: (_, text) =>
-          Effect.sync(() => {
-            metadata = text;
-          }),
-      }),
-    ),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect("does not fall back to the picker when an automatic Wayland capture fails", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  linuxCaptureMock.mockRejectedValueOnce(new Error("Capture denied"));
-  getSourcesMock.mockClear();
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure(enabledSettings());
-      const failure = yield* Effect.flip(service.capture);
-      assert.equal(failure.operation, "capture");
-      assert.lengthOf(getSourcesMock.mock.calls, 0);
-    }),
-  ).pipe(
-    Effect.provide(
-      layerTest("linux", {
-        makeDirectory: () => Effect.void,
-        remove: () => Effect.void,
-      }),
-    ),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect(
-  "logs a GNOME activation failure and completes the shell flight before acknowledging the image",
-  () => {
-    vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-    const order: string[] = [];
-    const activationFailure = new Error("Activation failed");
-    const logs: Array<unknown> = [];
-    const logger = Logger.make(({ message }) => logs.push(message));
-    const feedback = {
-      animationStarted: true,
-      activate: async () => {
-        order.push("activate");
-        throw activationFailure;
-      },
-      animateTo: async () => {
-        order.push("land");
-      },
-      complete: async () => {
-        order.push("complete");
-      },
-      close: () => {
-        order.push("close");
-      },
-    };
-    linuxCaptureMock.mockImplementationOnce(async () => {
-      order.push("snapshot");
-      return { png: Buffer.from([1, 2, 3]), feedback };
-    });
-    focusedWindowMock.mockReturnValue(undefined);
-    const destination = {
-      getBounds: () => ({ x: 0, y: 0, width: 1000, height: 800 }),
-      getTitle: () => "Busyboy",
-      isDestroyed: () => false,
-      isVisible: () => true,
-      isMinimized: () => false,
-    };
-    allWindowsMock.mockReturnValue([destination]);
-    let saved = "";
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* DesktopSnapShot.make;
-        yield* service.configure(enabledSettings());
-        yield* service.capture;
-        assert.deepEqual(order, ["snapshot", "activate"]);
-        const warning = logs.find(
-          (message) =>
-            Array.isArray(message) &&
-            message[0] === "The compositor could not activate Busyboy after the snapshot",
-        );
-        assert.strictEqual(Array.isArray(warning) ? warning[1] : undefined, activationFailure);
-        const pending = yield* decodePendingMetadata(saved);
-        yield* service.setAnimationDestination(pending.id, {
-          frame: { x: 0, y: 0, width: 10, height: 10 },
-          relativeFrame: { x: 0.1, y: 0.8, width: 0.2, height: 0.1 },
-          backgroundColor: "white",
-          borderColor: "black",
-          borderWidth: 1,
-          cornerRadius: 8,
-          scaleFactor: 1,
-        });
-        yield* service.acknowledge(pending.id);
-        assert.deepEqual(order, ["snapshot", "activate", "land", "complete", "delete", "delete"]);
-      }),
-    ).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          layerTest("linux", {
-            makeDirectory: () => Effect.void,
-            rename: () => Effect.void,
-            writeFile: () => Effect.void,
-            writeFileString: (_, value) =>
-              Effect.sync(() => {
-                saved = value;
-              }),
-            remove: () =>
-              Effect.sync(() => {
-                order.push("delete");
-              }),
-          }),
-          Logger.layer([logger], { mergeWithExisting: false }),
-        ),
-      ),
-      Effect.ensuring(
-        Effect.sync(() => {
-          allWindowsMock.mockReturnValue([]);
-          vi.unstubAllEnvs();
-        }),
-      ),
-    );
-  },
-);
-
-it.effect("does not read unverified accessibility context for a Wayland portal capture", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  const png = Buffer.from([1, 2, 3]);
-  accessibilityForegroundMock.mockReset();
-  getSourcesMock.mockReset().mockResolvedValue([
-    {
-      id: "window:42:0",
-      name: "Untitled",
-      thumbnail: { isEmpty: () => false, toPNG: () => png },
-    },
-  ]);
-  const layer = layerTest("linux", {
-    makeDirectory: () => Effect.void,
-    rename: () => Effect.void,
-    writeFile: () => Effect.void,
-    writeFileString: () => Effect.void,
-  });
-
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure(enabledSettings());
-      yield* service.capture;
-
-      assert.lengthOf(accessibilityForegroundMock.mock.calls, 0);
-    }),
-  ).pipe(Effect.provide(layer), Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())));
 });
 
 it.effect("uses display-local macOS capture surfaces across the source and main displays", () => {
@@ -3378,412 +2855,6 @@ it.effect("keeps shortcut registration errors off the capture status", () => {
     }),
   ).pipe(Effect.provide(layerTest("win32")));
 });
-
-it.effect("uses an external Niri shortcut without registering an Electron accelerator", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  vi.stubEnv("XDG_CURRENT_DESKTOP", "niri");
-  vi.stubEnv("NIRI_SOCKET", "/test/niri.sock");
-  registerShortcutMock.mockReset();
-  niriShortcutStopMock.mockReset();
-  niriShortcutMock.mockReset().mockResolvedValue(niriShortcutStopMock);
-  const settings = { ...DEFAULT_CLIENT_SETTINGS, snapShotEnabled: true };
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure(settings);
-      const state = yield* service.state;
-      assert.isFalse(state.shortcutRegistered);
-      assert.include(state.shortcutBinding, "gdbus");
-      assert.match(state.shortcutBinding ?? "", /^Ctrl\+Shift\+2 repeat=false \{/);
-      assert.include(state.shortcutMessage, "Niri config");
-      assert.isTrue(state.shortcutActionRegistered);
-      assert.lengthOf(registerShortcutMock.mock.calls, 0);
-      assert.lengthOf(niriShortcutMock.mock.calls, 1);
-      assert.isFalse((yield* service.checkShortcut(settings.snapShotShortcut)).available);
-      yield* Effect.promise(async () => {
-        await niriShortcutMock.mock.calls[0]![1]();
-      });
-      assert.isTrue((yield* service.state).shortcutVerified);
-      yield* service.configure({ ...settings, snapShotEnabled: false });
-      assert.lengthOf(niriShortcutStopMock.mock.calls, 1);
-      assert.isUndefined((yield* service.state).shortcutBinding);
-    }),
-  ).pipe(
-    Effect.provide(layerTest("linux")),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect("defers ordinary Wayland shortcut registration until settings are applied", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  registerShortcutMock.mockReset().mockReturnValue(false);
-
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      const conflict = yield* service.checkShortcut({
-        key: "c",
-        metaKey: false,
-        ctrlKey: true,
-        shiftKey: false,
-        altKey: false,
-        modKey: false,
-      });
-      const available = yield* service.checkShortcut({
-        key: "2",
-        metaKey: false,
-        ctrlKey: true,
-        shiftKey: true,
-        altKey: false,
-        modKey: false,
-      });
-      assert.isFalse(conflict.available);
-      assert.isTrue(available.available);
-      assert.match(available.message ?? "", /desktop will confirm/);
-
-      const pair = yield* service.checkShortcut({
-        kind: "modifier-pair",
-        modifier: "meta",
-      });
-      assert.isFalse(pair.available);
-      assert.match(pair.message ?? "", /Modifier-pair shortcuts aren't available/);
-      assert.lengthOf(registerShortcutMock.mock.calls, 0);
-    }),
-  ).pipe(
-    Effect.provide(layerTest("linux")),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect.each(["GNOME", "KDE", "niri", "Hyprland"] as const)(
-  "identifies %s in setup even when its capability check fails",
-  (desktop) => {
-    vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-    vi.stubEnv("XDG_CURRENT_DESKTOP", desktop);
-    linuxBackendMock.mockRejectedValueOnce(new Error("Capability check failed"));
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* DesktopSnapShot.make;
-        const state = yield* service.state;
-        assert.equal(state.linuxDesktop, desktop.toLowerCase());
-        assert.equal(state.message, "Capability check failed");
-        assert.isFalse(state.shortcutVerified);
-      }),
-    ).pipe(
-      Effect.provide(layerTest("linux")),
-      Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-    );
-  },
-);
-
-it.effect(
-  "keeps saved preferences but rechecks access and shortcut delivery after changing desktops",
-  () => {
-    vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-    vi.stubEnv("NIRI_SOCKET", "/test/niri.sock");
-    vi.stubEnv("FLATPAK_ID", "");
-    vi.stubEnv("SNAP", "");
-    registerShortcutMock.mockReset().mockReturnValue(true);
-    niriShortcutMock.mockReset().mockResolvedValue(niriShortcutStopMock);
-    const settings: ClientSettings = {
-      ...DEFAULT_CLIENT_SETTINGS,
-      snapShotEnabled: true,
-      snapShotShortcut: {
-        key: "2",
-        ctrlKey: true,
-        shiftKey: true,
-        altKey: false,
-        metaKey: false,
-        modKey: false,
-      },
-      snapShotPlaySound: false,
-      snapShotAnimations: false,
-    };
-    return Effect.gen(function* () {
-      for (const [desktop, backend] of [
-        ["GNOME", "gnome-extension"],
-        ["niri", "niri"],
-        ["KDE", "kde"],
-        ["Hyprland", "hyprland"],
-        ["GNOME", "gnome-extension"],
-      ] as const) {
-        vi.stubEnv("XDG_CURRENT_DESKTOP", desktop);
-        linuxBackendMock.mockResolvedValue(backend);
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            const service = yield* DesktopSnapShot.make;
-            yield* service.initialize;
-            const state = yield* service.state;
-            assert.equal(state.linuxDesktop, desktop.toLowerCase());
-            assert.equal(state.linuxBackend, backend);
-            assert.deepEqual(state.shortcut, settings.snapShotShortcut);
-            assert.isFalse(state.shortcutVerified);
-            assert.equal(state.gnomeExtension?.status, desktop === "GNOME" ? "enabled" : undefined);
-            assert.equal(state.kdeHelper?.status, desktop === "KDE" ? "not-installed" : undefined);
-            assert.equal(
-              state.hyprlandHelper?.status,
-              desktop === "Hyprland" ? "not-installed" : undefined,
-            );
-            assert.equal(
-              Boolean(state.shortcutBinding),
-              desktop === "niri" || desktop === "Hyprland",
-            );
-            const trigger =
-              desktop === "niri"
-                ? niriShortcutMock.mock.calls.at(-1)![1]
-                : portalShortcutInstances.at(-1)!.onCapture;
-            yield* Effect.promise(async () => {
-              await trigger();
-            });
-            assert.isTrue((yield* service.state).shortcutVerified);
-          }),
-        ).pipe(Effect.provide(layerTest("linux", {}, Option.some(settings))));
-      }
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          linuxBackendMock.mockResolvedValue("picker");
-          vi.unstubAllEnvs();
-        }),
-      ),
-    );
-  },
-);
-
-it.effect("does not register a Wayland modifier-pair shortcut when enabled", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  registerShortcutMock.mockReset().mockReturnValue(true);
-  const settings = { ...DEFAULT_CLIENT_SETTINGS, snapShotEnabled: true };
-
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure(settings);
-
-      const state = yield* service.state;
-      assert.lengthOf(registerShortcutMock.mock.calls, 0);
-      assert.isFalse(state.shortcutRegistered);
-      assert.deepEqual(state.shortcut, DEFAULT_CLIENT_SETTINGS.snapShotShortcut);
-      assert.match(state.shortcutMessage ?? "", /Modifier-pair shortcuts aren't available/);
-    }),
-  ).pipe(
-    Effect.provide(layerTest("linux")),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect("exposes pending portal permission and then the real assigned shortcut", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  registerShortcutMock.mockReset().mockReturnValue(true);
-  nextPortalState.value = {
-    shortcutRegistered: false,
-    shortcutPending: true,
-    shortcutMessage: "Waiting for permission",
-  };
-  const shortcut = {
-    key: "2",
-    metaKey: false,
-    ctrlKey: true,
-    shiftKey: true,
-    altKey: false,
-    modKey: false,
-  } as const;
-  const settings = {
-    ...DEFAULT_CLIENT_SETTINGS,
-    snapShotEnabled: true,
-    snapShotShortcut: shortcut,
-  };
-
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure(settings);
-
-      const state = yield* service.state;
-      assert.lengthOf(registerShortcutMock.mock.calls, 0);
-      assert.isFalse(state.shortcutRegistered);
-      assert.isTrue(state.shortcutPending);
-      assert.deepEqual(state.shortcut, shortcut);
-      assert.equal(state.shortcutMessage, "Waiting for permission");
-
-      portalShortcutInstances[0]!.state = {
-        shortcutRegistered: true,
-        shortcutPending: false,
-        shortcutLabel: "Ctrl+Shift+7",
-        shortcutMessage: null,
-      };
-      assert.equal((yield* service.state).shortcutLabel, "Ctrl+Shift+7");
-      assert.isTrue((yield* service.state).shortcutRegistered);
-      portalShortcutInstances[0]!.state = {
-        shortcutRegistered: false,
-        shortcutPending: false,
-        shortcutMessage: "Permission denied",
-      };
-      const failed = yield* service.state;
-      assert.isFalse(failed.shortcutRegistered);
-      assert.equal(failed.shortcutMessage, "Permission denied");
-    }),
-  ).pipe(
-    Effect.provide(layerTest("linux")),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect("verifies only native shortcut delivery and captures normally", () => {
-  vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-  vi.stubEnv("XDG_CURRENT_DESKTOP", "test-desktop");
-  registerShortcutMock.mockReset().mockReturnValue(true);
-  linuxCaptureMock.mockClear().mockResolvedValue({
-    png: Buffer.from([1, 2, 3]),
-    window: {
-      title: "Shortcut capture",
-      appName: "Text Editor",
-      appIdentifier: "org.kde.kwrite",
-      processId: 123,
-      bounds: { x: 0, y: 0, width: 700, height: 520 },
-    },
-  });
-  const settings = {
-    ...DEFAULT_CLIENT_SETTINGS,
-    snapShotEnabled: true,
-    snapShotIncludeAccessibility: false,
-    snapShotShortcut: {
-      key: "2",
-      ctrlKey: true,
-      shiftKey: true,
-      altKey: false,
-      metaKey: false,
-      modKey: false,
-    },
-  };
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const service = yield* DesktopSnapShot.make;
-      yield* service.configure(settings);
-      assert.isFalse((yield* service.state).shortcutVerified);
-      yield* service.capture;
-      assert.isFalse((yield* service.state).shortcutVerified);
-      linuxCaptureMock.mockClear();
-      const trigger = portalShortcutInstances.at(-1)!.onCapture;
-      yield* service.setShortcutSuppressed(true);
-      yield* Effect.promise(trigger);
-      assert.isFalse((yield* service.state).shortcutVerified);
-      assert.lengthOf(linuxCaptureMock.mock.calls, 0);
-      yield* service.setShortcutSuppressed(false);
-      yield* Effect.promise(trigger);
-      assert.isTrue((yield* service.state).shortcutVerified);
-      assert.lengthOf(linuxCaptureMock.mock.calls, 1);
-      yield* service.setup("retry-shortcut");
-      assert.equal(portalShortcutInstances.length, 1);
-      assert.equal(portalShortcutInstances[0]!.configure.mock.calls.length, 1);
-      yield* service.configure({ ...settings, snapShotEnabled: false });
-      assert.isFalse((yield* service.state).shortcutVerified);
-    }),
-  ).pipe(
-    Effect.provide(
-      layerTest("linux", {
-        makeDirectory: () => Effect.void,
-        rename: () => Effect.void,
-        writeFile: () => Effect.void,
-        writeFileString: () => Effect.void,
-      }),
-    ),
-    Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-  );
-});
-
-it.effect(
-  "preserves an approved portal session for cosmetic changes and retires it when keys change",
-  () => {
-    vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-    const settings = {
-      ...DEFAULT_CLIENT_SETTINGS,
-      snapShotEnabled: true,
-      snapShotShortcut: {
-        key: "2",
-        ctrlKey: true,
-        shiftKey: true,
-        altKey: false,
-        metaKey: false,
-        modKey: false,
-      },
-    };
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* DesktopSnapShot.make;
-        yield* service.configure(settings);
-        const first = portalShortcutInstances[0]!;
-        yield* Effect.promise(first.onCapture);
-        yield* service.configure({
-          ...settings,
-          snapShotPlaySound: false,
-          snapShotFlash: false,
-        });
-        assert.equal(portalShortcutInstances.length, 1);
-        assert.equal(first.close.mock.calls.length, 0);
-        assert.isTrue((yield* service.state).shortcutVerified);
-        yield* service.configure({
-          ...settings,
-          snapShotShortcut: { ...settings.snapShotShortcut, key: "8" },
-        });
-        assert.equal(first.close.mock.calls.length, 1);
-        assert.equal(portalShortcutInstances.length, 2);
-        assert.isFalse((yield* service.state).shortcutVerified);
-        yield* Effect.promise(first.onCapture);
-        assert.isFalse((yield* service.state).shortcutVerified);
-        const current = portalShortcutInstances[1]!;
-        yield* Effect.promise(current.onCapture);
-        assert.isTrue((yield* service.state).shortcutVerified);
-        yield* service.configure({ ...settings, snapShotEnabled: false });
-        assert.equal(current.close.mock.calls.length, 1);
-        yield* Effect.promise(current.onCapture);
-        assert.isFalse((yield* service.state).shortcutVerified);
-        assert.isFalse((yield* service.state).shortcutRegistered);
-      }),
-    ).pipe(
-      Effect.provide(layerTest("linux")),
-      Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-    );
-  },
-);
-
-it.effect(
-  "keeps Hyprland's stable action with a modifier-pair preference and releases it when disabled",
-  () => {
-    vi.stubEnv("XDG_SESSION_TYPE", "wayland");
-    vi.stubEnv("XDG_CURRENT_DESKTOP", "Hyprland");
-    vi.stubEnv("FLATPAK_ID", "");
-    vi.stubEnv("SNAP", "");
-    nextPortalState.value = {
-      shortcutRegistered: false,
-      shortcutActionRegistered: true,
-      shortcutPending: false,
-      shortcutMessage: "Managed by Hyprland",
-    };
-    const settings = { ...DEFAULT_CLIENT_SETTINGS, snapShotEnabled: true };
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* DesktopSnapShot.make;
-        yield* service.configure(settings);
-        assert.lengthOf(portalShortcutInstances, 1);
-        const first = portalShortcutInstances[0]!;
-        assert.isTrue((yield* service.state).shortcutActionRegistered);
-        const check = yield* service.checkShortcut(settings.snapShotShortcut);
-        assert.isFalse(check.available);
-        assert.include(check.message, "Hyprland config");
-        yield* service.configure({ ...settings, snapShotPlaySound: false });
-        assert.lengthOf(portalShortcutInstances, 1);
-        assert.lengthOf(first.close.mock.calls, 0);
-        yield* service.configure({ ...settings, snapShotEnabled: false });
-        assert.lengthOf(first.close.mock.calls, 1);
-        assert.notEqual((yield* service.state).shortcutActionRegistered, true);
-      }),
-    ).pipe(
-      Effect.provide(layerTest("linux")),
-      Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
-    );
-  },
-);
 
 it.effect("advises about the system menu for a meta pair on Windows", () =>
   Effect.scoped(

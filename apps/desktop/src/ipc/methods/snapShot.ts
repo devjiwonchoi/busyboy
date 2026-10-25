@@ -7,9 +7,6 @@ import {
   DesktopSnapShotState,
   DesktopSnapShotSetupAction,
   SnapShotShortcut,
-  DesktopCaptureConfigRequest,
-  DesktopCaptureConfigPreview,
-  DesktopCaptureConfigApplied,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -17,7 +14,6 @@ import * as Schema from "effect/Schema";
 import type * as Electron from "electron";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
-import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as DesktopSnapShot from "../../snapShot/DesktopSnapShot.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
@@ -100,44 +96,6 @@ export const setupSnapShot = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.snapShot.setup")(function* (action, event) {
     yield* ensureTrustedSnapShotSender(event);
     yield* (yield* DesktopSnapShot.DesktopSnapShot).setup(action);
-  }),
-});
-
-export const previewSnapShotConfig = DesktopIpc.makeIpcMethod({
-  channel: IpcChannels.PREVIEW_SNAP_SHOT_CONFIG_CHANNEL,
-  payload: DesktopCaptureConfigRequest,
-  result: Schema.NullOr(DesktopCaptureConfigPreview),
-  handler: Effect.fn("desktop.ipc.snapShot.previewConfig")(function* (request, event) {
-    const window = yield* ensureTrustedSnapShotSender(event);
-    const capture = yield* DesktopSnapShot.DesktopSnapShot;
-    let selectedPath: string | undefined;
-    if (request.chooseFile) {
-      const state = yield* capture.state;
-      const paths = yield* (yield* ElectronDialog.ElectronDialog).pickFiles({
-        owner: Option.some(window),
-        defaultPath: Option.fromUndefinedOr(state.shortcutConfigPath),
-        filters: [
-          {
-            name: "Desktop config",
-            extensions: state.linuxBackend === "niri" ? ["kdl"] : ["conf", "lua"],
-          },
-        ],
-        multiple: false,
-      });
-      selectedPath = paths[0];
-      if (!selectedPath) return null;
-    }
-    return yield* capture.previewConfig(request, selectedPath);
-  }),
-});
-
-export const applySnapShotConfig = DesktopIpc.makeIpcMethod({
-  channel: IpcChannels.APPLY_SNAP_SHOT_CONFIG_CHANNEL,
-  payload: DesktopSnapShotId,
-  result: DesktopCaptureConfigApplied,
-  handler: Effect.fn("desktop.ipc.snapShot.applyConfig")(function* (id, event) {
-    yield* ensureTrustedSnapShotSender(event);
-    return yield* (yield* DesktopSnapShot.DesktopSnapShot).applyConfig(id);
   }),
 });
 

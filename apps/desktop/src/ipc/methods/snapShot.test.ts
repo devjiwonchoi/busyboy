@@ -6,14 +6,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
-import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as DesktopSnapShot from "../../snapShot/DesktopSnapShot.ts";
 import {
   checkSnapShotShortcut,
   requestSnapShotPermissions,
   setupSnapShot,
-  previewSnapShotConfig,
-  applySnapShotConfig,
   setSnapShotAnimationDestination,
   setSnapShotShortcutSuppressed,
   snapShotScreenFrame,
@@ -21,134 +18,6 @@ import {
 } from "./snapShot.ts";
 
 describe("window capture IPC", () => {
-  const configPreview = {
-    id: "12345678-1234-1234-1234-123456789abc",
-    path: "/config/niri/config.kdl",
-    resolvedPath: "/config/niri/config.kdl",
-    before: "binds {}\n",
-    after: "binds {\n}\n",
-    shortcut: "Ctrl+Shift+2",
-    operation: "install" as const,
-  };
-  it.effect("requires a trusted renderer for both config read and write approval", () => {
-    const calls: string[] = [];
-    return Effect.gen(function* () {
-      const request = { operation: "install" as const, chooseFile: false };
-      const untrustedRead = yield* Effect.exit(
-        previewSnapShotConfig.handler(request, { sender: { id: 8 } }),
-      );
-      const untrustedWrite = yield* Effect.exit(
-        applySnapShotConfig.handler(configPreview.id, { sender: { id: 8 } }),
-      );
-      assert(Exit.isFailure(untrustedRead));
-      assert(Exit.isFailure(untrustedWrite));
-      assert.deepEqual(calls, []);
-      yield* previewSnapShotConfig.handler(request, { sender: { id: 7 } });
-      assert.deepEqual(calls, ["read"]);
-      yield* applySnapShotConfig.handler(configPreview.id, { sender: { id: 7 } });
-      assert.deepEqual(calls, ["read", configPreview.id]);
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Layer.succeed(ElectronWindow.ElectronWindow, {
-            main: Effect.succeedSome({ webContents: { id: 7 } }),
-          } as ElectronWindow.ElectronWindow["Service"]),
-          Layer.succeed(DesktopSnapShot.DesktopSnapShot, {
-            previewConfig: () =>
-              Effect.sync(() => {
-                calls.push("read");
-                return configPreview;
-              }),
-            applyConfig: (id: string) =>
-              Effect.sync(() => {
-                calls.push(id);
-                return { backupPath: null, warning: null };
-              }),
-          } as unknown as DesktopSnapShot.DesktopSnapShot["Service"]),
-          Layer.succeed(
-            ElectronDialog.ElectronDialog,
-            {} as ElectronDialog.ElectronDialog["Service"],
-          ),
-        ),
-      ),
-    );
-  });
-
-  it.effect("cancelling custom file selection reads and writes nothing", () => {
-    let read = false;
-    return Effect.gen(function* () {
-      const preview = yield* previewSnapShotConfig.handler(
-        { operation: "install", chooseFile: true },
-        { sender: { id: 7 } },
-      );
-      assert.isNull(preview);
-      assert.isFalse(read);
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Layer.succeed(ElectronWindow.ElectronWindow, {
-            main: Effect.succeedSome({ webContents: { id: 7 } }),
-          } as ElectronWindow.ElectronWindow["Service"]),
-          Layer.succeed(DesktopSnapShot.DesktopSnapShot, {
-            state: Effect.succeed({
-              linuxBackend: "niri",
-              shortcutConfigPath: "/config/niri/config.kdl",
-            }),
-            previewConfig: () =>
-              Effect.sync(() => {
-                read = true;
-                return configPreview;
-              }),
-          } as unknown as DesktopSnapShot.DesktopSnapShot["Service"]),
-          Layer.succeed(ElectronDialog.ElectronDialog, {
-            pickFiles: () => Effect.succeed([]),
-          } as unknown as ElectronDialog.ElectronDialog["Service"]),
-        ),
-      ),
-    );
-  });
-
-  it.effect("uses only the file returned by the native custom config picker", () => {
-    let path: string | undefined;
-    return Effect.gen(function* () {
-      yield* previewSnapShotConfig.handler(
-        { operation: "install", chooseFile: true },
-        { sender: { id: 7 } },
-      );
-      assert.equal(path, "/chosen/config.kdl");
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Layer.succeed(ElectronWindow.ElectronWindow, {
-            main: Effect.succeedSome({ webContents: { id: 7 } }),
-          } as ElectronWindow.ElectronWindow["Service"]),
-          Layer.succeed(DesktopSnapShot.DesktopSnapShot, {
-            state: Effect.succeed({ linuxBackend: "niri" }),
-            previewConfig: (_: unknown, selected: string) =>
-              Effect.sync(() => {
-                path = selected;
-                return configPreview;
-              }),
-          } as unknown as DesktopSnapShot.DesktopSnapShot["Service"]),
-          Layer.succeed(ElectronDialog.ElectronDialog, {
-            pickFiles: () => Effect.succeed(["/chosen/config.kdl"]),
-          } as unknown as ElectronDialog.ElectronDialog["Service"]),
-        ),
-      ),
-    );
-  });
-
-  it("converts renderer viewport coordinates from the content origin using the window zoom", () => {
-    assert.deepEqual(
-      snapShotScreenFrame(
-        { x: 12, y: 20, width: 208, height: 112 },
-        { x: 100, y: 80, width: 1_000, height: 700 },
-        1.25,
-      ),
-      { x: 115, y: 105, width: 260, height: 140 },
-    );
-  });
-
   it.effect("forwards a trusted renderer animation destination in screen coordinates", () => {
     let received: unknown;
     const webContents = { id: 7, getZoomFactor: () => 1.25 };
@@ -264,13 +133,13 @@ describe("window capture IPC", () => {
   it.effect("allows capture setup only from the trusted main renderer", () => {
     const actions: string[] = [];
     return Effect.gen(function* () {
-      yield* setupSnapShot.handler("install-extension", { sender: { id: 7 } });
-      assert.deepEqual(actions, ["install-extension"]);
+      yield* setupSnapShot.handler("retry-shortcut", { sender: { id: 7 } });
+      assert.deepEqual(actions, ["retry-shortcut"]);
       const rejected = yield* Effect.exit(
-        setupSnapShot.handler("enable-extension", { sender: { id: 8 } }),
+        setupSnapShot.handler("allow-accessibility", { sender: { id: 8 } }),
       );
       assert(Exit.isFailure(rejected));
-      assert.deepEqual(actions, ["install-extension"]);
+      assert.deepEqual(actions, ["retry-shortcut"]);
     }).pipe(
       Effect.provide(
         Layer.mergeAll(

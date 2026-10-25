@@ -83,7 +83,6 @@ minimumReleaseAgeExclude:
   - "@muse-code/sdk@1.4.6"
 overrides:
   "@exodus/bytes>@noble/hashes": 1.8.0
-  dbus-next>usocket: "-"
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-darwin-arm64": "-"
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-darwin-x64": "-"
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-arm64": "-"
@@ -126,7 +125,6 @@ patchedDependencies:
   "@ff-labs/fff-node@0.11.0": patches/@ff-labs__fff-node@0.11.0.patch
   "@legendapp/list@3.3.5": patches/@legendapp__list@3.3.5.patch
   "@pierre/diffs@1.5.2": patches/@pierre%2Fdiffs@1.5.2.patch
-  dbus-next@0.10.2: patches/dbus-next@0.10.2.patch
   node-pty@1.2.0-beta.15: patches/node-pty@1.2.0-beta.15.patch
 peerDependencyRules:
   allowAny:

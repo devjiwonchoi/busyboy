@@ -20,7 +20,6 @@
     "@t3tools/shared": "workspace:*",
     "@t3tools/ssh": "workspace:*",
     "@t3tools/tailscale": "workspace:*",
-    "dbus-next": "0.10.2",
     "effect": "catalog:",
     "electron": "44.4.5",
     "electron-store": "^8.2.0",
