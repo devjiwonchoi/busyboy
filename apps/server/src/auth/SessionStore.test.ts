@@ -22,7 +22,6 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
 import * as SessionStore from "./SessionStore.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
-import { base64UrlDecodeUtf8, base64UrlEncode, signPayload } from "./utils.ts";
 
 const layerServerConfig = (overrides?: Partial<ServerConfig.ServerConfig["Service"]>) =>
   Layer.effect(
@@ -52,12 +51,11 @@ const layerSessionStore = (
     Layer.provide(layerServerConfig(overrides)),
   );
 
-const relaySessionInput = {
-  subject: "managed-relay-bootstrap",
-  method: "dpop-access-token",
-  proofKeyThumbprint: "relay-proof-key",
+const shortLivedSessionInput = {
+  subject: "remote-client",
+  method: "bearer-access-token",
   ttl: Duration.hours(1),
-  client: { label: "Relay desktop", deviceType: "desktop" },
+  client: { label: "Remote desktop", deviceType: "desktop" },
 } as const;
 
 const makeDiskSessionStoreLayer = Effect.fn("makeDiskSessionStoreLayer")(function* (
@@ -121,7 +119,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
       Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
         const owner = yield* sessions.issue({ subject: "owner" });
-        const client = yield* sessions.issue(relaySessionInput);
+        const client = yield* sessions.issue(shortLivedSessionInput);
         const ownerInvalidated = yield* Deferred.make<void>();
         yield* sessions
           .awaitInvalidation(owner.sessionId)
@@ -137,7 +135,8 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
           .pipe(Effect.forkScoped({ startImmediately: true }));
         if (operation === "revoke") yield* sessions.revoke(client.sessionId);
         else if (operation === "revokeAllExcept") yield* sessions.revokeAllExcept(owner.sessionId);
-        else yield* sessions.issue({ ...relaySessionInput, replaceSessionId: client.sessionId });
+        else
+          yield* sessions.issue({ ...shortLivedSessionInput, replaceSessionId: client.sessionId });
         yield* Fiber.join(first);
         yield* Fiber.join(second);
         expect(yield* Deferred.isDone(ownerInvalidated)).toBe(false);
@@ -148,7 +147,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
   it.effect("expires a connected session at its credential deadline", () =>
     Effect.gen(function* () {
       const sessions = yield* SessionStore.SessionStore;
-      const client = yield* sessions.issue(relaySessionInput);
+      const client = yield* sessions.issue(shortLivedSessionInput);
       yield* sessions.markConnected(client.sessionId);
       const invalidated = yield* Deferred.make<void>();
       const watcher = yield* sessions
@@ -342,32 +341,6 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
       expect((yield* sessions.verify(capped.token)).runtimeModeCeiling).toBe("auto");
       expect((yield* sessions.verify(uncapped.token)).runtimeModeCeiling).toBeUndefined();
     }).pipe(Effect.provide(layerSessionStore())),
-  );
-  it.effect("keeps recorded scopes unchanged for both token versions", () =>
-    Effect.gen(function* () {
-      const sessions = yield* SessionStore.SessionStore;
-      const secrets = yield* ServerSecretStore.ServerSecretStore;
-      const legacyScopes = ["orchestration:read", "terminal:operate", "review:write"] as const;
-      const issued = yield* sessions.issue({ subject: "one-time-token", scopes: legacyScopes });
-      const [encodedPayload] = issued.token.split(".");
-      const currentClaims = base64UrlDecodeUtf8(encodedPayload!);
-      expect(currentClaims).toContain('"v":1');
-      const legacyPayload = base64UrlEncode(currentClaims.replace('"v":1', '"v":2'));
-      const secret = yield* secrets.getOrCreateRandom("server-signing-key", 32);
-      const legacyToken = `${legacyPayload}.${signPayload(legacyPayload, secret)}`;
-
-      expect((yield* sessions.verify(issued.token)).scopes).toEqual(legacyScopes);
-      expect((yield* sessions.verify(legacyToken)).scopes).toEqual(legacyScopes);
-    }).pipe(
-      Effect.provide(
-        SessionStore.layer.pipe(
-          Layer.provideMerge(ServerSecretStore.layer),
-          Layer.provide(SqlitePersistence.layerMemory),
-          Layer.provide(layerServerEnvironment(EnvironmentId.make("test-environment"))),
-          Layer.provide(layerServerConfig()),
-        ),
-      ),
-    ),
   );
 
   it.effect("rejects malformed session tokens", () =>
@@ -709,10 +682,10 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
     }).pipe(Effect.provide(Layer.merge(layerSessionStore(), TestClock.layer()))),
   );
 
-  it.effect("keeps connected relay sessions visible through expiry and HTTP renewal", () =>
+  it.effect("keeps connected short-lived sessions visible through expiry and renewal", () =>
     Effect.gen(function* () {
       const sessions = yield* SessionStore.SessionStore;
-      const original = yield* sessions.issue(relaySessionInput);
+      const original = yield* sessions.issue(shortLivedSessionInput);
       const websocket = yield* sessions.issueWebSocketToken(original.sessionId, {
         ttl: Duration.hours(2),
       });
@@ -732,7 +705,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
         _tag: "WebSocketSessionExpiredError",
       });
 
-      const renewed = yield* sessions.issue(relaySessionInput);
+      const renewed = yield* sessions.issue(shortLivedSessionInput);
       const afterRenewal = yield* sessions.listActive();
       expect(renewed.sessionId).not.toBe(original.sessionId);
       expect(afterRenewal).toHaveLength(2);
@@ -754,7 +727,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
     (socketCount) =>
       Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
-        const issued = yield* sessions.issue(relaySessionInput);
+        const issued = yield* sessions.issue(shortLivedSessionInput);
         const changes = yield* Queue.unbounded<SessionStore.SessionCredentialChange>();
         yield* sessions.streamChanges.pipe(
           Stream.runForEach((change) => Queue.offer(changes, change)),
@@ -795,7 +768,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
       Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
         const administrative = yield* sessions.issue({ subject: "desktop-bootstrap" });
-        const client = yield* sessions.issue(relaySessionInput);
+        const client = yield* sessions.issue(shortLivedSessionInput);
         yield* sessions.markConnected(client.sessionId);
         yield* TestClock.adjust(Duration.minutes(61));
         const changes = yield* Queue.unbounded<SessionStore.SessionCredentialChange>();

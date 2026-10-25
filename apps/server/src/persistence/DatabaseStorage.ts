@@ -91,7 +91,7 @@ const make = Effect.gen(function* () {
 
   const compact = maintenance.compactEventStore.pipe(
     Effect.tap((result) =>
-      result.deletedEventCount > 0 || result.deletedReceiptCount > 0
+      result.deletedEventCount > 0
         ? Effect.logInfo("Compacted orchestration history", result)
         : Effect.void,
     ),

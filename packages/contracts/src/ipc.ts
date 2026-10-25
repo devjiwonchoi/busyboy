@@ -284,20 +284,16 @@ export const DesktopUpdateCheckResultSchema = Schema.Struct({
 export const PRIMARY_LOCAL_ENVIRONMENT_ID = "primary";
 
 export interface DesktopEnvironmentBootstrap {
-  // The web env runtime keys local environments off this so projects routed to
-  // a specific backend reopen against the same one.
-  id: string;
   label: string;
-  httpBaseUrl: string | null;
-  wsBaseUrl: string | null;
+  httpBaseUrl: string;
+  wsBaseUrl: string;
   bootstrapToken?: string;
 }
 
 export const DesktopEnvironmentBootstrapSchema = Schema.Struct({
-  id: Schema.String,
   label: Schema.String,
-  httpBaseUrl: Schema.NullOr(Schema.String),
-  wsBaseUrl: Schema.NullOr(Schema.String),
+  httpBaseUrl: Schema.String,
+  wsBaseUrl: Schema.String,
   bootstrapToken: Schema.optionalKey(Schema.String),
 });
 
@@ -398,11 +394,6 @@ export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
   createdAt: Schema.String,
   lastConnectedAt: Schema.NullOr(Schema.String),
   desktopSsh: Schema.optionalKey(DesktopSshEnvironmentTargetSchema),
-  relayManaged: Schema.optionalKey(
-    Schema.Struct({
-      relayUrl: Schema.String,
-    }),
-  ),
 });
 export type PersistedSavedEnvironmentRecord = typeof PersistedSavedEnvironmentRecordSchema.Type;
 
@@ -935,7 +926,8 @@ export interface DesktopBridge {
    * regardless of OS settings.
    */
   getSystemLocale?: () => string | null;
-  getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
+  /** The primary local backend, or null while it is not running. */
+  getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
   getLocalEnvironmentEnabled?: () => boolean;
   setLocalEnvironmentEnabled?: (enabled: boolean) => Promise<void>;
   getLocalEnvironmentBearerToken: () => Promise<string>;

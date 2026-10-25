@@ -8,7 +8,7 @@ const validPreload = `
   electron.contextBridge.exposeInMainWorld("__clerk_internal_electron_passkeys", {});
   electron.contextBridge.exposeInMainWorld("desktopBridge", {
     getClientPlatform: () => process.platform,
-    getLocalEnvironmentBootstraps: () => [],
+    getLocalEnvironmentBootstrap: () => null,
     getPathForFile: () => "",
     pickFolder: (options) => electron.ipcRenderer.invoke(PICK_FOLDER_CHANNEL, options),
   });
@@ -19,7 +19,7 @@ describe("desktop preload bundle verifier", () => {
     assert.throws(
       () =>
         verifyPreloadBundle(`
-          "desktopBridge getClientPlatform getLocalEnvironmentBootstraps pickFolder";
+          "desktopBridge getClientPlatform getLocalEnvironmentBootstrap pickFolder";
           "__clerk_internal_electron_passkeys";
           require("electron");
         `),

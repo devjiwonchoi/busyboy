@@ -71,7 +71,7 @@ it.layer(layerTest)("ContextHandoffService legacy import", (it) => {
   it.effect("prepares imported history for the first native v2 turn", () =>
     Effect.gen(function* () {
       const service = yield* ContextHandoffService.ContextHandoffServiceV2;
-      const handoff = yield* service.prepareLegacyImport({
+      const handoff = yield* service.prepareImportedHistory({
         threadId: ThreadId.make("thread:legacy-context"),
         targetRunId: RunId.make("run:first-v2"),
         toProviderThreadId: ProviderThreadId.make("provider-thread:first-v2"),
@@ -104,7 +104,7 @@ it.layer(layerTest)("ContextHandoffService legacy import", (it) => {
   it.effect("preserves role attribution when truncating imported history", () =>
     Effect.gen(function* () {
       const service = yield* ContextHandoffService.ContextHandoffServiceV2;
-      const handoff = yield* service.prepareLegacyImport({
+      const handoff = yield* service.prepareImportedHistory({
         threadId: ThreadId.make("thread:legacy-context"),
         targetRunId: RunId.make("run:first-v2"),
         toProviderThreadId: ProviderThreadId.make("provider-thread:first-v2"),
@@ -129,7 +129,7 @@ it.layer(layerTest)("ContextHandoffService legacy import", (it) => {
   it.effect("retains the newest oversized import even when it has no whitespace", () =>
     Effect.gen(function* () {
       const service = yield* ContextHandoffService.ContextHandoffServiceV2;
-      const handoff = yield* service.prepareLegacyImport({
+      const handoff = yield* service.prepareImportedHistory({
         threadId: ThreadId.make("thread:legacy-context"),
         targetRunId: RunId.make("run:first-v2"),
         toProviderThreadId: ProviderThreadId.make("provider-thread:first-v2"),

@@ -91,8 +91,6 @@ import {
 import type { LegendListRef } from "@legendapp/list/react";
 import { useAtomValue } from "@effect/atom-react";
 
-import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
-import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
@@ -406,12 +404,11 @@ function useEnvironmentLookups(environments: ReturnType<typeof useEnvironments>[
   const projectEnvironmentLocationById = new Map(
     environments.map((environment) => {
       const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
-      const isLocal = isPrimary || isDesktopLocalConnectionTarget(environment.entry.target);
       return [
         environment.environmentId,
         {
-          kind: isLocal ? "local" : "remote",
-          label: isPrimary ? "Local" : isLocal ? `${environment.label} (Local)` : environment.label,
+          kind: isPrimary ? "local" : "remote",
+          label: isPrimary ? "Local" : environment.label,
           machine: resolveEnvironmentMachineKind(environment.serverConfig),
         },
       ] as const;
@@ -744,7 +741,6 @@ function OpenCommandPaletteDialog(props: {
     reportFailure: false,
   });
   const { environments } = useEnvironments();
-  const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
@@ -924,21 +920,6 @@ function OpenCommandPaletteDialog(props: {
   const canCreateProject = useEnvironmentScope(browseEnvironmentId, AuthOrchestrationOperateScope);
   const browseEnvironment =
     environments.find((environment) => environment.environmentId === browseEnvironmentId) ?? null;
-  const browseEnvironmentIsDesktopLocal =
-    browseEnvironment !== null && isDesktopLocalConnectionTarget(browseEnvironment.entry.target);
-  // The native folder picker only serves backends that this desktop app runs.
-  const browseDesktopInstanceId = (() => {
-    if (!browseEnvironmentIsDesktopLocal || browseEnvironment === null) {
-      return null;
-    }
-    const displayUrl = browseEnvironment.displayUrl;
-    if (displayUrl === null) {
-      return null;
-    }
-    return (
-      desktopLocalBootstraps.find((bootstrap) => bootstrap.httpBaseUrl === displayUrl)?.id ?? null
-    );
-  })();
   const sourceControlDiscovery = useEnvironmentQuery(
     browseEnvironmentId === null
       ? null
@@ -2826,8 +2807,8 @@ function OpenCommandPaletteDialog(props: {
   const canOpenProjectFromFileManager =
     isBrowsing &&
     browseEnvironmentId !== null &&
-    (browseEnvironmentId === primaryEnvironmentId ||
-      (browseEnvironmentIsDesktopLocal && browseDesktopInstanceId !== null)) &&
+    // The native folder picker only serves the backend this desktop app runs.
+    browseEnvironmentId === primaryEnvironmentId &&
     typeof window !== "undefined" &&
     window.desktopBridge !== undefined;
   const fileManagerInitialPath = (() => {

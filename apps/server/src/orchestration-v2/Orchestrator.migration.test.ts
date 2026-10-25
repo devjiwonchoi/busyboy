@@ -5,36 +5,36 @@ import { ContextHandoffId, OrchestrationV2Command, ThreadId } from "@t3tools/con
 import {
   appendContextHandoffId,
   canReplayCommandReceipt,
-  shouldPrepareLegacyImportHandoff,
+  shouldPrepareImportedHistoryHandoff,
 } from "./Orchestrator.ts";
 
 it("reissues imported context until a V2 run completes", () => {
   assert.isTrue(
-    shouldPrepareLegacyImportHandoff({
-      historyOrigin: "v1_import",
+    shouldPrepareImportedHistoryHandoff({
+      historyOrigin: "imported",
       hasCompletedRun: false,
-      legacyImportItemCount: 2,
+      importedHistoryItemCount: 2,
     }),
   );
   assert.isFalse(
-    shouldPrepareLegacyImportHandoff({
-      historyOrigin: "v1_import",
+    shouldPrepareImportedHistoryHandoff({
+      historyOrigin: "imported",
       hasCompletedRun: true,
-      legacyImportItemCount: 2,
+      importedHistoryItemCount: 2,
     }),
   );
   assert.isFalse(
-    shouldPrepareLegacyImportHandoff({
+    shouldPrepareImportedHistoryHandoff({
       historyOrigin: undefined,
       hasCompletedRun: false,
-      legacyImportItemCount: 2,
+      importedHistoryItemCount: 2,
     }),
   );
   assert.isFalse(
-    shouldPrepareLegacyImportHandoff({
-      historyOrigin: "v1_import",
+    shouldPrepareImportedHistoryHandoff({
+      historyOrigin: "imported",
       hasCompletedRun: false,
-      legacyImportItemCount: 0,
+      importedHistoryItemCount: 0,
     }),
   );
 });

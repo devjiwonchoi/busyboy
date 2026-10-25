@@ -71,10 +71,6 @@
       "types": "./src/otelEnvironment.ts",
       "import": "./src/otelEnvironment.ts"
     },
-    "./httpObservability": {
-      "types": "./src/httpObservability.ts",
-      "import": "./src/httpObservability.ts"
-    },
     "./editor": {
       "types": "./src/editor.ts",
       "import": "./src/editor.ts"
@@ -167,29 +163,9 @@
       "types": "./src/remote.ts",
       "import": "./src/remote.ts"
     },
-    "./relaySigning": {
-      "types": "./src/relaySigning.ts",
-      "import": "./src/relaySigning.ts"
-    },
-    "./dpop": {
-      "types": "./src/dpop.ts",
-      "import": "./src/dpop.ts"
-    },
     "./desktopBootstrapToken": {
       "types": "./src/desktopBootstrapToken.ts",
       "import": "./src/desktopBootstrapToken.ts"
-    },
-    "./dpopCommon": {
-      "types": "./src/dpopCommon.ts",
-      "import": "./src/dpopCommon.ts"
-    },
-    "./relayUrl": {
-      "types": "./src/relayUrl.ts",
-      "import": "./src/relayUrl.ts"
-    },
-    "./relayJwt": {
-      "types": "./src/relayJwt.ts",
-      "import": "./src/relayJwt.ts"
     },
     "./oauthScope": {
       "types": "./src/oauthScope.ts",
@@ -274,10 +250,6 @@
     "./terminalLabels": {
       "types": "./src/terminalLabels.ts",
       "import": "./src/terminalLabels.ts"
-    },
-    "./relayTracing": {
-      "types": "./src/relayTracing.ts",
-      "import": "./src/relayTracing.ts"
     },
     "./preview": {
       "types": "./src/preview.ts",
@@ -489,7 +461,6 @@
     "@noble/hashes": "catalog:",
     "@t3tools/contracts": "workspace:*",
     "effect": "catalog:",
-    "jose": "catalog:",
     "mdast-util-directive": "catalog:",
     "micromark-extension-directive": "catalog:",
     "micromark-util-character": "catalog:",

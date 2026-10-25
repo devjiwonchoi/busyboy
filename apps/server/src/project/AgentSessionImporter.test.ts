@@ -73,7 +73,7 @@ it.effect("imports messages once and preserves the provider native resume bindin
           getThreadRecords: () =>
             imported
               ? Effect.succeed({
-                  thread: { id: threadId, projectId, historyOrigin: "v1_import" },
+                  thread: { id: threadId, projectId, historyOrigin: "imported" },
                 } as never)
               : Effect.fail(new Orchestrator.OrchestratorProjectionError({ threadId })),
         }),
@@ -120,7 +120,7 @@ it.effect("imports messages once and preserves the provider native resume bindin
     expect(created?.payload).toMatchObject({
       id: threadId,
       activeProviderThreadId: providerThread?.payload.id,
-      historyOrigin: "v1_import",
+      historyOrigin: "imported",
     });
     expect(providerThread?.payload).toMatchObject({
       appThreadId: threadId,

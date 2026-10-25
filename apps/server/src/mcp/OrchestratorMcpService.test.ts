@@ -1923,7 +1923,6 @@ describe("OrchestratorMcpService provider resolution", () => {
       runCount: 0,
       webhook: {
         path: "/hooks/scheduled-task/secret",
-        url: "https://t3.example/hooks/secret",
         hasSecret: false,
       },
       ...overrides,
@@ -1969,7 +1968,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         ),
       );
 
-    it.effect("hides a webhook URL from a caller below the task's modes", () =>
+    it.effect("hides a webhook path from a caller below the task's modes", () =>
       Effect.gen(function* () {
         const upserted = yield* Ref.make(0);
         const listed = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
@@ -1986,13 +1985,13 @@ describe("OrchestratorMcpService provider resolution", () => {
           ),
         );
         assert.deepEqual(
-          listed.tasks.map((summary) => summary.webhookUrl),
-          [undefined, "https://t3.example/hooks/secret"],
+          listed.tasks.map((summary) => summary.webhookPath),
+          [undefined, "/hooks/scheduled-task/secret"],
         );
       }),
     );
 
-    it.effect("hides a webhook URL from a thread whose turn has ended", () =>
+    it.effect("hides a webhook path from a thread whose turn has ended", () =>
       Effect.gen(function* () {
         const callerId = ThreadId.make("thread:scheduled-ended");
         const shell = liveThreadShell(callerId, { activeRunId: null });
@@ -2038,11 +2037,11 @@ describe("OrchestratorMcpService provider resolution", () => {
             ),
           ),
         );
-        assert.equal(listed.tasks[0]?.webhookUrl, undefined);
+        assert.equal(listed.tasks[0]?.webhookPath, undefined);
       }),
     );
 
-    it.effect("never shows a read-only client a webhook URL", () =>
+    it.effect("never shows a read-only client a webhook path", () =>
       Effect.gen(function* () {
         const upserted = yield* Ref.make(0);
         const listed = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
@@ -2057,7 +2056,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           ),
           Effect.provide(service([task({})], null, upserted)),
         );
-        assert.equal(listed.tasks[0]?.webhookUrl, undefined);
+        assert.equal(listed.tasks[0]?.webhookPath, undefined);
       }),
     );
 
@@ -2074,7 +2073,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           Effect.provide(layer),
         );
         const listed = yield* mcp.listScheduledTasks(supervisedClient, { projectId });
-        assert.equal(listed.tasks[0]?.webhookUrl, undefined);
+        assert.equal(listed.tasks[0]?.webhookPath, undefined);
         const error = yield* mcp
           .updateScheduledTask(supervisedClient, {
             scheduledTaskId: bound.id,
@@ -2134,7 +2133,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         });
         assert.equal(yield* Ref.get(upserted), 1);
         assert.equal(updated.scheduledTaskId, bound.id);
-        assert.equal(updated.webhookUrl, undefined);
+        assert.equal(updated.webhookPath, undefined);
       }),
     );
   });

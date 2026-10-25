@@ -202,11 +202,6 @@ import {
   PullRequestUpdateInput,
 } from "./pullRequest.ts";
 import {
-  RelayClientInstallFailedError,
-  RelayClientInstallProgressEventSchema,
-  RelayClientStatusSchema,
-} from "./relayClient.ts";
-import {
   ORCHESTRATION_V2_WS_METHODS,
   OrchestrationGetWorkflowScriptError,
   OrchestrationV2StopWorkflowError,

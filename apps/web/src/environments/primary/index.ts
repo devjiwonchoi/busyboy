@@ -26,8 +26,6 @@ export {
 export { usePrimarySessionState } from "./sessionState";
 
 export {
-  DesktopEnvironmentBootstrapIncompleteError,
-  isDesktopEnvironmentBootstrapIncompleteError,
   isPrimaryEnvironmentProtocolUnsupportedError,
   isPrimaryEnvironmentUrlInvalidError,
   PrimaryEnvironmentProtocolUnsupportedError,

@@ -993,8 +993,8 @@ function deriveTurnFolds(input: {
   const runlessFailedKeys = new Set<RunId>();
 
   // Fold state is keyed by run, so each runless prompt lends its response a
-  // stable key of its own. Decide per prompt, not per thread: a V1 thread's
-  // first V2 run must not unfold every imported turn above it.
+  // stable key of its own. Decide per prompt, not per thread: an imported
+  // thread's first run must not unfold every imported turn above it.
   let runlessKey: RunId | null = null;
   let responseKey: RunId | null = null;
   let pendingBoundary: { createdAt: string; anchorEntryId: string } | null = null;
@@ -1975,7 +1975,7 @@ export interface MessagesTimelineRowsProjection {
 }
 
 /**
- * Runless (imported V1) turns fold under a synthetic key, so the entry's own
+ * Runless (imported) turns fold under a synthetic key, so the entry's own
  * run id is not enough to open them.
  */
 export function timelineEntryTurnFoldRunId(

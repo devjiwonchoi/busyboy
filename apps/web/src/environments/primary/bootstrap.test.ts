@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import {
   getPrimaryKnownEnvironment,
-  isDesktopEnvironmentBootstrapIncompleteError,
   isPrimaryEnvironmentProtocolUnsupportedError,
   isPrimaryEnvironmentUrlInvalidError,
   readPrimaryEnvironmentTarget,
@@ -191,15 +190,12 @@ describe("environmentBootstrap", () => {
         replaceState: vi.fn(),
       },
       desktopBridge: {
-        getLocalEnvironmentBootstraps: () => [
-          {
-            id: "primary",
-            label: "Windows",
-            httpBaseUrl: "http://127.0.0.1:3773",
-            wsBaseUrl: "ws://127.0.0.1:3773",
-            bootstrapToken: "desktop-bootstrap-token",
-          },
-        ],
+        getLocalEnvironmentBootstrap: () => ({
+          label: "Windows",
+          httpBaseUrl: "http://127.0.0.1:3773",
+          wsBaseUrl: "ws://127.0.0.1:3773",
+          bootstrapToken: "desktop-bootstrap-token",
+        }),
       },
     });
     await installDescriptorApi();
@@ -228,41 +224,12 @@ describe("environmentBootstrap", () => {
     expect(error.message).not.toContain("http://[");
   });
 
-  it("describes which desktop bootstrap endpoint is missing", () => {
-    vi.stubGlobal("window", {
-      location: new URL("http://127.0.0.1:5733/"),
-      history: { replaceState: vi.fn() },
-      desktopBridge: {
-        getLocalEnvironmentBootstraps: () => [
-          {
-            id: "primary",
-            label: "Local environment",
-            httpBaseUrl: "http://127.0.0.1:3773",
-            bootstrapToken: "desktop-bootstrap-token",
-          },
-        ],
-      },
-    });
-
-    const error = captureThrown(readPrimaryEnvironmentTarget);
-
-    expect(isDesktopEnvironmentBootstrapIncompleteError(error)).toBe(true);
-    if (!isDesktopEnvironmentBootstrapIncompleteError(error)) {
-      throw new Error("Expected a structured desktop bootstrap error.");
-    }
-    expect(error).toMatchObject({
-      hasHttpBaseUrl: true,
-      hasWsBaseUrl: false,
-      message: "Desktop bootstrap is missing wsBaseUrl for the local environment.",
-    });
-  });
-
   it("has no primary target when the desktop local environment is disabled", () => {
     vi.stubGlobal("window", {
       location: new URL("t3code://app/"),
       desktopBridge: {
         getLocalEnvironmentEnabled: () => false,
-        getLocalEnvironmentBootstraps: () => [],
+        getLocalEnvironmentBootstrap: () => null,
       },
     });
 

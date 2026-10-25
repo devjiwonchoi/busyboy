@@ -29,13 +29,10 @@ export function useAvailableSettingsSearchItems() {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const canMaintain = useEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope);
 
-  // Same fallback as the Connections row: older servers imply a tunnel from `linked`.
-
   const localEnvironmentDisabled = isLocalEnvironmentDisabled() === true;
   const canManageLocalBackend = !localEnvironmentDisabled && canMaintain;
   return filterAvailableSettingsSearchItems({
     localEnvironmentDisabled,
-    hasCloudPublicConfig: false,
     hasEnvironment,
     hasProviderSettingsEnvironment,
     canManageLocalBackend,

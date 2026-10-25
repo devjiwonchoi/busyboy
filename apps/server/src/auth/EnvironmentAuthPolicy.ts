@@ -1,4 +1,4 @@
-import { AuthEnvironmentMaintainScope, type ServerAuthDescriptor } from "@t3tools/contracts";
+import type { ServerAuthDescriptor } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -39,8 +39,7 @@ export const make = Effect.gen(function* () {
   const descriptor: ServerAuthDescriptor = {
     policy,
     bootstrapMethods,
-    sessionMethods: ["browser-session-cookie", "bearer-access-token", "dpop-access-token"],
-    serverUpdateScope: AuthEnvironmentMaintainScope,
+    sessionMethods: ["browser-session-cookie", "bearer-access-token"],
     sessionCookieName: resolveSessionCookieName({
       mode: config.mode,
       port: config.port,

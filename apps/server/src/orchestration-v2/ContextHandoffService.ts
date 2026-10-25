@@ -42,7 +42,7 @@ export const ContextHandoffServiceV2Error = Schema.Union([ContextHandoffPrepareE
 export type ContextHandoffServiceV2Error = typeof ContextHandoffServiceV2Error.Type;
 
 export interface ContextHandoffServiceV2Shape {
-  readonly prepareLegacyImport: (input: {
+  readonly prepareImportedHistory: (input: {
     readonly threadId: ThreadId;
     readonly targetRunId: RunId;
     readonly toProviderThreadId: ProviderThreadId;
@@ -141,7 +141,7 @@ function makeForkDeltaSummary(input: {
   ].join("\n");
 }
 
-function makeLegacyImportSummary(items: ReadonlyArray<OrchestrationV2TurnItem>): string {
+function makeImportedHistorySummary(items: ReadonlyArray<OrchestrationV2TurnItem>): string {
   const sections = items.flatMap((item) => {
     switch (item.type) {
       case "user_message":
@@ -153,7 +153,7 @@ function makeLegacyImportSummary(items: ReadonlyArray<OrchestrationV2TurnItem>):
     }
   });
   const header =
-    "Imported conversation history from the previous Busyboy orchestrator. Use it as context; do not repeat it unless the user asks.";
+    "Imported conversation history. Use it as context; do not repeat it unless the user asks.";
   const maxChars = 32_000;
   const selected: Array<string> = [];
   let remaining = maxChars - header.length - 2;
@@ -233,66 +233,66 @@ const makeContextHandoffService = Effect.fn("orchestrationV2.ContextHandoffServi
       Effect.orElseSucceed(() => DEFAULT_HANDOFF_TOKEN_CAP),
     );
 
-    const prepareLegacyImport = Effect.fn("orchestrationV2.contextHandoff.prepareLegacyImport")(
-      function* (input: {
-        readonly threadId: ThreadId;
-        readonly targetRunId: RunId;
-        readonly toProviderThreadId: ProviderThreadId;
-        readonly toProviderInstanceId: ProviderInstanceId;
-        readonly items: ReadonlyArray<OrchestrationV2TurnItem>;
-        readonly createdAt: DateTime.Utc;
-      }) {
-        const handoffId = yield* idAllocator.allocate
-          .contextHandoff({
-            threadId: input.threadId,
-            fromProviderInstanceId: ProviderInstanceId.make("legacy"),
-            toProviderInstanceId: input.toProviderInstanceId,
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new ContextHandoffPrepareError({
-                  threadId: input.threadId,
-                  targetRunId: input.targetRunId,
-                  fromProviderThreadIds: [],
-                  toProviderThreadId: input.toProviderThreadId,
-                  cause,
-                }),
-            ),
-          );
-        const coverage = handoffCoverage({ ...input, coveredRunOrdinals: { from: 1, to: 1 } });
-        const selected = selectHistory({
-          messages: input.items.flatMap((item) => {
-            const message = historicalMessage(item);
-            return message === null ? [] : [message];
-          }),
-          coverage,
-          budget: tokenCap,
-        });
-        return {
-          id: handoffId,
-          transferId: null,
+    const prepareImportedHistory = Effect.fn(
+      "orchestrationV2.contextHandoff.prepareImportedHistory",
+    )(function* (input: {
+      readonly threadId: ThreadId;
+      readonly targetRunId: RunId;
+      readonly toProviderThreadId: ProviderThreadId;
+      readonly toProviderInstanceId: ProviderInstanceId;
+      readonly items: ReadonlyArray<OrchestrationV2TurnItem>;
+      readonly createdAt: DateTime.Utc;
+    }) {
+      const handoffId = yield* idAllocator.allocate
+        .contextHandoff({
           threadId: input.threadId,
-          targetRunId: input.targetRunId,
-          fromProviderThreadIds: [],
-          toProviderThreadId: input.toProviderThreadId,
-          coveredRunOrdinals: { from: 1, to: 1 },
-          strategy: "manual_context",
-          status: "ready",
-          summaryMessageId: null,
-          summaryText: makeLegacyImportSummary(input.items),
-          history: {
-            messages: selected.messages,
-            coverage,
-            omittedItems: selected.omittedItems,
-            omittedItemIds: selected.omittedItemIds,
-          },
-          createdByProviderInstanceId: null,
-          createdAt: input.createdAt,
-          updatedAt: input.createdAt,
-        } satisfies OrchestrationV2ContextHandoff;
-      },
-    );
+          fromProviderInstanceId: ProviderInstanceId.make("imported"),
+          toProviderInstanceId: input.toProviderInstanceId,
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new ContextHandoffPrepareError({
+                threadId: input.threadId,
+                targetRunId: input.targetRunId,
+                fromProviderThreadIds: [],
+                toProviderThreadId: input.toProviderThreadId,
+                cause,
+              }),
+          ),
+        );
+      const coverage = handoffCoverage({ ...input, coveredRunOrdinals: { from: 1, to: 1 } });
+      const selected = selectHistory({
+        messages: input.items.flatMap((item) => {
+          const message = historicalMessage(item);
+          return message === null ? [] : [message];
+        }),
+        coverage,
+        budget: tokenCap,
+      });
+      return {
+        id: handoffId,
+        transferId: null,
+        threadId: input.threadId,
+        targetRunId: input.targetRunId,
+        fromProviderThreadIds: [],
+        toProviderThreadId: input.toProviderThreadId,
+        coveredRunOrdinals: { from: 1, to: 1 },
+        strategy: "manual_context",
+        status: "ready",
+        summaryMessageId: null,
+        summaryText: makeImportedHistorySummary(input.items),
+        history: {
+          messages: selected.messages,
+          coverage,
+          omittedItems: selected.omittedItems,
+          omittedItemIds: selected.omittedItemIds,
+        },
+        createdByProviderInstanceId: null,
+        createdAt: input.createdAt,
+        updatedAt: input.createdAt,
+      } satisfies OrchestrationV2ContextHandoff;
+    });
 
     const prepare = Effect.fn("orchestrationV2.contextHandoff.prepare")(function* (input: {
       readonly threadId: ThreadId;
@@ -486,7 +486,7 @@ const makeContextHandoffService = Effect.fn("orchestrationV2.ContextHandoffServi
     });
 
     return ContextHandoffServiceV2.of({
-      prepareLegacyImport,
+      prepareImportedHistory,
       prepare,
       prepareForkDelta,
       prepareProviderHandoff,

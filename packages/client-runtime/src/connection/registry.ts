@@ -15,7 +15,6 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import {
   type ConnectionCatalogEntry,
-  type ConnectionCredential,
   type ConnectionProfile,
   type ConnectionRegistration,
   type ConnectionRoute,
@@ -44,10 +43,8 @@ import {
   gitHubRoutingConnectionKey,
 } from "./githubRoutingPermissions.ts";
 import {
-  RELAY_ROUTE_ID,
   connectionRouteId,
   connectionRoutes,
-  credentialConnectionId,
   entryWithRoutes,
   findRouteToSameAddress,
   mergeLearnedRoutes,
@@ -142,12 +139,6 @@ export class EnvironmentRegistry extends Context.Service<
       | EnvironmentNotRegisteredError
       | PlatformEnvironmentRemovalError
       | ConnectionBlockedError
-    >;
-    readonly removeRelayEnvironments: () => Effect.Effect<
-      void,
-      | Persistence.ConnectionPersistenceError
-      | ConnectionAttemptError
-      | PlatformEnvironmentRemovalError
     >;
     readonly retryNow: (environmentId: EnvironmentId) => Effect.Effect<void>;
     readonly setEnabled: (
@@ -640,32 +631,6 @@ export const make = Effect.gen(function* () {
             return next;
           });
 
-          // Secondary desktop-local backends live
-          // on their own loopback origin, so they authenticate with a bearer
-          // token instead of the primary's same-origin cookie. Stash it where
-          // the resolver's bearer broker looks it up.
-          let bearerReplaced = false;
-          if (registration._tag === "BearerConnectionRegistration") {
-            const stored = yield* credentials
-              .get(registration.target.connectionId)
-              .pipe(Effect.orElseSucceed(() => Option.none<ConnectionCredential>()));
-            const changed =
-              Option.isSome(stored) && !Equal.equals(stored.value, registration.credential);
-            // Only a bearer that was actually stored can be retried with; a
-            // failed write leaves the rejected one in place.
-            bearerReplaced = yield* credentials
-              .put(registration.target.connectionId, registration.credential)
-              .pipe(
-                Effect.as(changed),
-                Effect.catch((error) =>
-                  Effect.logWarning("Could not store the platform bearer credential.", {
-                    environmentId: target.environmentId,
-                    error,
-                  }).pipe(Effect.as(false)),
-                ),
-              );
-          }
-
           if (persisted) {
             yield* registrations.remove(target.environmentId).pipe(
               Effect.tap(() =>
@@ -688,39 +653,6 @@ export const make = Effect.gen(function* () {
           }
 
           yield* installEntryLocked(entry, { retainEquivalentRuntime: true });
-
-          if (bearerReplaced && registration._tag === "BearerConnectionRegistration") {
-            const scope = (yield* SubscriptionRef.get(serviceScopes)).get(target.environmentId);
-            if (scope !== undefined) {
-              const state = yield* SubscriptionRef.get(scope.supervisor.state);
-              if (
-                state.phase === "connecting" ||
-                state.phase === "backoff" ||
-                (state.phase === "blocked" &&
-                  state.lastFailure?._tag === "ConnectionBlockedError" &&
-                  state.lastFailure.reason === "authentication")
-              ) {
-                yield* scope.supervisor.retryNow;
-              } else if (state.phase === "connected") {
-                const token = registration.credential.token;
-                yield* SubscriptionRef.updateSome(scope.supervisor.prepared, (current) =>
-                  Option.isSome(current) &&
-                  current.value.target._tag === "BearerConnectionTarget" &&
-                  credentialConnectionId(current.value.target.connectionId) ===
-                    registration.target.connectionId &&
-                  current.value.httpAuthorization?._tag === "Bearer" &&
-                  current.value.httpAuthorization.token !== token
-                    ? Option.some(
-                        Option.some({
-                          ...current.value,
-                          httpAuthorization: { _tag: "Bearer", token },
-                        }),
-                      )
-                    : Option.none(),
-                );
-              }
-            }
-          }
         }),
       );
     },
@@ -983,28 +915,6 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const removeRelayEnvironments = Effect.fn("EnvironmentRegistry.removeRelayEnvironments")(
-    function* () {
-      const relayEnvironmentIds = [...(yield* SubscriptionRef.get(entries)).values()]
-        .filter((entry) =>
-          connectionRoutes(entry).some((route) => route.target._tag === "RelayConnectionTarget"),
-        )
-        .map((entry) => entry.target.environmentId);
-
-      yield* Effect.forEach(
-        relayEnvironmentIds,
-        (environmentId) =>
-          removeRoute(environmentId, RELAY_ROUTE_ID).pipe(
-            Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
-          ),
-        {
-          concurrency: "unbounded",
-          discard: true,
-        },
-      );
-    },
-  );
-
   const retryNow = (environmentId: EnvironmentId) =>
     acquireSupervisor(environmentId).pipe(
       Effect.flatMap((supervisor) => supervisor.retryNow),
@@ -1154,7 +1064,6 @@ export const make = Effect.gen(function* () {
     remove,
     removeRoute,
     reorderRoutes,
-    removeRelayEnvironments,
     retryNow,
     setEnabled,
     setCompatibility,
