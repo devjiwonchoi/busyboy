@@ -79,13 +79,6 @@ describe("add project shared logic", () => {
         sshUrl: "git@github.com:imputnet/helium.git",
       }),
     ).toBe("https://github.com/imputnet/helium");
-    expect(
-      getDefaultCloneUrl({
-        provider: SourceControlProviderKind.make("forgejo"),
-        url: "https://forgejo.example.test:8443/owner/repo.git",
-        sshUrl: "ssh://git@forgejo.example.test:2222/owner/repo.git",
-      }),
-    ).toBe("https://forgejo.example.test:8443/owner/repo.git");
   });
 
   it("preserves existing clone transport behavior for other providers", () => {
@@ -298,19 +291,12 @@ describe("new project publish targets", () => {
     },
   });
 
-  it("offers ready hosts that can place the repository, GitHub first, and keeps the pick", () => {
+  it("offers only hosts Busyboy ships and defaults to GitHub", () => {
     const targets = getNewProjectPublishTargets({
       versionControlSystems: [],
-      sourceControlProviders: [
-        readyHost("gitlab", "group"),
-        readyHost("github", null),
-        readyHost("azure-devops", "me"),
-      ],
+      sourceControlProviders: [readyHost("gitlab", "group"), readyHost("github", null)],
     });
-    expect(targets.map((target) => target.definition.kind)).toEqual(["github", "gitlab"]);
+    expect(targets.map((target) => target.definition.kind)).toEqual(["github"]);
     expect(getNewProjectPublishTarget(targets, null)?.definition.kind).toBe("github");
-    expect(
-      getNewProjectPublishTarget(targets, SourceControlProviderKind.make("gitlab"))?.owner,
-    ).toBe("group");
   });
 });
