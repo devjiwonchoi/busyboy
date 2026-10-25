@@ -37,7 +37,7 @@ vi.mock("../../state/environments", () => {
     environmentId: "test-env",
     label: "Computer",
     connection: { phase: "connected" },
-    entry: { enabled: true },
+    entry: { enabled: true, target: { _tag: "PrimaryConnectionTarget" } },
   };
   return {
     useEnvironments: () => ({ environments: [environment] }),
