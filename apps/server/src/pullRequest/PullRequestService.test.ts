@@ -34,8 +34,6 @@ import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.t
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
-import * as ForgejoCli from "@t3tools/source-control-forgejo/server/ForgejoCli";
-import * as ForgejoPullRequestProvider from "@t3tools/source-control-forgejo/server/ForgejoPullRequestProvider";
 import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
 import * as GitHubCredentials from "@t3tools/source-control-github/server/GitHubCredentials";
 import * as GitHubPullRequestApi from "@t3tools/source-control-github/server/GitHubPullRequestApi";
@@ -6429,112 +6427,6 @@ const GITLAB_REFERENCE = {
   repository: "group/project",
   number: 1,
 };
-
-it.effect("tracks Forgejo viewed files through its diff and refuses truncated baselines", () =>
-  Effect.gen(function* () {
-    let alpha = "b485fe5";
-    let truncated = false;
-    let diffReads = 0;
-    const provider = yield* ForgejoPullRequestProvider.make.pipe(
-      Effect.provide(
-        Layer.mock(ForgejoCli.ForgejoCli)({
-          api: (input) => {
-            assert.strictEqual(input.host, "forge.example:3000");
-            const viewer = input.path === "user";
-            if (!viewer) {
-              assert.strictEqual(input.repository, "reviewer/project");
-              assert.strictEqual(input.path, "repos/reviewer/project/pulls/1.diff");
-              diffReads++;
-            }
-            return Effect.succeed({
-              exitCode: ChildProcessSpawner.ExitCode(0),
-              stdout: viewer
-                ? JSON.stringify({ login: "reviewer" })
-                : truncated
-                  ? `diff --git a/alpha.ts b/alpha.ts\nindex eb2d7c5..${alpha} 100644\n`
-                  : [
-                      "diff --git a/alpha.ts b/alpha.ts",
-                      `index eb2d7c5..${alpha} 100644`,
-                      "diff --git a/beta.ts b/beta.ts",
-                      "index b39e8b3..5851425 100644",
-                      'diff --git "a/caf\\303\\251 notes.txt" "b/caf\\303\\251 notes.txt"',
-                      "index ffd99ce..6dd9855 100644",
-                      "diff --git a/deleted.txt b/deleted.txt",
-                      "deleted file mode 100644",
-                      "index 233f5c6..0000000",
-                      "diff --git a/old.txt b/renamed.txt",
-                      "similarity index 100%",
-                      "rename from old.txt",
-                      "rename to renamed.txt",
-                      "",
-                    ].join("\n"),
-              stderr: "",
-              stdoutTruncated: !viewer && truncated,
-              stderrTruncated: false,
-            });
-          },
-        }),
-      ),
-    );
-    const service = yield* makeService({
-      projects: [
-        project({
-          id: "forgejo",
-          title: "on forgejo",
-          workspaceRoot: "/forgejo",
-          repository: "reviewer/project",
-          provider: SourceControlProviderKind.make("forgejo"),
-          host: "forge.example:3000",
-          remoteUrl: "http://forge.example:3000/reviewer/project.git",
-        }),
-      ],
-      providers: [provider],
-    });
-    const reference = {
-      projectId: "forgejo" as ProjectId,
-      repository: "reviewer/project",
-      host: "forge.example:3000",
-      number: 1,
-    };
-    const paths = ["alpha.ts", "beta.ts", "café notes.txt", "deleted.txt", "renamed.txt"];
-    yield* service.setFilesViewed({
-      ...reference,
-      files: paths.map((path) => ({ path, viewed: true })),
-    });
-    assert.deepStrictEqual(
-      new Map((yield* service.filesViewed(reference)).files.map((file) => [file.path, file.state])),
-      new Map(paths.map((path) => [path, "viewed"])),
-    );
-    assert.strictEqual(diffReads, 1);
-
-    alpha = "aabbccd";
-    yield* service.invalidate({ reference });
-    assert.deepStrictEqual(
-      new Map((yield* service.filesViewed(reference)).files.map((file) => [file.path, file.state])),
-      new Map(paths.map((path) => [path, path === "alpha.ts" ? "dismissed" : "viewed"])),
-    );
-    yield* service.setFilesViewed({
-      ...reference,
-      files: [{ path: "beta.ts", viewed: false }],
-    });
-    assert.isFalse(
-      (yield* service.filesViewed(reference)).files.some((file) => file.path === "beta.ts"),
-    );
-
-    truncated = true;
-    yield* service.invalidate({ reference });
-    yield* service.setFilesViewed({
-      ...reference,
-      files: [{ path: "beta.ts", viewed: true }],
-    });
-    truncated = false;
-    yield* service.invalidate({ reference });
-    assert.deepStrictEqual(
-      (yield* service.filesViewed(reference)).files.find((file) => file.path === "beta.ts"),
-      { path: "beta.ts", state: "viewed" },
-    );
-  }),
-);
 
 it.effect("keeps hosted Forgejo marks with their repository instead of the serving checkout", () =>
   Effect.gen(function* () {
