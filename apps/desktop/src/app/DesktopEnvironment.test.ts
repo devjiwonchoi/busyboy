@@ -48,7 +48,7 @@ describe("DesktopEnvironment", () => {
           BUSYBOY_COMMIT_HASH: " 0123456789abcdef ",
           BUSYBOY_PORT: "4949",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
-          BUSYBOY_DEV_REMOTE_T3_SERVER_ENTRY_PATH: " /remote/server.mjs ",
+          BUSYBOY_DEV_REMOTE_BUSYBOY_SERVER_ENTRY_PATH: " /remote/server.mjs ",
           BUSYBOY_OTLP_TRACES_URL: " http://127.0.0.1:4318/v1/traces ",
           BUSYBOY_OTLP_METRICS_URL: " http://127.0.0.1:4318/v1/metrics ",
           BUSYBOY_OTLP_LOGS_URL: " http://127.0.0.1:4318/v1/logs ",

@@ -111,7 +111,7 @@ export const requireThreadMcpCapability = (
 const threadCallerRequired = (operation: string) =>
   new OrchestratorMcpFailure({
     code: "thread_credential_required",
-    message: `${operation} acts as the calling T3 thread, so it needs an agent running inside Busyboy. This MCP client signed in from outside a thread.`,
+    message: `${operation} acts as the calling Busyboy thread, so it needs an agent running inside Busyboy. This MCP client signed in from outside a thread.`,
   });
 
 export type McpThreadInvocationScope = McpInvocationScope & { readonly thread: McpThreadCaller };

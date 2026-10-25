@@ -307,7 +307,7 @@ describe("prompt stash context records", () => {
     store.stashEntry({
       id: "entry-records",
       createdAt: "2026-01-01T00:00:00.000Z",
-      prompt: "see [Terminal 1 line 4](t3-context://v1/terminal/ctx-1)",
+      prompt: "see [Terminal 1 line 4](busyboy-context://v1/terminal/ctx-1)",
       attachments: [],
       droppedImageNames: [],
       records,

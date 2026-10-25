@@ -103,7 +103,7 @@ export const otlpResource = (
   serviceVersion: packageJson.version,
   attributes: {
     "service.namespace": "busyboy",
-    "service.runtime": "t3-server",
+    "service.runtime": "busyboy-server",
     "service.mode": config.mode,
     "host.name": config.otelEnvironment.resourceAttributes["host.name"] || hostName,
   },

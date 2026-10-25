@@ -56,7 +56,7 @@ export class DatabaseCompactError extends Schema.TaggedError<DatabaseCompactErro
   }
 }
 
-/** Offline inspection and repair of a T3 state database, for `busyboy doctor`. */
+/** Offline inspection and repair of a Busyboy state database, for `busyboy doctor`. */
 export class DatabaseMaintenance extends Context.Service<
   DatabaseMaintenance,
   {

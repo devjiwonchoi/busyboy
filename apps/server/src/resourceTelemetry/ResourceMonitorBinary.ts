@@ -59,7 +59,7 @@ export class ResourceMonitorBinary extends Context.Service<
 >()("busyboy/resourceTelemetry/ResourceMonitorBinary") {}
 
 function binaryName(platform: NodeJS.Platform): string {
-  return platform === "win32" ? "t3-resource-monitor.exe" : "t3-resource-monitor";
+  return platform === "win32" ? "busyboy-resource-monitor.exe" : "busyboy-resource-monitor";
 }
 
 export type ResourceMonitorLinuxLibc = "gnu" | "musl";

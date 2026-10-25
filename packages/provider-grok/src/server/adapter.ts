@@ -150,7 +150,7 @@ const registerGrokAcpExtensions: NonNullable<AcpAdapterV2Flavor["registerExtensi
 
 /**
  * Grok intercepts exit_plan_mode and reverse-requests client approval. Capture
- * the plan into T3's proposed-plan card and abandon the native gate so the turn
+ * the plan into Busyboy's proposed-plan card and abandon the native gate so the turn
  * does not hang (#8358; mirrors the Claude ExitPlanMode pattern).
  */
 const registerGrokExitPlanModeExtensions = ({
@@ -213,7 +213,7 @@ const registerGrokAskUserQuestionExtensions = ({
 
 /**
  * Grok's permission mode is fixed at launch. Explicit approval or sandbox
- * overrides launch it asking, so every mutating prompt reaches T3's policy
+ * overrides launch it asking, so every mutating prompt reaches Busyboy's policy
  * check instead of being bypassed by always-approve or Grok's auto classifier.
  */
 export function grokLaunchRuntimeMode(

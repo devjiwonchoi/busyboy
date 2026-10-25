@@ -56,7 +56,7 @@ export const Arguments = Context.Reference<ReadonlyArray<string>>(
 
 /**
  * The command the shell was given, before Node resolved it to the binary:
- * `busyboy` for a PATH lookup, `./t3` or the launcher symlink for an explicit
+ * `busyboy` for a PATH lookup, `./busyboy` or the launcher symlink for an explicit
  * path. `process.argv[0]` and `execPath` are always the resolved binary.
  */
 export const InvokedAs = Context.Reference<string>("@busyboy/shared/HostProcess/InvokedAs", {

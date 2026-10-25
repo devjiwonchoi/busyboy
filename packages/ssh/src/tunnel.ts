@@ -455,10 +455,10 @@ fi
 # Unpacked into the pinned-runtime layout so \`busyboy service install\` reuses it.
 BUSYBOY_RELEASE_BASE_URL=@@BUSYBOY_RELEASE_BASE_URL@@
 BUSYBOY_RUNTIME_DIR="$HOME/.busyboy/runtime/versions/$BUSYBOY_ARCHIVE_VERSION"
-t3_runtime_ready() {
-  [ -x "$BUSYBOY_RUNTIME_DIR/t3" ] && [ "$(cat "$BUSYBOY_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$BUSYBOY_ARCHIVE_VERSION" ]
+busyboy_runtime_ready() {
+  [ -x "$BUSYBOY_RUNTIME_DIR/busyboy" ] && [ "$(cat "$BUSYBOY_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$BUSYBOY_ARCHIVE_VERSION" ]
 }
-if ! t3_runtime_ready; then
+if ! busyboy_runtime_ready; then
   mkdir -p "$HOME/.busyboy/runtime/versions"
   # Concurrent launches (two clients, a retry racing a slow first run) must
   # not both install: mkdir is the atomic lock and the ready check repeats
@@ -498,7 +498,7 @@ if ! t3_runtime_ready; then
   printf '%s\\n' "$$" > "$BUSYBOY_LOCK/pid.tmp" && mv "$BUSYBOY_LOCK/pid.tmp" "$BUSYBOY_LOCK/pid"
   trap 'rm -rf "$BUSYBOY_LOCK"' EXIT
 fi
-if ! t3_runtime_ready; then
+if ! busyboy_runtime_ready; then
   case "$(uname -s)" in
     Darwin) BUSYBOY_PLATFORM="darwin" ;;
     Linux) BUSYBOY_PLATFORM="linux" ;;
@@ -509,17 +509,17 @@ if ! t3_runtime_ready; then
     x86_64 | amd64) BUSYBOY_ARCH="x64" ;;
     *) printf 'Remote host %s has no busyboy release archive.\\n' "$(uname -m)" >&2; exit 1 ;;
   esac
-  BUSYBOY_ARCHIVE="t3-$BUSYBOY_ARCHIVE_VERSION-$BUSYBOY_PLATFORM-$BUSYBOY_ARCH.tar.gz"
+  BUSYBOY_ARCHIVE="busyboy-$BUSYBOY_ARCHIVE_VERSION-$BUSYBOY_PLATFORM-$BUSYBOY_ARCH.tar.gz"
   BUSYBOY_STAGING="$(mktemp -d "$HOME/.busyboy/runtime/versions/.staging-XXXXXX")"
   trap 'rm -rf "$BUSYBOY_STAGING" "$BUSYBOY_LOCK"' EXIT
-  t3_fetch() {
+  busyboy_fetch() {
     if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2"
     elif command -v wget >/dev/null 2>&1; then wget -q --timeout=30 --tries=1 "$1" -O "$2"
     else printf 'Remote host needs curl or wget to download %s.\\n' "$BUSYBOY_ARCHIVE" >&2; exit 1
     fi
   }
-  t3_fetch "$BUSYBOY_RELEASE_BASE_URL/v$BUSYBOY_ARCHIVE_VERSION/SHA256SUMS" "$BUSYBOY_STAGING/SHA256SUMS" @@BUSYBOY_ARCHIVE_CHECKSUMS_SECONDS@@
-  t3_fetch "$BUSYBOY_RELEASE_BASE_URL/v$BUSYBOY_ARCHIVE_VERSION/$BUSYBOY_ARCHIVE" "$BUSYBOY_STAGING/$BUSYBOY_ARCHIVE" @@BUSYBOY_ARCHIVE_DOWNLOAD_SECONDS@@
+  busyboy_fetch "$BUSYBOY_RELEASE_BASE_URL/v$BUSYBOY_ARCHIVE_VERSION/SHA256SUMS" "$BUSYBOY_STAGING/SHA256SUMS" @@BUSYBOY_ARCHIVE_CHECKSUMS_SECONDS@@
+  busyboy_fetch "$BUSYBOY_RELEASE_BASE_URL/v$BUSYBOY_ARCHIVE_VERSION/$BUSYBOY_ARCHIVE" "$BUSYBOY_STAGING/$BUSYBOY_ARCHIVE" @@BUSYBOY_ARCHIVE_DOWNLOAD_SECONDS@@
   BUSYBOY_EXPECTED="$(grep " \\*\\{0,1\\}$BUSYBOY_ARCHIVE$" "$BUSYBOY_STAGING/SHA256SUMS" | cut -d' ' -f1)"
   if command -v sha256sum >/dev/null 2>&1; then
     BUSYBOY_ACTUAL="$(sha256sum "$BUSYBOY_STAGING/$BUSYBOY_ARCHIVE" | cut -d' ' -f1)"
@@ -533,7 +533,7 @@ if ! t3_runtime_ready; then
   rm -f "$BUSYBOY_STAGING/$BUSYBOY_ARCHIVE" "$BUSYBOY_STAGING/SHA256SUMS"
   # Prove the binary runs here (libc, arch) before marking it ready, or every
   # later launch would exec a broken install instead of retrying.
-  if ! "$BUSYBOY_STAGING/t3" --version >/dev/null 2>&1; then
+  if ! "$BUSYBOY_STAGING/busyboy" --version >/dev/null 2>&1; then
     printf 'The busyboy %s executable does not run on this host.\\n' "$BUSYBOY_ARCHIVE_VERSION" >&2; exit 1
   fi
   printf '%s\\n' "$BUSYBOY_ARCHIVE_VERSION" > "$BUSYBOY_STAGING/.install-complete"
@@ -544,21 +544,21 @@ if [ -n "\${BUSYBOY_LOCK:-}" ]; then
   rm -rf "$BUSYBOY_LOCK"
   trap - EXIT
 fi
-exec "$BUSYBOY_RUNTIME_DIR/t3" "$@"
+exec "$BUSYBOY_RUNTIME_DIR/busyboy" "$@"
 `;
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu
 @@BUSYBOY_NODE_ENV_SCRIPT@@
 STATE_KEY="$1"
 STATE_DIR="$HOME/.busyboy/ssh-launch/$STATE_KEY"
-DEFAULT_SERVER_HOME="$HOME/.t3"
+DEFAULT_SERVER_HOME="$HOME/.busyboy"
 DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"
 PORT_FILE="$STATE_DIR/port"
 PID_FILE="$STATE_DIR/pid"
 MANAGED_FILE="$STATE_DIR/managed"
 LOG_FILE="$STATE_DIR/server.log"
-RUNNER_FILE="$STATE_DIR/run-t3.sh"
-RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
+RUNNER_FILE="$STATE_DIR/run-busyboy.sh"
+RUNNER_NEXT="$STATE_DIR/run-busyboy.next.$$"
 mkdir -p "$STATE_DIR"
 cleanup_runner_next() {
   rm -f "$RUNNER_NEXT"
@@ -707,7 +707,7 @@ elif [ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && server_running "$REMOTE_PI
     REMOTE_PORT=""
     REMOTE_MANAGED=""
   elif ! wait_ready "@@BUSYBOY_READY_TIMEOUT_MS@@"; then
-    printf 'Remote T3 server is still running but did not become ready. Retry the connection; the server was left running.\\n' >&2
+    printf 'Remote Busyboy server is still running but did not become ready. Retry the connection; the server was left running.\\n' >&2
     exit 1
   fi
 else
@@ -731,7 +731,7 @@ if [ -z "$REMOTE_PORT" ]; then
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf 'managed\\n' >"$MANAGED_FILE"
   if ! wait_ready "@@BUSYBOY_READY_TIMEOUT_MS@@"; then
-    printf 'Remote T3 server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
+    printf 'Remote Busyboy server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     if [ -s "$LOG_FILE" ]; then
       tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     else
@@ -748,8 +748,8 @@ printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGE
 
 const REMOTE_PAIRING_SCRIPT = `set -eu
 STATE_DIR="$HOME/.busyboy/ssh-launch/@@BUSYBOY_STATE_KEY@@"
-DEFAULT_SERVER_HOME="$HOME/.t3"
-RUNNER_FILE="$STATE_DIR/run-t3.sh"
+DEFAULT_SERVER_HOME="$HOME/.busyboy"
+RUNNER_FILE="$STATE_DIR/run-busyboy.sh"
 mkdir -p "$STATE_DIR"
 cat >"$RUNNER_FILE" <<'SH'
 @@BUSYBOY_RUNNER_SCRIPT@@
@@ -774,7 +774,7 @@ if [ "$REMOTE_MANAGED" != "external" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMO
     sleep 0.1
   done
   if kill -0 "$REMOTE_PID" 2>/dev/null; then
-    printf 'Remote T3 server with PID %s did not stop within 2 seconds. Its ownership files were kept.\\n' "$REMOTE_PID" >&2
+    printf 'Remote Busyboy server with PID %s did not stop within 2 seconds. Its ownership files were kept.\\n' "$REMOTE_PID" >&2
     exit 1
   fi
 fi

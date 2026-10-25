@@ -1046,30 +1046,30 @@ function acpMcpFallbackInput(value: string | undefined): Record<string, unknown>
 }
 
 /**
- * T3 always injects its server as "t3-code", and matches are additionally gated on the known T3
+ * Busyboy always injects its server as "busyboy", and matches are additionally gated on the known Busyboy
  * tool inventory, so the separator match can stay loose.
  */
 const BUSYBOY_MCP_TITLE_CALL =
-  /^(?:mcp[-_]{1,2})?busyboy[-_ ]?code[-_.:/ ]{1,3}(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*)(?::.*)?$/i;
+  /^(?:mcp[-_]{1,2})?busyboy[-_.:/ ]{1,3}(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*)(?::.*)?$/i;
 
 /**
  * Gemini CLI titles injected MCP calls "<tool> (<server> MCP Server)" and
  * qwen-code appends ": <args json>" to the same template; Auggie namespaces
- * tool-first as "<tool>_t3-code".
+ * tool-first as "<tool>_busyboy".
  */
 const BUSYBOY_MCP_TITLE_SUFFIX_CALL =
-  /^(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*?)(?: \(busyboy[-_ ]?code MCP Server\)(?::|$)|[-_.]busyboy[-_ ]?code$)/i;
+  /^(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*?)(?: \(busyboy MCP Server\)(?::|$)|[-_.]busyboy$)/i;
 
 /**
  * glm-acp-agent and Kimi CLI register injected MCP tools under their bare
  * names; Kimi additionally appends ": <raw args json>". Safe only because the
- * match is gated on the known T3 tool inventory.
+ * match is gated on the known Busyboy tool inventory.
  */
 const BUSYBOY_MCP_BARE_TITLE_CALL = /^(?<tool>[A-Za-z0-9_]+)(?::\s|$)/;
 
 /**
  * ACP has no typed MCP tool-call item, so agents surface MCP calls in agent-specific shapes:
- * codex-acp tags execute calls with `rawInput.server`/`rawInput.tool`, while agents on T3's
+ * codex-acp tags execute calls with `rawInput.server`/`rawInput.tool`, while agents on Busyboy's
  * terminal fallback run the `acp-mcp-call <tool>` CLI through their command or an embedded client
  * terminal.
  */
@@ -1094,7 +1094,7 @@ export function extractMcpToolCallIdentity(
     : undefined;
   const metaServerId = typeof meta?.serverId === "string" ? meta.serverId.trim() : "";
   const metaToolName = typeof meta?.toolName === "string" ? meta.toolName.trim() : "";
-  if (/^busyboy[-_ ]?code$/i.test(metaServerId) && metaToolName.length > 0) {
+  if (/^busyboy$/i.test(metaServerId) && metaToolName.length > 0) {
     for (const knownTool of BUSYBOY_MCP_TOOL_NAMES) {
       const boundary = metaToolName.length - knownTool.length - 1;
       if (
@@ -1103,15 +1103,15 @@ export function extractMcpToolCallIdentity(
           boundary >= 0 &&
           !/[A-Za-z0-9]/.test(metaToolName.charAt(boundary)))
       ) {
-        return { server: "t3-code", tool: knownTool };
+        return { server: "busyboy", tool: knownTool };
       }
     }
   }
   const gooseExtension =
     typeof gooseToolCall?.extensionName === "string" ? gooseToolCall.extensionName.trim() : "";
   const assertsForeignOrigin =
-    (metaServerId.length > 0 && !/^busyboy[-_ ]?code$/i.test(metaServerId)) ||
-    (gooseExtension.length > 0 && !/^busyboy[-_ ]?code$/i.test(gooseExtension));
+    (metaServerId.length > 0 && !/^busyboy$/i.test(metaServerId)) ||
+    (gooseExtension.length > 0 && !/^busyboy$/i.test(gooseExtension));
   // qwen's serverId marks a real MCP server, but goose reports its built-in
   // extensions (developer__shell, edits) the same way as user MCP servers, so
   // goose stays unclassified and keeps its command and file-change projections.
@@ -1132,7 +1132,7 @@ export function extractMcpToolCallIdentity(
   for (const candidate of candidates) {
     const trimmed = candidate.trim();
     const qualified = /^mcp__(.+?)__(.+)$/i.exec(trimmed);
-    if (qualified?.[1] && qualified[2] && !/^busyboy[-_ ]?code$/i.test(qualified[1]))
+    if (qualified?.[1] && qualified[2] && !/^busyboy$/i.test(qualified[1]))
       return { server: qualified[1], tool: qualified[2] };
     const match =
       BUSYBOY_MCP_TITLE_CALL.exec(trimmed) ??
@@ -1140,7 +1140,7 @@ export function extractMcpToolCallIdentity(
       BUSYBOY_MCP_BARE_TITLE_CALL.exec(trimmed);
     const candidateTool = match?.groups?.tool;
     if (candidateTool !== undefined && BUSYBOY_MCP_TOOL_NAMES.has(candidateTool)) {
-      return { server: "t3-code", tool: candidateTool };
+      return { server: "busyboy", tool: candidateTool };
     }
   }
   const commands = [
@@ -1153,7 +1153,7 @@ export function extractMcpToolCallIdentity(
     const match = ACP_MCP_FALLBACK_CALL.exec(command);
     if (match?.[1] !== undefined) {
       const input = acpMcpFallbackInput(match[2]);
-      return { server: "t3-code", tool: match[1], ...(input === undefined ? {} : { input }) };
+      return { server: "busyboy", tool: match[1], ...(input === undefined ? {} : { input }) };
     }
   }
   return undefined;

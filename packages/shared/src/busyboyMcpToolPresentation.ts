@@ -1,4 +1,4 @@
-export type BusyboyMcpToolLogo = "t3-code";
+export type BusyboyMcpToolLogo = "busyboy";
 
 export interface BusyboyMcpToolPresentation {
   readonly displayName: string;
@@ -68,20 +68,20 @@ export type BusyboyMcpToolSummaryAction =
 export interface BusyboyMcpToolDefinition {
   readonly displayName: string;
   readonly labels: readonly [action: string, running: string, completed: string, detail: string];
-  readonly icon: "t3-code" | "browser" | "pull-request";
+  readonly icon: "busyboy" | "browser" | "pull-request";
   readonly summaryAction: BusyboyMcpToolSummaryAction;
 }
 
 function tool(
   labels: BusyboyMcpToolDefinition["labels"],
   summaryAction: BusyboyMcpToolSummaryAction,
-  icon: BusyboyMcpToolDefinition["icon"] = "t3-code",
+  icon: BusyboyMcpToolDefinition["icon"] = "busyboy",
   displayName = `${labels[0]} ${labels[3]}`,
 ): BusyboyMcpToolDefinition {
   return { displayName, labels, icon, summaryAction };
 }
 
-const BUSYBOY_MCP_SERVER_ALIASES = new Set(["t3-code", "t3_code", "busyboy"]);
+const BUSYBOY_MCP_SERVER_ALIASES = new Set(["busyboy"]);
 
 const BUSYBOY_MCP_TOOLS: Readonly<Record<string, BusyboyMcpToolDefinition>> = {
   link_pull_request: tool(
@@ -143,25 +143,25 @@ const BUSYBOY_MCP_TOOLS: Readonly<Record<string, BusyboyMcpToolDefinition>> = {
     "schedule-delete",
   ),
   request_secret: tool(["Ask for", "Asking for", "Asked for", "a secret"], "secret-request"),
-  create_threads: tool(["Create", "Creating", "Created", "T3 threads"], "thread-create"),
-  t3_thread_start: tool(["Start", "Starting", "Started", "a T3 thread"], "thread-create"),
-  t3_thread_list: tool(["List", "Listing", "Listed", "T3 threads"], "thread-list"),
-  t3_thread_read: tool(["Read", "Reading", "Read", "a T3 thread"], "thread-read"),
-  t3_thread_send: tool(["Send", "Sending", "Sent", "to a T3 thread"], "thread-send"),
-  t3_thread_wait: tool(["Wait", "Waiting", "Waited", "for a T3 thread"], "thread-wait"),
-  t3_workflow_stop: tool(
+  create_threads: tool(["Create", "Creating", "Created", "Busyboy threads"], "thread-create"),
+  busyboy_thread_start: tool(["Start", "Starting", "Started", "a Busyboy thread"], "thread-create"),
+  busyboy_thread_list: tool(["List", "Listing", "Listed", "Busyboy threads"], "thread-list"),
+  busyboy_thread_read: tool(["Read", "Reading", "Read", "a Busyboy thread"], "thread-read"),
+  busyboy_thread_send: tool(["Send", "Sending", "Sent", "to a Busyboy thread"], "thread-send"),
+  busyboy_thread_wait: tool(["Wait", "Waiting", "Waited", "for a Busyboy thread"], "thread-wait"),
+  busyboy_workflow_stop: tool(
     ["Stop", "Stopping", "Requested a stop for", "a workflow"],
     "workflow-stop",
   ),
-  t3_thread_interrupt: tool(
-    ["Interrupt", "Interrupting", "Requested an interrupt of", "a T3 thread"],
+  busyboy_thread_interrupt: tool(
+    ["Interrupt", "Interrupting", "Requested an interrupt of", "a Busyboy thread"],
     "thread-interrupt",
   ),
-  t3_worktree_handoff: tool(
+  busyboy_worktree_handoff: tool(
     ["Hand off", "Handing off", "Handed off", "thread to a git worktree"],
     "worktree-handoff",
   ),
-  t3_worktree_status: tool(["Get", "Getting", "Got", "thread worktree status"], "worktree-status"),
+  busyboy_worktree_status: tool(["Get", "Getting", "Got", "thread worktree status"], "worktree-status"),
   preview_status: tool(["Get", "Getting", "Got", "preview browser status"], "browser", "browser"),
   preview_open: tool(
     ["Open", "Opening", "Opened", "a page in the preview browser"],
@@ -254,68 +254,68 @@ const BUSYBOY_MCP_TOOLS: Readonly<Record<string, BusyboyMcpToolDefinition>> = {
     ["Run", "Running", "Requested a run of", "a scheduled task"],
     "schedule-run",
   ),
-  t3_queue_list: tool(["List", "Listing", "Listed", "queued messages"], "queue-list"),
-  t3_queue_read: tool(["Read", "Reading", "Read", "a queued message"], "queue-read"),
-  t3_queue_edit: tool(["Edit", "Editing", "Edited", "a queued message"], "queue-edit"),
-  t3_queue_cancel: tool(
+  busyboy_queue_list: tool(["List", "Listing", "Listed", "queued messages"], "queue-list"),
+  busyboy_queue_read: tool(["Read", "Reading", "Read", "a queued message"], "queue-read"),
+  busyboy_queue_edit: tool(["Edit", "Editing", "Edited", "a queued message"], "queue-edit"),
+  busyboy_queue_cancel: tool(
     ["Cancel", "Canceling", "Requested cancellation of", "a queued run"],
     "queue-cancel",
   ),
-  t3_queue_reorder: tool(["Reorder", "Reordering", "Reordered", "a queued run"], "queue-reorder"),
-  t3_queue_promote_to_steer: tool(
+  busyboy_queue_reorder: tool(["Reorder", "Reordering", "Reordered", "a queued run"], "queue-reorder"),
+  busyboy_queue_promote_to_steer: tool(
     ["Steer with", "Steering with", "Requested steering with", "a queued message"],
     "queue-steer",
   ),
-  t3_pending_request_list: tool(
+  busyboy_pending_request_list: tool(
     ["List", "Listing", "Listed", "pending questions"],
     "question-list",
   ),
-  t3_pending_request_read: tool(["Read", "Reading", "Read", "pending questions"], "question-read"),
-  t3_pending_request_respond: tool(
+  busyboy_pending_request_read: tool(["Read", "Reading", "Read", "pending questions"], "question-read"),
+  busyboy_pending_request_respond: tool(
     ["Answer", "Answering", "Answered", "pending questions"],
     "question-respond",
   ),
-  t3_thread_configuration: tool(
+  busyboy_thread_configuration: tool(
     ["Read", "Reading", "Read", "thread configuration"],
     "thread-configuration",
   ),
-  t3_thread_configure: tool(["Set", "Setting", "Set", "thread model"], "thread-configure"),
-  t3_thread_fork: tool(["Fork", "Forking", "Requested a fork of", "this thread"], "thread-fork"),
-  t3_thread_merge_back: tool(
+  busyboy_thread_configure: tool(["Set", "Setting", "Set", "thread model"], "thread-configure"),
+  busyboy_thread_fork: tool(["Fork", "Forking", "Requested a fork of", "this thread"], "thread-fork"),
+  busyboy_thread_merge_back: tool(
     ["Merge", "Merging", "Requested a merge of", "thread context"],
     "thread-merge",
   ),
-  t3_thread_search: tool(["Search", "Searching", "Searched", "thread content"], "thread-search"),
-  t3_thread_transfers: tool(["Read", "Reading", "Read", "thread transfers"], "thread-transfers"),
-  t3_thread_organize: tool(["Organize", "Organizing", "Organized", "a thread"], "thread-organize"),
-  t3_thread_update: tool(["Update", "Updating", "Updated", "T3 thread metadata"], "thread-update"),
-  t3_worktree_list: tool(["List", "Listing", "Listed", "workspace branches"], "worktree-list"),
-  t3_preview_list: tool(["List", "Listing", "Listed", "preview tabs"], "browser", "browser"),
-  t3_preview_close: tool(["Close", "Closing", "Closed", "a preview tab"], "browser", "browser"),
-  t3_environment_read: tool(
+  busyboy_thread_search: tool(["Search", "Searching", "Searched", "thread content"], "thread-search"),
+  busyboy_thread_transfers: tool(["Read", "Reading", "Read", "thread transfers"], "thread-transfers"),
+  busyboy_thread_organize: tool(["Organize", "Organizing", "Organized", "a thread"], "thread-organize"),
+  busyboy_thread_update: tool(["Update", "Updating", "Updated", "Busyboy thread metadata"], "thread-update"),
+  busyboy_worktree_list: tool(["List", "Listing", "Listed", "workspace branches"], "worktree-list"),
+  busyboy_preview_list: tool(["List", "Listing", "Listed", "preview tabs"], "browser", "browser"),
+  busyboy_preview_close: tool(["Close", "Closing", "Closed", "a preview tab"], "browser", "browser"),
+  busyboy_environment_read: tool(
     ["Read", "Reading", "Read", "environment preferences"],
     "environment-read",
   ),
-  t3_environment_preferences_update: tool(
+  busyboy_environment_preferences_update: tool(
     ["Update", "Updating", "Updated", "environment preferences"],
     "environment-update",
   ),
-  t3_thread_launch: tool(["Launch", "Launching", "Launched", "a project thread"], "thread-create"),
-  t3_project_list: tool(["List", "Listing", "Listed", "projects"], "project-list"),
-  t3_project_read: tool(["Read", "Reading", "Read", "a project"], "project-read"),
-  t3_project_create: tool(["Register", "Registering", "Registered", "a project"], "project-create"),
-  t3_project_update: tool(["Update", "Updating", "Updated", "a project"], "project-update"),
-  t3_project_delete: tool(["Delete", "Deleting", "Deleted", "a project"], "project-delete"),
-  t3_project_clone: tool(["Clone", "Cloning", "Cloned", "a repository"], "project-clone"),
-  t3_attachment_prepare_upload: tool(
+  busyboy_thread_launch: tool(["Launch", "Launching", "Launched", "a project thread"], "thread-create"),
+  busyboy_project_list: tool(["List", "Listing", "Listed", "projects"], "project-list"),
+  busyboy_project_read: tool(["Read", "Reading", "Read", "a project"], "project-read"),
+  busyboy_project_create: tool(["Register", "Registering", "Registered", "a project"], "project-create"),
+  busyboy_project_update: tool(["Update", "Updating", "Updated", "a project"], "project-update"),
+  busyboy_project_delete: tool(["Delete", "Deleting", "Deleted", "a project"], "project-delete"),
+  busyboy_project_clone: tool(["Clone", "Cloning", "Cloned", "a repository"], "project-clone"),
+  busyboy_attachment_prepare_upload: tool(
     ["Prepare", "Preparing", "Prepared", "an attachment upload"],
     "attachment-prepare",
   ),
-  t3_attachment_discard: tool(
+  busyboy_attachment_discard: tool(
     ["Discard", "Discarding", "Discarded", "a pending attachment"],
     "attachment-discard",
   ),
-  t3_thread_send_attachments: tool(["Send", "Sending", "Sent", "attachments"], "attachment-send"),
+  busyboy_thread_send_attachments: tool(["Send", "Sending", "Sent", "attachments"], "attachment-send"),
   html_preview: tool(["Preview", "Previewing", "Previewed", "an HTML page"], "html-preview"),
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
 };
@@ -327,8 +327,8 @@ function normalizeBusyboyMcpToolLabel(value: string): string {
 }
 
 /**
- * ACP agents disagree on how the injected T3 server prefixes its tools:
- * `mcp__t3-code__x` (Claude/Cursor), `t3-code.x` (Codex), plus single
+ * ACP agents disagree on how the injected Busyboy server prefixes its tools:
+ * `mcp__busyboy__x` (Claude/Cursor), `busyboy.x` (Codex), plus single
  * underscore, colon, slash, dash, and space separators seen from registry
  * agents. The prefix match is deliberately loose because the display-name
  * inventory is the real gate; unknown tools stay on the generic renderer.
@@ -345,20 +345,23 @@ function resolveBusyboyMcpToolName(value: string): string | null {
       : null;
   }
 
-  const namespaceMatch = /^(?<server>t3-code|t3_code|busyboy)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
+  const namespaceMatch = /^(?<server>busyboy)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
     label,
   );
   if (namespaceMatch?.groups) {
     return namespaceMatch.groups.tool ?? null;
   }
 
-  const prefixed = /^(?:mcp[-_]{1,2})?busyboy[-_ ]?code(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);
+  // Tool ids share the `busyboy_` prefix with the server name, so a bare tool
+  // id must win before the server prefix is stripped.
+  if (Object.hasOwn(BUSYBOY_MCP_TOOLS, label)) return label;
+  const prefixed = /^(?:mcp[-_]{1,2})?busyboy(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);
   const candidate = prefixed?.groups?.tool ?? label;
   if (Object.hasOwn(BUSYBOY_MCP_TOOLS, candidate)) return candidate;
-  // OpenCode 2 registers one server per thread, `t3-code-<thread>`, and joins
+  // OpenCode 2 registers one server per thread, `busyboy-<thread>`, and joins
   // it to the tool with `_`. Thread ids can hold `_` too, so take the longest
   // known tool name that ends the label.
-  if (!/^t3-code-/i.test(label)) return null;
+  if (!/^busyboy-/i.test(label)) return null;
   let longest: string | null = null;
   for (const tool of Object.keys(BUSYBOY_MCP_TOOLS)) {
     if (label.endsWith(`_${tool}`) && tool.length > (longest?.length ?? 0)) longest = tool;
@@ -382,7 +385,7 @@ export function resolveBusyboyMcpToolPresentation(
   toolName: string | null | undefined,
 ): BusyboyMcpToolPresentation | null {
   const definition = resolveBusyboyMcpToolDefinition(toolName);
-  return definition === null ? null : { displayName: definition.displayName, logo: "t3-code" };
+  return definition === null ? null : { displayName: definition.displayName, logo: "busyboy" };
 }
 
 export function resolveBusyboyMcpToolSummaryAction(

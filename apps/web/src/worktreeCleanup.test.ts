@@ -89,14 +89,14 @@ describe("formatWorktreePathForDisplay", () => {
     const result = formatWorktreePathForDisplay(
       "/Users/julius/.busyboy/worktrees/t3code-mvp/t3code-4e609bb8",
     );
-    expect(result).toBe("busyboy-4e609bb8");
+    expect(result).toBe("t3code-4e609bb8");
   });
 
   it("normalizes windows separators before selecting the final segment", () => {
     const result = formatWorktreePathForDisplay(
       "C:\\Users\\julius\\.t3\\worktrees\\t3code-mvp\\t3code-4e609bb8",
     );
-    expect(result).toBe("busyboy-4e609bb8");
+    expect(result).toBe("t3code-4e609bb8");
   });
 
   it("uses the final segment even when outside ~/.busyboy/worktrees", () => {

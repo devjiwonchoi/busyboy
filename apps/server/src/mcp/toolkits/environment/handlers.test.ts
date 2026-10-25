@@ -54,7 +54,7 @@ it.effect("updates preferences for a thread caller through the /mcp registration
     const server = yield* McpServer.McpServer;
     const result = yield* server
       .callTool({
-        name: "t3_environment_preferences_update",
+        name: "busyboy_environment_preferences_update",
         arguments: { newWorktreesStartFromOrigin: true },
       })
       .pipe(
@@ -144,7 +144,7 @@ it.effect("refuses a preferences update when the caller's turn ends while it wai
         .pipe(Effect.forkChild);
       yield* Deferred.await(held);
       const update = yield* toolkit
-        .handle("t3_environment_preferences_update", { newWorktreesStartFromOrigin: true })
+        .handle("busyboy_environment_preferences_update", { newWorktreesStartFromOrigin: true })
         .pipe(Stream.unwrap, Stream.runCollect, Effect.forkChild);
       yield* Deferred.await(checked);
       yield* Ref.update(caller, (shell) => ({ ...shell, activeRunId: null }));

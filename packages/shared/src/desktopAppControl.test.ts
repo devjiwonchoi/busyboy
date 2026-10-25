@@ -19,14 +19,14 @@ describe("resolveDesktopAppControlAddress", () => {
       joinPath: (...segments) => segments.join("/"),
     });
 
-    expect(first.directory).toBe("/tmp/t3code-1000");
+    expect(first.directory).toBe("/tmp/busyboy-1000");
     expect(first.address.length).toBeLessThan(108);
     expect(first.address).not.toBe(second.address);
   });
 
   it("uses a Windows named pipe", () => {
     const result = resolveDesktopAppControlAddress({
-      stateDir: "C:\\Users\\user\\.t3\\userdata",
+      stateDir: "C:\\Users\\user\\.busyboy\\userdata",
       platform: "win32",
       tempDir: "C:\\Temp",
       userId: undefined,
@@ -34,6 +34,6 @@ describe("resolveDesktopAppControlAddress", () => {
     });
 
     expect(result.directory).toBeNull();
-    expect(result.address).toMatch(/^\\\\\.\\pipe\\t3code-app-[a-f0-9]{24}$/);
+    expect(result.address).toMatch(/^\\\\\.\\pipe\\busyboy-app-[a-f0-9]{24}$/);
   });
 });

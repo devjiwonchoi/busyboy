@@ -560,7 +560,7 @@ layer("ProviderEventIngestorV2", (it) => {
                     parentCheckpointId: null,
                     ordinalWithinScope: input.ordinal,
                     appRunOrdinal: input.ordinal,
-                    ref: CheckpointRef.make(`refs/t3/checkpoints/rewound/${input.ordinal}`),
+                    ref: CheckpointRef.make(`refs/busyboy/checkpoints/rewound/${input.ordinal}`),
                     status: "ready" as const,
                     files: [],
                     capturedAt: now,
@@ -1562,7 +1562,7 @@ layer("ProviderEventIngestorV2", (it) => {
         type: "image",
         file: { base64: readBase64, type: "image/png", originalSize: 30_000 },
       });
-      const screenshot = toolItem("turn-item:screenshot", 2, "mcp__t3-code__device_screenshot", {
+      const screenshot = toolItem("turn-item:screenshot", 2, "mcp__busyboy__device_screenshot", {
         content: [
           {
             type: "image",
@@ -1906,7 +1906,7 @@ layer("ProviderEventIngestorV2", (it) => {
           scenario === "explicit"
             ? "child-feature"
             : scenario === "legacy"
-              ? "t3-abcd1234"
+              ? "busyboy-abcd1234"
               : "busyboy/abcd1234";
         if (scenario === "explicit" || scenario === "legacy")
           yield* command(worktreePath, ["branch", "-m", branch]);

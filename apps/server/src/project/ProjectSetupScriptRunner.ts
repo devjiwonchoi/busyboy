@@ -118,7 +118,7 @@ export class ProjectSetupScriptRunner extends Context.Service<
  * Each run gets its own random token so script output cannot spoof completion, and the sentinel
  * pattern is built per run from it.
  */
-const COMPLETION_SENTINEL_PREFIX = "__T3_SETUP_DONE__";
+const COMPLETION_SENTINEL_PREFIX = "__BUSYBOY_SETUP_DONE__";
 const OUTPUT_LINE_MAX_LENGTH = 400;
 const PARTIAL_LINE_MAX_LENGTH = 4_096;
 

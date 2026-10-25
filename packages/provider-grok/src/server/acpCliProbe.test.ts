@@ -82,11 +82,11 @@ describe.runIf(process.env.T3_GROK_ACP_PROBE === "1")("Grok ACP CLI probe", () =
           return Effect.void;
         }).pipe(Effect.forkChild);
         const result = yield* runtime.prompt({
-          prompt: [{ type: "text", text: "Reply exactly GROK_T3_OK. Do not use any tools." }],
+          prompt: [{ type: "text", text: "Reply exactly GROK_BUSYBOY_OK. Do not use any tools." }],
         });
         yield* runtime.drainEvents;
         expect(result.stopReason).toBe("end_turn");
-        expect(chunks.join("")).toContain("GROK_T3_OK");
+        expect(chunks.join("")).toContain("GROK_BUSYBOY_OK");
         yield* Fiber.interrupt(events);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

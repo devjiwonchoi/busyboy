@@ -188,11 +188,11 @@ export function buildCodexAdditionalContext(
   const tools = toolInstructions(toolsAvailable);
   // Separate keys keep each value under Codex's per-entry token cap.
   return {
-    t3_code_orchestration: { kind: "application", value: BUSYBOY_ORCHESTRATION_INSTRUCTIONS },
-    t3_code_runtime: {
+    busyboy_orchestration: { kind: "application", value: BUSYBOY_ORCHESTRATION_INSTRUCTIONS },
+    busyboy_code_runtime: {
       kind: "application",
       value: buildRuntimeInstructions({ harness: "Codex", ...runtime }),
     },
-    ...(tools ? { t3_code_tools: { kind: "application", value: tools } } : {}),
+    ...(tools ? { busyboy_code_tools: { kind: "application", value: tools } } : {}),
   };
 }

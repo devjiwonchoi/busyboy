@@ -625,7 +625,7 @@ const deliveriesCounted = (outcome: string) =>
     Effect.map((snapshots) => {
       const found = snapshots.find(
         (snapshot) =>
-          snapshot.id === "t3_webhook_deliveries_total" && snapshot.attributes?.outcome === outcome,
+          snapshot.id === "busyboy_webhook_deliveries_total" && snapshot.attributes?.outcome === outcome,
       );
       return found?.type === "Counter" ? Number(found.state.count) : 0;
     }),

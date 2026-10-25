@@ -1141,7 +1141,7 @@ it.effect("names the worktree itself when the client provides no branch", () =>
       yield* waitUntil(() => Effect.sync(() => harness.createWorktree.mock.calls.length === 1));
       assert.match(
         harness.createWorktree.mock.calls[0]?.[0]?.newRefName ?? "",
-        /^t3\/[0-9a-f]{8}$/u,
+        /^busyboy\/[0-9a-f]{8}$/u,
       );
       yield* waitUntil(() =>
         threads
@@ -1335,10 +1335,10 @@ it.effect.each(
   ),
 );
 
-it.effect("provisions under t3-<hash> when a plain t3 branch blocks t3/*", () =>
+it.effect("provisions under busyboy-<hash> when a plain busyboy branch blocks busyboy/*", () =>
   Effect.gen(function* () {
     const harness = makeHarness({
-      hasCommit: (input) => Effect.succeed(input.refName === "refs/heads/t3"),
+      hasCommit: (input) => Effect.succeed(input.refName === "refs/heads/busyboy"),
       createWorktree: (input) =>
         Effect.succeed({
           worktree: { path: "/repo-worktrees/temp", refName: input.newRefName, headSha: "abc" },
@@ -1360,8 +1360,8 @@ it.effect("provisions under t3-<hash> when a plain t3 branch blocks t3/*", () =>
           .getThreadProjection(launched.threadId)
           .pipe(Effect.map((projection) => projection.thread.branch === "generated-branch")),
       );
-      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "t3-abcd1234");
-      assert.equal(harness.renameBranch.mock.calls[0]?.[0]?.oldBranch, "t3-abcd1234");
+      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "busyboy-abcd1234");
+      assert.equal(harness.renameBranch.mock.calls[0]?.[0]?.oldBranch, "busyboy-abcd1234");
     }).pipe(Effect.provide(harness.layer));
   }),
 );
@@ -1435,7 +1435,7 @@ it.effect("renames a temporary branch on an existing worktree to a generated nam
           message: "Build the feature",
           workspace: {
             type: "existing_worktree",
-            worktreePath: "/repo-worktrees/t3-abcd1234",
+            worktreePath: "/repo-worktrees/busyboy-abcd1234",
             branch: "busyboy/abcd1234",
           },
         }),
@@ -1446,7 +1446,7 @@ it.effect("renames a temporary branch on an existing worktree to a generated nam
           .pipe(Effect.map((projection) => projection.thread.branch === "generated-branch")),
       );
       assert.deepEqual(harness.renameBranch.mock.calls[0]?.[0], {
-        cwd: "/repo-worktrees/t3-abcd1234",
+        cwd: "/repo-worktrees/busyboy-abcd1234",
         oldBranch: "busyboy/abcd1234",
         newBranch: "generated-branch",
       });
@@ -2358,7 +2358,7 @@ it.effect("shared intake preserves durable attachment bytes after a lost launch 
       ...launchInput({ command: "intake-launch", thread: "intake-thread" }),
       initialMessage: {
         messageId: MessageId.make("intake-first"),
-        text: "First [file](t3-context://v1/file/intake-file)",
+        text: "First [file](busyboy-context://v1/file/intake-file)",
         context: {
           version: 1 as const,
           records: [

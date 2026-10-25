@@ -51,7 +51,7 @@ export const layer = Layer.effect(
       onStateDirOwned: () =>
         electronDialog
           .showErrorBox(
-            "This T3 home is unavailable",
+            "This Busyboy home is unavailable",
             "Another Busyboy server, such as the background service, is using this data directory. Stop that server and reopen Busyboy, or set a separate BUSYBOY_HOME and pair with the running server.",
           )
           .pipe(Effect.andThen(electronApp.quit)),

@@ -189,23 +189,23 @@ describe("ServerUpdateAction", () => {
     [
       { kind: "npm-global", prefix: "/opt/node" },
       "Copy update command",
-      "npm install --global --prefix '/opt/node' t3@0.0.45",
+      "npm install --global --prefix '/opt/node' busyboy@0.0.45",
       "Update command copied",
-      "then restart t3",
+      "then restart busyboy",
     ],
     [
       { kind: "npx" },
       "Copy relaunch command",
       "npx busyboy@0.0.45",
       "Relaunch command copied",
-      "This does not update an installed t3 command.",
+      "This does not update an installed busyboy command.",
     ],
     [
       undefined,
       "Copy relaunch command",
       "npx busyboy@0.0.45",
       "Relaunch command copied",
-      "This does not update an installed t3 command.",
+      "This does not update an installed busyboy command.",
     ],
   ] satisfies ReadonlyArray<
     readonly [ServerInstallation | undefined, string, string, string, string]
@@ -238,7 +238,7 @@ describe("ServerUpdateAction", () => {
     expect(testState.toast).toHaveBeenCalledWith({
       type: "success",
       title: "Test server updated",
-      description: "Reconnected on t3@0.0.31.",
+      description: "Reconnected on busyboy@0.0.31.",
     });
   });
 

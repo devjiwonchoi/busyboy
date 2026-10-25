@@ -34,7 +34,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
 
       expect(descriptor.policy).toBe("desktop-managed-local");
       expect(descriptor.bootstrapMethods).toEqual(["desktop-bootstrap"]);
-      expect(descriptor.sessionCookieName).toBe("t3_session_3773");
+      expect(descriptor.sessionCookieName).toBe("busyboy_session_3773");
     }).pipe(
       Effect.provide(
         layerEnvironmentAuthPolicy({
@@ -50,7 +50,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
       const policy = yield* EnvironmentAuthPolicy.EnvironmentAuthPolicy;
       const descriptor = yield* policy.getDescriptor();
 
-      expect(descriptor.sessionCookieName).toBe("t3_session_3774");
+      expect(descriptor.sessionCookieName).toBe("busyboy_session_3774");
     }).pipe(
       Effect.provide(
         layerEnvironmentAuthPolicy({
@@ -85,7 +85,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
 
       expect(descriptor.policy).toBe("loopback-browser");
       expect(descriptor.bootstrapMethods).toEqual(["one-time-token"]);
-      expect(descriptor.sessionCookieName).toMatch(/^t3_session_3773_[a-f0-9]{12}$/);
+      expect(descriptor.sessionCookieName).toMatch(/^busyboy_session_3773_[a-f0-9]{12}$/);
     }).pipe(
       Effect.provide(
         layerEnvironmentAuthPolicy({
@@ -104,7 +104,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
 
       expect(descriptor.policy).toBe("remote-reachable");
       expect(descriptor.bootstrapMethods).toEqual(["one-time-token"]);
-      expect(descriptor.sessionCookieName).toMatch(/^t3_session_[a-f0-9]{12}$/);
+      expect(descriptor.sessionCookieName).toMatch(/^busyboy_session_[a-f0-9]{12}$/);
     }).pipe(
       Effect.provide(
         layerEnvironmentAuthPolicy({
@@ -121,7 +121,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
       const descriptor = yield* policy.getDescriptor();
 
       expect(descriptor.policy).toBe("remote-reachable");
-      expect(descriptor.sessionCookieName).toMatch(/^t3_session_5775_[a-f0-9]{12}$/);
+      expect(descriptor.sessionCookieName).toMatch(/^busyboy_session_5775_[a-f0-9]{12}$/);
     }).pipe(
       Effect.provide(
         layerEnvironmentAuthPolicy({
@@ -140,7 +140,7 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
       const descriptor = yield* policy.getDescriptor();
 
       expect(descriptor.policy).toBe("remote-reachable");
-      expect(descriptor.sessionCookieName).toMatch(/^t3_session_[a-f0-9]{12}$/);
+      expect(descriptor.sessionCookieName).toMatch(/^busyboy_session_[a-f0-9]{12}$/);
     }).pipe(
       Effect.provide(
         layerEnvironmentAuthPolicy({

@@ -62,7 +62,7 @@ export function isProxiableBindHost(host: string): boolean {
   );
 }
 
-export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
+export const DEFAULT_BUSYBOY_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.join(NodeOS.homedir(), ".busyboy"),
 );
 
@@ -264,7 +264,7 @@ function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, neve
       return path.resolve(configured);
     }
 
-    return yield* DEFAULT_T3_HOME;
+    return yield* DEFAULT_BUSYBOY_HOME;
   });
 }
 
@@ -652,7 +652,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       serverOffset !== offset || webOffset !== offset
         ? ` selectedOffset(server=${serverOffset},web=${webOffset})`
         : "";
-    const baseDir = env.BUSYBOY_HOME ?? (yield* DEFAULT_T3_HOME);
+    const baseDir = env.BUSYBOY_HOME ?? (yield* DEFAULT_BUSYBOY_HOME);
 
     yield* Effect.logInfo(
       `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.BUSYBOY_PORT)} webPort=${String(env.PORT)} baseDir=${baseDir}`,
@@ -785,7 +785,7 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   busyboyHome: Flag.String("home-dir").pipe(
     Flag.withDescription(
-      "Explicit Busyboy data directory; runtime state is stored under userdata (equivalent to BUSYBOY_HOME). Inside a git worktree this defaults to that worktree's own .t3 so dev state stays off the shared home.",
+      "Explicit Busyboy data directory; runtime state is stored under userdata (equivalent to BUSYBOY_HOME). Inside a git worktree this defaults to that worktree's own .busyboy so dev state stays off the shared home.",
     ),
     Flag.optional,
     Flag.map(Option.getOrUndefined),

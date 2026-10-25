@@ -21,7 +21,7 @@ const firstRunId = RunId.make("run:checkpoint-diff-v2:1");
 const secondRunId = RunId.make("run:checkpoint-diff-v2:2");
 const firstScopeId = CheckpointScopeId.make("scope:checkpoint-diff-v2:1");
 const secondScopeId = CheckpointScopeId.make("scope:checkpoint-diff-v2:2");
-const secondRef = CheckpointRef.make("refs/t3/test/second");
+const secondRef = CheckpointRef.make("refs/busyboy/test/second");
 
 function makeProjection(): ProjectionCheckpointContext {
   return {
@@ -176,7 +176,7 @@ it.effect("excludes ready checkpoints from rolled-back runs", () => {
           scopeId: firstScopeId,
           runId: firstRunId,
           appRunOrdinal: 1,
-          ref: CheckpointRef.make("refs/t3/test/first"),
+          ref: CheckpointRef.make("refs/busyboy/test/first"),
         },
         ...projection.checkpoints,
       ],

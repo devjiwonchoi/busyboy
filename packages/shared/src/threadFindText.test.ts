@@ -30,7 +30,7 @@ it("excludes structured context chips without joining text across them", () => {
     searchableMessageSegments({
       role: "user",
       streaming: false,
-      text: "before[hidden label](t3-context://v1/terminal/terminal_1)after",
+      text: "before[hidden label](busyboy-context://v1/terminal/terminal_1)after",
       context: { version: 1, records: [] },
     }),
   ).toEqual(["before", "after"]);
@@ -55,9 +55,9 @@ it("keeps context reference syntax inside code searchable", () => {
     searchableMessageSegments({
       role: "user",
       streaming: false,
-      text: "`[label](t3-context://v1/terminal/terminal_1)`",
+      text: "`[label](busyboy-context://v1/terminal/terminal_1)`",
     }),
-  ).toEqual(["[label](t3-context://v1/terminal/terminal_1)"]);
+  ).toEqual(["[label](busyboy-context://v1/terminal/terminal_1)"]);
 });
 
 it("excludes repeated legacy attachments containing literal context tags", () => {
@@ -133,9 +133,9 @@ it("indexes skill labels in prose but leaves links and code literal", () => {
         text: "Use $test-t3-app now.\n\n`$test-t3-app`\n\n[$test-t3-app](https://example.com)",
       },
       undefined,
-      [{ name: "test-t3-app", displayName: "T3 App Testing" }],
+      [{ name: "test-t3-app", displayName: "Busyboy App Testing" }],
     ),
-  ).toEqual(["Use T3 App Testing now.", "$test-t3-app", "$test-t3-app"]);
+  ).toEqual(["Use Busyboy App Testing now.", "$test-t3-app", "$test-t3-app"]);
 });
 
 it("indexes the citation chip label instead of its link text", () => {

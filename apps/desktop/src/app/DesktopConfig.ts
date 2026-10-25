@@ -40,7 +40,7 @@ export const DesktopConfig = Config.all({
   busyboyHome: trimmedString("BUSYBOY_HOME"),
   devServerUrl: Config.URL("VITE_DEV_SERVER_URL").pipe(Config.option),
   appUserModelIdOverride: trimmedString("BUSYBOY_DESKTOP_APP_USER_MODEL_ID"),
-  devRemoteBusyboyServerEntryPath: trimmedString("BUSYBOY_DEV_REMOTE_T3_SERVER_ENTRY_PATH"),
+  devRemoteBusyboyServerEntryPath: trimmedString("BUSYBOY_DEV_REMOTE_BUSYBOY_SERVER_ENTRY_PATH"),
   configuredBackendPort: Config.Port("BUSYBOY_PORT").pipe(Config.option),
   commitHashOverride: trimmedString("BUSYBOY_COMMIT_HASH"),
   desktopLanHostOverride: trimmedString("BUSYBOY_DESKTOP_LAN_HOST"),

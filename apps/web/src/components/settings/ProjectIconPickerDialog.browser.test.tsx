@@ -89,7 +89,7 @@ describe("ProjectIconPickerDialog", () => {
     await click("Save icon");
     expect(onSelect).toHaveBeenCalledExactlyOnceWith({
       kind: "monogram",
-      text: "T3",
+      text: "Busyboy",
       color: deriveProjectIdentity("Test").color,
     });
   });

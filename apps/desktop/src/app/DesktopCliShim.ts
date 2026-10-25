@@ -29,7 +29,7 @@ export type CliShimTarget =
 /**
  * Electron runs the server as plain Node with `ELECTRON_RUN_AS_NODE`, which
  * reads the entry from inside the asar archive. The launcher's own path and the
- * app's T3 home are written in, so the command the server shows is absolute and
+ * app's Busyboy home are written in, so the command the server shows is absolute and
  * `sudo`, which clears the environment, still runs against this install's home.
  */
 export const renderCliShim = (input: {
@@ -42,7 +42,7 @@ export const renderCliShim = (input: {
     const utf8 = [target.executable, target.entry, input.shimPath, input.busyboyHome].some((value) =>
       [...value].some((character) => character.codePointAt(0)! > 0x7f),
     );
-    const restore = utf8 ? ["chcp %t3_codepage% >nul"] : [];
+    const restore = utf8 ? ["chcp %busyboy_codepage% >nul"] : [];
     return [
       "@echo off",
       `rem ${MARKER}`,
@@ -53,7 +53,7 @@ export const renderCliShim = (input: {
       // for the common all-ASCII install.
       ...(utf8
         ? [
-            `for /f "tokens=2 delims=:." %%c in ('chcp') do set "t3_codepage=%%c"`,
+            `for /f "tokens=2 delims=:." %%c in ('chcp') do set "busyboy_codepage=%%c"`,
             "chcp 65001 >nul",
           ]
         : []),
@@ -69,9 +69,9 @@ export const renderCliShim = (input: {
       "exit /b 127",
       ":run",
       `${cmdWord(target.executable)} ${cmdWord(target.entry)} %*`,
-      'set "t3_exit=%ERRORLEVEL%"',
+      'set "busyboy_exit=%ERRORLEVEL%"',
       ...restore,
-      "exit /b %t3_exit%",
+      "exit /b %busyboy_exit%",
       "",
     ].join("\r\n");
   }

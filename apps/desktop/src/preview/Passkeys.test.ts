@@ -64,7 +64,7 @@ const makeGuest = (origin = "https://accounts.example.com") => {
   return { guest: guest as unknown as Electron.WebContents, mainFrame, handlers, state, call };
 };
 
-const bridgeLayer = layerFor({ t3codeWebAuthn: { browserPasskeys: true } });
+const bridgeLayer = layerFor({ busyboyWebAuthn: { browserPasskeys: true } });
 
 const attestationObject = (authData: ReadonlyArray<number>) => {
   const text = (value: string) => [0x60 + value.length, ...Buffer.from(value)];
@@ -293,7 +293,7 @@ describe("PreviewPasskeys", () => {
       const entitled = yield* PreviewPasskeys.PreviewPasskeys.pipe(
         Effect.provide(
           layerFor({
-            t3codeWebAuthn: {
+            busyboyWebAuthn: {
               touchIdKeychainAccessGroup: "ABC1234567.com.busyboy.app.webauthn",
               browserPasskeys: false,
             },
@@ -312,7 +312,7 @@ describe("PreviewPasskeys", () => {
       const unpackaged = yield* PreviewPasskeys.PreviewPasskeys.pipe(
         Effect.provide(
           layerFor(
-            { t3codeWebAuthn: { touchIdKeychainAccessGroup: "X", browserPasskeys: true } },
+            { busyboyWebAuthn: { touchIdKeychainAccessGroup: "X", browserPasskeys: true } },
             false,
           ),
         ),

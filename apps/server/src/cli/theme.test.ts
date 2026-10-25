@@ -390,7 +390,7 @@ describe("busyboy theme", () => {
   it.effect("rejects the mobile default theme id", () =>
     Effect.gen(function* () {
       const baseDir = makeBaseDir();
-      const failure = yield* runCli(["theme", "set", "t3-code", "--base-dir", baseDir]).pipe(
+      const failure = yield* runCli(["theme", "set", "busyboy", "--base-dir", baseDir]).pipe(
         Effect.flip,
       );
       assert.include(String(failure), "No theme named");

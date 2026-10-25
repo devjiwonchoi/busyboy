@@ -22,7 +22,7 @@ import * as ProcessRunner from "../processRunner.ts";
 
 const PINNED_RUNTIME_DIR = "runtime";
 const PINNED_RUNTIME_INSTALL_TIMEOUT = Duration.minutes(10);
-const PINNED_RUNTIME_ARCHIVE_FILE = "t3-runtime-archive";
+const PINNED_RUNTIME_ARCHIVE_FILE = "busyboy-runtime-archive";
 // Boot-service setup and remote update can construct separate layers. Serialize
 // the complete install transaction across every caller in this process.
 const pinnedRuntimeInstallLock = Semaphore.makeUnsafe(1);
@@ -219,7 +219,7 @@ const installFromArchive = Effect.fn("cloud.pinned_runtime.install_archive")(fun
   input.onProgress?.({ stage: "extract" });
   const extractStep = "extracting the busyboy release archive";
   // The archive wraps everything in one directory named after its stem;
-  // strip it so the executable lands at <versionDir>/t3.
+  // strip it so the executable lands at <versionDir>/busyboy.
   yield* input.runner
     .run({
       command: cliArchiveTarCommand(input.platform, process.env),

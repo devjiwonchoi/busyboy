@@ -401,7 +401,7 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
       expect(refreshedIdentity).not.toBeNull();
       expect(refreshedIdentity?.canonicalKey).toBe("github.com/t3tools/t3code-next");
       expect(refreshedIdentity?.displayName).toBe("t3tools/t3code-next");
-      expect(refreshedIdentity?.name).toBe("busyboy-next");
+      expect(refreshedIdentity?.name).toBe("t3code-next");
     }).pipe(
       Effect.provide(
         Layer.merge(

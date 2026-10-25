@@ -3849,7 +3849,7 @@ function toolGroupSummaryIconName(
     case "command":
       return "terminal";
     case "thread-create":
-      return "t3-code";
+      return "busyboy";
     case "browser":
       return "browser";
     case "search":
@@ -4748,7 +4748,7 @@ type WorkEntryIconName =
   | "square-pen"
   | "terminal"
   | "pull-request"
-  | "t3-code"
+  | "busyboy"
   | "wrench"
   | "x"
   | "zap";
@@ -4939,7 +4939,7 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
       return <BrowserAppIcon className={className} />;
     case "code":
       return <Code2Icon className={className} aria-hidden />;
-    case "t3-code":
+    case "busyboy":
       return <BusyboyWordmark className={className} aria-hidden />;
     case "check":
       return <CheckIcon className={className} aria-hidden />;
@@ -5080,7 +5080,7 @@ function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconName {
       case "background_task":
         return "zap";
       case "system":
-        return "t3-code";
+        return "busyboy";
       default:
         source satisfies never;
         return "zap";

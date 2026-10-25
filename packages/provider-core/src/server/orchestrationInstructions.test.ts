@@ -7,16 +7,16 @@ import {
   busyboyOrchestrationSystemPrompt,
 } from "./orchestrationInstructions.ts";
 
-describe("T3 orchestration provider instructions", () => {
+describe("Busyboy orchestration provider instructions", () => {
   it("distinguishes delegated subagents from ordinary top-level threads", () => {
     assert.include(BUSYBOY_ORCHESTRATION_INSTRUCTIONS, "Use `delegate_task`");
-    assert.include(BUSYBOY_ORCHESTRATION_INSTRUCTIONS, "ordinary top-level T3 conversations");
+    assert.include(BUSYBOY_ORCHESTRATION_INSTRUCTIONS, "ordinary top-level Busyboy conversations");
     assert.include(BUSYBOY_ORCHESTRATION_INSTRUCTIONS, "Never use them merely");
     assert.include(BUSYBOY_ORCHESTRATION_INSTRUCTIONS, "cross-provider");
     assert.include(BUSYBOY_ORCHESTRATION_INSTRUCTIONS, "call `delegate_task` again");
     assert.include(
       BUSYBOY_ORCHESTRATION_INSTRUCTIONS,
-      "Do not use `t3_thread_send` on `childThreadId`",
+      "Do not use `busyboy_thread_send` on `childThreadId`",
     );
   });
 
@@ -34,7 +34,7 @@ describe("T3 orchestration provider instructions", () => {
       hasBusyboyMcp: true,
     });
 
-    assert.include(injected, "<t3_code_orchestration_instructions>");
+    assert.include(injected, "<busyboy_orchestration_instructions>");
     assert.include(injected, `<user_request>\n${prompt}\n</user_request>`);
     assert.equal(
       busyboyOrchestrationPromptForFirstRun({ prompt, runOrdinal: 2, hasBusyboyMcp: true }),
@@ -46,7 +46,7 @@ describe("T3 orchestration provider instructions", () => {
     );
   });
 
-  it("only exposes the system prompt when the T3 MCP server is attached", () => {
+  it("only exposes the system prompt when the Busyboy MCP server is attached", () => {
     assert.equal(busyboyOrchestrationSystemPrompt(false), undefined);
     assert.equal(busyboyOrchestrationSystemPrompt(true), BUSYBOY_ORCHESTRATION_INSTRUCTIONS);
   });

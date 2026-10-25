@@ -1095,7 +1095,7 @@ describe("asking about a change rather than working on it", () => {
     expect(legacyText).toContain(base.url);
     expect(legacyText).toContain(prose);
     expect(legacyText).not.toContain("PLEASE IMPLEMENT THIS PLAN");
-    expect(legacyText).not.toContain("t3-context://");
+    expect(legacyText).not.toContain("busyboy-context://");
   });
 
   it("builds a neutral composer reference without prescribing an action", () => {

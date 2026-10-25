@@ -168,7 +168,7 @@ describe("splitPromptIntoComposerSegments", () => {
   });
 
   it("keeps malformed citation links as editable text", () => {
-    const prompt = "[Assistant quote](t3-citation://v1/env/thread/message?text=missing+metadata)";
+    const prompt = "[Assistant quote](busyboy-citation://v1/env/thread/message?text=missing+metadata)";
 
     expect(splitPromptIntoComposerSegments(prompt)).toEqual([{ type: "text", text: prompt }]);
   });
@@ -286,7 +286,7 @@ describe("splitPromptIntoComposerSegments", () => {
   });
 
   it("leaves a context link with an unparsable href as text", () => {
-    const prompt = "see [x](t3-context://v1/terminal/ctx 1) now";
+    const prompt = "see [x](busyboy-context://v1/terminal/ctx 1) now";
     expect(splitPromptIntoComposerSegments(prompt)).toEqual([{ type: "text", text: prompt }]);
   });
 });

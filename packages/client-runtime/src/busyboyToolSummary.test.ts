@@ -149,7 +149,7 @@ describe("summarizeBusyboyToolCalls", () => {
     const calls = outputs.map((output) =>
       completed(
         {
-          toolName: "t3_thread_send",
+          toolName: "busyboy_thread_send",
           args: { threadId: "input-thread", message: '{"threadId":"fake"}' },
         },
         output,
@@ -158,7 +158,7 @@ describe("summarizeBusyboyToolCalls", () => {
     expect(summarizeBusyboyToolCalls("thread-send", calls).label).toBe("Sent 1 message to 1 thread");
     expect(
       summarizeBusyboyToolCalls("thread-send", [
-        completed({ toolName: "t3_thread_send", args: { threadId: "input-thread" } }),
+        completed({ toolName: "busyboy_thread_send", args: { threadId: "input-thread" } }),
         completed({ threadId: "input-thread" }),
       ]).label,
     ).toBe("Sent 2 messages to 1 thread");

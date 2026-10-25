@@ -338,11 +338,11 @@ describe("MessagesTimeline work rows", () => {
     expect(text()).not.toContain("C:/Users/mike/dev-stuff/t3code/apps/web/src/session-logic.ts");
   });
 
-  it("renders T3 MCP dynamic tools with their pretty name", async () => {
+  it("renders Busyboy MCP dynamic tools with their pretty name", async () => {
     const item = {
       id: "tool-t3-thread-read",
       type: "dynamic_tool",
-      toolName: "mcp__t3-code__t3_thread_read",
+      toolName: "mcp__busyboy__busyboy_thread_read",
       input: { threadId: "thread-child" },
       output: { messages: [] },
     };
@@ -361,8 +361,8 @@ describe("MessagesTimeline work rows", () => {
       }),
     ]);
     await click(button(/^Received 1 update/));
-    await vi.waitFor(() => expect(text()).toContain("Read a T3 thread"));
-    expect(text()).not.toContain("mcp__t3-code__t3_thread_read");
+    await vi.waitFor(() => expect(text()).toContain("Read a Busyboy thread"));
+    expect(text()).not.toContain("mcp__busyboy__busyboy_thread_read");
   });
 
   it("keeps a provider retry collapsed in the work log", async () => {
