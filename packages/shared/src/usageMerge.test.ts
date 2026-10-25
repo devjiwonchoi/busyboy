@@ -82,8 +82,8 @@ describe("mergeUsage", () => {
   it("counts a shared account once across servers while retaining each server's other providers", () => {
     const account = {
       provider: "grok" as const,
-      hostId: "cursor.com",
-      homePath: "cursor-account:account-hash",
+      hostId: "x.ai",
+      homePath: "grok-account:account-hash",
       volumeId: "account-hash",
     };
     const merged = mergeUsage(
@@ -108,8 +108,8 @@ describe("mergeUsage", () => {
     expect(
       merged.providers.map((provider) => [provider.provider, provider.costUsd]).sort(),
     ).toEqual([
-      ["grok", 10],
       ["claude", 10],
+      ["grok", 10],
     ]);
     expect(merged.duplicateSources).toHaveLength(1);
   });
