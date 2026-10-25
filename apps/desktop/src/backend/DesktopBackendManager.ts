@@ -57,8 +57,6 @@ export interface BackendProcessContext {
   readonly httpBaseUrl: URL;
 }
 
-export type DesktopBackendBootstrapDelivery = "fd3" | "stdin";
-
 export interface DesktopBackendStartConfig extends BackendProcessContext {
   readonly args: ReadonlyArray<string>;
   readonly env: Record<string, string | undefined>;
@@ -66,7 +64,6 @@ export interface DesktopBackendStartConfig extends BackendProcessContext {
   // when false `env` is passed verbatim.
   readonly extendEnv: boolean;
   readonly bootstrap: DesktopBackendBootstrapValue;
-  readonly bootstrapDelivery: DesktopBackendBootstrapDelivery;
   readonly httpBaseUrl: URL;
   readonly captureOutput: boolean;
   readonly preflightFailure: Option.Option<PreflightFailure>;
@@ -392,35 +389,31 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
   );
   const onOutput = options.onOutput ?? (() => Effect.void);
   const bootstrapStream = Stream.encodeText(Stream.make(`${bootstrapJson}\n`));
-  const additionalFds: Record<`fd${number}`, ChildProcess.AdditionalFdConfig> = {};
-  if (options.bootstrapDelivery === "fd3") {
-    additionalFds.fd3 = {
+  const additionalFds: Record<`fd${number}`, ChildProcess.AdditionalFdConfig> = {
+    fd3: { type: "input", stream: bootstrapStream },
+  };
+  if (options.bootstrap.desktopTelemetryFd !== undefined) {
+    additionalFds[`fd${options.bootstrap.desktopTelemetryFd}`] = {
       type: "input",
-      stream: bootstrapStream,
+      stream: options.desktopTelemetryStream,
     };
-    if (options.bootstrap.desktopTelemetryFd !== undefined) {
-      additionalFds[`fd${options.bootstrap.desktopTelemetryFd}`] = {
-        type: "input",
-        stream: options.desktopTelemetryStream,
-      };
-    }
-    if (options.bootstrap.desktopTelemetryControlFd !== undefined) {
-      additionalFds[`fd${options.bootstrap.desktopTelemetryControlFd}`] = {
-        type: "output",
-      };
-    }
-    if (
-      options.bootstrap.desktopBrowserFd !== undefined &&
-      options.desktopBrowserStream !== undefined
-    ) {
-      additionalFds[`fd${options.bootstrap.desktopBrowserFd}`] = {
-        type: "input",
-        stream: options.desktopBrowserStream,
-      };
-    }
-    if (options.bootstrap.desktopBrowserControlFd !== undefined) {
-      additionalFds[`fd${options.bootstrap.desktopBrowserControlFd}`] = { type: "output" };
-    }
+  }
+  if (options.bootstrap.desktopTelemetryControlFd !== undefined) {
+    additionalFds[`fd${options.bootstrap.desktopTelemetryControlFd}`] = {
+      type: "output",
+    };
+  }
+  if (
+    options.bootstrap.desktopBrowserFd !== undefined &&
+    options.desktopBrowserStream !== undefined
+  ) {
+    additionalFds[`fd${options.bootstrap.desktopBrowserFd}`] = {
+      type: "input",
+      stream: options.desktopBrowserStream,
+    };
+  }
+  if (options.bootstrap.desktopBrowserControlFd !== undefined) {
+    additionalFds[`fd${options.bootstrap.desktopBrowserControlFd}`] = { type: "output" };
   }
   const command = ChildProcess.make(options.executablePath, options.args, {
     cwd: options.cwd,
@@ -428,13 +421,12 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
     extendEnv: options.extendEnv,
     // In Electron main, process.execPath points to the Electron binary.
     // Run the child in Node mode so this backend process does not become a GUI app instance.
-    stdin: options.bootstrapDelivery === "stdin" ? bootstrapStream : "ignore",
+    stdin: "ignore",
     stdout: options.captureOutput ? "pipe" : "inherit",
     stderr: options.captureOutput ? "pipe" : "inherit",
     killSignal: "SIGTERM",
     forceKillAfter: DEFAULT_BACKEND_TERMINATE_GRACE,
-    // The stdin delivery path sends the bootstrap envelope via `--bootstrap-fd 0`.
-    ...(options.bootstrapDelivery === "fd3" ? { additionalFds } : {}),
+    additionalFds,
   });
 
   const handle = yield* spawner.spawn(command).pipe(

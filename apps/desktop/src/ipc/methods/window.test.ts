@@ -49,7 +49,6 @@ const readySecondaryConfig: DesktopBackendManager.DesktopBackendStartConfig = {
     tailscaleServeEnabled: false,
     tailscaleServePort: 443,
   },
-  bootstrapDelivery: "stdin",
   httpBaseUrl: new URL("http://127.0.0.1:3774"),
   captureOutput: true,
   preflightFailure: Option.none(),
