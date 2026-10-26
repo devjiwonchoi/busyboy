@@ -641,14 +641,56 @@ describe("null patches at project scope", () => {
     expect(
       planScopedSettingsPatch(scope, environments, { defaultModelSelection: null }).serverWrites[0]
         ?.patch,
-    ).toEqual({
-      projectSettingsOverrides: {
-        [projectId]: {
-          defaultThreadEnvMode: "worktree",
-          defaultAutoPull: true,
-          defaultModelSelection: null,
+    ).toEqual({ defaultModelSelection: null });
+  });
+});
+
+describe("global defaults at project scope", () => {
+  it("saves model and permissions to the environment and drops every project's override of them", () => {
+    const otherProjectId = ProjectId.make("other");
+    const withOverrides = environment("Server", {
+      settings: {
+        projectSettingsOverrides: {
+          [projectId]: { defaultRuntimeMode: "full-access", defaultAutoPull: true },
+          [otherProjectId]: { defaultRuntimeMode: "approval-required" },
         },
       },
+    });
+
+    expect(
+      planScopedSettingsPatch(checkout, [laptop, withOverrides], { defaultRuntimeMode: "auto" })
+        .serverWrites,
+    ).toEqual([
+      {
+        environmentId: server.environmentId,
+        label: server.label,
+        previous: expect.anything(),
+        patch: {
+          defaultRuntimeMode: "auto",
+          projectSettingsOverrides: {
+            [projectId]: { defaultAutoPull: true },
+            [otherProjectId]: null,
+          },
+        },
+      },
+    ]);
+  });
+
+  it("keeps the project override for other keys sent alongside", () => {
+    const withOverrides = environment("Server", {
+      settings: {
+        projectSettingsOverrides: { [projectId]: { defaultRuntimeMode: "full-access" } },
+      },
+    });
+
+    expect(
+      planScopedSettingsPatch(checkout, [laptop, withOverrides], {
+        defaultRuntimeMode: "auto",
+        defaultAutoPull: true,
+      }).serverWrites[0]?.patch,
+    ).toEqual({
+      defaultRuntimeMode: "auto",
+      projectSettingsOverrides: { [projectId]: { defaultAutoPull: true } },
     });
   });
 });

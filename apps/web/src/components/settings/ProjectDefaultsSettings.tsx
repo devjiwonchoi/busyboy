@@ -130,11 +130,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       mixed={mixedModel}
       id="default-model"
       title="Model"
-      description={
-        isProjectScope
-          ? "Model for new threads in this project."
-          : "Default model for new threads. Projects can override it."
-      }
+      description="Default model for new threads in every project."
       status={
         unavailable || mixedModel || modelSource === "project"
           ? undefined
@@ -272,11 +268,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             settingKeys={["defaultRuntimeMode"]}
             mixed={mixedPermissions}
             {...searchableSetting("default-permissions")}
-            description={
-              isProjectScope
-                ? "Permissions for new threads in this project."
-                : "Default permissions for new threads. Projects can override them."
-            }
+            description="Default permissions for new threads in every project."
             resetAction={
               settings.defaultRuntimeMode !== DEFAULT_SERVER_SETTINGS.defaultRuntimeMode ? (
                 <SettingResetButton
