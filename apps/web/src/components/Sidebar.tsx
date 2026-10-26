@@ -54,6 +54,7 @@ import {
 } from "@t3tools/contracts";
 
 import {
+  ArchiveIcon,
   ArrowRightLeftIcon,
   CircleAlertIcon,
   CircleCheckIcon,
@@ -1269,6 +1270,7 @@ type SidebarThreadRowProps = {
   renamingTitle: string;
   onContextMenu: (threadRef: ScopedThreadRef, position: { x: number; y: number }) => void;
   onUnpin: (threadRef: ScopedThreadRef) => void;
+  onArchive: (threadRef: ScopedThreadRef) => void;
   onFileDropThreads?: ((threadRef: ScopedThreadRef, files: File[]) => void) | undefined;
 };
 
@@ -1284,6 +1286,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     onThreadActivate,
     onThreadClick,
     onUnpin,
+    onArchive,
     openPullRequestsInRightPanel,
     renamingTitle,
     thread,
@@ -1503,6 +1506,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     event.preventDefault();
     event.stopPropagation();
     onUnpin(threadRef);
+  };
+  // Archive rejects a thread with an attached provider, so the button only shows when it can succeed.
+  const showArchiveButton = canOperateThread && threadRuntimeCanArchive(thread.runtime);
+  const handleArchiveClick = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onArchive(threadRef);
   };
   const handlePrClick = (event: ReactMouseEvent<HTMLElement>, targetUrl?: string) => {
     const url = targetUrl ?? pr?.url ?? currentLinkedPr?.url;
@@ -1741,7 +1751,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     className={cn(
                       "pointer-events-none",
                       // The label gives way to the hover actions, so it stays put when there are none.
-                      hasUnsentDraft &&
+                      (hasUnsentDraft || showArchiveButton) &&
                         "group-has-[:focus-visible]/sidebar-status-slot:absolute group-has-[:focus-visible]/sidebar-status-slot:right-0 group-has-[:focus-visible]/sidebar-status-slot:opacity-0 group-any-hover/sidebar-row:absolute group-any-hover/sidebar-row:right-0 group-any-hover/sidebar-row:opacity-0",
                       "flex items-center self-center justify-self-end tabular-nums text-secondary-label transition-opacity",
                     )}
@@ -1784,28 +1794,47 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       <RelativeTimeLabel timestamp={threadTimeTimestamp(thread)} />
                     )}
                   </span>
-                  {hasUnsentDraft ? (
+                  {hasUnsentDraft || showArchiveButton ? (
                     // focus-visible, not focus-within: a mouse click leaves
                     // the clicked button focused, and a plain focus-within
                     // would keep the controls pinned over the status label
                     // once the pointer moves away instead of cross-fading
                     // back.
                     <span className="pointer-events-none absolute inset-y-0 right-0 flex items-stretch opacity-0 transition-opacity has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:static has-[:focus-visible]:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:static group-any-hover/sidebar-row:opacity-100">
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label="Discard draft"
-                              onClick={handleDiscardDraftClick}
-                              className="inline-flex cursor-pointer items-center rounded-md bg-transparent px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                            />
-                          }
-                        >
-                          <XIcon className="size-3.5" />
-                        </TooltipTrigger>
-                        <TooltipPopup side="top">Discard draft</TooltipPopup>
-                      </Tooltip>
+                      {hasUnsentDraft ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                aria-label="Discard draft"
+                                onClick={handleDiscardDraftClick}
+                                className="inline-flex cursor-pointer items-center rounded-md bg-transparent px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                              />
+                            }
+                          >
+                            <XIcon className="size-3.5" />
+                          </TooltipTrigger>
+                          <TooltipPopup side="top">Discard draft</TooltipPopup>
+                        </Tooltip>
+                      ) : null}
+                      {showArchiveButton ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                aria-label="Archive thread"
+                                onClick={handleArchiveClick}
+                                className="-mr-1 inline-flex cursor-pointer items-center rounded-md bg-transparent px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                              />
+                            }
+                          >
+                            <ArchiveIcon className="size-3.5" />
+                          </TooltipTrigger>
+                          <TooltipPopup side="top">Archive thread</TooltipPopup>
+                        </Tooltip>
+                      ) : null}
                     </span>
                   ) : null}
                 </span>
@@ -2646,6 +2675,38 @@ export default function Sidebar() {
       }
     })();
   };
+  const attemptArchive = (threadRef: ScopedThreadRef) => {
+    void (async () => {
+      const thread = threadByKeyRef.current.get(scopedThreadKey(threadRef));
+      if (!thread) return;
+      if (confirmThreadArchive) {
+        const api = readLocalApi();
+        if (!api) return;
+        const confirmed = await settlePromise(() =>
+          api.dialogs.confirm(`Archive thread "${thread.title}"?`),
+        );
+        if (confirmed._tag === "Failure" || !confirmed.value) return;
+      }
+      let didArchive = false;
+      const result = await archiveThread(threadRef, {
+        onArchived: () => {
+          didArchive = true;
+        },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: didArchive
+              ? "Thread archived, but navigation failed"
+              : "Failed to archive thread",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    })();
+  };
   const attemptUnpin = (threadRef: ScopedThreadRef) => {
     void (async () => {
       const result = await confirmAndUnpinThread(threadRef);
@@ -3279,34 +3340,9 @@ export default function Sidebar() {
           case "copy-thread-id":
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
             return;
-          case "archive": {
-            if (confirmThreadArchive) {
-              const confirmed = await settlePromise(() =>
-                api.dialogs.confirm(`Archive thread "${thread.title}"?`),
-              );
-              if (confirmed._tag === "Failure" || !confirmed.value) return;
-            }
-            let didArchive = false;
-            const result = await archiveThread(threadRef, {
-              onArchived: () => {
-                didArchive = true;
-              },
-            });
-            if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-              const error = squashAtomCommandFailure(result);
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: didArchive
-                    ? "Thread archived, but navigation failed"
-                    : "Failed to archive thread",
-                  description: error instanceof Error ? error.message : "An error occurred.",
-                }),
-              );
-              return;
-            }
+          case "archive":
+            attemptArchive(threadRef);
             return;
-          }
           case "delete": {
             if (confirmThreadDelete) {
               const confirmed = await settlePromise(() =>
@@ -3756,6 +3792,7 @@ export default function Sidebar() {
                             renamingTitle={renamingThreadKey === threadKey ? renamingTitle : ""}
                             onContextMenu={handleThreadContextMenu}
                             onUnpin={attemptUnpin}
+                            onArchive={attemptArchive}
                             onFileDropThreads={handleThreadFileDrop}
                           />
                         );
