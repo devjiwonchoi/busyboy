@@ -21,6 +21,7 @@ export function checkFields(request: {
       const element = matches.length === 1 ? matches[0] : undefined;
       return element instanceof HTMLElement &&
         element.getClientRects().length > 0 &&
+        getComputedStyle(element).opacity !== "0" &&
         !(element as HTMLInputElement).disabled
         ? element
         : undefined;

@@ -43,8 +43,15 @@ const fakePage = ({
   const log: Array<string> = [];
   const frame = { origin, isDestroyed: () => false };
   const guest = {
+    id: 1,
+    on: () => {},
+    off: () => {},
+    once: () => {},
     mainFrame: frame,
-    session: { isPersistent: () => true },
+    session: {
+      isPersistent: () => true,
+      webRequest: { onBeforeRequest: () => {} },
+    },
     executeJavaScriptInIsolatedWorld: async (_world: number, [{ code }]: [{ code: string }]) => {
       if (code.includes("checkFields")) {
         log.push("check");
@@ -78,7 +85,11 @@ const signInWith = ({
           attachGuest: () => () => {},
         }),
         Layer.succeed(PasswordSignIn.PasswordSignInApproval, {
-          approve: ({ accounts }) => Effect.sync(() => approve(accounts)),
+          approve: ({ accounts }) =>
+            Effect.sync(() => {
+              const account = approve(accounts);
+              return account === null ? "declined" : { account };
+            }),
         }),
       ),
     ),
@@ -98,6 +109,7 @@ describe("PasswordSignIn", () => {
 
       const result = yield* Effect.promise(() =>
         service.signIn({
+          pageModified: false,
           guest: page.guest,
           request,
           lock: (secret) => page.log.push(`lock ${secret}`),
@@ -123,6 +135,7 @@ describe("PasswordSignIn", () => {
 
       yield* Effect.promise(() =>
         service.signIn({
+          pageModified: false,
           guest: page.guest,
           request: { ...request, account: "alt" },
           lock: () => {},
@@ -144,22 +157,33 @@ describe("PasswordSignIn", () => {
 
         const noLogin = fakePage({ origin: "https://example.com", fieldsValid: true });
         expect(
-          yield* Effect.promise(() => declining.signIn({ guest: noLogin.guest, request, lock })),
+          yield* Effect.promise(() =>
+            declining.signIn({ pageModified: false, guest: noLogin.guest, request, lock }),
+          ),
         ).toEqual({ status: "unavailable" });
 
         const badFields = fakePage({ origin: "https://github.com", fieldsValid: false });
         expect(
-          yield* Effect.promise(() => declining.signIn({ guest: badFields.guest, request, lock })),
+          yield* Effect.promise(() =>
+            declining.signIn({ pageModified: false, guest: badFields.guest, request, lock }),
+          ),
         ).toEqual({ status: "locator_invalid" });
 
         const declined = fakePage({ origin: "https://github.com", fieldsValid: true });
         expect(
-          yield* Effect.promise(() => declining.signIn({ guest: declined.guest, request, lock })),
+          yield* Effect.promise(() =>
+            declining.signIn({ pageModified: false, guest: declined.guest, request, lock }),
+          ),
         ).toEqual({ status: "declined" });
 
         expect(
           yield* Effect.promise(() =>
-            declining.signIn({ guest: declined.guest, request: { passwordSelector: "" }, lock }),
+            declining.signIn({
+              pageModified: false,
+              guest: declined.guest,
+              request: { passwordSelector: "" },
+              lock,
+            }),
           ),
         ).toEqual({ status: "locator_invalid" });
 
@@ -179,11 +203,59 @@ describe("PasswordSignIn", () => {
       const lockAttempts: Array<string> = [];
 
       const result = yield* Effect.promise(() =>
-        service.signIn({ guest: page.guest, request, lock: (secret) => lockAttempts.push(secret) }),
+        service.signIn({
+          pageModified: false,
+          guest: page.guest,
+          request,
+          lock: (secret) => lockAttempts.push(secret),
+        }),
       );
 
       expect(result).toEqual({ status: "origin_changed" });
       expect(lockAttempts).toEqual([]);
+    }),
+  );
+
+  it.effect("does not ask again for a while after the user declines", () =>
+    Effect.gen(function* () {
+      let prompts = 0;
+      const service = yield* signInWith({
+        approve: () => {
+          prompts += 1;
+          return null;
+        },
+      });
+      const page = fakePage({ origin: "https://github.com", fieldsValid: true });
+
+      for (const _attempt of [1, 2, 3]) {
+        expect(
+          yield* Effect.promise(() =>
+            service.signIn({ pageModified: false, guest: page.guest, request, lock: () => {} }),
+          ),
+        ).toEqual({ status: "declined" });
+      }
+      expect(prompts).toBe(1);
+    }),
+  );
+
+  it.effect("refuses a page the agent already ran its own script in", () =>
+    Effect.gen(function* () {
+      let prompts = 0;
+      const service = yield* signInWith({
+        approve: () => {
+          prompts += 1;
+          return "octo";
+        },
+      });
+      const page = fakePage({ origin: "https://github.com", fieldsValid: true });
+
+      expect(
+        yield* Effect.promise(() =>
+          service.signIn({ guest: page.guest, request, pageModified: true, lock: () => {} }),
+        ),
+      ).toEqual({ status: "page_modified" });
+      expect(prompts).toBe(0);
+      expect(page.log).toEqual([]);
     }),
   );
 });

@@ -17,7 +17,9 @@ const isFillable = (input: HTMLInputElement) =>
   !input.disabled &&
   !input.readOnly &&
   input.getClientRects().length > 0 &&
-  getComputedStyle(input).visibility !== "hidden";
+  getComputedStyle(input).visibility !== "hidden" &&
+  // A field the page made invisible is a trap, not a sign-in form.
+  getComputedStyle(input).opacity !== "0";
 
 /** The visible text field just before the password field, in its form when it has one. */
 const usernameFieldBefore = (passwordField: HTMLInputElement) => {

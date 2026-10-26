@@ -674,6 +674,11 @@ export const PreviewSignInStatus = Schema.Literals([
   "locator_invalid",
   /** The page navigated or changed site while waiting for approval. */
   "origin_changed",
+  /**
+   * The agent ran JavaScript in this page, which could intercept the login.
+   * Load the sign-in page fresh (preview_navigate) and sign in before evaluating.
+   */
+  "page_modified",
 ]);
 export type PreviewSignInStatus = typeof PreviewSignInStatus.Type;
 
@@ -685,6 +690,13 @@ export type PreviewSignInResult = typeof PreviewSignInResult.Type;
  * answers it itself instead of forwarding it to the page.
  */
 export const PREVIEW_SIGN_IN_CDP_METHOD = "Busyboy.signIn";
+
+/**
+ * Sent over a desktop tab's relay just before the server runs JavaScript the
+ * agent wrote, so the desktop knows the current page can no longer be trusted
+ * with a password.
+ */
+export const PREVIEW_AGENT_SCRIPT_CDP_METHOD = "Busyboy.noteAgentScript";
 
 export const PreviewAutomationWaitForInput = Schema.Struct({
   ...PreviewAutomationTabTargetFields,

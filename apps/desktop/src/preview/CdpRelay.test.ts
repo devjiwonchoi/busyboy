@@ -9,9 +9,10 @@ import {
 const makeTarget = (
   send: CdpRelayTarget["send"],
   setDownloadDirectory: CdpRelayTarget["setDownloadDirectory"] = () => {},
-  credentials: Pick<CdpRelayTarget, "signIn" | "credentialLocked"> = {
+  credentials: Pick<CdpRelayTarget, "signIn" | "credentialLocked" | "noteAgentScript"> = {
     signIn: async () => ({ status: "unavailable" }),
     credentialLocked: () => false,
+    noteAgentScript: () => {},
   },
 ): CdpRelayTarget => ({
   send,
@@ -204,7 +205,11 @@ describe("CDP relay downloads", () => {
     const signIn = vi.fn(async () => ({ status: "submitted" }));
     const written: Array<Record<string, unknown>> = [];
     const relay = createCdpRelayConnection(
-      makeTarget(send, () => {}, { signIn, credentialLocked: () => false }),
+      makeTarget(send, () => {}, {
+        signIn,
+        credentialLocked: () => false,
+        noteAgentScript: () => {},
+      }),
       (raw) => written.push(JSON.parse(raw)),
     );
     relay.receive(
@@ -230,6 +235,7 @@ describe("CDP relay downloads", () => {
       makeTarget(send, () => {}, {
         signIn: async () => ({}),
         credentialLocked: () => true,
+        noteAgentScript: () => {},
       }),
       (raw) => written.push(JSON.parse(raw)),
     );
@@ -254,5 +260,39 @@ describe("CDP relay downloads", () => {
       error: { code: -32000, message: CREDENTIAL_LOCKED_MESSAGE },
       sessionId: "t3-preview-page",
     });
+  });
+
+  it("treats script the agent runs in the page as agent script, and refuses it while locked", async () => {
+    const send = vi.fn(async () => ({}));
+    let locked = false;
+    const noteAgentScript = vi.fn();
+    const written: Array<Record<string, unknown>> = [];
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, {
+        signIn: async () => ({}),
+        credentialLocked: () => locked,
+        noteAgentScript,
+      }),
+      (raw) => written.push(JSON.parse(raw)),
+    );
+    const page = (id: number, method: string, params: Record<string, unknown>) =>
+      relay.receive(JSON.stringify({ id, method, params, sessionId: "t3-preview-page" }));
+
+    page(1, "Busyboy.noteAgentScript", {});
+    page(2, "Page.navigate", { url: " JavaScript:alert(1)" });
+    page(3, "Page.reload", { scriptToEvaluateOnLoad: "steal()" });
+    page(4, "Page.navigate", { url: "https://example.com/" });
+    await settle();
+    expect(noteAgentScript).toHaveBeenCalledTimes(3);
+
+    locked = true;
+    page(5, "Page.navigate", { url: "javascript:void 0" });
+    page(6, "Page.reload", { scriptToEvaluateOnLoad: "steal()" });
+    page(7, "Page.reload", {});
+    await settle();
+    expect(
+      written.filter((message) => message["error"] !== undefined).map((message) => message["id"]),
+    ).toEqual([5, 6]);
+    expect(send).toHaveBeenLastCalledWith("Page.reload", {}, undefined);
   });
 });

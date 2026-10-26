@@ -2,7 +2,7 @@
  * Electron allows one debugger client per webContents, so the relay shares the
  * attach the preview manager already holds.
  */
-import { PREVIEW_SIGN_IN_CDP_METHOD } from "@t3tools/contracts";
+import { PREVIEW_AGENT_SCRIPT_CDP_METHOD, PREVIEW_SIGN_IN_CDP_METHOD } from "@t3tools/contracts";
 
 export interface CdpRelayTarget {
   readonly send: (
@@ -24,6 +24,8 @@ export interface CdpRelayTarget {
   readonly signIn: (params: Record<string, unknown>) => Promise<unknown>;
   /** True while a saved password filled for the agent is still in the page. */
   readonly credentialLocked: () => boolean;
+  /** The agent ran its own JavaScript in the current page. */
+  readonly noteAgentScript: () => void;
 }
 
 export interface CdpRelayConnection {
@@ -77,6 +79,18 @@ const isAllowedWhileCredentialLocked = (method: string) =>
   ALLOWED_WHILE_CREDENTIAL_LOCKED.has(method) ||
   method.startsWith("Target.") ||
   method.startsWith("Emulation.");
+
+/**
+ * Commands that run script in the page without looking like it: a
+ * `javascript:` navigation, or a reload that injects a script.
+ */
+const runsPageScript = (command: CdpCommand) => {
+  if (command.method === "Page.navigate") {
+    const url = command.params?.["url"];
+    return typeof url === "string" && /^\s*javascript:/i.test(url);
+  }
+  return command.method === "Page.reload" && command.params?.["scriptToEvaluateOnLoad"] != null;
+};
 
 const ACKNOWLEDGED = new Set([
   "Target.setDiscoverTargets",
@@ -181,8 +195,19 @@ export function createCdpRelayConnection(
     if (command.method === PREVIEW_SIGN_IN_CDP_METHOD && child === undefined) {
       return target.signIn(command.params ?? {});
     }
-    if (target.credentialLocked() && !isAllowedWhileCredentialLocked(command.method)) {
+    if (command.method === PREVIEW_AGENT_SCRIPT_CDP_METHOD && child === undefined) {
+      target.noteAgentScript();
+      return Promise.resolve({});
+    }
+    const scripted = runsPageScript(command);
+    if (
+      target.credentialLocked() &&
+      (scripted || !isAllowedWhileCredentialLocked(command.method))
+    ) {
       return Promise.reject(new Error(CREDENTIAL_LOCKED_MESSAGE));
+    }
+    if (scripted) {
+      target.noteAgentScript();
     }
     // The page itself is already running, but its child frames are not:
     // Playwright auto-attaches with waitForDebuggerOnStart, so Chromium pauses

@@ -1,4 +1,5 @@
 import { PreviewAutomationSignInInput, type PreviewSignInResult } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +8,7 @@ import * as Schema from "effect/Schema";
 import * as Electron from "electron";
 
 import * as ElectronDialog from "../../electron/ElectronDialog.ts";
+import { guardPasswordSubmission } from "./CredentialNetworkGuard.ts";
 import { isFillableOrigin } from "./PasswordEntry.ts";
 import {
   checkFields,
@@ -21,6 +23,12 @@ import * as PasswordVault from "./PasswordVault.ts";
  * methods they use, so it learns the values only the way a typed login would.
  */
 const SIGN_IN_WORLD_ID = 1_009;
+
+/**
+ * After the user declines, the same tab and site are not asked again for a
+ * while, so an agent cannot keep re-prompting until someone taps through.
+ */
+const DECLINE_COOLDOWN_MS = 2 * 60_000;
 
 const SignInRequest = PreviewAutomationSignInInput.mapFields(
   ({ tabId: _tabId, ...fields }) => fields,
@@ -37,21 +45,31 @@ const runInSignInWorld = <A>(
     { code: `(${script.toString()})(${JSON.stringify(argument)})` },
   ]);
 
+/** The account the user approved, or why there is none. */
+export type SignInApproval =
+  | { readonly account: string }
+  | "declined"
+  /** No biometric check is available, so an agent sign-in cannot be approved safely. */
+  | "unavailable";
+
 export class PasswordSignInApproval extends Context.Service<
   PasswordSignInApproval,
   {
-    /** The account the user approved, or `null` when they declined. */
     readonly approve: (input: {
       readonly guest: Electron.WebContents;
       readonly site: string;
       readonly accounts: ReadonlyArray<string>;
-    }) => Effect.Effect<string | null>;
+    }) => Effect.Effect<SignInApproval>;
   }
 >()("@t3tools/desktop/preview/Passwords/PasswordSignIn/PasswordSignInApproval") {}
 
 const accountLabel = (username: string) => (username === "" ? "the saved login" : username);
 
-/** Lets the user pick an account, then confirms with Touch ID where available. */
+/**
+ * Lets the user pick an account, then requires Touch ID. Without Touch ID an
+ * agent cannot sign in: a plain dialog could be clicked by anything that can
+ * drive the screen, including a computer-use agent.
+ */
 export const layerApproval = Layer.effect(
   PasswordSignInApproval,
   Effect.gen(function* () {
@@ -64,7 +82,14 @@ export const layerApproval = Layer.effect(
       );
 
     return PasswordSignInApproval.of({
-      approve: Effect.fn("PasswordSignInApproval.approve")(function* ({ guest, site, accounts }) {
+      approve: Effect.fn("PasswordSignInApproval.approve")(function* ({
+        guest,
+        site,
+        accounts,
+      }): Effect.fn.Return<SignInApproval> {
+        if (!Electron.systemPreferences.canPromptTouchID?.()) {
+          return "unavailable";
+        }
         const host = guest.hostWebContents;
         const owner =
           host && !host.isDestroyed()
@@ -84,29 +109,17 @@ export const layerApproval = Layer.effect(
           account = Option.isSome(choice) ? accounts[choice.value] : undefined;
         }
         if (account === undefined) {
-          return null;
+          return "declined";
         }
 
         const reason = `let an agent sign in to ${site} as ${accountLabel(account)}`;
-        if (Electron.systemPreferences.canPromptTouchID?.()) {
-          const approved = yield* Effect.tryPromise(() =>
-            Electron.systemPreferences.promptTouchID(reason),
-          ).pipe(
-            Effect.as(true),
-            Effect.orElseSucceed(() => false),
-          );
-          return approved ? account : null;
-        }
-
-        const confirm = yield* ask(owner, {
-          type: "question",
-          message: `Let an agent sign in to ${site} as ${accountLabel(account)}?`,
-          detail: "Busyboy fills and submits the saved password. The agent never sees it.",
-          buttons: ["Sign in", "Cancel"],
-          cancelId: 1,
-          defaultId: 1,
-        });
-        return Option.getOrNull(confirm) === 0 ? account : null;
+        const approved = yield* Effect.tryPromise(() =>
+          Electron.systemPreferences.promptTouchID(reason),
+        ).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        );
+        return approved ? { account } : "declined";
       }),
     });
   }),
@@ -123,6 +136,8 @@ export class PasswordSignIn extends Context.Service<
     readonly signIn: (input: {
       readonly guest: Electron.WebContents;
       readonly request: unknown;
+      /** The agent already ran its own JavaScript in this page. */
+      readonly pageModified: boolean;
       readonly lock: (secret: string) => void;
     }) => Promise<PreviewSignInResult>;
     readonly pageHoldsPassword: (guest: Electron.WebContents) => Promise<boolean>;
@@ -135,16 +150,24 @@ export const make = Effect.gen(function* () {
   const vault = yield* PasswordVault.PasswordVault;
   const approval = yield* PasswordSignInApproval;
   const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
+  const declinedUntil = new Map<string, number>();
 
   const signInEffect = Effect.fn("PasswordSignIn.signIn")(function* ({
     guest,
     request,
+    pageModified,
     lock,
   }: {
     readonly guest: Electron.WebContents;
     readonly request: SignInRequest;
+    readonly pageModified: boolean;
     readonly lock: (secret: string) => void;
   }) {
+    // Script the agent left in the page could read the fields as they fill.
+    if (pageModified) {
+      return { status: "page_modified" } satisfies PreviewSignInResult;
+    }
+
     // The origin comes from the committed main frame, never from the agent.
     const frame = guest.mainFrame;
     const pageOrigin = frame.origin;
@@ -174,14 +197,24 @@ export const make = Effect.gen(function* () {
       return { status: "locator_invalid" } satisfies PreviewSignInResult;
     }
 
-    const approvedAccount = yield* approval.approve({
+    const declineKey = `${guest.id}\u0000${pageOrigin}`;
+    if ((declinedUntil.get(declineKey) ?? 0) > (yield* Clock.currentTimeMillis)) {
+      return { status: "declined" } satisfies PreviewSignInResult;
+    }
+
+    const decision = yield* approval.approve({
       guest,
       site: new URL(pageOrigin).host,
       accounts: [...new Set(candidates.map((entry) => entry.username))],
     });
-    if (approvedAccount === null) {
+    if (decision === "unavailable") {
+      return { status: "unavailable" } satisfies PreviewSignInResult;
+    }
+    if (decision === "declined") {
+      declinedUntil.set(declineKey, (yield* Clock.currentTimeMillis) + DECLINE_COOLDOWN_MS);
       return { status: "declined" } satisfies PreviewSignInResult;
     }
+    const approvedAccount = decision.account;
 
     // Approval can take a while; the page may have moved on in the meantime.
     if (frame.isDestroyed() || guest.mainFrame !== frame || frame.origin !== pageOrigin) {
@@ -192,7 +225,10 @@ export const make = Effect.gen(function* () {
       return { status: "unavailable" } satisfies PreviewSignInResult;
     }
 
+    // Both guards go up before the password enters the page: the agent cannot
+    // read it, and the page can only send it to its own origin.
     lock(login.password);
+    guardPasswordSubmission({ guest, secret: login.password, pageOrigin, scope: "origin" });
     const filled = yield* Effect.tryPromise(() =>
       runInSignInWorld(guest, fillAndSubmit, {
         ...selectors,
@@ -206,12 +242,12 @@ export const make = Effect.gen(function* () {
   });
 
   return PasswordSignIn.of({
-    signIn: ({ guest, request, lock }) =>
+    signIn: ({ guest, request, pageModified, lock }) =>
       Option.match(decodeSignInRequest(request), {
         onNone: () => Promise.resolve({ status: "locator_invalid" } as const),
         onSome: (decoded) =>
           runPromise(
-            signInEffect({ guest, request: decoded, lock }).pipe(
+            signInEffect({ guest, request: decoded, pageModified, lock }).pipe(
               Effect.catchCause((cause) =>
                 Effect.logWarning("Agent sign-in failed", { cause }).pipe(
                   Effect.as({ status: "unavailable" } as const),

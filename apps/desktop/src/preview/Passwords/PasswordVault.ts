@@ -14,6 +14,7 @@ import type { IpcMainInvokeEvent, WebContents } from "electron";
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
 import * as ElectronSafeStorage from "../../electron/ElectronSafeStorage.ts";
 import { PASSWORD_FILL_CHANNEL } from "../GuestProtocol.ts";
+import { guardPasswordSubmission } from "./CredentialNetworkGuard.ts";
 import {
   isFillableOrigin,
   passwordMatchesOrigin,
@@ -353,6 +354,7 @@ export const make = Effect.gen(function* () {
         return null;
       }
       if (fill.password !== null) {
+        guardPasswordSubmission({ guest, secret: fill.password, pageOrigin, scope: "site" });
         onPasswordFilled(fill.password);
       }
       return fill;

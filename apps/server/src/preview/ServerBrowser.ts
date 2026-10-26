@@ -20,6 +20,7 @@ import {
   type PreviewAutomationDragInput,
   type PreviewAutomationEvaluateInput,
   type PreviewAutomationSignInInput,
+  PREVIEW_AGENT_SCRIPT_CDP_METHOD,
   PREVIEW_SIGN_IN_CDP_METHOD,
   PreviewSignInResult,
   type PreviewAutomationHoverInput,
@@ -1939,6 +1940,12 @@ const make = Effect.gen(function* () {
           ServerBrowserPage.scroll(tab.page, input as PreviewAutomationScrollInput),
         );
       case "evaluate":
+        // The desktop stops trusting this page with saved passwords from here on.
+        if (tab.desktop) {
+          await (
+            tab.cdp as unknown as { send: (method: string, params: object) => Promise<unknown> }
+          ).send(PREVIEW_AGENT_SCRIPT_CDP_METHOD, {});
+        }
         return ServerBrowserPage.evaluate(
           tab.cdp,
           input as PreviewAutomationEvaluateInput,
