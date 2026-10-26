@@ -525,46 +525,19 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           usageLimitSources,
         });
         const updated = yield* serverSettings.updateSettings({
-          storageCleanup: { worktreeSettledAfterDays: 0, worktreeKeepWhen: "any-local-files" },
+          storageCleanup: { worktreeAfterDays: 30, worktreeKeepWhen: "any-local-files" },
         });
         assert.deepStrictEqual(updated.usageLimitSources, saved.usageLimitSources);
         const persisted = yield* readPersisted;
         assert.deepStrictEqual(persisted.usagePriceOverrides, { "example-model": prices });
         assert.deepStrictEqual(persisted.usageModelAliases, usageModelAliases);
         assert.deepStrictEqual(persisted.usageLimitSources, usageLimitSources);
-        assert.equal(persisted.storageCleanup.worktreeSettledAfterDays, 0);
+        assert.equal(persisted.storageCleanup.worktreeAfterDays, 30);
         assert.equal(persisted.storageCleanup.worktreeKeepWhen, "any-local-files");
 
         yield* serverSettings.updateSettings({ usagePriceOverrides: { "example-model": null } });
         const restored = yield* readPersisted;
         assert.deepStrictEqual(restored.usagePriceOverrides, {});
-      }),
-    ).pipe(Effect.provide(layerServerSettings())),
-  );
-
-  it.effect("persists and broadcasts thread settlement settings", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const serverConfig = yield* ServerConfig.ServerConfig;
-        const fileSystem = yield* FileSystem.FileSystem;
-        const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-        const changes = yield* serverSettings.subscribeChanges;
-
-        const next = yield* serverSettings.updateSettings({
-          sidebarAutoSettleAfterDays: null,
-          sidebarAutoSettleOnMerge: false,
-        });
-        const change = Option.getOrUndefined(yield* Stream.runHead(changes));
-        const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
-
-        const persisted = JSON.parse(raw) as Record<string, unknown>;
-
-        assert.strictEqual(next.sidebarAutoSettleAfterDays, null);
-        assert.isFalse(next.sidebarAutoSettleOnMerge);
-        assert.strictEqual(change?.sidebarAutoSettleAfterDays, null);
-        assert.isFalse(change?.sidebarAutoSettleOnMerge);
-        assert.strictEqual(persisted.sidebarAutoSettleAfterDays, null);
-        assert.isFalse(persisted.sidebarAutoSettleOnMerge);
       }),
     ).pipe(Effect.provide(layerServerSettings())),
   );

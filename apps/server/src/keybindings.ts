@@ -116,6 +116,14 @@ const LATE_DEFAULT_KEYBINDINGS: ReadonlyArray<{
   },
 ];
 
+// Commands a release removed. Their entries, usually old defaults written on
+// first run, are dropped without an issue so they cannot block the default sync.
+const RETIRED_KEYBINDING_COMMANDS: ReadonlySet<unknown> = new Set(["thread.settle"]);
+
+function isRetiredKeybindingEntry(entry: unknown): boolean {
+  return Predicate.hasProperty(entry, "command") && RETIRED_KEYBINDING_COMMANDS.has(entry.command);
+}
+
 function keybindingShortcutContext(rule: KeybindingRule): string | null {
   const parsed = parseKeybindingShortcut(rule.key);
   if (!parsed) return null;
@@ -300,6 +308,9 @@ const make = Effect.gen(function* () {
 
     return yield* Effect.forEach(rawConfig, (entry) =>
       Effect.gen(function* () {
+        if (isRetiredKeybindingEntry(entry)) {
+          return null;
+        }
         const decodedRule = decodeKeybindingRuleExit(entry);
         if (decodedRule._tag === "Failure") {
           yield* Effect.logWarning("ignoring invalid keybinding entry", {
@@ -327,11 +338,12 @@ const make = Effect.gen(function* () {
     {
       readonly keybindings: readonly KeybindingRule[];
       readonly issues: readonly ServerConfigIssue[];
+      readonly hasRetiredEntries: boolean;
     },
     KeybindingsConfigError
   > {
     if (!(yield* readConfigExists)) {
-      return { keybindings: [], issues: [] };
+      return { keybindings: [], issues: [], hasRetiredEntries: false };
     }
 
     const rawConfig = yield* readRawConfig;
@@ -341,12 +353,18 @@ const make = Effect.gen(function* () {
       return {
         keybindings: [],
         issues: [malformedConfigIssue(detail)],
+        hasRetiredEntries: false,
       };
     }
 
     const keybindings: KeybindingRule[] = [];
     const issues: ServerConfigIssue[] = [];
+    let hasRetiredEntries = false;
     for (const [index, entry] of decodedEntries.value.entries()) {
+      if (isRetiredKeybindingEntry(entry)) {
+        hasRetiredEntries = true;
+        continue;
+      }
       const decodedRule = decodeKeybindingRuleExit(entry);
       if (decodedRule._tag === "Failure") {
         const detail = Cause.pretty(decodedRule.cause);
@@ -375,7 +393,7 @@ const make = Effect.gen(function* () {
       keybindings.push(decodedRule.value);
     }
 
-    return { keybindings, issues };
+    return { keybindings, issues, hasRetiredEntries };
   });
 
   const appliedMigrationsPath = path.join(
@@ -554,7 +572,8 @@ const make = Effect.gen(function* () {
           commands: skippedDefaults.map((rule) => rule.command),
         });
       }
-      if (defaultsToAppend.length > 0) {
+      // Rewriting also drops retired entries, which `customConfig` leaves out.
+      if (defaultsToAppend.length > 0 || runtimeConfig.hasRetiredEntries) {
         yield* writeConfigAtomically([...defaultsToAppend, ...customConfig]);
       }
       const settledLateDefaults = pendingLateDefaults.filter(

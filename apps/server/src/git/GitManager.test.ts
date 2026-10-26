@@ -2978,8 +2978,8 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
       yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
       yield* runGit(repoDir, ["remote", "set-head", "origin", "main"]);
       yield* configureRemote(repoDir, "team/fork", forkDir, "team/fork");
-      yield* runGit(repoDir, ["checkout", "-b", "feature/fork-settle", "origin/main"]);
-      yield* runGit(repoDir, ["push", "team/fork", "feature/fork-settle"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/fork-merged", "origin/main"]);
+      yield* runGit(repoDir, ["push", "team/fork", "feature/fork-merged"]);
       yield* configureVisibleRemoteUrlWithLocalRewrite(
         repoDir,
         "origin",
@@ -2996,13 +2996,13 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
       const { manager } = yield* makeManager({
         ghScenario: {
           prListByHeadSelector: {
-            "feature/fork-settle": JSON.stringify([
+            "feature/fork-merged": JSON.stringify([
               {
                 number: 91,
-                title: "Fork PR to settle",
+                title: "Merged fork PR",
                 url: "https://github.com/pingdotgg/codething-mvp/pull/91",
                 baseRefName: "main",
-                headRefName: "feature/fork-settle",
+                headRefName: "feature/fork-merged",
                 state: "MERGED",
                 updatedAt: "2026-05-02T10:00:00Z",
                 isCrossRepository: true,
@@ -3016,7 +3016,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
 
       const pullRequest = yield* manager.branchPullRequest({
         cwd: repoDir,
-        branch: "feature/fork-settle",
+        branch: "feature/fork-merged",
       });
 
       expect(pullRequest).toMatchObject({
@@ -3572,8 +3572,6 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
               createdAt,
               updatedAt: createdAt,
               archivedAt: null,
-              settledOverride: null,
-              settledAt: null,
               lastVisitedAt: null,
               deletedAt: null,
             },

@@ -79,9 +79,6 @@ const SHELL_SNAPSHOT: OrchestrationV2ShellSnapshot = {
       createdAt: NOW,
       updatedAt: NOW,
       archivedAt: null,
-      settledOverride: null,
-      settledAt: NOW,
-      unsettledAt: NOW,
       lastVisitedAt: null,
       titleRegeneration: {
         requestId: CommandId.make("title-regeneration-1"),
@@ -120,8 +117,6 @@ const THREAD_SNAPSHOT: OrchestrationV2ThreadDetailSnapshot = {
       createdAt: NOW,
       updatedAt: NOW,
       archivedAt: null,
-      settledOverride: null,
-      settledAt: NOW,
       lastVisitedAt: null,
       deletedAt: null,
     },
@@ -236,7 +231,6 @@ describe("mobile SQLite environment cache store", () => {
       expect(DateTime.formatIso(shell.threads[0]!.activityRunStartedAt!)).toBe(
         "2026-07-29T12:00:00.000Z",
       );
-      expect(DateTime.formatIso(shell.threads[0]!.unsettledAt!)).toBe("2026-07-29T12:00:00.000Z");
       expect(DateTime.formatIso(thread.projection.thread.updatedAt)).toBe(
         "2026-07-29T12:00:00.000Z",
       );

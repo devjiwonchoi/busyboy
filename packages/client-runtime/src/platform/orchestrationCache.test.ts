@@ -64,7 +64,6 @@ const shellSnapshotWithSummaries: OrchestrationV2ShellSnapshot = {
         updatedAt: v2Now,
       },
       latestUserMessageAt: v2Now,
-      settledAt: v2Now,
       titleRegeneration: {
         requestId: CommandId.make("title-regeneration-v2"),
         startedAt: v2Now,
@@ -141,11 +140,6 @@ describe("orchestration cache envelopes", () => {
         threadShell?.latestUserMessageAt === null || threadShell?.latestUserMessageAt === undefined
           ? null
           : DateTime.formatIso(threadShell.latestUserMessageAt),
-      ).toBe("2026-06-20T00:00:00.000Z");
-      expect(
-        threadShell?.settledAt === null || threadShell?.settledAt === undefined
-          ? null
-          : DateTime.formatIso(threadShell.settledAt),
       ).toBe("2026-06-20T00:00:00.000Z");
       expect(
         threadShell?.titleRegeneration === null || threadShell?.titleRegeneration === undefined

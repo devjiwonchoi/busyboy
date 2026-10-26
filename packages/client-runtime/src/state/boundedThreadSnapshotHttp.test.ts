@@ -53,8 +53,6 @@ const FULL_SNAPSHOT_BODY = {
       updatedAt: NOW,
       archivedAt: null,
       deletedAt: null,
-      settledOverride: null,
-      settledAt: null,
     },
     runs: [],
     attempts: [],

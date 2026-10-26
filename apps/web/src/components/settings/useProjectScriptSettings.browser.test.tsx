@@ -72,7 +72,6 @@ const input = (keybinding: string | null): NewProjectScriptInput => ({
   icon: lint.icon,
   runOnWorktreeCreate: false,
   waitForSetup: false,
-  runOnSettle: false,
   keybinding,
   previewUrl: null,
   autoOpenPreview: false,

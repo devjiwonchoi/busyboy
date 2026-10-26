@@ -87,16 +87,13 @@ export function HomeRouteScreen() {
   const {
     archiveThread,
     confirmDeleteThread,
-    settleThread,
     snoozeThread,
     unsnoozeThread,
     pinThread,
     unpinThread,
-    setThreadAutoSettle,
     moveThread,
     renameThread,
     regenerateThreadTitle,
-    unsettleThread,
   } = useThreadListActions();
   const pendingTasks = usePendingNewTasks();
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
@@ -262,13 +259,10 @@ export function HomeRouteScreen() {
           }
           onArchiveThread={archiveThread}
           onDeleteThread={confirmDeleteThread}
-          onSettleThread={settleThread}
           onSnoozeThread={snoozeThread}
           onUnsnoozeThread={unsnoozeThread}
-          onUnsettleThread={unsettleThread}
           onPinThread={pinThread}
           onUnpinThread={unpinThread}
-          onSetThreadAutoSettle={setThreadAutoSettle}
           onMoveThread={moveThread}
           onRenameThread={renameThread}
           onRegenerateThreadTitle={regenerateThreadTitle}

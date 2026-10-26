@@ -137,8 +137,6 @@ describe("orchestration V2 wire projection", () => {
         createdAt: now,
         updatedAt: now,
         archivedAt: null,
-        settledOverride: null,
-        settledAt: null,
         deletedAt: null,
       },
       runs: [],

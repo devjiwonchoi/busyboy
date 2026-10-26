@@ -69,8 +69,6 @@ const thread = Schema.decodeUnknownSync(OrchestrationV2AppThread)({
   createdAt: now,
   updatedAt: now,
   archivedAt: null,
-  settledOverride: null,
-  settledAt: null,
   lastVisitedAt: null,
   deletedAt: null,
 });

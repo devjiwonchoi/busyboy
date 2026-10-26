@@ -408,8 +408,6 @@ describe("Grok launch permission mode", () => {
             createdAt: now,
             updatedAt: now,
             archivedAt: null,
-            settledOverride: null,
-            settledAt: null,
             lastVisitedAt: null,
             deletedAt: null,
           },

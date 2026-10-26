@@ -68,30 +68,26 @@ vi.mock("../../state/atom-registry", () => ({
         ? state.dropBusy
         : atom === "thread-shells"
           ? state.shells
-          : atom === "queued-thread-keys"
-            ? new Set<string>()
-            : new Map(
-                [...state.scopes.keys()].map((environmentId) => [
-                  environmentId,
-                  {
-                    environment: {
-                      capabilities: {
-                        threadSettlement: true,
-                        threadSnooze: true,
-                        threadPinning: true,
-                        threadPinReorder: true,
-                        threadTitleRegeneration: true,
-                      },
+          : new Map(
+              [...state.scopes.keys()].map((environmentId) => [
+                environmentId,
+                {
+                  environment: {
+                    capabilities: {
+                      threadSnooze: true,
+                      threadPinning: true,
+                      threadPinReorder: true,
+                      threadTitleRegeneration: true,
                     },
                   },
-                ]),
-              ),
+                },
+              ]),
+            ),
   },
 }));
 vi.mock("../../state/use-atom-command", () => ({
   useAtomCommand: (command: unknown) => command,
 }));
-vi.mock("../../state/use-thread-outbox", () => ({ queuedThreadKeysAtom: "queued-thread-keys" }));
 vi.mock("../../state/thread-order", () => ({
   threadDropBusyAtom: "thread-drop-busy",
   getPendingThreadOrder: () => state.pendingOrder,
@@ -115,8 +111,6 @@ vi.mock("../../state/threads", () => ({
       "archive",
       "unarchive",
       "delete",
-      "settle",
-      "unsettle",
       "snooze",
       "unsnooze",
       "pin",
@@ -158,8 +152,6 @@ function makeThread(input: Partial<EnvironmentThreadShell> = {}): EnvironmentThr
 
 const mutationCases = [
   ["archiveThread", "archive"],
-  ["settleThread", "settle"],
-  ["unsettleThread", "unsettle"],
   ["snoozeThread", "snooze"],
   ["unsnoozeThread", "unsnooze"],
   ["pinThread", "pin"],

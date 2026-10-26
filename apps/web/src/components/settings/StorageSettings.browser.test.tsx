@@ -48,7 +48,6 @@ vi.mock(import("./SettingsScopeContext"), async (original) => ({
           capabilities: {
             storageCleanup: true,
             storageCleanupRun: true,
-            settledWorktreeCleanup: true,
           },
         },
       },
@@ -100,7 +99,6 @@ beforeEach(() => {
     storageCleanup: {
       worktreeKeepWhen: "uncommitted-changes",
       worktreeAfterDays: null,
-      worktreeSettledAfterDays: null,
       worktreeOnMerge: false,
       worktreeOnDelete: false,
       worktreeUnchanged: false,
@@ -134,13 +132,13 @@ async function render() {
   )!;
 }
 
-it.each(["machine-wide immediate", "project custom"])(
-  "runs cleanup when only %s settled retention is enabled",
+it.each(["machine-wide", "project custom"])(
+  "runs cleanup when only %s worktree retention is enabled",
   async (scope) => {
-    if (scope === "machine-wide immediate") {
+    if (scope === "machine-wide") {
       state.settings = {
         ...state.settings,
-        storageCleanup: { ...state.settings.storageCleanup, worktreeSettledAfterDays: 0 },
+        storageCleanup: { ...state.settings.storageCleanup, worktreeAfterDays: 1 },
       };
     } else {
       state.settings = {
@@ -149,7 +147,7 @@ it.each(["machine-wide immediate", "project custom"])(
           [ProjectId.make("project")]: {
             worktreeCleanup: {
               mode: "custom",
-              rules: { ...state.settings.storageCleanup, worktreeSettledAfterDays: 7 },
+              rules: { ...state.settings.storageCleanup, worktreeAfterDays: 7 },
             },
           },
         },
@@ -180,7 +178,7 @@ it.each(["machine-wide immediate", "project custom"])(
   },
 );
 
-it("keeps cleanup disabled when settled retention and all other rules are off", async () => {
+it("keeps cleanup disabled when all rules are off", async () => {
   const button = await render();
 
   expect(button.disabled).toBe(true);
@@ -191,7 +189,7 @@ it("keeps cleanup disabled when settled retention and all other rules are off", 
 it("shows an orphan's full path and size while keeping thread row titles unchanged", async () => {
   state.settings = {
     ...state.settings,
-    storageCleanup: { ...state.settings.storageCleanup, worktreeSettledAfterDays: 0 },
+    storageCleanup: { ...state.settings.storageCleanup, worktreeAfterDays: 1 },
   };
   state.report = {
     trigger: "manual",

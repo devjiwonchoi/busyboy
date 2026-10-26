@@ -1,9 +1,21 @@
 import { assert, describe, it } from "@effect/vitest";
+import {
+  OrchestrationV2AppThreadJson,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
+} from "@t3tools/contracts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { migrationManifest, runMigrations } from "./Migrations.ts";
+import Migration0001 from "./Migrations/001_Baseline.ts";
+import * as OrchestrationEventStore from "./OrchestrationEventStore.ts";
 
 const history = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -31,6 +43,97 @@ describe("runMigrations", () => {
         ["thread-projections"],
       );
       assert.deepStrictEqual(yield* runMigrations(), []);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("rewrites stored thread settlement events as metadata updates", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* Migrator.make({})({
+        loader: Migrator.fromRecord({ "1_Baseline": Migration0001 }),
+      });
+
+      // Settlement events stored the whole thread, including its settlement fields.
+      const threadId = ThreadId.make("thread:settled");
+      const now = DateTime.makeUnsafe("2026-06-01T00:00:00.000Z");
+      const providerInstanceId = ProviderInstanceId.make("codex");
+      const thread = yield* Schema.encodeEffect(OrchestrationV2AppThreadJson)({
+        createdBy: "user",
+        creationSource: "web",
+        id: threadId,
+        projectId: ProjectId.make("project:settled"),
+        title: "Settled thread",
+        providerInstanceId,
+        modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        activeProviderThreadId: null,
+        lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+        forkedFrom: null,
+        createdAt: now,
+        updatedAt: now,
+        archivedAt: null,
+        lastVisitedAt: null,
+        deletedAt: null,
+      });
+      const payloadJson = JSON.stringify({
+        ...thread,
+        settledOverride: "settled",
+        settledAt: thread.createdAt,
+        unsettledAt: null,
+        autoSettleDisabledAt: null,
+        lastSnoozeWakeAt: null,
+      });
+      const eventTypes = [
+        "thread.created",
+        "thread.settled",
+        "thread.unsettled",
+        "thread.auto-settle-set",
+        "thread.archived",
+      ];
+      for (const [streamVersion, eventType] of eventTypes.entries()) {
+        yield* sql`
+          INSERT INTO orchestration_events (
+            event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at,
+            actor_kind, payload_json, metadata_json, application_event_version
+          )
+          VALUES (
+            ${`event:settled:${streamVersion}`}, 'thread', ${threadId}, ${streamVersion},
+            ${eventType}, ${thread.createdAt}, 'server', ${payloadJson}, '{}', 2
+          )
+        `;
+      }
+
+      assert.deepStrictEqual(yield* runMigrations(), migrationManifest.slice(1));
+      const rows = yield* sql<{ readonly event_type: string; readonly stream_version: number }>`
+        SELECT event_type, stream_version FROM orchestration_events ORDER BY sequence
+      `;
+      assert.deepStrictEqual(
+        rows.map((row) => [row.stream_version, row.event_type]),
+        [
+          [0, "thread.created"],
+          [1, "thread.metadata-updated"],
+          [2, "thread.metadata-updated"],
+          [3, "thread.metadata-updated"],
+          [4, "thread.archived"],
+        ],
+      );
+      const store = yield* OrchestrationEventStore.OrchestrationEventStore.pipe(
+        Effect.provide(OrchestrationEventStore.layer),
+      );
+      const events = yield* Stream.runCollect(store.readAgentEvents({ threadId }));
+      assert.deepStrictEqual(
+        events.map((stored) => stored.event.type),
+        [
+          "thread.created",
+          "thread.metadata-updated",
+          "thread.metadata-updated",
+          "thread.metadata-updated",
+          "thread.archived",
+        ],
+      );
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 });

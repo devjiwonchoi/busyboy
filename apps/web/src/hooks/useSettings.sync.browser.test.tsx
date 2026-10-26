@@ -21,9 +21,9 @@ const state = vi.hoisted(() => ({
     label: string;
     connection: { phase: "connected" | "disconnected" };
     serverConfig: {
-      environment: { capabilities: { threadAutoSettlement: boolean } };
+      environment: { capabilities: object };
       settings: typeof DEFAULT_SERVER_SETTINGS;
-    };
+    } | null;
   }>,
   persist: vi.fn(),
   toast: vi.fn(),
@@ -56,7 +56,7 @@ import { useUpdatePrimarySettings } from "./useSettings";
 
 const primaryId = EnvironmentId.make("primary");
 const remoteId = EnvironmentId.make("remote");
-const patch = { sidebarAutoSettleOnMerge: false } satisfies ServerSettingsPatch;
+const patch = { snoozeLimitedThreads: false } satisfies ServerSettingsPatch;
 const session = (scopes: ReadonlyArray<AuthEnvironmentScope>): AuthSessionState => ({
   authenticated: true,
   scopes,
@@ -106,7 +106,7 @@ beforeEach(() => {
     label: environmentId,
     connection: { phase: "connected" },
     serverConfig: {
-      environment: { capabilities: { threadAutoSettlement: true } },
+      environment: { capabilities: {} },
       settings: DEFAULT_SERVER_SETTINGS,
     },
   }));
@@ -202,12 +202,12 @@ describe("shared settings writes", () => {
     });
   });
 
-  it.each(["disconnected", "unsupported"] as const)(
+  it.each(["disconnected", "unloaded"] as const)(
     "skips a %s remote even with a cold grant",
     async (condition) => {
       const remote = state.environments[1]!;
       if (condition === "disconnected") remote.connection.phase = "disconnected";
-      else remote.serverConfig.environment.capabilities.threadAutoSettlement = false;
+      else remote.serverConfig = null;
       await mountEditor();
       saveSharedSettings();
 

@@ -41,24 +41,18 @@ function formatValue(key: keyof ServerSettings, value: unknown): string {
   if (value === null || value === undefined) {
     return key === "pullRequestMergeMethod"
       ? "Last selected"
-      : key === "sidebarAutoSettleAfterDays"
-        ? "Never"
-        : key === "defaultModelSelection"
-          ? "Automatic"
-          : key === "sourceControlWriterModelSelection"
-            ? "Text generation model"
-            : key === "reviewGuideModelSelection"
-              ? "Source control writer model"
-              : key === "defaultThreadEnvMode" || key === "worktreeSubmodules"
-                ? "Inherit"
-                : "Not set";
+      : key === "defaultModelSelection"
+        ? "Automatic"
+        : key === "sourceControlWriterModelSelection"
+          ? "Text generation model"
+          : key === "reviewGuideModelSelection"
+            ? "Source control writer model"
+            : key === "defaultThreadEnvMode" || key === "worktreeSubmodules"
+              ? "Inherit"
+              : "Not set";
   }
   if (typeof value === "boolean") return value ? "On" : "Off";
-  if (typeof value === "number") {
-    return key === "sidebarAutoSettleAfterDays"
-      ? `${value} ${value === 1 ? "day" : "days"}`
-      : String(value);
-  }
+  if (typeof value === "number") return String(value);
   if (typeof value === "string") {
     if (key === "defaultThreadEnvMode" && (value === "local" || value === "worktree")) {
       return resolveEnvModeLabel(value);

@@ -86,8 +86,6 @@ function timelineProjection(itemCount: number): OrchestrationV2ThreadProjection 
       createdAt: NOW,
       updatedAt: NOW,
       archivedAt: null,
-      settledOverride: null,
-      settledAt: null,
       deletedAt: null,
     },
     runs: [],

@@ -80,8 +80,6 @@ vi.mock("../state/threads", () => ({
       "archive",
       "unarchive",
       "delete",
-      "settle",
-      "unsettle",
       "pin",
       "unpin",
       "reorderPin",
@@ -97,7 +95,6 @@ vi.mock("../state/vcs", () => ({
 vi.mock("../state/entities", () => ({
   readEnvironmentSupportsPinning: () => true,
   readEnvironmentSupportsPinReorder: () => true,
-  readEnvironmentSupportsSettlement: () => true,
   readEnvironmentSupportsSnooze: () => true,
   readThreadShell: (ref: ScopedThreadRef) =>
     state.threads.find(
@@ -178,14 +175,6 @@ const operations = [
   {
     name: "unarchive",
     run: (actions: ThreadActions, ref: ScopedThreadRef) => actions.unarchiveThread(ref),
-  },
-  {
-    name: "settle",
-    run: (actions: ThreadActions, ref: ScopedThreadRef) => actions.settleThread(ref),
-  },
-  {
-    name: "unsettle",
-    run: (actions: ThreadActions, ref: ScopedThreadRef) => actions.unsettleThread(ref),
   },
   {
     name: "snooze",

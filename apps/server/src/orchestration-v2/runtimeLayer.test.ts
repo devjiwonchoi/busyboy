@@ -1141,7 +1141,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
     }),
   );
 
-  it.effect("dismisses message-capable questions directly and while settling", () =>
+  it.effect("dismisses message-capable questions directly", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
       const eventSink = yield* EventSink.EventSinkV2;
@@ -1262,25 +1262,6 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
         "cancelled",
       );
       assert.lengthOf(dismissedProjection.messages, 0);
-
-      const settled = yield* seedQuestion("runtime-settle-question");
-      yield* orchestrator.dispatch({
-        type: "thread.settle",
-        commandId: CommandId.make("runtime-settle-question-command"),
-        threadId: settled.threadId,
-      });
-      const settledProjection = yield* orchestrator.getThreadProjection(settled.threadId);
-      assert.equal(settledProjection.thread.settledOverride, "settled");
-      assert.equal(settledProjection.runtimeRequests[0]?.status, "resolved");
-      assert.equal(settledProjection.runtimeRequests[0]?.decision, "cancel");
-      assert.equal(
-        settledProjection.nodes.find((node) => node.id === settled.nodeId)?.status,
-        "cancelled",
-      );
-      assert.equal(
-        settledProjection.turnItems.find((item) => item.id === settled.itemId)?.status,
-        "cancelled",
-      );
     }),
   );
 
@@ -1599,68 +1580,6 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         orderKey: "a0",
       });
       assert.equal((yield* orchestrator.getThreadProjection(threadId)).thread.activeOrderKey, "a0");
-
-      const preAutoProjection = yield* orchestrator.getThreadProjection(threadId);
-      const staleAutoSettle = yield* orchestrator
-        .dispatch({
-          type: "thread.auto-settle",
-          commandId: CommandId.make("runtime-layer-lifecycle-auto-settle-stale"),
-          threadId,
-          snapshotAt: DateTime.makeUnsafe(
-            DateTime.toEpochMillis(preAutoProjection.thread.updatedAt) - 1,
-          ),
-        })
-        .pipe(Effect.flip);
-      assert.instanceOf(staleAutoSettle, Orchestrator.OrchestratorDispatchError);
-      yield* orchestrator.dispatch({
-        type: "thread.auto-settle",
-        commandId: CommandId.make("runtime-layer-lifecycle-auto-settle"),
-        threadId,
-        snapshotAt: preAutoProjection.thread.updatedAt,
-      });
-      const autoSettledProjection = yield* orchestrator.getThreadProjection(threadId);
-      assert.equal(autoSettledProjection.thread.settledOverride, "settled");
-      assert.isNull(autoSettledProjection.thread.activeOrderKey);
-      yield* orchestrator.dispatch({
-        type: "thread.unsettle",
-        commandId: CommandId.make("runtime-layer-lifecycle-auto-unsettle"),
-        threadId,
-        reason: "user",
-      });
-      const postUnsettleProjection = yield* orchestrator.getThreadProjection(threadId);
-      const overriddenAutoSettle = yield* orchestrator
-        .dispatch({
-          type: "thread.auto-settle",
-          commandId: CommandId.make("runtime-layer-lifecycle-auto-settle-overridden"),
-          threadId,
-          snapshotAt: postUnsettleProjection.thread.updatedAt,
-        })
-        .pipe(Effect.flip);
-      assert.instanceOf(overriddenAutoSettle, Orchestrator.OrchestratorDispatchError);
-
-      yield* orchestrator.dispatch({
-        type: "thread.settle",
-        commandId: CommandId.make("runtime-layer-lifecycle-settle"),
-        threadId,
-      });
-      const settledProjection = yield* orchestrator.getThreadProjection(threadId);
-      assert.equal(settledProjection.thread.settledOverride, "settled");
-      assert.isNotNull(settledProjection.thread.settledAt);
-
-      yield* orchestrator.dispatch({
-        type: "thread.unsettle",
-        commandId: CommandId.make("runtime-layer-lifecycle-unsettle"),
-        threadId,
-        reason: "user",
-      });
-      const activeProjection = yield* orchestrator.getThreadProjection(threadId);
-      assert.equal(activeProjection.thread.settledOverride, "active");
-      assert.isNull(activeProjection.thread.settledAt);
-      assert.isNotNull(activeProjection.thread.unsettledAt);
-      const activeShell = (yield* orchestrator.getShellSnapshot()).threads.find(
-        (thread) => thread.id === threadId,
-      );
-      assert.deepEqual(activeShell?.unsettledAt, activeProjection.thread.unsettledAt);
 
       const archive = yield* orchestrator.dispatch({
         type: "thread.archive",
@@ -2071,108 +1990,6 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       assert.isUndefined(yield* watchOf);
       const { messages } = yield* orchestrator.getThreadRecords(threadId, ["messages"]);
       assert.deepEqual(messages, []);
-    }),
-  );
-
-  it.effect.each(["manual", "automatic"])("settling ends every pull request watch: %s", (mode) =>
-    Effect.gen(function* () {
-      const orchestrator = yield* Orchestrator.OrchestratorV2;
-      const maintenance = yield* ProjectionMaintenance.ProjectionMaintenanceV2;
-      const threadId = ThreadId.make(`pr-watch-settle-${mode}`);
-      yield* orchestrator.dispatch({
-        type: "thread.create",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make(`pr-watch-settle-create-${mode}`),
-        threadId,
-        projectId: ProjectId.make("pr-watch-settle-project"),
-        title: "Settle watched PRs",
-        modelSelection,
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: null,
-      });
-      const key = { host: "github.com", repository: "pingdotgg/t3code" };
-      for (const number of [7, 8]) {
-        yield* orchestrator.dispatch({
-          type: "thread.pull-request.watch",
-          commandId: CommandId.make(`pr-watch-settle-start-${mode}-${number}`),
-          threadId,
-          ...key,
-          number,
-          watching: true,
-          link: { url: `https://github.com/pingdotgg/t3code/pull/${number}`, source: "agent" },
-        });
-      }
-      const before = yield* orchestrator.getThreadShell(threadId);
-      const started = before?.pullRequests?.[0]?.watch;
-      assert.isDefined(started);
-      if (started === undefined || before === null) return;
-      yield* orchestrator.dispatch({
-        ...(mode === "manual"
-          ? { type: "thread.settle" as const }
-          : { type: "thread.auto-settle" as const, snapshotAt: before.updatedAt }),
-        commandId: CommandId.make(`pr-watch-settle-${mode}`),
-        threadId,
-      });
-      const expected = before.pullRequests?.map(({ watch: _watch, ...link }) => link);
-      assert.deepEqual((yield* orchestrator.getThreadShell(threadId))?.pullRequests, expected);
-      assert.isTrue((yield* maintenance.rebuild).valid);
-      assert.deepEqual((yield* orchestrator.getThreadShell(threadId))?.pullRequests, expected);
-
-      for (const wake of [
-        undefined,
-        {
-          messageId: MessageId.make(`pr-watch-settle-late-wake-${mode}`),
-          text: "Update",
-          notification: {
-            source: { kind: "monitor" as const },
-            outcome: "updated" as const,
-            summary: "#7",
-          },
-        },
-      ]) {
-        const late = yield* orchestrator
-          .dispatch({
-            type: "thread.pull-request-watch.sync",
-            commandId: CommandId.make(`pr-watch-settle-late-${mode}-${wake !== undefined}`),
-            threadId,
-            ...key,
-            number: 7,
-            startedAt: started.startedAt,
-            watch: { ...started, headSha: "late", wakes: 1 },
-            ...(wake === undefined ? {} : { wake }),
-          })
-          .pipe(Effect.flip);
-        assert.equal(late._tag, "OrchestratorDispatchError");
-      }
-      const restart = {
-        type: "thread.pull-request.watch" as const,
-        threadId,
-        ...key,
-        number: 7,
-        watching: true,
-      };
-      const blocked = yield* orchestrator
-        .dispatch({
-          ...restart,
-          commandId: CommandId.make(`pr-watch-settle-blocked-${mode}`),
-        })
-        .pipe(Effect.flip);
-      assert.equal(blocked._tag, "OrchestratorDispatchError");
-      assert.deepEqual((yield* orchestrator.getThreadRecords(threadId, ["messages"])).messages, []);
-      yield* orchestrator.dispatch({
-        type: "thread.unsettle",
-        commandId: CommandId.make(`pr-watch-settle-unsettle-${mode}`),
-        threadId,
-        reason: "user",
-      });
-      yield* orchestrator.dispatch({
-        ...restart,
-        commandId: CommandId.make(`pr-watch-settle-restart-${mode}`),
-      });
-      assert.isDefined((yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch);
     }),
   );
 
@@ -3105,37 +2922,32 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       }),
   );
 
-  it.effect("rejects settling a thread while a run is active", () =>
+  it.effect("rejects an empty-thread workspace claim once a message was sent", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
-      const threadId = ThreadId.make("runtime-layer-active-settle-thread");
+      const threadId = ThreadId.make("runtime-layer-nonempty-claim-thread");
 
       yield* orchestrator.dispatch({
         type: "thread.create",
         createdBy: "user",
         creationSource: "web",
-        commandId: CommandId.make("runtime-layer-active-settle-create"),
+        commandId: CommandId.make("runtime-layer-nonempty-claim-create"),
         threadId,
-        projectId: ProjectId.make("runtime-layer-active-settle-project"),
-        title: "Active settle",
+        projectId: ProjectId.make("runtime-layer-nonempty-claim-project"),
+        title: "Non-empty claim",
         modelSelection,
         runtimeMode: "full-access",
         interactionMode: "default",
         branch: null,
-        worktreePath: "/tmp/runtime-layer-active-settle",
-      });
-      yield* orchestrator.dispatch({
-        type: "thread.settle",
-        commandId: CommandId.make("runtime-layer-active-settle-initial"),
-        threadId,
+        worktreePath: "/tmp/runtime-layer-nonempty-claim",
       });
       yield* orchestrator.dispatch({
         type: "message.dispatch",
         createdBy: "user",
         creationSource: "web",
-        commandId: CommandId.make("runtime-layer-active-settle-message"),
+        commandId: CommandId.make("runtime-layer-nonempty-claim-message"),
         threadId,
-        messageId: MessageId.make("runtime-layer-active-settle-message"),
+        messageId: MessageId.make("runtime-layer-nonempty-claim-message"),
         text: "Keep this run active.",
         attachments: [],
         modelSelection,
@@ -3145,224 +2957,13 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       const nonEmptyClaim = yield* orchestrator
         .dispatch({
           type: "thread.metadata.update",
-          commandId: CommandId.make("runtime-layer-active-settle-empty-claim"),
+          commandId: CommandId.make("runtime-layer-nonempty-claim-update"),
           threadId,
           worktreePath: "/tmp/reassigned-after-message",
           expectedEmpty: true,
         })
         .pipe(Effect.flip);
       assert.instanceOf(nonEmptyClaim, Orchestrator.OrchestratorDispatchError);
-
-      const error = yield* orchestrator
-        .dispatch({
-          type: "thread.settle",
-          commandId: CommandId.make("runtime-layer-active-settle"),
-          threadId,
-        })
-        .pipe(Effect.flip);
-
-      assert.equal(error._tag, "OrchestratorDispatchError");
-      assert.equal(error.cause, `Thread ${threadId} is still running. Stop it before settling.`);
-      const projection = yield* orchestrator.getThreadProjection(threadId);
-      assert.equal(projection.runs[0]?.status, "starting");
-      assert.isNull(projection.thread.settledOverride);
-      assert.isNull(projection.thread.settledAt);
-      assert.isNotNull(projection.thread.unsettledAt);
-    }),
-  );
-
-  it.effect("settles a thread its own agent settled once the turn completes", () =>
-    Effect.gen(function* () {
-      const orchestrator = yield* Orchestrator.OrchestratorV2;
-      const eventSink = yield* EventSink.EventSinkV2;
-      const threadManagement = yield* ThreadManagementService.ThreadManagementService;
-      const projectId = ProjectId.make("runtime-layer-settle-after-run-project");
-      const threadId = ThreadId.make("runtime-layer-settle-after-run-thread");
-
-      yield* orchestrator.dispatch({
-        type: "thread.create",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make("runtime-layer-settle-after-run-create"),
-        threadId,
-        projectId,
-        title: "Settle after run",
-        modelSelection,
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: "/tmp/runtime-layer-settle-after-run",
-      });
-      yield* orchestrator.dispatch({
-        type: "message.dispatch",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make("runtime-layer-settle-after-run-message"),
-        threadId,
-        messageId: MessageId.make("runtime-layer-settle-after-run-message"),
-        text: "Fix it and then settle this thread.",
-        attachments: [],
-        modelSelection,
-        dispatchMode: { type: "start_immediately" },
-      });
-      const run = (yield* orchestrator.getThreadProjection(threadId)).runs[0];
-      if (run === undefined) return yield* Effect.die(new Error("Run missing."));
-
-      const settled = yield* orchestrator
-        .streamStoredEventsFrom({ threadId, afterSequence: 0, eventType: "thread.settled" })
-        .pipe(Stream.runHead, Effect.forkChild);
-      const result = yield* threadManagement.settleThread({
-        threadId,
-        commandId: CommandId.make("runtime-layer-settle-after-run-settle"),
-        byOwnAgent: true,
-      });
-      assert.deepEqual(result, { settlesWhenTurnEnds: true });
-      assert.isNull((yield* orchestrator.getThreadProjection(threadId)).thread.settledOverride);
-      const now = yield* DateTime.now;
-      yield* eventSink.write({
-        commandId: CommandId.make("runtime-layer-settle-after-run-completed"),
-        events: [
-          {
-            id: EventId.make("runtime-layer-settle-after-run-completed"),
-            type: "run.updated",
-            threadId,
-            runId: run.id,
-            occurredAt: now,
-            payload: { ...run, status: "completed", startedAt: now, completedAt: now },
-          },
-        ],
-      });
-      yield* Fiber.join(settled);
-
-      const projection = yield* orchestrator.getThreadProjection(threadId);
-      assert.equal(projection.thread.settledOverride, "settled");
-    }),
-  );
-
-  it.effect("settles past held automatic runs but not held user messages", () =>
-    Effect.gen(function* () {
-      const orchestrator = yield* Orchestrator.OrchestratorV2;
-      const eventSink = yield* EventSink.EventSinkV2;
-      const threadId = ThreadId.make("runtime-layer-settle-automatic-queued");
-
-      yield* orchestrator.dispatch({
-        type: "thread.create",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make("settle-automatic-create"),
-        threadId,
-        projectId: ProjectId.make("settle-automatic-project"),
-        title: "Settle automatic queued",
-        modelSelection,
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: "/tmp/runtime-layer-settle-automatic",
-      });
-      yield* orchestrator.dispatch({
-        type: "message.dispatch",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make("settle-automatic-active"),
-        threadId,
-        messageId: MessageId.make("settle-automatic-active"),
-        text: "Active",
-        attachments: [],
-        modelSelection,
-        dispatchMode: { type: "start_immediately" },
-      });
-      const queueMessage = (id: string, automatic: boolean) =>
-        orchestrator.dispatch({
-          type: "message.dispatch",
-          createdBy: automatic ? "agent" : "user",
-          creationSource: automatic ? "provider" : "web",
-          ...(automatic
-            ? {
-                notification: {
-                  source: { kind: "background_task" as const },
-                  outcome: "updated" as const,
-                  summary: "Background activity updated",
-                },
-              }
-            : {}),
-          commandId: CommandId.make(id),
-          threadId,
-          messageId: MessageId.make(id),
-          text: id,
-          attachments: [],
-          modelSelection,
-          dispatchMode: { type: "queue_after_active" },
-        });
-      yield* queueMessage("settle-automatic-notification", true);
-
-      const holdQueueAfterRestart = (commandId: string) =>
-        Effect.gen(function* () {
-          const projection = yield* orchestrator.getThreadProjection(threadId);
-          const now = yield* DateTime.now;
-          yield* eventSink.commitCommand({
-            commandId: CommandId.make(commandId),
-            threadId,
-            commandType: "provider-runtime.reconcile",
-            acceptedAt: now,
-            events: projection.runs
-              .filter((run) => run.status === "starting" || run.status === "queued")
-              .map((run) => ({
-                id: EventId.make(`${commandId}:${run.id}`),
-                type: "run.updated" as const,
-                threadId,
-                runId: run.id,
-                occurredAt: now,
-                payload:
-                  run.status === "queued"
-                    ? { ...run, queueHeld: true }
-                    : { ...run, status: "cancelled" as const, completedAt: now },
-              })),
-            effects: [],
-          });
-        });
-      yield* holdQueueAfterRestart("settle-automatic-restart");
-
-      yield* orchestrator.dispatch({
-        type: "thread.settle",
-        commandId: CommandId.make("settle-automatic-settle"),
-        threadId,
-      });
-      const settled = yield* orchestrator.getThreadProjection(threadId);
-      assert.isNotNull(settled.thread.settledAt);
-      assert.isTrue(settled.runs.every((run) => run.status === "cancelled"));
-
-      yield* orchestrator.dispatch({
-        type: "thread.unsettle",
-        commandId: CommandId.make("settle-automatic-unsettle"),
-        threadId,
-        reason: "user",
-      });
-      yield* orchestrator.dispatch({
-        type: "message.dispatch",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make("settle-automatic-active-2"),
-        threadId,
-        messageId: MessageId.make("settle-automatic-active-2"),
-        text: "Active again",
-        attachments: [],
-        modelSelection,
-        dispatchMode: { type: "start_immediately" },
-      });
-      yield* queueMessage("settle-automatic-user-queued", false);
-      yield* holdQueueAfterRestart("settle-automatic-restart-2");
-      const error = yield* orchestrator
-        .dispatch({
-          type: "thread.settle",
-          commandId: CommandId.make("settle-automatic-settle-2"),
-          threadId,
-        })
-        .pipe(Effect.flip);
-      assert.equal(error._tag, "OrchestratorDispatchError");
-      assert.equal(
-        error.cause,
-        `Thread ${threadId} has a queued message. Send it or remove it from the queue before settling.`,
-      );
     }),
   );
 
@@ -4481,11 +4082,6 @@ it.layer(layerSharedApplicationDataPlaneTest)("snooze projection", (it) => {
         threadId,
         reason: "user",
       });
-      const projections = yield* ProjectionStore.ProjectionStoreV2.pipe(
-        Effect.provide(ProjectionStore.layer),
-      );
-      const [candidate] = yield* projections.getSettlementCandidates(threadId);
-      assert.deepEqual(candidate?.lastSnoozeWakeAt, yield* DateTime.now);
       yield* orchestrator.dispatch({
         type: "thread.snooze",
         commandId: CommandId.make("runtime-layer-snoozed-thread-snooze-after-wake"),
@@ -5016,7 +4612,6 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
     "snooze-race",
     "new-message",
     "archive",
-    "settle",
     "replacement",
     "manual-snooze",
     "manual-snooze-after-recovery",
@@ -5391,12 +4986,6 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
           dispatchMode: { type: "defer_start" },
           createdBy: "user",
           creationSource: "web",
-        });
-      if (scenario === "settle")
-        yield* orchestrator.dispatch({
-          type: "thread.settle",
-          commandId: CommandId.make(`recovery:settle:${scenario}`),
-          threadId,
         });
       if (scenario === "replacement") {
         const current = yield* orchestrator.getThreadProjection(threadId);

@@ -250,6 +250,59 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     }).pipe(Effect.provide(layerKeybindings())),
   );
 
+  it.effect("drops retired commands without reporting them as issues", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      yield* fs.writeFileString(
+        keybindingsConfigPath,
+        JSON.stringify([
+          { key: "mod+j", command: "terminal.toggle" },
+          { key: "mod+shift+s", command: "thread.settle", when: "!terminalFocus" },
+        ]),
+      );
+
+      const configState = yield* Effect.gen(function* () {
+        const keybindings = yield* Keybindings.Keybindings;
+        return yield* keybindings.loadConfigState;
+      });
+
+      assert.isTrue(configState.keybindings.some((entry) => entry.command === "terminal.toggle"));
+      assert.isFalse(
+        configState.keybindings.some((entry) => String(entry.command) === "thread.settle"),
+      );
+      assert.deepEqual(configState.issues, []);
+    }).pipe(Effect.provide(layerKeybindings())),
+  );
+
+  it.effect("removes retired commands and backfills missing defaults on startup", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      const retired = { key: "mod+shift+s", command: "thread.settle", when: "!terminalFocus" };
+      yield* fs.writeFileString(
+        keybindingsConfigPath,
+        JSON.stringify([{ key: "mod+shift+y", command: "terminal.toggle" }, retired]),
+      );
+
+      const keybindings = yield* Keybindings.Keybindings;
+      yield* keybindings.syncDefaultKeybindingsOnStartup;
+
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      const commands = new Set(persisted.map((entry) => entry.command));
+      for (const defaultRule of Keybindings.DEFAULT_KEYBINDINGS) {
+        assert.isTrue(commands.has(defaultRule.command), `expected ${defaultRule.command}`);
+      }
+      assert.isFalse((yield* fs.readFileString(keybindingsConfigPath)).includes("thread.settle"));
+      assert.deepEqual((yield* keybindings.loadConfigState).issues, []);
+
+      // With every default present, the retired entry alone still triggers the rewrite.
+      yield* fs.writeFileString(keybindingsConfigPath, JSON.stringify([...persisted, retired]));
+      yield* keybindings.syncDefaultKeybindingsOnStartup;
+      assert.deepEqual(yield* readKeybindingsConfig(keybindingsConfigPath), persisted);
+    }).pipe(Effect.provide(layerKeybindings())),
+  );
+
   it.effect(
     "upserts missing default keybindings on startup without overriding existing command rules",
     () =>

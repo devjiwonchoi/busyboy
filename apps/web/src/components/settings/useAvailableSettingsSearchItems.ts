@@ -4,10 +4,7 @@ import { isLocalEnvironmentDisabled } from "~/localEnvironment";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentScope } from "~/state/session";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
-import {
-  filterAvailableSettingsSearchItems,
-  getThreadAutoSettlementSearchAvailability,
-} from "./settingsSearch";
+import { filterAvailableSettingsSearchItems } from "./settingsSearch";
 
 export function useAvailableSettingsSearchItems() {
   const { environments } = useEnvironments();
@@ -24,8 +21,6 @@ export function useAvailableSettingsSearchItems() {
         hasServerConfig: environment.serverConfig !== null,
       }),
     ) === true;
-  const hasThreadAutoSettlement =
-    getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const canMaintain = useEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope);
 
@@ -36,7 +31,6 @@ export function useAvailableSettingsSearchItems() {
     hasEnvironment,
     hasProviderSettingsEnvironment,
     canManageLocalBackend,
-    hasThreadAutoSettlement,
     managedTunnelActive: false,
   });
 }

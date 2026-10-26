@@ -119,8 +119,6 @@ function threadCreated(id: ThreadId, at: DateTime.Utc, forkOf?: RunId): Orchestr
       createdAt: at,
       updatedAt: at,
       archivedAt: null,
-      settledOverride: null,
-      settledAt: null,
       lastVisitedAt: null,
       deletedAt: null,
     },

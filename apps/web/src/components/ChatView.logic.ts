@@ -520,8 +520,6 @@ export function buildLocalDraftThread(
     createdAt: timestamp,
     updatedAt: timestamp,
     archivedAt: null,
-    settledOverride: null,
-    settledAt: null,
     deletedAt: null,
   });
 }
@@ -1297,11 +1295,10 @@ export function mergeDirectPreviewAnnotation(input: {
  */
 export function isThreadWokeUnseen(input: {
   readonly wokeAt: string | null;
-  readonly settled: boolean;
   readonly lastVisitedAt: string | null | undefined;
   readonly latestRunCompletedAt: string | null;
 }): boolean {
-  if (input.wokeAt === null || input.settled) return false;
+  if (input.wokeAt === null) return false;
   const wokeAtMs = Date.parse(input.wokeAt);
   if (Number.isNaN(wokeAtMs)) return false;
   const seenAt = [input.lastVisitedAt, input.latestRunCompletedAt]

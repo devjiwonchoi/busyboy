@@ -1550,8 +1550,6 @@ function makeCodexTestAppThread(input: {
     createdAt: input.now,
     updatedAt: input.now,
     archivedAt: null,
-    settledOverride: null,
-    settledAt: null,
     lastVisitedAt: null,
     deletedAt: null,
   };

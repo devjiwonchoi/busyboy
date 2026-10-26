@@ -470,7 +470,7 @@ export function resolveThreadPr(input: {
 }
 
 /**
- * Parent-held PR snapshot for Sidebar V2. Rows remount when settlement
+ * Parent-held PR snapshot for Sidebar V2. Rows remount when sidebar
  * partitions move them, so terminal PR metadata must live above the row.
  */
 export interface ThreadChangeRequestSnapshot {
@@ -1031,30 +1031,14 @@ function ThreadPullRequestNumber({
   );
 }
 
-function settledPrHoverColorClass(state: NonNullable<ThreadPr>["state"], isDraft = false): string {
-  switch (state) {
-    case "open":
-      if (isDraft) {
-        return "group-hover/sidebar-row:text-zinc-500 dark:group-hover/sidebar-row:text-zinc-400/80";
-      }
-      return "group-hover/sidebar-row:text-emerald-600 dark:group-hover/sidebar-row:text-emerald-300/90";
-    case "merged":
-      return "group-hover/sidebar-row:text-violet-600 dark:group-hover/sidebar-row:text-violet-300/90";
-    case "closed":
-      return "group-hover/sidebar-row:text-red-600 dark:group-hover/sidebar-row:text-red-300/90";
-  }
-}
-
 export function ThreadSearchPullRequestNumber({
   thread,
   query,
   enabled = true,
-  settled = false,
 }: {
   thread: SidebarThreadSummary;
   query: string;
   enabled?: boolean;
-  settled?: boolean;
 }) {
   const matchedLink = visibleThreadPullRequests(thread.pullRequests).find((pr) =>
     pullRequestMatchesSearchQuery({ pullRequests: [pr] }, query),
@@ -1081,14 +1065,7 @@ export function ThreadSearchPullRequestNumber({
   return reference ? (
     <ThreadPullRequestNumber
       number={reference.number}
-      className={
-        settled
-          ? cn(
-              "text-secondary-label transition-colors",
-              linked?.pr && settledPrHoverColorClass(linked.pr.state, linked.pr.isDraft),
-            )
-          : (status?.colorClass ?? "text-secondary-label")
-      }
+      className={status?.colorClass ?? "text-secondary-label"}
       aria-label={status?.tooltip ?? `Pull request #${reference.number}`}
     />
   ) : null;

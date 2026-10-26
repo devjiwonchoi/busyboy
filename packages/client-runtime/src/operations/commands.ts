@@ -85,11 +85,6 @@ export interface ThreadCommandInput extends CommandMetadata {
 export type DeleteThreadInput = ThreadCommandInput;
 export type ArchiveThreadInput = ThreadCommandInput;
 export type UnarchiveThreadInput = ThreadCommandInput;
-export type SettleThreadInput = ThreadCommandInput;
-
-export interface UnsettleThreadInput extends ThreadCommandInput {
-  readonly reason: "user";
-}
 
 export interface PinThreadInput extends ThreadCommandInput {
   readonly orderKey?: string;
@@ -403,13 +398,7 @@ export const createThread = Effect.fn("EnvironmentCommands.createThread")(functi
 });
 
 function simpleThreadCommand(
-  type:
-    | "thread.delete"
-    | "thread.archive"
-    | "thread.unarchive"
-    | "thread.settle"
-    | "thread.pin"
-    | "thread.unpin",
+  type: "thread.delete" | "thread.archive" | "thread.unarchive" | "thread.pin" | "thread.unpin",
   input: ThreadCommandInput,
 ) {
   return allocateCommandId(input).pipe(
@@ -435,12 +424,6 @@ export const unarchiveThread = Effect.fn("EnvironmentCommands.unarchiveThread")(
   return yield* simpleThreadCommand("thread.unarchive", input);
 });
 
-export const settleThread = Effect.fn("EnvironmentCommands.settleThread")(function* (
-  input: SettleThreadInput,
-) {
-  return yield* simpleThreadCommand("thread.settle", input);
-});
-
 export const pinThread = Effect.fn("EnvironmentCommands.pinThread")(function* (
   input: PinThreadInput,
 ) {
@@ -450,20 +433,6 @@ export const pinThread = Effect.fn("EnvironmentCommands.pinThread")(function* (
     commandId,
     threadId: input.threadId,
     ...(input.orderKey === undefined ? {} : { orderKey: input.orderKey }),
-  });
-});
-
-export interface SetThreadAutoSettleInput extends ThreadCommandInput {
-  readonly enabled: boolean;
-}
-export const setThreadAutoSettle = Effect.fn("EnvironmentCommands.setThreadAutoSettle")(function* (
-  input: SetThreadAutoSettleInput,
-) {
-  return yield* dispatch({
-    type: "thread.auto-settle.set",
-    commandId: yield* allocateCommandId(input),
-    threadId: input.threadId,
-    enabled: input.enabled,
   });
 });
 
@@ -494,17 +463,6 @@ export const unpinThread = Effect.fn("EnvironmentCommands.unpinThread")(function
   input: UnpinThreadInput,
 ) {
   return yield* simpleThreadCommand("thread.unpin", input);
-});
-
-export const unsettleThread = Effect.fn("EnvironmentCommands.unsettleThread")(function* (
-  input: UnsettleThreadInput,
-) {
-  return yield* dispatch({
-    type: "thread.unsettle",
-    commandId: yield* allocateCommandId(input),
-    threadId: input.threadId,
-    reason: input.reason,
-  });
 });
 
 export const snoozeThread = Effect.fn("EnvironmentCommands.snoozeThread")(function* (

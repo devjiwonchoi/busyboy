@@ -18,7 +18,6 @@ import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
 
 import * as GitManager from "../git/GitManager.ts";
 import * as ProjectStore from "./ProjectStore.ts";
@@ -162,8 +161,6 @@ describe("ThreadPullRequestServiceV2 reads", () => {
       createdAt: NOW,
       updatedAt: NOW,
       archivedAt: null,
-      settledOverride: null,
-      settledAt: null,
       lastVisitedAt: null,
       deletedAt: null,
     };
@@ -176,9 +173,7 @@ describe("ThreadPullRequestServiceV2 reads", () => {
         const other = threadShell("other-thread");
         const activation = yield* Deferred.make<void>();
         const events = yield* PubSub.unbounded<OrchestrationV2DomainEvent>();
-        const reads = yield* Queue.unbounded<
-          ThreadId | { readonly location?: string; readonly unsettledOnly?: boolean }
-        >();
+        const reads = yield* Queue.unbounded<ThreadId | { readonly location?: string }>();
         const layerDependencies = Layer.mergeAll(
           Layer.mock(Orchestrator.OrchestratorV2)({
             streamDomainEvents: Stream.fromPubSub(events),
@@ -218,7 +213,7 @@ describe("ThreadPullRequestServiceV2 reads", () => {
           const service = yield* ThreadPullRequestService.make;
           yield* service.start();
           yield* Deferred.succeed(activation, undefined);
-          expect(yield* Queue.take(reads)).toEqual({ location: "active", unsettledOnly: false });
+          expect(yield* Queue.take(reads)).toEqual({ location: "active" });
           yield* service.drain;
           yield* PubSub.publish(events, {
             type: "thread.metadata-updated",
@@ -243,8 +238,6 @@ describe("ThreadPullRequestServiceV2 reads", () => {
               createdAt: thread.createdAt,
               updatedAt: thread.updatedAt,
               archivedAt: null,
-              settledOverride: null,
-              settledAt: null,
               lastVisitedAt: null,
               deletedAt: null,
             },
@@ -252,64 +245,6 @@ describe("ThreadPullRequestServiceV2 reads", () => {
           expect(yield* Queue.take(reads)).toBe(thread.id);
           yield* service.drain;
           expect(yield* Queue.size(reads)).toBe(0);
-        }).pipe(Effect.provide(layerDependencies));
-      }),
-    ),
-  );
-
-  it.effect("periodic sweeps read only unsettled threads once backfill is done", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const settled = {
-          ...threadShell("settled-thread"),
-          branch: "feature/settled",
-          settledOverride: "settled" as const,
-          settledAt: NOW,
-        };
-        const activation = yield* Deferred.make<void>();
-        const reads = yield* Queue.unbounded<{
-          readonly location?: string;
-          readonly unsettledOnly?: boolean;
-        }>();
-        const layerDependencies = Layer.mergeAll(
-          Layer.mock(Orchestrator.OrchestratorV2)({
-            streamDomainEvents: Stream.never,
-            getShellSnapshot: (options) =>
-              Queue.offer(reads, options ?? {}).pipe(
-                Effect.as({
-                  schemaVersion: 2,
-                  snapshotSequence: 1,
-                  threads: options?.unsettledOnly ? [] : [settled],
-                  archivedThreads: [],
-                }),
-              ),
-          }),
-          Layer.mock(ProjectStore.ProjectStoreV2)({
-            listShells: () => Effect.succeed([]),
-          }),
-          Layer.mock(GitManager.GitManager)({}),
-          Layer.mock(PullRequestService.PullRequestService)({}),
-          Layer.mock(RepositoryIdentityResolver.RepositoryIdentityResolver)({}),
-          Layer.succeed(ServerActivation.ServerActivation, Deferred.await(activation)),
-          Layer.succeed(
-            Crypto.Crypto,
-            Crypto.make({
-              randomBytes: (size) => new Uint8Array(size).fill(1),
-              digest: (_algorithm, data) => Effect.succeed(data),
-            }),
-          ),
-          FileSystem.layerNoop({}),
-        );
-
-        yield* Effect.gen(function* () {
-          const service = yield* ThreadPullRequestService.make;
-          yield* service.start();
-          yield* Deferred.succeed(activation, undefined);
-          expect(yield* Queue.take(reads)).toEqual({ location: "active", unsettledOnly: false });
-          yield* service.drain;
-          yield* TestClock.adjust("1 minute");
-          expect(yield* Queue.take(reads)).toEqual({ location: "active", unsettledOnly: true });
-          yield* service.drain;
         }).pipe(Effect.provide(layerDependencies));
       }),
     ),

@@ -21,23 +21,23 @@ const boxId = EnvironmentId.make("env-box");
 const restartCapabilities = { threadRestartContinuation: true };
 
 describe("supportsSharedSettingsSync", () => {
-  it("accepts only connected servers that advertise the shared-settings capability", () => {
-    expect(
-      supportsSharedSettingsSync({
-        connection: { phase: "connected" },
-        serverConfig: { environment: { capabilities: { threadAutoSettlement: true } } },
-      }),
-    ).toBe(true);
+  it("accepts only connected servers with a loaded config", () => {
     expect(
       supportsSharedSettingsSync({
         connection: { phase: "connected" },
         serverConfig: { environment: { capabilities: {} } },
       }),
+    ).toBe(true);
+    expect(
+      supportsSharedSettingsSync({
+        connection: { phase: "connected" },
+        serverConfig: null,
+      }),
     ).toBe(false);
     expect(
       supportsSharedSettingsSync({
         connection: { phase: "reconnecting" },
-        serverConfig: { environment: { capabilities: { threadAutoSettlement: true } } },
+        serverConfig: { environment: { capabilities: {} } },
       }),
     ).toBe(false);
   });
@@ -47,10 +47,10 @@ describe("splitSharedServerPatch", () => {
   it("keeps project overrides local: project ids belong to one environment", () => {
     const patch = {
       projectSettingsOverrides: { [ProjectId.make("project")]: { defaultAutoPull: true } },
-      sidebarAutoSettleOnMerge: false,
+      snoozeLimitedThreads: true,
     };
     expect(splitSharedServerPatch(patch)).toEqual({
-      sharedPatch: { sidebarAutoSettleOnMerge: false },
+      sharedPatch: { snoozeLimitedThreads: true },
       localPatch: { projectSettingsOverrides: patch.projectSettingsOverrides },
     });
   });
@@ -98,16 +98,16 @@ describe("splitSharedServerPatch", () => {
 
   it("routes preference keys to the shared patch and machine keys to the local patch", () => {
     const { sharedPatch, localPatch } = splitSharedServerPatch({
-      sidebarAutoSettleAfterDays: 7,
-      sidebarAutoSettleOnMerge: false,
+      autoResumeLimitedThreads: true,
+      snoozeLimitedThreads: false,
       continueThreadsAfterServerUpdate: true,
       enableAgentBrowserAccess: false,
       defaultThreadEnvMode: "worktree",
       newWorktreesStartFromOrigin: true,
     });
     expect(sharedPatch).toEqual({
-      sidebarAutoSettleAfterDays: 7,
-      sidebarAutoSettleOnMerge: false,
+      autoResumeLimitedThreads: true,
+      snoozeLimitedThreads: false,
       continueThreadsAfterServerUpdate: true,
       newWorktreesStartFromOrigin: true,
     });
@@ -126,8 +126,6 @@ describe("pickSharedServerSettings", () => {
       "autoResumeLimitedThreads",
       "continueThreadsAfterServerUpdate",
       "newWorktreesStartFromOrigin",
-      "sidebarAutoSettleAfterDays",
-      "sidebarAutoSettleOnMerge",
       "snoozeLimitedThreads",
       "sourceControlWritingStyle",
       "textGenerationModelSelection",
@@ -157,14 +155,14 @@ describe("filterSharedServerPatch", () => {
       const patch = {
         textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection,
         continueThreadsAfterServerUpdate: true,
-        sidebarAutoSettleAfterDays: 7,
+        snoozeLimitedThreads: true,
       };
       expect(filterSharedServerPatch(patch, undefined, settings, settings, targetIsSource)).toEqual(
         {
           ...(targetIsSource
             ? { textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection }
             : {}),
-          sidebarAutoSettleAfterDays: 7,
+          snoozeLimitedThreads: true,
         },
       );
     },
@@ -190,7 +188,7 @@ describe("filterSharedServerPatch", () => {
         ...DEFAULT_SERVER_SETTINGS,
         providerInstances: availability === "missing" ? {} : { [instanceId]: instance },
       };
-      const patch = { sidebarAutoSettleAfterDays: 7, textGenerationModelSelection: selection };
+      const patch = { snoozeLimitedThreads: true, textGenerationModelSelection: selection };
       const sourceSettings = {
         ...settings,
         providerInstances: {
@@ -198,7 +196,7 @@ describe("filterSharedServerPatch", () => {
         },
       };
       expect(filterSharedServerPatch(patch, restartCapabilities, settings, sourceSettings)).toEqual(
-        availability === "enabled" ? patch : { sidebarAutoSettleAfterDays: 7 },
+        availability === "enabled" ? patch : { snoozeLimitedThreads: true },
       );
       const primarySettings = {
         ...sourceSettings,
@@ -217,7 +215,7 @@ describe("filterSharedServerPatch", () => {
   );
 
   it.each([true, false])("preserves supported restart preference %s", (enabled) => {
-    const patch = { continueThreadsAfterServerUpdate: enabled, sidebarAutoSettleAfterDays: 7 };
+    const patch = { continueThreadsAfterServerUpdate: enabled, snoozeLimitedThreads: true };
     expect(filterSharedServerPatch(patch, restartCapabilities)).toEqual(patch);
   });
 
@@ -226,10 +224,10 @@ describe("filterSharedServerPatch", () => {
     (capabilities) => {
       expect(
         filterSharedServerPatch(
-          { continueThreadsAfterServerUpdate: true, sidebarAutoSettleAfterDays: 7 },
+          { continueThreadsAfterServerUpdate: true, snoozeLimitedThreads: true },
           capabilities,
         ),
-      ).toEqual({ sidebarAutoSettleAfterDays: 7 });
+      ).toEqual({ snoozeLimitedThreads: true });
       expect(pickSharedServerSettings(DEFAULT_SERVER_SETTINGS, capabilities)).not.toHaveProperty(
         "continueThreadsAfterServerUpdate",
       );
@@ -238,7 +236,7 @@ describe("filterSharedServerPatch", () => {
 });
 
 describe("findSharedSettingsMismatches", () => {
-  const primarySettings = { ...DEFAULT_SERVER_SETTINGS, sidebarAutoSettleAfterDays: 7 };
+  const primarySettings = { ...DEFAULT_SERVER_SETTINGS, snoozeLimitedThreads: true };
 
   it.each([true, false])(
     "detects remote restart continuation drift when the preference is %s",
@@ -307,7 +305,7 @@ describe("findSharedSettingsMismatches", () => {
           environments: [
             {
               ...environment,
-              settings: { ...environment.settings, sidebarAutoSettleAfterDays: 14 },
+              settings: { ...environment.settings, snoozeLimitedThreads: false },
             },
           ],
         }),

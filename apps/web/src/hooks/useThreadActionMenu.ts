@@ -6,7 +6,7 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-snooze";
 import {
   AuthOrchestrationOperateScope,
   type ScopedThreadRef,
@@ -25,9 +25,7 @@ import { threadEnvironment } from "../state/threads";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope } from "../state/session";
 import {
-  readEnvironmentSupportsAutoSettleOptOut,
   readEnvironmentSupportsPinning,
-  readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentSupportsTitleRegeneration,
   readThreadShell,
@@ -73,13 +71,10 @@ export function useThreadActionMenu(input: {
     primaryEnvironmentId,
   });
   const {
-    settleThread,
-    unsettleThread,
     snoozeThread,
     unsnoozeThread,
     pinThread,
     confirmAndUnpinThread,
-    setThreadAutoSettle,
     archiveThread,
     deleteThread,
     markThreadUnread,
@@ -120,8 +115,6 @@ export function useThreadActionMenu(input: {
       if (!thread) return;
       const now = new Date();
       const supports = {
-        settlement: readEnvironmentSupportsSettlement(threadRef.environmentId),
-        autoSettleOptOut: readEnvironmentSupportsAutoSettleOptOut(threadRef.environmentId),
         snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
         pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
         titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
@@ -133,8 +126,6 @@ export function useThreadActionMenu(input: {
         branch: thread.branch ?? null,
         projectFilter: null,
         isPinned: thread.pinnedAt != null,
-        isSettled: supports.settlement && thread.settledOverride === "settled",
-        autoSettleEnabled: thread.autoSettleDisabledAt == null,
         isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
         canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
         isRegeneratingTitle,
@@ -206,12 +197,6 @@ export function useThreadActionMenu(input: {
           }
           return;
         }
-        case "settle":
-          await reportFailure("Failed to settle thread", () => settleThread(threadRef));
-          return;
-        case "unsettle":
-          await reportFailure("Failed to un-settle thread", () => unsettleThread(threadRef));
-          return;
         case "unsnooze":
           await reportFailure("Failed to wake thread", () => unsnoozeThread(threadRef));
           return;
@@ -222,12 +207,6 @@ export function useThreadActionMenu(input: {
           await reportFailure("Failed to unpin thread", () => confirmAndUnpinThread(threadRef));
           return;
         }
-        case "auto-settle:enabled":
-        case "auto-settle:disabled":
-          await reportFailure("Failed to update auto-settle", () =>
-            setThreadAutoSettle(threadRef, action === "auto-settle:enabled"),
-          );
-          return;
         case "rename":
           onStartRename();
           return;

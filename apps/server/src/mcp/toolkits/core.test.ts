@@ -229,7 +229,7 @@ it.effect("returns a bounded public failure without serializing storage causes",
 );
 
 it("bounds public command rejections and redacts internal dispatch causes", () => {
-  const command = { commandId: CommandId.make("mcp-core-command"), commandType: "thread.settle" };
+  const command = { commandId: CommandId.make("mcp-core-command"), commandType: "thread.archive" };
   expect(
     dispatchFailure(new OrchestratorDispatchError({ ...command, cause: "🙂".repeat(1001) }))
       .message,

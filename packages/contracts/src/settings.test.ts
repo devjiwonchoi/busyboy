@@ -56,7 +56,6 @@ describe("storage cleanup settings", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();
     expect(decodeServerSettings({}).storageCleanup).toEqual({
       worktreeAfterDays: null,
-      worktreeSettledAfterDays: null,
       worktreeOnMerge: false,
       worktreeOnDelete: false,
       worktreeUnchanged: false,
@@ -72,9 +71,6 @@ describe("storage cleanup settings", () => {
     });
     expect(decodeServerSettingsPatch({ storageCleanup: { worktreeAfterDays: null } })).toEqual({
       storageCleanup: { worktreeAfterDays: null },
-    });
-    expect(decodeServerSettingsPatch({ storageCleanup: { worktreeSettledAfterDays: 0 } })).toEqual({
-      storageCleanup: { worktreeSettledAfterDays: 0 },
     });
   });
 
@@ -109,7 +105,7 @@ describe("storage cleanup settings", () => {
       }).projectSettingsOverrides[ProjectId.make("project")]?.worktreeCleanup,
     ).toMatchObject({
       mode: "custom",
-      rules: { worktreeSettledAfterDays: null, worktreeKeepWhen: "uncommitted-changes" },
+      rules: { worktreeKeepWhen: "uncommitted-changes" },
     });
   });
 
@@ -139,12 +135,6 @@ describe("storage cleanup settings", () => {
   it.each([0, -1, 1.5, 3651])("rejects invalid retention %s", (days) => {
     expect(() =>
       decodeServerSettingsPatch({ storageCleanup: { browserArtifactsAfterDays: days } }),
-    ).toThrow();
-  });
-
-  it.each([-1, 1.5, 3651])("rejects invalid settled retention %s", (days) => {
-    expect(() =>
-      decodeServerSettingsPatch({ storageCleanup: { worktreeSettledAfterDays: days } }),
     ).toThrow();
   });
 });
@@ -727,31 +717,18 @@ describe("ClientSettings composer collapse", () => {
   });
 });
 
-describe("ServerSettings thread settlement", () => {
-  it("defaults merge settlement on and inactivity settlement to three days", () => {
-    const settings = decodeServerSettings({});
-    expect(settings.sidebarAutoSettleAfterDays).toBe(3);
-    expect(settings.sidebarAutoSettleOnMerge).toBe(true);
-  });
-
-  it("allows both automatic rules to be disabled", () => {
-    expect(
-      decodeServerSettings({
-        sidebarAutoSettleAfterDays: null,
-        sidebarAutoSettleOnMerge: false,
-      }),
-    ).toMatchObject({ sidebarAutoSettleAfterDays: null, sidebarAutoSettleOnMerge: false });
-    expect(
-      decodeServerSettingsPatch({
-        sidebarAutoSettleAfterDays: null,
-        sidebarAutoSettleOnMerge: false,
-      }),
-    ).toMatchObject({ sidebarAutoSettleAfterDays: null, sidebarAutoSettleOnMerge: false });
-  });
-
-  it.each([-1, 0, 91])("rejects an auto-settle threshold outside 1..90: %s", (value) => {
-    expect(() => decodeServerSettings({ sidebarAutoSettleAfterDays: value })).toThrow();
-    expect(() => decodeServerSettingsPatch({ sidebarAutoSettleAfterDays: value })).toThrow();
+describe("ServerSettings removed thread settlement", () => {
+  it("decodes settings saved with the removed auto-settle keys", () => {
+    const settings = decodeServerSettings({
+      sidebarAutoSettleAfterDays: 3,
+      sidebarAutoSettleOnMerge: true,
+      sidebarAutoSettleKeepPullRequests: false,
+      storageCleanup: { worktreeSettledAfterDays: 0 },
+      projectSettingsOverrides: { project: { sidebarAutoSettleAfterDays: null } },
+    });
+    expect(settings).not.toHaveProperty("sidebarAutoSettleAfterDays");
+    expect(settings.storageCleanup).not.toHaveProperty("worktreeSettledAfterDays");
+    expect(settings.projectSettingsOverrides[ProjectId.make("project")]).toEqual({});
   });
 });
 

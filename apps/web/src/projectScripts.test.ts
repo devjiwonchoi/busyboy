@@ -5,7 +5,6 @@ import {
   projectScriptCwd,
   projectScriptRuntimeEnv,
   projectScriptMenuLabel,
-  settleProjectScript,
   setupProjectScript,
 } from "@t3tools/shared/projectScripts";
 
@@ -27,7 +26,6 @@ describe("projectScripts helpers", () => {
         icon: "debug",
         runOnWorktreeCreate: false,
         waitForSetup: false,
-        runOnSettle: false,
         previewUrl: "http://localhost:5733",
         autoOpenPreview: true,
       }),
@@ -50,7 +48,6 @@ describe("projectScripts helpers", () => {
         icon: "test",
         runOnWorktreeCreate: false,
         waitForSetup: false,
-        runOnSettle: false,
         previewUrl: null,
         autoOpenPreview: false,
       }),
@@ -70,7 +67,6 @@ describe("projectScripts helpers", () => {
       icon: "configure",
       previewUrl: null,
       autoOpenPreview: false,
-      runOnSettle: false,
     } as const;
     expect(
       buildProjectScript("setup", { ...input, runOnWorktreeCreate: true, waitForSetup: true }),
@@ -114,7 +110,7 @@ describe("projectScripts helpers", () => {
     expect(nextProjectScriptId("!!!", [])).toBe("script");
   });
 
-  it("resolves primary, setup, and settle scripts", () => {
+  it("resolves primary and setup scripts", () => {
     const scripts = [
       {
         id: "setup",
@@ -122,14 +118,6 @@ describe("projectScripts helpers", () => {
         command: "bun install",
         icon: "configure" as const,
         runOnWorktreeCreate: true,
-      },
-      {
-        id: "clean",
-        name: "Clean",
-        command: "cargo clean",
-        icon: "build" as const,
-        runOnWorktreeCreate: false,
-        runOnSettle: true,
       },
       {
         id: "test",
@@ -142,26 +130,21 @@ describe("projectScripts helpers", () => {
 
     expect(primaryProjectScript(scripts)?.id).toBe("test");
     expect(setupProjectScript(scripts)?.id).toBe("setup");
-    expect(settleProjectScript(scripts)?.id).toBe("clean");
-    expect(primaryProjectScript(scripts.filter((script) => script.id === "clean"))).toBeNull();
   });
 
-  it("labels every lifecycle role a script runs in", () => {
+  it("labels setup scripts", () => {
     const script = {
-      id: "both",
-      name: "Both",
+      id: "install",
+      name: "Install",
       command: "true",
       icon: "play" as const,
       runOnWorktreeCreate: true,
     };
-    expect(projectScriptMenuLabel(script)).toBe("Both (setup)");
-    expect(projectScriptMenuLabel({ ...script, runOnSettle: true })).toBe(
-      "Both (setup, on settle)",
-    );
-    expect(projectScriptMenuLabel({ ...script, runOnWorktreeCreate: false })).toBe("Both");
+    expect(projectScriptMenuLabel(script)).toBe("Install (setup)");
+    expect(projectScriptMenuLabel({ ...script, runOnWorktreeCreate: false })).toBe("Install");
   });
 
-  it("moves the setup and settle roles to the script that claims them", () => {
+  it("moves the setup role to the script that claims it", () => {
     const input = {
       name: "Next",
       command: "true",
@@ -176,18 +159,12 @@ describe("projectScripts helpers", () => {
       command: "true",
       icon: "play" as const,
       runOnWorktreeCreate: true,
-      runOnSettle: true,
     };
 
-    expect(
-      releaseClaimedRoles(holder, { ...input, runOnWorktreeCreate: false, runOnSettle: true }),
-    ).toMatchObject({ runOnWorktreeCreate: true, runOnSettle: false });
-    expect(
-      releaseClaimedRoles(holder, { ...input, runOnWorktreeCreate: true, runOnSettle: false }),
-    ).toMatchObject({ runOnWorktreeCreate: false, runOnSettle: true });
-    expect(
-      releaseClaimedRoles(holder, { ...input, runOnWorktreeCreate: false, runOnSettle: false }),
-    ).toBe(holder);
+    expect(releaseClaimedRoles(holder, { ...input, runOnWorktreeCreate: true })).toMatchObject({
+      runOnWorktreeCreate: false,
+    });
+    expect(releaseClaimedRoles(holder, { ...input, runOnWorktreeCreate: false })).toBe(holder);
   });
 
   it("builds default runtime env for scripts", () => {
