@@ -14,6 +14,7 @@ import {
   checkFields,
   clearPasswordFieldsScript,
   fillAndSubmit,
+  pageContainsSecretScript,
   pageHoldsPasswordScript,
 } from "./PasswordSignInScripts.ts";
 import { makeStandIn, type Substitution } from "./PasswordSubstitution.ts";
@@ -153,6 +154,8 @@ export class PasswordSignIn extends Context.Service<
       readonly substitute: SubstitutePassword;
     }) => Promise<PreviewSignInResult>;
     readonly pageHoldsPassword: (guest: Electron.WebContents) => Promise<boolean>;
+    /** True when the page shows `secret`; a page that cannot be checked counts as showing it. */
+    readonly pageContainsSecret: (guest: Electron.WebContents, secret: string) => Promise<boolean>;
     readonly clearPasswordFields: (guest: Electron.WebContents) => Promise<void>;
   }
 >()("@t3tools/desktop/preview/Passwords/PasswordSignIn") {}
@@ -303,6 +306,10 @@ export const make = Effect.gen(function* () {
       Promise.resolve()
         .then(() => runInSignInWorld(guest, pageHoldsPasswordScript, null))
         .catch(() => false),
+    pageContainsSecret: (guest, secret) =>
+      Promise.resolve()
+        .then(() => runInSignInWorld(guest, pageContainsSecretScript, secret))
+        .catch(() => true),
     clearPasswordFields: (guest) =>
       Promise.resolve()
         .then(() => runInSignInWorld(guest, clearPasswordFieldsScript, null))
@@ -318,6 +325,7 @@ export const layerTest = Layer.succeed(
   PasswordSignIn.of({
     signIn: async () => ({ status: "unavailable" }),
     pageHoldsPassword: async () => false,
+    pageContainsSecret: async () => false,
     clearPasswordFields: async () => {},
   }),
 );

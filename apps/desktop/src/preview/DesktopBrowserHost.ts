@@ -8,6 +8,7 @@ import {
   DesktopBrowserCommand,
   DesktopBrowserEvent,
   type DesktopBrowserEvent as DesktopBrowserEventType,
+  type PreviewSignInResult,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import { Buffer } from "node:buffer";
@@ -37,11 +38,15 @@ const AGENT_DOWNLOAD_WINDOW_MS = 5_000;
  */
 const AGENT_DRIVING_WINDOW_MS = 3_000;
 const SCRUBBED_TEXT = "[saved password]";
+/** How long an attaching agent's commands wait for the page to be checked. */
+const ATTACH_CHECK_MS = 2_000;
 /** Strings this long are screenshots or bodies too big to hide a password worth decoding. */
 const MAX_DECODED_LENGTH = 64 * 1024;
 const BASE64_TEXT = /^[A-Za-z0-9+/_-]{8,}={0,2}$/;
 /** Request body fields CDP reports, dropped while a password of unknown value is in the page. */
 const BODY_FIELDS = new Set(["postData", "postDataEntries"]);
+/** Fields that hold a request or response body, decoded whatever their size. */
+const BODY_KEYS = new Set(["postData", "bytes", "body"]);
 
 export interface DesktopBrowserTabKey {
   readonly threadId: string;
@@ -74,6 +79,8 @@ interface AttachedTab {
    */
   agentScriptInDocument: boolean;
   readonly onNavigate: () => void;
+  /** Settles once the page was checked for a password the person entered. */
+  ready: Promise<void>;
   /**
    * Passwords removed from everything sent to the agent for as long as the tab
    * is attached: the browser can still hand back old request bodies later.
@@ -148,10 +155,14 @@ export const make = Effect.gen(function* () {
    */
   const filledByDocument = new WeakMap<Electron.WebContents, Set<string>>();
 
-  const scrubText = (forms: ReadonlyArray<string>, text: string) => {
+  const scrubText = (forms: ReadonlyArray<string>, text: string, isBody = false) => {
     // CDP hands bodies over as base64 of the whole body, where the password
     // can start at any offset, so its own base64 forms may not appear.
-    if (forms.length > 0 && text.length <= MAX_DECODED_LENGTH && BASE64_TEXT.test(text)) {
+    if (
+      forms.length > 0 &&
+      (isBody || text.length <= MAX_DECODED_LENGTH) &&
+      BASE64_TEXT.test(text)
+    ) {
       const decoded = Buffer.from(text, "base64").toString("utf8");
       if (forms.some((form) => decoded.includes(form))) {
         return SCRUBBED_TEXT;
@@ -176,18 +187,18 @@ export const make = Effect.gen(function* () {
     } catch {
       return scrubText(forms, message);
     }
-    const walk = (value: unknown): unknown => {
+    const walk = (value: unknown, key = ""): unknown => {
       if (typeof value === "string") {
-        return scrubText(forms, value);
+        return scrubText(forms, value, BODY_KEYS.has(key));
       }
       if (Array.isArray(value)) {
-        return value.map(walk);
+        return value.map((item) => walk(item, key));
       }
       if (typeof value === "object" && value !== null) {
         return Object.fromEntries(
           Object.entries(value)
             .filter(([key]) => !(dropBodies && BODY_FIELDS.has(key)))
-            .map(([key, field]) => [key, walk(field)]),
+            .map(([field, inner]) => [field, walk(inner, field)]),
         );
       }
       return value;
@@ -200,22 +211,58 @@ export const make = Effect.gen(function* () {
    * can outlive its field (a "show password" toggle, a single-page app's
    * state), so an empty field is not enough to let the agent back in.
    */
-  const lockCredentials = (tab: AttachedTab, secret: string | null) => {
+  const lockCredentials = (
+    tab: AttachedTab,
+    secret: string | null,
+    { checkNow = false }: { readonly checkNow?: boolean } = {},
+  ) => {
+    // A lock on a password of unknown value stays one: its bodies stay dropped.
+    const unknownSecret = secret === null || tab.credentialLock?.unknownSecret === true;
     tab.credentialLock?.release();
     const webContents = tab.debuggee.webContents;
     if (secret !== null) {
       tab.scrubbed.add(secret);
     }
+    const stillShown = () =>
+      secret === null
+        ? passwordSignIn.pageHoldsPassword(webContents)
+        : passwordSignIn.pageContainsSecret(webContents, secret);
+    let navigated = false;
+
     const release = () => {
-      webContents.off("did-navigate", release);
+      webContents.off("did-navigate", onNavigate);
+      webContents.off("dom-ready", onReady);
       webContents.off("destroyed", release);
       if (tab.credentialLock?.release === release) {
         tab.credentialLock = null;
       }
     };
-    webContents.on("did-navigate", release);
+    const releaseIfClean = () =>
+      void stillShown().then((shown) => {
+        if (!shown) {
+          release();
+        }
+      });
+    const onNavigate = () => {
+      navigated = true;
+    };
+    // The next document is checked once parsed: a server can echo a submitted
+    // password into it, so leaving the page is not enough on its own.
+    const onReady = () => {
+      if (navigated) {
+        navigated = false;
+        releaseIfClean();
+      }
+    };
+    webContents.on("did-navigate", onNavigate);
+    webContents.on("dom-ready", onReady);
     webContents.on("destroyed", release);
-    tab.credentialLock = { release, unknownSecret: secret === null };
+    tab.credentialLock = { release, unknownSecret };
+    // A sign-in that stayed on its page (a single-page app) is checked now;
+    // one that is loading the next page is checked when it is ready.
+    if (checkNow && !webContents.isLoadingMainFrame?.()) {
+      releaseIfClean();
+    }
   };
   const emit = (event: DesktopBrowserEventType) => runFork(PubSub.publish(outbox, event));
 
@@ -242,35 +289,41 @@ export const make = Effect.gen(function* () {
           if (tab.signingIn) {
             return { status: "unavailable" };
           }
+          // The agent stays off the page while the swap can happen: it could
+          // otherwise read the stand-in and have the page send it somewhere
+          // that echoes the password back.
           tab.signingIn = true;
-          let stopped: Promise<void> = Promise.resolve();
+          let password: string | null = null;
+          let result: PreviewSignInResult;
           try {
-            return await passwordSignIn.signIn({
+            result = await passwordSignIn.signIn({
               guest: webContents,
               request: params,
               pageModified: tab.agentScriptInDocument,
               lock: (secret) => {
-                // The submit that follows is the agent's, not a person's. The page
-                // only gets a stand-in, so the agent is kept off it just while the
-                // swap can happen; the real password is scrubbed from then on.
+                // The submit that follows is the agent's, not a person's.
                 tab.agentInputAt = performance.now();
                 tab.scrubbed.add(secret);
+                password = secret;
               },
               substitute: (input) => {
                 const substitution = armSubstitution({ debuggee, ...input });
                 // It lets events through again once interception is off.
                 tab.interceptor = substitution.onDebuggerMessage;
                 standIns.add(input.standIn);
-                stopped = substitution.stopped;
                 return substitution;
               },
             });
           } finally {
-            void stopped.then(() => {
-              tab.signingIn = false;
-            });
+            tab.signingIn = false;
           }
+          // The swap is over, but the response may show the password.
+          if (result.status === "submitted" && password !== null) {
+            lockCredentials(tab, password, { checkNow: true });
+          }
+          return result;
         },
+        ready: () => tab.ready,
         credentialLocked: () => tab.credentialLock !== null || tab.signingIn,
         noteAgentScript: () => {
           tab.agentScriptInDocument = true;
@@ -327,6 +380,7 @@ export const make = Effect.gen(function* () {
       scrubbed: new Set(),
       interceptor: null,
       signingIn: false,
+      ready: Promise.resolve(),
       onNavigate: () => {
         tab.agentScriptInDocument = false;
       },
@@ -353,15 +407,19 @@ export const make = Effect.gen(function* () {
       }
       lockCredentials(tab, [...filled][0]!);
     } else {
-      // One the person typed is not: the agent starts locked out, with request
-      // bodies dropped, until the page is checked for a filled password field.
-      lockCredentials(tab, null);
-      const pending = tab.credentialLock;
-      void passwordSignIn.pageHoldsPassword(debuggee.webContents).then((holdsPassword) => {
-        if (!holdsPassword && tab.credentialLock === pending) {
-          pending?.release();
-        }
-      });
+      // One the person typed is not. The agent's commands wait for the page
+      // to be checked rather than being refused, so automation can set up.
+      const checked = passwordSignIn
+        .pageHoldsPassword(debuggee.webContents)
+        .then((holdsPassword) => {
+          if (holdsPassword && tabs.get(id) === tab && tab.credentialLock === null) {
+            lockCredentials(tab, null);
+          }
+        });
+      tab.ready = Promise.race([
+        checked,
+        new Promise<void>((resolve) => setTimeout(resolve, ATTACH_CHECK_MS)),
+      ]);
     }
     emit({ type: "attached", ...key });
   };

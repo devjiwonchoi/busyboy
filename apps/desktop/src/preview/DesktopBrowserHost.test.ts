@@ -87,6 +87,8 @@ describe("DesktopBrowserHost", () => {
       yield* command(1, "Page.captureScreenshot");
       yield* host.handleCommandLine(encodeJson({ type: "release", ...key }));
       yield* command(2, "DOM.enable");
+      // Commands first wait for the page's password check.
+      yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
       debuggee.release();
       yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
       const [, reply] = yield* Fiber.join(reader);
@@ -154,32 +156,40 @@ describe("DesktopBrowserHost", () => {
   );
 
   it.effect(
-    "keeps the agent off the page while a sign-in's swap can happen, and never relays the password",
+    "keeps the agent off the page while it signs in and while the page shows the password",
     () =>
       Effect.gen(function* () {
         const secret = 'hunter2 "pw"';
-        let signIn: { readonly cancel: () => void } | undefined;
+        let finishSignIn: () => void = () => {};
+        let pageShowsPassword = true;
         const host = yield* DesktopBrowserHost.make.pipe(
           Effect.provideService(PasswordSignIn.PasswordSignIn, {
             signIn: async ({ lock, substitute }) => {
               lock(secret);
-              signIn = substitute({
+              substitute({
                 standIn: "Qq7standin0000000",
                 password: secret,
                 pageOrigin: "https://example.com",
               });
+              // Resolves once the swap is over, as the real sign-in does.
+              await new Promise<void>((resolve) => {
+                finishSignIn = resolve;
+              });
               return { status: "submitted" };
             },
             pageHoldsPassword: async () => false,
+            // The server echoed the submitted password into the page.
+            pageContainsSecret: async () => pageShowsPassword,
             clearPasswordFields: async () => {},
           }),
         );
         const debuggee = makeDebuggee();
         host.attach(key, debuggee.tab);
-        const collected = yield* takeEvents(host, 7).pipe(Effect.forkChild);
+        const collected = yield* takeEvents(host, 8).pipe(Effect.forkChild);
         const agent = (message: Record<string, unknown>) =>
           host.handleCommandLine(encodeJson({ type: "cdp", ...key, message: encodeJson(message) }));
         const settle = Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+        const page = debuggee.tab.webContents as unknown as NodeEvents.EventEmitter;
 
         // Let the collector subscribe before the agent starts talking.
         yield* settle;
@@ -205,10 +215,17 @@ describe("DesktopBrowserHost", () => {
         });
         yield* settle;
 
-        signIn?.cancel();
-        debuggee.release();
+        finishSignIn();
         yield* settle;
         yield* agent({ id: 4, method: "DOM.getDocument", sessionId: "t3-preview-page" });
+        yield* settle;
+
+        // The next page does not show it, so the agent is let back in.
+        pageShowsPassword = false;
+        page.emit("did-navigate");
+        page.emit("dom-ready");
+        yield* settle;
+        yield* agent({ id: 5, method: "DOM.getDocument", sessionId: "t3-preview-page" });
         yield* settle;
         debuggee.release();
         yield* settle;
@@ -222,10 +239,12 @@ describe("DesktopBrowserHost", () => {
           result: { status: "submitted" },
           sessionId: "t3-preview-page",
         });
-        expect(replies.find((reply) => reply["id"] === 3)).toMatchObject({
-          error: { message: expect.stringContaining("saved password") },
-        });
-        expect(replies.find((reply) => reply["id"] === 4)).toMatchObject({
+        for (const id of [3, 4]) {
+          expect(replies.find((reply) => reply["id"] === id)).toMatchObject({
+            error: { message: expect.stringContaining("saved password") },
+          });
+        }
+        expect(replies.find((reply) => reply["id"] === 5)).toMatchObject({
           result: { method: "DOM.getDocument" },
         });
         const network = messages.find((message) => message.includes("requestWillBeSent"))!;
@@ -237,13 +256,57 @@ describe("DesktopBrowserHost", () => {
       }),
   );
 
+  it.effect("holds an attaching agent's commands until the page is checked, then runs them", () =>
+    Effect.gen(function* () {
+      let finishCheck: (holdsPassword: boolean) => void = () => {};
+      const host = yield* DesktopBrowserHost.make.pipe(
+        Effect.provideService(PasswordSignIn.PasswordSignIn, {
+          signIn: async () => ({ status: "unavailable" }),
+          pageHoldsPassword: () =>
+            new Promise<boolean>((resolve) => {
+              finishCheck = resolve;
+            }),
+          pageContainsSecret: async () => false,
+          clearPasswordFields: async () => {},
+        }),
+      );
+      const debuggee = makeDebuggee();
+      host.attach(key, debuggee.tab);
+      const collected = yield* takeEvents(host, 4).pipe(Effect.forkChild);
+      const settle = Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      const agent = (message: Record<string, unknown>) =>
+        host.handleCommandLine(encodeJson({ type: "cdp", ...key, message: encodeJson(message) }));
+
+      yield* settle;
+      yield* agent({ id: 1, method: "Target.setAutoAttach", params: {} });
+      // Playwright's page setup, which is not allowed while locked.
+      yield* agent({
+        id: 2,
+        method: "Page.addScriptToEvaluateOnNewDocument",
+        params: { source: "" },
+        sessionId: "t3-preview-page",
+      });
+      yield* settle;
+      finishCheck(false);
+      yield* settle;
+      debuggee.release();
+
+      const replies = (yield* Fiber.join(collected)).flatMap((event) =>
+        event.type === "cdp" ? [JSON.parse(event.message) as Record<string, unknown>] : [],
+      );
+      expect(replies.find((reply) => reply["id"] === 2)).toMatchObject({
+        result: { method: "Page.addScriptToEvaluateOnNewDocument" },
+      });
+    }),
+  );
+
   it.effect("starts an agent that attaches after a person's autofill locked out", () =>
     Effect.gen(function* () {
       const host = yield* makeHost;
       const debuggee = makeDebuggee();
       host.lockForFilledPassword(debuggee.tab.webContents, "s3cret");
       host.attach(key, debuggee.tab);
-      const collected = yield* takeEvents(host, 3).pipe(Effect.forkChild);
+      const collected = yield* takeEvents(host, 4).pipe(Effect.forkChild);
       yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
       const agent = (message: Record<string, unknown>) =>
         host.handleCommandLine(encodeJson({ type: "cdp", ...key, message: encodeJson(message) }));

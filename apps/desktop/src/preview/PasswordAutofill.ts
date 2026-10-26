@@ -7,7 +7,6 @@ type PasswordFillRequest = {
 
 type InvokePasswordFill = (request: PasswordFillRequest) => Promise<unknown>;
 
-const SCAN_DELAY_MS = 250;
 const USERNAME_INPUT_TYPES = new Set(["text", "email", "tel"]);
 
 const autocompleteTokens = (input: HTMLInputElement) =>
@@ -26,6 +25,15 @@ const isOnScreen = (input: HTMLInputElement) => {
   );
 };
 
+/** Opacity is not inherited in computed style, so a faded ancestor is checked too. */
+const isOpaqueEnough = (input: HTMLInputElement) => {
+  let opacity = 1;
+  for (let element: Element | null = input; element !== null; element = element.parentElement) {
+    opacity *= Number(getComputedStyle(element).opacity);
+  }
+  return opacity >= 0.1;
+};
+
 const isFillable = (input: HTMLInputElement) =>
   !input.disabled &&
   !input.readOnly &&
@@ -33,7 +41,7 @@ const isFillable = (input: HTMLInputElement) =>
   isOnScreen(input) &&
   getComputedStyle(input).visibility !== "hidden" &&
   // A field the page made invisible is a trap, not a sign-in form.
-  getComputedStyle(input).opacity !== "0";
+  isOpaqueEnough(input);
 
 /** The visible text field just before the password field, in its form when it has one. */
 const usernameFieldBefore = (passwordField: HTMLInputElement) => {
@@ -46,17 +54,6 @@ const usernameFieldBefore = (passwordField: HTMLInputElement) => {
   );
   return candidates.at(-1);
 };
-
-/**
- * Identifier-first sign-ins (Google, Microsoft) ask for the username alone.
- * Only fields that say they want one count, so search boxes are left alone.
- */
-const standaloneUsernameField = () =>
-  [...document.querySelectorAll("input")].find(
-    (input) =>
-      (autocompleteTokens(input).includes("username") || input.type === "email") &&
-      isFillable(input),
-  );
 
 /**
  * Sets the value through the native setter so frameworks that track the last
@@ -88,52 +85,71 @@ const readFill = (value: unknown) => {
  * decides what this origin may have and refuses pages an agent drives, so the
  * page only ever sees the login for itself.
  */
+/**
+ * Which sign-in fields a click or Tab into `target` should fill, or nothing
+ * when it is not an empty field of a sign-in form.
+ */
+const fieldsFor = (target: HTMLInputElement) => {
+  if (target.value !== "" || !isFillable(target)) {
+    return undefined;
+  }
+  if (target.type === "password") {
+    // Sign-up forms ask for a new password; those are never filled.
+    return autocompleteTokens(target).includes("new-password")
+      ? undefined
+      : { passwordField: target, usernameField: usernameFieldBefore(target) };
+  }
+  if (!USERNAME_INPUT_TYPES.has(target.type)) {
+    return undefined;
+  }
+  const passwordField = [
+    ...(target.form ?? document).querySelectorAll<HTMLInputElement>('input[type="password"]'),
+  ].find(
+    (input) =>
+      input.value === "" &&
+      !autocompleteTokens(input).includes("new-password") &&
+      isFillable(input) &&
+      target.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  if (passwordField !== undefined) {
+    return { passwordField, usernameField: target };
+  }
+  // Identifier-first sign-ins (Google, Microsoft) ask for the username alone.
+  // Only fields that say they want one count, so search boxes are left alone.
+  return autocompleteTokens(target).includes("username") || target.type === "email"
+    ? { passwordField: undefined, usernameField: target }
+    : undefined;
+};
+
 export function installPasswordAutofill(invoke: InvokePasswordFill) {
-  // Each field is offered at most once, so a page with no saved login is not
-  // asked about again on every DOM change.
-  const offered = new WeakSet<HTMLInputElement>();
-  let scanTimer: ReturnType<typeof setTimeout> | undefined;
   let requestInFlight = false;
 
-  const scan = async () => {
-    if (requestInFlight) {
+  const fill = async (target: EventTarget | null) => {
+    if (requestInFlight || !(target instanceof HTMLInputElement)) {
       return;
     }
-
-    // Sign-up forms ask for a new password; those are never filled.
-    const passwordFields = [
-      ...document.querySelectorAll<HTMLInputElement>('input[type="password"]'),
-    ].filter((input) => !autocompleteTokens(input).includes("new-password") && isFillable(input));
-    const passwordField = passwordFields.find((input) => !offered.has(input) && input.value === "");
-    if (passwordFields.length > 0 && passwordField === undefined) {
+    const fields = fieldsFor(target);
+    if (fields === undefined) {
       return;
     }
-
-    const usernameField =
-      passwordField === undefined ? standaloneUsernameField() : usernameFieldBefore(passwordField);
-    const target = passwordField ?? usernameField;
-    if (target === undefined || offered.has(target) || target.value !== "") {
-      return;
-    }
-    offered.add(target);
+    const { passwordField, usernameField } = fields;
 
     requestInFlight = true;
     try {
-      const fill = readFill(
+      const login = readFill(
         await invoke({
           typedUsername: usernameField?.value ?? "",
           wantsPassword: passwordField !== undefined,
         }),
       );
-      if (fill === undefined) {
+      if (login === undefined) {
         return;
       }
-
-      if (usernameField !== undefined && usernameField.value === "" && fill.username !== "") {
-        fillField(usernameField, fill.username);
+      if (usernameField !== undefined && usernameField.value === "" && login.username !== "") {
+        fillField(usernameField, login.username);
       }
-      if (passwordField !== undefined && passwordField.value === "" && fill.password !== null) {
-        fillField(passwordField, fill.password);
+      if (passwordField !== undefined && passwordField.value === "" && login.password !== null) {
+        fillField(passwordField, login.password);
       }
     } catch {
       // A failed lookup leaves the form for the user to fill.
@@ -142,32 +158,25 @@ export function installPasswordAutofill(invoke: InvokePasswordFill) {
     }
   };
 
-  const scheduleScan = () => {
-    clearTimeout(scanTimer);
-    scanTimer = setTimeout(() => void scan(), SCAN_DELAY_MS);
-  };
-
-  const start = () => {
-    scheduleScan();
-    // Single-page sign-ins render their forms after load.
-    new MutationObserver(scheduleScan).observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["type", "style", "class", "hidden"],
-    });
-  };
-
-  // Like Chrome, nothing is filled until someone actually clicks or types in
-  // the page, so a script that loads with it cannot read a login unattended.
-  const startOnGesture = (event: Event) => {
-    if (!event.isTrusted) {
-      return;
-    }
-    window.removeEventListener("pointerdown", startOnGesture, true);
-    window.removeEventListener("keydown", startOnGesture, true);
-    start();
-  };
-  window.addEventListener("pointerdown", startOnGesture, true);
-  window.addEventListener("keydown", startOnGesture, true);
+  // Like Safari, a login is filled when the person clicks or tabs into one of
+  // its fields, never on its own: a script cannot plant a hidden form and
+  // wait for any click on the page. Main checks the input really happened.
+  window.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (event.isTrusted) {
+        void fill(event.target);
+      }
+    },
+    true,
+  );
+  window.addEventListener(
+    "keyup",
+    (event) => {
+      if (event.isTrusted && event.key === "Tab") {
+        void fill(document.activeElement);
+      }
+    },
+    true,
+  );
 }

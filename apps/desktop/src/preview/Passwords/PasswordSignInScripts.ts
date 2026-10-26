@@ -98,6 +98,39 @@ export function pageHoldsPasswordScript(): boolean {
   );
 }
 
+/**
+ * True when the page shows `secret` anywhere: a field of any type (a "show
+ * password" toggle makes it text), its markup, or an open shadow root. A
+ * server that echoes a submitted password puts it in the next document.
+ */
+export function pageContainsSecretScript(secret: string): boolean {
+  const escaped = secret
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const roots: Array<Document | ShadowRoot> = [document];
+  for (let index = 0; index < roots.length; index += 1) {
+    const root = roots[index]!;
+    for (const element of root.querySelectorAll("*")) {
+      if (element.shadowRoot) {
+        roots.push(element.shadowRoot);
+      }
+      if (
+        (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) &&
+        element.value.includes(secret)
+      ) {
+        return true;
+      }
+    }
+    const markup = root instanceof Document ? root.documentElement.outerHTML : root.innerHTML;
+    if (markup.includes(secret) || markup.includes(escaped)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function clearPasswordFieldsScript(): void {
   for (const input of document.querySelectorAll("input[type='password']")) {
     if (input instanceof HTMLInputElement) {

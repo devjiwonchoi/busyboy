@@ -26,6 +26,8 @@ export interface CdpRelayTarget {
   readonly credentialLocked: () => boolean;
   /** The agent ran its own JavaScript in the current page. */
   readonly noteAgentScript: () => void;
+  /** Page commands wait for this, as the page is first checked for a password. */
+  readonly ready?: () => Promise<void>;
 }
 
 export interface CdpRelayConnection {
@@ -194,7 +196,12 @@ export function createCdpRelayConnection(
     }
   };
 
-  const pageCommand = (command: CdpCommand): Promise<unknown> => {
+  const pageCommand = (command: CdpCommand): Promise<unknown> =>
+    target.ready === undefined
+      ? runPageCommand(command)
+      : target.ready().then(() => runPageCommand(command));
+
+  const runPageCommand = (command: CdpCommand): Promise<unknown> => {
     const child = sessions.get(command.sessionId!) === "page" ? undefined : command.sessionId;
     if (command.method === PREVIEW_SIGN_IN_CDP_METHOD && child === undefined) {
       return target.signIn(command.params ?? {});
