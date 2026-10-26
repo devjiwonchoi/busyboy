@@ -539,6 +539,10 @@ describe("ComputerUseService", () => {
         assert.strictEqual(yield* errorCode(pressReturn), "screen_locked");
         fake.refusal = "refused: background_unavailable for this surface";
         assert.strictEqual(yield* errorCode(pressReturn), "background_unsupported");
+        // Seen from the real driver when the app has two windows.
+        fake.refusal =
+          "Background input refused (window_not_key): window 309 could not be confirmed as the app's key window";
+        assert.strictEqual(yield* errorCode(pressReturn), "background_unsupported");
         fake.refusal = "refused: stale_element_token s1:4";
         assert.strictEqual(yield* errorCode(pressReturn), "invalid_element");
         fake.refusal = "the window closed";

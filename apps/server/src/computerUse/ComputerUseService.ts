@@ -155,14 +155,15 @@ function defaultWindow(windows: ReadonlyArray<WindowInfo>): WindowInfo | undefin
 function actionRefused(text: string): ComputerUseError {
   const message = text.trim().slice(0, MAX_RESULT_TEXT) || "The driver refused the action.";
   if (/screen_locked/.test(text)) return screenLocked();
-  if (/stale_element_token|unknown_snapshot/.test(text)) {
+  if (/stale_element_token|unknown_snapshot|stale_target|target_changed/.test(text)) {
     return fail(
       "invalid_element",
       `That element is from an older read of the window. Call computer_get_app_state again and use its new elements. ${message}`,
     );
   }
+  // The driver's codes for input it will not send without the app in front.
   if (
-    /background_(unavailable|unsupported|refused)|foreground_required|target_focus_unconfirmed/.test(
+    /background_(unavailable|occluded)|window_not_key|no_focused_text_input|target_focus_unconfirmed/.test(
       text,
     )
   ) {
