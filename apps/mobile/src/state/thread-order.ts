@@ -1,5 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
-import { useEffect } from "react";
 import { Atom } from "effect/reactivity";
 
 import {
@@ -8,7 +6,6 @@ import {
 } from "../features/threads/threadOrder";
 import { getThreadListV2OrderedSection } from "../features/threads/threadListV2";
 import { appAtomRegistry } from "./atom-registry";
-import { environmentServerConfigsAtom } from "./server";
 import { environmentThreadShells } from "./threads";
 
 export const threadArrangementOpenAtom = Atom.make(false).pipe(Atom.keepAlive);
@@ -18,16 +15,6 @@ export const threadDropBusyAtom = Atom.make(false).pipe(Atom.keepAlive);
 export const pendingThreadOrderAtom = Atom.make<PendingThreadOrder | null>(null).pipe(
   Atom.keepAlive,
 );
-
-export function usePendingThreadOrder(nowMinute: string, snoozeWakeTick: number) {
-  const pending = useAtomValue(pendingThreadOrderAtom);
-  // A timed wake can change section membership without a shell event. Use the
-  // lists' existing clocks to retire that hold and re-enable their move menus.
-  useEffect(() => {
-    getPendingThreadOrder();
-  }, [nowMinute, snoozeWakeTick]);
-  return pending;
-}
 
 let refreshPendingOrder: (() => void) | undefined;
 
@@ -48,16 +35,9 @@ export function beginPendingThreadOrder(pending: PendingThreadOrder) {
     if (refreshPendingOrder !== refresh) return;
     const current = appAtomRegistry.get(pendingThreadOrderAtom);
     if (current === null) return;
-    const configs = appAtomRegistry.get(environmentServerConfigsAtom);
     const ordered = getThreadListV2OrderedSection({
       threads: appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
       section: current.section,
-      now: new Date().toISOString(),
-      snoozeEnvironmentIds: new Set(
-        [...configs].flatMap(([id, config]) =>
-          config.environment.capabilities.threadSnooze === true ? [id] : [],
-        ),
-      ),
     });
     const next = reconcilePendingThreadOrder(current, ordered);
     if (next === null) cancel();
@@ -65,10 +45,7 @@ export function beginPendingThreadOrder(pending: PendingThreadOrder) {
   };
   refreshPendingOrder = refresh;
   appAtomRegistry.set(pendingThreadOrderAtom, pending);
-  unsubscribers.push(
-    appAtomRegistry.subscribe(environmentThreadShells.threadShellsAtom, refresh),
-    appAtomRegistry.subscribe(environmentServerConfigsAtom, refresh),
-  );
+  unsubscribers.push(appAtomRegistry.subscribe(environmentThreadShells.threadShellsAtom, refresh));
   return {
     isPending: () => {
       refresh();

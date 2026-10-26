@@ -28,8 +28,8 @@ import {
 
 import { emptyProjection } from "./ProjectionStore.ts";
 
-const parentThreadId = ThreadId.make("thread:subagent-snoozed-parent");
-const childThreadId = ThreadId.make("thread:subagent-awake-child");
+const parentThreadId = ThreadId.make("thread:subagent-parent");
+const childThreadId = ThreadId.make("thread:subagent-child");
 const parentProviderInstanceId = ProviderInstanceId.make("codex");
 const childProviderInstanceId = ProviderInstanceId.make("claude");
 const parentModelSelection = {
@@ -41,8 +41,7 @@ const childModelSelection = {
   model: "claude-opus-4-1",
 } satisfies ModelSelection;
 const parentCreatedAt = DateTime.makeUnsafe("2026-07-24T09:00:00.000Z");
-const snoozedAt = DateTime.makeUnsafe("2026-07-24T09:05:00.000Z");
-const snoozedUntil = DateTime.makeUnsafe("2026-07-25T09:00:00.000Z");
+const parentUpdatedAt = DateTime.makeUnsafe("2026-07-24T09:05:00.000Z");
 const childCreatedAt = DateTime.makeUnsafe("2026-07-24T09:10:00.000Z");
 
 function makeParentThread(): OrchestrationV2AppThread {
@@ -50,15 +49,15 @@ function makeParentThread(): OrchestrationV2AppThread {
     createdBy: "user",
     creationSource: "web",
     id: parentThreadId,
-    projectId: ProjectId.make("project:subagent-snooze"),
-    title: "Snoozed parent",
+    projectId: ProjectId.make("project:subagent"),
+    title: "Parent",
     providerInstanceId: parentProviderInstanceId,
     modelSelection: parentModelSelection,
     runtimeMode: "full-access",
     interactionMode: "plan",
     branch: "feature/source",
     worktreePath: "/tmp/source-worktree",
-    activeProviderThreadId: ProviderThreadId.make("provider-thread:subagent-snoozed-parent"),
+    activeProviderThreadId: ProviderThreadId.make("provider-thread:subagent-parent"),
     lineage: {
       parentThreadId: null,
       relationshipToParent: null,
@@ -66,19 +65,17 @@ function makeParentThread(): OrchestrationV2AppThread {
     },
     forkedFrom: null,
     createdAt: parentCreatedAt,
-    updatedAt: snoozedAt,
+    updatedAt: parentUpdatedAt,
     archivedAt: null,
     lastVisitedAt: null,
-    snoozedUntil,
-    snoozedAt,
     deletedAt: null,
     historyOrigin: "imported",
   };
 }
 
-it("keeps a subagent child awake when its parent thread is snoozed", () => {
+it("builds a subagent child thread from its parent", () => {
   const parentThread = makeParentThread();
-  const childProviderThreadId = ProviderThreadId.make("provider-thread:subagent-awake-child");
+  const childProviderThreadId = ProviderThreadId.make("provider-thread:subagent-child");
   const parentNodeId = NodeId.make("node:subagent-parent");
   const childThread = makeSubagentChildThread({
     parentThread,
@@ -87,14 +84,12 @@ it("keeps a subagent child awake when its parent thread is snoozed", () => {
     activeProviderThreadId: childProviderThreadId,
     providerInstanceId: childProviderInstanceId,
     modelSelection: childModelSelection,
-    title: "Awake child",
+    title: "Child",
     now: childCreatedAt,
     createdBy: "agent",
     creationSource: "provider",
   });
 
-  assert.isNull(childThread.snoozedUntil);
-  assert.isNull(childThread.snoozedAt);
   assert.equal(childThread.projectId, parentThread.projectId);
   assert.equal(childThread.runtimeMode, parentThread.runtimeMode);
   assert.equal(childThread.interactionMode, parentThread.interactionMode);

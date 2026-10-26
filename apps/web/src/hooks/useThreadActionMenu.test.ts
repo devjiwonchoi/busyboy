@@ -34,7 +34,6 @@ function recordEffect(action: string) {
   state.completed.resolve();
 }
 
-vi.mock("../components/CustomSnoozeDialog", () => ({ requestCustomSnooze: vi.fn() }));
 vi.mock("react", () => ({
   useCallback: (callback: unknown) => callback,
   useMemo: (factory: () => unknown) => factory(),
@@ -48,7 +47,6 @@ vi.mock("../state/session", () => ({
 }));
 vi.mock("../state/entities", () => ({
   readEnvironmentSupportsPinning: () => true,
-  readEnvironmentSupportsSnooze: () => true,
   readEnvironmentSupportsTitleRegeneration: () => true,
   readThreadShell: () => ({
     id: "thread",
@@ -99,12 +97,6 @@ vi.mock("../components/ui/toast", () => ({
   stackedThreadToast: (toast: unknown) => toast,
   toastManager: { add: () => state.completed.resolve() },
 }));
-vi.mock("../components/Sidebar.snooze", () => ({
-  resolveSnoozePresets: () => [
-    { id: "hour", label: "In 1 hour", whenLabel: "3 PM", snoozedUntil: "2099-01-01T00:00:00Z" },
-  ],
-  snoozeWakeDescription: () => "later",
-}));
 vi.mock("./useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: () => recordEffect("copy") }),
 }));
@@ -116,7 +108,6 @@ vi.mock("./useSettings", () => ({
     select({
       confirmThreadDelete: true,
       confirmThreadArchive: true,
-      timestampFormat: "12-hour",
     }),
 }));
 vi.mock("./useThreadActions", () => ({
@@ -124,8 +115,6 @@ vi.mock("./useThreadActions", () => ({
     Object.fromEntries(
       [
         "markThreadUnread",
-        "snoozeThread",
-        "unsnoozeThread",
         "pinThread",
         "confirmAndUnpinThread",
         "archiveThread",

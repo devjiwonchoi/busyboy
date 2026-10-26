@@ -102,8 +102,6 @@ function shell(overrides: Partial<OrchestrationV2ThreadShell> = {}): Orchestrati
     createdAt: at(-30 * DAY_MS),
     updatedAt: at(-10 * DAY_MS),
     archivedAt: null,
-    snoozedUntil: null,
-    snoozedAt: null,
     pinnedAt: null,
     ...overrides,
   };

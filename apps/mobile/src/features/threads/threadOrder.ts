@@ -4,7 +4,6 @@ import {
   pinOrderKeyBetween,
   planPinnedReorder,
 } from "@t3tools/client-runtime/state/thread-sort";
-import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-snooze";
 import type { EnvironmentId } from "@t3tools/contracts";
 
 export type ThreadMoveDestination =
@@ -272,25 +271,12 @@ export function applyPendingThreadOrder<T extends OrderRow>(
   );
 }
 
-export function threadDropLifecycle(
-  thread: EnvironmentThreadShell,
-  section: "pinned" | "active",
-  now: string,
-) {
-  if (section === "pinned") return { pin: true, unpin: false, unsnooze: false };
-  return {
-    pin: false,
-    unpin: thread.pinnedAt != null,
-    unsnooze: effectiveSnoozed(thread, { now }),
-  };
+export function threadDropLifecycle(thread: EnvironmentThreadShell, section: "pinned" | "active") {
+  if (section === "pinned") return { pin: true, unpin: false };
+  return { pin: false, unpin: thread.pinnedAt != null };
 }
 
-export type ThreadDragSection = "pinned" | "active" | "snoozed";
-
-export function threadDragAction(source: ThreadDragSection, destination: ThreadDragSection) {
-  if (destination === "snoozed") return null;
+export function threadDragAction(source: "pinned" | "active", destination: "pinned" | "active") {
   if (source === destination) return "Reorder";
-  if (destination === "pinned") return "Pin";
-  if (source === "pinned") return "Unpin";
-  return "Unsnooze";
+  return destination === "pinned" ? "Pin" : "Unpin";
 }

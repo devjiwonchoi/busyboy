@@ -27,7 +27,6 @@ import {
   OrchestrationV2Checkpoint,
   OrchestrationV2CheckpointScope,
   OrchestrationV2Command,
-  OrchestrationV2LimitRecoveryUpdate,
   OrchestrationV2DomainEvent,
   OrchestrationV2ProviderCapabilities,
   OrchestrationV2ProviderThread,
@@ -1520,23 +1519,6 @@ describe("background work kinds from older or newer servers", () => {
         pendingBackgroundTasks: [{ taskId: "", kind: "command" }],
       }),
     ).toThrow();
-  });
-});
-
-describe("limit recovery choice updates", () => {
-  const decode = Schema.decodeUnknownSync(OrchestrationV2LimitRecoveryUpdate);
-  const identity = { runId: "run:limited", resetAt: "2026-09-20T21:00:00.000Z" };
-  it("rejects updates that would disable defaults without choosing an option", () => {
-    expect(() => decode(identity)).toThrow("A recovery update must include autoResume or snooze");
-  });
-  it.each([
-    { autoResume: true },
-    { autoResume: false },
-    { snooze: true },
-    { snooze: false },
-    { autoResume: true, snooze: false },
-  ])("accepts an explicit independent choice %j", (choice) => {
-    expect(decode({ ...identity, ...choice })).toEqual({ ...identity, ...choice });
   });
 });
 

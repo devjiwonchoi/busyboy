@@ -5,7 +5,6 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { canSnooze, threadWokeAt } from "@t3tools/client-runtime/state/thread-snooze";
 import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
 import {
   AuthOrchestrationOperateScope,
@@ -38,7 +37,6 @@ import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
   readEnvironmentSupportsActiveReorder,
-  readEnvironmentSupportsSnooze,
   readEnvironmentSupportsVisitedTracking,
   readEnvironmentThreadRefs,
   readProject,
@@ -67,30 +65,6 @@ export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveB
 ) {
   override get message(): string {
     return "Cannot archive while the provider is active.";
-  }
-}
-
-export class ThreadSnoozeUnsupportedError extends Schema.TaggedError<ThreadSnoozeUnsupportedError>()(
-  "ThreadSnoozeUnsupportedError",
-  {
-    environmentId: EnvironmentId,
-    threadId: ThreadId,
-  },
-) {
-  override get message(): string {
-    return "This environment's server does not support snoozing yet. Update the server to use Snooze.";
-  }
-}
-
-export class ThreadSnoozeBlockedError extends Schema.TaggedError<ThreadSnoozeBlockedError>()(
-  "ThreadSnoozeBlockedError",
-  {
-    environmentId: EnvironmentId,
-    threadId: ThreadId,
-  },
-) {
-  override get message(): string {
-    return "This thread is waiting on you. Respond to the pending request before snoozing it.";
   }
 }
 
@@ -191,21 +165,6 @@ function useMarkThreadUnread() {
   };
 }
 
-export function useAcknowledgeThreadWoke() {
-  const visitThreadMutation = useAtomCommand(threadEnvironment.visit, { reportFailure: false });
-  const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
-  return (target: ScopedThreadRef, wokeAt: string) => {
-    if (readEnvironmentSupportsVisitedTracking(target.environmentId)) {
-      void visitThreadMutation({
-        environmentId: target.environmentId,
-        input: { threadId: target.threadId, visitedAt: wokeAt },
-      });
-      return;
-    }
-    markThreadVisited(scopedThreadKey(target), wokeAt);
-  };
-}
-
 function threadOperationFailure(target: ScopedThreadRef) {
   return readEnvironmentScope(target.environmentId, AuthOrchestrationOperateScope)
     ? null
@@ -241,12 +200,6 @@ export function useThreadActions() {
   const reorderActiveThreadMutation = useOrchestrationCommand(threadEnvironment.reorderActive, {
     reportFailure: false,
   });
-  const snoozeThreadMutation = useOrchestrationCommand(threadEnvironment.snooze, {
-    reportFailure: false,
-  });
-  const unsnoozeThreadMutation = useOrchestrationCommand(threadEnvironment.unsnooze, {
-    reportFailure: false,
-  });
   const markThreadUnread = useMarkThreadUnread();
   const stopThreadSession = useOrchestrationCommand(threadEnvironment.stopSession);
   const removeWorktree = useAtomCommand(vcsEnvironment.removeWorktree, {
@@ -266,7 +219,6 @@ export function useThreadActions() {
     (store) => store.clearProjectDraftThreadById,
   );
   const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
-  const acknowledgeThreadWoke = useAcknowledgeThreadWoke();
   const router = useRouter();
   const handleNewThread = useNewThreadHandler();
 
@@ -333,10 +285,6 @@ export function useThreadActions() {
     if (archiveResult._tag === "Failure") {
       action.finish();
       return archiveResult;
-    }
-    const wokeAt = threadWokeAt(thread, { now: new Date().toISOString() });
-    if (wokeAt !== null) {
-      acknowledgeThreadWoke(threadRef, wokeAt);
     }
     refreshArchivedThreadsForEnvironment(threadRef.environmentId);
     opts.onArchived?.();
@@ -672,64 +620,6 @@ export function useThreadActions() {
     });
   };
 
-  const unsnoozeThread = async (target: ScopedThreadRef) => {
-    if (!readEnvironmentSupportsSnooze(target.environmentId)) {
-      return AsyncResult.failure(
-        Cause.fail(
-          new ThreadSnoozeUnsupportedError({
-            environmentId: target.environmentId,
-            threadId: target.threadId,
-          }),
-        ),
-      );
-    }
-    ThreadUndo.invalidate("snooze", scopedThreadKey(target));
-    return unsnoozeThreadMutation({
-      environmentId: target.environmentId,
-      input: { threadId: target.threadId, reason: "user" },
-    });
-  };
-
-  const snoozeThread = async (target: ScopedThreadRef, snoozedUntil: string) => {
-    if (!readEnvironmentSupportsSnooze(target.environmentId)) {
-      return AsyncResult.failure(
-        Cause.fail(
-          new ThreadSnoozeUnsupportedError({
-            environmentId: target.environmentId,
-            threadId: target.threadId,
-          }),
-        ),
-      );
-    }
-    const resolved = resolveThreadTarget(target);
-    if (resolved && !canSnooze(resolved.thread, { now: new Date().toISOString() })) {
-      return AsyncResult.failure(
-        Cause.fail(
-          new ThreadSnoozeBlockedError({
-            environmentId: resolved.threadRef.environmentId,
-            threadId: resolved.threadRef.threadId,
-          }),
-        ),
-      );
-    }
-    const action = ThreadUndo.begin("snooze", scopedThreadKey(target));
-    const result = await snoozeThreadMutation({
-      environmentId: target.environmentId,
-      input: { threadId: target.threadId, snoozedUntil },
-    });
-    if (result._tag !== "Success") {
-      action.finish();
-      return result;
-    }
-    showThreadUndoNotice({
-      action: "Snoozed",
-      claim: action,
-      undo: () => unsnoozeThread(target),
-      failureTitle: "Failed to wake thread",
-    });
-    return result;
-  };
-
   const confirmAndDeleteThread = async (target: ScopedThreadRef) => {
     const permissionFailure = threadOperationFailure(target);
     if (permissionFailure) return permissionFailure;
@@ -763,8 +653,6 @@ export function useThreadActions() {
     unarchiveThread,
     deleteThread,
     confirmAndDeleteThread,
-    snoozeThread,
-    unsnoozeThread,
     pinThread,
     unpinThread,
     confirmAndUnpinThread,

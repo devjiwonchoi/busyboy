@@ -105,26 +105,25 @@ beforeEach(() => vi.stubGlobal("HTMLElement", TestRow));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("sidebar list motion", () => {
-  it("moves a retained Active row into Snoozed with its displaced peers", () => {
+  it("moves a retained Active row into Working with its displaced peers", () => {
     const pinnedHeader = new TestRow("Pinned", 0);
     const pinned = new TestRow("pin");
     const divider = new TestRow("Active", 0);
     const a = new TestRow("a");
     const b = new TestRow("b");
-    const snoozedHeader = new TestRow("Snoozed", 32);
-    const snoozed = new TestRow("snoozed", 36);
-    const rows = [pinnedHeader, pinned, divider, a, b, snoozedHeader, snoozed];
+    const workingHeader = new TestRow("Working", 32);
+    const working = new TestRow("working");
+    const rows = [pinnedHeader, pinned, divider, a, b, workingHeader, working];
     const { motion, layout } = fixture(rows);
     motion.update(true);
     expect(rows.every((row) => row.animations.length === 0)).toBe(true);
 
-    a.offsetHeight = 36;
-    layout([pinnedHeader, pinned, divider, b, snoozedHeader, snoozed, a]);
+    layout([pinnedHeader, pinned, divider, b, workingHeader, working, a]);
     motion.update(true);
-    expectMove(a, -153);
+    expectMove(a, -199);
     expectMove(b, 83);
-    expectMove(snoozedHeader, 83);
-    expectMove(snoozed, 83);
+    expectMove(workingHeader, 83);
+    expectMove(working, 83);
     expect(pinned.animate).not.toHaveBeenCalled();
     expect(divider.animate).not.toHaveBeenCalled();
   });
@@ -255,7 +254,7 @@ describe("sidebar list motion", () => {
     expect(a.animate).toHaveBeenCalledTimes(2);
   });
 
-  it("fades a collapsed-shelf exit at its current visual box and a new wake in", () => {
+  it("fades a collapsed-shelf exit at its current visual box and a new arrival in", () => {
     const a = new TestRow("a");
     const b = new TestRow("b");
     const fresh = new TestRow("new");

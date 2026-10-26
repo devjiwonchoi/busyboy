@@ -1,7 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   CommandId,
-  RuntimeRequestId,
   EnvironmentId,
   ORCHESTRATION_V2_WS_METHODS,
   ProjectId,
@@ -28,17 +27,6 @@ import { createThreadEnvironmentAtoms } from "./threadCommands.ts";
 const ENVIRONMENT_ID = EnvironmentId.make("remote");
 const THREAD_ID = ThreadId.make("thread");
 const NOW = DateTime.makeUnsafe("2026-09-12T10:00:00.000Z");
-const FUTURE = DateTime.makeUnsafe("2099-01-01T00:00:00.000Z");
-const APPROVAL = {
-  id: RuntimeRequestId.make("approval"),
-  kind: "command" as const,
-  createdAt: NOW,
-};
-const USER_INPUT = {
-  id: RuntimeRequestId.make("input"),
-  kind: "user_input" as const,
-  createdAt: NOW,
-};
 const SNAPSHOT: OrchestrationV2ShellSnapshot = {
   snapshotSequence: 1,
   schemaVersion: 2,
@@ -124,8 +112,6 @@ const makeHarness = Effect.fn("TestThreadCommands.makeHarness")(function* () {
 
 describe("remote thread lifecycle commands", () => {
   const actions = [
-    ["snooze", { snoozedUntil: "2099-01-01T00:00:00.000Z" }, { snoozedUntil: FUTURE }],
-    ["unsnooze", { reason: "user" }, { snoozedUntil: null, snoozedAt: null }],
     ["pin", { orderKey: "a" }, { pinnedAt: expect.any(Object), pinOrderKey: "a" }],
     ["unpin", {}, { pinnedAt: null, pinOrderKey: null }],
     ["reorderPin", { orderKey: "b" }, { pinOrderKey: "b" }],
@@ -143,9 +129,6 @@ describe("remote thread lifecycle commands", () => {
           threads: [
             {
               ...SNAPSHOT.threads[0]!,
-              ...(action === "unsnooze" || action === "pin"
-                ? { snoozedUntil: FUTURE, snoozedAt: NOW }
-                : {}),
               ...(action === "unpin" ? { pinnedAt: NOW, pinOrderKey: "a" } : {}),
             },
           ],
@@ -156,9 +139,7 @@ describe("remote thread lifecycle commands", () => {
           input: {
             threadId: THREAD_ID,
             commandId: CommandId.make(action),
-            reason: "user",
             orderKey: "a",
-            snoozedUntil: "2099-01-01T00:00:00.000Z",
             ...input,
           },
         });
@@ -174,9 +155,9 @@ describe("remote thread lifecycle commands", () => {
   it.effect("keeps the preview after acknowledgement until the matching shell update arrives", () =>
     Effect.gen(function* () {
       const h = yield* makeHarness();
-      const result = h.commands.snooze.run(h.registry, {
+      const result = h.commands.pin.run(h.registry, {
         environmentId: ENVIRONMENT_ID,
-        input: { threadId: THREAD_ID, snoozedUntil: "2099-01-01T00:00:00.000Z" },
+        input: { threadId: THREAD_ID, orderKey: "a" },
       });
       const request = yield* Queue.take(h.requests);
       yield* Deferred.succeed(request.reply, { sequence: 3 });
@@ -189,12 +170,12 @@ describe("remote thread lifecycle commands", () => {
       h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), changed);
       expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({
         title: "Renamed remotely",
-        snoozedUntil: FUTURE,
+        pinOrderKey: "a",
       });
       const confirmed = {
         ...changed,
         snapshotSequence: 3,
-        threads: [{ ...changed.threads[0]!, snoozedUntil: FUTURE, snoozedAt: NOW }],
+        threads: [{ ...changed.threads[0]!, pinnedAt: NOW, pinOrderKey: "a" }],
       };
       h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), confirmed);
       expect(h.registry.get(h.visibleAtom)).toBe(confirmed);
@@ -209,29 +190,29 @@ describe("remote thread lifecycle commands", () => {
     () =>
       Effect.gen(function* () {
         const h = yield* makeHarness();
-        const snooze = h.commands.snooze.run(h.registry, {
+        const pin = h.commands.pin.run(h.registry, {
           environmentId: ENVIRONMENT_ID,
-          input: { threadId: THREAD_ID, snoozedUntil: "2099-01-01T00:00:00.000Z" },
+          input: { threadId: THREAD_ID, orderKey: "a" },
         });
         const first = yield* Queue.take(h.requests);
-        const unsnooze = h.commands.unsnooze.run(h.registry, {
+        const unpin = h.commands.unpin.run(h.registry, {
           environmentId: ENVIRONMENT_ID,
-          input: { threadId: THREAD_ID, reason: "user" },
+          input: { threadId: THREAD_ID },
         });
-        expect(h.registry.get(h.visibleAtom)?.threads[0]?.snoozedUntil).toBeNull();
-        yield* Deferred.fail(first.reply, new Error("Snooze rejected"));
-        yield* Effect.promise(() => snooze);
-        expect(h.registry.get(h.visibleAtom)?.threads[0]?.snoozedUntil).toBeNull();
+        expect(h.registry.get(h.visibleAtom)?.threads[0]?.pinnedAt).toBeNull();
+        yield* Deferred.fail(first.reply, new Error("Pin rejected"));
+        yield* Effect.promise(() => pin);
+        expect(h.registry.get(h.visibleAtom)?.threads[0]?.pinnedAt).toBeNull();
         const second = yield* Queue.take(h.requests);
-        expect(second.command.type).toBe("thread.unsnooze");
+        expect(second.command.type).toBe("thread.unpin");
         const confirmed = {
           ...SNAPSHOT,
           snapshotSequence: 2,
-          threads: [{ ...SNAPSHOT.threads[0]!, snoozedUntil: null, snoozedAt: null }],
+          threads: [{ ...SNAPSHOT.threads[0]!, pinnedAt: null, pinOrderKey: null }],
         };
         h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), confirmed);
         yield* Deferred.succeed(second.reply, { sequence: 2 });
-        yield* Effect.promise(() => unsnooze);
+        yield* Effect.promise(() => unpin);
         expect(h.registry.get(h.visibleAtom)).toBe(confirmed);
       }),
   );
@@ -240,9 +221,9 @@ describe("remote thread lifecycle commands", () => {
     Effect.gen(function* () {
       const h = yield* makeHarness();
       const otherEnvironment = EnvironmentId.make("other-remote");
-      const result = h.commands.snooze.run(h.registry, {
+      const result = h.commands.pin.run(h.registry, {
         environmentId: ENVIRONMENT_ID,
-        input: { threadId: THREAD_ID, snoozedUntil: "2099-01-01T00:00:00.000Z" },
+        input: { threadId: THREAD_ID, orderKey: "a" },
       });
       const request = yield* Queue.take(h.requests);
       expect(h.registry.get(h.commands.snapshotAtom(otherEnvironment))).toBe(SNAPSHOT);
@@ -255,96 +236,34 @@ describe("remote thread lifecycle commands", () => {
     }),
   );
 
-  it.effect("keeps pending approvals visible while a lifecycle request is pending", () =>
+  it.effect("restores a confirmed pin when a queued undo fails", () =>
     Effect.gen(function* () {
       const h = yield* makeHarness();
-      const blocked = {
-        ...SNAPSHOT,
-        threads: [{ ...SNAPSHOT.threads[0]!, pendingRuntimeRequest: APPROVAL }],
-      };
-      h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), blocked);
-      const result = h.commands.snooze.run(h.registry, {
+      const result = h.commands.pin.run(h.registry, {
         environmentId: ENVIRONMENT_ID,
-        input: { threadId: THREAD_ID, snoozedUntil: "2099-01-01T00:00:00.000Z" },
-      });
-      const request = yield* Queue.take(h.requests);
-      expect(h.registry.get(h.visibleAtom)?.threads[0]).toBe(blocked.threads[0]);
-      yield* Deferred.fail(request.reply, new Error("Approval pending"));
-      yield* Effect.promise(() => result);
-    }),
-  );
-
-  it.effect("restores a confirmed snooze when a queued undo fails", () =>
-    Effect.gen(function* () {
-      const h = yield* makeHarness();
-      const result = h.commands.snooze.run(h.registry, {
-        environmentId: ENVIRONMENT_ID,
-        input: { threadId: THREAD_ID, snoozedUntil: "2099-01-01T00:00:00.000Z" },
+        input: { threadId: THREAD_ID, orderKey: "a" },
       });
       const first = yield* Queue.take(h.requests);
-      const undo = h.commands.unsnooze.run(h.registry, {
+      const undo = h.commands.unpin.run(h.registry, {
         environmentId: ENVIRONMENT_ID,
-        input: { threadId: THREAD_ID, reason: "user" },
+        input: { threadId: THREAD_ID },
       });
-      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({ snoozedUntil: null });
+      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({ pinnedAt: null });
       yield* Deferred.succeed(first.reply, { sequence: 2 });
       expect((yield* Effect.promise(() => result))._tag).toBe("Success");
-      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({ snoozedUntil: null });
+      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({ pinnedAt: null });
       const confirmed = {
         ...SNAPSHOT,
         snapshotSequence: 2,
-        threads: [{ ...SNAPSHOT.threads[0]!, snoozedUntil: FUTURE }],
+        threads: [{ ...SNAPSHOT.threads[0]!, pinnedAt: NOW, pinOrderKey: "a" }],
       };
       h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), confirmed);
-      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({ snoozedUntil: null });
+      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({ pinnedAt: null });
       const second = yield* Queue.take(h.requests);
-      expect(second.command.type).toBe("thread.unsnooze");
+      expect(second.command.type).toBe("thread.unpin");
       yield* Deferred.fail(second.reply, new Error("Undo rejected"));
       expect((yield* Effect.promise(() => undo))._tag).toBe("Failure");
       expect(h.registry.get(h.visibleAtom)).toBe(confirmed);
-    }),
-  );
-
-  it.effect("preserves a newer approval when the snooze reply arrives after the shell", () =>
-    Effect.gen(function* () {
-      const h = yield* makeHarness();
-      const result = h.commands.snooze.run(h.registry, {
-        environmentId: ENVIRONMENT_ID,
-        input: { threadId: THREAD_ID, snoozedUntil: "2099-01-01T00:00:00.000Z" },
-      });
-      const request = yield* Queue.take(h.requests);
-      const newer = {
-        ...SNAPSHOT,
-        snapshotSequence: 3,
-        threads: [{ ...SNAPSHOT.threads[0]!, pendingRuntimeRequest: APPROVAL }],
-      };
-      h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), newer);
-      expect(h.registry.get(h.visibleAtom)?.threads[0]).toBe(newer.threads[0]);
-      yield* Deferred.succeed(request.reply, { sequence: 2 });
-      expect((yield* Effect.promise(() => result))._tag).toBe("Success");
-      expect(h.registry.get(h.visibleAtom)).toBe(newer);
-    }),
-  );
-
-  it.effect("shows an accepted snooze while the shell still has an old input request", () =>
-    Effect.gen(function* () {
-      const h = yield* makeHarness();
-      const stale = {
-        ...SNAPSHOT,
-        threads: [{ ...SNAPSHOT.threads[0]!, pendingRuntimeRequest: USER_INPUT }],
-      };
-      h.registry.set(h.snapshotAtom(ENVIRONMENT_ID), stale);
-      const result = h.commands.snooze.run(h.registry, {
-        environmentId: ENVIRONMENT_ID,
-        input: { threadId: THREAD_ID, snoozedUntil: "2099-01-01T00:00:00.000Z" },
-      });
-      const request = yield* Queue.take(h.requests);
-      expect(h.registry.get(h.visibleAtom)?.threads[0]).toBe(stale.threads[0]);
-      yield* Deferred.succeed(request.reply, { sequence: 2 });
-      expect((yield* Effect.promise(() => result))._tag).toBe("Success");
-      expect(h.registry.get(h.visibleAtom)?.threads[0]).toMatchObject({ snoozedUntil: FUTURE });
-      expect(h.registry.get(h.visibleAtom)?.threads[0]?.pendingRuntimeRequest).toBeNull();
-      expect(h.registry.get(h.snapshotAtom(ENVIRONMENT_ID))).toBe(stale);
     }),
   );
 });

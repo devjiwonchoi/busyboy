@@ -78,10 +78,7 @@ function UsageLimitSettingsRows() {
     return null;
   }
 
-  const writeToAll = (patch: {
-    autoResumeLimitedThreads?: boolean;
-    snoozeLimitedThreads?: boolean;
-  }) => {
+  const writeToAll = (patch: { autoResumeLimitedThreads?: boolean }) => {
     if (
       writeInFlight.current ||
       !syncTargets.every((target) =>
@@ -115,13 +112,6 @@ function UsageLimitSettingsRows() {
         value={uniformMobileSetting(displayTargets, "autoResumeLimitedThreads")}
         disabled={disabled}
         onValueChange={(value) => writeToAll({ autoResumeLimitedThreads: value })}
-      />
-      <SettingsSwitchRow
-        icon="clock"
-        label="Snooze limited threads"
-        value={uniformMobileSetting(displayTargets, "snoozeLimitedThreads")}
-        disabled={disabled}
-        onValueChange={(value) => writeToAll({ snoozeLimitedThreads: value })}
       />
     </SettingsSection>
   );

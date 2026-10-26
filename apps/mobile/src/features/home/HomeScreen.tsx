@@ -45,14 +45,13 @@ import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
 import { useThreadSearch } from "../../state/queries";
 import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
-import { usePendingThreadOrder } from "../../state/thread-order";
+import { pendingThreadOrderAtom } from "../../state/thread-order";
 import { threadListEnvironmentsAtom } from "../../state/server";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useQueuedThreadKeys } from "../../state/use-thread-outbox";
 import {
   ThreadListV2PendingRow,
   ThreadListV2Row,
-  ThreadListV2SnoozedShelfHeader,
   ThreadListV2WorkingShelfHeader,
 } from "../threads/thread-list-v2-items";
 import { useThreadRowProviderInstanceResolver } from "../threads/thread-provider-instance";
@@ -100,11 +99,6 @@ interface HomeScreenProps {
   readonly onSelectThread: (thread: EnvironmentThreadShell) => void;
   readonly onArchiveThread: (thread: EnvironmentThreadShell) => void;
   readonly onDeleteThread: (thread: EnvironmentThreadShell) => void;
-  readonly onSnoozeThread: (
-    thread: EnvironmentThreadShell,
-    snoozedUntil: string,
-  ) => Promise<boolean>;
-  readonly onUnsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onPinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onUnpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onMoveThread: (
@@ -410,18 +404,6 @@ export function HomeScreen(props: HomeScreenProps) {
           ),
     [v2ScopedProjectGroup],
   );
-  const handleSnoozeThread = useCallback(
-    (thread: EnvironmentThreadShell, snoozedUntil: string) => {
-      void props.onSnoozeThread(thread, snoozedUntil);
-    },
-    [props.onSnoozeThread],
-  );
-  const handleUnsnoozeThread = useCallback(
-    (thread: EnvironmentThreadShell) => {
-      void props.onUnsnoozeThread(thread);
-    },
-    [props.onUnsnoozeThread],
-  );
   const handlePinThread = useCallback(
     (thread: EnvironmentThreadShell) => {
       void props.onPinThread(thread);
@@ -453,14 +435,11 @@ export function HomeScreen(props: HomeScreenProps) {
   const handleDeleteThread = props.onDeleteThread;
   const {
     loaded: shelfPreferencesLoaded,
-    snoozedShelfExpanded,
     workingShelfEnabled,
     workingShelfExpanded,
-    toggleSnoozedShelf,
     toggleWorkingShelf,
   } = useThreadListV2ShelfPreferences();
   const [nowMinute, setNowMinute] = useState(() => new Date().toISOString().slice(0, 16));
-  const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
   useFocusEffect(
     useCallback(() => {
       setNowMinute(new Date().toISOString().slice(0, 16));
@@ -472,14 +451,13 @@ export function HomeScreen(props: HomeScreenProps) {
   const {
     providersByEnvironmentId,
     machineByEnvironmentId,
-    snoozeEnvironmentIds,
     pinningEnvironmentIds,
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,
     titleRegenerationEnvironmentIds,
   } = listEnvironments;
   const resolveProviderInstance = useThreadRowProviderInstanceResolver(providersByEnvironmentId);
-  const pendingOrder = usePendingThreadOrder(nowMinute, snoozeWakeTick);
+  const pendingOrder = useAtomValue(pendingThreadOrderAtom);
   // Up/down menu availability for every card, computed once per section per
   // rebuild (see computeThreadMoveAvailability): per-thread planner calls made
   // list construction quadratic, and this list rebuilds on every minute tick.
@@ -495,8 +473,6 @@ export function HomeScreen(props: HomeScreenProps) {
           threads: props.threads,
           section,
           pendingOrder,
-          now: new Date().toISOString(),
-          snoozeEnvironmentIds,
         }),
       });
     return new Map([
@@ -509,9 +485,6 @@ export function HomeScreen(props: HomeScreenProps) {
     activeReorderEnvironmentIds,
     props.threads,
     pendingOrder,
-    snoozeEnvironmentIds,
-    nowMinute,
-    snoozeWakeTick,
   ]);
   const threadListV2Layout = useMemo(() => {
     threadListInboxReturns.observe(workingShelfEnabled ? props.threads : null);
@@ -522,12 +495,9 @@ export function HomeScreen(props: HomeScreenProps) {
       projectRefs: v2ScopedProjectGroup === null ? null : v2ScopedProjectGroup.projectRefs,
       searchQuery: props.searchQuery,
       matchedThreadKeys,
-      snoozeEnvironmentIds,
-      now: new Date().toISOString(),
       workingShelfEnabled,
       workingShelfExpanded,
       inboxReturnAt: threadListInboxReturns.returnedAt,
-      snoozedShelfExpanded,
       selectedThreadKey,
     });
   }, [
@@ -535,28 +505,12 @@ export function HomeScreen(props: HomeScreenProps) {
     workingShelfExpanded,
     pendingOrder,
     selectedThreadKey,
-    nowMinute,
-    snoozeWakeTick,
-    snoozedShelfExpanded,
-    snoozeEnvironmentIds,
     props.searchQuery,
     props.selectedEnvironmentId,
     props.threads,
     matchedThreadKeys,
     v2ScopedProjectGroup,
   ]);
-  const nextSnoozeWakeAt = threadListV2Layout.nextSnoozeWakeAt;
-  useEffect(() => {
-    if (nextSnoozeWakeAt === null) return;
-    const wakeAtMs = Date.parse(nextSnoozeWakeAt);
-    if (Number.isNaN(wakeAtMs)) return;
-    const delayMs = Math.min(Math.max(0, wakeAtMs - Date.now()) + 50, 2_147_483_647);
-    const id = setTimeout(() => bumpSnoozeWakeTick((tick) => tick + 1), delayMs);
-    return () => clearTimeout(id);
-    // snoozeWakeTick must re-arm the timer even when nextSnoozeWakeAt is
-    // unchanged: after a clamped fire (wake beyond the 32-bit setTimeout
-    // range) the boundary string is identical and the chain would die.
-  }, [nextSnoozeWakeAt, snoozeWakeTick]);
   const v2SearchQuery = props.searchQuery.trim().toLocaleLowerCase();
   const v2PendingTasks = useMemo(
     () =>
@@ -581,22 +535,16 @@ export function HomeScreen(props: HomeScreenProps) {
         workingCount: threadListV2Layout.workingCount,
         workingShelfExpanded,
         workingShelfHeaderIndex: threadListV2Layout.workingShelfHeaderIndex,
-        snoozedCount: threadListV2Layout.snoozedCount,
-        snoozedShelfExpanded,
-        snoozedShelfHeaderIndex: threadListV2Layout.snoozedShelfHeaderIndex,
-        snoozeLabelNow: `${nowMinute}:00.000Z`,
-        snoozeEnvironmentIds,
         queuedThreadKeys,
         moveAvailability: threadMoveAvailability,
         shelfPreferencesLoading: !shelfPreferencesLoaded,
       }),
     [
+      // nowMinute refreshes the relative time labels.
       nowMinute,
       queuedThreadKeys,
       threadMoveAvailability,
       shelfPreferencesLoaded,
-      snoozedShelfExpanded,
-      snoozeEnvironmentIds,
       threadListV2Layout,
       v2PendingTasks,
       workingShelfExpanded,
@@ -644,16 +592,6 @@ export function HomeScreen(props: HomeScreenProps) {
           />
         );
       }
-      if (item.type === "v2-snoozed-shelf") {
-        return (
-          <ThreadListV2SnoozedShelfHeader
-            count={item.count}
-            disabled={item.disabled}
-            expanded={item.expanded}
-            onToggle={toggleSnoozedShelf}
-          />
-        );
-      }
       const thread = item.item.thread;
       return (
         <ThreadListV2Row
@@ -663,10 +601,7 @@ export function HomeScreen(props: HomeScreenProps) {
           onNewThreadOnBranch={props.onNewThreadOnBranch}
           thread={thread}
           hasQueuedMessages={item.hasQueuedMessages}
-          snoozed={item.item.snoozed}
           pinned={item.item.pinned}
-          snoozePresetMinute={item.snoozePresetMinute ?? ""}
-          snoozeWakeLabelText={item.snoozeWakeLabelText}
           timeLabel={item.timeLabel}
           showTrailingDivider={item.showTrailingDivider}
           project={
@@ -696,7 +631,6 @@ export function HomeScreen(props: HomeScreenProps) {
           onRenameThread={handleRenameThread}
           onRegenerateThreadTitle={handleRegenerateThreadTitle}
           titleRegenerationSupported={titleRegenerationEnvironmentIds.has(thread.environmentId)}
-          snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
           pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
           reorderSupported={
             item.item.pinned
@@ -705,8 +639,6 @@ export function HomeScreen(props: HomeScreenProps) {
           }
           canMoveUp={item.canMoveUp}
           canMoveDown={item.canMoveDown}
-          onSnoozeThread={handleSnoozeThread}
-          onUnsnoozeThread={handleUnsnoozeThread}
           onPinThread={handlePinThread}
           onUnpinThread={handleUnpinThread}
           onMoveThread={handleMoveThread}
@@ -724,9 +656,7 @@ export function HomeScreen(props: HomeScreenProps) {
       handlePinThread,
       handleRegenerateThreadTitle,
       handleRenameThread,
-      handleSnoozeThread,
       handleUnpinThread,
-      handleUnsnoozeThread,
       handleSwipeableClose,
       handleSwipeableWillOpen,
       homeScrollGesture,
@@ -745,10 +675,8 @@ export function HomeScreen(props: HomeScreenProps) {
       props.savedConnectionsById,
       resolveProviderInstance,
       providersByEnvironmentId,
-      snoozeEnvironmentIds,
       threadSearchMatchByKey,
       titleRegenerationEnvironmentIds,
-      toggleSnoozedShelf,
       toggleWorkingShelf,
       v2ProjectTitleByProjectKey,
       props.searchQuery,

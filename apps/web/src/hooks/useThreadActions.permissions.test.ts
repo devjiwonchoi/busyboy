@@ -76,17 +76,9 @@ vi.mock("../state/use-atom-query-runner", () => ({
 }));
 vi.mock("../state/threads", () => ({
   threadEnvironment: Object.fromEntries(
-    [
-      "archive",
-      "unarchive",
-      "delete",
-      "pin",
-      "unpin",
-      "reorderPin",
-      "snooze",
-      "unsnooze",
-      "stopSession",
-    ].map((action) => [action, action]),
+    ["archive", "unarchive", "delete", "pin", "unpin", "reorderPin", "stopSession"].map(
+      (action) => [action, action],
+    ),
   ),
 }));
 vi.mock("../state/vcs", () => ({
@@ -95,7 +87,6 @@ vi.mock("../state/vcs", () => ({
 vi.mock("../state/entities", () => ({
   readEnvironmentSupportsPinning: () => true,
   readEnvironmentSupportsPinReorder: () => true,
-  readEnvironmentSupportsSnooze: () => true,
   readThreadShell: (ref: ScopedThreadRef) =>
     state.threads.find(
       (thread) => thread.environmentId === ref.environmentId && thread.id === ref.threadId,
@@ -125,10 +116,7 @@ vi.mock("../terminalUiStateStore", () => ({
     }),
 }));
 vi.mock("../uiStateStore", () => ({
-  useUiStateStore: (select: (store: unknown) => unknown) =>
-    select({
-      markThreadVisited: () => state.localEffects.push("mark-visited"),
-    }),
+  useUiStateStore: (select: (store: unknown) => unknown) => select({}),
 }));
 vi.mock("../lib/archivedThreadsState", () => ({
   refreshArchivedThreadsForEnvironment: () => state.localEffects.push("refresh-archive"),
@@ -175,15 +163,6 @@ const operations = [
   {
     name: "unarchive",
     run: (actions: ThreadActions, ref: ScopedThreadRef) => actions.unarchiveThread(ref),
-  },
-  {
-    name: "snooze",
-    run: (actions: ThreadActions, ref: ScopedThreadRef) =>
-      actions.snoozeThread(ref, "2099-01-01T00:00:00Z"),
-  },
-  {
-    name: "unsnooze",
-    run: (actions: ThreadActions, ref: ScopedThreadRef) => actions.unsnoozeThread(ref),
   },
   { name: "pin", run: (actions: ThreadActions, ref: ScopedThreadRef) => actions.pinThread(ref) },
   {

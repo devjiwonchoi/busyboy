@@ -200,8 +200,6 @@ export const layer: Layer.Layer<
     const SUPERSEDABLE_THREAD_EVENT_TYPES = [
       "thread.archived",
       "thread.unarchived",
-      "thread.snoozed",
-      "thread.unsnoozed",
       "thread.pinned",
       "thread.unpinned",
       "thread.pin-reordered",

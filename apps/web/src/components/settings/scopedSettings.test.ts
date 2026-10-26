@@ -198,7 +198,7 @@ describe("scoped settings writes", () => {
     const persistServer = vi.fn().mockResolvedValue({ _tag: "Success" });
     const persistClient = vi.fn();
     await persistScopedSettingsPatch(
-      planScopedSettingsPatch(named, environments, { snoozeLimitedThreads: false }),
+      planScopedSettingsPatch(named, environments, { autoResumeLimitedThreads: false }),
       persistServer,
       persistClient,
     );
@@ -206,7 +206,7 @@ describe("scoped settings writes", () => {
       [
         {
           environmentId: server.environmentId,
-          input: { patch: { snoozeLimitedThreads: false } },
+          input: { patch: { autoResumeLimitedThreads: false } },
         },
       ],
     ]);

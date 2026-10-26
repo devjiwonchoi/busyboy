@@ -17,17 +17,16 @@ import * as Effect from "effect/Effect";
 
 import * as ThreadForkService from "./ThreadForkService.ts";
 
-const sourceThreadId = ThreadId.make("thread:fork-snoozed-source");
-const targetThreadId = ThreadId.make("thread:fork-awake-target");
-const sourceRunId = RunId.make("run:fork-snoozed-source");
+const sourceThreadId = ThreadId.make("thread:fork-source");
+const targetThreadId = ThreadId.make("thread:fork-target");
+const sourceRunId = RunId.make("run:fork-source");
 const providerInstanceId = ProviderInstanceId.make("codex");
 const modelSelection = {
   instanceId: providerInstanceId,
   model: "gpt-5.4",
 } satisfies ModelSelection;
 const sourceCreatedAt = DateTime.makeUnsafe("2026-07-24T09:00:00.000Z");
-const snoozedAt = DateTime.makeUnsafe("2026-07-24T09:05:00.000Z");
-const snoozedUntil = DateTime.makeUnsafe("2026-07-25T09:00:00.000Z");
+const sourceUpdatedAt = DateTime.makeUnsafe("2026-07-24T09:05:00.000Z");
 const forkCreatedAt = DateTime.makeUnsafe("2026-07-24T09:10:00.000Z");
 
 function makeSourceThread(): OrchestrationV2AppThread {
@@ -35,15 +34,15 @@ function makeSourceThread(): OrchestrationV2AppThread {
     createdBy: "user",
     creationSource: "web",
     id: sourceThreadId,
-    projectId: ProjectId.make("project:fork-snooze"),
-    title: "Snoozed source",
+    projectId: ProjectId.make("project:fork"),
+    title: "Source",
     providerInstanceId,
     modelSelection,
     runtimeMode: "full-access",
     interactionMode: "plan",
     branch: "feature/source",
     worktreePath: "/tmp/source-worktree",
-    activeProviderThreadId: ProviderThreadId.make("provider-thread:fork-snoozed-source"),
+    activeProviderThreadId: ProviderThreadId.make("provider-thread:fork-source"),
     lineage: {
       parentThreadId: null,
       relationshipToParent: null,
@@ -51,11 +50,9 @@ function makeSourceThread(): OrchestrationV2AppThread {
     },
     forkedFrom: null,
     createdAt: sourceCreatedAt,
-    updatedAt: snoozedAt,
+    updatedAt: sourceUpdatedAt,
     archivedAt: null,
     lastVisitedAt: null,
-    snoozedUntil,
-    snoozedAt,
     deletedAt: null,
   };
 }
@@ -67,15 +64,15 @@ function makeSourceRun(status: OrchestrationV2Run["status"]): OrchestrationV2Run
     ordinal: 1,
     providerInstanceId,
     modelSelection,
-    providerThreadId: ProviderThreadId.make("provider-thread:fork-snoozed-source"),
-    userMessageId: MessageId.make("message:fork-snoozed-source"),
+    providerThreadId: ProviderThreadId.make("provider-thread:fork-source"),
+    userMessageId: MessageId.make("message:fork-source"),
     rootNodeId: null,
     activeAttemptId: null,
     status,
     queuePosition: null,
     requestedAt: sourceCreatedAt,
     startedAt: sourceCreatedAt,
-    completedAt: snoozedAt,
+    completedAt: sourceUpdatedAt,
     checkpointId: null,
     contextHandoffId: null,
   };
@@ -100,7 +97,7 @@ function makeSourceProjection(sourceRun: OrchestrationV2Run): OrchestrationV2Thr
     contextHandoffs: [],
     contextTransfers: [],
     visibleTurnItems: [],
-    updatedAt: snoozedAt,
+    updatedAt: sourceUpdatedAt,
   };
 }
 
@@ -115,9 +112,9 @@ const planFork = (sourceRun: OrchestrationV2Run) =>
         threadId: sourceThreadId,
         runId: sourceRunId,
       },
-      transferId: ContextTransferId.make("context-transfer:fork-snoozed-source"),
+      transferId: ContextTransferId.make("context-transfer:fork-source"),
       targetThreadId,
-      title: "Awake fork",
+      title: "Fork",
       createdBy: "user",
       creationSource: "mobile",
       createdAt: forkCreatedAt,
@@ -137,14 +134,12 @@ it("treats usage-limited and other provider-finished runs as forkable", () => {
   assert.isFalse(ThreadForkService.isForkableSourceRunStatus("rolled_back"));
 });
 
-it.effect("keeps a fork awake when its source thread is snoozed", () =>
+it.effect("builds a fork thread from its source thread", () =>
   Effect.gen(function* () {
     const sourceThread = makeSourceThread();
     const sourceRun = makeSourceRun("completed");
     const result = yield* planFork(sourceRun);
 
-    assert.isNull(result.targetThread.snoozedUntil);
-    assert.isNull(result.targetThread.snoozedAt);
     assert.equal(result.targetThread.projectId, sourceThread.projectId);
     assert.equal(result.targetThread.providerInstanceId, sourceThread.providerInstanceId);
     assert.deepEqual(result.targetThread.modelSelection, sourceThread.modelSelection);

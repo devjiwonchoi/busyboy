@@ -439,16 +439,16 @@ describe("mergeEnvironmentSettings", () => {
   it("keeps server settings when legacy client data contains retired keys", () => {
     const serverSettings = {
       ...DEFAULT_SERVER_SETTINGS,
-      snoozeLimitedThreads: false,
+      autoResumeLimitedThreads: false,
     };
     const legacyClientSettings = {
       ...DEFAULT_CLIENT_SETTINGS,
-      snoozeLimitedThreads: true,
+      autoResumeLimitedThreads: true,
     };
 
     const settings = mergeEnvironmentSettings(serverSettings, legacyClientSettings);
 
-    expect(settings.snoozeLimitedThreads).toBe(false);
+    expect(settings.autoResumeLimitedThreads).toBe(false);
   });
 });
 

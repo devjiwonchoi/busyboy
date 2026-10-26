@@ -74,7 +74,6 @@ vi.mock("../../state/atom-registry", () => ({
                 {
                   environment: {
                     capabilities: {
-                      threadSnooze: true,
                       threadPinning: true,
                       threadPinReorder: true,
                       threadTitleRegeneration: true,
@@ -107,30 +106,22 @@ vi.mock("../../state/thread-order", () => ({
 vi.mock("../../state/threads", () => ({
   environmentThreadShells: { threadShellsAtom: "thread-shells" },
   threadEnvironment: Object.fromEntries(
-    [
-      "archive",
-      "unarchive",
-      "delete",
-      "snooze",
-      "unsnooze",
-      "pin",
-      "unpin",
-      "reorderPin",
-      "updateMetadata",
-    ].map((action) => [
-      action,
-      async (request: {
-        environmentId: string;
-        input: { threadId: string; orderKey?: string };
-      }) => {
-        state.requests.push({ action, ...request });
-        if (!state.scopes.get(request.environmentId)?.has(AuthOrchestrationOperateScope)) {
-          return AsyncResult.failure(Cause.fail(new Error("Thread operation denied")));
-        }
-        state.afterRequest?.();
-        return AsyncResult.success(undefined);
-      },
-    ]),
+    ["archive", "unarchive", "delete", "pin", "unpin", "reorderPin", "updateMetadata"].map(
+      (action) => [
+        action,
+        async (request: {
+          environmentId: string;
+          input: { threadId: string; orderKey?: string };
+        }) => {
+          state.requests.push({ action, ...request });
+          if (!state.scopes.get(request.environmentId)?.has(AuthOrchestrationOperateScope)) {
+            return AsyncResult.failure(Cause.fail(new Error("Thread operation denied")));
+          }
+          state.afterRequest?.();
+          return AsyncResult.success(undefined);
+        },
+      ],
+    ),
   ),
 }));
 
@@ -152,8 +143,6 @@ function makeThread(input: Partial<EnvironmentThreadShell> = {}): EnvironmentThr
 
 const mutationCases = [
   ["archiveThread", "archive"],
-  ["snoozeThread", "snooze"],
-  ["unsnoozeThread", "unsnooze"],
   ["pinThread", "pin"],
   ["unpinThread", "unpin"],
   ["regenerateThreadTitle", "updateMetadata"],
@@ -182,17 +171,14 @@ describe("thread list operation permissions", () => {
       const actions = useThreadListActions();
       state.scopes.get(primaryEnvironmentId)!.clear();
 
-      await actions[handler](makeThread(), "2099-01-01T00:00:00.000Z");
+      await actions[handler](makeThread());
 
       expect(state.requests).toEqual([]);
     },
   );
 
   it.each(mutationCases)("%s requires the target environment's permission", async (handler) => {
-    await useThreadListActions()[handler](
-      makeThread({ environmentId: otherEnvironmentId }),
-      "2099-01-01T00:00:00.000Z",
-    );
+    await useThreadListActions()[handler](makeThread({ environmentId: otherEnvironmentId }));
 
     expect(state.requests).toEqual([]);
   });
@@ -204,10 +190,7 @@ describe("thread list operation permissions", () => {
       const actions = useThreadListActions();
       state.scopes.get(otherEnvironmentId)!.add(AuthOrchestrationOperateScope);
 
-      await actions[handler](
-        makeThread({ environmentId: otherEnvironmentId }),
-        "2099-01-01T00:00:00.000Z",
-      );
+      await actions[handler](makeThread({ environmentId: otherEnvironmentId }));
 
       expect(state.requests).toEqual([
         expect.objectContaining({ action, environmentId: otherEnvironmentId }),

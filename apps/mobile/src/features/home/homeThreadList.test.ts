@@ -93,7 +93,6 @@ describe("home project scopes", () => {
       environmentId: null,
       projectRefs: scratchScope.projectRefs,
       searchQuery: "",
-      now: "2026-06-01T00:00:00.000Z",
     });
     expect(filtered.items.map((item) => item.thread.id).sort()).toEqual(
       threads
@@ -117,7 +116,6 @@ describe("home project scopes", () => {
         environmentId: remoteEnvironmentId,
         projectRefs: remoteScratch.projectRefs,
         searchQuery: "",
-        now: "2026-06-01T00:00:00.000Z",
       }).items.map((item) => item.thread.id),
     ).toEqual([threads[1]!.id]);
   });

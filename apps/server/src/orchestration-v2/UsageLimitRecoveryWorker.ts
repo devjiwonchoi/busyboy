@@ -11,7 +11,6 @@ export function limitRecoveryCommand(
   thread: ProjectionStore.ProjectionLimitRecoveryCandidate,
   autoResume: boolean,
   nowMs: number,
-  snooze = false,
 ): OrchestrationV2Command | null {
   if (
     thread.status !== "failed" ||
@@ -32,7 +31,7 @@ export function limitRecoveryCommand(
   const identity = `${thread.id}:${thread.latestRunId}:${resetMs}`;
   const recovery = thread.limitRecovery;
   if (recovery?.runId !== thread.latestRunId || recovery.resetAt !== thread.usageLimitResetAt) {
-    if (!autoResume && (!snooze || resetMs <= nowMs)) return null;
+    if (!autoResume) return null;
     return {
       type: "thread.metadata.update",
       commandId: CommandId.make(`limit-arm:${identity}`),
@@ -41,16 +40,10 @@ export function limitRecoveryCommand(
         runId: thread.latestRunId,
         resetAt: thread.usageLimitResetAt,
         autoResume,
-        snooze: snooze && resetMs > nowMs,
       },
     };
   }
-  if (
-    !recovery.autoResume ||
-    resetMs > nowMs ||
-    (thread.snoozedUntil != null && DateTime.toEpochMillis(thread.snoozedUntil) > nowMs)
-  )
-    return null;
+  if (!recovery.autoResume || resetMs > nowMs) return null;
   const deliveryIdentity = `${identity}:${recovery.requestId ?? "legacy"}`;
   return {
     type: "message.dispatch",
@@ -79,16 +72,10 @@ const makeSweep = Effect.gen(function* () {
     const candidates = yield* projections.getLimitRecoveryCandidates({
       now,
       autoResume: preferences.autoResumeLimitedThreads,
-      snooze: preferences.snoozeLimitedThreads,
     });
     const nowMs = DateTime.toEpochMillis(now);
     for (const thread of candidates) {
-      const command = limitRecoveryCommand(
-        thread,
-        preferences.autoResumeLimitedThreads,
-        nowMs,
-        preferences.snoozeLimitedThreads,
-      );
+      const command = limitRecoveryCommand(thread, preferences.autoResumeLimitedThreads, nowMs);
       if (command === null) continue;
       yield* threads.dispatch(command).pipe(
         Effect.catchCause((cause) =>

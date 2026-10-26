@@ -87,8 +87,6 @@ export function HomeRouteScreen() {
   const {
     archiveThread,
     confirmDeleteThread,
-    snoozeThread,
-    unsnoozeThread,
     pinThread,
     unpinThread,
     moveThread,
@@ -259,8 +257,6 @@ export function HomeRouteScreen() {
           }
           onArchiveThread={archiveThread}
           onDeleteThread={confirmDeleteThread}
-          onSnoozeThread={snoozeThread}
-          onUnsnoozeThread={unsnoozeThread}
           onPinThread={pinThread}
           onUnpinThread={unpinThread}
           onMoveThread={moveThread}
