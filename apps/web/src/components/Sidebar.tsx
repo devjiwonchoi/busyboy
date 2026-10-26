@@ -1275,6 +1275,7 @@ type SidebarThreadRowProps = {
   isRenaming: boolean;
   renamingTitle: string;
   onContextMenu: (threadRef: ScopedThreadRef, position: { x: number; y: number }) => void;
+  onPin: (threadRef: ScopedThreadRef) => void;
   onUnpin: (threadRef: ScopedThreadRef) => void;
   onArchive: (threadRef: ScopedThreadRef) => void;
   onFileDropThreads?: ((threadRef: ScopedThreadRef, files: File[]) => void) | undefined;
@@ -1291,6 +1292,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     onStartRename,
     onThreadActivate,
     onThreadClick,
+    onPin,
     onUnpin,
     onArchive,
     openPullRequestsInRightPanel,
@@ -1507,6 +1509,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     if (!renameCommittedRef.current) {
       onCommitRename(threadRef, renamingTitle, thread.title);
     }
+  };
+  const showPinButton = props.pinningSupported && canOperateThread && !props.isPinned;
+  const handlePinClick = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onPin(threadRef);
   };
   const handleUnpinClick = (event: ReactMouseEvent) => {
     event.preventDefault();
@@ -1757,7 +1765,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     className={cn(
                       "pointer-events-none",
                       // The label gives way to the hover actions, so it stays put when there are none.
-                      (hasUnsentDraft || showArchiveButton) &&
+                      (hasUnsentDraft || showPinButton || showArchiveButton) &&
                         "group-has-[:focus-visible]/sidebar-status-slot:absolute group-has-[:focus-visible]/sidebar-status-slot:right-0 group-has-[:focus-visible]/sidebar-status-slot:opacity-0 group-any-hover/sidebar-row:absolute group-any-hover/sidebar-row:right-0 group-any-hover/sidebar-row:opacity-0",
                       "flex items-center self-center justify-self-end tabular-nums text-secondary-label transition-opacity",
                     )}
@@ -1800,7 +1808,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       <RelativeTimeLabel timestamp={threadTimeTimestamp(thread)} />
                     )}
                   </span>
-                  {hasUnsentDraft || showArchiveButton ? (
+                  {hasUnsentDraft || showPinButton || showArchiveButton ? (
                     // focus-visible, not focus-within: a mouse click leaves
                     // the clicked button focused, and a plain focus-within
                     // would keep the controls pinned over the status label
@@ -1822,6 +1830,26 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                             <XIcon className="size-3.5" />
                           </TooltipTrigger>
                           <TooltipPopup side="top">Discard draft</TooltipPopup>
+                        </Tooltip>
+                      ) : null}
+                      {showPinButton ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                aria-label="Pin thread"
+                                onClick={handlePinClick}
+                                className={cn(
+                                  "inline-flex cursor-pointer items-center rounded-md bg-transparent px-1.5 text-xs text-muted-foreground hover:text-foreground",
+                                  !showArchiveButton && "-mr-1",
+                                )}
+                              />
+                            }
+                          >
+                            <PinIcon className="size-3.5" />
+                          </TooltipTrigger>
+                          <TooltipPopup side="top">Pin thread</TooltipPopup>
                         </Tooltip>
                       ) : null}
                       {showArchiveButton ? (
@@ -3797,6 +3825,7 @@ export default function Sidebar() {
                             isRenaming={renamingThreadKey === threadKey}
                             renamingTitle={renamingThreadKey === threadKey ? renamingTitle : ""}
                             onContextMenu={handleThreadContextMenu}
+                            onPin={attemptPin}
                             onUnpin={attemptUnpin}
                             onArchive={attemptArchive}
                             onFileDropThreads={handleThreadFileDrop}
