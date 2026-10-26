@@ -30,6 +30,7 @@ import * as BrowserSession from "./BrowserSession.ts";
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
 import * as PreviewManager from "./Manager.ts";
 import * as PreviewPasskeys from "./Passkeys.ts";
+import * as PasswordSignIn from "./Passwords/PasswordSignIn.ts";
 import * as PasswordVault from "./Passwords/PasswordVault.ts";
 
 describe("fitPictureInPictureContentSize", () => {
@@ -302,6 +303,7 @@ const managerLayer = (platform: NodeJS.Platform = "darwin") =>
       }),
     ),
     Layer.provideMerge(DesktopBrowserHost.layer),
+    Layer.provideMerge(PasswordSignIn.layerTest),
     Layer.provideMerge(layerBrowserSession),
     Layer.provideMerge(
       Layer.mock(PreviewPasskeys.PreviewPasskeys)({

@@ -159,8 +159,9 @@ export function PasswordImportDialog({
         <DialogHeader>
           <DialogTitle>Import passwords</DialogTitle>
           <DialogDescription>
-            Saved logins fill in automatically in the in-app browser, so agents can sign in without
-            ever seeing your passwords. They stay encrypted on this Mac.
+            Saved logins fill in when you click into a sign-in form in the in-app browser. Agents
+            can sign in with them only after you approve, and cannot read them from the page. They
+            stay encrypted on this Mac.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel className="flex flex-col gap-3">

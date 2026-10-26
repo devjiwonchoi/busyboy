@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { createCdpRelayConnection, type CdpRelayTarget } from "./CdpRelay.ts";
+import {
+  CREDENTIAL_LOCKED_MESSAGE,
+  createCdpRelayConnection,
+  type CdpRelayTarget,
+} from "./CdpRelay.ts";
 
 const makeTarget = (
   send: CdpRelayTarget["send"],
   setDownloadDirectory: CdpRelayTarget["setDownloadDirectory"] = () => {},
+  credentials: Pick<CdpRelayTarget, "signIn" | "credentialLocked"> = {
+    signIn: async () => ({ status: "unavailable" }),
+    credentialLocked: () => false,
+  },
 ): CdpRelayTarget => ({
   send,
   targetId: async () => "GUEST-TARGET",
@@ -12,6 +20,7 @@ const makeTarget = (
   title: () => "Fixture",
   userAgent: () => "Electron",
   setDownloadDirectory,
+  ...credentials,
 });
 
 // Each relay reply resolves after a few microtasks; one macrotask lets them all land.
@@ -188,5 +197,62 @@ describe("CDP relay downloads", () => {
     expect(written).toEqual([
       { method: "Browser.downloadWillBegin", params: { guid: "g1", suggestedFilename: "r.csv" } },
     ]);
+  });
+
+  it("answers sign-in itself and never forwards it to the page", async () => {
+    const send = vi.fn(async () => ({}));
+    const signIn = vi.fn(async () => ({ status: "submitted" }));
+    const written: Array<Record<string, unknown>> = [];
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, { signIn, credentialLocked: () => false }),
+      (raw) => written.push(JSON.parse(raw)),
+    );
+    relay.receive(
+      JSON.stringify({
+        id: 1,
+        method: "Busyboy.signIn",
+        params: { passwordSelector: "#pw" },
+        sessionId: "t3-preview-page",
+      }),
+    );
+    await settle();
+    expect(signIn).toHaveBeenCalledWith({ passwordSelector: "#pw" });
+    expect(send).not.toHaveBeenCalled();
+    expect(written).toEqual([
+      { id: 1, result: { status: "submitted" }, sessionId: "t3-preview-page" },
+    ]);
+  });
+
+  it("refuses page reads but allows leaving while a saved password is in the page", async () => {
+    const send = vi.fn(async () => ({}));
+    const written: Array<Record<string, unknown>> = [];
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, {
+        signIn: async () => ({}),
+        credentialLocked: () => true,
+      }),
+      (raw) => written.push(JSON.parse(raw)),
+    );
+    for (const [id, method] of [
+      [1, "Runtime.evaluate"],
+      [2, "Runtime.callFunctionOn"],
+      [3, "DOM.getDocument"],
+      [4, "Input.dispatchMouseEvent"],
+      [5, "Page.captureScreenshot"],
+      [6, "Page.navigate"],
+    ] as const) {
+      relay.receive(JSON.stringify({ id, method, sessionId: "t3-preview-page" }));
+    }
+    await settle();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("Page.navigate", {}, undefined);
+    expect(
+      written.filter((message) => message["error"] !== undefined).map((message) => message["id"]),
+    ).toEqual([1, 2, 3, 4, 5]);
+    expect(written[0]).toEqual({
+      id: 1,
+      error: { code: -32000, message: CREDENTIAL_LOCKED_MESSAGE },
+      sessionId: "t3-preview-page",
+    });
   });
 });

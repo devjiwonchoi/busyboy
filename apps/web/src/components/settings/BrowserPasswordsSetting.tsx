@@ -56,7 +56,7 @@ export function BrowserPasswordsSetting({ disabled }: { readonly disabled: boole
   return (
     <SettingsRow
       {...searchableSetting("browser-saved-passwords")}
-      description="Saved logins fill in automatically in the in-app browser, so agents can sign in without seeing your passwords. Chrome passwords keep syncing after the first import."
+      description="Saved logins fill in when you click into a sign-in form. Agents can sign in with them only after you approve, and cannot read them from the page. Chrome passwords keep syncing after the first import."
       status={status === null || disabled ? null : savedPasswordStatusLabel(status)}
       control={
         <div className="flex items-center gap-1">

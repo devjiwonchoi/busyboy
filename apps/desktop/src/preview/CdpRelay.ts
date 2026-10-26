@@ -2,6 +2,7 @@
  * Electron allows one debugger client per webContents, so the relay shares the
  * attach the preview manager already holds.
  */
+import { PREVIEW_SIGN_IN_CDP_METHOD } from "@t3tools/contracts";
 
 export interface CdpRelayTarget {
   readonly send: (
@@ -19,6 +20,10 @@ export interface CdpRelayTarget {
    * Playwright reads the file where it asked for it.
    */
   readonly setDownloadDirectory: (directory: string | null) => void;
+  /** Answers the agent's sign-in request with a saved login; never returns secrets. */
+  readonly signIn: (params: Record<string, unknown>) => Promise<unknown>;
+  /** True while a saved password filled for the agent is still in the page. */
+  readonly credentialLocked: () => boolean;
 }
 
 export interface CdpRelayConnection {
@@ -42,6 +47,36 @@ const isCommand = (value: unknown): value is CdpCommand =>
 const BROWSER_CONTEXT_ID = "t3-preview";
 const ANNOUNCE = Symbol("announce");
 const PAGE_SESSION_ID = "t3-preview-page";
+
+/**
+ * While a saved password is in the page the agent may only leave it: navigate,
+ * keep sessions attached, and size the view. Everything that reads the page,
+ * runs script in it or drives input (which could reveal the field) is refused.
+ */
+const ALLOWED_WHILE_CREDENTIAL_LOCKED = new Set([
+  "Page.enable",
+  "Page.navigate",
+  "Page.reload",
+  "Page.stopLoading",
+  "Page.getFrameTree",
+  "Page.getNavigationHistory",
+  "Page.navigateToHistoryEntry",
+  "Page.setLifecycleEventsEnabled",
+  "Page.bringToFront",
+  "Runtime.enable",
+  "Runtime.runIfWaitingForDebugger",
+  "Network.enable",
+  "Network.disable",
+  "Log.enable",
+]);
+
+export const CREDENTIAL_LOCKED_MESSAGE =
+  "A saved password is in this page, so it cannot be read or driven. Navigate to the signed-in page to continue.";
+
+const isAllowedWhileCredentialLocked = (method: string) =>
+  ALLOWED_WHILE_CREDENTIAL_LOCKED.has(method) ||
+  method.startsWith("Target.") ||
+  method.startsWith("Emulation.");
 
 const ACKNOWLEDGED = new Set([
   "Target.setDiscoverTargets",
@@ -143,6 +178,12 @@ export function createCdpRelayConnection(
 
   const pageCommand = (command: CdpCommand): Promise<unknown> => {
     const child = sessions.get(command.sessionId!) === "page" ? undefined : command.sessionId;
+    if (command.method === PREVIEW_SIGN_IN_CDP_METHOD && child === undefined) {
+      return target.signIn(command.params ?? {});
+    }
+    if (target.credentialLocked() && !isAllowedWhileCredentialLocked(command.method)) {
+      return Promise.reject(new Error(CREDENTIAL_LOCKED_MESSAGE));
+    }
     // The page itself is already running, but its child frames are not:
     // Playwright auto-attaches with waitForDebuggerOnStart, so Chromium pauses
     // every new cross-site iframe and worker until this reaches it. Swallowing

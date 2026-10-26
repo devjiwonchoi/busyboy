@@ -44,8 +44,8 @@ export function PasswordImportOnboardingCard({ onImport }: { readonly onImport: 
         <div className="flex flex-col gap-0.5">
           <p className="font-medium text-sm">Sign in with your saved passwords</p>
           <p className="text-muted-foreground text-sm">
-            Import from Chrome, Apple Passwords or 1Password. Logins fill in automatically, and
-            agents never see the passwords.
+            Import from Chrome, Apple Passwords or 1Password. Logins fill in when you sign in, and
+            agents can use them only after you approve.
           </p>
         </div>
         <div className="flex gap-2">

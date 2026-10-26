@@ -107,6 +107,10 @@ export class PasswordVault extends Context.Service<
   PasswordVault,
   {
     readonly count: Effect.Effect<number, PasswordVaultError>;
+    /** Saved logins for a page origin, most recently saved first. Main process only. */
+    readonly loginsFor: (
+      pageOrigin: string,
+    ) => Effect.Effect<ReadonlyArray<SavedPassword>, PasswordVaultError>;
     readonly chromeSync: Effect.Effect<ChromeSync | null, PasswordVaultError>;
     readonly setChromeSync: (sync: ChromeSync | null) => Effect.Effect<void, PasswordVaultError>;
     readonly save: (input: {
@@ -117,8 +121,17 @@ export class PasswordVault extends Context.Service<
       PasswordVaultError
     >;
     readonly clear: Effect.Effect<void, PasswordVaultError>;
-    /** Answers the guest's autofill requests; returns the detach function. */
-    readonly attachGuest: (guest: WebContents) => () => void;
+    /**
+     * Answers the guest's autofill requests; returns the detach function. A
+     * page the agent is driving is never autofilled (agents sign in through an
+     * approved `preview_sign_in`), and `onPasswordFilled` runs before a
+     * password is handed to the page so the caller can keep agents off it.
+     */
+    readonly attachGuest: (input: {
+      readonly guest: WebContents;
+      readonly isAgentDriven: () => boolean;
+      readonly onPasswordFilled: (password: string) => void;
+    }) => () => void;
   }
 >()("@t3tools/desktop/preview/Passwords/PasswordVault") {}
 
@@ -224,6 +237,7 @@ export const make = Effect.gen(function* () {
   }) {
     const savedAt = yield* Clock.currentTimeMillis;
     return yield* update((state) => {
+
       const byKey = new Map(state.passwords.map((entry) => [entryKey(entry), entry] as const));
       let imported = 0;
       let updated = 0;
@@ -281,7 +295,15 @@ export const make = Effect.gen(function* () {
     } satisfies PasswordFill;
   });
 
-  const attachGuest = (guest: WebContents) => {
+  const attachGuest = ({
+    guest,
+    isAgentDriven,
+    onPasswordFilled,
+  }: {
+    readonly guest: WebContents;
+    readonly isAgentDriven: () => boolean;
+    readonly onPasswordFilled: (password: string) => void;
+  }) => {
     const serve = async (
       event: IpcMainInvokeEvent,
       request: unknown,
@@ -294,7 +316,7 @@ export const make = Effect.gen(function* () {
       }
       const pageOrigin = frame.origin;
       // Private sessions keep nothing, so they get nothing from the vault.
-      if (!isFillableOrigin(pageOrigin) || !guest.session.isPersistent()) {
+      if (!isFillableOrigin(pageOrigin) || !guest.session.isPersistent() || isAgentDriven()) {
         return null;
       }
       if (typeof request !== "object" || request === null) {
@@ -317,7 +339,13 @@ export const make = Effect.gen(function* () {
       // A password read for a document that navigated away belongs to nobody.
       const sameDocument =
         !frame.isDestroyed() && frame === guest.mainFrame && frame.origin === pageOrigin;
-      return sameDocument ? fill : null;
+      if (!sameDocument || fill === null) {
+        return null;
+      }
+      if (fill.password !== null) {
+        onPasswordFilled(fill.password);
+      }
+      return fill;
     };
 
     guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
@@ -327,6 +355,14 @@ export const make = Effect.gen(function* () {
 
   return PasswordVault.of({
     count: loaded.pipe(Effect.map((state) => state.passwords.length)),
+    loginsFor: (pageOrigin) =>
+      loaded.pipe(
+        Effect.map((state) =>
+          state.passwords
+            .filter((entry) => passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin }))
+            .toSorted((left, right) => right.savedAt - left.savedAt),
+        ),
+      ),
     chromeSync: loaded.pipe(Effect.map((state) => state.chromeSync)),
     setChromeSync,
     save,

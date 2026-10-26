@@ -29,6 +29,7 @@ import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
+import * as PasswordSignIn from "../preview/Passwords/PasswordSignIn.ts";
 
 const decodeDesktopBackendBootstrap = Schema.decodeEffect(
   Schema.fromJsonString(DesktopBackendBootstrap),
@@ -168,7 +169,7 @@ function makeTestInstance(input: MakeInstanceInput) {
       updateCancellations: Stream.empty,
       ...input.desktopTelemetryPublisher,
     }),
-    DesktopBrowserHost.layer,
+    DesktopBrowserHost.layer.pipe(Layer.provide(PasswordSignIn.layerTest)),
   );
 
   const instance = DesktopBackendManager.makeBackendInstance({

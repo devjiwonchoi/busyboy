@@ -1584,7 +1584,11 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         wc.ipc.on(RECORDING_INPUT_CHANNEL, recordingInput);
         wc.ipc.on(MOUSE_NAVIGATE_CHANNEL, mouseNavigate);
         detachPasskeys = passkeys.attachGuest(wc);
-        detachPasswords = passwordVault.attachGuest(wc);
+        detachPasswords = passwordVault.attachGuest({
+          guest: wc,
+          isAgentDriven: () => browserHost.isAgentDriving(wc),
+          onPasswordFilled: (password) => browserHost.lockForFilledPassword(wc, password),
+        });
         wc.setWindowOpenHandler((details) => {
           const action = previewWindowOpenAction(details);
           if (action === "popup") {
