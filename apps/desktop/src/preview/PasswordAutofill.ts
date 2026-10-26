@@ -68,9 +68,9 @@ const readFill = (value: unknown) => {
 };
 
 /**
- * Fills saved logins into the page. Main decides what this origin may have,
- * so the page (and an agent driving it) only ever sees the login for itself,
- * and only once it shows a field to put it in.
+ * Fills saved logins into the page once a person interacts with it. Main
+ * decides what this origin may have and refuses pages an agent drives, so the
+ * page only ever sees the login for itself.
  */
 export function installPasswordAutofill(invoke: InvokePasswordFill) {
   // Each field is offered at most once, so a page with no saved login is not
@@ -142,9 +142,16 @@ export function installPasswordAutofill(invoke: InvokePasswordFill) {
     });
   };
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start, { once: true });
-  } else {
+  // Like Chrome, nothing is filled until someone actually clicks or types in
+  // the page, so a script that loads with it cannot read a login unattended.
+  const startOnGesture = (event: Event) => {
+    if (!event.isTrusted) {
+      return;
+    }
+    window.removeEventListener("pointerdown", startOnGesture, true);
+    window.removeEventListener("keydown", startOnGesture, true);
     start();
-  }
+  };
+  window.addEventListener("pointerdown", startOnGesture, true);
+  window.addEventListener("keydown", startOnGesture, true);
 }
