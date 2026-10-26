@@ -4,13 +4,27 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
+interface DesktopIpcSender {
+  readonly id: number;
+  /** Electron's `webContents.getType()`; `"webview"` for a preview page. */
+  readonly getType?: () => string;
+}
+
 export interface DesktopIpcInvokeEvent {
-  readonly sender: { readonly id: number };
+  readonly sender: DesktopIpcSender;
 }
 
 export interface DesktopIpcSyncEvent {
+  readonly sender?: DesktopIpcSender;
   returnValue: unknown;
 }
+
+/**
+ * Preview pages run without context isolation, so a page can reach its
+ * preload's `ipcRenderer`. These methods are the app's own; a page has its
+ * own channels on its webContents and is refused here.
+ */
+const isPreviewPage = (sender: DesktopIpcSender | undefined) => sender?.getType?.() === "webview";
 
 export type DesktopIpcHandleListener = (
   event: DesktopIpcInvokeEvent,
@@ -95,12 +109,17 @@ export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
           try: () => {
             ipcMain.removeHandler(channel);
             ipcMain.handle(channel, (event, raw) =>
-              runPromise(
-                Effect.gen(function* () {
-                  yield* Effect.annotateCurrentSpan({ channel });
-                  return yield* handler(raw, event);
-                }).pipe(Effect.annotateLogs({ channel }), Effect.withSpan("desktop.ipc.invoke")),
-              ),
+              isPreviewPage(event.sender)
+                ? Promise.reject(new Error("Not available to web pages."))
+                : runPromise(
+                    Effect.gen(function* () {
+                      yield* Effect.annotateCurrentSpan({ channel });
+                      return yield* handler(raw, event);
+                    }).pipe(
+                      Effect.annotateLogs({ channel }),
+                      Effect.withSpan("desktop.ipc.invoke"),
+                    ),
+                  ),
             );
           },
           catch: (cause) =>
@@ -128,6 +147,10 @@ export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
           try: () => {
             ipcMain.removeAllListeners(channel);
             ipcMain.on(channel, (event) => {
+              if (isPreviewPage(event.sender)) {
+                event.returnValue = undefined;
+                return;
+              }
               event.returnValue = runSync(
                 Effect.gen(function* () {
                   yield* Effect.annotateCurrentSpan({ channel });
