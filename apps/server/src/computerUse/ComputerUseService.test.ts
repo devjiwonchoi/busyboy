@@ -8,9 +8,11 @@ import type {
   WindowStateOutput,
 } from "@trycua/cua-driver";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ComputerUseApprovals from "./ComputerUseApprovals.ts";
 import * as ComputerUseDriver from "./ComputerUseDriver.ts";
@@ -41,6 +43,11 @@ interface FakeDriver {
   readonly actions: Array<{ readonly tool: string; readonly args: Record<string, unknown> }>;
   /** When set, actions fail with this text, as a driver refusal does. */
   refusal: string | undefined;
+  /** When set, actions never finish, like typing that is still going. */
+  hang: boolean;
+  /** Each thread's runs; a run counts as active while its status is "running". */
+  readonly runs: Map<string, Array<{ id: string; status: string; ordinal: number }>>;
+  restarts: number;
 }
 
 const window = (windowId: bigint, overrides: Partial<WindowInfo> = {}): WindowInfo => ({
@@ -66,6 +73,9 @@ function fakeDriver(): FakeDriver {
     asked: [],
     actions: [],
     refusal: undefined,
+    hang: false,
+    runs: new Map([[threadId, [{ id: "run-1", status: "running", ordinal: 1 }]]]),
+    restarts: 0,
   };
 }
 
@@ -87,6 +97,7 @@ function workerFor(fake: FakeDriver): CuaDriverLike {
         };
       }
       fake.actions.push({ tool: name, args: JSON.parse(argumentsJson) });
+      if (fake.hang) return new Promise(() => {});
       return fake.refusal === undefined
         ? { text: `${name} done`, images: [], isError: false }
         : { text: fake.refusal, images: [], isError: true };
@@ -108,7 +119,9 @@ function makeService(
       options?.available === false
         ? Effect.fail(new ComputerUseDriver.ComputerUseUnavailableError())
         : use(workerFor(fake)),
-    restart: Effect.void,
+    restart: Effect.sync(() => {
+      fake.restarts += 1;
+    }),
     setKeepDisplayAwake: () => Effect.void,
   });
   return ComputerUseService.make.pipe(
@@ -133,6 +146,13 @@ function makeService(
             ? { projectSettingsOverrides: { [projectId]: { enableAgentComputerUse: true } } }
             : {},
         ),
+        Layer.mock(ThreadManagementService.ThreadManagementService)({
+          // Yields like a real database read, so concurrent callers interleave.
+          getThreadRecords: (thread) =>
+            Effect.yieldNow.pipe(
+              Effect.andThen(Effect.sync(() => ({ runs: fake.runs.get(thread) ?? [] }) as never)),
+            ),
+        }),
         Layer.mock(ProjectionStore.ProjectionStoreV2)({
           getThread: () =>
             options?.threadFails === true
@@ -516,6 +536,89 @@ describe("ComputerUseService", () => {
           "app_denied",
         );
         assert.lengthOf(fake.actions, 0);
+      }),
+    );
+
+    it.effect("lets one thread operate the computer at a time", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const otherThread = ThreadId.make("thread-2");
+        fake.runs.set(otherThread, [{ id: "run-9", status: "running", ordinal: 1 }]);
+        const other = { ...caller, threadId: otherThread };
+        const service = yield* makeService(fake, { enabled: true });
+
+        yield* service.pressKey({ caller, app: "TextEdit", key: "tab" });
+        assert.strictEqual(
+          yield* errorCode(service.pressKey({ caller: other, app: "TextEdit", key: "tab" })),
+          "computer_busy",
+        );
+
+        fake.runs.set(threadId, [{ id: "run-1", status: "completed", ordinal: 1 }]);
+        yield* service.pressKey({ caller: other, app: "TextEdit", key: "tab" });
+        assert.lengthOf(fake.actions, 2);
+      }),
+    );
+
+    it.effect("does not let two threads claim the computer at the same moment", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const otherThread = ThreadId.make("thread-2");
+        const earlierThread = ThreadId.make("thread-0");
+        fake.runs.set(otherThread, [{ id: "run-9", status: "running", ordinal: 1 }]);
+        fake.runs.set(earlierThread, [{ id: "run-0", status: "running", ordinal: 1 }]);
+        const service = yield* makeService(fake, { enabled: true });
+        // An earlier turn held the computer and has since ended, so both
+        // newcomers find the claim free at the same time.
+        yield* service.pressKey({
+          caller: { ...caller, threadId: earlierThread },
+          app: "TextEdit",
+          key: "tab",
+        });
+        fake.runs.set(earlierThread, [{ id: "run-0", status: "completed", ordinal: 1 }]);
+
+        const codes = yield* Effect.forEach(
+          [caller, { ...caller, threadId: otherThread }],
+          (who) =>
+            service.pressKey({ caller: who, app: "TextEdit", key: "tab" }).pipe(
+              Effect.as("ok"),
+              Effect.catch((error) => Effect.succeed(error.code)),
+            ),
+          { concurrency: "unbounded" },
+        );
+        assert.deepStrictEqual(codes.toSorted(), ["computer_busy", "ok"]);
+      }),
+    );
+
+    it.live("stops an action and restarts the driver when the turn ends", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        fake.hang = true;
+        const service = yield* makeService(fake, { enabled: true });
+
+        const typing = yield* Effect.forkChild(
+          errorCode(service.typeText({ caller, app: "TextEdit", text: "hello" })),
+        );
+        while (fake.actions.length === 0) yield* Effect.sleep("10 millis");
+        fake.runs.set(threadId, [{ id: "run-1", status: "interrupted", ordinal: 1 }]);
+
+        assert.strictEqual(yield* Fiber.join(typing), "stopped");
+        assert.strictEqual(fake.restarts, 1);
+      }),
+    );
+
+    it.live("restarts the driver when the call itself is aborted", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        fake.hang = true;
+        const service = yield* makeService(fake, { enabled: true });
+
+        const typing = yield* Effect.forkChild(
+          service.typeText({ caller, app: "TextEdit", text: "hello" }),
+        );
+        while (fake.actions.length === 0) yield* Effect.sleep("10 millis");
+        yield* Fiber.interrupt(typing);
+
+        assert.strictEqual(fake.restarts, 1);
       }),
     );
   });

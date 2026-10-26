@@ -18,12 +18,15 @@ import {
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import type { AppInfo, CuaDriverLike, WindowInfo } from "@trycua/cua-driver";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ComputerUseApprovals from "./ComputerUseApprovals.ts";
 import * as ComputerUseDriver from "./ComputerUseDriver.ts";
@@ -66,6 +69,8 @@ export const TYPE_TEXT_CHUNK = 200;
 // Snapshots this server handed out, to check element tokens against.
 const MAX_REMEMBERED_SNAPSHOTS = 500;
 const MAX_RESULT_TEXT = 2_000;
+// How often an action checks that its turn is still running.
+const RUN_WATCH_INTERVAL = Duration.millis(250);
 // Tools whose input schema takes delivery_mode; the driver rejects unknown
 // arguments, and set_value and invoke_menu act through accessibility only.
 const BACKGROUND_DELIVERY_TOOLS: ReadonlySet<string> = new Set([
@@ -170,7 +175,59 @@ export const make = Effect.gen(function* () {
   const approvals = yield* ComputerUseApprovals.ComputerUseApprovals;
   const settings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
   const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const threadManagement = yield* ThreadManagementService.ThreadManagementService;
   const snapshots = yield* Ref.make(new Map<string, SnapshotOwner>());
+  // The one run that may operate the computer right now.
+  const actingRun = yield* Ref.make(
+    Option.none<{ readonly threadId: ThreadId; readonly runId: string }>(),
+  );
+  // Claims are checked and taken one at a time, so two first actions cannot both win.
+  const claimLock = yield* Semaphore.make(1);
+
+  const activeRunOf = (threadId: ThreadId) =>
+    threadManagement.getThreadRecords(threadId, ["runs"], { messageRoles: [] }).pipe(
+      Effect.map((records) => ThreadManagementService.latestActiveRun(records)),
+      Effect.orElseSucceed(() => undefined),
+    );
+
+  /**
+   * One run operates the computer at a time: two agents typing into the same
+   * Mac would interleave their input, and one stop would end both. A run that
+   * has ended no longer holds it.
+   */
+  const claimComputer = (caller: ComputerUseCaller) =>
+    claimLock.withPermits(1)(claimComputerUnlocked(caller));
+
+  const claimComputerUnlocked = Effect.fn("ComputerUseService.claimComputer")(function* (
+    caller: ComputerUseCaller,
+  ) {
+    const run = yield* activeRunOf(caller.threadId);
+    if (run === undefined) {
+      return yield* fail("stopped", "Computer use acts only during an active turn of this agent.");
+    }
+    const holder = yield* Ref.get(actingRun);
+    if (Option.isSome(holder) && holder.value.runId !== run.id) {
+      const holderRun = yield* activeRunOf(holder.value.threadId);
+      if (holderRun?.id === holder.value.runId) {
+        return yield* fail(
+          "computer_busy",
+          "Another Busyboy thread is operating the computer right now. Wait for it to finish, or ask the user.",
+        );
+      }
+    }
+    yield* Ref.set(actingRun, Option.some({ threadId: caller.threadId, runId: run.id }));
+    return run.id;
+  });
+
+  /** Completes when the run is no longer active. */
+  const runEnded = (threadId: ThreadId, runId: string) =>
+    Effect.gen(function* () {
+      while (true) {
+        yield* Effect.sleep(RUN_WATCH_INTERVAL);
+        const run = yield* activeRunOf(threadId);
+        if (run?.id !== runId) return;
+      }
+    });
 
   /**
    * Read on every call, so turning the setting off stops agents that are
@@ -420,22 +477,37 @@ export const make = Effect.gen(function* () {
   ) =>
     withWorker(input.caller, (worker) =>
       Effect.gen(function* () {
-        const target = yield* resolveTarget(worker, input);
-        if (input.element !== undefined) yield* requireElement(input.element, target);
-        const results: Array<string> = [];
-        for (const step of steps(target)) {
-          const args = BACKGROUND_DELIVERY_TOOLS.has(step.tool)
-            ? { ...step.args, delivery_mode: "background" }
-            : step.args;
-          const result = yield* callDriver(() => worker.callTool(step.tool, JSON.stringify(args)));
-          if (result.isError) return yield* actionRefused(result.text);
-          results.push(result.text.trim());
-        }
-        return {
-          app: target.app.name,
-          windowId: String(target.window.windowId),
-          result: results.join("\n").slice(0, MAX_RESULT_TEXT),
-        } satisfies ComputerUseActionResult;
+        const runId = yield* claimComputer(input.caller);
+        const perform = Effect.gen(function* () {
+          const target = yield* resolveTarget(worker, input);
+          if (input.element !== undefined) yield* requireElement(input.element, target);
+          const results: Array<string> = [];
+          for (const step of steps(target)) {
+            const args = BACKGROUND_DELIVERY_TOOLS.has(step.tool)
+              ? { ...step.args, delivery_mode: "background" }
+              : step.args;
+            const result = yield* callDriver(() =>
+              worker.callTool(step.tool, JSON.stringify(args)),
+            );
+            if (result.isError) return yield* actionRefused(result.text);
+            results.push(result.text.trim());
+          }
+          return {
+            app: target.app.name,
+            windowId: String(target.window.windowId),
+            result: results.join("\n").slice(0, MAX_RESULT_TEXT),
+          } satisfies ComputerUseActionResult;
+        }).pipe(
+          // The driver cannot cancel an action it has started, so a stopped turn
+          // or an aborted call restarts the worker to keep input from landing.
+          Effect.onInterrupt(() => driver.restart),
+        );
+        const stoppedWhenRunEnds = runEnded(input.caller.threadId, runId).pipe(
+          Effect.andThen(
+            Effect.fail(fail("stopped", "The turn ended, so the action was stopped.")),
+          ),
+        );
+        return yield* Effect.raceFirst(perform, stoppedWhenRunEnds);
       }).pipe(Effect.withSpan(`ComputerUseService.${name}`)),
     );
 

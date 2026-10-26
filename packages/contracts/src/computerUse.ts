@@ -29,6 +29,14 @@ export const ComputerUseErrorCode = Schema.Literals([
   "background_unsupported",
   // The driver refused or could not complete the action.
   "action_failed",
+  // Another thread is operating the computer; one acts at a time.
+  "computer_busy",
+  // The agent's turn ended, so its action was stopped.
+  "stopped",
+  // Another thread is operating the computer; one acts at a time.
+  "computer_busy",
+  // The agent's turn ended, so its action was stopped.
+  "stopped",
   "screen_locked",
   "driver_failed",
 ]);
