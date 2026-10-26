@@ -10,6 +10,7 @@ import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
 
 import * as ServerConfig from "../config.ts";
+import * as ProcessRunner from "../processRunner.ts";
 import * as ComputerUseDriver from "./ComputerUseDriver.ts";
 
 interface FakeWorkers {
@@ -49,7 +50,7 @@ const makeDriver = (
         ...base,
         computerUseDriverPath:
           options && "driverPath" in options ? options.driverPath : "/opt/cua driver's/cua-driver",
-        computerUseHostBundleId: "dev.jiwon.busyboy",
+        computerUseHostBundleId: "dev.jiwon.busyboy.computer-use",
       }),
       Effect.provideService(HostProcess.Platform, options?.platform ?? "darwin"),
       Scope.provide(scope),
@@ -76,6 +77,32 @@ describe("ComputerUseDriver", () => {
     }).pipe(Effect.provide(TestLayer)),
   );
 
+  it.effect("has Busyboy Computer Use ask macOS for its permissions, once", () =>
+    Effect.gen(function* () {
+      const runs: Array<ProcessRunner.ProcessRunInput> = [];
+      const runner = Layer.mock(ProcessRunner.ProcessRunner)({
+        run: (input) =>
+          Effect.sync(() => {
+            runs.push(input);
+            return { stdout: "", stderr: "", code: 0 } as never;
+          }),
+      });
+      const fileSystem = yield* FileSystem.FileSystem;
+      const { driver, stateDir } = yield* makeDriver(fakeWorkers()).pipe(Effect.provide(runner));
+      const path = yield* Path.Path;
+      const launcherPath = path.join(stateDir, "computer-use", "cua-driver-launcher");
+
+      yield* driver.requestPermissions;
+      yield* driver.requestPermissions;
+
+      assert.deepStrictEqual(
+        runs.map(({ command, args }) => ({ command, args })),
+        [{ command: launcherPath, args: ["--request-permissions"] }],
+      );
+      assert.include(yield* fileSystem.readFileString(launcherPath), "exec ");
+    }).pipe(Effect.provide(TestLayer)),
+  );
+
   it.effect("starts one worker lazily and reuses it across concurrent calls", () =>
     Effect.gen(function* () {
       const fakes = fakeWorkers();
@@ -93,7 +120,7 @@ describe("ComputerUseDriver", () => {
       assert.deepStrictEqual(fakes.started, [
         {
           launcherPath: path.join(stateDir, "computer-use", "cua-driver-launcher"),
-          hostBundleId: "dev.jiwon.busyboy",
+          hostBundleId: "dev.jiwon.busyboy.computer-use",
         },
       ]);
     }).pipe(Effect.provide(TestLayer)),

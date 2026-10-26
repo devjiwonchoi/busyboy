@@ -50,6 +50,8 @@ interface FakeDriver {
   /** Each thread's runs; a run counts as active while its status is "running". */
   readonly runs: Map<string, Array<{ id: string; status: string; ordinal: number }>>;
   restarts: number;
+  /** How often the service had macOS ask the user for permissions. */
+  permissionRequests: number;
   readonly interrupts: Array<{ readonly threadId: string; readonly runId?: string }>;
   screenLocked: boolean;
 }
@@ -80,6 +82,7 @@ function fakeDriver(): FakeDriver {
     hang: false,
     runs: new Map([[threadId, [{ id: "run-1", status: "running", ordinal: 1 }]]]),
     restarts: 0,
+    permissionRequests: 0,
     interrupts: [],
     screenLocked: false,
   };
@@ -129,6 +132,9 @@ function makeService(
       fake.restarts += 1;
     }),
     setKeepDisplayAwake: () => Effect.void,
+    requestPermissions: Effect.sync(() => {
+      fake.permissionRequests += 1;
+    }),
   });
   return ComputerUseService.make.pipe(
     Effect.provide(
@@ -347,7 +353,7 @@ describe("ComputerUseService", () => {
     }),
   );
 
-  it.effect("asks for the missing macOS permission instead of reading", () =>
+  it.effect("has macOS ask for the missing permission instead of reading", () =>
     Effect.gen(function* () {
       const fake = fakeDriver();
       fake.permissions = { accessibility: false, screen_recording: true };
@@ -355,12 +361,15 @@ describe("ComputerUseService", () => {
       const error = yield* Effect.flip(service.getAppState({ caller, app: "TextEdit" }));
       assert.strictEqual(error.code, "permission_required");
       assert.include(error.message, "Accessibility");
+      assert.include(error.message, "Busyboy Computer Use");
+      assert.strictEqual(fake.permissionRequests, 1);
 
       fake.permissions = { accessibility: true, screen_recording: false };
       const screenshot = yield* Effect.flip(
         service.getAppState({ caller, app: "TextEdit", includeScreenshot: true }),
       );
       assert.include(screenshot.message, "Screen Recording");
+      assert.strictEqual(fake.permissionRequests, 2);
       assert.lengthOf(fake.stateRequests, 0);
     }),
   );

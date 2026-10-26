@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../config.ts";
+import * as ProcessRunner from "../processRunner.ts";
 
 /**
  * Computer use needs the Cua driver that the macOS desktop app installs and
@@ -37,11 +38,17 @@ export class ComputerUseDriverStartError extends Schema.TaggedError<ComputerUseD
 
 /** Where and how the driver runs. */
 export interface ComputerUseWorkerSpec {
-  /** The generated launcher, which sets the driver's environment and execs it. */
+  /**
+   * The generated launcher, which sets the driver's environment and execs
+   * Busyboy Computer Use.app, which runs the driver under its own permissions.
+   */
   readonly launcherPath: string;
   /** The app whose macOS permissions the driver uses. */
   readonly hostBundleId: string;
 }
+
+/** Busyboy Computer Use.app runs this instead of the driver. */
+export const REQUEST_PERMISSIONS_ARGUMENT = "--request-permissions";
 
 /** Starts one private driver worker. Tests replace this. */
 export type ComputerUseWorkerFactory = (spec: ComputerUseWorkerSpec) => Promise<CuaDriverLike>;
@@ -58,6 +65,11 @@ export class ComputerUseDriver extends Context.Service<
     readonly restart: Effect.Effect<void>;
     /** Applies the keep-display-awake setting, restarting the worker if it changed. */
     readonly setKeepDisplayAwake: (enabled: boolean) => Effect.Effect<void>;
+    /**
+     * Has macOS ask the user to grant Busyboy Computer Use its permissions,
+     * which also lists the app in System Settings. Asks once per run.
+     */
+    readonly requestPermissions: Effect.Effect<void>;
   }
 >()("t3/computerUse/ComputerUseDriver") {}
 
@@ -149,10 +161,12 @@ export const make = Effect.fn("ComputerUseDriver.make")(function* (
       withWorker: () => Effect.fail(unavailable),
       restart: Effect.void,
       setKeepDisplayAwake: () => Effect.void,
+      requestPermissions: Effect.void,
     });
   }
 
-  const hostBundleId = config.computerUseHostBundleId ?? "dev.jiwon.busyboy";
+  const hostBundleId = config.computerUseHostBundleId ?? "dev.jiwon.busyboy.computer-use";
+  const runner = yield* Effect.serviceOption(ProcessRunner.ProcessRunner);
   const directory = path.join(config.stateDir, "computer-use");
   const launcherPath = path.join(directory, "cua-driver-launcher");
   const driverHome = path.join(directory, "driver-home");
@@ -198,6 +212,21 @@ export const make = Effect.fn("ComputerUseDriver.make")(function* (
 
   const restart = lifecycle.withPermits(1)(stopWorker);
 
+  const permissionsRequested = yield* Ref.make(false);
+  const requestPermissions = Effect.gen(function* () {
+    if (Option.isNone(runner) || (yield* Ref.getAndSet(permissionsRequested, true))) return;
+    yield* lifecycle.withPermits(1)(writeLauncher);
+    yield* runner.value.run({
+      command: launcherPath,
+      args: [REQUEST_PERMISSIONS_ARGUMENT],
+      timeout: "10 seconds",
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Could not ask macOS for the computer-use permissions", cause),
+    ),
+  );
+
   yield* Effect.addFinalizer(() => restart);
 
   return ComputerUseDriver.of({
@@ -212,7 +241,10 @@ export const make = Effect.fn("ComputerUseDriver.make")(function* (
           yield* stopWorker;
         }),
       ),
+    requestPermissions,
   });
 });
 
-export const layer = Layer.effect(ComputerUseDriver, make());
+export const layer = Layer.effect(ComputerUseDriver, make()).pipe(
+  Layer.provide(ProcessRunner.layer),
+);
