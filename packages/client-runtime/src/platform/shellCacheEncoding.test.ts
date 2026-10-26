@@ -77,7 +77,7 @@ const SHELL_SNAPSHOT: OrchestrationV2ShellSnapshot = {
       createdAt: NOW,
       updatedAt: NOW,
       archivedAt: null,
-      snoozedAt: NOW,
+      pinnedAt: NOW,
       lastVisitedAt: null,
       titleRegeneration: {
         requestId: CommandId.make("title-regeneration-1"),
@@ -111,7 +111,7 @@ describe("cooperative shell cache encoding", () => {
         id: ThreadId.make(`thread-${index}`),
         branch: "  main  ",
         activityRunStartedAt: index % 2 === 0 ? NOW : null,
-        snoozedAt: index % 2 === 0 ? NOW : null,
+        pinnedAt: index % 2 === 0 ? NOW : null,
         modelSelection: {
           instanceId: PROVIDER_INSTANCE_ID,
           model: "  gpt-5.4  ",
@@ -150,14 +150,14 @@ describe("cooperative shell cache encoding", () => {
   it.effect("preserves optional fields and dates across chunk boundaries and archived rows", () =>
     Effect.gen(function* () {
       const base = SHELL_SNAPSHOT.threads[0]!;
-      const { titleRegeneration: _, snoozedAt: __, ...withoutOptional } = base;
+      const { titleRegeneration: _, pinnedAt: __, ...withoutOptional } = base;
       const row = (index: number) =>
         index % 3 === 0
           ? { ...withoutOptional, id: ThreadId.make(`row-${index}`) }
           : {
               ...base,
               id: ThreadId.make(`row-${index}`),
-              snoozedUntil: DateTime.add(NOW, { minutes: index }),
+              lastVisitedAt: DateTime.add(NOW, { minutes: index }),
               pinnedAt: index % 2 === 0 ? null : NOW,
             };
       const mixed = {
@@ -176,8 +176,8 @@ describe("cooperative shell cache encoding", () => {
       const parsed = JSON.parse(actual);
       expect(parsed.snapshot.threads).toHaveLength(65);
       expect(parsed.snapshot.threads[63]).not.toHaveProperty("titleRegeneration");
-      expect(parsed.snapshot.threads[63]).not.toHaveProperty("snoozedAt");
-      expect(parsed.snapshot.threads[64].snoozedUntil).toBe(
+      expect(parsed.snapshot.threads[63]).not.toHaveProperty("pinnedAt");
+      expect(parsed.snapshot.threads[64].lastVisitedAt).toBe(
         DateTime.formatIso(DateTime.add(NOW, { minutes: 64 })),
       );
       expect(parsed.snapshot.archivedThreads).toHaveLength(33);

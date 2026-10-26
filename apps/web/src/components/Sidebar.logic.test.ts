@@ -32,7 +32,6 @@ import {
   resolveProjectStatusIndicator,
   resolveSidebarSweepKeys,
   resolveSidebarStageBadgeLabel,
-  resolveSidebarThreadSection,
   resolveSidebarRowAccessibility,
   resolveSidebarThreadStatus,
   resolveSidebarV2TopStatus,
@@ -54,7 +53,6 @@ import {
   sortScopedProjectsForSidebar,
   sortSidebarV2ProjectGroups,
   shouldCreateNewThreadInCurrentProject,
-  shouldNavigateAfterThreadPark,
   THREAD_JUMP_HINT_SHOW_DELAY_MS,
   type SidebarListItem,
   type SidebarListMarker,
@@ -126,16 +124,6 @@ describe("animateSidebarLayoutChanges", () => {
 
   it("keeps layout movement while the user is sorting", () => {
     expect(animateSidebarLayoutChanges({ ...baseArgs, isSorting: true })).toBe(true);
-  });
-});
-
-describe("resolveSidebarThreadSection", () => {
-  it("keeps a pinned thread in the pinned shelf", () => {
-    expect(resolveSidebarThreadSection({ snoozed: false, pinned: true })).toBe("pinned");
-  });
-
-  it("keeps the snoozed shelf authoritative over a stale pin", () => {
-    expect(resolveSidebarThreadSection({ snoozed: true, pinned: true })).toBe("snoozed");
   });
 });
 
@@ -526,13 +514,12 @@ describe("hasUnseenCompletion", () => {
 
 describe("shouldRecedeSidebarThread", () => {
   it.each(["working", "waiting"] as const)(
-    "recedes an inactive %s thread even when it is unread and woke",
+    "recedes an inactive %s thread even when it is unread",
     (status) => {
       expect(
         shouldRecedeSidebarThread({
           status,
           isUnread: true,
-          isWoke: true,
           isActive: false,
           isSelected: false,
         }),
@@ -547,7 +534,6 @@ describe("shouldRecedeSidebarThread", () => {
         shouldRecedeSidebarThread({
           status,
           isUnread: true,
-          isWoke: false,
           isActive: false,
           isSelected: false,
         }),
@@ -559,7 +545,6 @@ describe("shouldRecedeSidebarThread", () => {
     const input = {
       status: "working" as const,
       isUnread: true,
-      isWoke: true,
       isActive: false,
       isSelected: false,
     };
@@ -573,7 +558,6 @@ describe("shouldRecedeSidebarThread", () => {
       shouldRecedeSidebarThread({
         status: "input",
         isUnread,
-        isWoke: false,
         isActive: false,
         isSelected: false,
       }),
@@ -777,7 +761,6 @@ describe("orderItemsByPreferredIds", () => {
       "/work/beta",
     ]);
   });
-
 });
 
 describe("resolveAdjacentThreadId", () => {
@@ -914,14 +897,11 @@ describe("resolveSidebarThreadStatus", () => {
     expect(
       resolveSidebarThreadStatus({ ...idle, runtime: { ...limited, status: "completed" } }),
     ).toBe("ready");
-    expect(resolveSidebarV2TopStatus({ status: "limited", isUnread: false, isWoke: false })).toBe(
-      "limited",
-    );
+    expect(resolveSidebarV2TopStatus({ status: "limited", isUnread: false })).toBe("limited");
     expect(
       shouldRecedeSidebarThread({
         status: "limited",
         isUnread: false,
-        isWoke: false,
         isActive: false,
         isSelected: false,
       }),
@@ -953,10 +933,8 @@ describe("resolveSidebarThreadStatus", () => {
     expect(resolveSidebarThreadStatus(idle)).toBe("ready");
   });
 
-  it("keeps a waiting runtime visible ahead of unread and woke presentation", () => {
-    expect(resolveSidebarV2TopStatus({ status: "waiting", isUnread: true, isWoke: true })).toBe(
-      "waiting",
-    );
+  it("keeps a waiting runtime visible ahead of unread presentation", () => {
+    expect(resolveSidebarV2TopStatus({ status: "waiting", isUnread: true })).toBe("waiting");
   });
 
   it("keeps Waiting static while Working shows elapsed duration", () => {
@@ -1998,47 +1976,18 @@ describe("sortPinnedThreadsForSidebar", () => {
 
 describe("resolveSidebarSweepKeys", () => {
   const ordered = ["a", "b", "c", "d", "blocked"];
-  const canWake = (key: string) => key !== "blocked";
+  const canApply = (key: string) => key !== "blocked";
 
   it("covers every row between the pressed row and the pointer, in either direction", () => {
-    expect(resolveSidebarSweepKeys(ordered, "b", "b", canWake)).toEqual(["b"]);
-    expect(resolveSidebarSweepKeys(ordered, "b", "d", canWake)).toEqual(["b", "c", "d"]);
-    expect(resolveSidebarSweepKeys(ordered, "d", "a", canWake)).toEqual(["a", "b", "c", "d"]);
+    expect(resolveSidebarSweepKeys(ordered, "b", "b", canApply)).toEqual(["b"]);
+    expect(resolveSidebarSweepKeys(ordered, "b", "d", canApply)).toEqual(["b", "c", "d"]);
+    expect(resolveSidebarSweepKeys(ordered, "d", "a", canApply)).toEqual(["a", "b", "c", "d"]);
   });
 
-  it("leaves out rows that cannot wake and rows that left the list", () => {
-    expect(resolveSidebarSweepKeys(ordered, "c", "blocked", canWake)).toEqual(["c", "d"]);
-    expect(resolveSidebarSweepKeys(ordered, "gone", "a", canWake)).toEqual([]);
+  it("leaves out rows the action cannot apply to and rows that left the list", () => {
+    expect(resolveSidebarSweepKeys(ordered, "c", "blocked", canApply)).toEqual(["c", "d"]);
+    expect(resolveSidebarSweepKeys(ordered, "gone", "a", canApply)).toEqual([]);
   });
-});
-
-describe("navigation after parking a thread", () => {
-  it.each([
-    ["2099-01-01T00:00:00.000Z", "thread", true],
-    [null, "thread", false],
-    ["2026-09-12T09:00:00.000Z", "thread", false],
-    ["2099-01-01T00:00:00.000Z", "thread", false, true],
-    ["2099-01-01T00:00:00.000Z", "other-thread", false],
-  ] as const)(
-    "snooze until %s on %s navigates: %s",
-    (snoozedUntil, currentThreadKey, expected, hasPendingApprovals: boolean = false) => {
-      expect(
-        shouldNavigateAfterThreadPark({
-          threadKey: "thread",
-          currentThreadKey,
-          now: "2026-09-12T10:00:00.000Z",
-          thread: {
-            snoozedUntil,
-            snoozedAt: null,
-            session: null,
-            latestTurn: null,
-            hasPendingApprovals,
-            hasPendingUserInput: false,
-          },
-        }),
-      ).toBe(expected);
-    },
-  );
 });
 
 describe("unseen completion with background work", () => {
@@ -2059,12 +2008,11 @@ describe("unseen completion with background work", () => {
 
     expect(isUnread).toBe(true);
     expect(status).toBe(expected.status);
-    expect(resolveSidebarV2TopStatus({ status, isUnread, isWoke: false })).toBe(expected.topStatus);
+    expect(resolveSidebarV2TopStatus({ status, isUnread })).toBe(expected.topStatus);
     expect(
       shouldRecedeSidebarThread({
         status,
         isUnread,
-        isWoke: false,
         isActive: false,
         isSelected: false,
       }),
@@ -2264,7 +2212,6 @@ describe("Working shelf (beta)", () => {
         order: null,
         assignments: [],
         unpin: true,
-        unsnooze: false,
       });
     });
   });

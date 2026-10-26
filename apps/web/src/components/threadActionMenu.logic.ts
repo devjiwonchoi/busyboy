@@ -1,5 +1,4 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
-import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-snooze";
 
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
@@ -7,9 +6,6 @@ export type ThreadActionMenuId =
   | "project-settings"
   | "pin"
   | "unpin"
-  | "snooze"
-  | `snooze:${string}`
-  | "unsnooze"
   | "rename"
   | "regenerate-title"
   | "mark-unread"
@@ -66,17 +62,13 @@ export interface ThreadActionMenuState {
     readonly isActive: boolean;
   } | null;
   readonly isPinned: boolean;
-  readonly isSnoozed: boolean;
-  readonly canSnoozeNow: boolean;
   readonly isRegeneratingTitle: boolean;
   /** Archive rejects a thread with an attached provider, so disable it here rather than let the action fail. */
   readonly isRunning: boolean;
   readonly supports: {
-    readonly snooze: boolean;
     readonly pinning: boolean;
     readonly titleRegeneration: boolean;
   };
-  readonly snoozePresets: ReadonlyArray<SnoozePreset>;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -110,25 +102,6 @@ export function buildThreadActionMenuItems(
           state.isPinned
             ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }
             : { id: "pin" as const, label: "Pin thread", icon: "pin" },
-        ]
-      : []),
-    ...(state.supports.snooze
-      ? [
-          state.isSnoozed
-            ? { id: "unsnooze" as const, label: "Wake thread", icon: "clock" }
-            : {
-                id: "snooze" as const,
-                label: "Snooze",
-                icon: "clock",
-                disabled: !state.canSnoozeNow,
-                children: [
-                  ...state.snoozePresets.map((preset) => ({
-                    id: `snooze:${preset.id}` as const,
-                    label: `${preset.label} (${preset.whenLabel})`,
-                  })),
-                  { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
-                ],
-              },
         ]
       : []),
     { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },

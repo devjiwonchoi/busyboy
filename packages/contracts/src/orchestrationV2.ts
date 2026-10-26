@@ -334,23 +334,14 @@ export const OrchestrationV2LimitRecovery = Schema.Struct({
   runId: RunId,
   resetAt: IsoDateTime,
   autoResume: Schema.Boolean,
-  snooze: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationV2LimitRecovery = typeof OrchestrationV2LimitRecovery.Type;
 
 export const OrchestrationV2LimitRecoveryUpdate = Schema.Struct({
   runId: RunId,
   resetAt: IsoDateTime,
-  autoResume: Schema.optional(Schema.Boolean),
-  snooze: Schema.optional(Schema.Boolean),
-}).check(
-  Schema.makeFilter(
-    (update) =>
-      update.autoResume !== undefined ||
-      update.snooze !== undefined ||
-      "A recovery update must include autoResume or snooze.",
-  ),
-);
+  autoResume: Schema.Boolean,
+});
 export type OrchestrationV2LimitRecoveryUpdate = typeof OrchestrationV2LimitRecoveryUpdate.Type;
 
 export const OrchestrationV2AppThread = Schema.Struct({
@@ -384,8 +375,6 @@ export const OrchestrationV2AppThread = Schema.Struct({
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
   archivedAt: Schema.NullOr(Schema.DateTimeUtc),
-  snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
-  snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecovery)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
@@ -1588,8 +1577,6 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.archived",
       "thread.unarchived",
       "thread.deleted",
-      "thread.snoozed",
-      "thread.unsnoozed",
       "thread.pinned",
       "thread.unpinned",
       "thread.pin-reordered",
@@ -1829,8 +1816,6 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
   archivedAt: Schema.NullOr(Schema.DateTimeUtc),
-  snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
-  snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecovery)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
@@ -1908,8 +1893,6 @@ export const OrchestrationV2AppThreadJson = OrchestrationV2AppThread.mapFields((
   createdAt: Schema.DateTimeUtcFromString,
   updatedAt: Schema.DateTimeUtcFromString,
   archivedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
-  snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   lastVisitedAt: Schema.NullOr(Schema.DateTimeUtcFromString).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -2328,8 +2311,6 @@ export const OrchestrationV2ThreadShellJson = OrchestrationV2ThreadShell.mapFiel
   createdAt: Schema.DateTimeUtcFromString,
   updatedAt: Schema.DateTimeUtcFromString,
   archivedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
-  snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   lastVisitedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   titleRegeneration: Schema.optional(
@@ -2378,8 +2359,6 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.archived",
       "thread.unarchived",
       "thread.deleted",
-      "thread.snoozed",
-      "thread.unsnoozed",
       "thread.pinned",
       "thread.unpinned",
       "thread.pin-reordered",
@@ -2553,18 +2532,6 @@ export const OrchestrationV2Command = Schema.Union([
     type: Schema.Literal("thread.delete"),
     commandId: CommandId,
     threadId: ThreadId,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("thread.snooze"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    snoozedUntil: IsoDateTime,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("thread.unsnooze"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    reason: Schema.Literal("user"),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.pin"),

@@ -3879,236 +3879,6 @@ it.layer(layerSharedApplicationDataPlaneTest)("pending provider interruption", (
   );
 });
 
-it.layer(layerTest)("snooze queued runs", (it) => {
-  it.effect.each(["notification", "delegated-completion", "user"] as const)(
-    "only user messages block snooze with a held %s run",
-    (kind) =>
-      Effect.gen(function* () {
-        const orchestrator = yield* Orchestrator.OrchestratorV2;
-        const eventSink = yield* EventSink.EventSinkV2;
-        const threadId = ThreadId.make(`snooze-queued:${kind}`);
-        const snoozedUntil = "2099-07-25T09:00:00.000Z";
-        yield* orchestrator.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make(`create:${threadId}`),
-          threadId,
-          projectId: ProjectId.make("snooze-queued-project"),
-          title: "Snooze with held queued work",
-          modelSelection,
-          runtimeMode: "full-access",
-          interactionMode: "default",
-          branch: null,
-          worktreePath: "/tmp/snooze-queued",
-          createdBy: "user",
-          creationSource: "web",
-        });
-        yield* orchestrator.dispatch({
-          type: "message.dispatch",
-          commandId: CommandId.make(`active:${threadId}`),
-          threadId,
-          messageId: MessageId.make(`active:${threadId}`),
-          text: "Active run",
-          attachments: [],
-          modelSelection,
-          dispatchMode: { type: "start_immediately" },
-          createdBy: "user",
-          creationSource: "web",
-        });
-        const activeRun = (yield* orchestrator.getThreadProjection(threadId)).runs[0]!;
-        const now = yield* DateTime.now;
-        if (kind === "delegated-completion") {
-          yield* eventSink.write({
-            events: [
-              {
-                id: EventId.make(`completion:${threadId}`),
-                type: "run.updated",
-                threadId,
-                runId: activeRun.id,
-                occurredAt: now,
-                payload: {
-                  ...activeRun,
-                  delegatedCompletion: {
-                    disposition: "open",
-                    nextGeneration: 2,
-                    delivery: {
-                      messageId: MessageId.make(`queued:${threadId}`),
-                      generation: 1,
-                      taskIds: [NodeId.make("snooze-queued-task")],
-                    },
-                  },
-                },
-              },
-            ],
-          });
-        }
-        yield* orchestrator.dispatch({
-          type: "message.dispatch",
-          commandId: CommandId.make(`queued:${threadId}`),
-          threadId,
-          messageId: MessageId.make(`queued:${threadId}`),
-          text: "Queued work",
-          attachments: [],
-          modelSelection,
-          dispatchMode: { type: "queue_after_active" },
-          createdBy: kind === "user" ? "user" : "agent",
-          creationSource: kind === "user" ? "web" : "server",
-          ...(kind === "notification"
-            ? {
-                notification: {
-                  source: { kind: "background_task" as const },
-                  outcome: "updated" as const,
-                  summary: "Background activity updated",
-                },
-              }
-            : kind === "delegated-completion"
-              ? {
-                  delegatedCompletion: {
-                    parentRunId: activeRun.id,
-                    generation: 1,
-                    taskIds: [NodeId.make("snooze-queued-task")],
-                  },
-                }
-              : {}),
-        });
-        const beforeRecovery = yield* orchestrator.getThreadProjection(threadId);
-        yield* eventSink.commitCommand({
-          commandId: CommandId.make(`recovery:${threadId}`),
-          threadId,
-          commandType: "provider-runtime.reconcile",
-          acceptedAt: now,
-          events: beforeRecovery.runs.map((run) => ({
-            id: EventId.make(`recovery:${run.id}`),
-            type: "run.updated" as const,
-            threadId,
-            runId: run.id,
-            occurredAt: now,
-            payload:
-              run.status === "queued"
-                ? { ...run, queueHeld: true }
-                : { ...run, status: "completed" as const, completedAt: now },
-          })),
-          effects: [],
-        });
-        const beforeSnooze = yield* orchestrator.getThreadProjection(threadId);
-        assert.isTrue(beforeSnooze.runs.some((run) => run.status === "queued" && run.queueHeld));
-        const snooze = orchestrator.dispatch({
-          type: "thread.snooze",
-          commandId: CommandId.make(`snooze:${threadId}`),
-          threadId,
-          snoozedUntil,
-        });
-        if (kind === "user") {
-          const error = yield* snooze.pipe(Effect.flip);
-          assert.equal(error._tag, "OrchestratorDispatchError");
-          assert.equal(error.cause, `Thread ${threadId} has a queued run and cannot be snoozed.`);
-          assert.isNull((yield* orchestrator.getThreadProjection(threadId)).thread.snoozedUntil);
-        } else {
-          yield* snooze;
-          const snoozed = yield* orchestrator.getThreadProjection(threadId);
-          assert.equal(DateTime.formatIso(snoozed.thread.snoozedUntil!), snoozedUntil);
-          assert.deepEqual(snoozed.runs, beforeSnooze.runs);
-          yield* orchestrator.dispatch({
-            type: "thread.unsnooze",
-            commandId: CommandId.make(`unsnooze:${threadId}`),
-            threadId,
-            reason: "user",
-          });
-          const awake = yield* orchestrator.getThreadProjection(threadId);
-          assert.isNull(awake.thread.snoozedUntil);
-          assert.deepEqual(awake.runs, beforeSnooze.runs);
-        }
-      }),
-  );
-});
-
-it.layer(layerSharedApplicationDataPlaneTest)("snooze projection", (it) => {
-  it.effect("carries snooze state through the V2 shell projection", () =>
-    Effect.gen(function* () {
-      const projects = yield* ProjectService.ProjectService;
-      const orchestrator = yield* Orchestrator.OrchestratorV2;
-      const projectId = ProjectId.make("runtime-layer-snoozed-project");
-      const threadId = ThreadId.make("runtime-layer-snoozed-thread");
-      const snoozedUntil = "2099-07-25T09:00:00.000Z";
-
-      yield* projects.create({
-        commandId: CommandId.make("runtime-layer-snoozed-project-create"),
-        projectId,
-        title: "Snoozed shell projection",
-        workspaceRoot: "/tmp/runtime-layer-snoozed-project",
-      });
-      yield* orchestrator.dispatch({
-        type: "thread.create",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make("runtime-layer-snoozed-thread-create"),
-        threadId,
-        projectId,
-        title: "Snoozed thread",
-        modelSelection,
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: null,
-      });
-      yield* orchestrator.dispatch({
-        type: "thread.snooze",
-        commandId: CommandId.make("runtime-layer-snoozed-thread-snooze"),
-        threadId,
-        snoozedUntil,
-      });
-
-      const firstProjection = yield* orchestrator.getThreadProjection(threadId);
-      const firstSnoozedAt = firstProjection.thread.snoozedAt;
-      const firstUpdatedAt = firstProjection.thread.updatedAt;
-      assert.isNotNull(firstSnoozedAt);
-
-      yield* orchestrator.dispatch({
-        type: "thread.snooze",
-        commandId: CommandId.make("runtime-layer-snoozed-thread-snooze-again"),
-        threadId,
-        snoozedUntil,
-      });
-
-      const shell = yield* orchestrator.getShellSnapshot();
-      const thread = shell.threads.find((candidate) => candidate.id === threadId);
-      assert.isDefined(thread);
-      assert.equal(DateTime.formatIso(thread.snoozedUntil!), snoozedUntil);
-      assert.deepEqual(thread.snoozedAt, firstSnoozedAt);
-      assert.deepEqual(thread.updatedAt, firstUpdatedAt);
-
-      yield* orchestrator.dispatch({
-        type: "thread.unsnooze",
-        commandId: CommandId.make("runtime-layer-snoozed-thread-wake"),
-        threadId,
-        reason: "user",
-      });
-      yield* orchestrator.dispatch({
-        type: "thread.snooze",
-        commandId: CommandId.make("runtime-layer-snoozed-thread-snooze-after-wake"),
-        threadId,
-        snoozedUntil,
-      });
-
-      yield* orchestrator.dispatch({
-        type: "message.dispatch",
-        createdBy: "user",
-        creationSource: "web",
-        commandId: CommandId.make("runtime-layer-snoozed-message"),
-        threadId,
-        messageId: MessageId.make("runtime-layer-snoozed-message"),
-        text: "Wake this thread.",
-        attachments: [],
-        modelSelection,
-        dispatchMode: { type: "start_immediately" },
-      });
-
-      const awakened = yield* orchestrator.getThreadProjection(threadId);
-      assert.isNull(awakened.thread.snoozedUntil);
-      assert.isNull(awakened.thread.snoozedAt);
-    }),
-  );
-});
-
 it.layer(layerSharedApplicationDataPlaneTest)("visited projection", (it) => {
   it.effect("carries the visited watermark through the V2 shell projection", () =>
     Effect.gen(function* () {
@@ -4609,20 +4379,10 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
     "queued-resume",
     "cancel",
     "rearm",
-    "snooze-race",
     "new-message",
     "archive",
     "replacement",
-    "manual-snooze",
-    "manual-snooze-after-recovery",
-    "invalid-snooze",
-    "snooze-only",
-    "snooze-resume",
-    "cancel-resume-keep-snooze",
-    "wake-preserve-resume",
-    "independent-patches",
-    "expired-snooze",
-    "wake",
+    "invalid-reset",
   ] as const)("guards a scheduled usage-limit continuation against %s", (scenario) =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -4678,12 +4438,9 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
       const run = projection.runs[0]!;
       const now = yield* DateTime.now;
       const resetAt =
-        scenario === "invalid-snooze"
+        scenario === "invalid-reset"
           ? "not-a-date"
-          : DateTime.formatIso(DateTime.add(now, { minutes: 1 })).replace(
-              "Z",
-              scenario === "wake" ? "+00:00" : "Z",
-            );
+          : DateTime.formatIso(DateTime.add(now, { minutes: 1 }));
       yield* events.write({
         commandId: CommandId.make(`recovery:failure:${scenario}`),
         events: [
@@ -4754,148 +4511,32 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
         (thread) => thread.id === threadId,
       )!;
       assert.isNull(limitRecoveryCommand(shell, false, DateTime.toEpochMillis(now)));
-      if (scenario === "invalid-snooze") {
+      if (scenario === "invalid-reset") {
         const result = yield* orchestrator
           .dispatch({
             type: "thread.metadata.update",
-            commandId: CommandId.make("recovery:invalid-snooze"),
+            commandId: CommandId.make("recovery:invalid-reset"),
             threadId,
-            limitRecovery: { runId: run.id, resetAt, snooze: true },
+            limitRecovery: { runId: run.id, resetAt, autoResume: true },
           })
           .pipe(Effect.exit);
         assert.equal(result._tag, "Failure");
         const current = yield* orchestrator.getThreadProjection(threadId);
         assert.isNull(current.thread.limitRecovery ?? null);
-        assert.isNull(current.thread.snoozedUntil);
         return;
       }
-      const snooze = [
-        "snooze-only",
-        "manual-snooze-after-recovery",
-        "snooze-resume",
-        "wake",
-        "cancel-resume-keep-snooze",
-        "wake-preserve-resume",
-      ].includes(scenario);
-      const autoResume = scenario !== "snooze-only" && scenario !== "wake";
-      const arm = limitRecoveryCommand(shell, autoResume, DateTime.toEpochMillis(now), snooze);
+      const arm = limitRecoveryCommand(shell, true, DateTime.toEpochMillis(now));
       assert.isNotNull(arm);
       yield* orchestrator.dispatch(arm!);
-      let armedShell = (yield* orchestrator.getShellSnapshot()).threads.find(
+      const armedShell = (yield* orchestrator.getShellSnapshot()).threads.find(
         (thread) => thread.id === threadId,
       )!;
       assert.deepEqual(armedShell.limitRecovery, {
         runId: run.id,
         resetAt,
-        autoResume,
-        snooze,
+        autoResume: true,
         requestId: arm!.commandId,
       });
-      if (snooze)
-        assert.equal(DateTime.toEpochMillis(armedShell.snoozedUntil!), Date.parse(resetAt));
-      if (scenario === "cancel-resume-keep-snooze" || scenario === "wake-preserve-resume") {
-        yield* TestClock.adjust("10 seconds");
-        yield* orchestrator.dispatch({
-          type: "thread.metadata.update",
-          commandId: CommandId.make(`recovery:independent-choice:${scenario}`),
-          threadId,
-          limitRecovery: {
-            runId: run.id,
-            resetAt,
-            autoResume: scenario === "wake-preserve-resume",
-            snooze: scenario === "cancel-resume-keep-snooze",
-          },
-        });
-        armedShell = (yield* orchestrator.getShellSnapshot()).threads.find(
-          (thread) => thread.id === threadId,
-        )!;
-        if (scenario === "cancel-resume-keep-snooze") {
-          assert.equal(DateTime.toEpochMillis(armedShell.snoozedUntil!), Date.parse(resetAt));
-          assert.equal(
-            DateTime.toEpochMillis(armedShell.snoozedAt!),
-            DateTime.toEpochMillis(armedShell.updatedAt),
-          );
-          assert.isFalse(armedShell.limitRecovery!.autoResume);
-        } else {
-          assert.isNull(armedShell.snoozedUntil);
-          assert.isNull(armedShell.snoozedAt);
-          assert.isTrue(armedShell.limitRecovery!.autoResume);
-        }
-      }
-      if (scenario === "independent-patches") {
-        yield* TestClock.adjust("10 seconds");
-        yield* orchestrator.dispatch({
-          type: "thread.metadata.update",
-          commandId: CommandId.make("recovery:patch-snooze"),
-          threadId,
-          limitRecovery: { runId: run.id, resetAt, snooze: true },
-        });
-        let current = yield* orchestrator.getThreadProjection(threadId);
-        assert.isTrue(current.thread.limitRecovery!.autoResume);
-        assert.isTrue(current.thread.limitRecovery!.snooze);
-        yield* TestClock.adjust("10 seconds");
-        yield* orchestrator.dispatch({
-          type: "thread.metadata.update",
-          commandId: CommandId.make("recovery:patch-cancel-resume"),
-          threadId,
-          limitRecovery: { runId: run.id, resetAt, autoResume: false },
-        });
-        current = yield* orchestrator.getThreadProjection(threadId);
-        assert.isFalse(current.thread.limitRecovery!.autoResume);
-        assert.isTrue(current.thread.limitRecovery!.snooze);
-        assert.equal(DateTime.toEpochMillis(current.thread.snoozedUntil!), Date.parse(resetAt));
-        assert.equal(
-          DateTime.toEpochMillis(current.thread.snoozedAt!),
-          DateTime.toEpochMillis(current.thread.updatedAt),
-        );
-        yield* orchestrator.dispatch({
-          type: "thread.metadata.update",
-          commandId: CommandId.make("recovery:patch-resume"),
-          threadId,
-          limitRecovery: { runId: run.id, resetAt, autoResume: true },
-        });
-        armedShell = (yield* orchestrator.getShellSnapshot()).threads.find(
-          (thread) => thread.id === threadId,
-        )!;
-        assert.isTrue(armedShell.limitRecovery!.autoResume);
-        assert.isTrue(armedShell.limitRecovery!.snooze);
-      }
-      if (scenario === "manual-snooze" || scenario === "manual-snooze-after-recovery") {
-        yield* orchestrator.dispatch({
-          type: "thread.snooze",
-          commandId: CommandId.make(`recovery:manual-snooze:${scenario}`),
-          threadId,
-          snoozedUntil: resetAt,
-        });
-        yield* orchestrator.dispatch({
-          type: "thread.metadata.update",
-          commandId: CommandId.make(`recovery:manual-cancel:${scenario}`),
-          threadId,
-          limitRecovery: { runId: run.id, resetAt, autoResume: false, snooze: false },
-        });
-        assert.equal(
-          DateTime.toEpochMillis(
-            (yield* orchestrator.getThreadProjection(threadId)).thread.snoozedUntil!,
-          ),
-          Date.parse(resetAt),
-        );
-        yield* orchestrator.dispatch({
-          type: "thread.unsnooze",
-          commandId: CommandId.make(`recovery:manual-wake:${scenario}`),
-          threadId,
-          reason: "user",
-        });
-        assert.isNull((yield* orchestrator.getThreadProjection(threadId)).thread.snoozedUntil);
-      }
-      if (scenario === "wake") {
-        yield* orchestrator.dispatch({
-          type: "thread.metadata.update",
-          commandId: CommandId.make(`recovery:wake:${scenario}`),
-          threadId,
-          limitRecovery: { runId: run.id, resetAt, autoResume: false, snooze: false },
-        });
-        assert.isNull((yield* orchestrator.getThreadProjection(threadId)).thread.snoozedUntil);
-      }
       assert.isNull(limitRecoveryCommand(armedShell, true, DateTime.toEpochMillis(now)));
       yield* orchestrator.dispatch({
         type: "message.dispatch",
@@ -4919,49 +4560,7 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
         true,
         DateTime.toEpochMillis(yield* DateTime.now),
       );
-      if (autoResume && scenario !== "cancel-resume-keep-snooze") assert.isNotNull(resume);
-      else assert.isNull(resume);
-      if (scenario === "snooze-race") {
-        const wakeAt = DateTime.formatIso(DateTime.add(yield* DateTime.now, { minutes: 1 }));
-        yield* orchestrator.dispatch({
-          type: "thread.snooze",
-          commandId: CommandId.make("recovery:raced-snooze"),
-          threadId,
-          snoozedUntil: wakeAt,
-        });
-        yield* orchestrator.dispatch(resume!);
-        assert.lengthOf((yield* orchestrator.getThreadProjection(threadId)).runs, 1);
-        yield* TestClock.adjust("1 minute");
-        const current = (yield* orchestrator.getShellSnapshot()).threads.find(
-          (thread) => thread.id === threadId,
-        )!;
-        const freshResume = limitRecoveryCommand(
-          current,
-          true,
-          DateTime.toEpochMillis(yield* DateTime.now),
-        );
-        assert.isNotNull(freshResume);
-        assert.notEqual(freshResume!.commandId, resume!.commandId);
-        yield* orchestrator.dispatch(freshResume!);
-        yield* orchestrator.dispatch(freshResume!);
-        assert.lengthOf((yield* orchestrator.getThreadProjection(threadId)).runs, 2);
-      }
-      if (scenario === "expired-snooze") {
-        const staleSnooze = yield* orchestrator
-          .dispatch({
-            type: "thread.metadata.update",
-            commandId: CommandId.make("recovery:expired-snooze"),
-            threadId,
-            limitRecovery: { runId: run.id, resetAt, snooze: true },
-          })
-          .pipe(Effect.exit);
-        assert.equal(staleSnooze._tag, "Failure");
-        const current = yield* orchestrator.getThreadProjection(threadId);
-        assert.isNull(current.thread.snoozedUntil);
-        assert.isFalse(current.thread.limitRecovery!.snooze);
-        assert.isTrue(current.thread.limitRecovery!.autoResume);
-      }
-
+      assert.isNotNull(resume);
       if (scenario === "cancel" || scenario === "rearm")
         yield* orchestrator.dispatch({
           type: "thread.metadata.update",
@@ -5036,35 +4635,12 @@ it.layer(layerTest)("usage-limit recovery", (it) => {
         assert.lengthOf((yield* orchestrator.getThreadProjection(threadId)).runs, 2);
       }
       const before = yield* orchestrator.getThreadProjection(threadId);
-      if (resume !== null) {
-        yield* orchestrator.dispatch(resume);
-        yield* orchestrator.dispatch(resume);
-      }
+      yield* orchestrator.dispatch(resume!);
+      yield* orchestrator.dispatch(resume!);
       const after = yield* orchestrator.getThreadProjection(threadId);
-      assert.lengthOf(
-        after.runs,
-        before.runs.length +
-          (scenario === "resume" ||
-          scenario === "queued-resume" ||
-          scenario === "snooze-resume" ||
-          scenario === "wake-preserve-resume" ||
-          scenario === "independent-patches" ||
-          scenario === "expired-snooze"
-            ? 1
-            : 0),
-      );
-      assert.lengthOf(
-        after.messages,
-        before.messages.length +
-          (scenario === "resume" ||
-          scenario === "queued-resume" ||
-          scenario === "snooze-resume" ||
-          scenario === "wake-preserve-resume" ||
-          scenario === "independent-patches" ||
-          scenario === "expired-snooze"
-            ? 1
-            : 0),
-      );
+      const resumes = scenario === "resume" || scenario === "queued-resume" ? 1 : 0;
+      assert.lengthOf(after.runs, before.runs.length + resumes);
+      assert.lengthOf(after.messages, before.messages.length + resumes);
       if (scenario === "queued-resume") {
         assert.equal(after.runs[1]?.status, "queued");
         assert.isTrue(after.runs[1]?.queueHeld);

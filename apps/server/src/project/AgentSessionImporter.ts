@@ -298,8 +298,6 @@ const make = Effect.gen(function* () {
             createdAt,
             updatedAt,
             archivedAt: null,
-            snoozedUntil: null,
-            snoozedAt: null,
             pinnedAt: null,
             pinOrderKey: null,
             activeOrderKey: null,

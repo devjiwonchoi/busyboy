@@ -11,8 +11,6 @@ const commands = vi.hoisted(() => ({
   unpin: vi.fn(),
   archive: vi.fn(),
   unarchive: vi.fn(),
-  snooze: vi.fn(),
-  unsnooze: vi.fn(),
 }));
 const router = vi.hoisted(() => ({
   navigate: vi.fn(async () => {}),
@@ -39,16 +37,13 @@ vi.mock("../lib/archivedThreadsState", () => ({ refreshArchivedThreadsForEnviron
 const threadShell = vi.hoisted(() => ({
   title: "Thread",
   pinOrderKey: "a0",
-  snoozedUntil: null,
   projectId: "project",
   environmentId: "undo-env",
-  session: null,
 }));
 vi.mock("../state/entities", async (original) => ({
   ...(await original<typeof import("../state/entities")>()),
   readEnvironmentSupportsPinning: () => true,
   readEnvironmentSupportsPinReorder: () => true,
-  readEnvironmentSupportsSnooze: () => true,
   readThreadShell: () => threadShell,
 }));
 vi.mock("../state/use-atom-command", () => ({
@@ -62,10 +57,6 @@ vi.mock("../state/use-atom-command", () => ({
         return commands.archive;
       case threadEnvironment.unarchive:
         return commands.unarchive;
-      case threadEnvironment.snooze:
-        return commands.snooze;
-      case threadEnvironment.unsnooze:
-        return commands.unsnooze;
       default:
         return vi.fn();
     }
@@ -155,20 +146,5 @@ describe("archive Undo", () => {
     const add = vi.spyOn(toastManager, "add").mockReturnValue("toast");
     await useThreadActions().archiveThread(target);
     expect(add).not.toHaveBeenCalled();
-  });
-});
-
-describe("snooze Undo", () => {
-  it("wakes the thread from the snooze notice", async () => {
-    const add = vi.spyOn(toastManager, "add").mockReturnValue("toast");
-    const actions = useThreadActions();
-    await actions.snoozeThread(target, new Date(Date.now() + 60_000).toISOString());
-    expect(useThreadUndoNotice.getState().notice).toMatchObject({ action: "Snoozed", count: 1 });
-    expect(add).not.toHaveBeenCalled();
-    await currentUndo()();
-    expect(commands.unsnooze).toHaveBeenCalledExactlyOnceWith({
-      environmentId: target.environmentId,
-      input: { threadId: target.threadId, reason: "user" },
-    });
   });
 });

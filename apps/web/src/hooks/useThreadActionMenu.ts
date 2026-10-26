@@ -1,12 +1,10 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-snooze";
 import {
   AuthOrchestrationOperateScope,
   type ScopedThreadRef,
@@ -14,7 +12,6 @@ import {
 } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
 
-import { resolveSnoozePresets } from "../components/Sidebar.snooze";
 import {
   buildThreadActionMenuItems,
   threadActionRequiresOperate,
@@ -26,7 +23,6 @@ import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope } from "../state/session";
 import {
   readEnvironmentSupportsPinning,
-  readEnvironmentSupportsSnooze,
   readEnvironmentSupportsTitleRegeneration,
   readThreadShell,
   useProjects,
@@ -70,22 +66,14 @@ export function useThreadActionMenu(input: {
     settings: projectGroupingSettings,
     primaryEnvironmentId,
   });
-  const {
-    snoozeThread,
-    unsnoozeThread,
-    pinThread,
-    confirmAndUnpinThread,
-    archiveThread,
-    deleteThread,
-    markThreadUnread,
-  } = useThreadActions();
+  const { pinThread, confirmAndUnpinThread, archiveThread, deleteThread, markThreadUnread } =
+    useThreadActions();
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
   const handleNewThread = useNewThreadHandler();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
-  const timestampFormat = useClientSettings((s) => s.timestampFormat);
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onCopy: ({ path }) => {
       toastManager.add({ type: "success", title: "Path copied", description: path });
@@ -113,25 +101,19 @@ export function useThreadActionMenu(input: {
       if (!api) return;
       const thread = readThreadShell(threadRef);
       if (!thread) return;
-      const now = new Date();
       const supports = {
-        snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
         pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
         titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
       };
       const isRegeneratingTitle = thread.titleRegeneration != null;
-      const snoozePresets = resolveSnoozePresets(now, timestampFormat);
       const items = buildThreadActionMenuItems({
         canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
         branch: thread.branch ?? null,
         projectFilter: null,
         isPinned: thread.pinnedAt != null,
-        isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
-        canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
         isRegeneratingTitle,
         isRunning: !threadRuntimeCanArchive(thread.runtime),
         supports,
-        snoozePresets,
       });
       const clicked = await settlePromise(() => api.contextMenu.show(items, position));
       if (clicked._tag === "Failure" || clicked.value === null) return;
@@ -144,18 +126,6 @@ export function useThreadActionMenu(input: {
           "Thread action unavailable",
           new Error("This connection cannot change threads."),
         );
-        return;
-      }
-      if (action.startsWith("snooze:")) {
-        const preset =
-          action === "snooze:custom"
-            ? await requestCustomSnooze()
-            : snoozePresets.find((candidate) => `snooze:${candidate.id}` === action);
-        if (!preset) return;
-        const result = await snoozeThread(threadRef, preset.snoozedUntil);
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          failureToast("Failed to snooze thread", squashAtomCommandFailure(result));
-        }
         return;
       }
       const reportFailure = async (
@@ -197,9 +167,6 @@ export function useThreadActionMenu(input: {
           }
           return;
         }
-        case "unsnooze":
-          await reportFailure("Failed to wake thread", () => unsnoozeThread(threadRef));
-          return;
         case "pin":
           await reportFailure("Failed to pin thread", () => pinThread(threadRef));
           return;

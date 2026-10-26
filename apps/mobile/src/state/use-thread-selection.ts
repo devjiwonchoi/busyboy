@@ -101,8 +101,6 @@ function threadDetailToShell(
     activeOrderKey: thread.activeOrderKey,
     pinnedAt: thread.pinnedAt,
     pinOrderKey: thread.pinOrderKey,
-    snoozedUntil: thread.snoozedUntil ?? null,
-    snoozedAt: thread.snoozedAt ?? null,
     deletedAt: thread.deletedAt,
   });
 }

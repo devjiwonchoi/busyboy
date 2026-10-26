@@ -1,6 +1,5 @@
 import type { ThreadMoveDestination } from "../threads/threadOrder";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-snooze";
 import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Haptics from "expo-haptics";
@@ -29,13 +28,6 @@ import {
 import { getThreadListV2OrderedSection } from "../threads/threadListV2";
 import { threadCanArchive } from "./threadArchive";
 import { resolveThreadTitleRename } from "../threads/thread-title-rename";
-
-function environmentSupportsSnooze(environmentId: EnvironmentThreadShell["environmentId"]) {
-  return (
-    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
-      .threadSnooze === true
-  );
-}
 
 function environmentSupportsPinning(environmentId: EnvironmentThreadShell["environmentId"]) {
   return (
@@ -173,8 +165,6 @@ function useConfirmDeleteThread(
 export function useThreadListActions(): {
   readonly archiveThread: (thread: EnvironmentThreadShell) => void;
   readonly confirmDeleteThread: (thread: EnvironmentThreadShell) => void;
-  readonly snoozeThread: (thread: EnvironmentThreadShell, snoozedUntil: string) => Promise<boolean>;
-  readonly unsnoozeThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly pinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly unpinThread: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly moveThread: (
@@ -185,14 +175,11 @@ export function useThreadListActions(): {
   readonly regenerateThreadTitle: (thread: EnvironmentThreadShell) => Promise<boolean>;
 } {
   const executeAction = useThreadActionExecutor();
-  const snoozeMutation = useAtomCommand(threadEnvironment.snooze, { reportFailure: false });
-  const unsnoozeMutation = useAtomCommand(threadEnvironment.unsnooze, { reportFailure: false });
   const pinMutation = useAtomCommand(threadEnvironment.pin, { reportFailure: false });
   const unpinMutation = useAtomCommand(threadEnvironment.unpin, { reportFailure: false });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
-  const snoozeInFlightThreadKeys = useRef(new Set<string>());
   const titleRegenerationInFlightThreadKeys = useRef(new Set<string>());
 
   const archiveThread = useCallback(
@@ -200,108 +187,6 @@ export function useThreadListActions(): {
       void executeAction("archive", thread);
     },
     [executeAction],
-  );
-  const snoozeThread = useCallback(
-    async (thread: EnvironmentThreadShell, snoozedUntil: string) => {
-      if (!checkThreadOperationPermission(thread, "Could not snooze thread")) return false;
-      const key = scopedThreadKey(thread.environmentId, thread.id);
-      if (snoozeInFlightThreadKeys.current.has(key)) {
-        return false;
-      }
-      snoozeInFlightThreadKeys.current.add(key);
-      try {
-        if (!environmentSupportsSnooze(thread.environmentId)) {
-          Dialog.alert(
-            "Could not snooze thread",
-            "This environment's server does not support snoozing yet. Update the server to use Snooze.",
-          );
-          return false;
-        }
-        if (!canSnooze(thread, { now: new Date().toISOString() })) {
-          Dialog.alert(
-            "Could not snooze thread",
-            thread.hasPendingApprovals ||
-              thread.hasPendingUserInput ||
-              thread.pendingSubagentRequest != null
-              ? "This thread is waiting on you. Respond to the pending request before snoozing it."
-              : "This thread is still starting a turn. Try again once it's running.",
-          );
-          return false;
-        }
-
-        selectionHaptic();
-        const result = await withThreadDismissal(
-          key,
-          () =>
-            snoozeMutation({
-              environmentId: thread.environmentId,
-              input: {
-                threadId: thread.id,
-                snoozedUntil,
-              },
-            }),
-          (result) => result._tag === "Success",
-        );
-        if (result._tag === "Failure") {
-          const error = Cause.squash(result.cause);
-          Dialog.alert(
-            "Could not snooze thread",
-            error instanceof Error && error.message.trim().length > 0
-              ? error.message
-              : "The thread could not be snoozed.",
-          );
-          return false;
-        }
-        return true;
-      } finally {
-        snoozeInFlightThreadKeys.current.delete(key);
-      }
-    },
-    [snoozeMutation],
-  );
-  const unsnoozeThread = useCallback(
-    async (thread: EnvironmentThreadShell) => {
-      if (!checkThreadOperationPermission(thread, "Could not wake thread")) return false;
-      const key = scopedThreadKey(thread.environmentId, thread.id);
-      if (snoozeInFlightThreadKeys.current.has(key)) {
-        return false;
-      }
-      snoozeInFlightThreadKeys.current.add(key);
-      try {
-        if (!environmentSupportsSnooze(thread.environmentId)) {
-          Dialog.alert(
-            "Could not wake thread",
-            "This environment's server does not support snoozing yet. Update the server to wake this thread.",
-          );
-          return false;
-        }
-
-        selectionHaptic();
-        const result = await withThreadDismissal(
-          key,
-          () =>
-            unsnoozeMutation({
-              environmentId: thread.environmentId,
-              input: { threadId: thread.id, reason: "user" },
-            }),
-          (result) => result._tag === "Success",
-        );
-        if (result._tag === "Failure") {
-          const error = Cause.squash(result.cause);
-          Dialog.alert(
-            "Could not wake thread",
-            error instanceof Error && error.message.trim().length > 0
-              ? error.message
-              : "The thread could not be woken.",
-          );
-          return false;
-        }
-        return true;
-      } finally {
-        snoozeInFlightThreadKeys.current.delete(key);
-      }
-    },
-    [unsnoozeMutation],
   );
   const pinThread = useCallback(
     async (thread: EnvironmentThreadShell) => {
@@ -487,16 +372,7 @@ export function useThreadListActions(): {
         );
         return false;
       }
-      const ordered = getThreadListV2OrderedSection({
-        threads: shells,
-        section,
-        now: new Date().toISOString(),
-        snoozeEnvironmentIds: new Set(
-          [...configs].flatMap(([id, config]) =>
-            config.environment.capabilities.threadSnooze === true ? [id] : [],
-          ),
-        ),
-      });
+      const ordered = getThreadListV2OrderedSection({ threads: shells, section });
       const assignments = createThreadMovePlanner({
         allThreads: shells,
         ordered,
@@ -504,16 +380,14 @@ export function useThreadListActions(): {
         reorderableEnvironmentIds: new Set([...configs.keys()].filter(supportsReorder)),
       })(scopedThreadKey(thread.environmentId, thread.id), direction);
       if (assignments === null) return false;
-      const lifecycle = threadDropLifecycle(thread, section, new Date().toISOString());
+      const lifecycle = threadDropLifecycle(thread, section);
       const crossSection = !ordered.some(
         (row) => row.id === thread.id && row.environmentId === thread.environmentId,
       );
       if (
         crossSection &&
-        (((section === "pinned" || thread.pinnedAt != null) &&
-          !environmentSupportsPinning(thread.environmentId)) ||
-          (effectiveSnoozed(thread, { now: new Date().toISOString() }) &&
-            !environmentSupportsSnooze(thread.environmentId)))
+        (section === "pinned" || thread.pinnedAt != null) &&
+        !environmentSupportsPinning(thread.environmentId)
       )
         return false;
       const shellByKey = new Map(
@@ -553,9 +427,8 @@ export function useThreadListActions(): {
               Dialog.alert("Could not pin thread", String(Cause.squash(result.cause)));
               return false;
             }
-          } else {
-            if (lifecycle.unpin && !(await unpinThread(thread))) return false;
-            if (lifecycle.unsnooze && !(await unsnoozeThread(thread))) return false;
+          } else if (lifecycle.unpin && !(await unpinThread(thread))) {
+            return false;
           }
         }
         for (const assignment of assignments) {
@@ -593,7 +466,7 @@ export function useThreadListActions(): {
         appAtomRegistry.set(threadDropBusyAtom, false);
       }
     },
-    [reorderActiveMutation, reorderPinnedMutation, pinMutation, unpinThread, unsnoozeThread],
+    [reorderActiveMutation, reorderPinnedMutation, pinMutation, unpinThread],
   );
 
   const confirmDeleteThread = useConfirmDeleteThread(executeAction);
@@ -601,8 +474,6 @@ export function useThreadListActions(): {
   return {
     archiveThread,
     confirmDeleteThread,
-    snoozeThread,
-    unsnoozeThread,
     pinThread,
     unpinThread,
     moveThread,

@@ -1,7 +1,6 @@
 import { appAtomRegistry } from "../../state/atom-registry";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-snooze";
 import { sortInboxThreadsByReturn } from "@t3tools/client-runtime/state/thread-inbox";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, FlatList, Modal, Pressable, View } from "react-native";
@@ -32,7 +31,7 @@ import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-pref
 const ROW_HEIGHT = 56;
 const HEADER_HEIGHT = 48;
 const keyOf = (thread: EnvironmentThreadShell) => scopedThreadKey(thread.environmentId, thread.id);
-type Section = "pinned" | "active" | "snoozed";
+type Section = "pinned" | "active";
 type Destination = Exclude<ThreadMoveDestination, string>;
 type Row = {
   key: string;
@@ -154,47 +153,15 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
   const dropBusy = useAtomValue(threadDropBusyAtom);
   const { moveThread } = useThreadListActions();
   const { workingShelfEnabled } = useThreadListV2ShelfPreferences();
-  const [now, setNow] = useState(() => new Date().toISOString());
-  const [snoozedExpanded, setSnoozedExpanded] = useState(false);
-  useEffect(() => {
-    const wakeAt = Math.min(
-      ...threads.flatMap((thread) => {
-        const at = Date.parse(thread.snoozedUntil ?? "");
-        return at > Date.parse(now) ? [at] : [];
-      }),
-    );
-    if (!Number.isFinite(wakeAt)) return;
-    const timer = setTimeout(
-      () => setNow(new Date().toISOString()),
-      Math.min(Math.max(0, wakeAt - Date.now()) + 1, 2_147_483_647),
-    );
-    return () => clearTimeout(timer);
-  }, [threads, now]);
   const sections = useMemo(() => {
-    const shared = {
-      threads,
-      now,
-      pendingOrder,
-      snoozeEnvironmentIds: new Set(
-        [...configs].flatMap(([id, config]) =>
-          config.environment.capabilities.threadSnooze ? [id] : [],
-        ),
-      ),
-    };
-    const pinned = getThreadListV2OrderedSection({ ...shared, section: "pinned" });
-    const active = getThreadListV2OrderedSection({ ...shared, section: "active" });
-    const visible = new Set([...pinned, ...active].map(keyOf));
-    const parked = threads.filter(
-      (thread) => thread.archivedAt === null && !visible.has(keyOf(thread)),
-    );
+    const active = getThreadListV2OrderedSection({ threads, pendingOrder, section: "active" });
     return {
-      pinned,
+      pinned: getThreadListV2OrderedSection({ threads, pendingOrder, section: "pinned" }),
       active: workingShelfEnabled
         ? sortInboxThreadsByReturn(active, threadListInboxReturns.returnedAt)
         : active,
-      snoozed: parked.filter((thread) => effectiveSnoozed(thread, { now })),
     };
-  }, [threads, configs, now, pendingOrder, workingShelfEnabled]);
+  }, [threads, pendingOrder, workingShelfEnabled]);
   const planners = useMemo(() => {
     const planner = (section: "pinned" | "active") =>
       createThreadMovePlanner({
@@ -218,18 +185,16 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
   const rows = useMemo(() => {
     const result: Row[] = [];
     let offset = 0;
-    for (const section of ["pinned", "active", "snoozed"] as const) {
-      if (section === "snoozed" && sections[section].length === 0) continue;
+    for (const section of ["pinned", "active"] as const) {
       result.push({ key: section, section, offset, height: HEADER_HEIGHT });
       offset += HEADER_HEIGHT;
-      if (section === "snoozed" && !snoozedExpanded) continue;
       for (const thread of sections[section]) {
         result.push({ key: keyOf(thread), section, thread, offset, height: ROW_HEIGHT });
         offset += ROW_HEIGHT;
       }
     }
     return result;
-  }, [sections, snoozedExpanded]);
+  }, [sections]);
   const list = useRef<FlatList<Row>>(null);
   const geometry = useRef({ height: 0, offset: 0 });
   const drag = useRef<Drag | null>(null);
@@ -270,12 +235,7 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
       latest.current.rows.find((row) => contentY < row.offset + row.height) ??
       latest.current.rows.at(-1);
     let destination: Destination | null = null;
-    if (
-      target &&
-      y >= 0 &&
-      y <= height &&
-      (target.section === "pinned" || target.section === "active")
-    ) {
+    if (target && y >= 0 && y <= height) {
       const candidate: Destination = {
         section: target.section,
         targetId: target.thread ? target.key : null,
@@ -398,10 +358,7 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
               })}
               renderItem={({ item }) => {
                 const thread = item.thread;
-                const planner =
-                  item.section === "pinned" || item.section === "active"
-                    ? planners[item.section]
-                    : null;
+                const planner = planners[item.section];
                 const capabilities =
                   thread && configs.get(thread.environmentId)?.environment.capabilities;
                 const sectionActions = thread
@@ -411,13 +368,9 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
                     }>((section) => {
                       if (section === item.section) return [];
                       const label = threadDragAction(item.section, section);
-                      if (!label) return [];
                       if (
-                        ((section === "pinned" || thread.pinnedAt != null) &&
-                          !capabilities?.threadPinning) ||
-                        (section === "active" &&
-                          item.section === "snoozed" &&
-                          !capabilities?.threadSnooze)
+                        (section === "pinned" || thread.pinnedAt != null) &&
+                        !capabilities?.threadPinning
                       )
                         return [];
                       return planners[section](item.key, {
@@ -470,8 +423,8 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
                               placement: "before",
                             });
                           }}
-                          canMoveUp={planner?.(item.key, "up") != null}
-                          canMoveDown={planner?.(item.key, "down") != null}
+                          canMoveUp={planner(item.key, "up") != null}
+                          canMoveDown={planner(item.key, "down") != null}
                           onStep={(direction) => {
                             void moveThread(thread, direction);
                           }}
@@ -491,18 +444,12 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
                         />
                       </>
                     ) : (
-                      <Pressable
-                        disabled={item.section === "pinned" || item.section === "active"}
-                        className="flex-1 justify-center self-stretch"
-                        onPress={() => {
-                          if (item.section === "snoozed") setSnoozedExpanded((value) => !value);
-                        }}
-                      >
+                      <View className="flex-1 justify-center self-stretch">
                         <Text className="text-sm font-t3-semibold text-foreground-muted">
                           {item.section[0]!.toUpperCase() + item.section.slice(1)} (
                           {sections[item.section].length})
                         </Text>
-                      </Pressable>
+                      </View>
                     )}
                   </ArrangementRow>
                 );

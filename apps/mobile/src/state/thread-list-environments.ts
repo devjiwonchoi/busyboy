@@ -13,7 +13,6 @@ export type ThreadListProvider = Pick<
 >;
 
 const capabilityKeys = [
-  "threadSnooze",
   "threadPinning",
   "threadPinReorder",
   "threadActiveReorder",
@@ -60,7 +59,6 @@ function sameProviders(
 function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnvironment>) {
   const providersByEnvironmentId = new Map<EnvironmentId, ReadonlyArray<ThreadListProvider>>();
   const machineByEnvironmentId = new Map<EnvironmentId, EnvironmentMachineKind>();
-  const snoozeEnvironmentIds = new Set<EnvironmentId>();
   const pinningEnvironmentIds = new Set<EnvironmentId>();
   const pinReorderEnvironmentIds = new Set<EnvironmentId>();
   const activeReorderEnvironmentIds = new Set<EnvironmentId>();
@@ -68,7 +66,6 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
   for (const [id, { providers, machineKind, capabilities }] of environments) {
     providersByEnvironmentId.set(id, providers);
     machineByEnvironmentId.set(id, machineKind);
-    if (capabilities.threadSnooze === true) snoozeEnvironmentIds.add(id);
     if (capabilities.threadPinning === true) pinningEnvironmentIds.add(id);
     if (capabilities.threadPinReorder === true) pinReorderEnvironmentIds.add(id);
     if (capabilities.threadActiveReorder === true) activeReorderEnvironmentIds.add(id);
@@ -77,7 +74,6 @@ function collectEnvironments(environments: ReadonlyMap<EnvironmentId, ListEnviro
   return {
     providersByEnvironmentId,
     machineByEnvironmentId,
-    snoozeEnvironmentIds,
     pinningEnvironmentIds,
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,

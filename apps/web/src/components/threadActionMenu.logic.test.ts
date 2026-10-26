@@ -11,18 +11,12 @@ const baseState: ThreadActionMenuState = {
   branch: null,
   projectFilter: null,
   isPinned: false,
-  isSnoozed: false,
-  canSnoozeNow: true,
   isRegeneratingTitle: false,
   isRunning: false,
   supports: {
-    snooze: true,
     pinning: true,
     titleRegeneration: true,
   },
-  snoozePresets: [
-    { id: "hour", label: "In 1 hour", whenLabel: "3:00 PM", snoozedUntil: "2026-08-07T15:00:00Z" },
-  ],
 };
 
 function ids(state: ThreadActionMenuState): string[] {
@@ -43,16 +37,11 @@ describe("buildThreadActionMenuItems", () => {
         ...baseState,
         canOperate: false,
         isPinned: reversed,
-        isSnoozed: reversed,
       });
       const expected = reversed
-        ? ["unpin", "unsnooze", "rename", "regenerate-title", "archive", "delete"]
-        : ["pin", "snooze", "rename", "regenerate-title", "archive", "delete"];
+        ? ["unpin", "rename", "regenerate-title", "archive", "delete"]
+        : ["pin", "rename", "regenerate-title", "archive", "delete"];
       expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual(expected);
-      expect(
-        items.find((item) => item.id === "snooze")?.children?.every((child) => child.disabled) ??
-          true,
-      ).toBe(true);
     },
   );
 
@@ -73,7 +62,6 @@ describe("buildThreadActionMenuItems", () => {
       ids({
         ...baseState,
         supports: {
-          snooze: false,
           pinning: false,
           titleRegeneration: false,
         },
@@ -122,18 +110,8 @@ describe("buildThreadActionMenuItems", () => {
   });
 
   it("flips lifecycle labels with thread state", () => {
-    expect(ids({ ...baseState, isPinned: true, isSnoozed: true })).toEqual(
-      expect.arrayContaining(["unpin", "unsnooze"]),
-    );
-    expect(ids(baseState)).toEqual(expect.arrayContaining(["pin", "snooze"]));
-  });
-
-  it("disables snooze when the thread cannot snooze, keeping presets visible", () => {
-    const snooze = buildThreadActionMenuItems({ ...baseState, canSnoozeNow: false }).find(
-      (item) => item.id === "snooze",
-    );
-    expect(snooze?.disabled).toBe(true);
-    expect(snooze?.children?.map((child) => child.id)).toEqual(["snooze:hour", "snooze:custom"]);
+    expect(ids({ ...baseState, isPinned: true })).toContain("unpin");
+    expect(ids(baseState)).toContain("pin");
   });
 
   it("disables title regeneration while one is in flight", () => {
@@ -162,7 +140,6 @@ describe("buildThreadActionMenuItems", () => {
       ids({
         ...baseState,
         supports: {
-          snooze: false,
           pinning: false,
           titleRegeneration: false,
         },

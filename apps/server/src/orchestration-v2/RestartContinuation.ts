@@ -38,16 +38,10 @@ function restartContinuationBlocked(
     "thread" | "runtimeRequests" | "providerTurns" | "turnItems"
   >,
   source: OrchestrationV2Run,
-  now: DateTime.Utc,
   settled: boolean,
 ): boolean {
   const { thread } = projection;
-  if (
-    thread.archivedAt !== null ||
-    thread.deletedAt !== null ||
-    (thread.snoozedUntil != null && DateTime.isGreaterThan(thread.snoozedUntil, now))
-  )
-    return true;
+  if (thread.archivedAt !== null || thread.deletedAt !== null) return true;
   const turn = latestProviderTurnForAttempt(projection.providerTurns, source.activeAttemptId);
   if (
     !settled &&
@@ -123,7 +117,6 @@ export function restartContinuationRun(
     | "runtimeRequests"
     | "turnItems"
   >,
-  now: DateTime.Utc,
 ): OrchestrationV2Run | undefined {
   const run = projection.runs.reduce<OrchestrationV2Run | undefined>(
     (latest, candidate) =>
@@ -139,7 +132,7 @@ export function restartContinuationRun(
     run.status === "starting" && run.restartContinuationOfRunId !== undefined;
   const settled = run.status === "completed" || run.status === "waiting";
   if (run.status !== "running" && !preparedContinuation && !settled) return;
-  if (restartContinuationBlocked(projection, run, now, settled)) return;
+  if (restartContinuationBlocked(projection, run, settled)) return;
   const liveTurnRequired = !preparedContinuation && !settled;
   if (projection.thread.providerInstanceId !== run.providerInstanceId) return;
   const providerThread = projection.providerThreads.find(
@@ -209,7 +202,6 @@ export const continueRestartedRun = Effect.fn("RestartContinuation.continueResta
       restartContinuationBlocked(
         projection,
         source,
-        yield* DateTime.now,
         isRestartNoteSource(source, projection.providerTurns),
       )
     )

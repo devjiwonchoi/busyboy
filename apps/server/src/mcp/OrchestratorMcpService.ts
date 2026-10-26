@@ -60,7 +60,6 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -86,7 +85,6 @@ import { runOutcome } from "../orchestration-v2/RestartBackgroundNote.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import { isSnoozed } from "../orchestration-v2/threadSnooze.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
@@ -681,22 +679,7 @@ function taskPrompt(input: OrchestratorMcpDelegateTaskInput): string {
     : `Act as the ${input.role} sub-agent for this task.\n\n${input.task}`;
 }
 
-function threadSnooze(
-  thread: Parameters<typeof isSnoozed>[0],
-  nowMs: number,
-): Pick<OrchestratorMcpThreadListItem, "snoozed" | "snoozedUntil"> {
-  const snoozed = isSnoozed(thread, nowMs);
-  return {
-    snoozed,
-    snoozedUntil:
-      snoozed && thread.snoozedUntil != null ? DateTime.formatIso(thread.snoozedUntil) : null,
-  };
-}
-
-function listItemFromShell(
-  shell: OrchestrationV2ThreadShell,
-  nowMs: number,
-): OrchestratorMcpThreadListItem {
+function listItemFromShell(shell: OrchestrationV2ThreadShell): OrchestratorMcpThreadListItem {
   return {
     threadId: shell.id,
     title: shell.title,
@@ -709,7 +692,6 @@ function listItemFromShell(
     runtimeMode: shell.runtimeMode,
     interactionMode: shell.interactionMode,
     linkedPullRequest: shell.linkedPullRequest ?? null,
-    ...threadSnooze(shell, nowMs),
     parentThreadId: shell.lineage.parentThreadId,
     relationshipToParent: shell.lineage.relationshipToParent,
     itemCount: shell.visibleItemCount,
@@ -721,8 +703,6 @@ function listItemFromShell(
 function threadDetail(
   projection: Pick<OrchestrationV2ThreadProjection, "thread" | "runs" | "runtimeRequests">,
   itemCount: number,
-  shell: OrchestrationV2ThreadShell,
-  nowMs: number,
 ): OrchestratorMcpThreadDetail {
   const latest = ThreadManagementService.latestRun(projection);
   const active = ThreadManagementService.latestActiveRun(projection);
@@ -758,7 +738,6 @@ function threadDetail(
       (request) => request.status === "pending",
     ).length,
     archived: projection.thread.archivedAt !== null,
-    ...threadSnooze(shell, nowMs),
     createdAt: DateTime.formatIso(projection.thread.createdAt),
     updatedAt: DateTime.formatIso(projection.thread.updatedAt),
   };
@@ -1111,7 +1090,7 @@ const make = Effect.gen(function* () {
           "contextTransfers",
         ])
         .pipe(Effect.mapError(threadManagementFailure));
-      return { parent, target, shell } as const;
+      return { parent, target } as const;
     });
 
   const loadProviders = providerRegistry.getProviders;
@@ -2398,16 +2377,12 @@ const make = Effect.gen(function* () {
               failure("orchestration_error", `Unable to list threads: ${errorMessage(error)}`),
             ),
           );
-        const nowMs = yield* Clock.currentTimeMillis;
         const statuses = input.statuses === undefined ? null : new Set(input.statuses);
         const titleContains = input.titleContains?.toLocaleLowerCase();
         const filtered = projectThreads
           .filter(
             (thread) =>
               statuses === null || statuses.has(thread.activityRunStatus ?? thread.status),
-          )
-          .filter(
-            (thread) => input.snoozed === undefined || isSnoozed(thread, nowMs) === input.snoozed,
           )
           .filter(
             (thread) =>
@@ -2421,14 +2396,14 @@ const make = Effect.gen(function* () {
         return {
           projectId,
           currentThreadId: parent?.thread.id ?? null,
-          threads: page.map((shell) => listItemFromShell(shell, nowMs)),
+          threads: page.map((shell) => listItemFromShell(shell)),
           nextCursor,
           total: filtered.length,
         } satisfies OrchestratorMcpThreadListResult;
       }),
     readThread: (scope, input) =>
       Effect.gen(function* () {
-        const { parent, target, shell } = yield* loadReadableThread(scope, input.threadId);
+        const { parent, target } = yield* loadReadableThread(scope, input.threadId);
         const view = input.view ?? "messages";
         const afterPosition = input.afterPosition ?? -1;
         const limit = input.limit ?? DEFAULT_THREAD_READ_LIMIT;
@@ -2504,7 +2479,7 @@ const make = Effect.gen(function* () {
           }
         }
         return {
-          thread: threadDetail(target, timeline.totalItems, shell, yield* Clock.currentTimeMillis),
+          thread: threadDetail(target, timeline.totalItems),
           recentRuns: target.runs
             .toSorted((left, right) => right.ordinal - left.ordinal)
             .slice(0, input.runLimit ?? DEFAULT_THREAD_RUN_LIMIT)

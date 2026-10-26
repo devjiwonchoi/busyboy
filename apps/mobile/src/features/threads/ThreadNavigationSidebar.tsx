@@ -31,7 +31,7 @@ import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import { useProjects, useNavigationThreadShells } from "../../state/entities";
 import { useThreadSearch } from "../../state/queries";
 import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
-import { usePendingThreadOrder } from "../../state/thread-order";
+import { pendingThreadOrderAtom } from "../../state/thread-order";
 import { threadListEnvironmentsAtom } from "../../state/server";
 import { usePendingNewTasks } from "../../state/use-pending-new-tasks";
 import { useQueuedThreadKeys } from "../../state/use-thread-outbox";
@@ -59,7 +59,6 @@ import { SidebarNavigationShell } from "./sidebar-navigation-shell";
 import {
   ThreadListV2PendingRow,
   ThreadListV2Row,
-  ThreadListV2SnoozedShelfHeader,
   ThreadListV2WorkingShelfHeader,
 } from "./thread-list-v2-items";
 import { useThreadRowProviderInstanceResolver } from "./thread-provider-instance";
@@ -128,8 +127,6 @@ function ThreadNavigationSidebarPane(
   const {
     archiveThread,
     confirmDeleteThread,
-    snoozeThread,
-    unsnoozeThread,
     pinThread,
     unpinThread,
     moveThread,
@@ -252,14 +249,11 @@ function ThreadNavigationSidebarPane(
 
   const {
     loaded: shelfPreferencesLoaded,
-    snoozedShelfExpanded,
     workingShelfEnabled,
     workingShelfExpanded,
-    toggleSnoozedShelf,
     toggleWorkingShelf,
   } = useThreadListV2ShelfPreferences();
   const [nowMinute, setNowMinute] = useState(() => new Date().toISOString().slice(0, 16));
-  const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
   useEffect(() => {
     setNowMinute(new Date().toISOString().slice(0, 16));
     const id = setInterval(() => setNowMinute(new Date().toISOString().slice(0, 16)), 60_000);
@@ -269,14 +263,13 @@ function ThreadNavigationSidebarPane(
   const {
     providersByEnvironmentId,
     machineByEnvironmentId,
-    snoozeEnvironmentIds,
     pinningEnvironmentIds,
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,
     titleRegenerationEnvironmentIds,
   } = listEnvironments;
   const resolveProviderInstance = useThreadRowProviderInstanceResolver(providersByEnvironmentId);
-  const pendingOrder = usePendingThreadOrder(nowMinute, snoozeWakeTick);
+  const pendingOrder = useAtomValue(pendingThreadOrderAtom);
   // Up/down menu availability for every card, computed once per section per
   // rebuild (see computeThreadMoveAvailability): per-thread planner calls made
   // list construction quadratic, and this list rebuilds on every minute tick.
@@ -292,8 +285,6 @@ function ThreadNavigationSidebarPane(
           threads,
           section,
           pendingOrder,
-          now: new Date().toISOString(),
-          snoozeEnvironmentIds,
         }),
       });
     return new Map([
@@ -306,9 +297,6 @@ function ThreadNavigationSidebarPane(
     activeReorderEnvironmentIds,
     threads,
     pendingOrder,
-    snoozeEnvironmentIds,
-    nowMinute,
-    snoozeWakeTick,
   ]);
   const threadListV2Layout = useMemo(() => {
     threadListInboxReturns.observe(workingShelfEnabled ? threads : null);
@@ -319,41 +307,22 @@ function ThreadNavigationSidebarPane(
       projectRefs: selectedProjectScope === null ? null : selectedProjectScope.projectRefs,
       searchQuery: props.searchQuery,
       matchedThreadKeys,
-      snoozeEnvironmentIds,
-      now: new Date().toISOString(),
       workingShelfEnabled,
       workingShelfExpanded,
       inboxReturnAt: threadListInboxReturns.returnedAt,
-      snoozedShelfExpanded,
       selectedThreadKey: props.selectedThreadKey ?? null,
     });
   }, [
     workingShelfEnabled,
     workingShelfExpanded,
     pendingOrder,
-    nowMinute,
-    snoozeWakeTick,
-    snoozedShelfExpanded,
     props.selectedThreadKey,
     options.selectedEnvironmentId,
     props.searchQuery,
     matchedThreadKeys,
-    snoozeEnvironmentIds,
     threads,
     selectedProjectScope,
   ]);
-  const nextSnoozeWakeAt = threadListV2Layout.nextSnoozeWakeAt;
-  useEffect(() => {
-    if (nextSnoozeWakeAt === null) return;
-    const wakeAtMs = Date.parse(nextSnoozeWakeAt);
-    if (Number.isNaN(wakeAtMs)) return;
-    const delayMs = Math.min(Math.max(0, wakeAtMs - Date.now()) + 50, 2_147_483_647);
-    const id = setTimeout(() => bumpSnoozeWakeTick((tick) => tick + 1), delayMs);
-    return () => clearTimeout(id);
-    // snoozeWakeTick must re-arm the timer even when nextSnoozeWakeAt is
-    // unchanged: after a clamped fire (wake beyond the 32-bit setTimeout
-    // range) the boundary string is identical and the chain would die.
-  }, [nextSnoozeWakeAt, snoozeWakeTick]);
   const listItems = useMemo(() => {
     const v2SearchQuery = props.searchQuery.trim().toLocaleLowerCase();
     const v2PendingTasks = pendingTasks.filter(
@@ -373,16 +342,12 @@ function ThreadNavigationSidebarPane(
       workingCount: threadListV2Layout.workingCount,
       workingShelfExpanded,
       workingShelfHeaderIndex: threadListV2Layout.workingShelfHeaderIndex,
-      snoozedCount: threadListV2Layout.snoozedCount,
-      snoozedShelfExpanded,
-      snoozedShelfHeaderIndex: threadListV2Layout.snoozedShelfHeaderIndex,
-      snoozeLabelNow: `${nowMinute}:00.000Z`,
-      snoozeEnvironmentIds,
       queuedThreadKeys,
       moveAvailability: threadMoveAvailability,
       shelfPreferencesLoading: !shelfPreferencesLoaded,
     });
   }, [
+    // nowMinute refreshes the relative time labels.
     nowMinute,
     options.selectedEnvironmentId,
     pendingTasks,
@@ -391,8 +356,6 @@ function ThreadNavigationSidebarPane(
     threadMoveAvailability,
     selectedProjectRefs,
     shelfPreferencesLoaded,
-    snoozedShelfExpanded,
-    snoozeEnvironmentIds,
     threadListV2Layout,
     workingShelfExpanded,
   ]);
@@ -590,10 +553,7 @@ function ThreadNavigationSidebarPane(
               onNewThreadOnBranch={props.onNewThreadOnBranch}
               thread={thread}
               hasQueuedMessages={item.hasQueuedMessages}
-              snoozed={item.item.snoozed}
               pinned={item.item.pinned}
-              snoozePresetMinute={item.snoozePresetMinute ?? ""}
-              snoozeWakeLabelText={item.snoozeWakeLabelText}
               timeLabel={item.timeLabel}
               project={projectByKey.get(scopeKey) ?? null}
               projectTitle={projectTitleByProjectKey.get(scopeKey)}
@@ -623,7 +583,6 @@ function ThreadNavigationSidebarPane(
               onRenameThread={renameThread}
               onRegenerateThreadTitle={regenerateThreadTitle}
               titleRegenerationSupported={titleRegenerationEnvironmentIds.has(thread.environmentId)}
-              snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
               pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
               reorderSupported={
                 item.item.pinned
@@ -632,8 +591,6 @@ function ThreadNavigationSidebarPane(
               }
               canMoveUp={item.canMoveUp}
               canMoveDown={item.canMoveDown}
-              onSnoozeThread={snoozeThread}
-              onUnsnoozeThread={unsnoozeThread}
               onPinThread={pinThread}
               onUnpinThread={unpinThread}
               onMoveThread={moveThread}
@@ -650,16 +607,6 @@ function ThreadNavigationSidebarPane(
               disabled={item.disabled}
               expanded={item.expanded}
               onToggle={toggleWorkingShelf}
-              pane="sidebar"
-            />
-          );
-        case "v2-snoozed-shelf":
-          return (
-            <ThreadListV2SnoozedShelfHeader
-              count={item.count}
-              disabled={item.disabled}
-              expanded={item.expanded}
-              onToggle={toggleSnoozedShelf}
               pane="sidebar"
             />
           );
@@ -693,12 +640,8 @@ function ThreadNavigationSidebarPane(
       threadSearchMatchByKey,
       titleRegenerationEnvironmentIds,
       sidebarScrollGesture,
-      snoozeEnvironmentIds,
-      snoozeThread,
-      toggleSnoozedShelf,
       toggleWorkingShelf,
       unpinThread,
-      unsnoozeThread,
       workingShelfEnabled,
     ],
   );

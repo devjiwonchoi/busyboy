@@ -131,7 +131,7 @@ describe("planPinnedReorder with hidden rows", () => {
       ["a", "f"],
       ["b", "t"],
       ["moved", "z"],
-      ["snoozed", midpoint],
+      ["hidden", midpoint],
     ]);
     const assignments = planPinnedReorder({
       orderedIds: ["a", "moved", "b"],

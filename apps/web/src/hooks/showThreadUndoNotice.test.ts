@@ -137,9 +137,9 @@ describe("thread undo notice", () => {
     });
     showThreadUndoNotice({
       ...options,
-      action: "Snoozed",
+      action: "Unpinned",
       undo: newer,
-      claim: ThreadUndo.begin("snooze", "env/b"),
+      claim: ThreadUndo.begin("pin", "env/b"),
     });
     expect(undoLatestThreadAction()).toBe(true);
     expect(newer).toHaveBeenCalledOnce();

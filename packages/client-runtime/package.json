@@ -299,10 +299,6 @@
       "types": "./src/state/threadSubagents.ts",
       "default": "./src/state/threadSubagents.ts"
     },
-    "./state/thread-snooze": {
-      "types": "./src/state/threadSnooze.ts",
-      "default": "./src/state/threadSnooze.ts"
-    },
     "./state/thread-search": {
       "types": "./src/state/threadSearch.ts",
       "default": "./src/state/threadSearch.ts"

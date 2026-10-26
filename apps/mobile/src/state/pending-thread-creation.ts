@@ -154,8 +154,6 @@ export function pendingThreadCreationShell(
     createdAt: timestamp,
     updatedAt: timestamp,
     archivedAt: null,
-    snoozedUntil: null,
-    snoozedAt: null,
     pinnedAt: null,
     pinOrderKey: null,
     activeOrderKey: null,

@@ -717,16 +717,18 @@ describe("ClientSettings composer collapse", () => {
   });
 });
 
-describe("ServerSettings removed thread settlement", () => {
-  it("decodes settings saved with the removed auto-settle keys", () => {
+describe("ServerSettings removed thread settlement and snooze", () => {
+  it("decodes settings saved with the removed auto-settle and snooze keys", () => {
     const settings = decodeServerSettings({
       sidebarAutoSettleAfterDays: 3,
       sidebarAutoSettleOnMerge: true,
       sidebarAutoSettleKeepPullRequests: false,
+      snoozeLimitedThreads: true,
       storageCleanup: { worktreeSettledAfterDays: 0 },
       projectSettingsOverrides: { project: { sidebarAutoSettleAfterDays: null } },
     });
     expect(settings).not.toHaveProperty("sidebarAutoSettleAfterDays");
+    expect(settings).not.toHaveProperty("snoozeLimitedThreads");
     expect(settings.storageCleanup).not.toHaveProperty("worktreeSettledAfterDays");
     expect(settings.projectSettingsOverrides[ProjectId.make("project")]).toEqual({});
   });

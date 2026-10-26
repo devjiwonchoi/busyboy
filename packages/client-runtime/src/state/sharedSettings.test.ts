@@ -47,10 +47,10 @@ describe("splitSharedServerPatch", () => {
   it("keeps project overrides local: project ids belong to one environment", () => {
     const patch = {
       projectSettingsOverrides: { [ProjectId.make("project")]: { defaultAutoPull: true } },
-      snoozeLimitedThreads: true,
+      autoResumeLimitedThreads: true,
     };
     expect(splitSharedServerPatch(patch)).toEqual({
-      sharedPatch: { snoozeLimitedThreads: true },
+      sharedPatch: { autoResumeLimitedThreads: true },
       localPatch: { projectSettingsOverrides: patch.projectSettingsOverrides },
     });
   });
@@ -99,7 +99,6 @@ describe("splitSharedServerPatch", () => {
   it("routes preference keys to the shared patch and machine keys to the local patch", () => {
     const { sharedPatch, localPatch } = splitSharedServerPatch({
       autoResumeLimitedThreads: true,
-      snoozeLimitedThreads: false,
       continueThreadsAfterServerUpdate: true,
       enableAgentBrowserAccess: false,
       defaultThreadEnvMode: "worktree",
@@ -107,7 +106,6 @@ describe("splitSharedServerPatch", () => {
     });
     expect(sharedPatch).toEqual({
       autoResumeLimitedThreads: true,
-      snoozeLimitedThreads: false,
       continueThreadsAfterServerUpdate: true,
       newWorktreesStartFromOrigin: true,
     });
@@ -126,7 +124,6 @@ describe("pickSharedServerSettings", () => {
       "autoResumeLimitedThreads",
       "continueThreadsAfterServerUpdate",
       "newWorktreesStartFromOrigin",
-      "snoozeLimitedThreads",
       "sourceControlWritingStyle",
       "textGenerationModelSelection",
     ]);
@@ -155,14 +152,14 @@ describe("filterSharedServerPatch", () => {
       const patch = {
         textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection,
         continueThreadsAfterServerUpdate: true,
-        snoozeLimitedThreads: true,
+        autoResumeLimitedThreads: true,
       };
       expect(filterSharedServerPatch(patch, undefined, settings, settings, targetIsSource)).toEqual(
         {
           ...(targetIsSource
             ? { textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection }
             : {}),
-          snoozeLimitedThreads: true,
+          autoResumeLimitedThreads: true,
         },
       );
     },
@@ -188,7 +185,7 @@ describe("filterSharedServerPatch", () => {
         ...DEFAULT_SERVER_SETTINGS,
         providerInstances: availability === "missing" ? {} : { [instanceId]: instance },
       };
-      const patch = { snoozeLimitedThreads: true, textGenerationModelSelection: selection };
+      const patch = { autoResumeLimitedThreads: true, textGenerationModelSelection: selection };
       const sourceSettings = {
         ...settings,
         providerInstances: {
@@ -196,7 +193,7 @@ describe("filterSharedServerPatch", () => {
         },
       };
       expect(filterSharedServerPatch(patch, restartCapabilities, settings, sourceSettings)).toEqual(
-        availability === "enabled" ? patch : { snoozeLimitedThreads: true },
+        availability === "enabled" ? patch : { autoResumeLimitedThreads: true },
       );
       const primarySettings = {
         ...sourceSettings,
@@ -215,7 +212,7 @@ describe("filterSharedServerPatch", () => {
   );
 
   it.each([true, false])("preserves supported restart preference %s", (enabled) => {
-    const patch = { continueThreadsAfterServerUpdate: enabled, snoozeLimitedThreads: true };
+    const patch = { continueThreadsAfterServerUpdate: enabled, autoResumeLimitedThreads: true };
     expect(filterSharedServerPatch(patch, restartCapabilities)).toEqual(patch);
   });
 
@@ -224,10 +221,10 @@ describe("filterSharedServerPatch", () => {
     (capabilities) => {
       expect(
         filterSharedServerPatch(
-          { continueThreadsAfterServerUpdate: true, snoozeLimitedThreads: true },
+          { continueThreadsAfterServerUpdate: true, autoResumeLimitedThreads: true },
           capabilities,
         ),
-      ).toEqual({ snoozeLimitedThreads: true });
+      ).toEqual({ autoResumeLimitedThreads: true });
       expect(pickSharedServerSettings(DEFAULT_SERVER_SETTINGS, capabilities)).not.toHaveProperty(
         "continueThreadsAfterServerUpdate",
       );
@@ -236,7 +233,7 @@ describe("filterSharedServerPatch", () => {
 });
 
 describe("findSharedSettingsMismatches", () => {
-  const primarySettings = { ...DEFAULT_SERVER_SETTINGS, snoozeLimitedThreads: true };
+  const primarySettings = { ...DEFAULT_SERVER_SETTINGS, autoResumeLimitedThreads: true };
 
   it.each([true, false])(
     "detects remote restart continuation drift when the preference is %s",
@@ -305,7 +302,7 @@ describe("findSharedSettingsMismatches", () => {
           environments: [
             {
               ...environment,
-              settings: { ...environment.settings, snoozeLimitedThreads: false },
+              settings: { ...environment.settings, autoResumeLimitedThreads: false },
             },
           ],
         }),
