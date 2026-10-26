@@ -3,6 +3,7 @@ import { Globe, History, RadioTower } from "lucide-react";
 
 import type { BrowserHistoryEntry } from "~/browserHistoryStore";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
+import { PasswordImportOnboardingCard } from "../passwords/PasswordImportOnboardingCard";
 import { DiscoveryList } from "../ui/discovery-list";
 
 import { PreviewLocalServerCard } from "./PreviewLocalServerCard";
@@ -16,6 +17,8 @@ interface Props {
   recentEntries: ReadonlyArray<BrowserHistoryEntry>;
   onRemoveRecent: (url: string) => void;
   onOpenUrl: (url: string) => void;
+  /** Present in the desktop app, where saved passwords can fill this browser. */
+  onImportPasswords?: (() => void) | undefined;
 }
 
 export function PreviewEmptyState({
@@ -25,6 +28,7 @@ export function PreviewEmptyState({
   recentEntries,
   onRemoveRecent,
   onOpenUrl,
+  onImportPasswords,
 }: Props) {
   const servers = useDiscoveredLocalServers({
     environmentId,
@@ -43,6 +47,11 @@ export function PreviewEmptyState({
           Type a URL above, or run a dev script. Browser-ready localhost servers will show up here
           automatically.
         </EmptyDescription>
+        {onImportPasswords ? (
+          <div className="mt-4 w-full max-w-md">
+            <PasswordImportOnboardingCard onImport={onImportPasswords} />
+          </div>
+        ) : null}
       </Empty>
     );
   }
@@ -50,6 +59,7 @@ export function PreviewEmptyState({
   return (
     <div className="scrollbar-gutter-both flex h-full min-h-0 overflow-y-auto px-5 py-8">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+        {onImportPasswords ? <PasswordImportOnboardingCard onImport={onImportPasswords} /> : null}
         {recents.length > 0 ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
