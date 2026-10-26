@@ -28,6 +28,7 @@ const STRICT_AFTER_AGENT_FILL_MS = 120_000;
 export const passwordForms = (secret: string): ReadonlyArray<string> => {
   const jsonEscaped = JSON.stringify(secret).slice(1, -1);
   const bytes = Buffer.from(secret, "utf8");
+  const formEncoded = new URLSearchParams({ p: secret }).toString().slice(2);
   return [
     ...new Set([
       secret,
@@ -35,6 +36,10 @@ export const passwordForms = (secret: string): ReadonlyArray<string> => {
       JSON.stringify(jsonEscaped).slice(1, -1),
       encodeURIComponent(secret),
       encodeURIComponent(secret).replace(/%20/g, "+"),
+      // How a form body encodes it: also escapes ! ' ( ) ~.
+      formEncoded,
+      formEncoded.replace(/%[0-9A-F]{2}/g, (escape) => escape.toLowerCase()),
+      encodeURIComponent(secret).replace(/%[0-9A-F]{2}/g, (escape) => escape.toLowerCase()),
       bytes.toString("base64"),
       bytes.toString("base64url"),
     ]),
@@ -63,8 +68,9 @@ const sameSite = (left: URL, right: URL) => {
   if (left.protocol !== right.protocol) {
     return false;
   }
-  const leftSite = getDomain(left.hostname);
-  const rightSite = getDomain(right.hostname);
+  // Hosting suffixes such as github.io count, so two people's pages there are not one site.
+  const leftSite = getDomain(left.hostname, { allowPrivateDomains: true });
+  const rightSite = getDomain(right.hostname, { allowPrivateDomains: true });
   // IP addresses and `localhost` have no registrable domain; only the host itself matches.
   return leftSite === null || rightSite === null
     ? left.hostname === right.hostname

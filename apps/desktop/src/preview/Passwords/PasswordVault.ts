@@ -79,6 +79,13 @@ const VaultDocument = Schema.fromJsonString(
 const decodeVaultDocument = Schema.decodeUnknownEffect(VaultDocument);
 const encodeVaultDocument = Schema.encodeEffect(VaultDocument);
 
+/**
+ * A fill must follow a real click or key press in the page this closely. Main
+ * tracks the input itself: a script in the page could fake the preload's own
+ * gesture check, since the page shares its JavaScript world.
+ */
+const FILL_GESTURE_WINDOW_MS = 5_000;
+
 const entryKey = (entry: { readonly origin: string; readonly username: string }) =>
   `${entry.origin}\n${entry.username}`;
 
@@ -113,7 +120,12 @@ export class PasswordVault extends Context.Service<
       pageOrigin: string,
     ) => Effect.Effect<ReadonlyArray<SavedPassword>, PasswordVaultError>;
     readonly chromeSync: Effect.Effect<ChromeSync | null, PasswordVaultError>;
-    readonly setChromeSync: (sync: ChromeSync | null) => Effect.Effect<void, PasswordVaultError>;
+    /** How many times the vault was cleared this run; imports pass it back to `save`. */
+    readonly clears: Effect.Effect<number>;
+    readonly setChromeSync: (
+      sync: ChromeSync | null,
+      options?: { readonly unlessClearedSince?: number },
+    ) => Effect.Effect<void, PasswordVaultError>;
     readonly save: (input: {
       readonly passwords: ReadonlyArray<ImportedPassword>;
       readonly source: PasswordImportSourceId;
@@ -122,6 +134,8 @@ export class PasswordVault extends Context.Service<
        * everything while the sync was reading Chrome, nothing is written back.
        */
       readonly onlyWhileChromeSyncs: boolean;
+      /** An import started before a clear writes nothing back. */
+      readonly unlessClearedSince?: number;
     }) => Effect.Effect<
       { readonly imported: number; readonly updated: number },
       PasswordVaultError
@@ -218,6 +232,9 @@ export const make = Effect.gen(function* () {
       : Effect.succeed([current, current] as const),
   );
 
+  let clearCount = 0;
+  const clearedSince = (since: number | undefined) => since !== undefined && since !== clearCount;
+
   /** Applies a change to the vault and writes it only when something changed. */
   const update = <A>(
     change: (state: VaultState) => { readonly result: A; readonly next: VaultState | null },
@@ -238,14 +255,16 @@ export const make = Effect.gen(function* () {
     passwords,
     source,
     onlyWhileChromeSyncs,
+    unlessClearedSince,
   }: {
     readonly passwords: ReadonlyArray<ImportedPassword>;
     readonly source: PasswordImportSourceId;
     readonly onlyWhileChromeSyncs: boolean;
+    readonly unlessClearedSince?: number;
   }) {
     const savedAt = yield* Clock.currentTimeMillis;
     return yield* update((state) => {
-      if (onlyWhileChromeSyncs && state.chromeSync === null) {
+      if ((onlyWhileChromeSyncs && state.chromeSync === null) || clearedSince(unlessClearedSince)) {
         return { result: { imported: 0, updated: 0 }, next: null };
       }
 
@@ -274,12 +293,21 @@ export const make = Effect.gen(function* () {
     });
   });
 
-  const setChromeSync = (chromeSync: ChromeSync | null) =>
-    update((state) => ({ result: undefined, next: { ...state, chromeSync } }));
+  const setChromeSync = (
+    chromeSync: ChromeSync | null,
+    options?: { readonly unlessClearedSince?: number },
+  ) =>
+    update((state) => ({
+      result: undefined,
+      next: clearedSince(options?.unlessClearedSince) ? null : { ...state, chromeSync },
+    }));
 
   // Clearing also stops the Chrome sync, so removed passwords do not come back.
   const clear = SynchronizedRef.updateEffect(cache, () =>
-    fileSystem.remove(vaultPath, { force: true }).pipe(
+    Effect.sync(() => {
+      clearCount += 1;
+    }).pipe(
+      Effect.andThen(fileSystem.remove(vaultPath, { force: true })),
       Effect.mapError((cause) => new PasswordVaultError({ reason: "saveFailed", cause })),
       Effect.as(EMPTY_VAULT),
     ),
@@ -315,10 +343,27 @@ export const make = Effect.gen(function* () {
     readonly isAgentDriven: () => boolean;
     readonly onPasswordFilled: (password: string) => void;
   }) => {
+    let lastInputAt = Number.NEGATIVE_INFINITY;
+    const noteKey = (_event: unknown, input: Electron.Input) => {
+      if (input.type === "keyDown") {
+        lastInputAt = performance.now();
+      }
+    };
+    const noteMouse = (_event: unknown, mouse: Electron.MouseInputEvent) => {
+      if (mouse.type === "mouseDown") {
+        lastInputAt = performance.now();
+      }
+    };
+    guest.on("before-input-event", noteKey);
+    guest.on("before-mouse-event", noteMouse);
+
     const serve = async (
       event: IpcMainInvokeEvent,
       request: unknown,
     ): Promise<PasswordFill | null> => {
+      if (performance.now() - lastInputAt > FILL_GESTURE_WINDOW_MS) {
+        return null;
+      }
       // Only the main frame runs the preload, and the page shares its JS world,
       // so the origin comes from the committed frame, never from the request.
       const frame = event.senderFrame;
@@ -362,7 +407,11 @@ export const make = Effect.gen(function* () {
 
     guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
     guest.ipc.handle(PASSWORD_FILL_CHANNEL, serve);
-    return () => guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
+    return () => {
+      guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
+      guest.off("before-input-event", noteKey);
+      guest.off("before-mouse-event", noteMouse);
+    };
   };
 
   return PasswordVault.of({
@@ -377,6 +426,7 @@ export const make = Effect.gen(function* () {
       ),
     chromeSync: loaded.pipe(Effect.map((state) => state.chromeSync)),
     setChromeSync,
+    clears: Effect.sync(() => clearCount),
     save,
     clear,
     attachGuest,

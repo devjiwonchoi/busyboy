@@ -13,10 +13,24 @@ const USERNAME_INPUT_TYPES = new Set(["text", "email", "tel"]);
 const autocompleteTokens = (input: HTMLInputElement) =>
   input.autocomplete.toLowerCase().split(/\s+/);
 
+/** In view and big enough to see: a field parked off-screen or shrunk to a dot is a trap. */
+const isOnScreen = (input: HTMLInputElement) => {
+  const rect = input.getBoundingClientRect();
+  return (
+    rect.width >= 4 &&
+    rect.height >= 4 &&
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.top < window.innerHeight &&
+    rect.left < window.innerWidth
+  );
+};
+
 const isFillable = (input: HTMLInputElement) =>
   !input.disabled &&
   !input.readOnly &&
   input.getClientRects().length > 0 &&
+  isOnScreen(input) &&
   getComputedStyle(input).visibility !== "hidden" &&
   // A field the page made invisible is a trap, not a sign-in form.
   getComputedStyle(input).opacity !== "0";

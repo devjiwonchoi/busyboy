@@ -3,6 +3,8 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import type { WebContents } from "electron";
+import * as NodeEvents from "node:events";
 
 import * as DesktopConfig from "../../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
@@ -48,6 +50,32 @@ const vaultLayer = ({
       ),
     ),
   );
+
+/**
+ * A preview webview: `request` plays the preload asking main for a fill, and
+ * `click` and `type` play real input reaching the page.
+ */
+const fakeGuest = (origin: string) => {
+  const events = new NodeEvents.EventEmitter();
+  const mainFrame = { origin, isDestroyed: () => false };
+  let serve: ((event: unknown, request: unknown) => Promise<unknown>) | undefined;
+  const guest = Object.assign(events, {
+    mainFrame,
+    session: { isPersistent: () => true, webRequest: { onBeforeRequest: () => {} } },
+    ipc: {
+      handle: (_channel: string, handler: typeof serve) => {
+        serve = handler;
+      },
+      removeHandler: () => {},
+    },
+  });
+  return {
+    webContents: guest as unknown as WebContents,
+    request: () => serve!({ senderFrame: mainFrame }, { typedUsername: "", wantsPassword: true }),
+    click: () => events.emit("before-mouse-event", {}, { type: "mouseDown" }),
+    type: () => events.emit("before-input-event", {}, { type: "keyDown" }),
+  };
+};
 
 const github = { origin: "https://github.com", username: "octo", password: "one" };
 const example = { origin: "https://example.com", username: "me", password: "two" };
@@ -137,6 +165,68 @@ describe("PasswordVault", () => {
       }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: false })));
 
       expect(error.reason).toBe("encryptionUnavailable");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("fills a page only right after real input reaches it, and never for an agent", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        yield* vault.save({ passwords: [github], source: "chrome", onlyWhileChromeSyncs: false });
+        const filled: Array<string> = [];
+        let agentDriving = false;
+        const page = fakeGuest("https://github.com");
+        vault.attachGuest({
+          guest: page.webContents,
+          isAgentDriven: () => agentDriving,
+          onPasswordFilled: (password) => filled.push(password),
+        });
+
+        // A script in the page can fake the preload's own gesture check.
+        expect(yield* Effect.promise(page.request)).toBeNull();
+
+        page.click();
+        expect(yield* Effect.promise(page.request)).toEqual({
+          username: "octo",
+          password: "one",
+        });
+        expect(filled).toEqual(["one"]);
+
+        page.type();
+        agentDriving = true;
+        expect(yield* Effect.promise(page.request)).toBeNull();
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("writes nothing back from an import that started before the user cleared", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        const importStarted = yield* vault.clears;
+        yield* vault.clear;
+
+        expect(
+          yield* vault.save({
+            passwords: [github],
+            source: "chrome",
+            onlyWhileChromeSyncs: false,
+            unlessClearedSince: importStarted,
+          }),
+        ).toEqual({ imported: 0, updated: 0 });
+        yield* vault.setChromeSync(
+          { profileDirectory: "Default", keys: { cbcV10: "a2V5" } },
+          { unlessClearedSince: importStarted },
+        );
+        expect(yield* vault.count).toBe(0);
+        expect(yield* vault.chromeSync).toBeNull();
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

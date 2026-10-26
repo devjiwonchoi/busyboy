@@ -130,4 +130,34 @@ describe("guardPasswordSubmission", () => {
     expect(page.request({ url: "https://evil.test/p?x=dGVyY3Nz" })).toBe(false);
     expect(page.request({ url: "https://evil.test/p", uploadData: body("s3cret") })).toBe(true);
   });
+
+  it("catches a password the way a form body encodes it", () => {
+    const page = fakePage();
+    guardPasswordSubmission({
+      guest: page.guest,
+      secret: "it's (mine)!~",
+      pageOrigin: "https://www.example.com",
+      scope: "site",
+    });
+
+    const formBody = new URLSearchParams({ pw: "it's (mine)!~" }).toString();
+    expect(page.request({ url: "https://evil.test/", uploadData: body(formBody) })).toBe(true);
+    expect(
+      page.request({ url: "https://evil.test/", uploadData: body(formBody.toLowerCase()) }),
+    ).toBe(true);
+  });
+
+  it("treats pages on a shared host such as github.io as different sites", () => {
+    const page = fakePage();
+    guardPasswordSubmission({
+      guest: page.guest,
+      secret: "s3cret",
+      pageOrigin: "https://alice.github.io",
+      scope: "site",
+    });
+
+    expect(page.request({ url: "https://mallory.github.io/", uploadData: body("s3cret") })).toBe(
+      true,
+    );
+  });
 });

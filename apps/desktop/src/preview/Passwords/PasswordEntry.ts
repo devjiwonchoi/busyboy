@@ -81,7 +81,13 @@ export const passwordMatchesOrigin = ({
     return false;
   }
 
-  if (saved.protocol === page.protocol && saved.port !== page.port) {
+  // An http login carries over to https only on the default ports; a dev
+  // server on http://localhost:3000 says nothing about another port.
+  const portMatches =
+    saved.protocol === page.protocol
+      ? saved.port === page.port
+      : saved.port === "" && page.port === "";
+  if (!portMatches) {
     return false;
   }
 

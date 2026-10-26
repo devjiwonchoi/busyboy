@@ -44,6 +44,9 @@ describe("passwordMatchesOrigin", () => {
 
   it("requires the same port", () => {
     expect(matches("http://localhost:3000", "http://localhost:4000")).toBe(false);
+    // Upgrading to HTTPS does not carry a dev server's login to any port.
+    expect(matches("http://localhost:3000", "https://localhost:8443")).toBe(false);
+    expect(matches("http://localhost:3000", "https://localhost")).toBe(false);
   });
 });
 

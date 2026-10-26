@@ -96,13 +96,20 @@ export const make = Effect.gen(function* () {
     read,
     sourceId,
     onlyWhileChromeSyncs,
+    unlessClearedSince,
   }: {
     readonly read: PasswordReadResult;
     readonly sourceId: PasswordImportSourceId;
     readonly onlyWhileChromeSyncs: boolean;
+    readonly unlessClearedSince?: number;
   }) {
     const saved = yield* vault
-      .save({ passwords: read.passwords, source: sourceId, onlyWhileChromeSyncs })
+      .save({
+        passwords: read.passwords,
+        source: sourceId,
+        onlyWhileChromeSyncs,
+        ...(unlessClearedSince === undefined ? {} : { unlessClearedSince }),
+      })
       .pipe(Effect.mapError(vaultFailure(sourceId)));
     return { ...saved, skipped: read.skipped } satisfies PasswordImportResult;
   });
@@ -196,6 +203,8 @@ export const make = Effect.gen(function* () {
     readonly sourceProfileDirectory: string;
   }) {
     const { definition, profile } = yield* findChromeProfile(sourceProfileDirectory);
+    // Removing everything while this reads Chrome wins: nothing is written back.
+    const clears = yield* vault.clears;
 
     // The one Keychain prompt: the key is kept in the vault for later syncs.
     const keys = yield* resolveChromiumKeys({
@@ -212,9 +221,17 @@ export const make = Effect.gen(function* () {
     );
 
     const read = yield* readChromeProfile({ databasePaths: profile.databasePaths, keys });
-    const result = yield* saveRead({ read, sourceId: "chrome", onlyWhileChromeSyncs: false });
+    const result = yield* saveRead({
+      read,
+      sourceId: "chrome",
+      onlyWhileChromeSyncs: false,
+      unlessClearedSince: clears,
+    });
     yield* vault
-      .setChromeSync({ profileDirectory: profile.directory, keys: encodeChromiumKeys(keys) })
+      .setChromeSync(
+        { profileDirectory: profile.directory, keys: encodeChromiumKeys(keys) },
+        { unlessClearedSince: clears },
+      )
       .pipe(Effect.mapError(vaultFailure("chrome")));
     yield* Ref.set(lastChromeSync, yield* Clock.currentTimeMillis);
     return result;
