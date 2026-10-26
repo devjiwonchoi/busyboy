@@ -99,7 +99,11 @@ export function installPasswordCapture(send: SendPasswordCapture) {
   // world, so the prototype can be wrapped directly.
   const submit = HTMLFormElement.prototype.submit;
   HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
-    capture(this);
-    submit.call(this);
+    // The page's own submit must go through whatever capturing does.
+    try {
+      capture(this);
+    } finally {
+      submit.call(this);
+    }
   };
 }

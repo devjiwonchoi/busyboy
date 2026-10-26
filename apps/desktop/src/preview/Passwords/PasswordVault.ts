@@ -16,7 +16,10 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
-import { PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL } from "../../ipc/channels.ts";
+import {
+  PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL,
+  PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL,
+} from "../../ipc/channels.ts";
 import * as ElectronSafeStorage from "../../electron/ElectronSafeStorage.ts";
 import { PASSWORD_CAPTURE_CHANNEL, PASSWORD_FILL_CHANNEL } from "../GuestProtocol.ts";
 import { guardPasswordSubmission } from "./CredentialNetworkGuard.ts";
@@ -167,6 +170,8 @@ export class PasswordVault extends Context.Service<
       readonly guest: WebContents;
       readonly tabId: string;
       readonly isAgentDriven: () => boolean;
+      /** True for the stand-in an agent sign-in put in a form instead of the password. */
+      readonly isPasswordStandIn: (value: string) => boolean;
       readonly onPasswordFilled: (password: string) => void;
     }) => () => void;
     readonly respondToOffer: (input: {
@@ -333,6 +338,8 @@ export const make = Effect.gen(function* () {
   const clear = SynchronizedRef.updateEffect(cache, () =>
     Effect.sync(() => {
       clearCount += 1;
+      // An unanswered offer must not bring a password back after a clear.
+      pendingOffers.clear();
     }).pipe(
       Effect.andThen(fileSystem.remove(vaultPath, { force: true })),
       Effect.mapError((cause) => new PasswordVaultError({ reason: "saveFailed", cause })),
@@ -363,34 +370,70 @@ export const make = Effect.gen(function* () {
 
   // An offer waits here, password included, until the user answers it. Only
   // its id, origin and username are sent to the renderer.
-  const pendingOffers = new Map<string, { readonly origin: string; readonly password: string }>();
+  const pendingOffers = new Map<
+    string,
+    { readonly origin: string; readonly password: string; readonly tabId: string }
+  >();
+  const dropOffersFor = (tabId: string) => {
+    for (const [offerId, offer] of pendingOffers) {
+      if (offer.tabId === tabId) {
+        pendingOffers.delete(offerId);
+      }
+    }
+  };
 
+  /**
+   * The offer for a submitted login, `"saved"` when it matches what is saved
+   * (so an older offer from a failed attempt is out of date), or `null`.
+   */
   const offerFor = Effect.fn("PasswordVault.offerFor")(function* ({
     pageOrigin,
-    username,
+    username: submittedUsername,
     password,
+    tabId,
   }: {
     readonly pageOrigin: string;
     readonly username: string;
     readonly password: string;
+    readonly tabId: string;
   }) {
     const { passwords, neverSaveOrigins } = yield* loaded;
     if (neverSaveOrigins?.includes(pageOrigin)) {
       return null;
     }
-    const sameLogin = passwords.filter(
-      (entry) =>
-        entry.username === username &&
-        passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin }),
+    const forSite = passwords.filter((entry) =>
+      passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin }),
     );
+
+    // Identifier-first and change-password forms submit no username: a saved
+    // password for the site is the same login, and a site with one account
+    // is that account.
+    let username = submittedUsername;
+    if (username === "") {
+      if (forSite.some((entry) => entry.password === password)) {
+        return "saved" as const;
+      }
+      const accounts = [...new Set(forSite.map((entry) => entry.username))];
+      if (accounts.length === 1) {
+        username = accounts[0]!;
+      }
+    }
+
+    const sameLogin = forSite.filter((entry) => entry.username === username);
     if (sameLogin.some((entry) => entry.password === password)) {
+      return "saved" as const;
+    }
+    // Nothing could be saved without encryption, so nothing is offered.
+    if (!(yield* safeStorage.isEncryptionAvailable.pipe(Effect.orElseSucceed(() => false)))) {
       return null;
     }
 
     const offerId = yield* crypto
       .randomUUIDv4()
       .pipe(Effect.mapError((cause) => new PasswordVaultError({ reason: "saveFailed", cause })));
-    pendingOffers.set(offerId, { origin: pageOrigin, password });
+    // One offer per tab, like Chrome's single save bubble.
+    dropOffersFor(tabId);
+    pendingOffers.set(offerId, { origin: pageOrigin, password, tabId });
     for (const staleOfferId of pendingOffers.keys()) {
       if (pendingOffers.size <= MAX_PENDING_OFFERS) {
         break;
@@ -427,8 +470,24 @@ export const make = Effect.gen(function* () {
       return;
     }
 
+    // The same login saved under another form of the address (www., http)
+    // is replaced rather than left beside the new one.
+    const savedUsername = username.trim();
+    const key = entryKey({ origin: offer.origin, username: savedUsername });
+    yield* update((state) => {
+      const kept = state.passwords.filter(
+        (entry) =>
+          entry.username !== savedUsername ||
+          entryKey(entry) === key ||
+          !passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin: offer.origin }),
+      );
+      return {
+        result: undefined,
+        next: kept.length === state.passwords.length ? null : { ...state, passwords: kept },
+      };
+    });
     yield* save({
-      passwords: [{ origin: offer.origin, username: username.trim(), password: offer.password }],
+      passwords: [{ origin: offer.origin, username: savedUsername, password: offer.password }],
       source: "busyboy",
       onlyWhileChromeSyncs: false,
       keepSavedInBusyboy: false,
@@ -439,11 +498,13 @@ export const make = Effect.gen(function* () {
     guest,
     tabId,
     isAgentDriven,
+    isPasswordStandIn,
     onPasswordFilled,
   }: {
     readonly guest: WebContents;
     readonly tabId: string;
     readonly isAgentDriven: () => boolean;
+    readonly isPasswordStandIn: (value: string) => boolean;
     readonly onPasswordFilled: (password: string) => void;
   }) => {
     let lastInputAt = Number.NEGATIVE_INFINITY;
@@ -528,21 +589,34 @@ export const make = Effect.gen(function* () {
       if (typeof username !== "string" || typeof password !== "string" || password === "") {
         return;
       }
+      // Checked on the value too: the stand-in can sit in the form long after
+      // the agent's sign-in, and saving it would replace the real password.
+      if (isPasswordStandIn(password)) {
+        return;
+      }
 
       void runPromise(
-        offerFor({ pageOrigin, username: username.trim(), password }).pipe(
+        offerFor({ pageOrigin, username: username.trim(), password, tabId }).pipe(
           Effect.catch((error) =>
             Effect.logWarning(error.message, { cause: error.cause }).pipe(Effect.as(null)),
           ),
         ),
       ).then((offer) => {
         const host = guest.hostWebContents;
-        if (offer !== null && host && !host.isDestroyed()) {
-          host.send(PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL, {
-            ...offer,
-            tabId,
-          } satisfies PasswordSaveOffer);
+        if (offer === null || !host || host.isDestroyed()) {
+          return;
         }
+        if (offer === "saved") {
+          // A later attempt matched what is saved: an offer from an earlier,
+          // mistyped attempt is out of date.
+          dropOffersFor(tabId);
+          host.send(PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL, tabId);
+          return;
+        }
+        host.send(PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL, {
+          ...offer,
+          tabId,
+        } satisfies PasswordSaveOffer);
       });
     };
 
@@ -552,6 +626,7 @@ export const make = Effect.gen(function* () {
     return () => {
       guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
       guest.ipc.off(PASSWORD_CAPTURE_CHANNEL, capture);
+      dropOffersFor(tabId);
       guest.off("before-input-event", noteKey);
       guest.off("before-mouse-event", noteMouse);
     };

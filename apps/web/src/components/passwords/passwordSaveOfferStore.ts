@@ -11,6 +11,11 @@ let offersByTabId: Readonly<Record<string, PasswordSaveOffer>> = {};
 const listeners = new Set<() => void>();
 let unsubscribeBridge: (() => void) | null = null;
 
+const withoutTab = (tabId: string) => {
+  const { [tabId]: _removed, ...rest } = offersByTabId;
+  return rest;
+};
+
 const setOffers = (next: Readonly<Record<string, PasswordSaveOffer>>) => {
   offersByTabId = next;
   for (const listener of listeners) {
@@ -21,10 +26,18 @@ const setOffers = (next: Readonly<Record<string, PasswordSaveOffer>>) => {
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   // Listening starts with the first browser panel and stops with the last.
-  unsubscribeBridge ??=
-    previewBridge?.onPasswordSaveOffer((offer) => {
+  if (unsubscribeBridge === null && previewBridge) {
+    const stopOffers = previewBridge.onPasswordSaveOffer((offer) => {
       setOffers({ ...offersByTabId, [offer.tabId]: offer });
-    }) ?? null;
+    });
+    const stopWithdrawals = previewBridge.onPasswordSaveOfferWithdrawn((tabId) => {
+      setOffers(withoutTab(tabId));
+    });
+    unsubscribeBridge = () => {
+      stopOffers();
+      stopWithdrawals();
+    };
+  }
   return () => {
     listeners.delete(listener);
     if (listeners.size === 0) {
@@ -49,8 +62,7 @@ export const respondToPasswordSaveOffer = async ({
   readonly decision: PasswordSaveDecision;
   readonly username: string;
 }): Promise<void> => {
-  const { [offer.tabId]: _answered, ...rest } = offersByTabId;
-  setOffers(rest);
+  setOffers(withoutTab(offer.tabId));
   await previewBridge?.respondToPasswordSaveOffer({
     offerId: offer.offerId,
     decision,

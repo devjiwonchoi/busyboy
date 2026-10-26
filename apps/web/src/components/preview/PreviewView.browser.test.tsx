@@ -68,6 +68,7 @@ vi.mock(import("./previewBridge"), async (original) => ({
     clearCookies: vi.fn(async () => undefined),
     clearCache: vi.fn(async () => undefined),
     onPasswordSaveOffer: vi.fn(() => () => undefined),
+    onPasswordSaveOfferWithdrawn: vi.fn(() => () => undefined),
     pictureInPicture: {
       open: mocks.openPictureInPicture,
       close: mocks.closePictureInPicture,

@@ -441,6 +441,17 @@ contextBridge.exposeInMainWorld("desktopBridge", {
           wrappedListener,
         );
     },
+    onPasswordSaveOfferWithdrawn: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, tabId: unknown) => {
+        if (typeof tabId === "string") listener(tabId);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(
+          IpcChannels.PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL,
+          wrappedListener,
+        );
+    },
     respondToPasswordSaveOffer: (input) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_RESPOND_PASSWORD_SAVE_OFFER_CHANNEL, input),
   },

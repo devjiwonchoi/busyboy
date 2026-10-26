@@ -1072,6 +1072,8 @@ export interface DesktopPreviewBridge {
   getSavedPasswordStatus: () => Promise<SavedPasswordStatus>;
   /** A page in a preview tab submitted a login that is not saved yet. */
   onPasswordSaveOffer: (listener: (offer: PasswordSaveOffer) => void) => () => void;
+  /** A tab's offer is out of date: a later sign-in there matched what is saved. */
+  onPasswordSaveOfferWithdrawn: (listener: (tabId: string) => void) => () => void;
   respondToPasswordSaveOffer: (input: {
     readonly offerId: string;
     readonly decision: PasswordSaveDecision;

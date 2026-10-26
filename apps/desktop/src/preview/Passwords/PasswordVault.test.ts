@@ -10,7 +10,10 @@ import * as NodeEvents from "node:events";
 import * as DesktopConfig from "../../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
 import * as ElectronSafeStorage from "../../electron/ElectronSafeStorage.ts";
-import { PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL } from "../../ipc/channels.ts";
+import {
+  PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL,
+  PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL,
+} from "../../ipc/channels.ts";
 import { PASSWORD_CAPTURE_CHANNEL } from "../GuestProtocol.ts";
 import * as PasswordVault from "./PasswordVault.ts";
 
@@ -165,6 +168,7 @@ describe("PasswordVault", () => {
           guest: guest.webContents,
           tabId: "tab-1",
           isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
           onPasswordFilled: () => {},
         });
 
@@ -238,6 +242,7 @@ describe("PasswordVault", () => {
           guest: insecure.webContents,
           tabId: "tab-1",
           isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
           onPasswordFilled: () => {},
         });
         expect(
@@ -249,6 +254,7 @@ describe("PasswordVault", () => {
           guest: incognito.webContents,
           tabId: "tab-2",
           isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
           onPasswordFilled: () => {},
         });
         expect(
@@ -261,6 +267,7 @@ describe("PasswordVault", () => {
           guest: agentDriven.webContents,
           tabId: "tab-3",
           isAgentDriven: () => true,
+          isPasswordStandIn: () => false,
           onPasswordFilled: () => {},
         });
         expect(
@@ -292,6 +299,7 @@ describe("PasswordVault", () => {
           guest: page.webContents,
           tabId: "tab-1",
           isAgentDriven: () => agentDriving,
+          isPasswordStandIn: () => false,
           onPasswordFilled: (password) => filled.push(password),
         });
 
@@ -340,6 +348,143 @@ describe("PasswordVault", () => {
       }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  it.effect("never offers the stand-in an agent sign-in left in the form", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        yield* vault.save({
+          passwords: [github],
+          source: "chrome",
+          onlyWhileChromeSyncs: false,
+          keepSavedInBusyboy: false,
+        });
+        const page = fakeGuest("https://github.com");
+        vault.attachGuest({
+          guest: page.webContents,
+          tabId: "tab-1",
+          // Long after the sign-in, so the page no longer counts as agent-driven.
+          isAgentDriven: () => false,
+          isPasswordStandIn: (value) => value === "Qq7standin000000",
+          onPasswordFilled: () => {},
+        });
+
+        expect(
+          yield* Effect.promise(() =>
+            page.submit({ username: "octo", password: "Qq7standin000000" }),
+          ),
+        ).toBeUndefined();
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("withdraws a mistyped login's offer once the right password signs in", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        yield* vault.save({
+          passwords: [github],
+          source: "chrome",
+          onlyWhileChromeSyncs: false,
+          keepSavedInBusyboy: false,
+        });
+        const page = fakeGuest("https://github.com");
+        vault.attachGuest({
+          guest: page.webContents,
+          tabId: "tab-1",
+          isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
+          onPasswordFilled: () => {},
+        });
+
+        const typo = yield* Effect.promise(() =>
+          page.submit({ username: "octo", password: "onr" }),
+        );
+        expect(typo?.isUpdate).toBe(true);
+        yield* Effect.promise(() => page.submit({ username: "octo", password: "one" }));
+        expect(page.withdrawn()).toEqual(["tab-1"]);
+
+        // Answering the stale bar anyway changes nothing.
+        yield* vault.respondToOffer({ offerId: typo!.offerId, decision: "save", username: "octo" });
+        expect(yield* vault.loginsFor("https://github.com")).toMatchObject([{ password: "one" }]);
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("matches a login submitted without a username to the site's account", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        yield* vault.save({
+          passwords: [{ ...github, origin: "https://www.github.com" }],
+          source: "chrome",
+          onlyWhileChromeSyncs: false,
+          keepSavedInBusyboy: false,
+        });
+        const page = fakeGuest("https://github.com");
+        vault.attachGuest({
+          guest: page.webContents,
+          tabId: "tab-1",
+          isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
+          onPasswordFilled: () => {},
+        });
+
+        // The saved password on a password-only step is already saved.
+        expect(
+          yield* Effect.promise(() => page.submit({ username: "", password: "one" })),
+        ).toBeUndefined();
+
+        // A new one updates the one account, replacing its www. copy.
+        const offer = yield* Effect.promise(() => page.submit({ username: "", password: "new" }));
+        expect(offer).toMatchObject({ username: "octo", isUpdate: true });
+        yield* vault.respondToOffer({
+          offerId: offer!.offerId,
+          decision: "save",
+          username: "octo",
+        });
+        expect(yield* vault.loginsFor("https://github.com")).toMatchObject([
+          { origin: "https://github.com", username: "octo", password: "new" },
+        ]);
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("forgets unanswered offers when the user removes every password", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        const page = fakeGuest("https://github.com");
+        vault.attachGuest({
+          guest: page.webContents,
+          tabId: "tab-1",
+          isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
+          onPasswordFilled: () => {},
+        });
+        const offer = yield* Effect.promise(() => page.submit({ username: "octo", password: "x" }));
+        yield* vault.clear;
+        yield* vault.respondToOffer({
+          offerId: offer!.offerId,
+          decision: "save",
+          username: "octo",
+        });
+        expect(yield* vault.count).toBe(0);
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });
 
 /**
@@ -371,7 +516,13 @@ function fakeGuest(origin: string, options = { persistent: true }) {
     },
   }) as unknown as WebContents;
 
+  const withdrawn: Array<string> = [];
   const submit = async (login: { readonly username: string; readonly password: string }) => {
+    for (const [channel, tabId] of sent.mock.calls) {
+      if (channel === PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL) {
+        withdrawn.push(tabId as unknown as string);
+      }
+    }
     sent.mockClear();
     listeners.get(PASSWORD_CAPTURE_CHANNEL)?.({ senderFrame: frame }, login);
     // The offer is built asynchronously after the vault is read.
@@ -385,6 +536,13 @@ function fakeGuest(origin: string, options = { persistent: true }) {
   return {
     webContents,
     submit,
+    /** Tabs whose offer main withdrew, as of the last `submit`. */
+    withdrawn: () => {
+      const latest = sent.mock.calls
+        .filter(([channel]) => channel === PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL)
+        .map(([, tabId]) => tabId as unknown as string);
+      return [...withdrawn, ...latest];
+    },
     /** The preload asking main for a fill. */
     request: () => serve!({ senderFrame: frame }, { typedUsername: "", wantsPassword: true }),
     /** Real input reaching the page. */

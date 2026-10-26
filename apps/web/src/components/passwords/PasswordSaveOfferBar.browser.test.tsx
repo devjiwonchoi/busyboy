@@ -5,8 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 const bridge = vi.hoisted(() => {
   let emit: ((offer: PasswordSaveOffer) => void) | null = null;
+  let withdraw: ((tabId: string) => void) | null = null;
   return {
     emit: (offer: PasswordSaveOffer) => emit?.(offer),
+    withdraw: (tabId: string) => withdraw?.(tabId),
+    onPasswordSaveOfferWithdrawn: vi.fn((listener: (tabId: string) => void) => {
+      withdraw = listener;
+      return () => {
+        withdraw = null;
+      };
+    }),
     onPasswordSaveOffer: vi.fn((listener: (offer: PasswordSaveOffer) => void) => {
       emit = listener;
       return () => {
@@ -97,5 +105,15 @@ describe("PasswordSaveOfferBar", () => {
       decision: "never",
       username: "octo",
     });
+  });
+
+  it("hides an offer from a mistyped sign-in once the right password signs in", async () => {
+    await act(async () => root.render(<PasswordSaveOfferBar tabId="tab-1" />));
+    await act(async () => bridge.emit(offer({ isUpdate: true })));
+    expect(container.textContent).toContain("github.com");
+
+    await act(async () => bridge.withdraw("tab-1"));
+    expect(container.textContent).toBe("");
+    expect(bridge.respondToPasswordSaveOffer).not.toHaveBeenCalled();
   });
 });
