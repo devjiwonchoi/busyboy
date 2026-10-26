@@ -231,6 +231,7 @@ const dependencies = Layer.mergeAll(
     available: true,
     computerUseStatus: () => Effect.void,
     computerUseStops: Stream.empty,
+    screenLocked: Effect.succeed(false),
     awaitAttached: (key) => Effect.sync(() => desktopRenders(key.tabId)),
     detached: Stream.callback<{ threadId: string; tabId: string }>((queue) =>
       Effect.acquireRelease(

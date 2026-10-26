@@ -14,6 +14,8 @@ export const DesktopBrowserEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("cdp"), ...TabKey, message: Schema.String }),
   /** The user pressed Escape or the overlay's Stop while an agent was using the computer. */
   Schema.Struct({ type: Schema.Literal("computer-use-stop") }),
+  /** The Mac's screen was locked or unlocked; foreground input must never reach a lock screen. */
+  Schema.Struct({ type: Schema.Literal("screen-lock"), locked: Schema.Boolean }),
 ]);
 export type DesktopBrowserEvent = typeof DesktopBrowserEvent.Type;
 

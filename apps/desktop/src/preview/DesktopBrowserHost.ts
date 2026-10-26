@@ -73,6 +73,8 @@ export class DesktopBrowserHost extends Context.Service<
     readonly computerUse: Stream.Stream<ComputerUseDesktopStatus>;
     /** Asks the backend to stop the agent that is using the computer. */
     readonly stopComputerUse: () => void;
+    /** Tells the backend the screen was locked or unlocked. */
+    readonly reportScreenLock: (locked: boolean) => void;
   }
 >()("@t3tools/desktop/preview/DesktopBrowserHost") {}
 
@@ -217,6 +219,7 @@ export const make = Effect.gen(function* () {
     pointers: Stream.fromPubSub(pointers),
     computerUse: Stream.fromPubSub(computerUse),
     stopComputerUse: () => emit({ type: "computer-use-stop" }),
+    reportScreenLock: (locked) => emit({ type: "screen-lock", locked }),
     // Subscribes before announcing, so no attach falls between the two.
     events: Stream.unwrap(
       Effect.gen(function* () {

@@ -33,6 +33,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as DesktopBrowserChannel from "../preview/DesktopBrowserChannel.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ComputerUseApprovals from "./ComputerUseApprovals.ts";
 import * as ComputerUseDriver from "./ComputerUseDriver.ts";
@@ -190,6 +191,7 @@ export const make = Effect.gen(function* () {
   const settings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const threadManagement = yield* ThreadManagementService.ThreadManagementService;
+  const desktop = yield* DesktopBrowserChannel.DesktopBrowserChannel;
   const snapshots = yield* Ref.make(new Map<string, SnapshotOwner>());
   // The one run that may operate the computer right now.
   const actingRun = yield* Ref.make(
@@ -527,6 +529,7 @@ export const make = Effect.gen(function* () {
       readonly app: string;
       readonly windowId?: string | undefined;
       readonly element?: string | undefined;
+      readonly foreground?: boolean | undefined;
     },
   >(
     name: string,
@@ -540,6 +543,19 @@ export const make = Effect.gen(function* () {
         const runId = yield* claimComputer(input.caller);
         const perform = Effect.gen(function* () {
           const target = yield* resolveTarget(worker, input);
+          const foreground = input.foreground === true;
+          if (foreground) {
+            // Foreground input goes wherever the keyboard focus is; on a lock
+            // screen that would be the password field.
+            if (yield* desktop.screenLocked) return yield* screenLocked();
+            yield* approvals.require({
+              threadId: input.caller.threadId,
+              providerInstanceId: input.caller.providerInstanceId,
+              appName: target.app.name,
+              bundleId: target.app.bundleId,
+              kind: "foreground",
+            });
+          }
           yield* SubscriptionRef.set(activity, {
             acting: true,
             threadId: input.caller.threadId,
@@ -549,7 +565,12 @@ export const make = Effect.gen(function* () {
           const results: Array<string> = [];
           for (const step of steps(target)) {
             const args = BACKGROUND_DELIVERY_TOOLS.has(step.tool)
-              ? { ...step.args, delivery_mode: "background" }
+              ? {
+                  ...step.args,
+                  // Foreground delivery needs the exact window to bring forward.
+                  ...(foreground ? windowArgs(target) : {}),
+                  delivery_mode: foreground ? "foreground" : "background",
+                }
               : step.args;
             const result = yield* callDriver(() =>
               worker.callTool(step.tool, JSON.stringify(args)),

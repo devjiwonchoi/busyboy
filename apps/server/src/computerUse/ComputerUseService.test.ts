@@ -14,6 +14,7 @@ import * as Layer from "effect/Layer";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as DesktopBrowserChannel from "../preview/DesktopBrowserChannel.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ComputerUseApprovals from "./ComputerUseApprovals.ts";
 import * as ComputerUseDriver from "./ComputerUseDriver.ts";
@@ -50,6 +51,7 @@ interface FakeDriver {
   readonly runs: Map<string, Array<{ id: string; status: string; ordinal: number }>>;
   restarts: number;
   readonly interrupts: Array<{ readonly threadId: string; readonly runId?: string }>;
+  screenLocked: boolean;
 }
 
 const window = (windowId: bigint, overrides: Partial<WindowInfo> = {}): WindowInfo => ({
@@ -79,6 +81,7 @@ function fakeDriver(): FakeDriver {
     runs: new Map([[threadId, [{ id: "run-1", status: "running", ordinal: 1 }]]]),
     restarts: 0,
     interrupts: [],
+    screenLocked: false,
   };
 }
 
@@ -136,7 +139,11 @@ function makeService(
           ComputerUseApprovals.ComputerUseApprovals.of({
             require: (request) =>
               Effect.suspend(() => {
-                fake.asked.push(request.bundleId);
+                fake.asked.push(
+                  request.kind === "foreground"
+                    ? `${request.bundleId}#foreground`
+                    : request.bundleId,
+                );
                 return fake.denied.has(request.bundleId)
                   ? Effect.fail(new ComputerUseError({ code: "app_denied", message: "declined" }))
                   : Effect.void;
@@ -149,6 +156,10 @@ function makeService(
             ? { projectSettingsOverrides: { [projectId]: { enableAgentComputerUse: true } } }
             : {},
         ),
+        Layer.mock(DesktopBrowserChannel.DesktopBrowserChannel)({
+          available: true,
+          screenLocked: Effect.sync(() => fake.screenLocked),
+        }),
         Layer.mock(ThreadManagementService.ThreadManagementService)({
           // Yields like a real database read, so concurrent callers interleave.
           getThreadRecords: (thread) =>
@@ -668,6 +679,40 @@ describe("ComputerUseService", () => {
 
         assert.deepStrictEqual(fake.interrupts, [{ threadId, runId: "run-1" }]);
         assert.strictEqual(fake.restarts, 1);
+      }),
+    );
+
+    it.effect("brings the app to the front only after the user allows it for the turn", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+
+        yield* service.pressKey({ caller, app: "TextEdit", key: "return", foreground: true });
+
+        assert.deepStrictEqual(fake.asked, ["com.apple.TextEdit", "com.apple.TextEdit#foreground"]);
+        assert.deepStrictEqual(fake.actions, [
+          {
+            tool: "press_key",
+            args: { pid: 10, window_id: 2, key: "return", delivery_mode: "foreground" },
+          },
+        ]);
+      }),
+    );
+
+    it.effect("never sends foreground input to a locked Mac", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        fake.screenLocked = true;
+        const service = yield* makeService(fake, { enabled: true });
+
+        assert.strictEqual(
+          yield* errorCode(
+            service.typeText({ caller, app: "TextEdit", text: "secret", foreground: true }),
+          ),
+          "screen_locked",
+        );
+        assert.lengthOf(fake.actions, 0);
+        assert.notInclude(fake.asked, "com.apple.TextEdit#foreground");
       }),
     );
   });

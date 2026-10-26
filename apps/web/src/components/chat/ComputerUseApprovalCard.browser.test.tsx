@@ -89,3 +89,19 @@ it("can only be answered in the thread that asked", async () => {
     .toBeVisible();
   expect(container.querySelector("button")).toBeNull();
 });
+
+it("asks about bringing the app to the front for this turn only", async () => {
+  await render({ ...item, approvalKind: "foreground" });
+
+  await expect.element(page.getByText("Let the agent bring TextEdit to the front?")).toBeVisible();
+  expect(Array.from(container.querySelectorAll("button"), (button) => button.textContent)).toEqual([
+    "Allow this turn",
+    "Don't allow",
+  ]);
+  await userEvent.click(page.getByRole("button", { name: "Allow this turn" }));
+
+  expect(state.answer).toHaveBeenCalledWith({
+    environmentId,
+    input: { threadId: item.threadId, turnItemId: item.id, decision: "allow_once" },
+  });
+});

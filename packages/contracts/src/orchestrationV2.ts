@@ -1319,11 +1319,20 @@ export const OrchestrationV2ComputerUseApprovalStatus = Schema.Literals([
 export type OrchestrationV2ComputerUseApprovalStatus =
   typeof OrchestrationV2ComputerUseApprovalStatus.Type;
 
+/**
+ * `app` asks whether the agent may use the app at all; `foreground` asks
+ * whether it may bring the app to the front for input that only lands there.
+ */
+export const OrchestrationV2ComputerUseApprovalKind = Schema.Literals(["app", "foreground"]);
+export type OrchestrationV2ComputerUseApprovalKind =
+  typeof OrchestrationV2ComputerUseApprovalKind.Type;
+
 const OrchestrationV2ComputerUseApprovalFields = {
   type: Schema.Literal("computer_use_approval"),
   appName: TrimmedNonEmptyString,
   bundleId: TrimmedNonEmptyString,
   approvalStatus: OrchestrationV2ComputerUseApprovalStatus,
+  approvalKind: Schema.optional(OrchestrationV2ComputerUseApprovalKind),
 } as const;
 
 export const OrchestrationV2TurnItem = Schema.Union([
@@ -2996,6 +3005,7 @@ const OrchestrationV2InternalCommand = Schema.Union([
     appName: TrimmedNonEmptyString,
     bundleId: TrimmedNonEmptyString,
     approvalStatus: OrchestrationV2ComputerUseApprovalStatus,
+    approvalKind: Schema.optional(OrchestrationV2ComputerUseApprovalKind),
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

@@ -74,6 +74,7 @@ const withApprovals = <A, E>(
               appName: command.appName,
               bundleId: command.bundleId,
               approvalStatus: command.approvalStatus,
+              approvalKind: command.approvalKind,
             });
           } else if (existing.approvalStatus === "pending") {
             existing.approvalStatus = command.approvalStatus;
@@ -256,6 +257,47 @@ describe("ComputerUseApprovals", () => {
           );
           assert.strictEqual(error.reason, "already_answered");
         }),
+      );
+    }),
+  );
+
+  it.live("asks about the front separately, for this turn only", () =>
+    Effect.gen(function* () {
+      const thread = fakeThread();
+      yield* withApprovals(
+        thread,
+        ({ approvals, settings }) =>
+          Effect.gen(function* () {
+            const foreground = { ...request, kind: "foreground" as const };
+            const foregroundCard = ComputerUseApprovals.approvalTurnItemId(
+              threadId,
+              "run-1" as never,
+              "com.apple.TextEdit",
+              "foreground",
+            );
+            const waiting = yield* Effect.forkChild(approvals.require(foreground));
+            while (!thread.turnItems.some((item) => item.id === foregroundCard)) {
+              yield* Effect.sleep(Duration.millis(20));
+            }
+            assert.strictEqual(
+              thread.turnItems.find((item) => item.id === foregroundCard)?.approvalKind,
+              "foreground",
+            );
+            // Even "always" only allows the front for this turn.
+            yield* approvals.answer({
+              threadId,
+              turnItemId: foregroundCard,
+              decision: "allow_always",
+            });
+            yield* Fiber.join(waiting);
+
+            const card = thread.turnItems.find((item) => item.id === foregroundCard);
+            assert.strictEqual(card?.approvalStatus, "allowed_once");
+            assert.deepStrictEqual((yield* settings.getSettings).computerUseAllowedApps, [
+              "com.apple.Notes",
+            ]);
+          }),
+        { allowedApps: ["com.apple.Notes"] },
       );
     }),
   );

@@ -581,7 +581,9 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(
     ComputerUseService.layer.pipe(
-      Layer.provide(Layer.merge(ComputerUseDriver.layer, ProjectionStoreV2.layer)),
+      Layer.provide(
+        Layer.mergeAll(ComputerUseDriver.layer, ProjectionStoreV2.layer, DesktopBrowserChannel.layer),
+      ),
     ),
   ),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(layerDesktopAppUpdate))),

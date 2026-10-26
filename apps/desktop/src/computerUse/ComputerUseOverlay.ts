@@ -189,7 +189,19 @@ export const make = Effect.gen(function* () {
     onWatcherFailure: (error) =>
       void runFork(Effect.logWarning("Escape watcher for computer use failed", error)),
   });
-  yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
+  // The backend refuses foreground input while the screen is locked, so it
+  // must hear about every lock and unlock.
+  const onLock = () => host.reportScreenLock(true);
+  const onUnlock = () => host.reportScreenLock(false);
+  Electron.powerMonitor.on("lock-screen", onLock);
+  Electron.powerMonitor.on("unlock-screen", onUnlock);
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      Electron.powerMonitor.removeListener("lock-screen", onLock);
+      Electron.powerMonitor.removeListener("unlock-screen", onUnlock);
+      controller.dispose();
+    }),
+  );
   yield* host.computerUse.pipe(
     Stream.runForEach((status) => Effect.sync(() => controller.update(status))),
     Effect.forkScoped,

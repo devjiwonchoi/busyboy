@@ -170,5 +170,4 @@ describe("DesktopBrowserHost", () => {
       expect(yield* Fiber.join(stops)).toEqual([{ type: "computer-use-stop" }]);
     }),
   );
-
 });
