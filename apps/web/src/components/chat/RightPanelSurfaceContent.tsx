@@ -6,10 +6,11 @@ import type {
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
   ThreadLinkedPullRequest,
+  ThreadId,
   ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { lazy, Suspense } from "react";
+import { lazy, type ReactNode, Suspense } from "react";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import { type RightPanelSurface, useRightPanelStore } from "../../rightPanelStore";
@@ -22,6 +23,7 @@ import { PullRequestDetailPanel } from "../pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
+import { SideChatPanel } from "./SideChatPanel";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
@@ -74,6 +76,10 @@ export function RightPanelSurfaceContent(props: {
   readonly terminal: RightPanelTerminalProps;
   readonly pullRequest: RightPanelPullRequestProps;
   readonly files: RightPanelFileProps;
+  readonly sideChat: {
+    readonly onNew: () => void;
+    readonly renderChat: (threadId: ThreadId) => ReactNode;
+  };
 }) {
   const { surface, threadRef, visible } = props;
   if (surface === null) return null;
@@ -159,6 +165,15 @@ export function RightPanelSurfaceContent(props: {
     }
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
+    case "side-chat":
+      return (
+        <SideChatPanel
+          environmentId={props.environmentId}
+          threadId={surface.threadId}
+          onNewSideChat={props.sideChat.onNew}
+          renderChat={props.sideChat.renderChat}
+        />
+      );
     case "files":
     case "file": {
       const files = props.files;

@@ -83,6 +83,8 @@ const isClosedViewEntry = (entry: unknown): entry is ClosedViewEntry => {
         (surface.host === undefined || typeof surface.host === "string") &&
         (surface.url === undefined || typeof surface.url === "string")
       );
+    case "side-chat":
+      return typeof surface.threadId === "string" && surface.id === `side-chat:${surface.threadId}`;
     default:
       return false;
   }

@@ -5317,6 +5317,92 @@ export default function ChatView(props: ChatViewProps) {
     (({ event }) => {
       if (!event.repeat) composerRef.current?.openControl(command);
     }) satisfies ChatShortcutHandler;
+  const sideChatPendingRef = useRef(false);
+  // Starts a fresh session in the same workspace; it shares no context with this thread.
+  const startSideChat = async () => {
+    if (!activeThread || !activeThreadRef || !activeProject || sideChatPendingRef.current) return;
+
+    sideChatPendingRef.current = true;
+    const sourceThreadRef = activeThreadRef;
+    const targetThreadRef = scopeThreadRef(environmentId, newThreadId());
+    const result = await createThread({
+      environmentId,
+      input: {
+        threadId: targetThreadRef.threadId,
+        projectId: activeProject.id,
+        title: "Side chat",
+        modelSelection: activeThread.modelSelection,
+        runtimeMode,
+        interactionMode: "default",
+        branch: activeThreadBranch,
+        worktreePath: activeThread.worktreePath,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const ready = result._tag === "Success" && (await waitForThreadShell(targetThreadRef));
+    sideChatPendingRef.current = false;
+    if (result._tag === "Failure") {
+      if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Could not start a side chat",
+            description: error instanceof Error ? error.message : "Failed to create the session.",
+          }),
+        );
+      }
+      return;
+    }
+    if (!ready) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not open the side chat",
+          description: "The side chat was created but has not reached this client yet.",
+        }),
+      );
+      return;
+    }
+
+    useRightPanelStore.getState().openSideChat(sourceThreadRef, targetThreadRef.threadId);
+  };
+  const startSideChatStable = useStableCallback(startSideChat);
+  const toggleSideChat = () => {
+    if (!isServerThread || !activeProject || !activeThreadRef) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "info",
+          title: "Side chat unavailable here",
+          description: isServerThread
+            ? "Side chats open in threads that belong to a project."
+            : "Send the first message, then open a side chat.",
+        }),
+      );
+      return;
+    }
+    const panel = selectThreadRightPanelState(
+      useRightPanelStore.getState().byThreadKey,
+      activeThreadRef,
+    );
+    const selected = panel.surfaces.find((surface) => surface.id === panel.activeSurfaceId);
+    if (panel.isOpen && selected?.kind === "side-chat") {
+      closePreviewPanel();
+      focusComposer();
+      return;
+    }
+
+    // Brings back the side chat last shown, else the newest one, else starts one.
+    const target =
+      selected?.kind === "side-chat"
+        ? selected
+        : panel.surfaces.findLast((surface) => surface.kind === "side-chat");
+    if (!target) {
+      void startSideChatStable();
+      return;
+    }
+    useRightPanelStore.getState().activateSurface(activeThreadRef, target.id);
+  };
   useChatShortcuts({
     enabled: activeThreadId !== null,
     // A side chat takes only its own composer's commands; the page's chat leaves those to it.
@@ -5359,6 +5445,10 @@ export default function ChatView(props: ChatViewProps) {
         if (!event.repeat) toggleRightPanelMaximizedStable();
       },
       "threadPanel.toggle": () => toggleThreadPanelStable(),
+      "sideChat.toggle": ({ event }) => {
+        if (event.repeat) return;
+        return toggleSideChat();
+      },
       "rightPanel.close": ({ event }) => {
         if (!activeRightPanelSurface) return false;
         if (!event.repeat) closeRightPanelSurfaceStable(activeRightPanelSurface);
@@ -7563,6 +7653,19 @@ export default function ChatView(props: ChatViewProps) {
         onOpenFile: openFileSurfaceStable,
         onPendingChange: handleFilePendingChangeStable,
       }}
+      sideChat={{
+        onNew: startSideChatStable,
+        // Rendered here so the side chat needs no import of ChatView back from the panel.
+        renderChat: (sideChatThreadId) => (
+          <ChatView
+            key={sideChatThreadId}
+            sideChat
+            routeKind="server"
+            environmentId={environmentId}
+            threadId={sideChatThreadId}
+          />
+        ),
+      }}
     />
   ) : null;
   const panelToggleControlProps = {
@@ -8340,12 +8443,14 @@ export default function ChatView(props: ChatViewProps) {
           onAddFiles={addFilesSurfaceStable}
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
+          onAddSideChat={startSideChatStable}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           pullRequestsAvailable={pullRequestsSurfaceAvailable}
+          sideChatAvailable={isServerThread && activeProject !== null}
         >
           {rightPanelContent}
         </RightPanelTabs>
@@ -8389,12 +8494,14 @@ export default function ChatView(props: ChatViewProps) {
             onAddFiles={addFilesSurfaceStable}
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
+            onAddSideChat={startSideChatStable}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}
             filesAvailable={activeProject !== null}
             pullRequestAvailable={pullRequestSurfaceAvailable}
             pullRequestsAvailable={pullRequestsSurfaceAvailable}
+            sideChatAvailable={isServerThread && activeProject !== null}
           >
             {rightPanelContent}
           </RightPanelTabs>

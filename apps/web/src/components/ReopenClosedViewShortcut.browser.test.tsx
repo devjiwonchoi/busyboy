@@ -165,6 +165,20 @@ describe("root reopen shortcut", () => {
     expect(useClosedViewStore.getState().entries).toEqual([]);
   });
 
+  it("brings back a closed side chat with the same conversation", async () => {
+    useRightPanelStore.getState().openSideChat(ref, "side-thread");
+    useRightPanelStore.getState().closeSurface(ref, "side-chat:side-thread");
+    await render();
+    await act(() => {
+      expect(press().defaultPrevented).toBe(true);
+    });
+    const panel = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, ref);
+    expect(panel.activeSurfaceId).toBe("side-chat:side-thread");
+    expect(panel.surfaces).toEqual([
+      { id: "side-chat:side-thread", kind: "side-chat", threadId: "side-thread" },
+    ]);
+  });
+
   it("leaves native shortcuts alone without history or while the palette is open", async () => {
     await render();
     expect(press().defaultPrevented).toBe(false);
