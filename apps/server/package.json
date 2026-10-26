@@ -29,6 +29,7 @@
     "@t3tools/provider-grok": "workspace:*",
     "@t3tools/source-control-core": "workspace:*",
     "@t3tools/source-control-github": "workspace:*",
+    "@trycua/cua-driver": "0.37.0",
     "effect": "catalog:",
     "jose": "catalog:",
     "node-pty": "^1.2.0-beta.15",
