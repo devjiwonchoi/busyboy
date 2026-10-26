@@ -9,8 +9,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 
 const state = vi.hoisted(() => ({
   mode: "notifications",
-  inApp: false,
-  toast: vi.fn(),
   shells: null as unknown as { set: (id: string, value: unknown) => void },
   navigate: vi.fn(),
   sound: vi.fn(),
@@ -22,10 +20,6 @@ vi.mock(import("@tanstack/react-router"), async (original) => ({
   useNavigate: (() => state.navigate) as never,
   useParams: (() => ({})) as never,
 }));
-vi.mock(import("./ui/toast"), async (original) => {
-  const actual = await original();
-  return { ...actual, toastManager: { ...actual.toastManager, add: state.toast as never } };
-});
 vi.mock(import("../state/shell"), async (original) => {
   const actual = await original();
   return {
@@ -42,9 +36,8 @@ vi.mock(import("../state/environments"), async (original) => ({
 }));
 vi.mock(import("../hooks/useSettings"), async (original) => ({
   ...(await original()),
-  useClientSettings: ((
-    select: (settings: { notificationMode: string; inAppNotificationsEnabled: boolean }) => unknown,
-  ) => select({ notificationMode: state.mode, inAppNotificationsEnabled: state.inApp })) as never,
+  useClientSettings: ((select: (settings: { notificationMode: string }) => unknown) =>
+    select({ notificationMode: state.mode })) as never,
   getClientSettings: (() => ({ notificationMode: state.mode })) as never,
 }));
 vi.mock(import("../threadNotifications"), async (original) => ({
@@ -169,7 +162,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   registry = AtomRegistry.make();
   state.mode = "notifications";
-  state.inApp = false;
   state.environmentIds = ["one", "two"];
   state.shells.set("one", shell());
   state.shells.set("two", shell());
@@ -273,11 +265,10 @@ it("starts a fresh count after another native app window gains focus", async () 
   expect(state.badge).toHaveBeenLastCalledWith(0);
 });
 
-it.each(["off", "sound", "focused", "denied", "archived"])(
+it.each(["off", "sound", "denied", "archived"])(
   "does not show visual alerts when %s",
   async (condition) => {
     if (condition === "off" || condition === "sound") state.mode = condition;
-    if (condition === "focused") focused = true;
     if (condition === "denied") TestNotification.permission = "denied";
     await render();
     complete();
@@ -315,23 +306,19 @@ it.each(["hasPendingApprovals", "hasPendingUserInput"] as const)(
   },
 );
 
-it("shows in-app alerts without adding a badge while focused", async () => {
-  state.inApp = true;
+it("shows native alerts without adding a badge while focused", async () => {
   focused = true;
   await render();
   complete();
   await render();
-  expect(state.toast).toHaveBeenCalledOnce();
-  expect(TestNotification.sent).toHaveLength(0);
+  expect(TestNotification.sent).toHaveLength(1);
   expect(state.badge.mock.calls.every(([count]) => count === 0)).toBe(true);
 });
 
-it("badges background failures with in-app notifications enabled", async () => {
-  state.inApp = true;
+it("badges background failures", async () => {
   await render();
   state.shells.set("one", shell({ latestTurn: { ...thread.latestTurn, state: "error" } }));
   await render();
   expect(TestNotification.sent[0]?.title).toBe("Thread failed");
   expect(state.badge).toHaveBeenLastCalledWith(1);
-  expect(state.toast).not.toHaveBeenCalled();
 });
