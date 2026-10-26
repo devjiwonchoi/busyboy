@@ -203,7 +203,11 @@ export const make = Effect.gen(function* () {
             guest: webContents,
             request: params,
             pageModified: tab.agentScriptInDocument,
-            lock: (secret) => lockCredentials(tab, secret),
+            lock: (secret) => {
+              // The submit that follows is the agent's, not a person's.
+              tab.agentInputAt = performance.now();
+              lockCredentials(tab, secret);
+            },
             substitute: (input) => {
               const substitution = armSubstitution({ debuggee, ...input });
               // It lets events through again once interception is off.
