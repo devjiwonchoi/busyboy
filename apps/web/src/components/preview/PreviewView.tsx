@@ -274,12 +274,12 @@ export function PreviewView({
     if (isServerTab && serverSurfaceRef.current) {
       if (serverInputDisabled) return false;
       serverSurfaceRef.current.navigate(resolvedUrl);
-      rememberPreviewUrl(threadRef, resolvedUrl);
+      if (!incognito) rememberPreviewUrl(threadRef, resolvedUrl);
       return true;
     }
     if (runtimeTabId && previewBridge) {
       await previewBridge.navigate(runtimeTabId, resolvedUrl);
-      rememberPreviewUrl(threadRef, resolvedUrl);
+      if (!incognito) rememberPreviewUrl(threadRef, resolvedUrl);
       return true;
     }
     const result = await openPreviewSession({ openPreview: open, threadRef, url: resolvedUrl });

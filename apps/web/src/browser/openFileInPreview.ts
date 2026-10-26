@@ -1,10 +1,11 @@
-import type {
-  AssetCreateUrlResult,
-  AssetResource,
-  EnvironmentId,
-  PreviewOpenInput,
-  PreviewSessionSnapshot,
-  ScopedThreadRef,
+import {
+  INCOGNITO_BROWSER_PROFILE_ID,
+  type AssetCreateUrlResult,
+  type AssetResource,
+  type EnvironmentId,
+  type PreviewOpenInput,
+  type PreviewSessionSnapshot,
+  type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
 import {
@@ -16,6 +17,7 @@ import * as Data from "effect/Data";
 import { AsyncResult } from "effect/reactivity";
 
 import { resolveAssetUrl } from "~/assets/assetUrls";
+import { recordVisitForThread } from "~/browserHistoryStore";
 import { isPreviewAvailableFor, previewRuntimeFor } from "~/browser/previewRuntime";
 import {
   applyPreviewServerSnapshot,
@@ -60,6 +62,8 @@ export async function openUrlInPreview<E>(input: {
   readonly openPreview: OpenPreviewMutation<E>;
   readonly profileId?: PreviewOpenInput["profileId"];
   readonly background?: boolean;
+  /** Adds the page to the thread's browsing history unless it opened incognito. */
+  readonly recordVisit?: boolean;
 }): Promise<AtomCommandResult<void, E | BrowserSettingsReadError>> {
   const defaults = await resolveBrowserDefaults().catch(
     (cause: unknown) => new BrowserSettingsReadError({ cause }),
@@ -86,7 +90,10 @@ export async function openUrlInPreview<E>(input: {
     },
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    rememberPreviewUrl(input.threadRef, input.url);
+    if (snapshot.profileId !== INCOGNITO_BROWSER_PROFILE_ID) {
+      rememberPreviewUrl(input.threadRef, input.url);
+      if (input.recordVisit) recordVisitForThread(input.threadRef, input.url);
+    }
     if (input.background) {
       updatePreviewServerSnapshot(input.threadRef, snapshot);
       // The server's "opened" event activates the new tab; hand focus back,

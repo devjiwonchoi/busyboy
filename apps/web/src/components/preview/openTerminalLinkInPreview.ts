@@ -1,4 +1,4 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import { INCOGNITO_BROWSER_PROFILE_ID, type ScopedThreadRef } from "@t3tools/contracts";
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 
@@ -84,7 +84,9 @@ export async function openTerminalLinkInPreview<E>(
     input.fallbackToBrowser();
     return;
   }
-  recordVisitForThread(input.threadRef, input.url);
+  if (result.value.profileId !== INCOGNITO_BROWSER_PROFILE_ID) {
+    recordVisitForThread(input.threadRef, input.url);
+  }
   applyPreviewServerSnapshot(input.threadRef, result.value);
   useRightPanelStore.getState().openBrowser(input.threadRef, result.value.tabId);
 }

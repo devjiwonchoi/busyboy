@@ -1,4 +1,8 @@
-import type { DiscoveredLocalServer, ScopedThreadRef } from "@t3tools/contracts";
+import {
+  INCOGNITO_BROWSER_PROFILE_ID,
+  type DiscoveredLocalServer,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import {
   mapAtomCommandResult,
   type AtomCommandResult,
@@ -26,7 +30,9 @@ export async function openDiscoveredPort<E>(input: {
     url: resolvedUrl,
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    recordVisitForThread(input.threadRef, input.port.url);
+    if (snapshot.profileId !== INCOGNITO_BROWSER_PROFILE_ID) {
+      recordVisitForThread(input.threadRef, input.port.url);
+    }
     useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
   });
 }

@@ -1,4 +1,8 @@
-import type { PreviewSessionSnapshot, ScopedThreadRef } from "@t3tools/contracts";
+import {
+  INCOGNITO_BROWSER_PROFILE_ID,
+  type PreviewSessionSnapshot,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -11,6 +15,12 @@ import {
 vi.mock("~/previewStateStore", () => ({
   applyPreviewServerSnapshot: vi.fn(),
   isPreviewSupportedInRuntime: () => true,
+}));
+
+const historyMocks = vi.hoisted(() => ({ recordVisitForThread: vi.fn() }));
+
+vi.mock("~/browserHistoryStore", () => ({
+  recordVisitForThread: historyMocks.recordVisitForThread,
 }));
 
 vi.mock("~/rightPanelStore", () => ({
@@ -61,6 +71,7 @@ beforeEach(() => {
   browserDefaultsMocks.resolve.mockReset();
   browserDefaultsMocks.resolve.mockResolvedValue(hydratedDefaults);
   linkTargetMocks.preference.mockReturnValue("app");
+  historyMocks.recordVisitForThread.mockReset();
 });
 
 afterEach(() => {
@@ -111,6 +122,26 @@ describe("openTerminalLinkInPreview", () => {
 
     expect(fallbackToBrowser).toHaveBeenCalledOnce();
     expect(openPreview).not.toHaveBeenCalled();
+  });
+
+  it("remembers the page unless it opened in an incognito tab", async () => {
+    const open = (opened: PreviewSessionSnapshot) =>
+      openTerminalLinkInPreview({
+        url: "https://example.com/docs",
+        threadRef,
+        openPreview: async () => AsyncResult.success(opened),
+        fallbackToBrowser: vi.fn(),
+        forceBrowser: false,
+      });
+
+    await open({ ...snapshot, profileId: INCOGNITO_BROWSER_PROFILE_ID });
+    expect(historyMocks.recordVisitForThread).not.toHaveBeenCalled();
+
+    await open(snapshot);
+    expect(historyMocks.recordVisitForThread).toHaveBeenCalledWith(
+      threadRef,
+      "https://example.com/docs",
+    );
   });
 
   it("opens public URLs in-app too, not only local servers", async () => {

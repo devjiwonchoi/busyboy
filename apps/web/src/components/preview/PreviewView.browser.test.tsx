@@ -319,6 +319,7 @@ describe("PreviewView", () => {
     await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
     expect(mocks.searchBrowsingHistory).not.toHaveBeenCalled();
     expect(mocks.recordVisitForThread).not.toHaveBeenCalled();
+    expect(mocks.rememberPreviewUrl).not.toHaveBeenCalled();
   });
 
   it("maps an empty-state localhost server onto the WSL host", async () => {
