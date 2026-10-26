@@ -60,6 +60,7 @@ import {
   CircleCheckIcon,
   CircleDashedIcon,
   CircleDotDashedIcon,
+  ChevronRightIcon,
   FolderIcon,
   GitBranchIcon,
   ListFilterIcon,
@@ -336,6 +337,8 @@ const EMPTY_PROVIDER_ENTRIES: ReadonlyMap<string, SidebarProviderEntry> = new Ma
 const EMPTY_THREADS: readonly EnvironmentThreadShell[] = [];
 
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
+const COLLAPSED_PROJECTS_KEY = "busyboy:sidebar:collapsed-projects";
+const NO_COLLAPSED_PROJECTS: readonly string[] = [];
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -399,8 +402,9 @@ function useSidebarThreads(input: {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly routeThreadKey: string | null;
+  readonly projectGroups: readonly SidebarProjectSnapshot[];
 }) {
-  const { scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey } = input;
+  const { scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey, projectGroups } = input;
   const allThreads = useThreadShells();
   const sideChatParents = useSideChatStore((state) => state.parentByThreadKey);
   // Side chats live in their thread's right panel, not in the list.
@@ -413,6 +417,12 @@ function useSidebarThreads(input: {
     false,
     Schema.Boolean,
   );
+  const [collapsedProjectKeyList, setCollapsedProjectKeyList] = useLocalStorage(
+    COLLAPSED_PROJECTS_KEY,
+    NO_COLLAPSED_PROJECTS,
+    Schema.Array(Schema.String),
+  );
+  const collapsedProjectKeys = new Set(collapsedProjectKeyList);
   const partition = partitionSidebarThreads({
     threads,
     scopedProjectKeys,
@@ -421,7 +431,48 @@ function useSidebarThreads(input: {
     workingShelfEnabled,
   });
 
-  const { pinnedThreads, activeThreads, workingThreads } = partition;
+  const { pinnedThreads, workingThreads } = partition;
+
+  // Active threads render in per-project sections, most recent project
+  // first. Collapsed projects hide their rows like the project filter does.
+  const projectKeyByProject = new Map<string, string>(
+    projectGroups.flatMap((group) =>
+      group.memberProjects.map(
+        (project) => [`${project.environmentId}:${project.id}`, group.projectKey] as const,
+      ),
+    ),
+  );
+  const projectKeyOf = (thread: EnvironmentThreadShell) => {
+    const physicalKey = `${thread.environmentId}:${thread.projectId}`;
+    return projectKeyByProject.get(physicalKey) ?? physicalKey;
+  };
+  const activeThreadsByProject = new Map<string, EnvironmentThreadShell[]>();
+  for (const thread of partition.activeThreads) {
+    const projectKey = projectKeyOf(thread);
+    const projectThreads = activeThreadsByProject.get(projectKey);
+    if (projectThreads) {
+      projectThreads.push(thread);
+    } else {
+      activeThreadsByProject.set(projectKey, [thread]);
+    }
+  }
+  const projectSectionKeys = [
+    ...activeThreadsByProject.keys(),
+    ...projectGroups
+      .filter(
+        (group) =>
+          !activeThreadsByProject.has(group.projectKey) &&
+          (scopedProjectKeys === null ||
+            group.memberProjectRefs.some((ref) =>
+              scopedProjectKeys.has(`${ref.environmentId}:${ref.projectId}`),
+            )),
+      )
+      .map((group) => group.projectKey),
+  ];
+  const activeThreads = projectSectionKeys.flatMap((projectKey) =>
+    collapsedProjectKeys.has(projectKey) ? [] : (activeThreadsByProject.get(projectKey) ?? []),
+  );
+
   const visibleWorkingThreads = workingShelfExpanded
     ? workingThreads
     : routeThreadOnly(workingThreads, routeThreadKey);
@@ -438,9 +489,20 @@ function useSidebarThreads(input: {
     ...partition,
     threads,
     workingShelfEnabled,
-    searchableThreads: [...pinnedThreads, ...activeThreads, ...workingThreads],
+    searchableThreads: [...pinnedThreads, ...partition.activeThreads, ...workingThreads],
     workingShelfExpanded,
     toggleWorkingShelf: () => setWorkingShelfExpanded((value) => !value),
+    activeThreads,
+    activeThreadCount: partition.activeThreads.length,
+    projectSectionKeys,
+    projectKeyOf,
+    collapsedProjectKeys,
+    toggleProjectCollapsed: (projectKey: string) =>
+      setCollapsedProjectKeyList((keys) =>
+        keys.includes(projectKey)
+          ? keys.filter((key) => key !== projectKey)
+          : [...keys, projectKey],
+      ),
     visibleWorkingThreads,
     orderedThreadKeys: orderedThreads.map(threadShellKey),
     threadByKey: new Map(orderedThreads.map((thread) => [threadShellKey(thread), thread] as const)),
@@ -1030,6 +1092,45 @@ function SidebarSectionHeader(props: {
       >
         {props.label}
       </CollapsibleSectionHeader>
+    </SortableSidebarMarker>
+  );
+}
+
+function SidebarProjectHeader(props: {
+  marker: SidebarListMarker;
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onNewThread: (() => void) | null;
+}) {
+  return (
+    <SortableSidebarMarker
+      marker={props.marker}
+      data-testid="sidebar-project-header"
+      className="group/project mx-0.5 mt-2 flex h-7 items-center"
+    >
+      <button
+        type="button"
+        aria-expanded={props.expanded}
+        onClick={props.onToggle}
+        className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+      >
+        <ChevronRightIcon
+          aria-hidden
+          className={cn("size-3 shrink-0 transition-transform", props.expanded && "rotate-90")}
+        />
+        <span className="truncate">{props.label}</span>
+      </button>
+      {props.onNewThread ? (
+        <button
+          type="button"
+          aria-label={`New thread in ${props.label}`}
+          onClick={props.onNewThread}
+          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground opacity-0 transition-opacity hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover/project:opacity-100"
+        >
+          <PlusIcon className="size-3.5" />
+        </button>
+      ) : null}
     </SortableSidebarMarker>
   );
 }
@@ -2394,11 +2495,17 @@ export default function Sidebar() {
     activeKeys,
     pinnedKeysById,
     activeKeysById,
+    activeThreadCount,
+    projectSectionKeys,
+    projectKeyOf,
+    collapsedProjectKeys,
+    toggleProjectCollapsed,
   } = useSidebarThreads({
     scopedProjectKeys,
     serverConfigs,
     optimisticDrop,
     routeThreadKey,
+    projectGroups,
   });
 
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
@@ -2792,16 +2899,22 @@ export default function Sidebar() {
         const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
         return { kind: "thread", key, section };
       });
-    if (pinnedThreads.length + activeThreads.length + workingThreads.length === 0) {
+    if (pinnedThreads.length + activeThreadCount + workingThreads.length === 0) {
       return [];
     }
     const items: SidebarListItem[] = [{ kind: "marker", marker: "pinned-header" }];
     const pinnedRows = rowsOf(pinnedThreads, "pinned");
     items.push(...pinnedRows);
     items.push({ kind: "marker", marker: "pinned-divider" });
-    const activeRows = rowsOf(activeThreads, "active");
     items.push({ kind: "marker", marker: "active-placeholder" });
-    items.push(...activeRows);
+    // activeThreads is already grouped in projectSectionKeys order.
+    for (const projectKey of projectSectionKeys) {
+      items.push({ kind: "marker", marker: `project:${projectKey}` });
+      for (const thread of activeThreads) {
+        if (projectKeyOf(thread) !== projectKey) continue;
+        items.push({ kind: "thread", key: threadShellKey(thread), section: "active", projectKey });
+      }
+    }
     if (workingThreads.length > 0) {
       items.push({ kind: "marker", marker: "working-header" });
       items.push(...rowsOf(visibleWorkingThreads, "working"));
@@ -3499,6 +3612,25 @@ export default function Sidebar() {
     openCommandPalette({ open: "new-thread-in" });
   };
 
+  const handleProjectNewThread = (projectGroup: SidebarProjectSnapshot) => {
+    if (isMobile) setOpenMobile(false);
+    void (async () => {
+      const result = await settlePromise(() =>
+        handleNewThreadRef.current(scopeProjectRef(projectGroup.environmentId, projectGroup.id)),
+      );
+      if (result._tag === "Failure") {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Could not create thread",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    })();
+  };
+
   const newThreadShortcutLabel =
     shortcutLabelForCommand(keybindings, "chat.new") ??
     (projectGroups.length <= 1 ? shortcutLabelForCommand(keybindings, "chat.newLocal") : undefined);
@@ -3908,6 +4040,22 @@ export default function Sidebar() {
                               />,
                             );
                             break;
+                          default: {
+                            const projectKey = item.marker.slice("project:".length);
+                            const projectGroup = projectGroupByScopeKey.get(projectKey);
+                            items.push(
+                              <SidebarProjectHeader
+                                key={item.marker}
+                                marker={item.marker}
+                                label={projectGroup?.displayName ?? "Unknown project"}
+                                expanded={!collapsedProjectKeys.has(projectKey)}
+                                onToggle={() => toggleProjectCollapsed(projectKey)}
+                                onNewThread={
+                                  projectGroup ? () => handleProjectNewThread(projectGroup) : null
+                                }
+                              />,
+                            );
+                          }
                         }
                       }
                       return items;
@@ -3919,7 +4067,7 @@ export default function Sidebar() {
           ) : null}
           {!isSearchingThreads &&
           visibleDraftSessionCount === 0 &&
-          pinnedThreads.length + activeThreads.length + workingThreads.length === 0 ? (
+          pinnedThreads.length + activeThreadCount + workingThreads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
               {projects.length === 0 ? (
                 <>

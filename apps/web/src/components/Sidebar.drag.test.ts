@@ -452,6 +452,25 @@ describe("sidebar drag projection", () => {
     expect(result.get(sidebarMarkerId("working-header"))?.y).toBe(-1);
   });
 
+  it("keeps an unpinned row in its own project section when dropped in another", () => {
+    const items: SidebarListItem[] = [
+      pinnedHeader,
+      { kind: "thread", key: "p", section: "pinned", projectKey: "x" },
+      divider,
+      marker("active-placeholder"),
+      marker("project:x"),
+      { kind: "thread", key: "x1", section: "active", projectKey: "x" },
+      marker("project:y"),
+      { kind: "thread", key: "y1", section: "active", projectKey: "y" },
+    ];
+    const result = preview({ items }, "p", "y1");
+    expect(result.get(sidebarMarkerId("project:x"))).toEqual({ ...stationary, y: -84 });
+    expect(result.get("x1")).toEqual({ ...stationary, y: -84 });
+    // Project y only shifts by the removed pinned gap: p's slot opens in x.
+    expect(result.get(sidebarMarkerId("project:y"))).toEqual({ ...stationary, y: -1 });
+    expect(result.get("y1")).toEqual({ ...stationary, y: -1 });
+  });
+
   it("preserves a collapsed Working header while another section changes", () => {
     const items = [
       pinnedHeader,
