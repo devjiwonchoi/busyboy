@@ -1037,6 +1037,7 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
   );
 }
 import { Button } from "../ui/button";
+import { Kbd } from "../ui/kbd";
 import { Select, SelectItem, SelectPopup, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
@@ -1348,6 +1349,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   } | null;
   isRunning: boolean;
   canInterrupt: boolean;
+  showEscapeToStopHint: boolean;
   followUpBehavior: "queue" | "steer";
   canSteer: boolean;
   alternateShortcutLabel: string | null;
@@ -1385,6 +1387,11 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         />
       ) : props.reserveContextWindowMeter ? (
         <ContextWindowMeterPlaceholder />
+      ) : null}
+      {props.showEscapeToStopHint ? (
+        <Kbd role="status" aria-label="Press Escape again to stop">
+          Esc
+        </Kbd>
       ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
@@ -1508,6 +1515,8 @@ export interface ChatComposerProps {
 
   phase: SessionPhase;
   canInterrupt: boolean;
+  /** A first Escape is waiting for a second to stop the running turn. */
+  showEscapeToStopHint: boolean;
   isConnecting: boolean;
   isSendBusy: boolean;
   canResume: boolean;
@@ -1903,6 +1912,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     projectSelectionRequired,
     phase,
     canInterrupt,
+    showEscapeToStopHint,
     isConnecting,
     isSendBusy,
     canResume,
@@ -7288,6 +7298,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     pendingAction={pendingPrimaryAction}
                     isRunning={phase === "running"}
                     canInterrupt={canInterrupt}
+                    showEscapeToStopHint={showEscapeToStopHint}
                     followUpBehavior={settings.followUpBehavior}
                     canSteer={!isCompacting}
                     alternateShortcutLabel={shortcutLabelForCommand(
