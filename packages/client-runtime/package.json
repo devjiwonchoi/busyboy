@@ -47,6 +47,10 @@
       "types": "./src/secretRequest.ts",
       "default": "./src/secretRequest.ts"
     },
+    "./computer-use-approval": {
+      "types": "./src/computerUseApproval.ts",
+      "default": "./src/computerUseApproval.ts"
+    },
     "./scheduled-task-webhook": {
       "types": "./src/scheduledTaskWebhook.ts",
       "default": "./src/scheduledTaskWebhook.ts"

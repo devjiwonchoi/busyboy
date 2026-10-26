@@ -146,6 +146,9 @@ it.effect("production mcp layer lists worktree tools over http", () =>
       const appState = tools.find((tool) => tool.name === "computer_get_app_state");
       expect(appState?.annotations?.readOnlyHint).toBe(true);
       expect(appState?.annotations?.openWorldHint).toBe(true);
+      const click = tools.find((tool) => tool.name === "computer_click");
+      expect(click?.annotations?.readOnlyHint).toBe(false);
+      expect(click?.annotations?.destructiveHint).toBe(true);
 
       const handoff = tools.find((tool) => tool.name === "t3_worktree_handoff");
       expect(handoff?.annotations?.readOnlyHint).toBe(false);

@@ -291,6 +291,7 @@ import {
   V2LifecycleRow,
   type HandoffTimelineRun,
 } from "./V2LifecycleRow";
+import { ComputerUseApprovalCard } from "./ComputerUseApprovalCard";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 
@@ -2917,6 +2918,15 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
   if (item.type === "secret_request") {
     return (
       <SecretRequestCard
+        environmentId={ctx.activeThreadEnvironmentId}
+        item={item}
+        visibility={visibility}
+      />
+    );
+  }
+  if (item.type === "computer_use_approval") {
+    return (
+      <ComputerUseApprovalCard
         environmentId={ctx.activeThreadEnvironmentId}
         item={item}
         visibility={visibility}

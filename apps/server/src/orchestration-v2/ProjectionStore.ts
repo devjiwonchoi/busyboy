@@ -1356,10 +1356,19 @@ function buildVisibleTurnItems(input: {
   ]);
 }
 
+// Secret requests and computer-use approvals wait on the user like a runtime
+// request, so the thread shows that it needs an answer.
+const USER_ANSWERED_ITEM_TYPES: ReadonlySet<OrchestrationV2TurnItem["type"]> = new Set([
+  "secret_request",
+  "computer_use_approval",
+]);
+
 function secretRequestAsPendingInput(
   item: OrchestrationV2TurnItem | null,
 ): OrchestrationV2ThreadProjection["runtimeRequests"][number] | null {
-  if (item?.type !== "secret_request" || item.nodeId === null) return null;
+  if (item === null || !USER_ANSWERED_ITEM_TYPES.has(item.type) || item.nodeId === null) {
+    return null;
+  }
   return {
     id: RuntimeRequestId.make(item.id),
     nodeId: item.nodeId,
@@ -1409,7 +1418,7 @@ export function threadShellFromProjection(
       projection.turnItems
         .filter(
           (item) =>
-            item.type === "secret_request" &&
+            USER_ANSWERED_ITEM_TYPES.has(item.type) &&
             item.status === "waiting" &&
             item.runId !== null &&
             liveRunIds.has(item.runId),
@@ -5264,7 +5273,8 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 WHERE r.thread_id = t.thread_id
                   AND r.status IN ('preparing', 'starting', 'running', 'waiting')
                   AND secret.thread_id = t.thread_id AND secret.run_id = r.run_id
-                  AND secret.type = 'secret_request' AND secret.status = 'waiting'
+                  AND secret.type IN ('secret_request', 'computer_use_approval')
+                  AND secret.status = 'waiting'
                 ORDER BY secret.updated_at DESC, secret.turn_item_id DESC
                 LIMIT 1
               ) AS pending_secret_request_payload_json,
