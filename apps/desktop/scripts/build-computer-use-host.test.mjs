@@ -92,6 +92,23 @@ describe.runIf(process.platform === "darwin")("Busyboy Computer Use.app", () => 
     expect(NodeChildProcess.spawnSync(other, [host, "--version"]).status).toBe(77);
   });
 
+  it("refuses to run inside a sandbox, even for Busyboy", () => {
+    // A sandbox passes to every process an agent starts, including Busyboy's own binaries.
+    const result = NodeChildProcess.spawnSync(
+      "sandbox-exec",
+      [
+        "-p",
+        '(version 1)(allow default)(deny file-write* (literal "/private/var/empty/x"))',
+        busyboy,
+        host,
+        "--version",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(77);
+    expect(result.stderr).toContain("does not run inside a sandbox");
+  });
+
   it("runs only a driver signed by Cua", () => {
     installDriver("/bin/echo");
     const result = NodeChildProcess.spawnSync(busyboy, [host, "--version"], { encoding: "utf8" });

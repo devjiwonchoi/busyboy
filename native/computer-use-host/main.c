@@ -7,9 +7,11 @@
 // the user. This app takes responsibility for itself, so the user grants these
 // permissions to it alone and agents inherit nothing.
 //
-// It starts only for a Busyboy app, and only runs the Cua-signed driver
-// installed beside it. Busyboy runs from user-writable source, so this raises
-// the bar for an agent; it is not a boundary against one set on getting in.
+// It starts only for a Busyboy app, never inside a sandbox, and only runs the
+// Cua-signed driver installed beside it. A sandbox passes to every process an
+// agent starts, so an agent in one (such as Codex's default mode) cannot use
+// this app by any route. An agent with full access is not contained: it can
+// change Busyboy itself, which runs from user-writable source.
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
@@ -29,6 +31,8 @@
 extern char **environ;
 // Private in libsystem; Chromium uses it the same way.
 int responsibility_spawnattrs_setdisclaim(posix_spawnattr_t *attrs, int disclaim);
+// Private in libsystem; with no operation it reports whether pid is sandboxed.
+int sandbox_check(pid_t pid, const char *operation, int type, ...);
 
 #define OWN_BUNDLE_ID "dev.jiwon.busyboy.computer-use"
 #define CALLER_BUNDLE_ID "dev.jiwon.busyboy"
@@ -176,6 +180,10 @@ static int run_driver(const char *driver, int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
+  // Busyboy's backend is never sandboxed; a sandboxed agent's processes always are.
+  if (sandbox_check(getpid(), NULL, 0) != 0) {
+    return fail(77, "computer use does not run inside a sandbox");
+  }
   if (!started_by_busyboy()) return fail(77, "only Busyboy can start computer use");
   if (getenv(DISCLAIMED_ENV) == NULL) return become_responsible(argv);
   unsetenv(DISCLAIMED_ENV);
