@@ -38,6 +38,7 @@ artifacts/app-store/screenshots/
 .github/pr-assets/
 native/**/target/
 apps/desktop/resources/cua-driver/
+apps/desktop/resources/computer-use/
 node_modules/
 .alchemy/
 *.log

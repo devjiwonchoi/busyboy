@@ -63,6 +63,11 @@ NodeChildProcess.execFileSync(
   [NodePath.join(desktopDir, "scripts/fetch-cua-driver.mjs")],
   { stdio: "inherit" },
 );
+NodeChildProcess.execFileSync(
+  process.execPath,
+  [NodePath.join(desktopDir, "scripts/build-computer-use-host.mjs")],
+  { stdio: "inherit" },
+);
 
 await waitForResources({
   baseDir: desktopDir,
