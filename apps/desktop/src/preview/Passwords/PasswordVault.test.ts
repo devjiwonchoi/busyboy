@@ -62,7 +62,13 @@ describe("PasswordVault", () => {
       yield* Effect.gen(function* () {
         const vault = yield* PasswordVault.PasswordVault;
         expect(yield* vault.count).toBe(0);
-        expect(yield* vault.save({ passwords: [github, example], source: "chrome" })).toEqual({
+        expect(
+          yield* vault.save({
+            passwords: [github, example],
+            source: "chrome",
+            onlyWhileChromeSyncs: false,
+          }),
+        ).toEqual({
           imported: 2,
           updated: 0,
         });
@@ -71,6 +77,7 @@ describe("PasswordVault", () => {
           yield* vault.save({
             passwords: [{ ...github, password: "changed" }, example],
             source: "1password",
+            onlyWhileChromeSyncs: false,
           }),
         ).toEqual({ imported: 0, updated: 1 });
       }).pipe(Effect.provide(layer));
@@ -124,7 +131,9 @@ describe("PasswordVault", () => {
 
       const error = yield* Effect.gen(function* () {
         const vault = yield* PasswordVault.PasswordVault;
-        return yield* Effect.flip(vault.save({ passwords: [github], source: "chrome" }));
+        return yield* Effect.flip(
+          vault.save({ passwords: [github], source: "chrome", onlyWhileChromeSyncs: false }),
+        );
       }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: false })));
 
       expect(error.reason).toBe("encryptionUnavailable");

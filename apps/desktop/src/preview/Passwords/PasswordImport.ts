@@ -95,12 +95,14 @@ export const make = Effect.gen(function* () {
   const saveRead = Effect.fn("PasswordImport.saveRead")(function* ({
     read,
     sourceId,
+    onlyWhileChromeSyncs,
   }: {
     readonly read: PasswordReadResult;
     readonly sourceId: PasswordImportSourceId;
+    readonly onlyWhileChromeSyncs: boolean;
   }) {
     const saved = yield* vault
-      .save({ passwords: read.passwords, source: sourceId })
+      .save({ passwords: read.passwords, source: sourceId, onlyWhileChromeSyncs })
       .pipe(Effect.mapError(vaultFailure(sourceId)));
     return { ...saved, skipped: read.skipped } satisfies PasswordImportResult;
   });
@@ -210,7 +212,7 @@ export const make = Effect.gen(function* () {
     );
 
     const read = yield* readChromeProfile({ databasePaths: profile.databasePaths, keys });
-    const result = yield* saveRead({ read, sourceId: "chrome" });
+    const result = yield* saveRead({ read, sourceId: "chrome", onlyWhileChromeSyncs: false });
     yield* vault
       .setChromeSync({ profileDirectory: profile.directory, keys: encodeChromiumKeys(keys) })
       .pipe(Effect.mapError(vaultFailure("chrome")));
@@ -236,7 +238,7 @@ export const make = Effect.gen(function* () {
       return yield* new PasswordImportFailedError({ sourceId: "chrome", reason: "readFailed" });
     }
 
-    const result = yield* saveRead({ read, sourceId: "chrome" });
+    const result = yield* saveRead({ read, sourceId: "chrome", onlyWhileChromeSyncs: true });
     yield* Ref.set(lastChromeSync, yield* Clock.currentTimeMillis);
     if (result.imported > 0 || result.updated > 0) {
       yield* Effect.logInfo("Synced passwords from Chrome", {
@@ -312,7 +314,7 @@ export const make = Effect.gen(function* () {
       return yield* new PasswordImportFailedError({ sourceId, reason: "invalidFile" });
     }
 
-    return yield* saveRead({ read, sourceId });
+    return yield* saveRead({ read, sourceId, onlyWhileChromeSyncs: false });
   });
 
   return PasswordImport.of({ chromeSource, importChrome, stopChromeSync, importFile, status });

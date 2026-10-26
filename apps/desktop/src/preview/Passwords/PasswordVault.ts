@@ -116,6 +116,11 @@ export class PasswordVault extends Context.Service<
     readonly save: (input: {
       readonly passwords: ReadonlyArray<ImportedPassword>;
       readonly source: PasswordImportSourceId;
+      /**
+       * Background syncs pass true: if the user stopped syncing or removed
+       * everything while the sync was reading Chrome, nothing is written back.
+       */
+      readonly onlyWhileChromeSyncs: boolean;
     }) => Effect.Effect<
       { readonly imported: number; readonly updated: number },
       PasswordVaultError
@@ -231,12 +236,17 @@ export const make = Effect.gen(function* () {
   const save = Effect.fn("PasswordVault.save")(function* ({
     passwords,
     source,
+    onlyWhileChromeSyncs,
   }: {
     readonly passwords: ReadonlyArray<ImportedPassword>;
     readonly source: PasswordImportSourceId;
+    readonly onlyWhileChromeSyncs: boolean;
   }) {
     const savedAt = yield* Clock.currentTimeMillis;
     return yield* update((state) => {
+      if (onlyWhileChromeSyncs && state.chromeSync === null) {
+        return { result: { imported: 0, updated: 0 }, next: null };
+      }
 
       const byKey = new Map(state.passwords.map((entry) => [entryKey(entry), entry] as const));
       let imported = 0;
