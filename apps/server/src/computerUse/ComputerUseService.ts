@@ -4,6 +4,7 @@ import {
   ComputerUseError,
   type ComputerUseErrorCode,
   type ComputerUseGetAppStateInput,
+  type ProviderInstanceId,
   type ThreadId,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -15,18 +16,25 @@ import * as Option from "effect/Option";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ComputerUseApprovals from "./ComputerUseApprovals.ts";
 import * as ComputerUseDriver from "./ComputerUseDriver.ts";
 import { computerUseAppPolicy } from "./ComputerUsePolicy.ts";
+
+/** The agent session calling a computer-use tool. */
+export interface ComputerUseCaller {
+  readonly threadId: ThreadId;
+  readonly providerInstanceId: ProviderInstanceId;
+}
 
 export class ComputerUseService extends Context.Service<
   ComputerUseService,
   {
     readonly listApps: (input: {
-      readonly threadId: ThreadId;
+      readonly caller: ComputerUseCaller;
       readonly includeNotRunning: boolean;
     }) => Effect.Effect<{ readonly apps: ReadonlyArray<ComputerUseApp> }, ComputerUseError>;
     readonly getAppState: (
-      input: ComputerUseGetAppStateInput & { readonly threadId: ThreadId },
+      input: ComputerUseGetAppStateInput & { readonly caller: ComputerUseCaller },
     ) => Effect.Effect<ComputerUseAppState, ComputerUseError>;
   }
 >()("t3/computerUse/ComputerUseService") {}
@@ -83,6 +91,7 @@ function defaultWindow(windows: ReadonlyArray<WindowInfo>): WindowInfo | undefin
 
 export const make = Effect.gen(function* () {
   const driver = yield* ComputerUseDriver.ComputerUseDriver;
+  const approvals = yield* ComputerUseApprovals.ComputerUseApprovals;
   const settings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
   const projections = yield* ProjectionStore.ProjectionStoreV2;
 
@@ -125,8 +134,8 @@ export const make = Effect.gen(function* () {
 
   const listApps: ComputerUseService["Service"]["listApps"] = Effect.fn(
     "ComputerUseService.listApps",
-  )(function* ({ threadId, includeNotRunning }) {
-    yield* requireEnabled(threadId);
+  )(function* ({ caller, includeNotRunning }) {
+    yield* requireEnabled(caller.threadId);
     return yield* withWorker((worker) =>
       callDriver(() => worker.listApps({})).pipe(
         Effect.map(({ apps }) => ({
@@ -146,7 +155,7 @@ export const make = Effect.gen(function* () {
   const getAppState: ComputerUseService["Service"]["getAppState"] = Effect.fn(
     "ComputerUseService.getAppState",
   )(function* (input) {
-    yield* requireEnabled(input.threadId);
+    yield* requireEnabled(input.caller.threadId);
     return yield* withWorker((worker) =>
       Effect.gen(function* () {
         const { apps } = yield* callDriver(() => worker.listApps({}));
@@ -175,6 +184,12 @@ export const make = Effect.gen(function* () {
             `${app.name} is not running. Ask the user to open it, then try again.`,
           );
         }
+        yield* approvals.require({
+          threadId: input.caller.threadId,
+          providerInstanceId: input.caller.providerInstanceId,
+          appName: app.name,
+          bundleId: app.bundleId,
+        });
 
         const permissions = yield* readPermissions(worker);
         if (!permissions.accessibility) return yield* permissionRequired("Accessibility");

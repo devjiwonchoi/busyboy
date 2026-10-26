@@ -36,7 +36,7 @@ const ComputerUseListAppsTool = Tool.make("computer_list_apps", {
 
 export const ComputerUseGetAppStateTool = Tool.make("computer_get_app_state", {
   description:
-    "Read a window of a running app on the user's Mac: its accessibility tree as text, and a screenshot when asked. The app stays where it is; Busyboy does not bring it to the front. Prefer the tree, and add includeScreenshot only when the tree does not show enough, since apps expose accessibility unevenly. To check what an action changed, pass the previous snapshotId as `since` to get only the differences. Some apps, such as terminals and password managers, are never available to computer use.",
+    "Read a window of a running app on the user's Mac: its accessibility tree as text, and a screenshot when asked. The app stays where it is; Busyboy does not bring it to the front. Prefer the tree, and add includeScreenshot only when the tree does not show enough, since apps expose accessibility unevenly. To check what an action changed, pass the previous snapshotId as `since` to get only the differences. The first time a turn uses an app, the user is asked to allow it and the call waits for the answer; if they decline, do not retry that app in the same turn. Some apps, such as terminals and password managers, are never available to computer use.",
   parameters: ComputerUseGetAppStateInput,
   success: ComputerUseAppState,
   failure,

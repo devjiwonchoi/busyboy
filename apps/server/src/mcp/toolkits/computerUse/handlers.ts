@@ -6,11 +6,11 @@ import * as McpToolAccess from "../../McpToolAccess.ts";
 import { ComputerUseAppStateToolkit, ComputerUseStandardToolkit } from "./tools.ts";
 
 // Computer use acts for the calling thread: its project's setting decides
-// whether it is on, and later its approvals belong to that thread.
-const callerThread = Effect.gen(function* () {
+// whether it is on, and its approvals belong to that thread's run.
+const caller = Effect.gen(function* () {
   const scope = yield* McpInvocationContext.McpInvocationContext;
   const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "Computer use");
-  return thread.threadId;
+  return { threadId: thread.threadId, providerInstanceId: thread.providerInstanceId };
 });
 
 export const layerStandard = McpToolAccess.toLayer(ComputerUseStandardToolkit, {
@@ -18,7 +18,7 @@ export const layerStandard = McpToolAccess.toLayer(ComputerUseStandardToolkit, {
     Effect.gen(function* () {
       const service = yield* ComputerUseService.ComputerUseService;
       return yield* service.listApps({
-        threadId: yield* callerThread,
+        caller: yield* caller,
         includeNotRunning: input.includeNotRunning === true,
       });
     }),
@@ -29,7 +29,7 @@ export const layerAppState = McpToolAccess.toLayer(ComputerUseAppStateToolkit, {
   computer_get_app_state: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
       const service = yield* ComputerUseService.ComputerUseService;
-      return yield* service.getAppState({ ...input, threadId: yield* callerThread });
+      return yield* service.getAppState({ ...input, caller: yield* caller });
     }),
   ),
 });
