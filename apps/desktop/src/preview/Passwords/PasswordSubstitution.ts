@@ -101,6 +101,8 @@ export interface Substitution {
   readonly ready: Promise<void>;
   /** Resolves `true` once the sign-in request left with the real password. */
   readonly done: Promise<boolean>;
+  /** Resolves once interception is off and no request can be swapped any more. */
+  readonly stopped: Promise<void>;
   readonly cancel: () => void;
 }
 
@@ -133,6 +135,10 @@ export const armSubstitution = ({
   let swapped = false;
   let finished = false;
   let disabled = false;
+  let markStopped: () => void = () => {};
+  const stopped = new Promise<void>((resolve) => {
+    markStopped = resolve;
+  });
 
   const finish = (result: boolean) => {
     if (finished) {
@@ -148,6 +154,7 @@ export const armSubstitution = ({
         .catch(() => undefined)
         .finally(() => {
           disabled = true;
+          markStopped();
         });
     if (result) {
       setTimeout(disable, keepInterceptingMs);
@@ -198,5 +205,5 @@ export const armSubstitution = ({
       patterns: [{ urlPattern: `${pageOrigin}/*`, requestStage: "Request" }],
     })
     .then(() => undefined);
-  return { ready, done, cancel: () => finish(false), onDebuggerMessage };
+  return { ready, done, stopped, cancel: () => finish(false), onDebuggerMessage };
 };

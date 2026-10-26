@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { Buffer } from "node:buffer";
 import * as NodeEvents from "node:events";
 
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
@@ -33,11 +34,12 @@ const makeDebuggee = () => {
         pending.push(() => resolve({ method }));
       }),
   });
-  const webContents = {
+  const webContents = Object.assign(new NodeEvents.EventEmitter(), {
     getURL: () => "http://localhost/",
     getTitle: () => "Page",
     getUserAgent: () => "Electron",
-  };
+    isDestroyed: () => false,
+  });
   return {
     tab: {
       webContents: webContents as unknown as Electron.WebContents,
@@ -152,28 +154,27 @@ describe("DesktopBrowserHost", () => {
   );
 
   it.effect(
-    "signs the agent in without the password ever reaching it, then unlocks on navigation",
+    "keeps the agent off the page while a sign-in's swap can happen, and never relays the password",
     () =>
       Effect.gen(function* () {
         const secret = 'hunter2 "pw"';
-        const pageEvents = new NodeEvents.EventEmitter();
+        let signIn: { readonly cancel: () => void } | undefined;
         const host = yield* DesktopBrowserHost.make.pipe(
           Effect.provideService(PasswordSignIn.PasswordSignIn, {
-            signIn: async ({ lock }) => {
+            signIn: async ({ lock, substitute }) => {
               lock(secret);
+              signIn = substitute({
+                standIn: "Qq7standin0000000",
+                password: secret,
+                pageOrigin: "https://example.com",
+              });
               return { status: "submitted" };
             },
-            // The failed form keeps the password, so only navigation unlocks it.
-            pageHoldsPassword: async () => true,
+            pageHoldsPassword: async () => false,
             clearPasswordFields: async () => {},
           }),
         );
         const debuggee = makeDebuggee();
-        Object.assign(debuggee.tab.webContents, {
-          on: pageEvents.on.bind(pageEvents),
-          off: pageEvents.off.bind(pageEvents),
-          isDestroyed: () => false,
-        });
         host.attach(key, debuggee.tab);
         const collected = yield* takeEvents(host, 7).pipe(Effect.forkChild);
         const agent = (message: Record<string, unknown>) =>
@@ -190,17 +191,24 @@ describe("DesktopBrowserHost", () => {
           sessionId: "t3-preview-page",
         });
         yield* settle;
-        yield* agent({ id: 3, method: "Runtime.evaluate", sessionId: "t3-preview-page" });
+        // The swap is still armed: the agent could read the stand-in and have
+        // the page send it somewhere that echoes the password back.
+        yield* agent({ id: 3, method: "DOM.getDocument", sessionId: "t3-preview-page" });
         debuggee.emit("Network.requestWillBeSent", {
           request: {
             postData: `password=${encodeURIComponent(secret)}`,
             json: { password: secret },
+            postDataEntries: [
+              { bytes: Buffer.from(`{"user":"octo","password":"${secret}"}`).toString("base64") },
+            ],
           },
         });
         yield* settle;
 
-        pageEvents.emit("did-navigate");
-        yield* agent({ id: 4, method: "Runtime.evaluate", sessionId: "t3-preview-page" });
+        signIn?.cancel();
+        debuggee.release();
+        yield* settle;
+        yield* agent({ id: 4, method: "DOM.getDocument", sessionId: "t3-preview-page" });
         yield* settle;
         debuggee.release();
         yield* settle;
@@ -218,12 +226,40 @@ describe("DesktopBrowserHost", () => {
           error: { message: expect.stringContaining("saved password") },
         });
         expect(replies.find((reply) => reply["id"] === 4)).toMatchObject({
-          result: { method: "Runtime.evaluate" },
+          result: { method: "DOM.getDocument" },
         });
         const network = messages.find((message) => message.includes("requestWillBeSent"))!;
         expect(network).not.toContain("hunter2");
-        expect(network.match(/\[saved password\]/g)).toHaveLength(2);
+        expect(network).not.toContain(
+          Buffer.from('"password":"hunter2').toString("base64").slice(0, 12),
+        );
+        expect(network.match(/\[saved password\]/g)).toHaveLength(3);
       }),
+  );
+
+  it.effect("starts an agent that attaches after a person's autofill locked out", () =>
+    Effect.gen(function* () {
+      const host = yield* makeHost;
+      const debuggee = makeDebuggee();
+      host.lockForFilledPassword(debuggee.tab.webContents, "s3cret");
+      host.attach(key, debuggee.tab);
+      const collected = yield* takeEvents(host, 3).pipe(Effect.forkChild);
+      yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      const agent = (message: Record<string, unknown>) =>
+        host.handleCommandLine(encodeJson({ type: "cdp", ...key, message: encodeJson(message) }));
+
+      yield* agent({ id: 1, method: "Target.setAutoAttach", params: {} });
+      yield* agent({ id: 2, method: "DOM.getDocument", sessionId: "t3-preview-page" });
+      yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      debuggee.release();
+
+      const replies = (yield* Fiber.join(collected)).flatMap((event) =>
+        event.type === "cdp" ? [JSON.parse(event.message) as Record<string, unknown>] : [],
+      );
+      expect(replies.find((reply) => reply["id"] === 2)).toMatchObject({
+        error: { message: expect.stringContaining("saved password") },
+      });
+    }),
   );
 
   it.effect("keeps the agent off a password a person's autofill put in its page", () =>

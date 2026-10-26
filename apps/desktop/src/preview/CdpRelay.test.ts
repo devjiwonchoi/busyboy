@@ -283,7 +283,8 @@ describe("CDP relay downloads", () => {
     page(3, "Page.reload", { scriptToEvaluateOnLoad: "steal()" });
     page(4, "Page.navigate", { url: "https://example.com/" });
     await settle();
-    expect(noteAgentScript).toHaveBeenCalledTimes(3);
+    // The Busyboy note, then each script both before and after it runs.
+    expect(noteAgentScript).toHaveBeenCalledTimes(5);
 
     locked = true;
     page(5, "Page.navigate", { url: "javascript:void 0" });
@@ -294,5 +295,40 @@ describe("CDP relay downloads", () => {
       written.filter((message) => message["error"] !== undefined).map((message) => message["id"]),
     ).toEqual([5, 6]);
     expect(send).toHaveBeenLastCalledWith("Page.reload", {}, undefined);
+  });
+
+  it("marks the page the agent's evaluate ran in, even if it navigated meanwhile", async () => {
+    let finish: () => void = () => {};
+    const send = vi.fn(
+      (method: string) =>
+        new Promise<unknown>((resolve) => {
+          if (method === "Runtime.evaluate") finish = () => resolve({});
+          else resolve({});
+        }),
+    );
+    const marks: Array<string> = [];
+    let documentId = "A";
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, {
+        signIn: async () => ({}),
+        credentialLocked: () => false,
+        noteAgentScript: () => marks.push(documentId),
+      }),
+      () => {},
+    );
+    const page = (id: number, method: string, params: Record<string, unknown>) =>
+      relay.receive(JSON.stringify({ id, method, params, sessionId: "t3-preview-page" }));
+
+    // Playwright's own evaluations name a context and are not the agent's.
+    page(1, "Runtime.evaluate", { expression: "1", contextId: 7 });
+    await settle();
+    expect(marks).toEqual([]);
+
+    page(2, "Runtime.evaluate", { expression: "steal()" });
+    await settle();
+    documentId = "B";
+    finish();
+    await settle();
+    expect(marks).toEqual(["A", "B"]);
   });
 });

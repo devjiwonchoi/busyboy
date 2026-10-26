@@ -54,6 +54,7 @@ const fakePage = ({
     swaps.push({ standIn, password });
     return {
       ready: Promise.resolve(),
+      stopped: Promise.resolve(),
       done: sendsStandIn ? Promise.resolve(true) : new Promise<boolean>(() => {}),
       cancel: () => {
         cancelled = true;

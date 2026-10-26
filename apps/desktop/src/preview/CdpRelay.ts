@@ -81,10 +81,14 @@ const isAllowedWhileCredentialLocked = (method: string) =>
   method.startsWith("Emulation.");
 
 /**
- * Commands that run script in the page without looking like it: a
- * `javascript:` navigation, or a reload that injects a script.
+ * Commands that run the agent's own script in the page: a contextless
+ * evaluate, a `javascript:` navigation, or a reload that injects a script.
  */
 const runsPageScript = (command: CdpCommand) => {
+  // Playwright always names a context; only the agent's own code runs without one.
+  if (command.method === "Runtime.evaluate") {
+    return command.params?.["contextId"] == null && command.params?.["uniqueContextId"] == null;
+  }
   if (command.method === "Page.navigate") {
     const url = command.params?.["url"];
     return typeof url === "string" && /^\s*javascript:/i.test(url);
@@ -207,7 +211,12 @@ export function createCdpRelayConnection(
       return Promise.reject(new Error(CREDENTIAL_LOCKED_MESSAGE));
     }
     if (scripted) {
+      // Marked again once it has run: a navigation in between would clear the
+      // first mark from the document the script actually ran in.
       target.noteAgentScript();
+      const sent = target.send(command.method, command.params ?? {}, child);
+      void sent.then(target.noteAgentScript, target.noteAgentScript);
+      return sent;
     }
     // The page itself is already running, but its child frames are not:
     // Playwright auto-attaches with waitForDebuggerOnStart, so Chromium pauses

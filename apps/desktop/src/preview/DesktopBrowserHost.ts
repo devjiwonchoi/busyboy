@@ -10,6 +10,7 @@ import {
   type DesktopBrowserEvent as DesktopBrowserEventType,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import { Buffer } from "node:buffer";
 import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -35,11 +36,12 @@ const AGENT_DOWNLOAD_WINDOW_MS = 5_000;
  * autofill; agent clicks are trusted events, so the page cannot tell.
  */
 const AGENT_DRIVING_WINDOW_MS = 3_000;
-/** How often a locked page is checked for a password still in a field. */
-const CREDENTIAL_CHECK_MS = 750;
-/** A failed sign-in can leave the password in place; it is cleared after this. */
-const CREDENTIAL_LOCK_MAX_MS = 60_000;
 const SCRUBBED_TEXT = "[saved password]";
+/** Strings this long are screenshots or bodies too big to hide a password worth decoding. */
+const MAX_DECODED_LENGTH = 64 * 1024;
+const BASE64_TEXT = /^[A-Za-z0-9+/_-]{8,}={0,2}$/;
+/** Request body fields CDP reports, dropped while a password of unknown value is in the page. */
+const BODY_FIELDS = new Set(["postData", "postDataEntries"]);
 
 export interface DesktopBrowserTabKey {
   readonly threadId: string;
@@ -61,12 +63,17 @@ interface AttachedTab {
   pendingDownloadGuid: string | null;
   agentInputAt: number;
   /** Set while a password filled for the agent may still be in the page. */
-  credentialLock: { readonly release: () => void } | null;
+  credentialLock: {
+    readonly release: () => void;
+    /** The password's value is unknown, so nothing can be scrubbed; bodies are dropped. */
+    readonly unknownSecret: boolean;
+  } | null;
   /**
    * The agent ran its own JavaScript in the current document, which could be
    * waiting to intercept a login. Cleared when the page loads a new document.
    */
   agentScriptInDocument: boolean;
+  readonly onNavigate: () => void;
   /**
    * Passwords removed from everything sent to the agent for as long as the tab
    * is attached: the browser can still hand back old request bodies later.
@@ -74,6 +81,12 @@ interface AttachedTab {
   readonly scrubbed: Set<string>;
   /** Consumes the debugger's interception events while a sign-in swaps its password in. */
   interceptor: ((method: string, params: unknown) => boolean) | null;
+  /**
+   * True from an agent sign-in's start until its swap can no longer happen.
+   * The agent stays off the page all that time: it could otherwise read the
+   * stand-in and have the page send it somewhere that echoes it back.
+   */
+  signingIn: boolean;
   readonly onMessage: (
     event: Electron.Event,
     method: string,
@@ -95,6 +108,8 @@ export class DesktopBrowserHost extends Context.Service<
      * script in it; such a page is not autofilled.
      */
     readonly isAgentDriving: (source: Electron.WebContents) => boolean;
+    /** True for a value an agent sign-in put in a page instead of the password. */
+    readonly isPasswordStandIn: (value: string) => boolean;
     /**
      * Keeps the agent off a page a saved password was just filled into, as
      * after an agent sign-in. A page no agent is attached to needs nothing.
@@ -121,61 +136,86 @@ export const make = Effect.gen(function* () {
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
   const passwordSignIn = yield* PasswordSignIn.PasswordSignIn;
   const tabs = new Map<string, AttachedTab>();
+  /**
+   * Every stand-in an agent sign-in put in a page this run. A form still
+   * holding one must never be offered for saving as the user's password.
+   */
+  const standIns = new Set<string>();
 
-  const scrub = (tab: AttachedTab, message: string) => {
-    let scrubbed = message;
-    for (const secret of tab.scrubbed) {
-      for (const form of passwordForms(secret)) {
-        scrubbed = scrubbed.split(form).join(SCRUBBED_TEXT);
+  /**
+   * Passwords a person's autofill put in a page's current document, kept even
+   * while no agent is attached, so one that attaches later is locked out too.
+   */
+  const filledByDocument = new WeakMap<Electron.WebContents, Set<string>>();
+
+  const scrubText = (forms: ReadonlyArray<string>, text: string) => {
+    // CDP hands bodies over as base64 of the whole body, where the password
+    // can start at any offset, so its own base64 forms may not appear.
+    if (forms.length > 0 && text.length <= MAX_DECODED_LENGTH && BASE64_TEXT.test(text)) {
+      const decoded = Buffer.from(text, "base64").toString("utf8");
+      if (forms.some((form) => decoded.includes(form))) {
+        return SCRUBBED_TEXT;
       }
+    }
+    let scrubbed = text;
+    for (const form of forms) {
+      scrubbed = scrubbed.split(form).join(SCRUBBED_TEXT);
     }
     return scrubbed;
   };
 
+  const scrub = (tab: AttachedTab, message: string) => {
+    const forms = [...tab.scrubbed].flatMap((secret) => passwordForms(secret));
+    const dropBodies = tab.credentialLock?.unknownSecret === true;
+    if (forms.length === 0 && !dropBodies) {
+      return message;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(message);
+    } catch {
+      return scrubText(forms, message);
+    }
+    const walk = (value: unknown): unknown => {
+      if (typeof value === "string") {
+        return scrubText(forms, value);
+      }
+      if (Array.isArray(value)) {
+        return value.map(walk);
+      }
+      if (typeof value === "object" && value !== null) {
+        return Object.fromEntries(
+          Object.entries(value)
+            .filter(([key]) => !(dropBodies && BODY_FIELDS.has(key)))
+            .map(([key, field]) => [key, walk(field)]),
+        );
+      }
+      return value;
+    };
+    return JSON.stringify(walk(parsed));
+  };
+
   /**
-   * Holds the agent off the page from just before a saved password enters it
-   * until the page navigates or no password field holds a value, clearing the
-   * fields itself if that takes too long.
+   * Holds the agent off the page until it loads another document. A password
+   * can outlive its field (a "show password" toggle, a single-page app's
+   * state), so an empty field is not enough to let the agent back in.
    */
-  const lockCredentials = (tab: AttachedTab, secret: string) => {
+  const lockCredentials = (tab: AttachedTab, secret: string | null) => {
     tab.credentialLock?.release();
     const webContents = tab.debuggee.webContents;
-    if (secret !== "") {
+    if (secret !== null) {
       tab.scrubbed.add(secret);
     }
-    const lockedAt = performance.now();
-    let checking = false;
-
     const release = () => {
-      clearInterval(timer);
       webContents.off("did-navigate", release);
       webContents.off("destroyed", release);
       if (tab.credentialLock?.release === release) {
         tab.credentialLock = null;
       }
     };
-    const check = async () => {
-      if (performance.now() - lockedAt > CREDENTIAL_LOCK_MAX_MS) {
-        await passwordSignIn.clearPasswordFields(webContents);
-        release();
-        return;
-      }
-      if (!(await passwordSignIn.pageHoldsPassword(webContents))) {
-        release();
-      }
-    };
-    const timer = setInterval(() => {
-      if (checking || webContents.isDestroyed()) {
-        return;
-      }
-      checking = true;
-      void check().finally(() => {
-        checking = false;
-      });
-    }, CREDENTIAL_CHECK_MS);
     webContents.on("did-navigate", release);
     webContents.on("destroyed", release);
-    tab.credentialLock = { release };
+    tab.credentialLock = { release, unknownSecret: secret === null };
   };
   const emit = (event: DesktopBrowserEventType) => runFork(PubSub.publish(outbox, event));
 
@@ -198,24 +238,40 @@ export const make = Effect.gen(function* () {
         setDownloadDirectory: (directory) => {
           tab.downloadDirectory = directory;
         },
-        signIn: (params) =>
-          passwordSignIn.signIn({
-            guest: webContents,
-            request: params,
-            pageModified: tab.agentScriptInDocument,
-            lock: (secret) => {
-              // The submit that follows is the agent's, not a person's.
-              tab.agentInputAt = performance.now();
-              lockCredentials(tab, secret);
-            },
-            substitute: (input) => {
-              const substitution = armSubstitution({ debuggee, ...input });
-              // It lets events through again once interception is off.
-              tab.interceptor = substitution.onDebuggerMessage;
-              return substitution;
-            },
-          }),
-        credentialLocked: () => tab.credentialLock !== null,
+        signIn: async (params) => {
+          if (tab.signingIn) {
+            return { status: "unavailable" };
+          }
+          tab.signingIn = true;
+          let stopped: Promise<void> = Promise.resolve();
+          try {
+            return await passwordSignIn.signIn({
+              guest: webContents,
+              request: params,
+              pageModified: tab.agentScriptInDocument,
+              lock: (secret) => {
+                // The submit that follows is the agent's, not a person's. The page
+                // only gets a stand-in, so the agent is kept off it just while the
+                // swap can happen; the real password is scrubbed from then on.
+                tab.agentInputAt = performance.now();
+                tab.scrubbed.add(secret);
+              },
+              substitute: (input) => {
+                const substitution = armSubstitution({ debuggee, ...input });
+                // It lets events through again once interception is off.
+                tab.interceptor = substitution.onDebuggerMessage;
+                standIns.add(input.standIn);
+                stopped = substitution.stopped;
+                return substitution;
+              },
+            });
+          } finally {
+            void stopped.then(() => {
+              tab.signingIn = false;
+            });
+          }
+        },
+        credentialLocked: () => tab.credentialLock !== null || tab.signingIn,
         noteAgentScript: () => {
           tab.agentScriptInDocument = true;
         },
@@ -251,6 +307,7 @@ export const make = Effect.gen(function* () {
     tabs.delete(id);
     tab.credentialLock?.release();
     tab.debuggee.debugger.off("message", tab.onMessage);
+    tab.debuggee.webContents.off?.("did-navigate", tab.onNavigate);
     emit({ type: "detached", ...key });
   };
 
@@ -269,6 +326,10 @@ export const make = Effect.gen(function* () {
       agentScriptInDocument: false,
       scrubbed: new Set(),
       interceptor: null,
+      signingIn: false,
+      onNavigate: () => {
+        tab.agentScriptInDocument = false;
+      },
       onMessage: (_event, method, params, sessionId) => {
         // The agent never sees the sign-in's paused requests or answers them.
         if (!sessionId && tab.interceptor?.(method, params)) {
@@ -283,16 +344,25 @@ export const make = Effect.gen(function* () {
     };
     tabs.set(id, tab);
     debuggee.debugger.on("message", tab.onMessage);
-    debuggee.webContents.on?.("did-navigate", () => {
-      tab.agentScriptInDocument = false;
-    });
-    // A password filled before the agent arrived is guarded too; its value is
-    // unknown here, so reads are refused but nothing can be scrubbed.
-    void passwordSignIn.pageHoldsPassword(debuggee.webContents).then((holdsPassword) => {
-      if (holdsPassword && tabs.get(id) === tab && tab.credentialLock === null) {
-        lockCredentials(tab, "");
+    debuggee.webContents.on?.("did-navigate", tab.onNavigate);
+    // Passwords a person's autofill already put in this document are known.
+    const filled = filledByDocument.get(debuggee.webContents);
+    if (filled !== undefined && filled.size > 0) {
+      for (const secret of filled) {
+        tab.scrubbed.add(secret);
       }
-    });
+      lockCredentials(tab, [...filled][0]!);
+    } else {
+      // One the person typed is not: the agent starts locked out, with request
+      // bodies dropped, until the page is checked for a filled password field.
+      lockCredentials(tab, null);
+      const pending = tab.credentialLock;
+      void passwordSignIn.pageHoldsPassword(debuggee.webContents).then((holdsPassword) => {
+        if (!holdsPassword && tab.credentialLock === pending) {
+          pending?.release();
+        }
+      });
+    }
     emit({ type: "attached", ...key });
   };
 
@@ -329,6 +399,14 @@ export const make = Effect.gen(function* () {
     );
 
   const lockForFilledPassword = (source: Electron.WebContents, password: string) => {
+    let filled = filledByDocument.get(source);
+    if (filled === undefined) {
+      const known = new Set<string>();
+      filled = known;
+      filledByDocument.set(source, known);
+      source.on?.("did-navigate", () => known.clear());
+    }
+    filled.add(password);
     for (const tab of tabs.values()) {
       if (tab.debuggee.webContents === source) {
         lockCredentials(tab, password);
@@ -363,6 +441,7 @@ export const make = Effect.gen(function* () {
     placeDownload,
     humanStartedDownload,
     isAgentDriving,
+    isPasswordStandIn: (value) => standIns.has(value),
     lockForFilledPassword,
   });
 });
