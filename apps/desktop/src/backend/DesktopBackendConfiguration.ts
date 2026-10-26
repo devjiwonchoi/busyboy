@@ -121,6 +121,30 @@ const resolveResourceMonitorPath = Effect.fn(
   return Option.none<string>();
 });
 
+// Computer use is macOS only for now. scripts/fetch-cua-driver.mjs installs the
+// driver into resources/cua-driver; a missing driver leaves computer use off.
+const resolveComputerUseDriverPath = Effect.fn(
+  "desktop.backendConfiguration.resolveComputerUseDriverPath",
+)(function* () {
+  const environment = yield* DesktopEnvironment.DesktopEnvironment;
+  if (environment.platform !== "darwin") {
+    return Option.none<string>();
+  }
+  const fileSystem = yield* FileSystem.FileSystem;
+  const relativePath = environment.path.join("cua-driver", "cua-driver");
+  const candidates = environment.isPackaged
+    ? [environment.path.join(environment.resourcesPath, relativePath)]
+    : environment.resolveResourcePathCandidates(relativePath);
+
+  for (const candidate of candidates) {
+    if (yield* fileSystem.exists(candidate).pipe(Effect.orElseSucceed(() => false))) {
+      return Option.some(candidate);
+    }
+  }
+
+  return Option.none<string>();
+});
+
 const readPersistedBackendObservabilitySettings = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -182,6 +206,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
   function* (
     input: SharedBootstrapInput & {
       readonly resourceMonitorPath: Option.Option<string>;
+      readonly computerUseDriverPath: Option.Option<string>;
       readonly cliPath: Option.Option<string>;
       readonly shellEnvironmentPrepared: boolean;
     },
@@ -213,6 +238,13 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       ...Option.match(input.resourceMonitorPath, {
         onNone: () => ({}),
         onSome: (resourceMonitorPath) => ({ resourceMonitorPath }),
+      }),
+      ...Option.match(input.computerUseDriverPath, {
+        onNone: () => ({}),
+        onSome: (computerUseDriverPath) => ({
+          computerUseDriverPath,
+          computerUseHostBundleId: environment.appUserModelId,
+        }),
       }),
       ...buildObservabilityFragment(input.observabilitySettings),
     };
@@ -292,6 +324,10 @@ export const make = Effect.gen(function* () {
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
     );
+    const computerUseDriverPath = yield* resolveComputerUseDriverPath().pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
+    );
     const cliPath = yield* DesktopCliShim.install.pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
@@ -300,6 +336,7 @@ export const make = Effect.gen(function* () {
     return yield* resolvePrimaryStartConfig({
       ...shared,
       resourceMonitorPath,
+      computerUseDriverPath,
       cliPath,
       shellEnvironmentPrepared,
     }).pipe(

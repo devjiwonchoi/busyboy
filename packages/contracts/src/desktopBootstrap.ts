@@ -32,6 +32,11 @@ export const DesktopBackendBootstrap = Schema.Struct({
   desktopBrowserFd: Schema.optionalKey(PositiveInt),
   desktopBrowserControlFd: Schema.optionalKey(PositiveInt),
   resourceMonitorPath: Schema.optionalKey(TrimmedNonEmptyString),
+  // The Cua driver executable for computer use, and the bundle ID of the app
+  // whose macOS permissions it runs under. Absent when the driver was not
+  // installed or the platform is not macOS.
+  computerUseDriverPath: Schema.optionalKey(TrimmedNonEmptyString),
+  computerUseHostBundleId: Schema.optionalKey(TrimmedNonEmptyString),
 });
 
 export type DesktopBackendBootstrap = typeof DesktopBackendBootstrap.Type;

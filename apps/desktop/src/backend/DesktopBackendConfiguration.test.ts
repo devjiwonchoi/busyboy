@@ -411,6 +411,111 @@ describe("DesktopBackendConfiguration", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("passes the packaged computer-use driver and the app's bundle ID to the backend", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-backend-config-test-",
+      });
+      const resourcesPath = path.join(baseDir, "resources");
+      const driverPath = path.join(resourcesPath, "cua-driver/cua-driver");
+      yield* fileSystem.makeDirectory(path.dirname(driverPath), { recursive: true });
+      yield* fileSystem.writeFileString(driverPath, "driver");
+
+      yield* Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const config = yield* configuration.resolvePrimary;
+        assert.equal(config.bootstrap.computerUseDriverPath, driverPath);
+        assert.equal(config.bootstrap.computerUseHostBundleId, "dev.jiwon.busyboy");
+      }).pipe(
+        Effect.provide(
+          layerBackendConfiguration().pipe(
+            Layer.provideMerge(layerServerExposure),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(
+              layerEnvironment(baseDir, {
+                appPath: `${resourcesPath}/app.asar`,
+                dirname: `${resourcesPath}/app.asar/apps/desktop/dist-electron`,
+                isPackaged: true,
+                resourcesPath,
+              }),
+            ),
+          ),
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("finds the development computer-use driver next to the desktop build", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-backend-config-test-",
+      });
+      const dirname = path.join(baseDir, "apps/desktop/dist-electron");
+      const driverPath = path.join(baseDir, "apps/desktop/resources/cua-driver/cua-driver");
+      yield* fileSystem.makeDirectory(path.dirname(driverPath), { recursive: true });
+      yield* fileSystem.writeFileString(driverPath, "driver");
+
+      yield* Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const config = yield* configuration.resolvePrimary;
+        assert.equal(config.bootstrap.computerUseDriverPath, driverPath);
+      }).pipe(
+        Effect.provide(
+          layerBackendConfiguration().pipe(
+            Layer.provideMerge(layerServerExposure),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(layerEnvironment(baseDir, { dirname, isPackaged: false })),
+          ),
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("leaves computer use off when the driver is missing or the platform is not macOS", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-backend-config-test-",
+      });
+      const resourcesPath = path.join(baseDir, "resources");
+      const resolveBootstrap = (platform: NodeJS.Platform) =>
+        Effect.gen(function* () {
+          const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+          return (yield* configuration.resolvePrimary).bootstrap;
+        }).pipe(
+          Effect.provide(
+            layerBackendConfiguration().pipe(
+              Layer.provideMerge(layerServerExposure),
+              Layer.provideMerge(DesktopAppSettings.layerTest()),
+              Layer.provideMerge(
+                layerEnvironment(baseDir, {
+                  appPath: `${resourcesPath}/app.asar`,
+                  dirname: `${resourcesPath}/app.asar/apps/desktop/dist-electron`,
+                  isPackaged: true,
+                  platform,
+                  resourcesPath,
+                }),
+              ),
+            ),
+          ),
+        );
+
+      const missing = yield* resolveBootstrap("darwin");
+      assert.notProperty(missing, "computerUseDriverPath");
+      assert.notProperty(missing, "computerUseHostBundleId");
+
+      yield* fileSystem.makeDirectory(path.join(resourcesPath, "cua-driver"), { recursive: true });
+      yield* fileSystem.writeFileString(path.join(resourcesPath, "cua-driver/cua-driver"), "driver");
+      const linux = yield* resolveBootstrap("linux");
+      assert.notProperty(linux, "computerUseDriverPath");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("prefers the release resource monitor when both development builds exist", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
