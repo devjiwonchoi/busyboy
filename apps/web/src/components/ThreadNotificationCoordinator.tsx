@@ -21,6 +21,8 @@ import {
 } from "../threadNotifications";
 import { resolveSidebarThreadStatus } from "./Sidebar.logic";
 
+export const OPEN_URL_MESSAGE = "busyboy:open-url";
+
 export function ThreadNotificationCoordinator() {
   const environmentIds = useEnvironmentIds();
   const mode = useClientSettings((settings) => settings.notificationMode);
@@ -70,6 +72,28 @@ export function ThreadNotificationCoordinator() {
       document.removeEventListener("keydown", unlockNotificationAudio);
     };
   }, [mode]);
+
+  // A tapped service worker notification asks this window to show its thread.
+  const navigate = useNavigate();
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<unknown>) => {
+      const data = event.data;
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        !("type" in data) ||
+        data.type !== OPEN_URL_MESSAGE ||
+        !("url" in data) ||
+        typeof data.url !== "string"
+      ) {
+        return;
+      }
+      const url = new URL(data.url);
+      void navigate({ href: `${url.pathname}${url.search}${url.hash}` });
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+  }, [navigate]);
 
   if (mode === "off") return null;
 
@@ -190,7 +214,15 @@ function EnvironmentNotifications({
           });
         });
       } catch {
-        // Some browsers expose Notification but reject desktop presentation.
+        // Mobile browsers reject the constructor and only show notifications
+        // through the service worker, which routes taps back through OPEN_URL_MESSAGE.
+        void navigator.serviceWorker?.ready.then((registration) =>
+          registration.showNotification(title, {
+            body: thread.title,
+            tag: `${environmentId}:${thread.id}`,
+            data: { url: `/${environmentId}/${thread.id}` },
+          }),
+        );
       }
     }
     previous.current = next;

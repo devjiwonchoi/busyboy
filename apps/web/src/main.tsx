@@ -22,6 +22,13 @@ const history = isElectron ? createHashHistory() : createBrowserHistory();
 
 const router = getRouter(history);
 
+// Mobile browsers show thread notifications through this worker.
+if (!isElectron && window.isSecureContext && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch((error: unknown) => {
+    console.warn("Could not register the notification service worker", error);
+  });
+}
+
 if (isElectron) {
   syncDocumentElectronPlatformClasses(navigator.platform);
   syncDocumentWindowControlsOverlayClass();
