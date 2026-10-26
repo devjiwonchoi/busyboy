@@ -13,10 +13,15 @@ import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
 import { AiError, McpProtocol, McpSchema, McpServer, Tool, type Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { OrchestratorMcpFailure, PreviewAutomationError } from "@t3tools/contracts";
+import {
+  ComputerUseError,
+  OrchestratorMcpFailure,
+  PreviewAutomationError,
+} from "@t3tools/contracts";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
+import * as ComputerUseService from "../computerUse/ComputerUseService.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
 import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
@@ -49,6 +54,12 @@ import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
+import * as ComputerUseHandlers from "./toolkits/computerUse/handlers.ts";
+import {
+  ComputerUseAppStateToolkit,
+  ComputerUseGetAppStateTool,
+  ComputerUseStandardToolkit,
+} from "./toolkits/computerUse/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
 
@@ -535,7 +546,8 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
 });
 
 interface ImageToolResult {
-  readonly screenshot: {
+  // Optional for tools that capture a screenshot only on request.
+  readonly screenshot?: {
     readonly mimeType: "image/png";
     readonly data: string;
     readonly width: number;
@@ -644,21 +656,24 @@ const registerImageTool = <T extends Tool.Any, E, R>(
                 const includeImage =
                   (payload as { readonly includeImage?: boolean } | undefined)?.includeImage !==
                   false;
-                const metadata = {
-                  ...rest,
-                  screenshot: {
-                    mimeType: screenshot.mimeType,
-                    width: screenshot.width,
-                    height: screenshot.height,
-                  },
-                };
+                const metadata =
+                  screenshot === undefined
+                    ? rest
+                    : {
+                        ...rest,
+                        screenshot: {
+                          mimeType: screenshot.mimeType,
+                          width: screenshot.width,
+                          height: screenshot.height,
+                        },
+                      };
                 return Effect.succeed(
                   new McpSchema.CallToolResult({
                     isError: false,
                     structuredContent: metadata,
                     content: [
                       { type: "text", text: JSON.stringify(metadata) },
-                      ...(includeImage
+                      ...(includeImage && screenshot !== undefined
                         ? [
                             {
                               type: "image" as const,
@@ -678,6 +693,27 @@ const registerImageTool = <T extends Tool.Any, E, R>(
   });
 
 const isOrchestratorMcpFailure = Schema.is(OrchestratorMcpFailure);
+
+const isComputerUseError = Schema.is(ComputerUseError);
+
+const registerComputerUseAppState = Effect.fn("McpHttpServer.registerComputerUseAppState")(
+  function* () {
+    const service = yield* ComputerUseService.ComputerUseService;
+    const built = yield* ComputerUseAppStateToolkit;
+    yield* registerImageTool(
+      ComputerUseGetAppStateTool,
+      (payload) =>
+        built
+          .handle("computer_get_app_state", payload)
+          .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
+      (effect) =>
+        effect.pipe(Effect.provideService(ComputerUseService.ComputerUseService, service)),
+      "computer_use",
+      // Computer-use messages are written by the server and say what to do next.
+      (error) => (isComputerUseError(error) ? error.message : "Reading the app failed."),
+    );
+  },
+);
 
 const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(function* () {
   const htmlRender = yield* HtmlRender.HtmlRender;
@@ -777,6 +813,11 @@ export const layerAttachmentToolkit = toolkitRegistration(
   AttachmentHandlers.layer,
 );
 
+export const layerComputerUseToolkit = Layer.mergeAll(
+  toolkitRegistration(ComputerUseStandardToolkit, ComputerUseHandlers.layerStandard),
+  imageToolRegistration(registerComputerUseAppState(), ComputerUseHandlers.layerAppState),
+);
+
 export const layerPullRequestsToolkit = toolkitRegistration(
   PullRequestsToolkit,
   PullRequestsHandlers.layer,
@@ -801,4 +842,5 @@ export const layer = Layer.mergeAll(
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,
   layerHtmlToolkit,
+  layerComputerUseToolkit,
 ).pipe(Layer.provideMerge(layerMcpTransport));

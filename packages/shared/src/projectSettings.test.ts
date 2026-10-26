@@ -269,6 +269,19 @@ describe("resolveNewThreadEnvMode", () => {
   });
 });
 
+describe("enableAgentComputerUse", () => {
+  it("is off by default and can be turned on for one project", () => {
+    expect(DEFAULT_SERVER_SETTINGS.enableAgentComputerUse).toBe(false);
+    const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      projectSettingsOverrides: { [projectId]: { enableAgentComputerUse: true } },
+    });
+    expect(resolveProjectSettings(settings, projectId).settings.enableAgentComputerUse).toBe(true);
+    expect(resolveProjectSettings(settings, otherProjectId).settings.enableAgentComputerUse).toBe(
+      false,
+    );
+  });
+});
+
 describe("projectSettingsOverrides patches", () => {
   it("replaces a project's entry, removes it with null, and drops empty entries", () => {
     const first = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
