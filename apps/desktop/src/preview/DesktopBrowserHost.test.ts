@@ -146,4 +146,29 @@ describe("DesktopBrowserHost", () => {
       expect(host.humanStartedDownload(debuggee.tab.webContents)).toBe(false);
     }),
   );
+
+  it.live("passes computer-use status to the overlay and stop requests to the backend", () =>
+    Effect.gen(function* () {
+      const host = yield* DesktopBrowserHost.make;
+      const statuses = yield* Effect.forkChild(
+        host.computerUse.pipe(Stream.take(2), Stream.runCollect),
+      );
+      const stops = yield* Effect.forkChild(takeEvents(host, 1));
+      yield* Effect.sleep("20 millis");
+
+      yield* host.handleCommandLine(
+        encodeJson({ type: "computer-use-status", acting: true, appName: "TextEdit" }),
+      );
+      yield* Effect.sleep("5 millis");
+      yield* host.handleCommandLine(encodeJson({ type: "computer-use-status", acting: false }));
+      host.stopComputerUse();
+
+      expect(yield* Fiber.join(statuses)).toEqual([
+        { acting: true, appName: "TextEdit" },
+        { acting: false },
+      ]);
+      expect(yield* Fiber.join(stops)).toEqual([{ type: "computer-use-stop" }]);
+    }),
+  );
+
 });

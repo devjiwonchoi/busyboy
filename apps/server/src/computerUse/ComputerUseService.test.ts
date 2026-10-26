@@ -9,6 +9,7 @@ import type {
 } from "@trycua/cua-driver";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Stream from "effect/Stream";
 import * as Layer from "effect/Layer";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
@@ -48,6 +49,7 @@ interface FakeDriver {
   /** Each thread's runs; a run counts as active while its status is "running". */
   readonly runs: Map<string, Array<{ id: string; status: string; ordinal: number }>>;
   restarts: number;
+  readonly interrupts: Array<{ readonly threadId: string; readonly runId?: string }>;
 }
 
 const window = (windowId: bigint, overrides: Partial<WindowInfo> = {}): WindowInfo => ({
@@ -76,6 +78,7 @@ function fakeDriver(): FakeDriver {
     hang: false,
     runs: new Map([[threadId, [{ id: "run-1", status: "running", ordinal: 1 }]]]),
     restarts: 0,
+    interrupts: [],
   };
 }
 
@@ -152,6 +155,14 @@ function makeService(
             Effect.yieldNow.pipe(
               Effect.andThen(Effect.sync(() => ({ runs: fake.runs.get(thread) ?? [] }) as never)),
             ),
+          interruptThread: (input) =>
+            Effect.sync(() => {
+              fake.interrupts.push({
+                threadId: input.threadId,
+                ...(input.runId === undefined ? {} : { runId: input.runId }),
+              });
+              return { type: "no_active_run" } as never;
+            }),
         }),
         Layer.mock(ProjectionStore.ProjectionStoreV2)({
           getThread: () =>
@@ -618,6 +629,44 @@ describe("ComputerUseService", () => {
         while (fake.actions.length === 0) yield* Effect.sleep("10 millis");
         yield* Fiber.interrupt(typing);
 
+        assert.strictEqual(fake.restarts, 1);
+      }),
+    );
+
+    it.live("reports who is using the computer until their turn ends", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+        const seen = yield* Effect.forkChild(
+          service.activity.pipe(
+            Stream.takeUntil((activity) => !activity.acting && fake.actions.length > 0),
+            Stream.runCollect,
+          ),
+        );
+        yield* Effect.sleep("20 millis");
+
+        yield* service.pressKey({ caller, app: "TextEdit", key: "tab" });
+        fake.runs.set(threadId, [{ id: "run-1", status: "completed", ordinal: 1 }]);
+
+        assert.deepStrictEqual(yield* Fiber.join(seen), [
+          { acting: false },
+          { acting: true, threadId, appName: "TextEdit" },
+          { acting: false },
+        ]);
+      }),
+    );
+
+    it.effect("stops the acting turn and its input when the user asks", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+        yield* service.stopActing;
+        assert.lengthOf(fake.interrupts, 0);
+
+        yield* service.pressKey({ caller, app: "TextEdit", key: "tab" });
+        yield* service.stopActing;
+
+        assert.deepStrictEqual(fake.interrupts, [{ threadId, runId: "run-1" }]);
         assert.strictEqual(fake.restarts, 1);
       }),
     );

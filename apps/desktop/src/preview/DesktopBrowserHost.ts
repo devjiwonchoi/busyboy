@@ -69,8 +69,17 @@ export class DesktopBrowserHost extends Context.Service<
       readonly x: number;
       readonly y: number;
     }>;
+    /** Whether an agent is using the computer, as the backend reports it. */
+    readonly computerUse: Stream.Stream<ComputerUseDesktopStatus>;
+    /** Asks the backend to stop the agent that is using the computer. */
+    readonly stopComputerUse: () => void;
   }
 >()("@t3tools/desktop/preview/DesktopBrowserHost") {}
+
+export interface ComputerUseDesktopStatus {
+  readonly acting: boolean;
+  readonly appName?: string | undefined;
+}
 
 export const make = Effect.gen(function* () {
   const outbox = yield* PubSub.unbounded<DesktopBrowserEventType>();
@@ -80,6 +89,7 @@ export const make = Effect.gen(function* () {
     readonly x: number;
     readonly y: number;
   }>(16);
+  const computerUse = yield* PubSub.sliding<ComputerUseDesktopStatus>(1);
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
   const tabs = new Map<string, AttachedTab>();
   const emit = (event: DesktopBrowserEventType) => runFork(PubSub.publish(outbox, event));
@@ -165,6 +175,13 @@ export const make = Effect.gen(function* () {
     Effect.sync(() => {
       const command = decodeCommand(line);
       if (Option.isNone(command)) return;
+      if (command.value.type === "computer-use-status") {
+        const { acting, appName } = command.value;
+        runFork(
+          PubSub.publish(computerUse, { acting, ...(appName === undefined ? {} : { appName }) }),
+        );
+        return;
+      }
       const tab = tabs.get(keyOf(command.value));
       if (!tab) return;
       if (command.value.type === "pointer") {
@@ -198,6 +215,8 @@ export const make = Effect.gen(function* () {
 
   return DesktopBrowserHost.of({
     pointers: Stream.fromPubSub(pointers),
+    computerUse: Stream.fromPubSub(computerUse),
+    stopComputerUse: () => emit({ type: "computer-use-stop" }),
     // Subscribes before announcing, so no attach falls between the two.
     events: Stream.unwrap(
       Effect.gen(function* () {

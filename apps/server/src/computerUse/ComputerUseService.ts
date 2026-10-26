@@ -1,4 +1,5 @@
 import {
+  CommandId,
   type ComputerUseActionResult,
   type ComputerUseApp,
   type ComputerUseAppState,
@@ -13,6 +14,7 @@ import {
   type ComputerUseSetValueInput,
   type ComputerUseTypeTextInput,
   type ProviderInstanceId,
+  type RunId,
   type ThreadId,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -20,10 +22,14 @@ import type { AppInfo, CuaDriverLike, WindowInfo } from "@trycua/cua-driver";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
@@ -37,6 +43,11 @@ export interface ComputerUseCaller {
   readonly threadId: ThreadId;
   readonly providerInstanceId: ProviderInstanceId;
 }
+
+/** Whether an agent is operating the computer, for the desktop's overlay. */
+export type ComputerUseActivity =
+  | { readonly acting: false }
+  | { readonly acting: true; readonly threadId: ThreadId; readonly appName: string };
 
 type WithCaller<T> = T & { readonly caller: ComputerUseCaller };
 type Action<T> = (input: WithCaller<T>) => Effect.Effect<ComputerUseActionResult, ComputerUseError>;
@@ -58,6 +69,9 @@ export class ComputerUseService extends Context.Service<
     readonly drag: Action<ComputerUseDragInput>;
     readonly setValue: Action<ComputerUseSetValueInput>;
     readonly invokeMenu: Action<ComputerUseInvokeMenuInput>;
+    readonly activity: Stream.Stream<ComputerUseActivity>;
+    /** Stops the agent that is operating the computer, as the user asked from the desktop. */
+    readonly stopActing: Effect.Effect<void>;
   }
 >()("t3/computerUse/ComputerUseService") {}
 
@@ -179,10 +193,13 @@ export const make = Effect.gen(function* () {
   const snapshots = yield* Ref.make(new Map<string, SnapshotOwner>());
   // The one run that may operate the computer right now.
   const actingRun = yield* Ref.make(
-    Option.none<{ readonly threadId: ThreadId; readonly runId: string }>(),
+    Option.none<{ readonly threadId: ThreadId; readonly runId: RunId }>(),
   );
   // Claims are checked and taken one at a time, so two first actions cannot both win.
   const claimLock = yield* Semaphore.make(1);
+  const activity = yield* SubscriptionRef.make<ComputerUseActivity>({ acting: false });
+  const watchers = yield* Scope.make("sequential");
+  yield* Effect.addFinalizer(() => Scope.close(watchers, Exit.void));
 
   const activeRunOf = (threadId: ThreadId) =>
     threadManagement.getThreadRecords(threadId, ["runs"], { messageRoles: [] }).pipe(
@@ -215,12 +232,55 @@ export const make = Effect.gen(function* () {
         );
       }
     }
+    const isNewClaim = Option.isNone(holder) || holder.value.runId !== run.id;
     yield* Ref.set(actingRun, Option.some({ threadId: caller.threadId, runId: run.id }));
+    if (isNewClaim) {
+      // The overlay stays up for the whole turn, not just each action, and
+      // goes away once the turn ends.
+      yield* runEnded(caller.threadId, run.id).pipe(
+        Effect.andThen(releaseClaim(run.id)),
+        Effect.forkIn(watchers),
+      );
+    }
     return run.id;
   });
 
+  const releaseClaim = (runId: RunId) =>
+    Ref.modify(actingRun, (holder) =>
+      Option.isSome(holder) && holder.value.runId === runId
+        ? [true, Option.none()]
+        : [false, holder],
+    ).pipe(
+      Effect.flatMap((released) =>
+        released ? SubscriptionRef.set(activity, { acting: false }) : Effect.void,
+      ),
+    );
+
+  const stopActing = Effect.gen(function* () {
+    const holder = yield* Ref.get(actingRun);
+    if (Option.isNone(holder)) return;
+    const { threadId, runId } = holder.value;
+    yield* Effect.gen(function* () {
+      const thread = yield* projections.getThread(threadId);
+      yield* threadManagement.interruptThread({
+        projectId: thread.projectId,
+        commandId: CommandId.make(`computer-use-stop:${runId}`),
+        threadId,
+        runId,
+        reason: "The user stopped computer use.",
+      });
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Could not interrupt the turn using the computer", { cause }),
+      ),
+    );
+    // Stop input already on its way even if the interrupt is slow to land.
+    yield* driver.restart;
+    yield* releaseClaim(runId);
+  }).pipe(Effect.withSpan("ComputerUseService.stopActing"));
+
   /** Completes when the run is no longer active. */
-  const runEnded = (threadId: ThreadId, runId: string) =>
+  const runEnded = (threadId: ThreadId, runId: RunId) =>
     Effect.gen(function* () {
       while (true) {
         yield* Effect.sleep(RUN_WATCH_INTERVAL);
@@ -480,6 +540,11 @@ export const make = Effect.gen(function* () {
         const runId = yield* claimComputer(input.caller);
         const perform = Effect.gen(function* () {
           const target = yield* resolveTarget(worker, input);
+          yield* SubscriptionRef.set(activity, {
+            acting: true,
+            threadId: input.caller.threadId,
+            appName: target.app.name,
+          });
           if (input.element !== undefined) yield* requireElement(input.element, target);
           const results: Array<string> = [];
           for (const step of steps(target)) {
@@ -623,6 +688,8 @@ export const make = Effect.gen(function* () {
     drag,
     setValue,
     invokeMenu,
+    activity: SubscriptionRef.changes(activity),
+    stopActing,
   });
 });
 
