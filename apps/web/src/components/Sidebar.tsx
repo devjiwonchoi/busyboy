@@ -87,6 +87,7 @@ import {
 import { useRouter } from "@tanstack/react-router";
 
 import { useRightPanelStore } from "../rightPanelStore";
+import { useSideChatStore } from "../sideChatStore";
 import {
   isAtomCommandInterrupted,
   settlePromise,
@@ -400,7 +401,10 @@ function useSidebarThreads(input: {
   readonly routeThreadKey: string | null;
 }) {
   const { scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey } = input;
-  const threads = useThreadShells();
+  const allThreads = useThreadShells();
+  const sideChatThreadKeys = useSideChatStore((state) => state.threadKeys);
+  // Side chats live in their thread's right panel, not in the list.
+  const threads = allThreads.filter((thread) => !sideChatThreadKeys[threadShellKey(thread)]);
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const [workingShelfExpanded, setWorkingShelfExpanded] = useLocalStorage(
     WORKING_SHELF_EXPANDED_KEY,

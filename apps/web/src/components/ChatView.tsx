@@ -226,6 +226,7 @@ import {
   type RightPanelSurface,
   useRightPanelStore,
 } from "../rightPanelStore";
+import { useSideChatStore } from "../sideChatStore";
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -5325,6 +5326,8 @@ export default function ChatView(props: ChatViewProps) {
     sideChatPendingRef.current = true;
     const sourceThreadRef = activeThreadRef;
     const targetThreadRef = scopeThreadRef(environmentId, newThreadId());
+    // Registered first so the new thread never flashes into the thread list.
+    useSideChatStore.getState().register(targetThreadRef);
     const result = await createThread({
       environmentId,
       input: {
