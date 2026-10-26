@@ -374,12 +374,16 @@ export const make = Effect.gen(function* () {
     string,
     { readonly origin: string; readonly password: string; readonly tabId: string }
   >();
-  const dropOffersFor = (tabId: string) => {
+  /** Drops the tab's offers (only those for `origin` when given); true if any were dropped. */
+  const dropOffersFor = (tabId: string, origin?: string) => {
+    let dropped = false;
     for (const [offerId, offer] of pendingOffers) {
-      if (offer.tabId === tabId) {
+      if (offer.tabId === tabId && (origin === undefined || offer.origin === origin)) {
         pendingOffers.delete(offerId);
+        dropped = true;
       }
     }
+    return dropped;
   };
 
   /**
@@ -406,17 +410,11 @@ export const make = Effect.gen(function* () {
     );
 
     // Identifier-first and change-password forms submit no username: a saved
-    // password for the site is the same login, and a site with one account
-    // is that account.
-    let username = submittedUsername;
-    if (username === "") {
-      if (forSite.some((entry) => entry.password === password)) {
-        return "saved" as const;
-      }
-      const accounts = [...new Set(forSite.map((entry) => entry.username))];
-      if (accounts.length === 1) {
-        username = accounts[0]!;
-      }
+    // password for the site is the same login. Otherwise the person names the
+    // account in the bar; guessing could overwrite someone else's login.
+    const username = submittedUsername;
+    if (username === "" && forSite.some((entry) => entry.password === password)) {
+      return "saved" as const;
     }
 
     const sameLogin = forSite.filter((entry) => entry.username === username);
@@ -479,7 +477,10 @@ export const make = Effect.gen(function* () {
         (entry) =>
           entry.username !== savedUsername ||
           entryKey(entry) === key ||
-          !passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin: offer.origin }),
+          !passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin: offer.origin }) ||
+          // Chrome sync would bring its copy back as new and fill it first;
+          // kept, it stays older than this save.
+          (entry.source === "chrome" && state.chromeSync !== null),
       );
       return {
         result: undefined,
@@ -608,9 +609,10 @@ export const make = Effect.gen(function* () {
         }
         if (offer === "saved") {
           // A later attempt matched what is saved: an offer from an earlier,
-          // mistyped attempt is out of date.
-          dropOffersFor(tabId);
-          host.send(PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL, tabId);
+          // mistyped attempt on this site is out of date.
+          if (dropOffersFor(tabId, pageOrigin)) {
+            host.send(PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL, tabId);
+          }
           return;
         }
         host.send(PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL, {

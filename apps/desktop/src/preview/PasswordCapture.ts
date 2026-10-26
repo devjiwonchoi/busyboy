@@ -102,8 +102,9 @@ export function installPasswordCapture(send: SendPasswordCapture) {
     // The page's own submit must go through whatever capturing does.
     try {
       capture(this);
-    } finally {
-      submit.call(this);
+    } catch {
+      // Not saving a login is better than breaking the page's sign-in.
     }
+    submit.call(this);
   };
 }

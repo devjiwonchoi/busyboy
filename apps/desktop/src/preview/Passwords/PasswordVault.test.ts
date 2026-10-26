@@ -5,6 +5,7 @@ import type { WebContents } from "electron";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import * as NodeEvents from "node:events";
 
 import * as DesktopConfig from "../../app/DesktopConfig.ts";
@@ -417,7 +418,7 @@ describe("PasswordVault", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("matches a login submitted without a username to the site's account", () =>
+  it.effect("never guesses the account for a login submitted without a username", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
@@ -425,7 +426,7 @@ describe("PasswordVault", () => {
       yield* Effect.gen(function* () {
         const vault = yield* PasswordVault.PasswordVault;
         yield* vault.save({
-          passwords: [{ ...github, origin: "https://www.github.com" }],
+          passwords: [github],
           source: "chrome",
           onlyWhileChromeSyncs: false,
           keepSavedInBusyboy: false,
@@ -443,10 +444,41 @@ describe("PasswordVault", () => {
         expect(
           yield* Effect.promise(() => page.submit({ username: "", password: "one" })),
         ).toBeUndefined();
+        // Another person's password is offered as a new login to name, not as
+        // an update to the one saved account.
+        expect(
+          yield* Effect.promise(() => page.submit({ username: "", password: "bobs" })),
+        ).toMatchObject({ username: "", isUpdate: false });
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 
-        // A new one updates the one account, replacing its www. copy.
-        const offer = yield* Effect.promise(() => page.submit({ username: "", password: "new" }));
-        expect(offer).toMatchObject({ username: "octo", isUpdate: true });
+  it.effect("replaces a login saved under another form of the address", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        yield* vault.save({
+          passwords: [{ ...github, origin: "https://www.github.com" }],
+          source: "1password",
+          onlyWhileChromeSyncs: false,
+          keepSavedInBusyboy: false,
+        });
+        const page = fakeGuest("https://github.com");
+        vault.attachGuest({
+          guest: page.webContents,
+          tabId: "tab-1",
+          isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
+          onPasswordFilled: () => {},
+        });
+
+        const offer = yield* Effect.promise(() =>
+          page.submit({ username: "octo", password: "new" }),
+        );
+        expect(offer).toMatchObject({ isUpdate: true });
         yield* vault.respondToOffer({
           offerId: offer!.offerId,
           decision: "save",
@@ -455,6 +487,46 @@ describe("PasswordVault", () => {
         expect(yield* vault.loginsFor("https://github.com")).toMatchObject([
           { origin: "https://github.com", username: "octo", password: "new" },
         ]);
+      }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("keeps Chrome's copy while it syncs, so its old password is not filled first", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
+
+      yield* Effect.gen(function* () {
+        const vault = yield* PasswordVault.PasswordVault;
+        yield* vault.save({
+          passwords: [{ ...github, origin: "https://www.github.com" }],
+          source: "chrome",
+          onlyWhileChromeSyncs: false,
+          keepSavedInBusyboy: false,
+        });
+        yield* vault.setChromeSync({ profileDirectory: "Default", keys: { cbcV10: "a2V5" } });
+        yield* TestClock.adjust("1 minute");
+        const page = fakeGuest("https://github.com");
+        vault.attachGuest({
+          guest: page.webContents,
+          tabId: "tab-1",
+          isAgentDriven: () => false,
+          isPasswordStandIn: () => false,
+          onPasswordFilled: () => {},
+        });
+
+        const offer = yield* Effect.promise(() =>
+          page.submit({ username: "octo", password: "new" }),
+        );
+        yield* vault.respondToOffer({
+          offerId: offer!.offerId,
+          decision: "save",
+          username: "octo",
+        });
+        // Newest first: the person's save is what fills.
+        expect(
+          (yield* vault.loginsFor("https://github.com")).map((entry) => entry.password),
+        ).toEqual(["new", "one"]);
       }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
