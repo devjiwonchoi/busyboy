@@ -226,7 +226,7 @@ describe("PasswordVault", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("ignores logins from plain HTTP pages and private sessions", () =>
+  it.effect("ignores logins from plain HTTP pages, private sessions and agents", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-password-vault-" });
@@ -253,6 +253,20 @@ describe("PasswordVault", () => {
         });
         expect(
           yield* Effect.promise(() => incognito.submit({ username: "a", password: "b" })),
+        ).toBeUndefined();
+
+        // After an agent sign-in the form holds only a stand-in.
+        const agentDriven = fakeGuest("https://example.com");
+        vault.attachGuest({
+          guest: agentDriven.webContents,
+          tabId: "tab-3",
+          isAgentDriven: () => true,
+          onPasswordFilled: () => {},
+        });
+        expect(
+          yield* Effect.promise(() =>
+            agentDriven.submit({ username: "a", password: "Qq7stand-in" }),
+          ),
         ).toBeUndefined();
       }).pipe(Effect.provide(vaultLayer({ baseDir, encryptionAvailable: true })));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

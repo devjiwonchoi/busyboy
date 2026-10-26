@@ -509,14 +509,16 @@ export const make = Effect.gen(function* () {
     };
 
     // Same origin checks as filling: a page can only offer a login for itself,
-    // and private sessions are never asked.
+    // and private sessions and agent-driven pages are never asked.
     const capture = (event: IpcMainEvent, payload: unknown) => {
       const frame = event.senderFrame;
       if (!frame || frame !== guest.mainFrame) {
         return;
       }
       const pageOrigin = frame.origin;
-      if (!isFillableOrigin(pageOrigin) || !guest.session.isPersistent()) {
+      // An agent's submit is not the person's login; after an agent sign-in
+      // the form holds only a stand-in, which must never replace the password.
+      if (!isFillableOrigin(pageOrigin) || !guest.session.isPersistent() || isAgentDriven()) {
         return;
       }
       if (typeof payload !== "object" || payload === null) {
