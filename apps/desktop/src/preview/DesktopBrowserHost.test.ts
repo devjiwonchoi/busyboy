@@ -360,4 +360,28 @@ describe("DesktopBrowserHost", () => {
       });
     }),
   );
+
+  it.effect("never autofills a site again after the agent ran its own script there", () =>
+    Effect.gen(function* () {
+      const host = yield* makeHost;
+      const debuggee = makeDebuggee();
+      host.attach(key, debuggee.tab);
+      const page = debuggee.tab.webContents as unknown as NodeEvents.EventEmitter;
+      const settle = Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      const agent = (message: Record<string, unknown>) =>
+        host.handleCommandLine(encodeJson({ type: "cdp", ...key, message: encodeJson(message) }));
+
+      yield* settle;
+      yield* agent({ id: 1, method: "Busyboy.noteAgentScript", sessionId: "t3-preview-page" });
+      yield* settle;
+      expect(host.isAgentDriving(debuggee.tab.webContents)).toBe(true);
+
+      // A new document on the same site: script the agent left in a popup or
+      // a service worker could still be there.
+      page.emit("did-navigate");
+      const otherTab = makeDebuggee();
+      expect(host.isAgentDriving(debuggee.tab.webContents)).toBe(true);
+      expect(host.isAgentDriving(otherTab.tab.webContents)).toBe(true);
+    }),
+  );
 });

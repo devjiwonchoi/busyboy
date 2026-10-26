@@ -58,6 +58,15 @@ export interface DesktopBrowserTabDebugger {
   readonly debugger: Electron.Debugger;
 }
 
+const originOf = (url: string) => {
+  try {
+    const { origin } = new URL(url);
+    return origin === "null" ? null : origin;
+  } catch {
+    return null;
+  }
+};
+
 const keyOf = ({ threadId, tabId }: DesktopBrowserTabKey) => `${threadId}\u0000${tabId}`;
 
 interface AttachedTab {
@@ -148,6 +157,12 @@ export const make = Effect.gen(function* () {
    * holding one must never be offered for saving as the user's password.
    */
   const standIns = new Set<string>();
+  /**
+   * Sites the agent ran its own script on this run. Its script can outlive
+   * the page (a popup, a service worker, stored data), so these sites are
+   * never autofilled for a person again until the app restarts.
+   */
+  const scriptedOrigins = new Set<string>();
 
   /**
    * Passwords a person's autofill put in a page's current document, kept even
@@ -327,6 +342,10 @@ export const make = Effect.gen(function* () {
         credentialLocked: () => tab.credentialLock !== null || tab.signingIn,
         noteAgentScript: () => {
           tab.agentScriptInDocument = true;
+          const origin = originOf(webContents.getURL());
+          if (origin !== null) {
+            scriptedOrigins.add(origin);
+          }
         },
       },
       (message) => {
@@ -449,6 +468,7 @@ export const make = Effect.gen(function* () {
   };
 
   const isAgentDriving = (source: Electron.WebContents) =>
+    scriptedOrigins.has(originOf(source.getURL?.() ?? "") ?? "") ||
     [...tabs.values()].some(
       (candidate) =>
         candidate.debuggee.webContents === source &&
