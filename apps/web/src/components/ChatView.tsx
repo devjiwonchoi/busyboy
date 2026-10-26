@@ -5327,7 +5327,7 @@ export default function ChatView(props: ChatViewProps) {
     const sourceThreadRef = activeThreadRef;
     const targetThreadRef = scopeThreadRef(environmentId, newThreadId());
     // Registered first so the new thread never flashes into the thread list.
-    useSideChatStore.getState().register(targetThreadRef);
+    useSideChatStore.getState().register(targetThreadRef, sourceThreadRef);
     const result = await createThread({
       environmentId,
       input: {

@@ -15,7 +15,7 @@ import {
   type ProviderInstanceId,
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { presentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   isAtomCommandInterrupted,
@@ -86,6 +86,7 @@ import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
+import { useSideChatStore } from "../../sideChatStore";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
   getCustomModelOptionsByInstance,
@@ -3086,6 +3087,7 @@ export function ArchivedThreadsPanel() {
     isLoading: isLoadingArchive,
     refresh: refreshArchivedThreads,
   } = useArchivedThreadSnapshots(scope.environmentIds);
+  const sideChatParents = useSideChatStore((state) => state.parentByThreadKey);
 
   const { groups: archivedGroups, hasMultipleEnvironments } = (() => {
     const selectedProjectKeys =
@@ -3111,11 +3113,18 @@ export function ArchivedThreadsPanel() {
         return [environment.environmentId, secondary ? `${primary} (${secondary})` : primary];
       }),
     );
+    // Side chats are archived with their thread and come back with it, so they are not listed.
     const threads = archivedSnapshots.flatMap(({ environmentId, snapshot }) =>
-      snapshot.threads.map((thread) => ({
-        ...presentThreadShell(environmentId, thread),
-        environmentLabel: environmentLabels.get(environmentId) ?? environmentId,
-      })),
+      snapshot.threads
+        .filter(
+          (thread) =>
+            sideChatParents[scopedThreadKey(scopeThreadRef(environmentId, thread.id))] ===
+            undefined,
+        )
+        .map((thread) => ({
+          ...presentThreadShell(environmentId, thread),
+          environmentLabel: environmentLabels.get(environmentId) ?? environmentId,
+        })),
     );
     const hasMultipleEnvironments =
       new Set(

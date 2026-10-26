@@ -402,9 +402,11 @@ function useSidebarThreads(input: {
 }) {
   const { scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey } = input;
   const allThreads = useThreadShells();
-  const sideChatThreadKeys = useSideChatStore((state) => state.threadKeys);
+  const sideChatParents = useSideChatStore((state) => state.parentByThreadKey);
   // Side chats live in their thread's right panel, not in the list.
-  const threads = allThreads.filter((thread) => !sideChatThreadKeys[threadShellKey(thread)]);
+  const threads = allThreads.filter(
+    (thread) => sideChatParents[threadShellKey(thread)] === undefined,
+  );
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const [workingShelfExpanded, setWorkingShelfExpanded] = useLocalStorage(
     WORKING_SHELF_EXPANDED_KEY,
