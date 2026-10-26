@@ -510,7 +510,10 @@ describe("DesktopBackendConfiguration", () => {
       assert.notProperty(missing, "computerUseHostBundleId");
 
       yield* fileSystem.makeDirectory(path.join(resourcesPath, "cua-driver"), { recursive: true });
-      yield* fileSystem.writeFileString(path.join(resourcesPath, "cua-driver/cua-driver"), "driver");
+      yield* fileSystem.writeFileString(
+        path.join(resourcesPath, "cua-driver/cua-driver"),
+        "driver",
+      );
       const linux = yield* resolveBootstrap("linux");
       assert.notProperty(linux, "computerUseDriverPath");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
