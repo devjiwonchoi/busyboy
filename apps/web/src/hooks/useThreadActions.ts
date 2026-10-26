@@ -49,6 +49,7 @@ import { clearThreadPreviewState } from "../previewStateStore";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
+import { isSideChatThread, readSideChatRefs } from "../sideChatStore";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { useClientSettings } from "./useSettings";
 import * as ThreadUndo from "./threadUndo";
@@ -253,6 +254,15 @@ export function useThreadActions() {
     if (result._tag === "Failure") {
       return result;
     }
+    // Side chats were archived with their thread, so they come back with it. Archived
+    // threads leave the active shells, so one still listed was never archived.
+    for (const sideChatRef of readSideChatRefs(target)) {
+      if (readThreadShell(sideChatRef) !== null) continue;
+      await unarchiveThreadMutation({
+        environmentId: sideChatRef.environmentId,
+        input: { threadId: sideChatRef.threadId },
+      });
+    }
     refreshArchivedThreadsForEnvironment(target.environmentId);
     if (opts.navigate) {
       return settlePromise(() =>
@@ -284,6 +294,16 @@ export function useThreadActions() {
     const shouldNavigateToDraft =
       currentRouteThreadRef?.threadId === threadRef.threadId &&
       currentRouteThreadRef.environmentId === threadRef.environmentId;
+    // Side chats share the thread's worktree, so they are archived first or they
+    // would keep it from being cleaned up. One that cannot be archived keeps it.
+    for (const sideChatRef of readSideChatRefs(threadRef)) {
+      const sideChat = readThreadShell(sideChatRef);
+      if (sideChat === null || !threadRuntimeCanArchive(sideChat.runtime)) continue;
+      await archiveThreadMutation({
+        environmentId: sideChatRef.environmentId,
+        input: { threadId: sideChatRef.threadId },
+      });
+    }
     const action = ThreadUndo.begin("archive", scopedThreadKey(threadRef));
     const archiveResult = await archiveThreadMutation({
       environmentId: threadRef.environmentId,
@@ -336,9 +356,11 @@ export function useThreadActions() {
       return result;
     }
     const { thread, threadRef } = resolved;
+    // Side chats are deleted with their thread and are never a place to land, so
+    // they neither share its worktree nor serve as the fallback.
     const threads = readEnvironmentThreadRefs(threadRef.environmentId).flatMap((ref) => {
       const shell = readThreadShell(ref);
-      return shell === null ? [] : [shell];
+      return shell === null || isSideChatThread(ref) ? [] : [shell];
     });
     const threadProject = readProject({
       environmentId: threadRef.environmentId,
@@ -429,6 +451,21 @@ export function useThreadActions() {
     });
     if (deleteResult._tag === "Failure") {
       return deleteResult;
+    }
+    // An archived side chat is not among the active shells but is deleted all the same.
+    for (const sideChatRef of readSideChatRefs(threadRef)) {
+      const sideChat = readThreadShell(sideChatRef);
+      if (sideChat !== null && sideChat.runtime !== null) {
+        await stopThreadSession({
+          environmentId: sideChatRef.environmentId,
+          input: { threadId: sideChatRef.threadId },
+        });
+      }
+      await deleteThreadMutation({
+        environmentId: sideChatRef.environmentId,
+        input: { threadId: sideChatRef.threadId },
+      });
+      clearThreadPreviewState(sideChatRef);
     }
     refreshArchivedThreadsForEnvironment(threadRef.environmentId);
     releaseComposerDraftUploads(threadRef);

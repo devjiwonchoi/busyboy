@@ -2366,4 +2366,11 @@ code {
       );
     }
   }
+  /* A side chat sits in the narrow right panel, so it keeps the compact gutters. */
+  [data-side-chat] .chat-composer-lane {
+    padding-inline: 0.75rem;
+  }
+  [data-side-chat] [data-chat-canvas] .messages-timeline-scroll {
+    padding-inline: calc(0.75rem - var(--chat-timeline-gutter, 0px));
+  }
 }

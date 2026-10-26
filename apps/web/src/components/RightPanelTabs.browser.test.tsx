@@ -140,6 +140,7 @@ async function renderTabs(
         onAddTerminal={noop}
         onAddPullRequest={noop}
         onAddPullRequests={noop}
+        onAddSideChat={noop}
         onAddDiff={noop}
         onAddFiles={noop}
         browserAvailable
@@ -148,6 +149,7 @@ async function renderTabs(
         filesAvailable={false}
         pullRequestAvailable={false}
         pullRequestsAvailable={false}
+        sideChatAvailable={false}
       >
         <div>content</div>
       </RightPanelTabs>,
