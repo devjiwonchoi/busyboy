@@ -5,6 +5,7 @@
 // keeps no page text, tags or bookmarks.
 
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import { stripSecretSearchParams } from "@t3tools/shared/preview";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -62,51 +63,6 @@ const ColumnRow = Schema.Struct({ name: Schema.String });
 const decodeColumnRows = Schema.decodeUnknownEffect(Schema.Array(ColumnRow));
 
 /**
- * Query parameters that tend to carry sign-in links, reset links, signed
- * URLs and API keys. Matched on the name lowercased with `-` and `_` removed.
- */
-const SECRET_PARAMS = new Set([
-  "auth",
-  "code",
-  "jwt",
-  "key",
-  "otp",
-  "pass",
-  "pwd",
-  "saml",
-  "samlrequest",
-  "samlresponse",
-  "sid",
-  "sig",
-  "ticket",
-]);
-const SECRET_PARAM_PARTS = [
-  "accesskey",
-  "apikey",
-  "authorization",
-  "credential",
-  "oauth",
-  "passwd",
-  "password",
-  "reset",
-  "secret",
-  "session",
-  "signature",
-  "token",
-  "verifier",
-];
-const SECRET_PARAM_PREFIXES = ["xamz", "xgoog"];
-
-export const isSecretParam = (name: string): boolean => {
-  const key = name.toLowerCase().replace(/[-_.\s]/g, "");
-  return (
-    SECRET_PARAMS.has(key) ||
-    SECRET_PARAM_PARTS.some((part) => key.includes(part)) ||
-    SECRET_PARAM_PREFIXES.some((prefix) => key.startsWith(prefix))
-  );
-};
-
-/**
  * The URL a visit is recorded under: web pages only, without the fragment, so
  * jumping between sections of one page is one entry, and without credentials
  * or query parameters that look secret.
@@ -120,11 +76,7 @@ export const historyUrl = (raw: string): string | null => {
     url.hash = "";
     url.username = "";
     url.password = "";
-    const params = Array.from(url.searchParams);
-    const kept = params.filter(([name]) => !isSecretParam(name));
-    if (kept.length !== params.length) {
-      url.search = new URLSearchParams(kept).toString();
-    }
+    stripSecretSearchParams(url);
     return url.href.length > MAX_URL_LENGTH ? null : url.href;
   } catch {
     return null;
