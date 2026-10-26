@@ -5,8 +5,9 @@ import {
 import { History } from "lucide-react";
 import { useState } from "react";
 
-import { useBrowserHistoryStore } from "~/browserHistoryStore";
+import { clearBrowserHistory } from "~/browserHistoryStore";
 import { previewBridge } from "~/components/preview/previewBridge";
+import { forgetRecentlySeenUrls } from "~/previewStateStore";
 
 import {
   AlertDialog,
@@ -45,7 +46,8 @@ export function BrowserHistorySetting({ disabled }: { readonly disabled: boolean
     void previewBridge
       .clearBrowsingHistory()
       .then(() => {
-        useBrowserHistoryStore.setState({ byProjectKey: {} });
+        clearBrowserHistory();
+        forgetRecentlySeenUrls();
         toastManager.add({ type: "success", title: "Cleared browsing history" });
       })
       .catch(() => toastManager.add({ type: "error", title: "Could not clear browsing history" }));
@@ -90,10 +92,11 @@ export function BrowserHistorySetting({ disabled }: { readonly disabled: boolean
             {importing ? <Spinner className="size-3.5" /> : <History />}
             Import from Chrome
           </Button>
+          {/* A clear during an import would race it; wait for the import. */}
           <Button
             size="sm"
             variant="ghost"
-            disabled={disabled}
+            disabled={disabled || importing}
             onClick={() => setClearPending(true)}
           >
             Clear history

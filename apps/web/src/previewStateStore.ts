@@ -477,6 +477,15 @@ export function rememberPreviewUrl(ref: ScopedThreadRef, url: string): void {
   }));
 }
 
+/** Forgets the pages every thread has seen, as part of clearing history. */
+export function forgetRecentlySeenUrls(): void {
+  for (const threadKey of changedPreviewThreadKeys) {
+    appAtomRegistry.update(previewStateAtom(threadKey), (current) =>
+      current.recentlySeenUrls.length === 0 ? current : { ...current, recentlySeenUrls: [] },
+    );
+  }
+}
+
 export function isPreviewSupportedInRuntime(): boolean {
   if (typeof window === "undefined") return false;
   return Boolean(window.desktopBridge?.preview);

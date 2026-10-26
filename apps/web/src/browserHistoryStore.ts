@@ -387,6 +387,15 @@ export function useThreadRecentHistory(
   );
 }
 
+/** Forgets every visited page, including visits still waiting for a project. */
+export function clearBrowserHistory(): void {
+  useBrowserHistoryStore.setState({
+    byProjectKey: {},
+    pendingVisitsByThreadKey: {},
+    pendingTitlesByThreadKey: {},
+  });
+}
+
 export function resetBrowserHistoryForTests(): void {
   useBrowserHistoryStore.setState({
     byProjectKey: {},
