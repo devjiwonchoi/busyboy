@@ -839,7 +839,16 @@ const make = Effect.gen(function* () {
         entries.push({ ...entry, outcome: "removed", reason: sentence(removalReason), bytes });
         yield* gitManager.invalidateStatus(project.workspaceRoot);
         // Preserve branch and path: ProviderTurnStartService recreates the checkout
-        // from that branch when the thread is resumed.
+        // from that branch when the thread is resumed. A deleted thread is never
+        // resumed, so its branch goes once its pull request was merged.
+        if (deleted) {
+          yield* gitManager
+            .deleteMergedBranch({
+              cwd: project.workspaceRoot,
+              branch: thread.branch,
+            })
+            .pipe(Effect.ignoreCause({ log: true }));
+        }
         yield* Effect.logInfo("storage cleanup removed worktree", { threadId: thread.id });
       }).pipe(
         (effect) => withWorkspaceLease(worktreePath, effect),
