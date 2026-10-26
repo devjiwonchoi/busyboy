@@ -19,4 +19,12 @@ describe("inlineHostCompletion", () => {
     expect(inlineHostCompletion({ typed: "git hub", url: "https://github.com/" })).toBeNull();
     expect(inlineHostCompletion({ typed: "github.com/", url: "https://github.com/a" })).toBeNull();
   });
+
+  it("never extends text that may already be a whole host", () => {
+    expect(
+      inlineHostCompletion({ typed: "github.com", url: "https://github.com.evil.io/" }),
+    ).toBeNull();
+    expect(inlineHostCompletion({ typed: "github.c", url: "https://github.com/" })).toBeNull();
+    expect(inlineHostCompletion({ typed: "localhost:", url: "http://localhost:3000/" })).toBeNull();
+  });
 });

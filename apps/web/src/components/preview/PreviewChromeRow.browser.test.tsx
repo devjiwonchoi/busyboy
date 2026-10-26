@@ -8,8 +8,8 @@ import "~/index.css";
 import { PreviewChromeRow } from "./PreviewChromeRow";
 
 const SUGGESTIONS = [
-  { url: "https://github.com/devjiwonchoi/busyboy", title: "busyboy" },
-  { url: "https://docs.github.com/en", title: "GitHub Docs" },
+  { url: "https://github.com/devjiwonchoi/busyboy", title: "busyboy", typed: true },
+  { url: "https://docs.github.com/en", title: "GitHub Docs", typed: false },
 ];
 
 let root: Root;
@@ -28,9 +28,9 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const render = async () => {
+const render = async (suggestions: ReadonlyArray<unknown> = SUGGESTIONS) => {
   const onSubmit = vi.fn();
-  const suggestHistory = vi.fn().mockResolvedValue(SUGGESTIONS);
+  const suggestHistory = vi.fn().mockResolvedValue(suggestions);
   await act(async () =>
     root.render(
       <PreviewChromeRow
@@ -94,6 +94,45 @@ describe("PreviewChromeRow address suggestions", () => {
     await userEvent.keyboard("{Escape}");
     expect(options()).toHaveLength(0);
     expect(document.activeElement).toBe(input);
+  });
+
+  it("goes to the last suggestion on ArrowUp from the input", async () => {
+    const { input, onSubmit } = await render();
+    await userEvent.click(input);
+    await userEvent.keyboard("git");
+    await vi.waitFor(() => expect(options()).toHaveLength(2));
+
+    await userEvent.keyboard("{ArrowUp}");
+    expect(options()[1]?.getAttribute("aria-selected")).toBe("true");
+
+    await userEvent.keyboard("{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith("https://docs.github.com/en");
+  });
+
+  it("goes to exactly the host typed out in full, not a longer one from history", async () => {
+    const { input, onSubmit } = await render([
+      { url: "https://github.com.evil.io/login", title: "Sign in", typed: true },
+    ]);
+    await userEvent.click(input);
+    await userEvent.keyboard("github.com");
+    await vi.waitFor(() => expect(options()).toHaveLength(1));
+    expect(input.value).toBe("github.com");
+
+    await userEvent.keyboard("{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith("github.com");
+  });
+
+  it("does not complete a host the user never typed or chose", async () => {
+    const { input, onSubmit } = await render([
+      { url: "https://gitlab-phish.io/", title: "GitLab", typed: false },
+    ]);
+    await userEvent.click(input);
+    await userEvent.keyboard("git");
+    await vi.waitFor(() => expect(options()).toHaveLength(1));
+    expect(input.value).toBe("git");
+
+    await userEvent.keyboard("{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith("git");
   });
 
   it("chooses a suggestion with the mouse", async () => {

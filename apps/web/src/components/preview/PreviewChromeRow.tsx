@@ -133,10 +133,15 @@ export function PreviewChromeRow({
           return;
         }
         setSuggestions(results);
-        const top = results[0];
-        setCompletion(
-          complete && top ? (inlineHostCompletion({ typed: text, url: top.url }) ?? "") : "",
-        );
+        // Only hosts the user typed or chose complete inline; a site or agent
+        // could have planted the others.
+        const completion = complete
+          ? results
+              .filter((result) => result.typed)
+              .map((result) => inlineHostCompletion({ typed: text, url: result.url }))
+              .find((tail) => tail !== null)
+          : undefined;
+        setCompletion(completion ?? "");
       },
       () => {
         if (request === suggestionRequest.current) {
@@ -261,9 +266,13 @@ export function PreviewChromeRow({
                       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                         if (suggestions.length === 0) return;
                         event.preventDefault();
-                        const step = event.key === "ArrowDown" ? 1 : -1;
-                        setActiveIndex(
-                          (current) => (current + step + suggestions.length) % suggestions.length,
+                        const count = suggestions.length;
+                        setActiveIndex((current) =>
+                          event.key === "ArrowDown"
+                            ? (current + 1) % count
+                            : current <= 0
+                              ? count - 1
+                              : current - 1,
                         );
                         return;
                       }

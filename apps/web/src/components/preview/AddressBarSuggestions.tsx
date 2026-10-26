@@ -43,11 +43,12 @@ export function AddressBarSuggestions({
           }}
         >
           <History className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate">
+          <span className="min-w-0 flex-1 truncate">
             {suggestion.title === suggestion.url ? displayUrl(suggestion.url) : suggestion.title}
           </span>
           {suggestion.title === suggestion.url ? null : (
-            <span className="min-w-0 shrink truncate text-muted-foreground text-xs">
+            // A long title must not push the address out of view.
+            <span className="min-w-0 max-w-1/2 shrink-0 truncate text-muted-foreground text-xs">
               {displayUrl(suggestion.url)}
             </span>
           )}
