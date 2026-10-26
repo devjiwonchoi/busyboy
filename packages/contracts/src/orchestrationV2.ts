@@ -1304,6 +1304,28 @@ const OrchestrationV2SecretRequestFields = {
   secretStatus: OrchestrationV2SecretRequestStatus,
 } as const;
 
+/**
+ * A computer-use app approval card. `allowed_once` covers the current run,
+ * `allowed_thread` the thread, and `allowed_always` every thread.
+ */
+export const OrchestrationV2ComputerUseApprovalStatus = Schema.Literals([
+  "pending",
+  "allowed_once",
+  "allowed_thread",
+  "allowed_always",
+  "denied",
+  "cancelled",
+]);
+export type OrchestrationV2ComputerUseApprovalStatus =
+  typeof OrchestrationV2ComputerUseApprovalStatus.Type;
+
+const OrchestrationV2ComputerUseApprovalFields = {
+  type: Schema.Literal("computer_use_approval"),
+  appName: TrimmedNonEmptyString,
+  bundleId: TrimmedNonEmptyString,
+  approvalStatus: OrchestrationV2ComputerUseApprovalStatus,
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1481,6 +1503,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2ComputerUseApprovalFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2220,6 +2246,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2ComputerUseApprovalFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
     type: Schema.Literal("subagent"),
     subagentId: NodeId,
     origin: Schema.Literals(["provider_native", "app_owned"]),
@@ -2952,6 +2982,20 @@ const OrchestrationV2InternalCommand = Schema.Union([
     reason: Schema.String,
     placeholder: Schema.optional(Schema.String),
     secretStatus: OrchestrationV2SecretRequestStatus,
+  }),
+  /**
+   * Internal so only the server's approval flow can grant computer use.
+   */
+  Schema.Struct({
+    type: Schema.Literal("computer_use_approval.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    nodeId: NodeId,
+    turnItemId: TurnItemId,
+    appName: TrimmedNonEmptyString,
+    bundleId: TrimmedNonEmptyString,
+    approvalStatus: OrchestrationV2ComputerUseApprovalStatus,
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

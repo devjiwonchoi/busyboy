@@ -61,16 +61,25 @@ function restartContinuationBlocked(
           turn.id === request.providerTurnId)),
   );
   if (waitingRequest) return true;
-  return projection.turnItems.some(
-    (item) =>
-      item.type === "secret_request" &&
+  return projection.turnItems.some((item) => {
+    // A run that was waiting on the user, or whose card the restart closed,
+    // waits for the user again instead of continuing on its own.
+    const status =
+      item.type === "secret_request"
+        ? item.secretStatus
+        : item.type === "computer_use_approval"
+          ? item.approvalStatus
+          : undefined;
+    return (
+      status !== undefined &&
       item.runId === source.id &&
-      (item.secretStatus === "pending" ||
-        (item.secretStatus === "cancelled" &&
+      (status === "pending" ||
+        (status === "cancelled" &&
           item.completedAt !== null &&
           source.completedAt !== null &&
-          DateTime.Equivalence(item.completedAt, source.completedAt))),
-  );
+          DateTime.Equivalence(item.completedAt, source.completedAt)))
+    );
+  });
 }
 
 /**
@@ -187,7 +196,7 @@ export const continueRestartedRun = Effect.fn("RestartContinuation.continueResta
     const projection = yield* threads.getThreadRecords(
       input.threadId,
       ["messages", "runs", "providerTurns", "attempts", "runtimeRequests", "turnItems"],
-      { messageIds: [messageId], turnItemTypes: ["secret_request"] },
+      { messageIds: [messageId], turnItemTypes: ["secret_request", "computer_use_approval"] },
     );
     if (
       !resolveProjectSettings(enabled, projection.thread.projectId).settings

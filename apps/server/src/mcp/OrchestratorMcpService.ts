@@ -818,6 +818,8 @@ function turnItemText(item: OrchestrationV2TurnItem): string | null {
       return `Created thread ${item.targetThreadId} with ${item.targetProviderInstanceId} (${item.targetModel}).`;
     case "secret_request":
       return `Asked the user for ${item.label}: ${item.secretStatus}.`;
+    case "computer_use_approval":
+      return `Asked the user to allow computer use with ${item.appName}: ${item.approvalStatus}.`;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":

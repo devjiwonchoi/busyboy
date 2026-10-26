@@ -52,6 +52,7 @@ import * as ThreadForkService from "./ThreadForkService.ts";
 import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as ComputerUseApprovals from "../computerUse/ComputerUseApprovals.ts";
 
 export const layerEventInfrastructure = Layer.mergeAll(
   OrchestrationEventStore.layer,
@@ -274,6 +275,9 @@ const layerThreadLifecycleProvided = ThreadLifecycleService.layer.pipe(
 const layerSecretRequestsProvided = SecretRequests.layer.pipe(
   Layer.provide(layerThreadManagementProvided),
 );
+const layerComputerUseApprovalsProvided = ComputerUseApprovals.layer.pipe(
+  Layer.provide(layerThreadManagementProvided),
+);
 const layerScheduledTaskProvided = ScheduledTaskService.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
@@ -357,6 +361,7 @@ export const layerProduction = Layer.mergeAll(
   layerThreadLifecycleProvided,
   layerScheduledTaskProvided,
   layerSecretRequestsProvided,
+  layerComputerUseApprovalsProvided,
   UsageLimitRecoveryWorker.layer.pipe(
     Layer.provide(Layer.mergeAll(ProjectionStore.layer, layerThreadManagementProvided)),
   ),

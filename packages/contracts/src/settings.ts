@@ -963,6 +963,11 @@ export const ServerSettings = Schema.Struct({
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   // Lets agents read and operate native macOS apps. Off unless the user turns it on.
   enableAgentComputerUse: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // Bundle IDs the user chose "Always allow" for. Apps computer use never
+  // touches stay refused even if listed here.
+  computerUseAllowedApps: Schema.Array(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   defaultAutoPull: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   defaultProjectScripts: Schema.Array(ProjectScript).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
@@ -1243,6 +1248,7 @@ export const ServerSettingsPatch = Schema.Struct({
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
   enableAgentComputerUse: Schema.optionalKey(Schema.Boolean),
+  computerUseAllowedApps: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
   defaultAutoPull: Schema.optionalKey(Schema.Boolean),
   defaultProjectScripts: Schema.optionalKey(Schema.Array(ProjectScript)),
   defaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),

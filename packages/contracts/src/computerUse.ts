@@ -18,6 +18,10 @@ export const ComputerUseErrorCode = Schema.Literals([
   "app_forbidden",
   // The app reports no bundle ID, so it cannot be approved.
   "app_unidentified",
+  // The user declined the approval card for this app.
+  "app_denied",
+  // No answer: the card timed out, the run ended, or the caller has no active run.
+  "approval_unavailable",
   "window_not_found",
   "screen_locked",
   "driver_failed",

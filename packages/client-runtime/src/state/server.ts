@@ -1306,6 +1306,15 @@ export function createServerEnvironmentAtoms<R, E>(
           JSON.stringify([environmentId, input.threadId, input.turnItemId]),
       },
     }),
+    answerComputerUseApproval: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:computer-use:answer-approval",
+      tag: WS_METHODS.computerUseAnswerApproval,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.threadId, input.turnItemId]),
+      },
+    }),
     refreshUsageRates: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-usage-rates",
       tag: WS_METHODS.serverRefreshUsageRates,

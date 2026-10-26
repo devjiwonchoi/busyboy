@@ -64,3 +64,4 @@ export * from "./worktreeSetup.ts";
 export * from "./secretRequest.ts";
 export * from "./clientRpcPermissions.ts";
 export * from "./computerUse.ts";
+export * from "./computerUseApproval.ts";

@@ -122,6 +122,7 @@ import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts"
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
+import * as ComputerUseApprovals from "./computerUse/ComputerUseApprovals.ts";
 import {
   archivedShellStreamItemFromThreadShell,
   buildActiveShellSnapshot,
@@ -1184,6 +1185,7 @@ const layerWsRpc = (
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const secretRequests = yield* SecretRequests.SecretRequests;
+      const computerUseApprovals = yield* ComputerUseApprovals.ComputerUseApprovals;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
@@ -2024,6 +2026,10 @@ const layerWsRpc = (
         [WS_METHODS.secretsAnswerRequest]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(secretRequests.answer(input)),
+          ),
+        [WS_METHODS.computerUseAnswerApproval]: (input) =>
+          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
+            Effect.andThen(computerUseApprovals.answer(input)),
           ),
         [WS_METHODS.scheduledTasksListWebhookDeliveries]: (input) =>
           Effect.annotateCurrentSpan({ "scheduled_task.id": input.id }).pipe(
