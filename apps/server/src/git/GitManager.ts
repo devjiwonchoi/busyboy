@@ -138,6 +138,15 @@ export class GitManager extends Context.Service<
       input: { readonly cwd: string; readonly branch: string },
       options?: { readonly refresh?: boolean; readonly freshGitState?: boolean },
     ) => Effect.Effect<GitBranchPullRequest | null, GitManagerServiceError>;
+    /**
+     * Deletes a local branch whose pull request was merged, and returns whether
+     * it did. The branch must still point at the merged head, so commits made
+     * after the merge are kept. Git refuses while a worktree has it checked out.
+     */
+    readonly deleteMergedBranch: (input: {
+      readonly cwd: string;
+      readonly branch: string;
+    }) => Effect.Effect<boolean, GitManagerServiceError>;
     readonly invalidateLocalStatus: (cwd: string) => Effect.Effect<void, never>;
     readonly invalidateRemoteStatus: (cwd: string) => Effect.Effect<void, never>;
     readonly invalidateStatus: (cwd: string) => Effect.Effect<void, never>;
@@ -2542,6 +2551,28 @@ export const make = Effect.gen(function* () {
       freshGitState: true,
     });
   });
+  const deleteMergedBranch: GitManager["Service"]["deleteMergedBranch"] = Effect.fn(
+    "deleteMergedBranch",
+  )(function* ({ cwd, branch }) {
+    const pullRequest = yield* branchPullRequest({ cwd, branch }, { refresh: true });
+    if (
+      pullRequest?.state !== "merged" ||
+      pullRequest.headRef !== branch ||
+      pullRequest.headSha == null
+    ) {
+      return false;
+    }
+
+    const head = yield* gitCore.resolveCommit({ cwd, revision: `refs/heads/${branch}` });
+    if (head.commitSha !== pullRequest.headSha) {
+      return false;
+    }
+
+    yield* gitCore.deleteLocalBranch({ cwd, refName: branch, force: true });
+    yield* invalidateStatus(cwd);
+
+    return true;
+  });
   const invalidateLocalStatus: GitManager["Service"]["invalidateLocalStatus"] = Effect.fn(
     "invalidateLocalStatus",
   )(function* (cwd) {
@@ -3091,6 +3122,7 @@ export const make = Effect.gen(function* () {
     remoteStatus,
     status,
     branchPullRequest,
+    deleteMergedBranch,
     invalidateLocalStatus,
     invalidateRemoteStatus,
     invalidateStatus,

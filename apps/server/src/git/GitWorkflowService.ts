@@ -107,6 +107,7 @@ export class GitWorkflowService extends Context.Service<
     readonly deleteLocalBranch: (
       input: GitVcsDriver.GitDeleteLocalBranchInput,
     ) => Effect.Effect<void, GitCommandError>;
+    readonly deleteMergedBranch: GitManager.GitManager["Service"]["deleteMergedBranch"];
     readonly createRef: (
       input: VcsCreateRefInput,
     ) => Effect.Effect<VcsCreateRefResult, GitCommandError>;
@@ -403,6 +404,10 @@ export const make = Effect.gen(function* () {
     deleteLocalBranch: (input) =>
       ensureGitCommand("GitWorkflowService.deleteLocalBranch", input.cwd).pipe(
         Effect.andThen(git.deleteLocalBranch(input)),
+      ),
+    deleteMergedBranch: (input) =>
+      ensureGit("GitWorkflowService.deleteMergedBranch", input.cwd).pipe(
+        Effect.andThen(gitManager.deleteMergedBranch(input)),
       ),
     createRef: (input) =>
       ensureGitCommand("GitWorkflowService.createRef", input.cwd).pipe(

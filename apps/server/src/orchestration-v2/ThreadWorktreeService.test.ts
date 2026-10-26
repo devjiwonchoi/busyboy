@@ -94,6 +94,12 @@ const run = (scenario: Scenario) =>
                   });
                 }
               }),
+            deleteMergedBranch: (input) =>
+              Effect.sync(() => {
+                assert.deepEqual(input, { cwd: workspaceRoot, branch });
+                calls.push("delete merged branch");
+                return true;
+              }),
             pruneWorktrees: (input) =>
               Effect.sync(() => {
                 assert.deepEqual(input, { cwd: workspaceRoot });
@@ -137,9 +143,9 @@ const run = (scenario: Scenario) =>
 
 it.effect.each([
   {
-    name: "removes the worktree of an archived thread",
+    name: "removes the worktree of an archived thread, then its branch if merged",
     scenario: { operation: "removeForArchive", archived: true, worktreeExists: true },
-    expected: ["remove"],
+    expected: ["remove", "delete merged branch"],
   },
   {
     name: "keeps the worktree when the thread was unarchived first",

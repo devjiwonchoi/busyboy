@@ -1516,6 +1516,56 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     }),
   );
 
+  it.effect.each([
+    { name: "deletes a local branch whose pull request was merged", extraCommit: false },
+    { name: "keeps a merged branch with commits after the merge", extraCommit: true },
+  ])("$name", ({ extraCommit }) =>
+    Effect.gen(function* () {
+      const branch = "feature/merged-branch";
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", branch]);
+      yield* runGit(repoDir, ["commit", "--allow-empty", "-m", "Merged work"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", branch]);
+      const mergedHead = (yield* runGit(repoDir, ["rev-parse", "HEAD"])).stdout.trim();
+      if (extraCommit) {
+        yield* runGit(repoDir, ["commit", "--allow-empty", "-m", "Unpushed work"]);
+      }
+      // Merged with the remote branch deleted, as after "Delete branch".
+      yield* runGit(repoDir, ["checkout", "main"]);
+      yield* runGit(repoDir, ["push", "origin", "--delete", branch]);
+      yield* runGit(repoDir, ["fetch", "--prune", "origin"]);
+
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          prListSequence: [
+            JSON.stringify([
+              {
+                number: 217,
+                title: "Merged branch PR",
+                url: "https://github.com/pingdotgg/t3code/pull/217",
+                baseRefName: "main",
+                headRefName: branch,
+                headRefOid: mergedHead,
+                state: "MERGED",
+                updatedAt: "2026-10-27T00:00:00Z",
+              },
+            ]),
+          ],
+        },
+      });
+
+      const deleted = yield* manager.deleteMergedBranch({ cwd: repoDir, branch });
+      const remaining = (yield* runGit(repoDir, ["branch", "--list", branch])).stdout.trim();
+
+      expect(deleted).toBe(!extraCommit);
+      expect(remaining === "").toBe(!extraCommit);
+    }),
+  );
+
   it.effect("branch PR lookup uses a saved tracked branch without changing checkout", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");

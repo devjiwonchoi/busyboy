@@ -17,7 +17,8 @@ import * as ProjectStore from "./ProjectStore.ts";
 /**
  * Archiving a thread removes its worktree, and unarchiving can restore it.
  * The thread keeps its branch and worktree path, so a restore checks the same
- * branch out at the same path.
+ * branch out at the same path. A branch whose pull request was merged is
+ * deleted instead, since its work already landed.
  */
 export class ThreadWorktreeService extends Context.Reference<{
   readonly removeForArchive: (threadId: ThreadId) => Effect.Effect<void>;
@@ -121,6 +122,12 @@ export const layer = Layer.effect(
           gitWorkflow.removeWorktree({ cwd: workspaceRoot, path: worktreePath }),
         );
         yield* gitWorkflow.invalidateStatus(workspaceRoot);
+
+        // A merged pull request already holds the branch's work, so its local
+        // branch goes too. The worktree is then not restored on unarchive.
+        if (yield* gitWorkflow.deleteMergedBranch({ cwd: workspaceRoot, branch })) {
+          yield* Effect.logInfo("Deleted merged branch of archived thread", { threadId, branch });
+        }
       }).pipe(logFailure("Failed to remove archived thread worktree", threadId));
 
     const restore = (threadId: ThreadId) =>
