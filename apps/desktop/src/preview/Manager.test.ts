@@ -30,6 +30,7 @@ import * as BrowserSession from "./BrowserSession.ts";
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
 import * as PreviewManager from "./Manager.ts";
 import * as PreviewPasskeys from "./Passkeys.ts";
+import * as BrowsingHistory from "./History/BrowsingHistory.ts";
 
 describe("fitPictureInPictureContentSize", () => {
   it("preserves the PiP content area across aspect-ratio changes", () => {
@@ -306,6 +307,11 @@ const managerLayer = (platform: NodeJS.Platform = "darwin") =>
       Layer.mock(PreviewPasskeys.PreviewPasskeys)({
         bridgeEnabled: false,
         installSessionHandlers: () => {},
+        attachGuest: () => () => {},
+      }),
+    ),
+    Layer.provideMerge(
+      Layer.mock(BrowsingHistory.BrowsingHistory)({
         attachGuest: () => () => {},
       }),
     ),

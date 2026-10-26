@@ -8,6 +8,7 @@ import type {
   BrowserImportSource,
   BrowserImportSourceId,
 } from "./browserImport.ts";
+import type { BrowsingHistorySuggestion } from "./browsingHistory.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
@@ -1048,6 +1049,11 @@ export interface DesktopPreviewBridge {
     readonly sourceProfileDirectory: string;
     readonly targetProfileId: string;
   }) => Promise<BrowserImportResult>;
+  /** Visited pages matching typed address-bar text, best match first. */
+  searchBrowsingHistory: (input: {
+    readonly text: string;
+    readonly limit: number;
+  }) => Promise<ReadonlyArray<BrowsingHistorySuggestion>>;
   setAnnotationTheme: (theme: DesktopPreviewAnnotationTheme) => Promise<void>;
   setAnnotationSendEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   /**

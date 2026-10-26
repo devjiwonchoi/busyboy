@@ -15,6 +15,8 @@ import {
   BrowserImportSource,
   DesktopPreviewClearDataInputSchema,
   DesktopPreviewImportCookiesInputSchema,
+  BrowsingHistorySuggestion,
+  DesktopPreviewSearchHistoryInputSchema,
   DesktopPreviewCreateTabInputSchema,
   DesktopPreviewTabInputSchema,
   DesktopPreviewWebviewConfigSchema,
@@ -31,6 +33,7 @@ import * as NodeURL from "node:url";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
+import * as BrowsingHistory from "../../preview/History/BrowsingHistory.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
@@ -351,6 +354,16 @@ export const importBrowserCookies = DesktopIpc.makeIpcMethod({
       persistent,
       ...(namespace === undefined ? {} : { namespace }),
     });
+  }),
+});
+
+export const searchBrowsingHistory = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_SEARCH_HISTORY_CHANNEL,
+  payload: DesktopPreviewSearchHistoryInputSchema,
+  result: Schema.Array(BrowsingHistorySuggestion),
+  handler: Effect.fn("desktop.ipc.preview.searchBrowsingHistory")(function* (input) {
+    const entries = yield* (yield* BrowsingHistory.BrowsingHistory).search(input);
+    return entries.map(({ url, title }) => ({ url, title }));
   }),
 });
 

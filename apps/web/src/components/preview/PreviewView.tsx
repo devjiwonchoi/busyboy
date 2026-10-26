@@ -138,6 +138,8 @@ function ServerTabFileNotShown(props: {
   );
 }
 
+const ADDRESS_BAR_SUGGESTION_LIMIT = 6;
+
 export function PreviewView({
   threadRef,
   tabId: requestedTabId,
@@ -147,6 +149,10 @@ export function PreviewView({
 }: Props) {
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
   const [pickActive, setPickActive] = useState(false);
+  const bridge = previewBridge;
+  const searchHistory = bridge
+    ? (text: string) => bridge.searchBrowsingHistory({ text, limit: ADDRESS_BAR_SUGGESTION_LIMIT })
+    : undefined;
   const canSendAnnotation =
     useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope) &&
     Boolean(onSendAnnotation);
@@ -908,6 +914,7 @@ export function PreviewView({
     >
       <PreviewChromeRow
         url={url}
+        suggestHistory={searchHistory}
         loading={loading || serverStreamPending}
         canGoBack={canGoBack && !serverInputDisabled}
         canGoForward={canGoForward && !serverInputDisabled}
