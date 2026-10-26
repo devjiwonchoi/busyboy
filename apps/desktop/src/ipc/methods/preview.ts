@@ -18,6 +18,7 @@ import {
   ChromePasswordSource,
   DesktopPreviewImportChromePasswordsInputSchema,
   DesktopPreviewImportPasswordFileInputSchema,
+  DesktopPreviewRespondPasswordSaveOfferInputSchema,
   PasswordFileImportResult,
   PasswordImportResult,
   SavedPasswordStatus,
@@ -408,6 +409,15 @@ export const importPasswordFile = DesktopIpc.makeIpcMethod({
     // behind once its contents are encrypted in the vault.
     const exportTrashed = yield* (yield* ElectronShell.ElectronShell).trashItem(filePath);
     return { ...result, exportTrashed };
+  }),
+});
+
+export const respondToPasswordSaveOffer = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_RESPOND_PASSWORD_SAVE_OFFER_CHANNEL,
+  payload: DesktopPreviewRespondPasswordSaveOfferInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.respondToPasswordSaveOffer")(function* (input) {
+    yield* (yield* PasswordVault.PasswordVault).respondToOffer(input);
   }),
 });
 

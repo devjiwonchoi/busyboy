@@ -13,6 +13,8 @@ import type {
   PasswordFileImportResult,
   PasswordFileImportSourceId,
   PasswordImportResult,
+  PasswordSaveDecision,
+  PasswordSaveOffer,
   SavedPasswordStatus,
 } from "./passwordImport.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
@@ -1068,6 +1070,13 @@ export interface DesktopPreviewBridge {
   /** Opens Apple's Passwords app so the user can export; `false` if it could not. */
   openPasswordsApp: () => Promise<boolean>;
   getSavedPasswordStatus: () => Promise<SavedPasswordStatus>;
+  /** A page in a preview tab submitted a login that is not saved yet. */
+  onPasswordSaveOffer: (listener: (offer: PasswordSaveOffer) => void) => () => void;
+  respondToPasswordSaveOffer: (input: {
+    readonly offerId: string;
+    readonly decision: PasswordSaveDecision;
+    readonly username: string;
+  }) => Promise<void>;
   clearSavedPasswords: () => Promise<void>;
   setAnnotationTheme: (theme: DesktopPreviewAnnotationTheme) => Promise<void>;
   setAnnotationSendEnabled: (tabId: string, enabled: boolean) => Promise<void>;

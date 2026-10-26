@@ -152,6 +152,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(PreviewIpc.importChromePasswords);
   yield* ipc.handle(PreviewIpc.importPasswordFile);
   yield* ipc.handle(PreviewIpc.openPasswordsApp);
+  yield* ipc.handle(PreviewIpc.respondToPasswordSaveOffer);
   yield* ipc.handle(PreviewIpc.stopChromePasswordSync);
   yield* ipc.handle(PreviewIpc.getSavedPasswordStatus);
   yield* ipc.handle(PreviewIpc.clearSavedPasswords);

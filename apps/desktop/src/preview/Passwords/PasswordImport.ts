@@ -97,11 +97,13 @@ export const make = Effect.gen(function* () {
     sourceId,
     onlyWhileChromeSyncs,
     unlessClearedSince,
+    keepSavedInBusyboy,
   }: {
     readonly read: PasswordReadResult;
     readonly sourceId: PasswordImportSourceId;
     readonly onlyWhileChromeSyncs: boolean;
     readonly unlessClearedSince?: number;
+    readonly keepSavedInBusyboy: boolean;
   }) {
     const saved = yield* vault
       .save({
@@ -109,6 +111,7 @@ export const make = Effect.gen(function* () {
         source: sourceId,
         onlyWhileChromeSyncs,
         ...(unlessClearedSince === undefined ? {} : { unlessClearedSince }),
+        keepSavedInBusyboy,
       })
       .pipe(Effect.mapError(vaultFailure(sourceId)));
     return { ...saved, skipped: read.skipped } satisfies PasswordImportResult;
@@ -226,6 +229,7 @@ export const make = Effect.gen(function* () {
       sourceId: "chrome",
       onlyWhileChromeSyncs: false,
       unlessClearedSince: clears,
+      keepSavedInBusyboy: false,
     });
     yield* vault
       .setChromeSync(
@@ -255,7 +259,12 @@ export const make = Effect.gen(function* () {
       return yield* new PasswordImportFailedError({ sourceId: "chrome", reason: "readFailed" });
     }
 
-    const result = yield* saveRead({ read, sourceId: "chrome", onlyWhileChromeSyncs: true });
+    const result = yield* saveRead({
+      read,
+      sourceId: "chrome",
+      onlyWhileChromeSyncs: true,
+      keepSavedInBusyboy: true,
+    });
     yield* Ref.set(lastChromeSync, yield* Clock.currentTimeMillis);
     if (result.imported > 0 || result.updated > 0) {
       yield* Effect.logInfo("Synced passwords from Chrome", {
@@ -331,7 +340,12 @@ export const make = Effect.gen(function* () {
       return yield* new PasswordImportFailedError({ sourceId, reason: "invalidFile" });
     }
 
-    return yield* saveRead({ read, sourceId, onlyWhileChromeSyncs: false });
+    return yield* saveRead({
+      read,
+      sourceId,
+      onlyWhileChromeSyncs: false,
+      keepSavedInBusyboy: false,
+    });
   });
 
   return PasswordImport.of({ chromeSource, importChrome, stopChromeSync, importFile, status });

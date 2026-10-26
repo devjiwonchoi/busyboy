@@ -96,6 +96,9 @@ export const PREVIEW_SAVED_PASSWORD_STATUS_CHANNEL = "desktop:preview-saved-pass
 export const PREVIEW_STOP_CHROME_PASSWORD_SYNC_CHANNEL =
   "desktop:preview-stop-chrome-password-sync";
 export const PREVIEW_CLEAR_SAVED_PASSWORDS_CHANNEL = "desktop:preview-clear-saved-passwords";
+export const PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL = "desktop:preview-password-save-offer";
+export const PREVIEW_RESPOND_PASSWORD_SAVE_OFFER_CHANNEL =
+  "desktop:preview-respond-password-save-offer";
 export const PREVIEW_SET_ANNOTATION_THEME_CHANNEL = "desktop:preview-set-annotation-theme";
 export const PREVIEW_SET_ANNOTATION_SEND_ENABLED_CHANNEL =
   "desktop:preview-set-annotation-send-enabled";

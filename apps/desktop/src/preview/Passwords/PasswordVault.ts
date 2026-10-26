@@ -1,4 +1,8 @@
-import { PasswordImportSourceId } from "@t3tools/contracts";
+import {
+  PasswordImportSourceId,
+  type PasswordSaveDecision,
+  type PasswordSaveOffer,
+} from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -9,17 +13,19 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
-import type { IpcMainInvokeEvent, WebContents } from "electron";
+import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
+import { PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL } from "../../ipc/channels.ts";
 import * as ElectronSafeStorage from "../../electron/ElectronSafeStorage.ts";
-import { PASSWORD_FILL_CHANNEL } from "../GuestProtocol.ts";
+import { PASSWORD_CAPTURE_CHANNEL, PASSWORD_FILL_CHANNEL } from "../GuestProtocol.ts";
 import { guardPasswordSubmission } from "./CredentialNetworkGuard.ts";
 import {
   isFillableOrigin,
   passwordMatchesOrigin,
   type ImportedPassword,
   type SavedPassword,
+  type SavedPasswordSource,
 } from "./PasswordEntry.ts";
 
 export class PasswordVaultError extends Schema.TaggedError<PasswordVaultError>()(
@@ -44,7 +50,7 @@ const SavedPasswordSchema = Schema.Struct({
   origin: Schema.String,
   username: Schema.String,
   password: Schema.String,
-  source: PasswordImportSourceId,
+  source: Schema.Union([PasswordImportSourceId, Schema.Literal("busyboy")]),
   savedAt: Schema.Number,
 });
 
@@ -62,6 +68,8 @@ export type ChromeSync = typeof ChromeSyncSchema.Type;
 const VaultStateSchema = Schema.Struct({
   passwords: Schema.Array(SavedPasswordSchema),
   chromeSync: Schema.NullOr(ChromeSyncSchema),
+  /** Origins where the user chose "Never save"; absent in older vaults. */
+  neverSaveOrigins: Schema.optional(Schema.Array(Schema.String)),
 });
 type VaultState = typeof VaultStateSchema.Type;
 const EMPTY_VAULT: VaultState = { passwords: [], chromeSync: null };
@@ -85,6 +93,8 @@ const encodeVaultDocument = Schema.encodeEffect(VaultDocument);
  * gesture check, since the page shares its JavaScript world.
  */
 const FILL_GESTURE_WINDOW_MS = 5_000;
+/** Unanswered offers kept per app run; older ones are forgotten first. */
+const MAX_PENDING_OFFERS = 10;
 
 const entryKey = (entry: { readonly origin: string; readonly username: string }) =>
   `${entry.origin}\n${entry.username}`;
@@ -128,7 +138,7 @@ export class PasswordVault extends Context.Service<
     ) => Effect.Effect<void, PasswordVaultError>;
     readonly save: (input: {
       readonly passwords: ReadonlyArray<ImportedPassword>;
-      readonly source: PasswordImportSourceId;
+      readonly source: SavedPasswordSource;
       /**
        * Background syncs pass true: if the user stopped syncing or removed
        * everything while the sync was reading Chrome, nothing is written back.
@@ -136,22 +146,34 @@ export class PasswordVault extends Context.Service<
       readonly onlyWhileChromeSyncs: boolean;
       /** An import started before a clear writes nothing back. */
       readonly unlessClearedSince?: number;
+      /**
+       * Background syncs pass true, so a login the user saved in Busyboy is
+       * not reverted by an older copy still in Chrome.
+       */
+      readonly keepSavedInBusyboy: boolean;
     }) => Effect.Effect<
       { readonly imported: number; readonly updated: number },
       PasswordVaultError
     >;
     readonly clear: Effect.Effect<void, PasswordVaultError>;
     /**
-     * Answers the guest's autofill requests; returns the detach function. A
+     * Answers the guest's autofill requests and turns the logins it submits
+     * into save offers for its host window; returns the detach function. A
      * page the agent is driving is never autofilled (agents sign in through an
      * approved `preview_sign_in`), and `onPasswordFilled` runs before a
      * password is handed to the page so the caller can keep agents off it.
      */
     readonly attachGuest: (input: {
       readonly guest: WebContents;
+      readonly tabId: string;
       readonly isAgentDriven: () => boolean;
       readonly onPasswordFilled: (password: string) => void;
     }) => () => void;
+    readonly respondToOffer: (input: {
+      readonly offerId: string;
+      readonly decision: PasswordSaveDecision;
+      readonly username: string;
+    }) => Effect.Effect<void, PasswordVaultError>;
   }
 >()("@t3tools/desktop/preview/Passwords/PasswordVault") {}
 
@@ -256,11 +278,13 @@ export const make = Effect.gen(function* () {
     source,
     onlyWhileChromeSyncs,
     unlessClearedSince,
+    keepSavedInBusyboy,
   }: {
     readonly passwords: ReadonlyArray<ImportedPassword>;
-    readonly source: PasswordImportSourceId;
+    readonly source: SavedPasswordSource;
     readonly onlyWhileChromeSyncs: boolean;
     readonly unlessClearedSince?: number;
+    readonly keepSavedInBusyboy: boolean;
   }) {
     const savedAt = yield* Clock.currentTimeMillis;
     return yield* update((state) => {
@@ -278,7 +302,10 @@ export const make = Effect.gen(function* () {
         const existing = byKey.get(key);
         if (existing === undefined) {
           imported += 1;
-        } else if (existing.password !== password.password) {
+        } else if (
+          existing.password !== password.password &&
+          !(keepSavedInBusyboy && existing.source === "busyboy")
+        ) {
           updated += 1;
         } else {
           continue;
@@ -334,12 +361,88 @@ export const make = Effect.gen(function* () {
     } satisfies PasswordFill;
   });
 
+  // An offer waits here, password included, until the user answers it. Only
+  // its id, origin and username are sent to the renderer.
+  const pendingOffers = new Map<string, { readonly origin: string; readonly password: string }>();
+
+  const offerFor = Effect.fn("PasswordVault.offerFor")(function* ({
+    pageOrigin,
+    username,
+    password,
+  }: {
+    readonly pageOrigin: string;
+    readonly username: string;
+    readonly password: string;
+  }) {
+    const { passwords, neverSaveOrigins } = yield* loaded;
+    if (neverSaveOrigins?.includes(pageOrigin)) {
+      return null;
+    }
+    const sameLogin = passwords.filter(
+      (entry) =>
+        entry.username === username &&
+        passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin }),
+    );
+    if (sameLogin.some((entry) => entry.password === password)) {
+      return null;
+    }
+
+    const offerId = yield* crypto
+      .randomUUIDv4()
+      .pipe(Effect.mapError((cause) => new PasswordVaultError({ reason: "saveFailed", cause })));
+    pendingOffers.set(offerId, { origin: pageOrigin, password });
+    for (const staleOfferId of pendingOffers.keys()) {
+      if (pendingOffers.size <= MAX_PENDING_OFFERS) {
+        break;
+      }
+      pendingOffers.delete(staleOfferId);
+    }
+
+    return { offerId, origin: pageOrigin, username, isUpdate: sameLogin.length > 0 };
+  });
+
+  const respondToOffer = Effect.fn("PasswordVault.respondToOffer")(function* ({
+    offerId,
+    decision,
+    username,
+  }: {
+    readonly offerId: string;
+    readonly decision: PasswordSaveDecision;
+    readonly username: string;
+  }) {
+    const offer = pendingOffers.get(offerId);
+    pendingOffers.delete(offerId);
+    if (offer === undefined || decision === "dismiss") {
+      return;
+    }
+
+    if (decision === "never") {
+      yield* update((state) => ({
+        result: undefined,
+        next: {
+          ...state,
+          neverSaveOrigins: [...new Set([...(state.neverSaveOrigins ?? []), offer.origin])],
+        },
+      }));
+      return;
+    }
+
+    yield* save({
+      passwords: [{ origin: offer.origin, username: username.trim(), password: offer.password }],
+      source: "busyboy",
+      onlyWhileChromeSyncs: false,
+      keepSavedInBusyboy: false,
+    });
+  });
+
   const attachGuest = ({
     guest,
+    tabId,
     isAgentDriven,
     onPasswordFilled,
   }: {
     readonly guest: WebContents;
+    readonly tabId: string;
     readonly isAgentDriven: () => boolean;
     readonly onPasswordFilled: (password: string) => void;
   }) => {
@@ -405,10 +508,48 @@ export const make = Effect.gen(function* () {
       return fill;
     };
 
+    // Same origin checks as filling: a page can only offer a login for itself,
+    // and private sessions are never asked.
+    const capture = (event: IpcMainEvent, payload: unknown) => {
+      const frame = event.senderFrame;
+      if (!frame || frame !== guest.mainFrame) {
+        return;
+      }
+      const pageOrigin = frame.origin;
+      if (!isFillableOrigin(pageOrigin) || !guest.session.isPersistent()) {
+        return;
+      }
+      if (typeof payload !== "object" || payload === null) {
+        return;
+      }
+      const { username, password } = payload as Record<string, unknown>;
+      if (typeof username !== "string" || typeof password !== "string" || password === "") {
+        return;
+      }
+
+      void runPromise(
+        offerFor({ pageOrigin, username: username.trim(), password }).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning(error.message, { cause: error.cause }).pipe(Effect.as(null)),
+          ),
+        ),
+      ).then((offer) => {
+        const host = guest.hostWebContents;
+        if (offer !== null && host && !host.isDestroyed()) {
+          host.send(PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL, {
+            ...offer,
+            tabId,
+          } satisfies PasswordSaveOffer);
+        }
+      });
+    };
+
     guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
     guest.ipc.handle(PASSWORD_FILL_CHANNEL, serve);
+    guest.ipc.on(PASSWORD_CAPTURE_CHANNEL, capture);
     return () => {
       guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
+      guest.ipc.off(PASSWORD_CAPTURE_CHANNEL, capture);
       guest.off("before-input-event", noteKey);
       guest.off("before-mouse-event", noteMouse);
     };
@@ -430,6 +571,7 @@ export const make = Effect.gen(function* () {
     save,
     clear,
     attachGuest,
+    respondToOffer,
   });
 });
 
