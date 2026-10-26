@@ -104,4 +104,52 @@ describe("DesktopIpc", () => {
       assert.notInclude(error.message, cause.message);
     }),
   );
+
+  it.effect("refuses a preview page that reaches the app's IPC", () =>
+    Effect.gen(function* () {
+      let invoke: DesktopIpc.DesktopIpcHandleListener | undefined;
+      let sync: DesktopIpc.DesktopIpcSyncListener | undefined;
+      const ipc = DesktopIpc.make(
+        makeIpcMain({
+          handle: (_channel, registered) => {
+            invoke = registered;
+          },
+          on: (_channel, registered) => {
+            sync = registered;
+          },
+        }),
+      );
+      let calls = 0;
+      const page = { id: 9, getType: () => "webview" };
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* ipc.handle({
+            channel: "desktop.test.clear-passwords",
+            handler: () => Effect.sync(() => (calls += 1)),
+          });
+          yield* ipc.handleSync({
+            channel: "desktop.test.sync-read",
+            handler: () => Effect.sync(() => (calls += 1)),
+          });
+          const refused = yield* Effect.promise(() =>
+            Promise.resolve(invoke!({ sender: page }, undefined)).then(
+              () => false,
+              () => true,
+            ),
+          );
+          assert.isTrue(refused);
+          const event: DesktopIpc.DesktopIpcSyncEvent = { sender: page, returnValue: "unset" };
+          sync!(event);
+          assert.isUndefined(event.returnValue);
+
+          yield* Effect.promise(async () =>
+            invoke!({ sender: { id: 1, getType: () => "window" } }, undefined),
+          );
+        }),
+      );
+
+      assert.strictEqual(calls, 1);
+    }),
+  );
 });
