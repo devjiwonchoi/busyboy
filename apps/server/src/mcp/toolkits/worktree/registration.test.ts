@@ -1,3 +1,4 @@
+import * as ComputerUseService from "../../../computerUse/ComputerUseService.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ServerConfig from "../../../config.ts";
@@ -55,6 +56,7 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(SourceControlRepositoryService.SourceControlRepositoryService)({}),
   Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
   Layer.mock(ThreadSearch.ThreadSearch)({}),
+  Layer.mock(ComputerUseService.ComputerUseService)({}),
 );
 
 const ToolsListPayload = Schema.fromJsonString(
@@ -139,6 +141,11 @@ it.effect("production mcp layer lists worktree tools over http", () =>
       expect(toolNames).toContain("t3_worktree_status");
       expect(toolNames).toContain("preview_status");
       expect(toolNames).toContain("delegate_task");
+      expect(toolNames).toContain("computer_list_apps");
+      expect(toolNames).toContain("computer_get_app_state");
+      const appState = tools.find((tool) => tool.name === "computer_get_app_state");
+      expect(appState?.annotations?.readOnlyHint).toBe(true);
+      expect(appState?.annotations?.openWorldHint).toBe(true);
 
       const handoff = tools.find((tool) => tool.name === "t3_worktree_handoff");
       expect(handoff?.annotations?.readOnlyHint).toBe(false);
