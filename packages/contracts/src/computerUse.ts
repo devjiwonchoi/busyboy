@@ -33,10 +33,6 @@ export const ComputerUseErrorCode = Schema.Literals([
   "computer_busy",
   // The agent's turn ended, so its action was stopped.
   "stopped",
-  // Another thread is operating the computer; one acts at a time.
-  "computer_busy",
-  // The agent's turn ended, so its action was stopped.
-  "stopped",
   "screen_locked",
   "driver_failed",
 ]);
