@@ -16,6 +16,7 @@ import {
   DesktopPreviewClearDataInputSchema,
   DesktopPreviewImportCookiesInputSchema,
   BrowsingHistorySuggestion,
+  ChromeHistoryImportResult,
   DesktopPreviewSearchHistoryInputSchema,
   DesktopPreviewCreateTabInputSchema,
   DesktopPreviewTabInputSchema,
@@ -34,6 +35,7 @@ import * as NodeURL from "node:url";
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
 import * as BrowsingHistory from "../../preview/History/BrowsingHistory.ts";
+import * as ChromeHistory from "../../preview/History/ChromeHistory.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
@@ -354,6 +356,15 @@ export const importBrowserCookies = DesktopIpc.makeIpcMethod({
       persistent,
       ...(namespace === undefined ? {} : { namespace }),
     });
+  }),
+});
+
+export const importChromeHistory = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_IMPORT_CHROME_HISTORY_CHANNEL,
+  payload: Schema.Void,
+  result: ChromeHistoryImportResult,
+  handler: Effect.fn("desktop.ipc.preview.importChromeHistory")(function* () {
+    return yield* ChromeHistory.importChromeHistory();
   }),
 });
 

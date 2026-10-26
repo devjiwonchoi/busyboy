@@ -328,6 +328,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_COOKIES_CHANNEL, input),
     searchBrowsingHistory: (input) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_SEARCH_HISTORY_CHANNEL, input),
+    importChromeHistory: () =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_CHROME_HISTORY_CHANNEL),
     clearCookies: (environmentId, profileId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_CLEAR_COOKIES_CHANNEL, { environmentId, profileId }),
     clearCache: (environmentId, profileId) =>
