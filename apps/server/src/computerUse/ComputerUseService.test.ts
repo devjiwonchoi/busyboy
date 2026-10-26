@@ -37,6 +37,10 @@ interface FakeDriver {
   /** Apps the user declines when asked. */
   readonly denied: Set<string>;
   readonly asked: Array<string>;
+  /** Driver actions, with their parsed arguments. */
+  readonly actions: Array<{ readonly tool: string; readonly args: Record<string, unknown> }>;
+  /** When set, actions fail with this text, as a driver refusal does. */
+  refusal: string | undefined;
 }
 
 const window = (windowId: bigint, overrides: Partial<WindowInfo> = {}): WindowInfo => ({
@@ -60,6 +64,8 @@ function fakeDriver(): FakeDriver {
     stateRequests: [],
     denied: new Set(),
     asked: [],
+    actions: [],
+    refusal: undefined,
   };
 }
 
@@ -71,14 +77,19 @@ function workerFor(fake: FakeDriver): CuaDriverLike {
       fake.stateRequests.push(input);
       return { pid: input.pid, windowId: input.windowId, images: [], ...fake.state };
     },
-    callTool: async (name: string) => {
-      assert.strictEqual(name, "check_permissions");
-      return {
-        text: "",
-        images: [],
-        isError: false,
-        structuredJson: JSON.stringify(fake.permissions),
-      };
+    callTool: async (name: string, argumentsJson: string) => {
+      if (name === "check_permissions") {
+        return {
+          text: "",
+          images: [],
+          isError: false,
+          structuredJson: JSON.stringify(fake.permissions),
+        };
+      }
+      fake.actions.push({ tool: name, args: JSON.parse(argumentsJson) });
+      return fake.refusal === undefined
+        ? { text: `${name} done`, images: [], isError: false }
+        : { text: fake.refusal, images: [], isError: true };
     },
   } as unknown as CuaDriverLike;
 }
@@ -365,4 +376,147 @@ describe("ComputerUseService", () => {
       assert.lengthOf(all.apps, 2);
     }),
   );
+
+  describe("actions", () => {
+    /** Reads TextEdit so its snapshot "snap-1" is known, as an agent would first. */
+    const readFirst = (service: ComputerUseService.ComputerUseService["Service"]) =>
+      service.getAppState({ caller, app: "TextEdit" });
+
+    it.effect("clicks an element from the app's latest read, in the background", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+        yield* readFirst(service);
+
+        const result = yield* service.click({ caller, app: "TextEdit", element: "snap-1:4" });
+
+        assert.deepStrictEqual(fake.actions, [
+          { tool: "click", args: { element_token: "snap-1:4", delivery_mode: "background" } },
+        ]);
+        assert.deepStrictEqual(result, { app: "TextEdit", windowId: "2", result: "click done" });
+      }),
+    );
+
+    it.effect("refuses an element that is not from this app's window", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+        yield* readFirst(service);
+
+        for (const element of ["other-snapshot:4", "snap-1"]) {
+          assert.strictEqual(
+            yield* errorCode(service.click({ caller, app: "TextEdit", element })),
+            "invalid_element",
+          );
+        }
+        assert.strictEqual(
+          yield* errorCode(
+            service.click({ caller, app: "TextEdit", windowId: "1", element: "snap-1:4" }),
+          ),
+          "invalid_element",
+        );
+        assert.lengthOf(fake.actions, 0);
+      }),
+    );
+
+    it.effect("clicks a screenshot point in the chosen window, and needs a position", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+
+        yield* service.click({ caller, app: "TextEdit", x: 10, y: 20, button: "right" });
+        assert.deepStrictEqual(fake.actions[0], {
+          tool: "click",
+          args: {
+            pid: 10,
+            window_id: 2,
+            x: 10,
+            y: 20,
+            button: "right",
+            delivery_mode: "background",
+          },
+        });
+        assert.strictEqual(
+          yield* errorCode(service.click({ caller, app: "TextEdit", x: 10 })),
+          "action_failed",
+        );
+      }),
+    );
+
+    it.effect("types long text in pieces, starting at the element", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+        yield* readFirst(service);
+        const text = "a".repeat(ComputerUseService.TYPE_TEXT_CHUNK * 2 + 5);
+
+        yield* service.typeText({ caller, app: "TextEdit", element: "snap-1:2", text });
+
+        assert.deepStrictEqual(
+          fake.actions.map(({ args }) => [
+            args.element_token ?? args.window_id,
+            String(args.text).length,
+          ]),
+          [
+            ["snap-1:2", ComputerUseService.TYPE_TEXT_CHUNK],
+            [2, ComputerUseService.TYPE_TEXT_CHUNK],
+            [2, 5],
+          ],
+        );
+      }),
+    );
+
+    it.effect("sets values and chooses menu commands without a delivery mode", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+        yield* readFirst(service);
+
+        yield* service.setValue({
+          caller,
+          app: "TextEdit",
+          element: "snap-1:7",
+          value: "Helvetica",
+        });
+        yield* service.invokeMenu({ caller, app: "TextEdit", path: ["File", "Save"] });
+
+        assert.deepStrictEqual(fake.actions, [
+          { tool: "set_value", args: { element_token: "snap-1:7", value: "Helvetica" } },
+          { tool: "invoke_menu", args: { pid: 10, window_id: 2, path: ["File", "Save"] } },
+        ]);
+      }),
+    );
+
+    it.effect("turns driver refusals into codes the agent can act on", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        const service = yield* makeService(fake, { enabled: true });
+        const pressReturn = service.pressKey({ caller, app: "TextEdit", key: "return" });
+
+        fake.refusal = "refused: screen_locked (the session is locked)";
+        assert.strictEqual(yield* errorCode(pressReturn), "screen_locked");
+        fake.refusal = "refused: background_unavailable for this surface";
+        assert.strictEqual(yield* errorCode(pressReturn), "background_unsupported");
+        fake.refusal = "refused: stale_element_token s1:4";
+        assert.strictEqual(yield* errorCode(pressReturn), "invalid_element");
+        fake.refusal = "the window closed";
+        const other = yield* Effect.flip(pressReturn);
+        assert.strictEqual(other.code, "action_failed");
+        assert.include(other.message, "the window closed");
+      }),
+    );
+
+    it.effect("never acts on an app the user declined", () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        fake.denied.add("com.apple.TextEdit");
+        const service = yield* makeService(fake, { enabled: true });
+        assert.strictEqual(
+          yield* errorCode(service.scroll({ caller, app: "TextEdit", direction: "down" })),
+          "app_denied",
+        );
+        assert.lengthOf(fake.actions, 0);
+      }),
+    );
+  });
 });
