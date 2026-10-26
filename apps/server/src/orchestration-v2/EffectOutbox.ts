@@ -100,6 +100,12 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     type: Schema.Literal("preview.cleanup"),
   }),
   Schema.Struct({
+    type: Schema.Literal("worktree.cleanup"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("worktree.restore"),
+  }),
+  Schema.Struct({
     type: Schema.Literal("attachment.cleanup"),
     attachmentIds: Schema.Array(Schema.String),
   }),
@@ -124,6 +130,8 @@ export const REPLAY_SAFE_EFFECT_TYPES_AFTER_PROCESS_LOSS = [
   "checkpoint.capture",
   "terminal.cleanup",
   "preview.cleanup",
+  "worktree.cleanup",
+  "worktree.restore",
   "attachment.cleanup",
   "thread-title.generate",
   "delegated-tasks.stop",

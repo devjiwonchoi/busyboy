@@ -2050,6 +2050,54 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
+  it.effect("archiving removes the worktree, and unarchiving restores it only when asked", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const threadId = ThreadId.make("runtime-archive-worktree");
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("archive-worktree-create"),
+        threadId,
+        projectId: ProjectId.make("archive-worktree-project"),
+        title: "Archive worktree",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: "feature/archive-worktree",
+        worktreePath: "/worktrees/archive-worktree",
+      });
+      const effectTypes = (commandId: CommandId) =>
+        Effect.map(outbox.listByCommandId(commandId), (effects) =>
+          effects.map((effect) => effect.request.type),
+        );
+
+      const archiveId = CommandId.make("archive-worktree-archive");
+      yield* orchestrator.dispatch({ type: "thread.archive", commandId: archiveId, threadId });
+      assert.deepEqual(yield* effectTypes(archiveId), ["terminal.cleanup", "worktree.cleanup"]);
+
+      const unarchiveId = CommandId.make("archive-worktree-unarchive");
+      yield* orchestrator.dispatch({ type: "thread.unarchive", commandId: unarchiveId, threadId });
+      assert.deepEqual(yield* effectTypes(unarchiveId), []);
+
+      yield* orchestrator.dispatch({
+        type: "thread.archive",
+        commandId: CommandId.make("archive-worktree-archive-again"),
+        threadId,
+      });
+      const restoreId = CommandId.make("archive-worktree-unarchive-restore");
+      yield* orchestrator.dispatch({
+        type: "thread.unarchive",
+        commandId: restoreId,
+        threadId,
+        restoreWorktree: true,
+      });
+      assert.deepEqual(yield* effectTypes(restoreId), ["worktree.restore"]);
+    }),
+  );
+
   it.effect("ends a watch it cannot read, and tells the agent", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
