@@ -147,7 +147,16 @@ describe("DesktopBrowserHost", () => {
     }),
   );
 
-  it.effect("counts the agent as driving a page right after it navigates it", () =>
+  it.effect.each([
+    {
+      label: "navigates it",
+      command: { method: "Page.navigate", params: { url: "https://example.com/" } },
+    },
+    {
+      label: "goes back or forward",
+      command: { method: "Page.navigateToHistoryEntry", params: { entryId: 3 } },
+    },
+  ] as const)("counts the agent as driving a page right after it $label", ({ command }) =>
     Effect.gen(function* () {
       const host = yield* DesktopBrowserHost.make;
       const debuggee = makeDebuggee();
@@ -155,15 +164,7 @@ describe("DesktopBrowserHost", () => {
       expect(host.isAgentDriving(debuggee.tab.webContents)).toBe(false);
 
       yield* host.handleCommandLine(
-        encodeJson({
-          type: "cdp",
-          ...key,
-          message: encodeJson({
-            id: 1,
-            method: "Page.navigate",
-            params: { url: "https://example.com/" },
-          }),
-        }),
+        encodeJson({ type: "cdp", ...key, message: encodeJson({ id: 1, ...command }) }),
       );
       expect(host.isAgentDriving(debuggee.tab.webContents)).toBe(true);
     }),

@@ -24,7 +24,7 @@ const encodeEvent = Schema.encodeSync(Schema.fromJsonString(DesktopBrowserEvent)
 const decodeCommand = Schema.decodeUnknownOption(Schema.fromJsonString(DesktopBrowserCommand));
 const lineEncoder = new TextEncoder();
 const AGENT_INPUT_COMMAND =
-  /"method":"(?:Input\.|Page\.navigate"|Runtime\.(?:evaluate|callFunctionOn)")/;
+  /"method":"(?:Input\.|Page\.navigate(?:ToHistoryEntry)?"|Runtime\.(?:evaluate|callFunctionOn)")/;
 const AGENT_DOWNLOAD_WINDOW_MS = 5_000;
 /** Agent input this recent means the agent is behind what the page does. */
 const AGENT_DRIVING_WINDOW_MS = 3_000;
