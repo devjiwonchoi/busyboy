@@ -1095,6 +1095,7 @@ import {
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useDelayedStatus } from "../../hooks/useDelayedStatus";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { useSaveGlobalDefaults } from "../../hooks/useSaveGlobalDefaults";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { usePanelAnimationSettings } from "../../panelAnimations";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -1984,6 +1985,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onRemoveEditingQueuedAttachment,
   } = props;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const saveGlobalDefaults = useSaveGlobalDefaults();
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
   const {
     heldRequestIds,
@@ -2826,12 +2828,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     scheduleComposerFocus();
   };
   const setPromptFromTraitsStable = useStableCallback(setPromptFromTraits);
+  const saveModelSelectionAsDefaultStable = useStableCallback((selection: ModelSelection) =>
+    saveGlobalDefaults({ environmentId, patch: { defaultModelSelection: selection } }),
+  );
 
   const providerTraitsMenuContent = renderProviderTraitsMenuContent({
     provider: selectedProvider,
     instanceId: selectedInstanceId,
     ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
     ...(routeKind === "draft" && draftId ? { draftId } : {}),
+    onStickyModelSelectionChange: saveModelSelectionAsDefaultStable,
     model: selectedModel,
     models: selectedProviderModels,
     modelOptions: composerModelOptions?.[selectedInstanceId],
@@ -2845,6 +2851,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     instanceId: selectedInstanceId,
     ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
     ...(routeKind === "draft" && draftId ? { draftId } : {}),
+    onStickyModelSelectionChange: saveModelSelectionAsDefaultStable,
     model: selectedModel,
     models: selectedProviderModels,
     modelOptions: composerModelOptions?.[selectedInstanceId],
@@ -6067,6 +6074,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               model: selectedModel,
               persistSticky: true,
             });
+          const stickySelection =
+            useComposerDraftStore.getState().stickyModelSelectionByProvider[selectedInstanceId];
+          if (stickySelection) {
+            saveGlobalDefaults({
+              environmentId,
+              patch: { defaultModelSelection: stickySelection },
+            });
+          }
         }
         if (change.prompt !== promptRef.current) {
           applyPromptReplacementStable(0, promptRef.current.length, change.prompt, {

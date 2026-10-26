@@ -45,6 +45,38 @@ export function isProjectScopedSettingKey(key: string): key is ProjectScopedServ
   return PROJECT_SCOPED_KEYS.has(key);
 }
 
+// Model (with effort) and permissions always save as environment defaults,
+// even when changed from a project, so new threads in every project use them.
+const GLOBAL_DEFAULT_KEYS = [
+  "defaultModelSelection",
+  "defaultRuntimeMode",
+] as const satisfies readonly ProjectScopedServerSettingKey[];
+const GLOBAL_DEFAULT_KEY_SET = new Set<string>(GLOBAL_DEFAULT_KEYS);
+
+export type GlobalDefaultsPatch = Pick<ServerSettingsPatch, (typeof GLOBAL_DEFAULT_KEYS)[number]>;
+
+/** Writes the defaults and drops every project's override of them. */
+export function globalDefaultsPatch({
+  settings,
+  patch,
+}: {
+  settings: ServerSettings;
+  patch: GlobalDefaultsPatch;
+}): ServerSettingsPatch {
+  const keys = GLOBAL_DEFAULT_KEYS.filter((key) => patch[key] !== undefined);
+  const projectSettingsOverrides = Object.fromEntries(
+    Object.entries(settings.projectSettingsOverrides).flatMap(([projectId, entry]) =>
+      keys.some((key) => Object.hasOwn(entry, key))
+        ? [[projectId, clearProjectSettingsOverrides(settings, projectId as ProjectId, keys)]]
+        : [],
+    ),
+  );
+
+  return Object.keys(projectSettingsOverrides).length === 0
+    ? patch
+    : { ...patch, projectSettingsOverrides };
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -209,9 +241,19 @@ export function planScopedSettingsPatch(
   const serverPatch = Object.fromEntries(
     Object.entries(patch).filter(([key]) => SERVER_KEYS.has(key)),
   ) as ServerSettingsPatch;
-  const serverKeys = Object.keys(serverPatch);
   const { connectedEnvironments } = selectScopedSettingsEnvironments(scope, environments, null);
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
+  const globalPatch: GlobalDefaultsPatch = isProjectScope
+    ? Object.fromEntries(
+        Object.entries(serverPatch).filter(([key]) => GLOBAL_DEFAULT_KEY_SET.has(key)),
+      )
+    : {};
+  if (isProjectScope) {
+    for (const key of GLOBAL_DEFAULT_KEYS) {
+      delete serverPatch[key];
+    }
+  }
+  const serverKeys = Object.keys(serverPatch);
   const unscopableKeys = isProjectScope
     ? serverKeys.filter((key) => !isProjectScopedSettingKey(key))
     : [];
@@ -227,6 +269,11 @@ export function planScopedSettingsPatch(
               // so complete the patch from the target's effective value.
               const effective = resolveProjectSettings(settings, projectId).settings;
               const next: Record<string, unknown> = { ...current };
+              if (Object.keys(globalPatch).length > 0) {
+                for (const key of GLOBAL_DEFAULT_KEYS) {
+                  delete next[key];
+                }
+              }
               for (const [key, value] of Object.entries(serverPatch)) {
                 if (key === "worktreeCleanup" && serverPatch.worktreeCleanup?.mode === "custom") {
                   next[key] = {
@@ -287,6 +334,42 @@ export function planScopedSettingsPatch(
               ];
             })
           : [];
+
+  // A project scope still writes its global defaults to each member's environment.
+  if (Object.keys(globalPatch).length > 0 && unscopableKeys.length === 0) {
+    for (const environment of connectedEnvironments) {
+      const previous = environment.serverConfig?.settings;
+      if (!previous) {
+        continue;
+      }
+      const patch = globalDefaultsPatch({ settings: previous, patch: globalPatch });
+      const index = serverWrites.findIndex(
+        (write) => write.environmentId === environment.environmentId,
+      );
+      const projectWrite = serverWrites[index];
+      if (projectWrite === undefined) {
+        serverWrites.push({
+          environmentId: environment.environmentId,
+          label: environment.label,
+          previous,
+          patch,
+        });
+        continue;
+      }
+      serverWrites[index] = {
+        ...projectWrite,
+        patch: {
+          ...patch,
+          ...projectWrite.patch,
+          projectSettingsOverrides: {
+            ...patch.projectSettingsOverrides,
+            ...projectWrite.patch.projectSettingsOverrides,
+          },
+        },
+      };
+    }
+  }
+
   const hasClientWrite = Object.keys(clientPatch).length > 0;
   const hasWrite = hasClientWrite || serverWrites.length > 0;
   const unavailableReason =

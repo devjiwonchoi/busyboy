@@ -23,6 +23,7 @@ import {
 } from "./ChatView.logic";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { useLogicalProjectEnvironments } from "../hooks/useLogicalProjectEnvironments";
+import { useSaveGlobalDefaults } from "../hooks/useSaveGlobalDefaults";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { useProjectScriptEditing } from "./chat/useProjectScriptEditing";
@@ -1220,6 +1221,7 @@ export default function ChatView(props: ChatViewProps) {
   const setComposerDraftThreadContexts = useComposerDraftStore((store) => store.setThreadContexts);
   const setComposerDraftModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const setComposerDraftRuntimeMode = useComposerDraftStore((store) => store.setRuntimeMode);
+  const saveGlobalDefaults = useSaveGlobalDefaults();
   const setComposerDraftInteractionMode = useComposerDraftStore(
     (store) => store.setInteractionMode,
   );
@@ -3515,6 +3517,7 @@ export default function ChatView(props: ChatViewProps) {
     if (isLocalDraftThread) {
       setDraftThreadContext(composerDraftTarget, { runtimeMode: mode });
     }
+    saveGlobalDefaults({ environmentId, patch: { defaultRuntimeMode: mode } });
     scheduleComposerFocus();
   };
   const handleRuntimeModeChangeStable = useStableCallback(handleRuntimeModeChange);
@@ -7255,6 +7258,10 @@ export default function ChatView(props: ChatViewProps) {
       { explicit: true, replaceOptions: true },
     );
     setStickyComposerModelSelection(nextModelSelection);
+    saveGlobalDefaults({
+      environmentId: activeThread.environmentId,
+      patch: { defaultModelSelection: nextModelSelection },
+    });
     if (options?.focusComposer !== false) scheduleComposerFocus();
   };
   const onProviderModelSelectStable = useStableCallback(onProviderModelSelect);
