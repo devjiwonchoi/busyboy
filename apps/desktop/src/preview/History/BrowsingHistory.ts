@@ -133,8 +133,8 @@ export class BrowsingHistory extends Context.Service<
       guest: WebContents,
       options?: { readonly isAgentDriving?: () => boolean },
     ) => () => void;
-    /** The guest's next page was typed or chosen in the address bar. */
-    readonly markTyped: (guest: WebContents) => void;
+    /** The guest is about to load `url`, typed or chosen in the address bar. */
+    readonly markTyped: (guest: WebContents, url: string) => void;
     /** Forgets every visited page. */
     readonly clear: Effect.Effect<void, BrowsingHistoryError>;
   }
@@ -441,7 +441,11 @@ export const make = Effect.gen(function* () {
     );
 
   // Set by the preview manager just before it loads an address-bar URL.
-  const typedGuests = new WeakSet<WebContents>();
+  // `started` once the guest begins loading that URL; only that load is typed.
+  const typedGuests = new WeakMap<
+    WebContents,
+    { readonly url: string | null; readonly started: boolean }
+  >();
 
   const attachGuest = (
     guest: WebContents,
@@ -468,6 +472,7 @@ export const make = Effect.gen(function* () {
       }
     };
     const startedNavigation = (details: {
+      readonly url: string;
       readonly isMainFrame: boolean;
       readonly isSameDocument: boolean;
       readonly initiator?: unknown;
@@ -476,13 +481,32 @@ export const make = Effect.gen(function* () {
         return;
       }
       agentNavigation = isAgentDriving();
-      // The page moved on by itself, so the next page is not the typed one.
-      if (details.initiator) {
+      const mark = typedGuests.get(guest);
+      if (mark === undefined) {
+        return;
+      }
+      // Any other navigation, such as the page moving on or a later back,
+      // is not the typed one.
+      if (!mark.started && !details.initiator && historyUrl(details.url) === mark.url) {
+        typedGuests.set(guest, { ...mark, started: true });
+      } else {
+        typedGuests.delete(guest);
+      }
+    };
+    const failedLoad = (
+      _event: unknown,
+      _errorCode: number,
+      _description: string,
+      _url: string,
+      isMainFrame: boolean,
+    ) => {
+      if (isMainFrame) {
         typedGuests.delete(guest);
       }
     };
     const navigated = (_event: unknown, url: string, httpResponseCode: number) => {
-      const typed = typedGuests.delete(guest);
+      const typed = typedGuests.get(guest)?.started === true;
+      typedGuests.delete(guest);
       // Pages the agent opens are its work, not the user's history, and error
       // pages are not worth suggesting again.
       if (agentNavigation || isAgentDriving() || httpResponseCode >= 400) {
@@ -501,19 +525,21 @@ export const make = Effect.gen(function* () {
     };
 
     guest.on("did-start-navigation", startedNavigation);
+    guest.on("did-fail-load", failedLoad);
     guest.on("did-navigate", navigated);
     guest.on("did-navigate-in-page", navigatedInPage);
     guest.on("page-title-updated", titleUpdated);
     return () => {
       guest.off("did-start-navigation", startedNavigation);
+      guest.off("did-fail-load", failedLoad);
       guest.off("did-navigate", navigated);
       guest.off("did-navigate-in-page", navigatedInPage);
       guest.off("page-title-updated", titleUpdated);
     };
   };
 
-  const markTyped = (guest: WebContents) => {
-    typedGuests.add(guest);
+  const markTyped = (guest: WebContents, url: string) => {
+    typedGuests.set(guest, { url: historyUrl(url), started: false });
   };
 
   const clear = SynchronizedRef.updateEffect(stateRef, (current) =>

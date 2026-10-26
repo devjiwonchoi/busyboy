@@ -50,12 +50,22 @@ const fakeGuest = ({ persistent }: { readonly persistent: boolean }) => {
     guest: guest as unknown as WebContents,
     navigate: (next: string, { code = 200, byPage = false } = {}) => {
       emitter.emit("did-start-navigation", {
+        url: next,
         isMainFrame: true,
         isSameDocument: false,
         initiator: byPage ? {} : null,
       });
       url = next;
       emitter.emit("did-navigate", {}, next, code);
+    },
+    failLoad: (next: string) => {
+      emitter.emit("did-start-navigation", {
+        url: next,
+        isMainFrame: true,
+        isSameDocument: false,
+        initiator: null,
+      });
+      emitter.emit("did-fail-load", {}, -105, "ERR_NAME_NOT_RESOLVED", next, true);
     },
     navigateInPage: (next: string) => {
       url = next;
@@ -190,12 +200,12 @@ describe("BrowsingHistory", () => {
         const tab = fakeGuest({ persistent: true });
         history.attachGuest(tab.guest);
 
-        history.markTyped(tab.guest);
+        history.markTyped(tab.guest, "https://github.com/");
         tab.navigate("https://github.com/");
         tab.navigate("https://github.com/");
         tab.navigate("https://github.com/");
         // A page's own link lands after the typed one, so it is not typed.
-        history.markTyped(tab.guest);
+        history.markTyped(tab.guest, "https://github.com/a");
         tab.navigate("https://github.com.evil.io/", { byPage: true });
 
         yield* eventually(
@@ -204,6 +214,30 @@ describe("BrowsingHistory", () => {
             expect.objectContaining({ url: "https://github.com.evil.io/", typed: false }),
           ]),
         );
+      }).pipe(Effect.provide(historyLayer(baseDir))),
+    ),
+  );
+
+  it.live("drops the typed mark when the typed page never loads", () =>
+    withTempHome((baseDir) =>
+      Effect.gen(function* () {
+        const history = yield* BrowsingHistory.BrowsingHistory;
+        const tab = fakeGuest({ persistent: true });
+        history.attachGuest(tab.guest);
+
+        history.markTyped(tab.guest, "https://typo.test/");
+        tab.failLoad("https://typo.test/");
+        // Going back afterwards is not the typed page.
+        tab.navigate("https://back.test/");
+        history.markTyped(tab.guest, "https://typed.test/");
+        tab.navigate("https://other.test/");
+        tab.navigate("https://typed.test/");
+
+        yield* eventually(
+          urlsFor(history, "test").pipe(Effect.filterOrFail((urls) => urls.length === 3)),
+        );
+        const found = yield* history.search({ text: "test", limit: 5 });
+        expect(found.filter((page) => page.typed)).toEqual([]);
       }).pipe(Effect.provide(historyLayer(baseDir))),
     ),
   );

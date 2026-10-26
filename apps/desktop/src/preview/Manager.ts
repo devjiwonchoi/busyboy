@@ -2045,7 +2045,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       return;
     }
     // Only the address bar calls this; agents navigate over CDP.
-    browsingHistory.markTyped(wc);
+    browsingHistory.markTyped(wc, url);
     if (wc.getURL() === url) {
       yield* attempt({ operation: "navigate.reload", tabId, webContentsId: wc.id }, () =>
         wc.reload(),
