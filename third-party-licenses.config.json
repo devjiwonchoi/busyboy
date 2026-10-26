@@ -96,6 +96,21 @@
           "copyrights": ["Copyright 2009, 2010, 2013 André Berg"]
         }
       ]
+    },
+    {
+      "bundles": ["desktop", "web"],
+      "license": "Apache-2.0",
+      "name": "Min",
+      "sourceUrl": "https://github.com/minbrowser/min",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0",
+          "copyrights": ["Copyright Min browser contributors"],
+          "preamble": [
+            "Busyboy's in-app browser adapts code from Min, a web browser built on Electron:\nhttps://github.com/minbrowser/min\n\nThe password save prompt follows Min's js/passwordManager/passwordCapture.js, and address-bar history ranking follows Min's js/places/placesService.js. Both were rewritten in TypeScript for Busyboy."
+          ]
+        }
+      ]
     }
   ],
   "packageOverrides": [

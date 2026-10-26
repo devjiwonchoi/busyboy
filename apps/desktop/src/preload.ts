@@ -1,6 +1,7 @@
 import type {
   DesktopBridge,
   DesktopPreviewOpenLinkEvent,
+  PasswordSaveOffer,
   DesktopPreviewPointerEvent,
   DesktopPreviewRecordingInputEvent,
   DesktopPreviewRecordingFrame,
@@ -428,5 +429,30 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       return () =>
         ipcRenderer.removeListener(IpcChannels.PREVIEW_OPEN_LINK_CHANNEL, wrappedListener);
     },
+    onPasswordSaveOffer: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, offer: unknown) => {
+        if (typeof offer !== "object" || offer === null) return;
+        listener(offer as PasswordSaveOffer);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(
+          IpcChannels.PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL,
+          wrappedListener,
+        );
+    },
+    onPasswordSaveOfferWithdrawn: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, tabId: unknown) => {
+        if (typeof tabId === "string") listener(tabId);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(
+          IpcChannels.PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL,
+          wrappedListener,
+        );
+    },
+    respondToPasswordSaveOffer: (input) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_RESPOND_PASSWORD_SAVE_OFFER_CHANNEL, input),
   },
 } satisfies DesktopBridge);

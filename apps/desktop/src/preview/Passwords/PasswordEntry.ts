@@ -6,8 +6,11 @@ export type ImportedPassword = {
   readonly password: string;
 };
 
+/** Where a saved login came from: an import, or a sign-in in the in-app browser. */
+export type SavedPasswordSource = PasswordImportSourceId | "busyboy";
+
 export type SavedPassword = ImportedPassword & {
-  readonly source: PasswordImportSourceId;
+  readonly source: SavedPasswordSource;
   readonly savedAt: number;
 };
 

@@ -61,6 +61,31 @@ export const PasswordFileImportResult = Schema.Struct({
 });
 export type PasswordFileImportResult = typeof PasswordFileImportResult.Type;
 
+/**
+ * A login a page just submitted that is not saved yet. The password stays in
+ * the desktop main process; the renderer only learns where and for whom.
+ */
+export const PasswordSaveOffer = Schema.Struct({
+  offerId: TrimmedNonEmptyString,
+  /** The preview tab whose page submitted the login. */
+  tabId: Schema.String,
+  origin: Schema.String,
+  username: Schema.String,
+  /** A login for this username is saved with a different password. */
+  isUpdate: Schema.Boolean,
+});
+export type PasswordSaveOffer = typeof PasswordSaveOffer.Type;
+
+export const PasswordSaveDecision = Schema.Literals(["save", "never", "dismiss"]);
+export type PasswordSaveDecision = typeof PasswordSaveDecision.Type;
+
+export const DesktopPreviewRespondPasswordSaveOfferInputSchema = Schema.Struct({
+  offerId: TrimmedNonEmptyString,
+  decision: PasswordSaveDecision,
+  /** The username to save under, which the user may have corrected. */
+  username: Schema.String,
+});
+
 export const SavedPasswordStatus = Schema.Struct({
   count: Schema.Int,
   /** Set once passwords were imported from Chrome; they then keep syncing. */

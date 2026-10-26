@@ -1586,7 +1586,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         detachPasskeys = passkeys.attachGuest(wc);
         detachPasswords = passwordVault.attachGuest({
           guest: wc,
+          tabId,
           isAgentDriven: () => browserHost.isAgentDriving(wc),
+          isPasswordStandIn: browserHost.isPasswordStandIn,
           onPasswordFilled: (password) => browserHost.lockForFilledPassword(wc, password),
         });
         wc.setWindowOpenHandler((details) => {

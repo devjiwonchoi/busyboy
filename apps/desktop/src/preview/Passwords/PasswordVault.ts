@@ -1,4 +1,8 @@
-import { PasswordImportSourceId } from "@t3tools/contracts";
+import {
+  PasswordImportSourceId,
+  type PasswordSaveDecision,
+  type PasswordSaveOffer,
+} from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -9,17 +13,22 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
-import type { IpcMainInvokeEvent, WebContents } from "electron";
+import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
+import {
+  PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL,
+  PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL,
+} from "../../ipc/channels.ts";
 import * as ElectronSafeStorage from "../../electron/ElectronSafeStorage.ts";
-import { PASSWORD_FILL_CHANNEL } from "../GuestProtocol.ts";
+import { PASSWORD_CAPTURE_CHANNEL, PASSWORD_FILL_CHANNEL } from "../GuestProtocol.ts";
 import { guardPasswordSubmission } from "./CredentialNetworkGuard.ts";
 import {
   isFillableOrigin,
   passwordMatchesOrigin,
   type ImportedPassword,
   type SavedPassword,
+  type SavedPasswordSource,
 } from "./PasswordEntry.ts";
 
 export class PasswordVaultError extends Schema.TaggedError<PasswordVaultError>()(
@@ -44,7 +53,7 @@ const SavedPasswordSchema = Schema.Struct({
   origin: Schema.String,
   username: Schema.String,
   password: Schema.String,
-  source: PasswordImportSourceId,
+  source: Schema.Union([PasswordImportSourceId, Schema.Literal("busyboy")]),
   savedAt: Schema.Number,
 });
 
@@ -62,6 +71,8 @@ export type ChromeSync = typeof ChromeSyncSchema.Type;
 const VaultStateSchema = Schema.Struct({
   passwords: Schema.Array(SavedPasswordSchema),
   chromeSync: Schema.NullOr(ChromeSyncSchema),
+  /** Origins where the user chose "Never save"; absent in older vaults. */
+  neverSaveOrigins: Schema.optional(Schema.Array(Schema.String)),
 });
 type VaultState = typeof VaultStateSchema.Type;
 const EMPTY_VAULT: VaultState = { passwords: [], chromeSync: null };
@@ -85,6 +96,8 @@ const encodeVaultDocument = Schema.encodeEffect(VaultDocument);
  * gesture check, since the page shares its JavaScript world.
  */
 const FILL_GESTURE_WINDOW_MS = 5_000;
+/** Unanswered offers kept per app run; older ones are forgotten first. */
+const MAX_PENDING_OFFERS = 10;
 
 const entryKey = (entry: { readonly origin: string; readonly username: string }) =>
   `${entry.origin}\n${entry.username}`;
@@ -128,7 +141,7 @@ export class PasswordVault extends Context.Service<
     ) => Effect.Effect<void, PasswordVaultError>;
     readonly save: (input: {
       readonly passwords: ReadonlyArray<ImportedPassword>;
-      readonly source: PasswordImportSourceId;
+      readonly source: SavedPasswordSource;
       /**
        * Background syncs pass true: if the user stopped syncing or removed
        * everything while the sync was reading Chrome, nothing is written back.
@@ -136,22 +149,36 @@ export class PasswordVault extends Context.Service<
       readonly onlyWhileChromeSyncs: boolean;
       /** An import started before a clear writes nothing back. */
       readonly unlessClearedSince?: number;
+      /**
+       * Background syncs pass true, so a login the user saved in Busyboy is
+       * not reverted by an older copy still in Chrome.
+       */
+      readonly keepSavedInBusyboy: boolean;
     }) => Effect.Effect<
       { readonly imported: number; readonly updated: number },
       PasswordVaultError
     >;
     readonly clear: Effect.Effect<void, PasswordVaultError>;
     /**
-     * Answers the guest's autofill requests; returns the detach function. A
+     * Answers the guest's autofill requests and turns the logins it submits
+     * into save offers for its host window; returns the detach function. A
      * page the agent is driving is never autofilled (agents sign in through an
      * approved `preview_sign_in`), and `onPasswordFilled` runs before a
      * password is handed to the page so the caller can keep agents off it.
      */
     readonly attachGuest: (input: {
       readonly guest: WebContents;
+      readonly tabId: string;
       readonly isAgentDriven: () => boolean;
+      /** True for the stand-in an agent sign-in put in a form instead of the password. */
+      readonly isPasswordStandIn: (value: string) => boolean;
       readonly onPasswordFilled: (password: string) => void;
     }) => () => void;
+    readonly respondToOffer: (input: {
+      readonly offerId: string;
+      readonly decision: PasswordSaveDecision;
+      readonly username: string;
+    }) => Effect.Effect<void, PasswordVaultError>;
   }
 >()("@t3tools/desktop/preview/Passwords/PasswordVault") {}
 
@@ -256,11 +283,13 @@ export const make = Effect.gen(function* () {
     source,
     onlyWhileChromeSyncs,
     unlessClearedSince,
+    keepSavedInBusyboy,
   }: {
     readonly passwords: ReadonlyArray<ImportedPassword>;
-    readonly source: PasswordImportSourceId;
+    readonly source: SavedPasswordSource;
     readonly onlyWhileChromeSyncs: boolean;
     readonly unlessClearedSince?: number;
+    readonly keepSavedInBusyboy: boolean;
   }) {
     const savedAt = yield* Clock.currentTimeMillis;
     return yield* update((state) => {
@@ -278,7 +307,10 @@ export const make = Effect.gen(function* () {
         const existing = byKey.get(key);
         if (existing === undefined) {
           imported += 1;
-        } else if (existing.password !== password.password) {
+        } else if (
+          existing.password !== password.password &&
+          !(keepSavedInBusyboy && existing.source === "busyboy")
+        ) {
           updated += 1;
         } else {
           continue;
@@ -306,6 +338,8 @@ export const make = Effect.gen(function* () {
   const clear = SynchronizedRef.updateEffect(cache, () =>
     Effect.sync(() => {
       clearCount += 1;
+      // An unanswered offer must not bring a password back after a clear.
+      pendingOffers.clear();
     }).pipe(
       Effect.andThen(fileSystem.remove(vaultPath, { force: true })),
       Effect.mapError((cause) => new PasswordVaultError({ reason: "saveFailed", cause })),
@@ -334,13 +368,144 @@ export const make = Effect.gen(function* () {
     } satisfies PasswordFill;
   });
 
+  // An offer waits here, password included, until the user answers it. Only
+  // its id, origin and username are sent to the renderer.
+  const pendingOffers = new Map<
+    string,
+    { readonly origin: string; readonly password: string; readonly tabId: string }
+  >();
+  /** Drops the tab's offers (only those for `origin` when given); true if any were dropped. */
+  const dropOffersFor = (tabId: string, origin?: string) => {
+    let dropped = false;
+    for (const [offerId, offer] of pendingOffers) {
+      if (offer.tabId === tabId && (origin === undefined || offer.origin === origin)) {
+        pendingOffers.delete(offerId);
+        dropped = true;
+      }
+    }
+    return dropped;
+  };
+
+  /**
+   * The offer for a submitted login, `"saved"` when it matches what is saved
+   * (so an older offer from a failed attempt is out of date), or `null`.
+   */
+  const offerFor = Effect.fn("PasswordVault.offerFor")(function* ({
+    pageOrigin,
+    username: submittedUsername,
+    password,
+    tabId,
+  }: {
+    readonly pageOrigin: string;
+    readonly username: string;
+    readonly password: string;
+    readonly tabId: string;
+  }) {
+    const { passwords, neverSaveOrigins } = yield* loaded;
+    if (neverSaveOrigins?.includes(pageOrigin)) {
+      return null;
+    }
+    const forSite = passwords.filter((entry) =>
+      passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin }),
+    );
+
+    // Identifier-first and change-password forms submit no username: a saved
+    // password for the site is the same login. Otherwise the person names the
+    // account in the bar; guessing could overwrite someone else's login.
+    const username = submittedUsername;
+    if (username === "" && forSite.some((entry) => entry.password === password)) {
+      return "saved" as const;
+    }
+
+    const sameLogin = forSite.filter((entry) => entry.username === username);
+    if (sameLogin.some((entry) => entry.password === password)) {
+      return "saved" as const;
+    }
+    // Nothing could be saved without encryption, so nothing is offered.
+    if (!(yield* safeStorage.isEncryptionAvailable.pipe(Effect.orElseSucceed(() => false)))) {
+      return null;
+    }
+
+    const offerId = yield* crypto
+      .randomUUIDv4()
+      .pipe(Effect.mapError((cause) => new PasswordVaultError({ reason: "saveFailed", cause })));
+    // One offer per tab, like Chrome's single save bubble.
+    dropOffersFor(tabId);
+    pendingOffers.set(offerId, { origin: pageOrigin, password, tabId });
+    for (const staleOfferId of pendingOffers.keys()) {
+      if (pendingOffers.size <= MAX_PENDING_OFFERS) {
+        break;
+      }
+      pendingOffers.delete(staleOfferId);
+    }
+
+    return { offerId, origin: pageOrigin, username, isUpdate: sameLogin.length > 0 };
+  });
+
+  const respondToOffer = Effect.fn("PasswordVault.respondToOffer")(function* ({
+    offerId,
+    decision,
+    username,
+  }: {
+    readonly offerId: string;
+    readonly decision: PasswordSaveDecision;
+    readonly username: string;
+  }) {
+    const offer = pendingOffers.get(offerId);
+    pendingOffers.delete(offerId);
+    if (offer === undefined || decision === "dismiss") {
+      return;
+    }
+
+    if (decision === "never") {
+      yield* update((state) => ({
+        result: undefined,
+        next: {
+          ...state,
+          neverSaveOrigins: [...new Set([...(state.neverSaveOrigins ?? []), offer.origin])],
+        },
+      }));
+      return;
+    }
+
+    // The same login saved under another form of the address (www., http)
+    // is replaced rather than left beside the new one.
+    const savedUsername = username.trim();
+    const key = entryKey({ origin: offer.origin, username: savedUsername });
+    yield* update((state) => {
+      const kept = state.passwords.filter(
+        (entry) =>
+          entry.username !== savedUsername ||
+          entryKey(entry) === key ||
+          !passwordMatchesOrigin({ savedOrigin: entry.origin, pageOrigin: offer.origin }) ||
+          // Chrome sync would bring its copy back as new and fill it first;
+          // kept, it stays older than this save.
+          (entry.source === "chrome" && state.chromeSync !== null),
+      );
+      return {
+        result: undefined,
+        next: kept.length === state.passwords.length ? null : { ...state, passwords: kept },
+      };
+    });
+    yield* save({
+      passwords: [{ origin: offer.origin, username: savedUsername, password: offer.password }],
+      source: "busyboy",
+      onlyWhileChromeSyncs: false,
+      keepSavedInBusyboy: false,
+    });
+  });
+
   const attachGuest = ({
     guest,
+    tabId,
     isAgentDriven,
+    isPasswordStandIn,
     onPasswordFilled,
   }: {
     readonly guest: WebContents;
+    readonly tabId: string;
     readonly isAgentDriven: () => boolean;
+    readonly isPasswordStandIn: (value: string) => boolean;
     readonly onPasswordFilled: (password: string) => void;
   }) => {
     let lastInputAt = Number.NEGATIVE_INFINITY;
@@ -405,10 +570,65 @@ export const make = Effect.gen(function* () {
       return fill;
     };
 
+    // Same origin checks as filling: a page can only offer a login for itself,
+    // and private sessions and agent-driven pages are never asked.
+    const capture = (event: IpcMainEvent, payload: unknown) => {
+      const frame = event.senderFrame;
+      if (!frame || frame !== guest.mainFrame) {
+        return;
+      }
+      const pageOrigin = frame.origin;
+      // An agent's submit is not the person's login; after an agent sign-in
+      // the form holds only a stand-in, which must never replace the password.
+      if (!isFillableOrigin(pageOrigin) || !guest.session.isPersistent() || isAgentDriven()) {
+        return;
+      }
+      if (typeof payload !== "object" || payload === null) {
+        return;
+      }
+      const { username, password } = payload as Record<string, unknown>;
+      if (typeof username !== "string" || typeof password !== "string" || password === "") {
+        return;
+      }
+      // Checked on the value too: the stand-in can sit in the form long after
+      // the agent's sign-in, and saving it would replace the real password.
+      if (isPasswordStandIn(password)) {
+        return;
+      }
+
+      void runPromise(
+        offerFor({ pageOrigin, username: username.trim(), password, tabId }).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning(error.message, { cause: error.cause }).pipe(Effect.as(null)),
+          ),
+        ),
+      ).then((offer) => {
+        const host = guest.hostWebContents;
+        if (offer === null || !host || host.isDestroyed()) {
+          return;
+        }
+        if (offer === "saved") {
+          // A later attempt matched what is saved: an offer from an earlier,
+          // mistyped attempt on this site is out of date.
+          if (dropOffersFor(tabId, pageOrigin)) {
+            host.send(PREVIEW_PASSWORD_SAVE_OFFER_WITHDRAWN_CHANNEL, tabId);
+          }
+          return;
+        }
+        host.send(PREVIEW_PASSWORD_SAVE_OFFER_CHANNEL, {
+          ...offer,
+          tabId,
+        } satisfies PasswordSaveOffer);
+      });
+    };
+
     guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
     guest.ipc.handle(PASSWORD_FILL_CHANNEL, serve);
+    guest.ipc.on(PASSWORD_CAPTURE_CHANNEL, capture);
     return () => {
       guest.ipc.removeHandler(PASSWORD_FILL_CHANNEL);
+      guest.ipc.off(PASSWORD_CAPTURE_CHANNEL, capture);
+      dropOffersFor(tabId);
       guest.off("before-input-event", noteKey);
       guest.off("before-mouse-event", noteMouse);
     };
@@ -430,6 +650,7 @@ export const make = Effect.gen(function* () {
     save,
     clear,
     attachGuest,
+    respondToOffer,
   });
 });
 

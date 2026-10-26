@@ -9,7 +9,7 @@ type InvokePasswordFill = (request: PasswordFillRequest) => Promise<unknown>;
 
 const USERNAME_INPUT_TYPES = new Set(["text", "email", "tel"]);
 
-const autocompleteTokens = (input: HTMLInputElement) =>
+export const autocompleteTokens = (input: HTMLInputElement) =>
   input.autocomplete.toLowerCase().split(/\s+/);
 
 /** In view and big enough to see: a field parked off-screen or shrunk to a dot is a trap. */
@@ -34,7 +34,7 @@ const isOpaqueEnough = (input: HTMLInputElement) => {
   return opacity >= 0.1;
 };
 
-const isFillable = (input: HTMLInputElement) =>
+export const isFillable = (input: HTMLInputElement) =>
   !input.disabled &&
   !input.readOnly &&
   input.getClientRects().length > 0 &&
@@ -44,7 +44,7 @@ const isFillable = (input: HTMLInputElement) =>
   isOpaqueEnough(input);
 
 /** The visible text field just before the password field, in its form when it has one. */
-const usernameFieldBefore = (passwordField: HTMLInputElement) => {
+export const usernameFieldBefore = (passwordField: HTMLInputElement) => {
   const scope = passwordField.form ?? document;
   const candidates = [...scope.querySelectorAll("input")].filter(
     (input) =>

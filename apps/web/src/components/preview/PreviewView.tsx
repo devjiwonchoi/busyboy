@@ -61,6 +61,7 @@ import { openPreviewSession } from "./openPreviewSession";
 import { showPreviewPopup } from "./showPreviewPopup";
 import { PreviewChromeRow } from "./PreviewChromeRow";
 import { PasswordImportDialog } from "../passwords/PasswordImportDialog";
+import { PasswordSaveOfferBar } from "../passwords/PasswordSaveOfferBar";
 import { PreviewEmptyState } from "./PreviewEmptyState";
 import { PreviewMoreMenu, type PreviewMoreMenuActions } from "./PreviewMoreMenu";
 import {
@@ -980,6 +981,9 @@ export function PreviewView({
           ) : null
         }
       />
+
+      {/* In the layout flow, so the page shrinks instead of covering it. */}
+      {previewBridge && !isServerTab ? <PasswordSaveOfferBar tabId={runtimeTabId} /> : null}
 
       <div ref={serverBodyRef} className="relative min-h-0 flex-1 overflow-hidden">
         {runtimeTabId && snapshot && isServerTab ? (
