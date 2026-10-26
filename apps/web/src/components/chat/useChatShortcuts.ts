@@ -27,6 +27,14 @@ export interface ChatShortcutsInput {
   /** Types a printable key into the composer; false when it could not take it. */
   readonly typeIntoComposer: (key: string) => boolean;
   readonly closeThreadFind: () => void;
+  /**
+   * Whether this chat takes the event, for when a side chat shares the window.
+   * `command` is null for a printable key that would be typed into the composer.
+   */
+  readonly handlesEvent: (input: {
+    readonly target: EventTarget | null;
+    readonly command: KeybindingCommand | null;
+  }) => boolean;
   readonly commands: Partial<Record<KeybindingCommand, ChatShortcutHandler>>;
   /** Handles commands not in `commands`, such as project scripts. */
   readonly fallback: (command: KeybindingCommand) => ChatShortcutHandler | undefined;
@@ -64,6 +72,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
         !shortcutContext.terminalFocus &&
         !shortcutContext.modelPickerOpen &&
         shouldTypeToFocusComposer(event) &&
+        current.handlesEvent({ target: event.target, command: null }) &&
         current.typeIntoComposer(event.key)
       ) {
         event.preventDefault();
@@ -74,7 +83,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       const command = resolveChatShortcutCommand(event, keybindings, current.scriptKeybindings, {
         context: shortcutContext,
       });
-      if (!command) return;
+      if (!command || !current.handlesEvent({ target: event.target, command })) return;
       const run = current.commands[command] ?? current.fallback(command);
       if (!run || run({ event, terminalFocusOwner }) === false) return;
       event.preventDefault();
