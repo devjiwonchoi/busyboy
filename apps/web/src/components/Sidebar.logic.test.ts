@@ -62,7 +62,6 @@ import {
   resolveSidebarDropVerb,
 } from "./Sidebar.logic";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { sortSettledThreads } from "@t3tools/client-runtime/state/thread-sort";
 import { EnvironmentId, ProjectId, ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
 
 import {
@@ -132,18 +131,11 @@ describe("animateSidebarLayoutChanges", () => {
 
 describe("resolveSidebarThreadSection", () => {
   it("keeps a pinned thread in the pinned shelf", () => {
-    expect(resolveSidebarThreadSection({ snoozed: false, settled: false, pinned: true })).toBe(
-      "pinned",
-    );
+    expect(resolveSidebarThreadSection({ snoozed: false, pinned: true })).toBe("pinned");
   });
 
-  it("keeps lifecycle shelves authoritative over a stale pin", () => {
-    expect(resolveSidebarThreadSection({ snoozed: true, settled: true, pinned: true })).toBe(
-      "snoozed",
-    );
-    expect(resolveSidebarThreadSection({ snoozed: false, settled: true, pinned: true })).toBe(
-      "settled",
-    );
+  it("keeps the snoozed shelf authoritative over a stale pin", () => {
+    expect(resolveSidebarThreadSection({ snoozed: true, pinned: true })).toBe("snoozed");
   });
 });
 
@@ -1471,8 +1463,6 @@ function makeThread(overrides: ThreadFixtureOverrides = {}): Thread {
     proposedPlans: [],
     createdAt: "2026-03-09T10:00:00.000Z",
     archivedAt: null,
-    settledOverride: null,
-    settledAt: null,
     deletedAt: null,
     updatedAt: "2026-03-09T10:00:00.000Z",
     latestRun: null,
@@ -2008,48 +1998,36 @@ describe("sortPinnedThreadsForSidebar", () => {
 
 describe("resolveSidebarSweepKeys", () => {
   const ordered = ["a", "b", "c", "d", "blocked"];
-  const canSettle = (key: string) => key !== "blocked";
+  const canWake = (key: string) => key !== "blocked";
 
   it("covers every row between the pressed row and the pointer, in either direction", () => {
-    expect(resolveSidebarSweepKeys(ordered, "b", "b", canSettle)).toEqual(["b"]);
-    expect(resolveSidebarSweepKeys(ordered, "b", "d", canSettle)).toEqual(["b", "c", "d"]);
-    expect(resolveSidebarSweepKeys(ordered, "d", "a", canSettle)).toEqual(["a", "b", "c", "d"]);
+    expect(resolveSidebarSweepKeys(ordered, "b", "b", canWake)).toEqual(["b"]);
+    expect(resolveSidebarSweepKeys(ordered, "b", "d", canWake)).toEqual(["b", "c", "d"]);
+    expect(resolveSidebarSweepKeys(ordered, "d", "a", canWake)).toEqual(["a", "b", "c", "d"]);
   });
 
-  it("leaves out rows that cannot settle and rows that left the list", () => {
-    expect(resolveSidebarSweepKeys(ordered, "c", "blocked", canSettle)).toEqual(["c", "d"]);
-    expect(resolveSidebarSweepKeys(ordered, "gone", "a", canSettle)).toEqual([]);
+  it("leaves out rows that cannot wake and rows that left the list", () => {
+    expect(resolveSidebarSweepKeys(ordered, "c", "blocked", canWake)).toEqual(["c", "d"]);
+    expect(resolveSidebarSweepKeys(ordered, "gone", "a", canWake)).toEqual([]);
   });
 });
 
 describe("navigation after parking a thread", () => {
   it.each([
-    ["settle", "settled", null, "thread", true],
-    ["settle", "active", null, "thread", false],
-    ["settle", "settled", null, "other-thread", false],
-    ["snooze", null, "2099-01-01T00:00:00.000Z", "thread", true],
-    ["snooze", null, null, "thread", false],
-    ["snooze", null, "2026-09-12T09:00:00.000Z", "thread", false],
-    ["snooze", null, "2099-01-01T00:00:00.000Z", "thread", false, true],
-    ["snooze", null, "2099-01-01T00:00:00.000Z", "other-thread", false],
+    ["2099-01-01T00:00:00.000Z", "thread", true],
+    [null, "thread", false],
+    ["2026-09-12T09:00:00.000Z", "thread", false],
+    ["2099-01-01T00:00:00.000Z", "thread", false, true],
+    ["2099-01-01T00:00:00.000Z", "other-thread", false],
   ] as const)(
-    "%s with state %s / %s on %s navigates: %s",
-    (
-      action,
-      settledOverride,
-      snoozedUntil,
-      currentThreadKey,
-      expected,
-      hasPendingApprovals: boolean = false,
-    ) => {
+    "snooze until %s on %s navigates: %s",
+    (snoozedUntil, currentThreadKey, expected, hasPendingApprovals: boolean = false) => {
       expect(
         shouldNavigateAfterThreadPark({
           threadKey: "thread",
           currentThreadKey,
-          action,
           now: "2026-09-12T10:00:00.000Z",
           thread: {
-            settledOverride,
             snoozedUntil,
             snoozedAt: null,
             session: null,
@@ -2145,14 +2123,10 @@ describe("Working shelf (beta)", () => {
   });
 
   describe("sortInboxThreadsByReturn", () => {
-    const thread = (
-      id: string,
-      input: { createdAt: string; completedAt?: string | null; unsettledAt?: string },
-    ) => ({
+    const thread = (id: string, input: { createdAt: string; completedAt?: string | null }) => ({
       id: ThreadId.make(id),
       environmentId: localEnvironmentId,
       createdAt: input.createdAt,
-      unsettledAt: input.unsettledAt ?? null,
       latestRun:
         input.completedAt === undefined
           ? null
@@ -2166,12 +2140,8 @@ describe("Working shelf (beta)", () => {
           createdAt: "2026-03-01T09:00:00.000Z",
           completedAt: "2026-03-09T12:00:00.000Z",
         }),
-        thread("reopened", {
-          createdAt: "2026-03-02T09:00:00.000Z",
-          unsettledAt: "2026-03-09T11:30:00.000Z",
-        }),
       ]);
-      expect(sorted.map((entry) => entry.id)).toEqual(["old-finished-now", "reopened", "new"]);
+      expect(sorted.map((entry) => entry.id)).toEqual(["old-finished-now", "new"]);
     });
 
     it("counts a return the server does not stamp, like an approval request", () => {
@@ -2210,8 +2180,6 @@ describe("Working shelf (beta)", () => {
       row("a2", "active"),
       marker("working-header"),
       row("w1", "working"),
-      marker("settled-header"),
-      row("s1", "settled"),
     ];
 
     it("never drops into the Working shelf, and keeps it out of the inbox order", () => {
@@ -2296,7 +2264,6 @@ describe("Working shelf (beta)", () => {
         order: null,
         assignments: [],
         unpin: true,
-        unsettle: false,
         unsnooze: false,
       });
     });

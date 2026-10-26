@@ -61,8 +61,6 @@ function makeProjection(): OrchestrationV2ThreadProjection {
       createdAt,
       updatedAt: createdAt,
       archivedAt: null,
-      settledOverride: null,
-      settledAt: null,
       lastVisitedAt: null,
       deletedAt: null,
     },

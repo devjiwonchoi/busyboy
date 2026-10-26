@@ -135,8 +135,6 @@ function makeProjection(visibleTurnItems: OrchestrationV2ProjectedTurnItem[]) {
       updatedAt: NOW,
       archivedAt: null,
       deletedAt: null,
-      settledOverride: null,
-      settledAt: null,
     },
     runs: [{ id: "run-1" }],
     attempts: [{ id: "attempt-1" }],

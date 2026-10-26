@@ -26,8 +26,6 @@ export interface PullRequestTestThread {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archivedAt: string | null;
-  readonly settledOverride: OrchestrationV2ThreadShell["settledOverride"];
-  readonly settledAt: string | null;
 }
 
 export function v2PullRequestThread(thread: PullRequestTestThread): OrchestrationV2ThreadShell {
@@ -67,8 +65,6 @@ export function v2PullRequestThread(thread: PullRequestTestThread): Orchestratio
     createdAt: DateTime.makeUnsafe(thread.createdAt),
     updatedAt: DateTime.makeUnsafe(thread.updatedAt),
     archivedAt: thread.archivedAt ? DateTime.makeUnsafe(thread.archivedAt) : null,
-    settledOverride: thread.settledOverride,
-    settledAt: thread.settledAt ? DateTime.makeUnsafe(thread.settledAt) : null,
     deletedAt: null,
   };
 }

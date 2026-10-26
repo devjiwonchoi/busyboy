@@ -81,8 +81,6 @@ function mockThreadShell() {
     latestRunStartedAt: SHELL_NOW,
     latestRunCompletedAt: state.completedAt ? DateTime.makeUnsafe(state.completedAt) : undefined,
     archivedAt: state.archivedAt ? DateTime.makeUnsafe(state.archivedAt) : null,
-    settledOverride: null,
-    settledAt: null,
     lastVisitedAt: null,
     deletedAt: null,
   };

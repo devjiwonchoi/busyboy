@@ -4,7 +4,7 @@ import {
   localSnoozeTime,
   resolveCustomSnooze,
   type CustomSnoozeInput,
-} from "@t3tools/client-runtime/state/thread-settled";
+} from "@t3tools/client-runtime/state/thread-snooze";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,

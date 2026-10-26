@@ -3,7 +3,7 @@ import * as DateTime from "effect/DateTime";
 
 import type { PendingSubagentRequest } from "./models.ts";
 
-interface SettlementRunLike {
+interface QueuedRunLike {
   readonly turnId?: unknown;
   readonly assistantMessageId?: unknown;
   readonly status?: string;
@@ -13,7 +13,7 @@ interface SettlementRunLike {
   readonly completedAt?: string | null;
 }
 
-interface SettlementRuntimeLike {
+interface QueuedRuntimeLike {
   readonly threadId?: unknown;
   readonly providerName?: unknown;
   readonly runtimeMode?: unknown;
@@ -25,10 +25,10 @@ interface SettlementRuntimeLike {
 
 interface QueuedThreadShell {
   readonly latestUserMessageAt?: string | null;
-  readonly latestTurn?: SettlementRunLike | null;
-  readonly latestRun?: SettlementRunLike | null;
-  readonly session?: SettlementRuntimeLike | null;
-  readonly runtime?: SettlementRuntimeLike | null;
+  readonly latestTurn?: QueuedRunLike | null;
+  readonly latestRun?: QueuedRunLike | null;
+  readonly session?: QueuedRuntimeLike | null;
+  readonly runtime?: QueuedRuntimeLike | null;
 }
 
 /**
@@ -36,7 +36,7 @@ interface QueuedThreadShell {
  * seconds, so a user message still unadopted after the grace window is a
  * failed start (or stale data — shells from older servers can carry user
  * messages with no latestTurn at all), not pending work. Without this bound
- * such threads would be permanently unsettleable.
+ * such threads could never be snoozed.
  */
 export const QUEUED_TURN_START_GRACE_MS = 2 * 60 * 1_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;

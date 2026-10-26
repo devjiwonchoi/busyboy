@@ -99,7 +99,6 @@ describe("thread list environment projection", () => {
   });
 
   it.each([
-    ["threadSettlement", "settlementEnvironmentIds"],
     ["threadSnooze", "snoozeEnvironmentIds"],
     ["threadPinning", "pinningEnvironmentIds"],
     ["threadPinReorder", "pinReorderEnvironmentIds"],

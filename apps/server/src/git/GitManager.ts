@@ -1647,8 +1647,8 @@ export const make = Effect.gen(function* () {
 
   // `git worktree add -b feature origin/main` makes the new local branch track
   // origin/main. That upstream is the branch's base, not its published PR head.
-  // Looking up PRs for it can attach an old reverse merge from main and
-  // auto-settle an unrelated feature thread.
+  // Looking up PRs for it can attach an old reverse merge from main to an
+  // unrelated feature thread.
   const resolveLookupHeadContext = Effect.fn("resolveLookupHeadContext")(function* (
     cwd: string,
     details: {
@@ -2264,7 +2264,7 @@ export const make = Effect.gen(function* () {
     });
     return mergeGitStatusParts(local, remote);
   });
-  // A merged or closed answer can settle a thread or remove its worktree, so
+  // A merged or closed answer can remove a thread's worktree, so
   // branchPullRequest confirms one against fresh reads, and discovery asks for
   // fresh reads (`freshGitState`) before it persists an answer.
   const prLookupGitStateByKey = new Map<

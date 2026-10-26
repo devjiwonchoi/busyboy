@@ -87,8 +87,6 @@ function makeThread(
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-20T00:00:00.000Z",
     archivedAt: null,
-    settledOverride: null,
-    settledAt: null,
     latestUserMessageAt: "2026-08-20T00:00:00.000Z",
     ...overrides,
   };
@@ -246,8 +244,6 @@ const makeHarness = Effect.fn("makePullRequestSyncHarness")(function* (options: 
                   relationshipToParent: null,
                   rootThreadId: thread.id,
                 },
-                settledOverride: thread.settledOverride,
-                settledAt: thread.settledAt === null ? null : DateTime.makeUnsafe(thread.settledAt),
                 pullRequests: thread.pullRequests,
               })),
           ),
@@ -847,44 +843,7 @@ describe("PullRequestSyncReactor", () => {
     ),
   );
 
-  it.effect("leaves a settled thread's links unread until the thread is unsettled", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(Date.parse(NOW));
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([
-            makeThread("settled", {
-              settledOverride: "settled",
-              settledAt: "2026-08-21T00:00:00.000Z",
-              pullRequests: [makeLink(5, { state: "open" }), makeLink(6, { state: "closed" })],
-            }),
-          ]),
-        });
-
-        yield* Effect.gen(function* () {
-          const reactor = yield* startAndSweep(fixture);
-          for (let index = 0; index < 15; index += 1) yield* sweepAgain(fixture, reactor);
-          assert.deepStrictEqual(yield* Ref.get(fixture.summaryCalls), []);
-
-          yield* Ref.update(fixture.snapshots, (snapshot) => ({
-            ...snapshot,
-            threads: snapshot.threads.map((thread) => ({
-              ...thread,
-              settledOverride: null,
-              settledAt: null,
-            })),
-          }));
-          yield* sweepAgain(fixture, reactor);
-          assert.deepStrictEqual(
-            (yield* Ref.get(fixture.summaryCalls)).map((call) => call.number).toSorted(),
-            [5, 6],
-          );
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
-  );
-
-  it.effect("auto-links missing native stack layers on active threads only", () =>
+  it.effect("auto-links missing native stack layers", () =>
     Effect.scoped(
       Effect.gen(function* () {
         yield* TestClock.setTime(Date.parse(NOW));
@@ -907,11 +866,6 @@ describe("PullRequestSyncReactor", () => {
                 makeLink(41, { state: "merged" }, { source: "stack-dismissed" }),
               ],
             }),
-            makeThread("settled", {
-              settledOverride: "settled",
-              settledAt: "2026-08-21T00:00:00.000Z",
-              pullRequests: [makeLink(42)],
-            }),
           ]),
           stack: () => Effect.succeed(stack),
         });
@@ -922,10 +876,7 @@ describe("PullRequestSyncReactor", () => {
           const syncCommands = yield* Ref.get(fixture.syncCommands);
           assert.deepStrictEqual(
             syncCommands.map((command) => [command.threadId, command.stack] as const),
-            [
-              [ThreadId.make("one"), { kind: "native", ...stack }],
-              [ThreadId.make("settled"), { kind: "native", ...stack }],
-            ],
+            [[ThreadId.make("one"), { kind: "native", ...stack }]],
           );
           assert.deepStrictEqual(
             (yield* Ref.get(fixture.linkCommands)).map(({ commandId: _, ...rest }) => rest),

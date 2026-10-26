@@ -773,15 +773,6 @@ describe("orchestrator MCP toolkit", () => {
             const invoke = (name: string, args: Record<string, unknown>) =>
               invokeAs(invocation, name, args);
 
-            const deferredSettle = yield* invoke("t3_thread_organize", { action: "settle" });
-            expect(deferredSettle.isError).toBe(false);
-            expect(deferredSettle.structuredContent).toEqual({ settlesWhenTurnEnds: true });
-            const afterDeferredSettle = yield* orchestrator.getThreadProjection(parentThreadId);
-            expect(afterDeferredSettle.thread.settledOverride).not.toBe("settled");
-            expect(afterDeferredSettle.runs.find((run) => run.id === parentRun?.id)?.status).toBe(
-              "running",
-            );
-
             const pinned = yield* invoke("t3_thread_organize", { action: "pin" });
             expect(pinned.isError).toBe(false);
             expect(pinned.structuredContent).toHaveProperty("sequence");
@@ -2159,50 +2150,6 @@ describe("orchestrator MCP toolkit", () => {
             ).toMatchObject({
               title: "Metadata-managed thread",
               linkedPullRequest: linked.linkedPullRequest,
-              settled: false,
-              settledAt: null,
-            });
-            expect(metadataRead.thread).toMatchObject({ settled: false, settledAt: null });
-
-            yield* orchestrator.dispatch({
-              type: "thread.settle",
-              commandId: CommandId.make("command:mcp-empty:settle"),
-              threadId: emptyThread.threadId,
-              settledAt: DateTime.makeUnsafe("2026-01-01T00:00:00.000Z"),
-            });
-            const settledReadCall = yield* invoke("t3_thread_read", {
-              threadId: emptyThread.threadId,
-            });
-            const settledRead = yield* decodeThreadReadResult(
-              settledReadCall.structuredContent,
-            ).pipe(Effect.orDie);
-            expect(settledRead.thread).toMatchObject({
-              settled: true,
-              settledAt: "2026-01-01T00:00:00.000Z",
-            });
-            const settledListCall = yield* invoke("t3_thread_list", { settled: true, limit: 100 });
-            const settledList = yield* decodeThreadListResult(
-              settledListCall.structuredContent,
-            ).pipe(Effect.orDie);
-            expect(settledList.threads.map((thread) => thread.threadId)).toEqual([
-              emptyThread.threadId,
-            ]);
-            expect(settledList.threads[0]).toMatchObject({
-              settled: true,
-              settledAt: "2026-01-01T00:00:00.000Z",
-            });
-            const activeListCall = yield* invoke("t3_thread_list", { settled: false, limit: 100 });
-            const activeList = yield* decodeThreadListResult(activeListCall.structuredContent).pipe(
-              Effect.orDie,
-            );
-            expect(
-              activeList.threads.some((thread) => thread.threadId === emptyThread.threadId),
-            ).toBe(false);
-            yield* orchestrator.dispatch({
-              type: "thread.unsettle",
-              commandId: CommandId.make("command:mcp-empty:unsettle"),
-              threadId: emptyThread.threadId,
-              reason: "user",
             });
 
             expect(metadataRead.thread).toMatchObject({ snoozed: false, snoozedUntil: null });

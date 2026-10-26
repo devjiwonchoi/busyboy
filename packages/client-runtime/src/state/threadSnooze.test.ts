@@ -12,7 +12,7 @@ import {
   threadRaisedHandWhileSnoozed,
   threadWokeAt,
   type ThreadSnoozeShell,
-} from "./threadSettled.ts";
+} from "./threadSnooze.ts";
 
 const NOW = "2026-04-10T12:00:00.000Z";
 const SNOOZED_AT = "2026-04-10T09:00:00.000Z";
@@ -195,7 +195,7 @@ describe("canSnooze", () => {
     ).toBe(false);
   });
 
-  it("refuses a queued turn start — same invisible-pending-work rule as settle", () => {
+  it("refuses a queued turn start", () => {
     expect(
       canSnooze(
         { ...makeShell({}), latestUserMessageAt: "2026-04-10T11:59:30.000Z" },

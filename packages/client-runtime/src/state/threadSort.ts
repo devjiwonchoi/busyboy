@@ -1,6 +1,5 @@
 import type { ProjectId } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
-import type { EnvironmentThreadShell } from "./models.ts";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 
@@ -18,49 +17,6 @@ export function toSortableTimestamp(iso: string | undefined): number | null {
   if (!iso) return null;
   const ms = Date.parse(iso);
   return Number.isFinite(ms) ? ms : null;
-}
-
-export type SettledThreadTimestampInput = Pick<
-  EnvironmentThreadShell,
-  "settledAt" | "latestUserMessageAt" | "latestRun" | "updatedAt"
->;
-
-export function resolveSettledThreadTimestamp(thread: SettledThreadTimestampInput): string | null {
-  if (thread.settledAt != null && toSortableTimestamp(thread.settledAt) !== null) {
-    return thread.settledAt;
-  }
-
-  let latest: string | null = null;
-  let latestMs = Number.NEGATIVE_INFINITY;
-  for (const candidate of [
-    thread.latestUserMessageAt,
-    thread.latestRun?.requestedAt,
-    thread.latestRun?.startedAt,
-    thread.latestRun?.completedAt,
-  ]) {
-    const parsed = toSortableTimestamp(candidate ?? undefined);
-    if (candidate != null && parsed !== null && parsed > latestMs) {
-      latest = candidate;
-      latestMs = parsed;
-    }
-  }
-  if (latest !== null) return latest;
-  return toSortableTimestamp(thread.updatedAt) === null ? null : thread.updatedAt;
-}
-
-export function sortSettledThreads<T extends SettledThreadTimestampInput & { readonly id: string }>(
-  threads: readonly T[],
-): T[] {
-  return threads
-    .map((thread) => {
-      const timestamp = resolveSettledThreadTimestamp(thread);
-      return { thread, timestampMs: timestamp === null ? 0 : Date.parse(timestamp) };
-    })
-    .sort(
-      (left, right) =>
-        right.timestampMs - left.timestampMs || left.thread.id.localeCompare(right.thread.id),
-    )
-    .map(({ thread }) => thread);
 }
 
 function getFirstSortableTimestamp(...values: Array<string | null | undefined>): number | null {
@@ -111,16 +67,6 @@ export function getThreadSortTimestamp(
     );
   }
   return getLatestUserMessageTimestamp(thread);
-}
-
-export function activeThreadAnchorTimestampMs(thread: {
-  readonly createdAt: string;
-  readonly unsettledAt?: string | null | undefined;
-}): number {
-  return Math.max(
-    toSortableTimestamp(thread.createdAt) ?? 0,
-    toSortableTimestamp(thread.unsettledAt ?? undefined) ?? 0,
-  );
 }
 
 export function sortThreads<T extends { readonly id: string } & ThreadSortInput>(
@@ -299,7 +245,6 @@ export function sortActiveThreadsByOrderKey<
   T extends {
     readonly id: string;
     readonly createdAt: string;
-    readonly unsettledAt?: string | null | undefined;
     readonly activeOrderKey?: string | null | undefined;
     readonly environmentId?: string | undefined;
   },
@@ -308,7 +253,7 @@ export function sortActiveThreadsByOrderKey<
   const timestamps = new Map<T, number>();
   for (const thread of threads) {
     if (thread.activeOrderKey == null) {
-      timestamps.set(thread, activeThreadAnchorTimestampMs(thread));
+      timestamps.set(thread, toSortableTimestamp(thread.createdAt) ?? 0);
     }
   }
   return [...threads].sort((left, right) => {

@@ -87,8 +87,6 @@ const seedThread = Effect.gen(function* () {
     createdAt: now,
     updatedAt: now,
     archivedAt: null,
-    settledOverride: null,
-    settledAt: null,
     lastVisitedAt: null,
     deletedAt: null,
   };

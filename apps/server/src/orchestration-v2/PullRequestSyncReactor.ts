@@ -126,10 +126,6 @@ function rateLimitRetryAt(cause: Cause.Cause<unknown>): number | undefined {
   return undefined;
 }
 
-function isUnsettled(thread: ProjectionStore.ProjectionThreadPullRequests): boolean {
-  return thread.settledOverride !== "settled" && thread.settledAt === null;
-}
-
 export class PullRequestSyncReactor extends Context.Service<
   PullRequestSyncReactor,
   {
@@ -166,9 +162,8 @@ export const make = Effect.gen(function* () {
   const isDue = (key: string, entries: ReadonlyArray<LinkEntry>, nowMs: number): boolean => {
     if (requested.has(key) || retryStacks.has(key)) return true;
     if (entries.some((entry) => entry.link.snapshot === null)) return true;
-    const active = entries.filter((entry) => isUnsettled(entry.thread));
-    if (active.every((entry) => entry.link.snapshot?.state === "merged")) return false;
-    if (active.some((entry) => entry.link.snapshot?.state === "open")) return true;
+    if (entries.every((entry) => entry.link.snapshot?.state === "merged")) return false;
+    if (entries.some((entry) => entry.link.snapshot?.state === "open")) return true;
     const last = lastSyncedAt.get(key);
     return last === undefined || nowMs - last >= SLOW_SYNC_INTERVAL_MS;
   };
@@ -212,10 +207,7 @@ export const make = Effect.gen(function* () {
         link.snapshot === null ||
         !snapshotFieldsEqual(link.snapshot, fields) ||
         !stacksEqual(link.stack, nextStack);
-      // Persist discovered siblings before a terminal snapshot can trigger settlement. A settled
-      // thread that shares this pull request with an active one takes the fresh snapshot, but
-      // gains no links.
-      for (const layer of isUnsettled(thread) ? (fetchedStack?.stack?.layers ?? []) : []) {
+      for (const layer of fetchedStack?.stack?.layers ?? []) {
         const layerKey = {
           host: normalizeThreadPullRequestKey(link).host,
           repository: link.repository,
@@ -428,7 +420,7 @@ export const make = Effect.gen(function* () {
             );
           // An agent can merge or close its pull request from a shell (`gh pr merge`), which
           // sends no merge notification. When a run that ran such a command ends, read the
-          // thread's open links fresh, so settlement does not wait for the next sweep and the
+          // thread's open links fresh, so the new state does not wait for the next sweep and the
           // cached summary. Other runs add no host reads.
           case "turn-item.updated":
             if (

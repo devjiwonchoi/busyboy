@@ -436,22 +436,19 @@ describe("mergeEnvironmentSettings", () => {
     expect(settings.favorites).toBe(clientSettings.favorites);
   });
 
-  it("keeps server settlement settings when legacy client data contains retired keys", () => {
+  it("keeps server settings when legacy client data contains retired keys", () => {
     const serverSettings = {
       ...DEFAULT_SERVER_SETTINGS,
-      sidebarAutoSettleAfterDays: 14,
-      sidebarAutoSettleOnMerge: false,
+      snoozeLimitedThreads: false,
     };
     const legacyClientSettings = {
       ...DEFAULT_CLIENT_SETTINGS,
-      sidebarAutoSettleAfterDays: 1,
-      sidebarAutoSettleOnMerge: true,
+      snoozeLimitedThreads: true,
     };
 
     const settings = mergeEnvironmentSettings(serverSettings, legacyClientSettings);
 
-    expect(settings.sidebarAutoSettleAfterDays).toBe(14);
-    expect(settings.sidebarAutoSettleOnMerge).toBe(false);
+    expect(settings.snoozeLimitedThreads).toBe(false);
   });
 });
 

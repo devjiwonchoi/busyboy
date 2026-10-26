@@ -84,8 +84,6 @@ const thread = (
     createdAt: at(0),
     updatedAt: at(0),
     archivedAt: overrides.archivedAt ?? null,
-    settledOverride: null,
-    settledAt: null,
     lastVisitedAt: null,
     deletedAt: overrides.deletedAt ?? null,
   },

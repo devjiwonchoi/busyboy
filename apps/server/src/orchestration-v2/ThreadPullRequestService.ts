@@ -6,7 +6,6 @@ import {
   CommandId,
   type OrchestrationProjectShell,
   type OrchestrationV2DomainEvent,
-  type OrchestrationV2ThreadShell,
   type ThreadId,
   type ThreadLinkedPullRequest,
 } from "@t3tools/contracts";
@@ -90,12 +89,9 @@ export function projectWorkspaceMatchesSnapshot(
   );
 }
 
-const BACKFILL_ATTEMPTS = 5;
-
 interface RefreshRequest {
   readonly threadId: ThreadId | null;
   readonly refresh: boolean;
-  readonly backfill?: boolean;
 }
 
 export const make = Effect.gen(function* () {
@@ -106,28 +102,10 @@ export const make = Effect.gen(function* () {
   const repositoryIdentities = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const crypto = yield* Crypto.Crypto;
   const fileSystem = yield* FileSystem.FileSystem;
-  const pendingBackfill = new Map<ThreadId, number>();
 
-  const finishBackfill = (threads: ReadonlyArray<Pick<OrchestrationV2ThreadShell, "id">>) => {
-    for (const thread of threads) pendingBackfill.delete(thread.id);
-  };
-  const failBackfill = (threads: ReadonlyArray<Pick<OrchestrationV2ThreadShell, "id">>) => {
-    for (const thread of threads) {
-      const remaining = pendingBackfill.get(thread.id);
-      if (remaining === undefined) continue;
-      if (remaining <= 1) pendingBackfill.delete(thread.id);
-      else pendingBackfill.set(thread.id, remaining - 1);
-    }
-  };
-
-  const readThreadSnapshot = ({ threadId, backfill }: RefreshRequest) =>
+  const readThreadSnapshot = ({ threadId }: RefreshRequest) =>
     threadId === null
-      ? orchestrator
-          .getShellSnapshot({
-            location: "active",
-            unsettledOnly: !(backfill || pendingBackfill.size > 0),
-          })
-          .pipe(NodeSqliteClient.readOnly)
+      ? orchestrator.getShellSnapshot({ location: "active" }).pipe(NodeSqliteClient.readOnly)
       : Effect.gen(function* () {
           // Read the sequence first. The thread is then at least this new, so a
           // sync guarded by the sequence is rejected rather than missing a change.
@@ -144,30 +122,9 @@ export const make = Effect.gen(function* () {
       projectStore.listShells(),
     ]);
     const projects = new Map(projectShells.map((project) => [project.id, project]));
-    if (request.backfill) {
-      for (const thread of threadSnapshot.threads) {
-        if (
-          (thread.settledOverride === "settled" || thread.settledAt !== null) &&
-          thread.branchPullRequest == null
-        ) {
-          pendingBackfill.set(thread.id, BACKFILL_ATTEMPTS);
-        }
-      }
-    }
-    const visibleThreadIds = new Set(
-      threadSnapshot.threads.filter((thread) => thread.branch !== null).map((thread) => thread.id),
-    );
-    const checkedIds = request.threadId === null ? [...pendingBackfill.keys()] : [request.threadId];
-    for (const threadId of checkedIds) {
-      if (!visibleThreadIds.has(threadId)) pendingBackfill.delete(threadId);
-    }
     const threads = threadSnapshot.threads.filter(
       (thread) =>
-        thread.archivedAt === null &&
-        ((thread.settledOverride !== "settled" && thread.settledAt === null) ||
-          request.threadId !== null ||
-          pendingBackfill.has(thread.id)) &&
-        (thread.branch !== null || thread.branchPullRequest != null),
+        thread.archivedAt === null && (thread.branch !== null || thread.branchPullRequest != null),
     );
     const groups = Map.groupBy(threads, (thread) =>
       JSON.stringify([thread.projectId, thread.worktreePath, thread.branch]),
@@ -179,12 +136,12 @@ export const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const first = group[0]!;
           const project = projects.get(first.projectId);
-          if (project === undefined) return finishBackfill(group);
+          if (project === undefined) return;
           const { project: resolvedProject, repository } =
             yield* resolveProjectForPullRequestDiscovery(project, repositoryIdentities, {
               refresh: request.refresh,
             });
-          if (first.branch !== null && repository === null) return finishBackfill(group);
+          if (first.branch !== null && repository === null) return;
           const worktreeExists =
             first.worktreePath !== null && (yield* fileSystem.exists(first.worktreePath));
           const cwd =
@@ -199,7 +156,7 @@ export const make = Effect.gen(function* () {
                   { refresh: request.refresh },
                 );
           if (detected !== null && !pullRequestMatchesProject(detected, resolvedProject)) {
-            return finishBackfill(group);
+            return;
           }
           const detectedReference =
             detected !== null && repository !== null
@@ -247,7 +204,6 @@ export const make = Effect.gen(function* () {
                 samePullRequest(thread.branchPullRequest, branchPullRequest) &&
                 replacement === undefined
               ) {
-                pendingBackfill.delete(thread.id);
                 return null;
               }
               return { thread, branchPullRequest, replacement };
@@ -258,10 +214,7 @@ export const make = Effect.gen(function* () {
                   Effect.logWarning("thread pull request discovery failed", {
                     threadId: thread.id,
                     cause: Cause.pretty(cause),
-                  }).pipe(
-                    Effect.tap(() => Effect.sync(() => failBackfill([thread]))),
-                    Effect.as(null),
-                  ),
+                  }).pipe(Effect.as(null)),
               ),
             ),
           );
@@ -287,7 +240,7 @@ export const make = Effect.gen(function* () {
                 repositoryIdentity: currentIdentity,
               })
             ) {
-              return failBackfill(updates.map((update) => update.thread));
+              return;
             }
           }
 
@@ -300,7 +253,7 @@ export const make = Effect.gen(function* () {
                 // workspace root cannot apply a result from the old checkout.
                 const currentProject = yield* projectStore.getShell(project.id);
                 if (!projectWorkspaceMatchesSnapshot(currentProject, project.workspaceRoot)) {
-                  return failBackfill([thread]);
+                  return;
                 }
                 const uuid = yield* crypto.randomUUIDv4();
                 yield* orchestrator.dispatch({
@@ -319,7 +272,6 @@ export const make = Effect.gen(function* () {
                   branchPullRequest,
                   ...(replacement === undefined ? {} : { linkedPullRequest: replacement }),
                 });
-                pendingBackfill.delete(thread.id);
               }).pipe(
                 Effect.catchCause((cause) =>
                   Cause.hasInterruptsOnly(cause)
@@ -327,7 +279,7 @@ export const make = Effect.gen(function* () {
                     : Effect.logWarning("thread pull request update failed", {
                         threadId: thread.id,
                         cause: Cause.pretty(cause),
-                      }).pipe(Effect.tap(() => Effect.sync(() => failBackfill([thread])))),
+                      }),
                 ),
               ),
             { discard: true },
@@ -339,7 +291,7 @@ export const make = Effect.gen(function* () {
               Effect.logWarning("thread branch pull request lookup failed", {
                 threadIds: group.map((thread) => thread.id),
                 cause: Cause.pretty(cause),
-              }).pipe(Effect.tap(() => Effect.sync(() => failBackfill(group)))),
+              }),
           ),
         ),
       // Wide enough that a sweep's GitHub branch lookups reach the GitHub provider together and share one
@@ -366,7 +318,6 @@ export const make = Effect.gen(function* () {
       case "thread.unarchived":
       case "thread.metadata-updated":
         return worker.enqueue({ threadId: event.threadId, refresh: false });
-      case "thread.unsettled":
       case "checkpoint.captured":
         return worker.enqueue({ threadId: event.threadId, refresh: true });
       case "run.updated":
@@ -389,13 +340,9 @@ export const make = Effect.gen(function* () {
     yield* forkParked(Stream.runForEach(orchestrator.streamDomainEvents, processEvent));
     yield* forkParked(
       Effect.gen(function* () {
-        yield* worker.enqueue({ threadId: null, refresh: false, backfill: true });
+        yield* worker.enqueue({ threadId: null, refresh: false });
         yield* worker.drain;
-        yield* Effect.gen(function* () {
-          yield* worker.enqueue({ threadId: null, refresh: false });
-          yield* worker.drain;
-        }).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.delay("1 minute"));
-      }).pipe(Effect.asVoid),
+      }).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.asVoid),
     );
   });
 

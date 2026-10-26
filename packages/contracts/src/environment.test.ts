@@ -14,14 +14,12 @@ const descriptor = {
 } as const;
 
 describe("ExecutionEnvironmentDescriptor", () => {
-  it("keeps settled cleanup optional alongside current worktree capabilities", () => {
-    expect(decodeDescriptor(descriptor).capabilities.settledWorktreeCleanup).toBeUndefined();
+  it("keeps worktree cleanup capabilities optional", () => {
+    expect(decodeDescriptor(descriptor).capabilities.projectWorktreeCleanup).toBeUndefined();
     const capabilities = {
-      settledWorktreeCleanup: true,
       storageCleanupRun: true,
       projectWorktreeCleanup: true,
       worktreesDirectory: true,
-      threadAutoSettlementScope: true,
     };
     expect(decodeDescriptor({ ...descriptor, capabilities }).capabilities).toMatchObject(
       capabilities,

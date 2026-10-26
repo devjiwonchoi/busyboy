@@ -27,9 +27,9 @@ const NOW = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
 const THREAD_ID = ThreadId.make("thread-perf");
 const PROVIDER_INSTANCE_ID = ProviderInstanceId.make("codex");
 
-const HISTORICAL_FULL_SNAPSHOT_APPLICATION_BYTES = 10_375_079;
-const FULL_SNAPSHOT_RPC_JSON_BYTES = 10_375_121;
-const PRE_OMISSION_BOUNDED_SNAPSHOT_RPC_JSON_BYTES = 1_038_647;
+const HISTORICAL_FULL_SNAPSHOT_APPLICATION_BYTES = 10_375_039;
+const FULL_SNAPSHOT_RPC_JSON_BYTES = 10_375_081;
+const PRE_OMISSION_BOUNDED_SNAPSHOT_RPC_JSON_BYTES = 1_038_607;
 const MAX_PROJECTED_BOUNDED_SNAPSHOT_RPC_JSON_BYTES = 131_072;
 const PRE_OMISSION_COMMAND_EVENT_RPC_JSON_BYTES = 8_790;
 const MAX_PROJECTED_COMMAND_EVENT_RPC_JSON_BYTES = 1_024;
@@ -113,8 +113,6 @@ function makeProjection(): OrchestrationV2ThreadProjection {
       updatedAt: NOW,
       archivedAt: null,
       deletedAt: null,
-      settledOverride: null,
-      settledAt: null,
       lastVisitedAt: null,
     },
     runs: [],

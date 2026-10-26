@@ -39,7 +39,6 @@ import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
-import { threadHasQueuedTurnStart } from "./orchestration-v2/ThreadSettlementService.ts";
 import { forkParked } from "./serverActivation.ts";
 import * as Settings from "./serverSettings.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
@@ -57,9 +56,7 @@ const decodeCleanupSession = Schema.decodeUnknownEffect(
 );
 
 const DAY_MS = 86_400_000;
-// After a settle, the project's settle script needs time to open its
-// terminal, which then protects the worktree.
-const SETTLE_SCRIPT_GRACE_MS = 60_000;
+export const QUEUED_TURN_START_GRACE_MS = 2 * 60 * 1_000;
 // Worktree creation can precede its thread row, including review-guide checkouts.
 const ORPHAN_WORKTREE_GRACE_MS = 60 * 60 * 1_000;
 
@@ -75,7 +72,6 @@ function cleanupFailureReason(error: { readonly message: string }) {
 
 const worktreeCleanupEnabled = (rules: WorktreeCleanupRules) =>
   rules.worktreeAfterDays !== null ||
-  rules.worktreeSettledAfterDays !== null ||
   rules.worktreeOnMerge ||
   rules.worktreeOnDelete ||
   rules.worktreeUnchanged;
@@ -104,6 +100,36 @@ function sameProjectWorktreePolicies(left: ServerSettings, right: ServerSettings
       right.projectSettingsOverrides[projectId as ProjectId]?.worktreeCleanup,
     ),
   );
+}
+
+/**
+ * Absolute age bounds client clock skew in both directions and stops stale
+ * pre-adoption data from blocking the thread forever.
+ */
+export function threadHasQueuedTurnStart(
+  thread: Pick<
+    OrchestrationV2ThreadShell,
+    | "latestUserMessageAt"
+    | "latestRunRequestedAt"
+    | "latestRunStartedAt"
+    | "latestRunCompletedAt"
+    | "latestRunId"
+    | "status"
+  >,
+  nowMs: number,
+): boolean {
+  const toMillis = (value: DateTime.Utc | null | undefined) =>
+    value == null ? null : DateTime.toEpochMillis(value);
+  const messageAtMs = toMillis(thread.latestUserMessageAt);
+  if (messageAtMs === null || thread.status === "failed") return false;
+  const age = nowMs - messageAtMs;
+  if (Number.isNaN(age) || Math.abs(age) > QUEUED_TURN_START_GRACE_MS) return false;
+  if (thread.latestRunId === null) return true;
+  return [
+    toMillis(thread.latestRunRequestedAt),
+    toMillis(thread.latestRunStartedAt),
+    toMillis(thread.latestRunCompletedAt),
+  ].every((value) => value === null || value < messageAtMs);
 }
 
 export function storageCleanupThreadIdle(thread: OrchestrationV2ThreadShell, now: number): boolean {
@@ -647,36 +673,15 @@ const make = Effect.gen(function* () {
           return keep("repository or branch changed");
         const changes = yield* localChangesReason(worktreePath, settings);
         if (changes !== null) return keep(changes);
-        if (
-          !deleted &&
-          group.some(
-            (member) =>
-              member.settledAt !== null &&
-              now - Math.max(DateTime.toEpochMillis(member.updatedAt), activityAt) <
-                SETTLE_SCRIPT_GRACE_MS,
-          )
-        )
-          return keep("settled moments ago");
         const head = yield* git.resolveCommit({ cwd: worktreePath, revision: "HEAD" });
         const old =
           !deleted &&
           settings.worktreeAfterDays !== null &&
           activityAt < now - settings.worktreeAfterDays * DAY_MS;
-        const settledFor =
-          deleted || thread.settledAt === null
-            ? null
-            : now - Math.max(DateTime.toEpochMillis(thread.settledAt), activityAt);
-        const settledDays = settledFor === null ? null : Math.floor(settledFor / DAY_MS);
-        const settled =
-          settledFor !== null &&
-          settings.worktreeSettledAfterDays !== null &&
-          settledFor >= settings.worktreeSettledAfterDays * DAY_MS;
-        let eligible = deleted || old || settled;
+        let eligible = deleted || old;
         let removalReason = deleted
           ? "thread was deleted"
-          : old
-            ? `inactive for ${Math.floor((now - activityAt) / DAY_MS)} days`
-            : `settled for ${settledDays} days`;
+          : `inactive for ${Math.floor((now - activityAt) / DAY_MS)} days`;
         if (!eligible && (settings.worktreeUnchanged || settings.worktreeOnMerge)) {
           const repositoryCwd = path.resolve(project.workspaceRoot);
           const remote = yield* git.resolvePrimaryRemoteName(repositoryCwd);
@@ -724,13 +729,9 @@ const make = Effect.gen(function* () {
           return keep(
             !deleted && settings.worktreeAfterDays !== null
               ? `inactive for ${Math.floor((now - activityAt) / DAY_MS)} of ${settings.worktreeAfterDays} days`
-              : settings.worktreeSettledAfterDays !== null
-                ? settledFor === null
-                  ? "not settled"
-                  : `settled for ${settledDays} of ${settings.worktreeSettledAfterDays} days`
-                : settings.worktreeOnMerge
-                  ? "not merged"
-                  : "has commits beyond the default branch",
+              : settings.worktreeOnMerge
+                ? "not merged"
+                : "has commits beyond the default branch",
           );
         // Threads, queued deletion work and provider sessions as they are now, so a
         // queued turn, resumed session or new thread sharing this path cancels
@@ -773,9 +774,6 @@ const make = Effect.gen(function* () {
                 return (
                   previous === undefined ||
                   shell.branch !== thread.branch ||
-                  !Equal.equals(shell.settledAt, previous.settledAt) ||
-                  (shell.settledAt !== null &&
-                    !Equal.equals(shell.updatedAt, previous.updatedAt)) ||
                   !storageCleanupThreadIdle(shell, now) ||
                   path.resolve(shell.worktreePath!) !== worktreePath ||
                   storageCleanupActivityAt(shell) !== storageCleanupActivityAt(previous)

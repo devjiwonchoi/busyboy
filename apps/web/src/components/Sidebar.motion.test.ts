@@ -105,26 +105,26 @@ beforeEach(() => vi.stubGlobal("HTMLElement", TestRow));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("sidebar list motion", () => {
-  it("moves a retained Active row into Settled with its displaced peers", () => {
+  it("moves a retained Active row into Snoozed with its displaced peers", () => {
     const pinnedHeader = new TestRow("Pinned", 0);
     const pinned = new TestRow("pin");
     const divider = new TestRow("Active", 0);
     const a = new TestRow("a");
     const b = new TestRow("b");
-    const settledHeader = new TestRow("Settled", 32);
-    const settled = new TestRow("settled", 36);
-    const rows = [pinnedHeader, pinned, divider, a, b, settledHeader, settled];
+    const snoozedHeader = new TestRow("Snoozed", 32);
+    const snoozed = new TestRow("snoozed", 36);
+    const rows = [pinnedHeader, pinned, divider, a, b, snoozedHeader, snoozed];
     const { motion, layout } = fixture(rows);
     motion.update(true);
     expect(rows.every((row) => row.animations.length === 0)).toBe(true);
 
     a.offsetHeight = 36;
-    layout([pinnedHeader, pinned, divider, b, settledHeader, settled, a]);
+    layout([pinnedHeader, pinned, divider, b, snoozedHeader, snoozed, a]);
     motion.update(true);
     expectMove(a, -153);
     expectMove(b, 83);
-    expectMove(settledHeader, 83);
-    expectMove(settled, 83);
+    expectMove(snoozedHeader, 83);
+    expectMove(snoozed, 83);
     expect(pinned.animate).not.toHaveBeenCalled();
     expect(divider.animate).not.toHaveBeenCalled();
   });

@@ -11,15 +11,11 @@ const baseState: ThreadActionMenuState = {
   branch: null,
   projectFilter: null,
   isPinned: false,
-  isSettled: false,
-  autoSettleEnabled: true,
   isSnoozed: false,
   canSnoozeNow: true,
   isRegeneratingTitle: false,
   isRunning: false,
   supports: {
-    settlement: true,
-    autoSettleOptOut: true,
     snooze: true,
     pinning: true,
     titleRegeneration: true,
@@ -47,30 +43,11 @@ describe("buildThreadActionMenuItems", () => {
         ...baseState,
         canOperate: false,
         isPinned: reversed,
-        isSettled: reversed,
         isSnoozed: reversed,
       });
       const expected = reversed
-        ? [
-            "unpin",
-            "unsettle",
-            "unsnooze",
-            "rename",
-            "regenerate-title",
-            "auto-settle",
-            "archive",
-            "delete",
-          ]
-        : [
-            "pin",
-            "settle",
-            "snooze",
-            "rename",
-            "regenerate-title",
-            "auto-settle",
-            "archive",
-            "delete",
-          ];
+        ? ["unpin", "unsnooze", "rename", "regenerate-title", "archive", "delete"]
+        : ["pin", "snooze", "rename", "regenerate-title", "archive", "delete"];
       expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual(expected);
       expect(
         items.find((item) => item.id === "snooze")?.children?.every((child) => child.disabled) ??
@@ -96,8 +73,6 @@ describe("buildThreadActionMenuItems", () => {
       ids({
         ...baseState,
         supports: {
-          settlement: false,
-          autoSettleOptOut: false,
           snooze: false,
           pinning: false,
           titleRegeneration: false,
@@ -135,7 +110,7 @@ describe("buildThreadActionMenuItems", () => {
     const filterIndex = items.findIndex((candidate) => candidate.id === "filter-by-project");
     expect(items[filterIndex]).toMatchObject({ label: "Show all projects", icon: "folder-tree" });
     expect(items[filterIndex - 1]?.id).toBe("mark-unread");
-    expect(items[filterIndex + 1]?.id).toBe("auto-settle");
+    expect(items[filterIndex + 1]?.id).toBe("copy");
   });
 
   it("includes branch items only for threads with a branch", () => {
@@ -147,28 +122,10 @@ describe("buildThreadActionMenuItems", () => {
   });
 
   it("flips lifecycle labels with thread state", () => {
-    expect(ids({ ...baseState, isPinned: true, isSettled: true, isSnoozed: true })).toEqual(
-      expect.arrayContaining(["unpin", "unsettle", "unsnooze"]),
+    expect(ids({ ...baseState, isPinned: true, isSnoozed: true })).toEqual(
+      expect.arrayContaining(["unpin", "unsnooze"]),
     );
-    expect(ids(baseState)).toEqual(expect.arrayContaining(["pin", "settle", "snooze"]));
-  });
-
-  it("offers auto-settle as a submenu with the current option checked", () => {
-    const find = (state: ThreadActionMenuState) =>
-      buildThreadActionMenuItems(state).find((item) => item.id === "auto-settle");
-    const on = find(baseState);
-    expect(on?.label).toBe("Auto-settle behavior");
-    expect(on?.children?.map((child) => [child.id, child.checked])).toEqual([
-      ["auto-settle:enabled", true],
-      ["auto-settle:disabled", false],
-    ]);
-    const off = find({ ...baseState, autoSettleEnabled: false });
-    expect(off?.children?.map((child) => child.checked)).toEqual([false, true]);
-    const items = buildThreadActionMenuItems(baseState);
-    expect(items[items.findIndex((item) => item.id === "mark-unread") + 1]?.id).toBe("auto-settle");
-    expect(
-      ids({ ...baseState, supports: { ...baseState.supports, autoSettleOptOut: false } }),
-    ).not.toContain("auto-settle");
+    expect(ids(baseState)).toEqual(expect.arrayContaining(["pin", "snooze"]));
   });
 
   it("disables snooze when the thread cannot snooze, keeping presets visible", () => {
@@ -205,8 +162,6 @@ describe("buildThreadActionMenuItems", () => {
       ids({
         ...baseState,
         supports: {
-          settlement: false,
-          autoSettleOptOut: false,
           snooze: false,
           pinning: false,
           titleRegeneration: false,

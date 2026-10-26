@@ -48,8 +48,6 @@ export function threadCreated(provider: ProviderDriverKind): OrchestrationV2Doma
       createdAt: now,
       updatedAt: now,
       archivedAt: null,
-      settledOverride: null,
-      settledAt: null,
       lastVisitedAt: null,
       deletedAt: null,
     },

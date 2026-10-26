@@ -112,8 +112,6 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     createdAt: now,
     updatedAt: now,
     archivedAt: null,
-    settledOverride: null,
-    settledAt: null,
     deletedAt: null,
     latestRun: null,
     branch: null,
@@ -2140,7 +2138,6 @@ describe("mergeDirectPreviewAnnotation", () => {
 describe("isThreadWokeUnseen", () => {
   const base = {
     wokeAt: "2026-10-16T10:00:00.000Z",
-    settled: false,
     lastVisitedAt: null,
     latestRunCompletedAt: null,
   };
@@ -2157,8 +2154,7 @@ describe("isThreadWokeUnseen", () => {
     );
   });
 
-  it("hides settled threads and unparseable wake times", () => {
-    expect(isThreadWokeUnseen({ ...base, settled: true })).toBe(false);
+  it("hides unparseable wake times", () => {
     expect(isThreadWokeUnseen({ ...base, wokeAt: "not a date" })).toBe(false);
   });
 });

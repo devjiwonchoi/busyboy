@@ -47,9 +47,11 @@ import {
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import {
+  QUEUED_TURN_START_GRACE_MS,
   storageCleanupActivityAt,
   storageCleanupPullRequestMerged,
   storageCleanupThreadIdle,
+  threadHasQueuedTurnStart,
 } from "./storageCleanup.ts";
 
 const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");
@@ -100,8 +102,6 @@ function shell(overrides: Partial<OrchestrationV2ThreadShell> = {}): Orchestrati
     createdAt: at(-30 * DAY_MS),
     updatedAt: at(-10 * DAY_MS),
     archivedAt: null,
-    settledOverride: null,
-    settledAt: null,
     snoozedUntil: null,
     snoozedAt: null,
     pinnedAt: null,
@@ -174,6 +174,39 @@ describe("V2 storage cleanup eligibility", () => {
   it("retains a queued prompt before the new run has been projected", () => {
     expect(
       storageCleanupThreadIdle({ ...candidate(), latestUserMessageAt: at(-1_000) }, NOW_MS),
+    ).toBe(false);
+  });
+
+  it("holds a fresh unadopted user message inside the grace window only", () => {
+    const fresh = shell({ latestUserMessageAt: at(-1_000) });
+    expect(threadHasQueuedTurnStart(fresh, NOW_MS)).toBe(true);
+    expect(
+      threadHasQueuedTurnStart(
+        shell({
+          latestUserMessageAt: at(-1_000),
+          latestRunId: "run-1" as never,
+          latestRunRequestedAt: at(-500),
+        }),
+        NOW_MS,
+      ),
+    ).toBe(false);
+    expect(
+      threadHasQueuedTurnStart(
+        shell({ latestUserMessageAt: at(-QUEUED_TURN_START_GRACE_MS - 1) }),
+        NOW_MS,
+      ),
+    ).toBe(false);
+    expect(
+      threadHasQueuedTurnStart(
+        shell({ latestUserMessageAt: at(QUEUED_TURN_START_GRACE_MS + 1) }),
+        NOW_MS,
+      ),
+    ).toBe(false);
+    expect(
+      threadHasQueuedTurnStart(
+        shell({ latestUserMessageAt: at(-1_000), status: "failed" }),
+        NOW_MS,
+      ),
     ).toBe(false);
   });
 
@@ -497,26 +530,13 @@ describe("subagent worktree ownership", () => {
     "unrelated",
     "fork",
     "recent-activity",
-    "recent-inactive",
-    "recent-grace",
-    "recent-settle",
-    "child-settled-now",
-    "child-settled-only",
   ] as const)("checks the whole owner group (%s)", (scenario) =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW_MS);
       const fixture = yield* cleanupFixture();
-      fixture.setSettings({
-        storageCleanup: {
-          ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-          worktreeSettledAfterDays: scenario === "recent-inactive" ? null : 8,
-          worktreeAfterDays: scenario === "recent-inactive" ? 8 : null,
-        },
-      });
       const root = shell({
         branch: "feature",
         worktreePath: fixture.worktree,
-        settledAt: scenario === "child-settled-only" ? null : at(-20 * DAY_MS),
         ...(scenario === "isolated-owner" || scenario === "fork-owner"
           ? {
               lineage: {
@@ -553,13 +573,7 @@ describe("subagent worktree ownership", () => {
         },
         status: scenario === "running" ? "running" : "completed",
         pendingBackgroundTasks: scenario === "pending" ? [{ taskId: "task", kind: "command" }] : [],
-        latestRunCompletedAt:
-          scenario === "recent-activity" || scenario === "recent-inactive"
-            ? at(-2 * DAY_MS)
-            : scenario === "recent-grace"
-              ? at(-30_000)
-              : null,
-        settledAt: scenario === "child-settled-only" ? at(-20 * DAY_MS) : null,
+        latestRunCompletedAt: scenario === "recent-activity" ? at(-2 * DAY_MS) : null,
       });
       const grandchild = {
         ...child,
@@ -574,15 +588,6 @@ describe("subagent worktree ownership", () => {
             ? [child, root, shell({ id: ThreadId.make("ancestor") })]
             : [child, root],
       );
-      if (scenario === "recent-settle" || scenario === "child-settled-now")
-        fixture.setThreads([
-          {
-            ...child,
-            settledAt: scenario === "recent-settle" ? at(0) : at(-20 * DAY_MS),
-            updatedAt: at(0),
-          },
-          root,
-        ]);
       const report = yield* fixture.service.runNow;
       const removed = ["idle", "grandchild", "isolated-owner", "fork-owner"].includes(scenario);
       const shared = [
@@ -598,20 +603,14 @@ describe("subagent worktree ownership", () => {
         threadId: shared ? child.id : root.id,
         outcome: removed ? "removed" : "kept",
         reason: removed
-          ? "Settled for 20 days"
+          ? "Inactive for 30 days"
           : scenario === "running" || scenario === "pending"
             ? "Thread is running or has pending work"
             : shared
               ? "Shared by 2 threads"
               : scenario === "null-branch" || scenario === "stale-branch"
                 ? "A subagent thread's branch differs from this worktree's branch"
-                : scenario === "recent-activity"
-                  ? "Settled for 2 of 8 days"
-                  : scenario === "recent-inactive"
-                    ? "Inactive for 2 of 8 days"
-                    : ["recent-grace", "recent-settle", "child-settled-now"].includes(scenario)
-                      ? "Settled moments ago"
-                      : "Not settled",
+                : "Inactive for 2 of 8 days",
       });
     }).pipe(Effect.provide(cleanupTestLayer), Effect.scoped),
   );
@@ -621,8 +620,6 @@ describe("subagent worktree ownership", () => {
     "pending",
     "activity",
     "unrelated",
-    "settled",
-    "resettled",
     "null-branch",
     "stale-branch",
   ] as const)("cancels removal when a child changes during measurement (%s)", (change) =>
@@ -633,7 +630,6 @@ describe("subagent worktree ownership", () => {
         const child = {
           ...root,
           id: ThreadId.make("child"),
-          settledAt: change === "resettled" ? at(-20 * DAY_MS) : null,
           lineage: {
             parentThreadId: root.id,
             rootThreadId: root.id,
@@ -653,8 +649,6 @@ describe("subagent worktree ownership", () => {
                 : change === "stale-branch"
                   ? "t3/15a6e5ae"
                   : child.branch,
-            settledAt: change === "settled" ? at(-20 * DAY_MS) : child.settledAt,
-            updatedAt: change === "settled" || change === "resettled" ? at(0) : child.updatedAt,
             status: change === "running" ? "running" : "idle",
             pendingBackgroundTasks:
               change === "pending" ? [{ taskId: "task", kind: "command" }] : [],
@@ -1628,145 +1622,11 @@ describe("storage cleanup reports and local file policies", () => {
   );
 });
 
-describe("settled worktree retention", () => {
-  it.effect.each([
-    "immediate",
-    "settle-script",
-    "expired",
-    "boundary",
-    "wait",
-    "recent-update",
-    "active",
-    "dirty",
-    "project-off",
-    "project-custom",
-    "inactive-settling",
-  ] as const)("applies retention and safety checks (%s)", (scenario) =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(NOW_MS);
-      const fixture = yield* cleanupFixture();
-      const days = ["wait", "boundary", "expired", "recent-update"].includes(scenario) ? 8 : 0;
-      const rules = {
-        ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-        worktreeSettledAfterDays:
-          scenario === "project-custom" || scenario === "inactive-settling" ? null : days,
-        worktreeAfterDays: scenario === "inactive-settling" ? 1 : null,
-      };
-      fixture.setSettings({
-        storageCleanup: rules,
-        projectSettingsOverrides: {
-          [ProjectId.make("project-1")]:
-            scenario === "project-off"
-              ? { worktreeCleanup: { mode: "off" } }
-              : scenario === "project-custom"
-                ? {
-                    worktreeCleanup: {
-                      mode: "custom",
-                      rules: { ...rules, worktreeSettledAfterDays: 0 },
-                    },
-                  }
-                : {},
-        },
-      });
-      const thread = shell({
-        branch: "feature",
-        worktreePath: fixture.worktree,
-        settledAt:
-          scenario === "active"
-            ? null
-            : at(
-                scenario === "expired" ||
-                  scenario === "recent-update" ||
-                  scenario === "inactive-settling"
-                  ? -20 * DAY_MS
-                  : scenario === "boundary"
-                    ? -8 * DAY_MS
-                    : scenario === "wait"
-                      ? -8 * DAY_MS + 1
-                      : scenario === "settle-script"
-                        ? 0
-                        : -60_000,
-              ),
-        updatedAt: at(
-          scenario === "recent-update" ||
-            scenario === "settle-script" ||
-            scenario === "inactive-settling"
-            ? 0
-            : -10 * DAY_MS,
-        ),
-      });
-      fixture.setThreads([thread]);
-      if (scenario === "dirty")
-        yield* fixture.fs.writeFileString(`${fixture.worktree}/tracked.txt`, "edit\n");
-      const report = yield* fixture.service.runNow;
-      const removed = ["immediate", "expired", "boundary", "project-custom"].includes(scenario);
-      expect(yield* fixture.fs.exists(fixture.worktree)).toBe(!removed);
-      expect(report.counts.removed).toBe(removed ? 1 : 0);
-      if (scenario !== "project-off") {
-        const reason =
-          scenario === "active"
-            ? "Not settled"
-            : scenario === "wait"
-              ? "Settled for 7 of 8 days"
-              : ["settle-script", "recent-update", "inactive-settling"].includes(scenario)
-                ? "Settled moments ago"
-                : scenario === "dirty"
-                  ? "Has uncommitted changes (1 file)"
-                  : `Settled for ${scenario === "expired" ? 20 : scenario === "boundary" ? 8 : 0} days`;
-        expect(report.entries[0]).toMatchObject({ outcome: removed ? "removed" : "kept", reason });
-      }
-      expect(thread.branch).toBe("feature");
-      expect(
-        (yield* fixture.command(fixture.repo, ["rev-parse", "--verify", "refs/heads/feature"]))
-          .exitCode,
-      ).toBe(0);
-    }).pipe(Effect.provide(cleanupTestLayer), Effect.scoped),
-  );
-});
-
-describe("settled worktree rechecks", () => {
-  it.live.each([{ settledAt: null }, { settledAt: at(DAY_MS) }])(
-    "keeps a checkout changed during measurement (%j)",
-    (change) =>
-      runCleanupTest(
-        Effect.gen(function* () {
-          const fixture = yield* pausedMeasurementFixture();
-          const thread = shell({
-            branch: "feature",
-            worktreePath: fixture.worktree,
-            settledAt: at(0),
-          });
-          fixture.setSettings({
-            storageCleanup: {
-              ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-              worktreeSettledAfterDays: 0,
-            },
-          });
-          fixture.setThreads([thread]);
-          const run = yield* fixture.service.runNow.pipe(Effect.forkChild);
-          yield* Deferred.await(fixture.measuring);
-          fixture.setThreads([{ ...thread, ...change }]);
-          yield* Deferred.succeed(fixture.resume, undefined);
-          const report = yield* Fiber.join(run);
-          expect(report.entries[0]?.reason).toBe(
-            "Thread activity or shared worktree changed since check",
-          );
-          expect(yield* fixture.fs.exists(fixture.worktree)).toBe(true);
-        }),
-      ),
-  );
-});
-
-it.live("keeps saved usage data when removing a settled checkout", () =>
+it.live("keeps saved usage data when removing a checkout", () =>
   runCleanupTest(
     Effect.gen(function* () {
       const fixture = yield* cleanupFixture();
-      fixture.setSettings({
-        storageCleanup: { ...DEFAULT_SERVER_SETTINGS.storageCleanup, worktreeSettledAfterDays: 0 },
-      });
-      fixture.setThreads([
-        shell({ branch: "feature", worktreePath: fixture.worktree, settledAt: at(0) }),
-      ]);
+      fixture.setThreads([shell({ branch: "feature", worktreePath: fixture.worktree })]);
       yield* fixture.fs.makeDirectory(fixture.config.stateDir, { recursive: true });
       const cachePath = `${fixture.config.stateDir}/${SCAN_CACHE_FILE_NAME}`;
       const savedUsage = JSON.stringify({ tokens: 12345, cost: 1.25 });
@@ -1777,42 +1637,28 @@ it.live("keeps saved usage data when removing a settled checkout", () =>
   ),
 );
 
-it.live.each(["thread.settled", "stopped", "ready"] as const)(
-  "leaves settled cleanup to the regular sweeps after %s",
+it.live.each(["stopped", "ready"] as const)(
+  "leaves inactive worktree cleanup to the regular sweeps after %s",
   (trigger) =>
     runCleanupTest(
       Effect.gen(function* () {
         const fixture = yield* pausedMeasurementFixture({
           ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-          worktreeSettledAfterDays: 0,
+          worktreeAfterDays: 8,
         });
         fixture.setSettings({
           storageCleanup: {
             ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-            worktreeSettledAfterDays: 0,
+            worktreeAfterDays: 8,
           },
         });
-        const thread = shell({
-          branch: "feature",
-          worktreePath: fixture.worktree,
-          settledAt: at(0),
-        });
+        const thread = shell({ branch: "feature", worktreePath: fixture.worktree });
         fixture.setThreads([thread]);
         const handled = yield* Deferred.make<void>();
         yield* fixture.activate(
           Stream.fromEffect(Deferred.await(fixture.measuring)).pipe(
             Stream.flatMap(() => Stream.range(0, 19)),
-            Stream.map((index): OrchestrationV2DomainEvent =>
-              trigger === "thread.settled"
-                ? {
-                    id: EventId.make(`settled-${index}`),
-                    type: "thread.settled",
-                    threadId: thread.id,
-                    occurredAt: at(0),
-                    payload: { ...thread, lastVisitedAt: null },
-                  }
-                : sessionUpdated(index, trigger),
-            ),
+            Stream.map((index) => sessionUpdated(index, trigger)),
             Stream.concat(
               Stream.fromEffect(Deferred.succeed(handled, undefined)).pipe(Stream.drain),
             ),

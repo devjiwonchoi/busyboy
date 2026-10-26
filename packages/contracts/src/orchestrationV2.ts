@@ -384,19 +384,10 @@ export const OrchestrationV2AppThread = Schema.Struct({
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
   archivedAt: Schema.NullOr(Schema.DateTimeUtc),
-  settledOverride: Schema.NullOr(Schema.Literals(["settled", "active"])).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null)),
-  ),
-  settledAt: Schema.NullOr(Schema.DateTimeUtc).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null)),
-  ),
-  unsettledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
-  lastSnoozeWakeAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecovery)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
-  autoSettleDisabledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   activeOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   lastVisitedAt: Schema.NullOr(Schema.DateTimeUtc).pipe(
@@ -1597,12 +1588,9 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.archived",
       "thread.unarchived",
       "thread.deleted",
-      "thread.settled",
-      "thread.unsettled",
       "thread.snoozed",
       "thread.unsnoozed",
       "thread.pinned",
-      "thread.auto-settle-set",
       "thread.unpinned",
       "thread.pin-reordered",
       "thread.active-reordered",
@@ -1841,14 +1829,10 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
   archivedAt: Schema.NullOr(Schema.DateTimeUtc),
-  settledOverride: Schema.NullOr(Schema.Literals(["settled", "active"])),
-  settledAt: Schema.NullOr(Schema.DateTimeUtc),
-  unsettledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecovery)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
-  autoSettleDisabledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   activeOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   lastVisitedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
@@ -1924,15 +1908,9 @@ export const OrchestrationV2AppThreadJson = OrchestrationV2AppThread.mapFields((
   createdAt: Schema.DateTimeUtcFromString,
   updatedAt: Schema.DateTimeUtcFromString,
   archivedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  settledAt: Schema.NullOr(Schema.DateTimeUtcFromString).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null)),
-  ),
-  unsettledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
-  lastSnoozeWakeAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
-  autoSettleDisabledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   lastVisitedAt: Schema.NullOr(Schema.DateTimeUtcFromString).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
@@ -2350,12 +2328,9 @@ export const OrchestrationV2ThreadShellJson = OrchestrationV2ThreadShell.mapFiel
   createdAt: Schema.DateTimeUtcFromString,
   updatedAt: Schema.DateTimeUtcFromString,
   archivedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  settledAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  unsettledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   snoozedUntil: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   snoozedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   pinnedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
-  autoSettleDisabledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   lastVisitedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtcFromString)),
   titleRegeneration: Schema.optional(
     Schema.NullOr(
@@ -2403,12 +2378,9 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.archived",
       "thread.unarchived",
       "thread.deleted",
-      "thread.settled",
-      "thread.unsettled",
       "thread.snoozed",
       "thread.unsnoozed",
       "thread.pinned",
-      "thread.auto-settle-set",
       "thread.unpinned",
       "thread.pin-reordered",
       "thread.active-reordered",
@@ -2583,30 +2555,6 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
   }),
   Schema.Struct({
-    type: Schema.Literal("thread.settle"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    settledAt: Schema.optional(Schema.DateTimeUtc),
-  }),
-  /**
-   * Rejected when the thread changed after `snapshotAt` or carries any explicit
-   * settled override, so automatic settlement can never race a user action or
-   * clobber an explicit un-settle.
-   */
-  Schema.Struct({
-    type: Schema.Literal("thread.auto-settle"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    snapshotAt: Schema.DateTimeUtc,
-    settledAt: Schema.optional(Schema.DateTimeUtc),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("thread.unsettle"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    reason: Schema.Literal("user"),
-  }),
-  Schema.Struct({
     type: Schema.Literal("thread.snooze"),
     commandId: CommandId,
     threadId: ThreadId,
@@ -2617,12 +2565,6 @@ export const OrchestrationV2Command = Schema.Union([
     commandId: CommandId,
     threadId: ThreadId,
     reason: Schema.Literal("user"),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("thread.auto-settle.set"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    enabled: Schema.Boolean,
   }),
   Schema.Struct({
     type: Schema.Literal("thread.pin"),

@@ -2,8 +2,12 @@ import * as Migrator from "effect/sql/Migrator";
 import * as Effect from "effect/Effect";
 
 import Migration0001 from "./Migrations/001_Baseline.ts";
+import Migration0002 from "./Migrations/002_RewriteThreadSettlementEvents.ts";
 
-export const migrationEntries = [[1, "Baseline", Migration0001]] as const;
+export const migrationEntries = [
+  [1, "Baseline", Migration0001],
+  [2, "RewriteThreadSettlementEvents", Migration0002],
+] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
 

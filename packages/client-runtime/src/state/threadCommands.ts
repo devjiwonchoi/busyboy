@@ -41,8 +41,6 @@ import {
   type PinThreadInput,
   type ReorderPinnedThreadInput,
   type ReorderActiveThreadInput,
-  type SetThreadAutoSettleInput,
-  type SettleThreadInput,
   type SnoozeThreadInput,
   type StartThreadTurnInput,
   type StopThreadSessionInput,
@@ -50,7 +48,6 @@ import {
   type UnlinkThreadPullRequestInput,
   type UnpinThreadInput,
   type WatchThreadPullRequestInput,
-  type UnsettleThreadInput,
   type UnsnoozeThreadInput,
   type UpdateThreadMetadataInput,
   type VisitThreadInput,
@@ -77,15 +74,12 @@ import {
   pinThread,
   reorderPinnedThread,
   reorderActiveThread,
-  setThreadAutoSettle,
-  settleThread,
   snoozeThread,
   startThreadTurn,
   stopThreadSession,
   unarchiveThread,
   unlinkThreadPullRequest,
   unpinThread,
-  unsettleThread,
   unsnoozeThread,
   updateThreadMetadata,
   visitThread,
@@ -123,8 +117,6 @@ export type {
   PinThreadInput,
   ReorderPinnedThreadInput,
   ReorderActiveThreadInput,
-  SetThreadAutoSettleInput,
-  SettleThreadInput,
   SnoozeThreadInput,
   StartThreadTurnInput,
   StopThreadSessionInput,
@@ -132,7 +124,6 @@ export type {
   UnarchiveThreadInput,
   UnlinkThreadPullRequestInput,
   UnpinThreadInput,
-  UnsettleThreadInput,
   UnsnoozeThreadInput,
   UpdateThreadMetadataInput,
   VisitThreadInput,
@@ -174,18 +165,6 @@ export function createThreadEnvironmentAtoms<R, E>(
       scheduler,
       concurrency,
     }),
-    settle: createEnvironmentCommand(runtime, {
-      label: "environment-data:commands:thread:settle",
-      execute: (input: SettleThreadInput) => settleThread(input),
-      scheduler,
-      concurrency,
-    }),
-    unsettle: createEnvironmentCommand(runtime, {
-      label: "environment-data:commands:thread:unsettle",
-      execute: (input: UnsettleThreadInput) => unsettleThread(input),
-      scheduler,
-      concurrency,
-    }),
     snooze: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:snooze",
       execute: (input: SnoozeThreadInput) => snoozeThread(input),
@@ -213,12 +192,6 @@ export function createThreadEnvironmentAtoms<R, E>(
     reorderPin: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:reorder-pin",
       execute: (input: ReorderPinnedThreadInput) => reorderPinnedThread(input),
-      scheduler,
-      concurrency,
-    }),
-    setAutoSettle: createEnvironmentCommand(runtime, {
-      label: "environment-data:commands:thread:set-auto-settle",
-      execute: (input: SetThreadAutoSettleInput) => setThreadAutoSettle(input),
       scheduler,
       concurrency,
     }),
@@ -409,30 +382,6 @@ export function createThreadEnvironmentAtoms<R, E>(
   return {
     ...commands,
     snapshotAtom: optimistic.snapshotAtom,
-    settle: optimistic.wrap(commands.settle, (thread, _input, now, accepted) =>
-      !accepted &&
-      (thread.pendingRuntimeRequest !== null ||
-        ["preparing", "queued", "starting", "running", "waiting"].includes(thread.status))
-        ? thread
-        : {
-            ...thread,
-            pendingRuntimeRequest: null,
-            settledOverride: "settled",
-            settledAt: thread.settledOverride === "settled" ? (thread.settledAt ?? now) : now,
-            unsettledAt: null,
-            activeOrderKey: null,
-            pinnedAt: null,
-            pinOrderKey: null,
-            snoozedAt: null,
-            snoozedUntil: null,
-          },
-    ),
-    unsettle: optimistic.wrap(commands.unsettle, (thread, input, now) => ({
-      ...thread,
-      settledOverride: input.reason === "user" ? "active" : null,
-      settledAt: null,
-      unsettledAt: thread.settledOverride === "active" ? (thread.unsettledAt ?? null) : now,
-    })),
     snooze: optimistic.wrap(commands.snooze, (thread, input, now, accepted) =>
       (!accepted &&
         (thread.pendingRuntimeRequest !== null ||
@@ -455,21 +404,10 @@ export function createThreadEnvironmentAtoms<R, E>(
       snoozedUntil: null,
       snoozedAt: null,
     })),
-    setAutoSettle: optimistic.wrap(commands.setAutoSettle, (thread, input, now) => ({
-      ...thread,
-      autoSettleDisabledAt: input.enabled ? null : (thread.autoSettleDisabledAt ?? now),
-    })),
     pin: optimistic.wrap(commands.pin, (thread, input, now) => ({
       ...thread,
       pinnedAt: thread.pinnedAt ?? now,
       pinOrderKey: thread.pinnedAt == null ? (input.orderKey ?? null) : thread.pinOrderKey,
-      ...(thread.settledOverride === "settled"
-        ? {
-            settledOverride: "active" as const,
-            settledAt: null,
-            unsettledAt: now,
-          }
-        : {}),
       snoozedUntil: null,
       snoozedAt: null,
     })),

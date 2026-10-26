@@ -12,8 +12,6 @@ import type { EnvironmentConnectionPhase } from "../connection/presentation.ts";
 
 const SHARED_SERVER_SETTING_KEYS = [
   "continueThreadsAfterServerUpdate",
-  "sidebarAutoSettleAfterDays",
-  "sidebarAutoSettleOnMerge",
   "autoResumeLimitedThreads",
   "snoozeLimitedThreads",
   "newWorktreesStartFromOrigin",
@@ -86,16 +84,9 @@ export function pickSharedServerSettings(
 
 export function supportsSharedSettingsSync(environment: {
   readonly connection: { readonly phase: EnvironmentConnectionPhase };
-  readonly serverConfig: {
-    readonly environment: {
-      readonly capabilities: Pick<ExecutionEnvironmentCapabilities, "threadAutoSettlement">;
-    };
-  } | null;
+  readonly serverConfig: object | null;
 }): boolean {
-  return (
-    environment.connection.phase === "connected" &&
-    environment.serverConfig?.environment.capabilities.threadAutoSettlement === true
-  );
+  return environment.connection.phase === "connected" && environment.serverConfig !== null;
 }
 
 export interface SharedSettingsEnvironment {
