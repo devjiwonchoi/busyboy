@@ -23,7 +23,7 @@ import { HISTORY_MAX_AGE_MS, searchHistory, type HistoryEntry } from "./HistoryR
 export class BrowsingHistoryError extends Schema.TaggedError<BrowsingHistoryError>()(
   "BrowsingHistoryError",
   {
-    operation: Schema.Literals(["open", "read", "write"]),
+    operation: Schema.Literals(["open", "read", "write", "clear"]),
     cause: Schema.Defect(),
   },
 ) {
@@ -94,6 +94,8 @@ export class BrowsingHistory extends Context.Service<
     ) => Effect.Effect<{ readonly imported: number }, BrowsingHistoryError>;
     /** Records the guest's visits and titles; returns the detach function. */
     readonly attachGuest: (guest: WebContents) => () => void;
+    /** Forgets every visited page. */
+    readonly clear: Effect.Effect<void, BrowsingHistoryError>;
   }
 >()("@t3tools/desktop/preview/History/BrowsingHistory") {}
 
@@ -119,6 +121,8 @@ export const make = Effect.gen(function* () {
         visit_count integer not null,
         last_visit integer not null
       )`;
+      // Visited URLs can carry sign-in links and tokens; only the user reads them.
+      yield* fileSystem.chmod(filename, 0o600);
       return sql;
     }).pipe(
       Effect.provideService(Scope.Scope, serviceScope),
@@ -300,7 +304,17 @@ export const make = Effect.gen(function* () {
     };
   };
 
-  return BrowsingHistory.of({ search, importEntries, attachGuest });
+  const clear = SynchronizedRef.updateEffect(cache, () =>
+    Effect.gen(function* () {
+      const sql = yield* database;
+      yield* sql`delete from places`.pipe(
+        Effect.mapError((cause) => new BrowsingHistoryError({ operation: "clear", cause })),
+      );
+      return new Map<string, HistoryEntry>();
+    }),
+  ).pipe(Effect.withSpan("BrowsingHistory.clear"));
+
+  return BrowsingHistory.of({ search, importEntries, attachGuest, clear });
 });
 
 export const layer = Layer.effect(BrowsingHistory, make);

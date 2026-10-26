@@ -359,6 +359,15 @@ export const importBrowserCookies = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const clearBrowsingHistory = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_CLEAR_HISTORY_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.clearBrowsingHistory")(function* () {
+    yield* (yield* BrowsingHistory.BrowsingHistory).clear;
+  }),
+});
+
 export const importChromeHistory = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_IMPORT_CHROME_HISTORY_CHANNEL,
   payload: Schema.Void,

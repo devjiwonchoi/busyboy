@@ -156,3 +156,39 @@ describe("BrowsingHistory", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
+
+describe("BrowsingHistory.clear", () => {
+  it.effect("forgets every page and keeps the database private to the user", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-history-" });
+
+      yield* Effect.gen(function* () {
+        const history = yield* BrowsingHistory.BrowsingHistory;
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const now = yield* Clock.currentTimeMillis;
+        yield* history.importEntries([
+          {
+            url: "https://reset.example.com/?token=abc",
+            title: "Reset",
+            visitCount: 1,
+            lastVisit: now,
+          },
+        ]);
+        expect(yield* history.search({ text: "reset", limit: 5 })).toHaveLength(1);
+
+        const info = yield* fileSystem.stat(`${environment.stateDir}/preview-history.sqlite`);
+        expect(info.mode & 0o777).toBe(0o600);
+
+        yield* history.clear;
+        expect(yield* history.search({ text: "reset", limit: 5 })).toEqual([]);
+      }).pipe(Effect.provide(historyLayer(baseDir)));
+
+      // A fresh start reads the cleared database, not a stale copy.
+      yield* Effect.gen(function* () {
+        const history = yield* BrowsingHistory.BrowsingHistory;
+        expect(yield* history.search({ text: "reset", limit: 5 })).toEqual([]);
+      }).pipe(Effect.provide(historyLayer(baseDir)));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});

@@ -1056,6 +1056,8 @@ export interface DesktopPreviewBridge {
   }) => Promise<ReadonlyArray<BrowsingHistorySuggestion>>;
   /** Adds recent history from every Chrome profile; Chrome can stay open. */
   importChromeHistory: () => Promise<ChromeHistoryImportResult>;
+  /** Forgets every page visited in the in-app browser. */
+  clearBrowsingHistory: () => Promise<void>;
   setAnnotationTheme: (theme: DesktopPreviewAnnotationTheme) => Promise<void>;
   setAnnotationSendEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   /**

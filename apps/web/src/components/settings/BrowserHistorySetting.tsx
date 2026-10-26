@@ -5,8 +5,18 @@ import {
 import { History } from "lucide-react";
 import { useState } from "react";
 
+import { useBrowserHistoryStore } from "~/browserHistoryStore";
 import { previewBridge } from "~/components/preview/previewBridge";
 
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
@@ -23,6 +33,23 @@ export const chromeHistoryImportFailureCopy = (cause: unknown): string => {
 
 export function BrowserHistorySetting({ disabled }: { readonly disabled: boolean }) {
   const [importing, setImporting] = useState(false);
+  const [clearPending, setClearPending] = useState(false);
+
+  // Both the address-bar history in the desktop app and the "Recently used"
+  // pages this window keeps per project.
+  const clearHistory = () => {
+    setClearPending(false);
+    if (!previewBridge) {
+      return;
+    }
+    void previewBridge
+      .clearBrowsingHistory()
+      .then(() => {
+        useBrowserHistoryStore.setState({ byProjectKey: {} });
+        toastManager.add({ type: "success", title: "Cleared browsing history" });
+      })
+      .catch(() => toastManager.add({ type: "error", title: "Could not clear browsing history" }));
+  };
 
   const importChromeHistory = () => {
     if (!previewBridge) {
@@ -53,16 +80,44 @@ export function BrowserHistorySetting({ disabled }: { readonly disabled: boolean
       {...searchableSetting("browser-history")}
       description="Pages you visit in the in-app browser are suggested in its address bar. Import Chrome's recent history to start with the sites you already use."
       control={
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={disabled || importing}
-          onClick={importChromeHistory}
-        >
-          {importing ? <Spinner className="size-3.5" /> : <History />}
-          Import from Chrome
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disabled || importing}
+            onClick={importChromeHistory}
+          >
+            {importing ? <Spinner className="size-3.5" /> : <History />}
+            Import from Chrome
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={disabled}
+            onClick={() => setClearPending(true)}
+          >
+            Clear history
+          </Button>
+        </div>
       }
-    />
+    >
+      <AlertDialog open={clearPending} onOpenChange={setClearPending}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear browsing history?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The address bar stops suggesting pages you visited, and the browser forgets its
+              recently used pages. Cookies and saved passwords are not touched.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <Button variant="destructive" onClick={clearHistory}>
+              Clear history
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+    </SettingsRow>
   );
 }
