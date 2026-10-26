@@ -20,11 +20,17 @@ describe("inlineHostCompletion", () => {
     expect(inlineHostCompletion({ typed: "github.com/", url: "https://github.com/a" })).toBeNull();
   });
 
-  it("never extends text that may already be a whole host", () => {
+  it("completes partly typed labels but never extends a whole host", () => {
+    expect(inlineHostCompletion({ typed: "github.c", url: "https://github.com/" })).toBe("om");
+    expect(inlineHostCompletion({ typed: "docs.goo", url: "https://docs.google.com/" })).toBe(
+      "gle.com",
+    );
+    expect(inlineHostCompletion({ typed: "localhost", url: "http://localhost:3000/" })).toBe(
+      ":3000",
+    );
     expect(
       inlineHostCompletion({ typed: "github.com", url: "https://github.com.evil.io/" }),
     ).toBeNull();
-    expect(inlineHostCompletion({ typed: "github.c", url: "https://github.com/" })).toBeNull();
-    expect(inlineHostCompletion({ typed: "localhost:", url: "http://localhost:3000/" })).toBeNull();
+    expect(inlineHostCompletion({ typed: "127.0.0.1", url: "http://127.0.0.1:3000/" })).toBeNull();
   });
 });

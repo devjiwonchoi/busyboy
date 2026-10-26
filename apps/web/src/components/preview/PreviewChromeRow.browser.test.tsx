@@ -122,6 +122,18 @@ describe("PreviewChromeRow address suggestions", () => {
     expect(onSubmit).toHaveBeenCalledWith("github.com");
   });
 
+  it("completes a host typed partway past its first dot", async () => {
+    const { input, onSubmit } = await render([
+      { url: "https://docs.google.com/document/d/1", title: "Doc", typed: true },
+    ]);
+    await userEvent.click(input);
+    await userEvent.keyboard("docs.goo");
+
+    await vi.waitFor(() => expect(input.value).toBe("docs.google.com"));
+    await userEvent.keyboard("{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith("docs.google.com");
+  });
+
   it("does not complete a host the user never typed or chose", async () => {
     const { input, onSubmit } = await render([
       { url: "https://gitlab-phish.io/", title: "GitLab", typed: false },
