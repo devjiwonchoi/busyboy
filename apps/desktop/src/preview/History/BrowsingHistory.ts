@@ -167,7 +167,10 @@ export const make = Effect.gen(function* () {
     .remove(importCopiesDirectory(environment, path), { recursive: true })
     .pipe(Effect.ignore);
 
-  /** Opened on first use, so a browser nobody opens never creates the file. */
+  /**
+   * Opened on first use, so a browser nobody opens never creates the file.
+   * Returns the connection and how to close it if what follows fails.
+   */
   const open = Effect.gen(function* () {
     yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
     // Visited URLs can carry sign-in links; the file is owner-only before
@@ -191,7 +194,7 @@ export const make = Effect.gen(function* () {
       if (!columns.some((column) => column.name === "typed")) {
         yield* sql`alter table places add column typed integer not null default 0`;
       }
-      return sql;
+      return { sql, close: Scope.close(scope, Exit.void) };
     }).pipe(
       Effect.provideService(Scope.Scope, scope),
       // A failed open is retried on the next use, not kept.
@@ -221,26 +224,34 @@ export const make = Effect.gen(function* () {
     }).pipe(Effect.mapError((cause) => new BrowsingHistoryError({ operation: "write", cause })));
 
   const load = Effect.gen(function* () {
-    const sql = yield* open;
-    const rows = yield* sql`select url, title, visit_count, last_visit, typed from places`.pipe(
-      Effect.flatMap(decodePlaceRows),
-      Effect.mapError((cause) => new BrowsingHistoryError({ operation: "read", cause })),
+    const { sql, close } = yield* open;
+    return yield* readState(sql).pipe(
+      // The next use opens a new connection, so this one must not linger.
+      Effect.onError(() => close),
     );
-    const entries = new Map<string, IndexedHistoryEntry>();
-    for (const row of rows) {
-      entries.set(
-        row.url,
-        indexHistoryEntry({
-          url: row.url,
-          title: row.title,
-          visitCount: row.visit_count,
-          lastVisit: row.last_visit,
-          typed: row.typed !== 0,
-        }),
-      );
-    }
-    return yield* prune({ sql, entries, prunedAt: 0 }, yield* Clock.currentTimeMillis);
   });
+
+  const readState = (sql: SqlClient.SqlClient) =>
+    Effect.gen(function* () {
+      const rows = yield* sql`select url, title, visit_count, last_visit, typed from places`.pipe(
+        Effect.flatMap(decodePlaceRows),
+        Effect.mapError((cause) => new BrowsingHistoryError({ operation: "read", cause })),
+      );
+      const entries = new Map<string, IndexedHistoryEntry>();
+      for (const row of rows) {
+        entries.set(
+          row.url,
+          indexHistoryEntry({
+            url: row.url,
+            title: row.title,
+            visitCount: row.visit_count,
+            lastVisit: row.last_visit,
+            typed: row.typed !== 0,
+          }),
+        );
+      }
+      return yield* prune({ sql, entries, prunedAt: 0 }, yield* Clock.currentTimeMillis);
+    });
 
   // Min keeps the whole history in memory: it is small, and every keystroke
   // in the address bar searches it.
@@ -249,16 +260,30 @@ export const make = Effect.gen(function* () {
   /** Runs `use` with the loaded history, holding it so writes stay ordered. */
   const withState = <A>(
     use: (state: State, now: number) => Effect.Effect<A, BrowsingHistoryError>,
-  ) =>
+  ): Effect.Effect<A, BrowsingHistoryError> =>
     SynchronizedRef.modifyEffect(stateRef, (current) =>
       Effect.gen(function* () {
-        const now = yield* Clock.currentTimeMillis;
-        let state = current ?? (yield* load);
-        if (now - state.prunedAt >= PRUNE_INTERVAL_MS) {
-          state = yield* prune(state, now);
-        }
-        return [yield* use(state, now), state] as const;
+        const loaded = current ?? (yield* load);
+        // A failure after loading still keeps the loaded state and its
+        // connection for the next use.
+        const exit: Exit.Exit<readonly [A, State], BrowsingHistoryError> = yield* Effect.exit(
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            const state =
+              now - loaded.prunedAt >= PRUNE_INTERVAL_MS ? yield* prune(loaded, now) : loaded;
+            return [yield* use(state, now), state] as const;
+          }),
+        );
+        const result: readonly [Exit.Exit<A, BrowsingHistoryError>, State | undefined] =
+          Exit.isSuccess(exit)
+            ? [Exit.succeed(exit.value[0]), exit.value[1]]
+            : [Exit.failCause(exit.cause), loaded];
+        return result;
       }),
+    ).pipe(
+      Effect.flatMap((exit) =>
+        Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause),
+      ),
     );
 
   // Bumped by clear. A write that started before a clear carries the old
@@ -489,11 +514,14 @@ export const make = Effect.gen(function* () {
   const clear = SynchronizedRef.updateEffect(stateRef, (current) =>
     Effect.gen(function* () {
       generation += 1;
-      const sql = current?.sql ?? (yield* open);
+      // Clearing needs only the connection, not a readable history.
+      const opened = current === undefined ? yield* open : undefined;
+      const sql = current?.sql ?? opened!.sql;
       // VACUUM rewrites the file, so cleared URLs leave nothing on disk.
       yield* sql`delete from places`.pipe(
         Effect.andThen(sql`vacuum`),
         Effect.mapError((cause) => new BrowsingHistoryError({ operation: "clear", cause })),
+        Effect.onError(() => opened?.close ?? Effect.void),
       );
       return { sql, entries: new Map(), prunedAt: yield* Clock.currentTimeMillis };
     }),

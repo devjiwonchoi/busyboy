@@ -1,10 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import { describe, expect, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as SqlClient from "effect/sql/SqlClient";
 import type { WebContents } from "electron";
 import { EventEmitter } from "node:events";
 
@@ -291,6 +293,47 @@ describe("BrowsingHistory", () => {
           yield* urlsFor(history, `page-${BrowsingHistory.HISTORY_MAX_ENTRIES - 1}.test`),
         ).toEqual([]);
       }).pipe(Effect.provide(historyLayer(baseDir))),
+    ),
+  );
+
+  it.live("closes the connection when reading the history fails", () =>
+    withTempHome((baseDir) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const environment = yield* DesktopEnvironment.DesktopEnvironment.pipe(
+          Effect.provide(environmentLayer(baseDir)),
+        );
+        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        // A row that does not decode makes every load fail after the open.
+        yield* Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`create table places (url text primary key, title text not null,
+            visit_count integer not null, last_visit integer not null,
+            typed integer not null default 0)`;
+          yield* sql`insert into places values ('https://a.test/', 'A', 1, 1, 'not a number')`;
+        }).pipe(
+          Effect.provide(
+            NodeSqliteClient.layer({
+              filename: `${environment.stateDir}/preview-history.sqlite`,
+            }),
+          ),
+        );
+
+        yield* Effect.gen(function* () {
+          const history = yield* BrowsingHistory.BrowsingHistory;
+          const openFiles = fileSystem
+            .readDirectory("/dev/fd")
+            .pipe(Effect.map((fds) => fds.length));
+          yield* Effect.flip(history.search({ text: "a", limit: 5 }));
+          const before = yield* openFiles;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            expect((yield* Effect.flip(history.search({ text: "a", limit: 5 }))).operation).toBe(
+              "read",
+            );
+          }
+          expect(yield* openFiles).toBeLessThanOrEqual(before);
+        }).pipe(Effect.provide(historyLayer(baseDir)));
+      }),
     ),
   );
 
