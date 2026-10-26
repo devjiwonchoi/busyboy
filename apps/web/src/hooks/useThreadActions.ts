@@ -23,6 +23,7 @@ import { useRouter } from "@tanstack/react-router";
 
 import { getFallbackThreadIdAfterDelete, pinOrderKeyBetween } from "../components/Sidebar.logic";
 import { useComposerDraftStore } from "../composerDraftStore";
+import type { ThreadShell } from "../types";
 import { environmentSession, readEnvironmentScope } from "../state/session";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentServerConfigsAtom } from "../state/server";
@@ -237,11 +238,17 @@ export function useThreadActions() {
     return resolveThreadRouteRef(currentRouteParams);
   };
 
-  const unarchiveThread = async (target: ScopedThreadRef, opts: { navigate?: boolean } = {}) => {
+  const unarchiveThread = async (
+    target: ScopedThreadRef,
+    opts: { navigate?: boolean; restoreWorktree?: boolean } = {},
+  ) => {
     ThreadUndo.invalidate("archive", scopedThreadKey(target));
     const result = await unarchiveThreadMutation({
       environmentId: target.environmentId,
-      input: { threadId: target.threadId },
+      input: {
+        threadId: target.threadId,
+        ...(opts.restoreWorktree === undefined ? {} : { restoreWorktree: opts.restoreWorktree }),
+      },
     });
     if (result._tag === "Failure") {
       return result;
@@ -291,7 +298,9 @@ export function useThreadActions() {
     showThreadUndoNotice({
       action: "Archived",
       claim: action,
-      undo: () => unarchiveThread(threadRef, { navigate: shouldNavigateToDraft }),
+      // Undo puts the thread back as it was, worktree included.
+      undo: () =>
+        unarchiveThread(threadRef, { navigate: shouldNavigateToDraft, restoreWorktree: true }),
       failureTitle: "Failed to undo archive",
     });
 
@@ -648,9 +657,46 @@ export function useThreadActions() {
     return deleteThread(target);
   };
 
+  // Archiving removes the thread's worktree, so ask before checking it out again.
+  const confirmAndUnarchiveThread = async (
+    thread: Pick<ThreadShell, "environmentId" | "id" | "worktreePath" | "branch">,
+  ) => {
+    const target = scopeThreadRef(thread.environmentId, thread.id);
+    const localApi = readLocalApi();
+    // An active thread sharing the worktree kept it, so there is nothing to restore.
+    const activeThreads = readEnvironmentThreadRefs(thread.environmentId).flatMap((ref) => {
+      const shell = readThreadShell(ref);
+      return shell === null ? [] : [shell];
+    });
+    const worktreePath =
+      thread.branch === null
+        ? null
+        : getOrphanedWorktreePathForThread([...activeThreads, thread], thread.id);
+    if (worktreePath === null || !localApi) {
+      return unarchiveThread(target);
+    }
+
+    const confirmationResult = await settlePromise(() =>
+      localApi.dialogs.confirm(
+        [
+          "Restore this thread's worktree?",
+          formatWorktreePathForDisplay(worktreePath),
+          "",
+          "The thread is unarchived either way.",
+        ].join("\n"),
+      ),
+    );
+    if (confirmationResult._tag === "Failure") {
+      return confirmationResult;
+    }
+
+    return unarchiveThread(target, { restoreWorktree: confirmationResult.value });
+  };
+
   return {
     archiveThread,
     unarchiveThread,
+    confirmAndUnarchiveThread,
     deleteThread,
     confirmAndDeleteThread,
     pinThread,
