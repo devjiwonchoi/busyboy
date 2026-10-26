@@ -88,6 +88,14 @@ export const PREVIEW_CLEAR_CACHE_CHANNEL = "desktop:preview-clear-cache";
 export const PREVIEW_GET_CONFIG_CHANNEL = "desktop:preview-get-config";
 export const PREVIEW_IMPORT_SOURCES_CHANNEL = "desktop:preview-import-sources";
 export const PREVIEW_IMPORT_COOKIES_CHANNEL = "desktop:preview-import-cookies";
+export const PREVIEW_CHROME_PASSWORD_SOURCE_CHANNEL = "desktop:preview-chrome-password-source";
+export const PREVIEW_IMPORT_CHROME_PASSWORDS_CHANNEL = "desktop:preview-import-chrome-passwords";
+export const PREVIEW_IMPORT_PASSWORD_FILE_CHANNEL = "desktop:preview-import-password-file";
+export const PREVIEW_OPEN_PASSWORDS_APP_CHANNEL = "desktop:preview-open-passwords-app";
+export const PREVIEW_SAVED_PASSWORD_STATUS_CHANNEL = "desktop:preview-saved-password-status";
+export const PREVIEW_STOP_CHROME_PASSWORD_SYNC_CHANNEL =
+  "desktop:preview-stop-chrome-password-sync";
+export const PREVIEW_CLEAR_SAVED_PASSWORDS_CHANNEL = "desktop:preview-clear-saved-passwords";
 export const PREVIEW_SET_ANNOTATION_THEME_CHANNEL = "desktop:preview-set-annotation-theme";
 export const PREVIEW_SET_ANNOTATION_SEND_ENABLED_CHANNEL =
   "desktop:preview-set-annotation-send-enabled";

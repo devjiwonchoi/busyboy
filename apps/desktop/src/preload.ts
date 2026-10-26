@@ -326,6 +326,19 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     listBrowserImportSources: () => ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_SOURCES_CHANNEL),
     importBrowserCookies: (input) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_COOKIES_CHANNEL, input),
+    getChromePasswordSource: () =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_CHROME_PASSWORD_SOURCE_CHANNEL),
+    importChromePasswords: (input) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_CHROME_PASSWORDS_CHANNEL, input),
+    importPasswordFile: (input) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_PASSWORD_FILE_CHANNEL, input),
+    openPasswordsApp: () => ipcRenderer.invoke(IpcChannels.PREVIEW_OPEN_PASSWORDS_APP_CHANNEL),
+    stopChromePasswordSync: () =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_STOP_CHROME_PASSWORD_SYNC_CHANNEL),
+    getSavedPasswordStatus: () =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_SAVED_PASSWORD_STATUS_CHANNEL),
+    clearSavedPasswords: () =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_CLEAR_SAVED_PASSWORDS_CHANNEL),
     clearCookies: (environmentId, profileId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_CLEAR_COOKIES_CHANNEL, { environmentId, profileId }),
     clearCache: (environmentId, profileId) =>

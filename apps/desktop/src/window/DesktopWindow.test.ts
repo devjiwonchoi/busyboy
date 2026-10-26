@@ -318,6 +318,8 @@ function layerTest(input: {
             Effect.sync(() => {
               input.copiedTexts?.push(text);
             }),
+          openPath: () => Effect.succeed(true),
+          trashItem: () => Effect.succeed(true),
         } satisfies ElectronShell.ElectronShell["Service"]),
         layerElectronTheme,
         layerElectronWindow,
@@ -426,6 +428,8 @@ const makeWindowScenario = (createOutcomes: readonly (Electron.BrowserWindow | n
             openExternal: () => Effect.succeed(true),
             openSystemSettings: () => Effect.succeed(true),
             copyText: () => Effect.void,
+            openPath: () => Effect.succeed(true),
+            trashItem: () => Effect.succeed(true),
           } satisfies ElectronShell.ElectronShell["Service"]),
           layerElectronTheme,
           Layer.succeed(ElectronWindow.ElectronWindow, electronWindowShape),

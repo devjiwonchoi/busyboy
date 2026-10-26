@@ -67,6 +67,7 @@ import * as DesktopUpdates from "./updates/DesktopUpdates.ts";
 import * as LocalAppUpdater from "./updates/LocalAppUpdater.ts";
 import * as BrowserImport from "./preview/BrowserImport/BrowserImport.ts";
 import * as LinuxBrowserSecret from "./preview/BrowserImport/LinuxBrowserSecret.ts";
+import * as PasswordImport from "./preview/Passwords/PasswordImport.ts";
 import * as PasswordVault from "./preview/Passwords/PasswordVault.ts";
 import * as BrowserSession from "./preview/BrowserSession.ts";
 import * as DesktopBrowserHost from "./preview/DesktopBrowserHost.ts";
@@ -162,6 +163,7 @@ const layerDesktopPreview = PreviewManager.layer.pipe(
   // Merged rather than provided so the IPC handlers can reach the import
   // service alongside the manager; both sit on the same BrowserSession.
   Layer.provideMerge(BrowserImport.layer.pipe(Layer.provide(LinuxBrowserSecret.layer))),
+  Layer.provideMerge(PasswordImport.layer.pipe(Layer.provide(LinuxBrowserSecret.layer))),
   Layer.provideMerge(PasswordVault.layer),
   Layer.provideMerge(BrowserSession.layer),
   Layer.provideMerge(PreviewPasskeys.layer),
