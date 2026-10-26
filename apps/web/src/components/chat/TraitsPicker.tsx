@@ -47,6 +47,7 @@ type TraitsPersistence =
       threadRef?: ScopedThreadRef;
       draftId?: DraftId;
       onModelOptionsChange?: never;
+      onStickyModelSelectionChange?: (selection: ModelSelection) => void;
     }
   | {
       threadRef?: undefined;
@@ -357,6 +358,14 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
       model,
       persistSticky: true,
     });
+
+    // The sticky selection now holds the normalized model with the new options.
+    const stickySelection = instanceId
+      ? useComposerDraftStore.getState().stickyModelSelectionByProvider[instanceId]
+      : undefined;
+    if (stickySelection) {
+      persistence.onStickyModelSelectionChange?.(stickySelection);
+    }
   };
   const selected = getTraitsSectionVisibility({
     provider,

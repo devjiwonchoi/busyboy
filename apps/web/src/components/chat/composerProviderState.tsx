@@ -50,6 +50,7 @@ type TraitsRenderInput = {
   instanceId?: ProviderInstanceId;
   threadRef?: ScopedThreadRef;
   draftId?: DraftId;
+  onStickyModelSelectionChange?: (selection: ModelSelection) => void;
   model: string;
   models: ReadonlyArray<ServerProviderModel>;
   modelOptions: ReadonlyArray<ProviderOptionSelection> | undefined;
@@ -210,6 +211,7 @@ function renderTraitsControl(
     instanceId,
     threadRef,
     draftId,
+    onStickyModelSelectionChange,
     model,
     models,
     modelOptions,
@@ -250,6 +252,7 @@ function renderTraitsControl(
       models={models}
       {...(threadRef ? { threadRef } : {})}
       {...(draftId ? { draftId } : {})}
+      {...(onStickyModelSelectionChange ? { onStickyModelSelectionChange } : {})}
       model={model}
       modelOptions={resolvedModelOptions}
       reportedModelSelection={reportedModelSelection}
