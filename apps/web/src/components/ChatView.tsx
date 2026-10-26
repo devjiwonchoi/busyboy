@@ -42,6 +42,7 @@ import { feedbackBannerItem } from "./chat/ComposerFeedback";
 import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts, type ChatShortcutHandler } from "./chat/useChatShortcuts";
+import { useEscapeToStop } from "./chat/useEscapeToStop";
 import {
   eventPathContainsSelector,
   pasteTextToFocusComposer,
@@ -5397,6 +5398,20 @@ export default function ChatView(props: ChatViewProps) {
       return script ? () => void runProjectScriptStable(script) : undefined;
     },
   });
+  const showEscapeToStopHint = useEscapeToStop({
+    canStop: canInterruptRunningThread,
+    threadKey: activeThreadKey,
+    ignoreEscape: (event) => {
+      const context = getShortcutContextStable(event.target);
+      return (
+        isThreadFindActive ||
+        context.terminalFocus ||
+        context.previewFocus ||
+        context.modelPickerOpen
+      );
+    },
+    onStop: () => void onInterruptStable(),
+  });
 
   // A focused desktop browser page forwards these chords as menu actions.
   useEffect(() => {
@@ -7925,6 +7940,7 @@ export default function ChatView(props: ChatViewProps) {
                               phase={phase}
                               isCompacting={isCompacting}
                               canInterrupt={canInterruptRunningThread}
+                              showEscapeToStopHint={showEscapeToStopHint}
                               isConnecting={isConnecting}
                               isSendBusy={
                                 (isSendBusy && !sendQueuesBehindSetup) ||
