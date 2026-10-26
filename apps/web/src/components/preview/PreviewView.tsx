@@ -10,6 +10,7 @@ import {
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_BROWSER_PROFILE_ID,
+  INCOGNITO_BROWSER_PROFILE_ID,
   FILL_PREVIEW_VIEWPORT,
   type PreviewAnnotationPayload,
   type PreviewViewportSetting,
@@ -149,10 +150,6 @@ export function PreviewView({
 }: Props) {
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
   const [pickActive, setPickActive] = useState(false);
-  const bridge = previewBridge;
-  const searchHistory = bridge
-    ? (text: string) => bridge.searchBrowsingHistory({ text, limit: ADDRESS_BAR_SUGGESTION_LIMIT })
-    : undefined;
   const canSendAnnotation =
     useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope) &&
     Boolean(onSendAnnotation);
@@ -238,6 +235,14 @@ export function PreviewView({
   // as "every profile".
   const activeProfileId = snapshot?.profileId ?? DEFAULT_BROWSER_PROFILE_ID;
   const activeProfileName = previewProfileName(browserDefaults.profiles, activeProfileId);
+  // Incognito keeps no history and is not shown the normal profile's.
+  const incognito = activeProfileId === INCOGNITO_BROWSER_PROFILE_ID;
+  const bridge = previewBridge;
+  const searchHistory =
+    bridge && !incognito
+      ? (text: string) =>
+          bridge.searchBrowsingHistory({ text, limit: ADDRESS_BAR_SUGGESTION_LIMIT })
+      : undefined;
   const panelRect = useBrowserSurfaceStore((state) =>
     runtimeTabId ? (state.byTabId[runtimeTabId]?.rect ?? null) : null,
   );
@@ -248,14 +253,22 @@ export function PreviewView({
   // Keyed on the ids rather than threadRef, which is recreated on every update.
   const { environmentId: threadEnvironmentId, threadId } = threadRef;
   useEffect(() => {
-    if (!navUrl || !navTitle || !latestHistoryUrl) return;
+    if (incognito || !navUrl || !navTitle || !latestHistoryUrl) return;
     setTitleForThreadUrl(
       scopeThreadRef(threadEnvironmentId, threadId),
       navUrl,
       navTitle,
       environmentHostname,
     );
-  }, [environmentHostname, latestHistoryUrl, navTitle, navUrl, threadEnvironmentId, threadId]);
+  }, [
+    environmentHostname,
+    incognito,
+    latestHistoryUrl,
+    navTitle,
+    navUrl,
+    threadEnvironmentId,
+    threadId,
+  ]);
 
   const navigateToResolvedUrl = async (resolvedUrl: string) => {
     if (isServerTab && serverSurfaceRef.current) {
@@ -286,7 +299,7 @@ export function PreviewView({
   const handleSubmitUrl = async (next: string) => {
     try {
       const resolved = resolveAddressBarInput(next);
-      if (await navigateToResolvedUrl(resolved)) {
+      if ((await navigateToResolvedUrl(resolved)) && !incognito) {
         recordVisitForThread(threadRef, resolved);
       }
     } catch {}
@@ -298,7 +311,7 @@ export function PreviewView({
         isServerTab || !previewBridge
           ? normalizePreviewUrl(next)
           : resolveDiscoveredServerUrl(threadRef.environmentId, next);
-      if (await navigateToResolvedUrl(resolved)) {
+      if ((await navigateToResolvedUrl(resolved)) && !incognito) {
         recordVisitForThread(threadRef, next);
       }
     } catch {}

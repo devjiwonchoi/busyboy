@@ -4,6 +4,7 @@ import {
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
   EnvironmentId,
+  INCOGNITO_BROWSER_PROFILE_ID,
   FILL_PREVIEW_VIEWPORT,
   ThreadId,
 } from "@t3tools/contracts";
@@ -37,6 +38,10 @@ const mocks = vi.hoisted(() => ({
   recordingTabIds: new Set<string>(),
   recordingRuntimeTabId: null as string | null,
   recordVisitForThread: vi.fn(),
+  searchBrowsingHistory: vi.fn(async (_input: { text: string; limit: number }) => [
+    { url: "https://github.com/", title: "GitHub", typed: true },
+  ]),
+  profileId: undefined as string | undefined,
 }));
 
 const STUB_BROWSER_DEFAULTS = {
@@ -53,6 +58,7 @@ vi.mock(import("./previewBridge"), async (original) => ({
   ...(await original()),
   previewBridge: {
     navigate: mocks.navigate,
+    searchBrowsingHistory: mocks.searchBrowsingHistory,
     pickElement: mocks.pickElement,
     setAnnotationSendEnabled: mocks.setAnnotationSendEnabled,
     cancelPickElement: mocks.cancelPickElement,
@@ -116,6 +122,7 @@ vi.mock(import("~/previewStateStore"), async (original) => ({
             threadId: "thread-1",
             tabId: "tab-1",
             navStatus: { _tag: "Success", url: "http://example.com/", title: "Example" },
+            ...(mocks.profileId === undefined ? {} : { profileId: mocks.profileId }),
             canGoBack: false,
             canGoForward: false,
             updatedAt: "2026-07-13T00:00:00.000Z",
@@ -216,6 +223,7 @@ describe("PreviewView", () => {
     mocks.servers = [];
     mocks.recordingTabIds = new Set();
     mocks.recordingRuntimeTabId = null;
+    mocks.profileId = undefined;
     useComposerDraftStore.setState({
       addPreviewAnnotation: mocks.addPreviewAnnotation,
       addImage: mocks.addImage,
@@ -286,6 +294,32 @@ describe("PreviewView", () => {
       expect(mocks.recordVisitForThread).toHaveBeenCalledWith(TEST_THREAD_REF, expected);
     },
   );
+
+  it("suggests visited pages while typing in a normal tab", async () => {
+    await render(view());
+    const input = page.getByPlaceholder("Search or enter URL");
+    await userEvent.click(input);
+    await userEvent.keyboard("git");
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="option"]')?.textContent).toContain("GitHub"),
+    );
+    expect(mocks.searchBrowsingHistory).toHaveBeenCalled();
+  });
+
+  it("neither suggests nor remembers pages in an incognito tab", async () => {
+    mocks.profileId = INCOGNITO_BROWSER_PROFILE_ID;
+    await render(view());
+    const input = page.getByPlaceholder("Search or enter URL");
+    await userEvent.click(input);
+    await userEvent.keyboard("git");
+    expect(document.querySelectorAll('[role="option"]')).toHaveLength(0);
+    await userEvent.keyboard("{Enter}");
+
+    await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+    expect(mocks.searchBrowsingHistory).not.toHaveBeenCalled();
+    expect(mocks.recordVisitForThread).not.toHaveBeenCalled();
+  });
 
   it("maps an empty-state localhost server onto the WSL host", async () => {
     mocks.showEmptyState = true;
