@@ -56,6 +56,7 @@ import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as ComputerUseDriver from "./computerUse/ComputerUseDriver.ts";
+import * as ComputerUseDesktopBridge from "./computerUse/ComputerUseDesktopBridge.ts";
 import * as ComputerUseService from "./computerUse/ComputerUseService.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
@@ -559,6 +560,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerBrowserStream.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,
+    ComputerUseDesktopBridge.layer,
   ),
   McpHttpServer.layer.pipe(
     Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
@@ -572,11 +574,16 @@ const layerMakeRoutes = Layer.mergeAll(
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(layerPullRequestService),
   Layer.provide(ServerBrowser.layer.pipe(Layer.provide(DesktopBrowserChannel.layer))),
+  // The same channel instance: layers are shared within one build, and the
+  // desktop's file descriptors can only be read once.
+  Layer.provide(DesktopBrowserChannel.layer),
   Layer.provide(PreviewBrowser.layer),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(
     ComputerUseService.layer.pipe(
-      Layer.provide(Layer.merge(ComputerUseDriver.layer, ProjectionStoreV2.layer)),
+      Layer.provide(
+        Layer.mergeAll(ComputerUseDriver.layer, ProjectionStoreV2.layer, DesktopBrowserChannel.layer),
+      ),
     ),
   ),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(layerDesktopAppUpdate))),

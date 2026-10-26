@@ -7026,7 +7026,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           parentItemId: null,
           ordinal: existing?.ordinal ?? (yield* nextTurnItemOrdinal(projection)),
           status: pending ? "waiting" : allowed ? "completed" : "cancelled",
-          title: `Use ${command.appName}`,
+          title:
+            command.approvalKind === "foreground"
+              ? `Bring ${command.appName} to the front`
+              : `Use ${command.appName}`,
           startedAt: existing?.startedAt ?? now,
           completedAt: pending ? null : now,
           updatedAt: now,
@@ -7034,6 +7037,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           appName: command.appName,
           bundleId: command.bundleId,
           approvalStatus: command.approvalStatus,
+          ...(command.approvalKind === undefined ? {} : { approvalKind: command.approvalKind }),
         };
     yield* emit(
       events,

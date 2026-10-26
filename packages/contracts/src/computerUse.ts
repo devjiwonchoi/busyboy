@@ -137,6 +137,13 @@ const ElementToken = TrimmedNonEmptyString.annotate({
     "An element from the latest computer_get_app_state of this app: `<snapshotId>:<N>` for the row tagged [N].",
 });
 
+const Foreground = Schema.optional(
+  Schema.Boolean.annotate({
+    description:
+      "Bring the app to the front for this input, then return to the user's app. Only after the background attempt failed with background_unsupported; the user is asked first.",
+  }),
+);
+
 const Pixel = Schema.Number.annotate({
   description:
     "Pixels in the window's computer_get_app_state screenshot, from its top-left corner.",
@@ -144,6 +151,7 @@ const Pixel = Schema.Number.annotate({
 
 export const ComputerUseClickInput = Schema.Struct({
   ...ActionTarget,
+  foreground: Foreground,
   element: Schema.optional(ElementToken),
   x: Schema.optional(Pixel),
   y: Schema.optional(Pixel),
@@ -158,6 +166,7 @@ export type ComputerUseClickInput = typeof ComputerUseClickInput.Type;
 
 export const ComputerUseTypeTextInput = Schema.Struct({
   ...ActionTarget,
+  foreground: Foreground,
   text: Schema.String.check(Schema.isMinLength(1)).annotate({
     description:
       "Text to insert. It does not press keys: use computer_press_key for Return, Tab or arrows.",
@@ -168,6 +177,7 @@ export type ComputerUseTypeTextInput = typeof ComputerUseTypeTextInput.Type;
 
 export const ComputerUsePressKeyInput = Schema.Struct({
   ...ActionTarget,
+  foreground: Foreground,
   key: TrimmedNonEmptyString.annotate({
     description:
       "return, tab, escape, up, down, left, right, space, delete, home, end, pageup, pagedown, f1-f12, or a letter or digit.",
@@ -181,6 +191,7 @@ export type ComputerUsePressKeyInput = typeof ComputerUsePressKeyInput.Type;
 
 export const ComputerUseScrollInput = Schema.Struct({
   ...ActionTarget,
+  foreground: Foreground,
   direction: Schema.Literals(["up", "down", "left", "right"]),
   amount: Schema.optional(
     Schema.Int.annotate({ description: "Wheel notches, 1-50. Defaults to 3." }),
@@ -193,6 +204,7 @@ export type ComputerUseScrollInput = typeof ComputerUseScrollInput.Type;
 
 export const ComputerUseDragInput = Schema.Struct({
   ...ActionTarget,
+  foreground: Foreground,
   fromX: Pixel,
   fromY: Pixel,
   toX: Pixel,

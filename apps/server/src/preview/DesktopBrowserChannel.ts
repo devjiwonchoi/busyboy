@@ -57,6 +57,15 @@ export class DesktopBrowserChannel extends Context.Service<
       key: DesktopTabKey,
       pointer: { readonly phase: "move" | "click"; readonly x: number; readonly y: number },
     ) => Effect.Effect<void>;
+    /** Tells the desktop whether an agent is using the computer, for its overlay. */
+    readonly computerUseStatus: (status: {
+      readonly acting: boolean;
+      readonly appName?: string | undefined;
+    }) => Effect.Effect<void>;
+    /** The user asked to stop computer use from the desktop (Escape or the overlay's Stop). */
+    readonly computerUseStops: Stream.Stream<void>;
+    /** Whether the desktop last reported the Mac's screen as locked. */
+    readonly screenLocked: Effect.Effect<boolean>;
   }
 >()("t3/preview/DesktopBrowserChannel") {}
 
@@ -65,6 +74,8 @@ const make = Effect.gen(function* () {
   const inputFd = config.desktopBrowserFd;
   const controlFd = config.desktopBrowserControlFd;
   const changes = yield* PubSub.unbounded<{ key: DesktopTabKey; attached: boolean }>();
+  const computerUseStops = yield* PubSub.unbounded<void>();
+  let screenLocked = false;
   const attachedTabs = new Set<string>();
   const inbound = new Map<string, Queue.Queue<string>>();
   const writeLock = yield* Semaphore.make(1);
@@ -78,6 +89,9 @@ const make = Effect.gen(function* () {
       isAttached: () => Effect.succeed(false),
       endpoint: () => Effect.die("No desktop app is attached to this server."),
       pointer: () => Effect.void,
+      computerUseStatus: () => Effect.void,
+      computerUseStops: Stream.empty,
+      screenLocked: Effect.succeed(false),
     });
   }
 
@@ -107,6 +121,12 @@ const make = Effect.gen(function* () {
     Stream.runForEach((decoded) => {
       if (Option.isNone(decoded)) return Effect.void;
       const event = decoded.value;
+      if (event.type === "computer-use-stop") return PubSub.publish(computerUseStops, undefined);
+      if (event.type === "screen-lock") {
+        return Effect.sync(() => {
+          screenLocked = event.locked;
+        });
+      }
       const key = { threadId: event.threadId, tabId: event.tabId };
       const id = keyOf(key);
       switch (event.type) {
@@ -192,6 +212,14 @@ const make = Effect.gen(function* () {
 
   return DesktopBrowserChannel.of({
     available: true,
+    computerUseStatus: (status) =>
+      command({
+        type: "computer-use-status",
+        acting: status.acting,
+        ...(status.appName === undefined ? {} : { appName: status.appName }),
+      }),
+    computerUseStops: Stream.fromPubSub(computerUseStops),
+    screenLocked: Effect.sync(() => screenLocked),
     awaitAttached: (key, timeout) =>
       Effect.scoped(
         Effect.gen(function* () {

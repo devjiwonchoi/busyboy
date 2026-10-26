@@ -37,7 +37,8 @@ export function ComputerUseApprovalCard(props: {
         icon={<Icon className="size-3.5 text-icon-muted" aria-hidden />}
         label={
           <>
-            Use {item.appName} · {display.label}
+            {item.approvalKind === "foreground" ? "Bring" : "Use"} {item.appName}
+            {item.approvalKind === "foreground" ? " to the front" : ""} · {display.label}
           </>
         }
       />
@@ -76,6 +77,46 @@ function PendingComputerUseApproval(props: {
     if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
     setError(computerUseApprovalFailureMessage(squashAtomCommandFailure(result)));
   };
+
+  if (item.approvalKind === "foreground") {
+    return (
+      <section
+        data-v2-item-type={item.type}
+        aria-label={`Bring ${item.appName} to the front?`}
+        className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/60 bg-card p-4"
+      >
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+            <MonitorIcon className="size-4 shrink-0 text-icon-muted" aria-hidden />
+            Let the agent bring {item.appName} to the front?
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Some input only reaches {item.appName} while it is in front. It comes forward briefly
+            for each such step, then your app returns. Press Esc to stop it.
+          </p>
+        </div>
+        {error !== null ? (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Button size="sm" disabled={submitting} onClick={() => void send("allow_once")}>
+            Allow this turn
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost-muted"
+            className="ms-auto"
+            disabled={submitting}
+            onClick={() => void send("deny")}
+          >
+            Don't allow
+          </Button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section

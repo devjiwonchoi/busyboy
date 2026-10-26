@@ -108,6 +108,7 @@ export const PREVIEW_POINTER_EVENT_CHANNEL = "desktop:preview-pointer-event";
 export const PREVIEW_OPEN_LINK_CHANNEL = "desktop:preview-open-link";
 
 export const MAC_PERMISSION_HELPER_CHANNEL = "desktop:mac-permission-helper";
+export const COMPUTER_USE_OVERLAY_CHANNEL = "desktop:computer-use-overlay";
 
 export const CHECK_SYSTEM_PERMISSION_CHANNEL = "desktop:check-system-permission";
 
