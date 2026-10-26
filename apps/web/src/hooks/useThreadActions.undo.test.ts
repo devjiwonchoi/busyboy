@@ -110,7 +110,7 @@ describe("unpin Undo", () => {
 });
 
 describe("archive Undo", () => {
-  it("unarchives and returns to the thread when archiving left it", async () => {
+  it("unarchives with its worktree and returns to the thread when archiving left it", async () => {
     const add = vi.spyOn(toastManager, "add").mockReturnValue("toast");
     router.state.matches[0]!.params = {
       environmentId: target.environmentId,
@@ -123,7 +123,7 @@ describe("archive Undo", () => {
     await currentUndo()();
     expect(commands.unarchive).toHaveBeenCalledExactlyOnceWith({
       environmentId: target.environmentId,
-      input: { threadId: target.threadId },
+      input: { threadId: target.threadId, restoreWorktree: true },
     });
     expect(router.navigate).toHaveBeenCalledWith(
       expect.objectContaining({

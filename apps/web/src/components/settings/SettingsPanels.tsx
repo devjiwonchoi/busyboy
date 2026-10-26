@@ -13,7 +13,6 @@ import {
   type DesktopUpdateChannel,
   ProviderDriverKind,
   type ProviderInstanceId,
-  type ScopedThreadRef,
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
@@ -3080,7 +3079,7 @@ export function GeneralSettingsPanel() {
 
 export function ArchivedThreadsPanel() {
   const { scope, groups: projectGroups, environments } = useSettingsScope();
-  const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const { confirmAndUnarchiveThread, confirmAndDeleteThread } = useThreadActions();
   const {
     snapshots: archivedSnapshots,
     error: archiveError,
@@ -3181,9 +3180,10 @@ export function ArchivedThreadsPanel() {
   })();
 
   const handleArchivedThreadContextMenu = async (
-    threadRef: ScopedThreadRef,
+    thread: Parameters<typeof confirmAndUnarchiveThread>[0],
     position: { x: number; y: number },
   ) => {
+    const threadRef = scopeThreadRef(thread.environmentId, thread.id);
     const api = readLocalApi();
     if (!api) return;
     const clicked = await api.contextMenu.show(
@@ -3195,7 +3195,7 @@ export function ArchivedThreadsPanel() {
     );
 
     if (clicked === "unarchive") {
-      const result = await unarchiveThread(threadRef);
+      const result = await confirmAndUnarchiveThread(thread);
       if (result._tag === "Success") {
         refreshArchivedThreads();
       } else if (!isAtomCommandInterrupted(result)) {
@@ -3272,13 +3272,10 @@ export function ArchivedThreadsPanel() {
                   event.preventDefault();
                   void (async () => {
                     const result = await settlePromise(() =>
-                      handleArchivedThreadContextMenu(
-                        scopeThreadRef(thread.environmentId, thread.id),
-                        {
-                          x: event.clientX,
-                          y: event.clientY,
-                        },
-                      ),
+                      handleArchivedThreadContextMenu(thread, {
+                        x: event.clientX,
+                        y: event.clientY,
+                      }),
                     );
                     if (result._tag === "Failure") {
                       const error = squashAtomCommandFailure(result);
@@ -3310,9 +3307,7 @@ export function ArchivedThreadsPanel() {
                     className="shrink-0"
                     onClick={() => {
                       void (async () => {
-                        const result = await unarchiveThread(
-                          scopeThreadRef(thread.environmentId, thread.id),
-                        );
+                        const result = await confirmAndUnarchiveThread(thread);
                         if (result._tag === "Success") {
                           refreshArchivedThreads();
                           return;

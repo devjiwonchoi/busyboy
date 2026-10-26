@@ -3188,6 +3188,26 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           threadId: command.threadId,
           request: { type: "terminal.cleanup" },
         } satisfies PendingOrchestrationEffectV2,
+        // Runs after the sessions detach and terminals close, so nothing still
+        // works in the worktree when it is removed.
+        {
+          id: `effect:${command.commandId}:worktree.cleanup`,
+          commandId: command.commandId,
+          threadId: command.threadId,
+          request: { type: "worktree.cleanup" },
+        } satisfies PendingOrchestrationEffectV2,
+      ]);
+    }
+
+    if (command.type === "thread.unarchive" && command.restoreWorktree === true) {
+      yield* Ref.update(effects, (existing) => [
+        ...existing,
+        {
+          id: `effect:${command.commandId}:worktree.restore`,
+          commandId: command.commandId,
+          threadId: command.threadId,
+          request: { type: "worktree.restore" },
+        } satisfies PendingOrchestrationEffectV2,
       ]);
     }
   });

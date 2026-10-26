@@ -84,7 +84,9 @@ export interface ThreadCommandInput extends CommandMetadata {
 
 export type DeleteThreadInput = ThreadCommandInput;
 export type ArchiveThreadInput = ThreadCommandInput;
-export type UnarchiveThreadInput = ThreadCommandInput;
+export interface UnarchiveThreadInput extends ThreadCommandInput {
+  readonly restoreWorktree?: boolean;
+}
 
 export interface PinThreadInput extends ThreadCommandInput {
   readonly orderKey?: string;
@@ -390,7 +392,7 @@ export const createThread = Effect.fn("EnvironmentCommands.createThread")(functi
 });
 
 function simpleThreadCommand(
-  type: "thread.delete" | "thread.archive" | "thread.unarchive" | "thread.pin" | "thread.unpin",
+  type: "thread.delete" | "thread.archive" | "thread.pin" | "thread.unpin",
   input: ThreadCommandInput,
 ) {
   return allocateCommandId(input).pipe(
@@ -413,7 +415,13 @@ export const archiveThread = Effect.fn("EnvironmentCommands.archiveThread")(func
 export const unarchiveThread = Effect.fn("EnvironmentCommands.unarchiveThread")(function* (
   input: UnarchiveThreadInput,
 ) {
-  return yield* simpleThreadCommand("thread.unarchive", input);
+  const commandId = yield* allocateCommandId(input);
+  return yield* dispatch({
+    type: "thread.unarchive",
+    commandId,
+    threadId: input.threadId,
+    ...(input.restoreWorktree === undefined ? {} : { restoreWorktree: input.restoreWorktree }),
+  });
 });
 
 export const pinThread = Effect.fn("EnvironmentCommands.pinThread")(function* (

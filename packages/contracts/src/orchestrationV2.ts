@@ -2527,6 +2527,8 @@ export const OrchestrationV2Command = Schema.Union([
     type: Schema.Literal("thread.unarchive"),
     commandId: CommandId,
     threadId: ThreadId,
+    // Archiving removes the thread's worktree; this checks its branch out again.
+    restoreWorktree: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.delete"),
