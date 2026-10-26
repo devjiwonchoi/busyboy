@@ -9,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
 import {
   BROWSER_IMPORT_SOURCES,
   listSourceProfiles,
@@ -39,14 +40,16 @@ const UrlRow = Schema.Struct({
   title: Schema.String,
   visit_count: Schema.Number,
   last_visit: Schema.Number,
+  typed: Schema.Number,
 });
 const decodeUrlRows = Schema.decodeUnknownEffect(Schema.Array(UrlRow));
 
 /**
- * Reads visited pages newer than `since` (ms since the epoch). Chrome stores
- * microseconds since 1601, which overflows JavaScript's safe integers, so the
- * conversion happens in SQL. Hidden rows are subframe and redirect URLs Chrome
- * never suggests either.
+ * Reads the most recent visited pages newer than `since` (ms since the
+ * epoch). Chrome stores microseconds since 1601, which overflows JavaScript's
+ * safe integers, so the conversion happens in SQL. Hidden rows are subframe
+ * and redirect URLs Chrome never suggests either. Pages the user typed keep
+ * that mark, so their hosts can complete inline here too.
  */
 export const readChromeHistoryDatabase = Effect.fn("ChromeHistory.readChromeHistoryDatabase")(
   function* ({ snapshotPath, since }: { readonly snapshotPath: string; readonly since: number }) {
@@ -55,10 +58,16 @@ export const readChromeHistoryDatabase = Effect.fn("ChromeHistory.readChromeHist
     const rows = yield* Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* decodeUrlRows(
-        yield* sql`select url, title, visit_count,
-            last_visit_time / 1000 - ${WEBKIT_EPOCH_OFFSET_MS} as last_visit
+        yield* sql`select url, coalesce(title, '') as title,
+            coalesce(visit_count, 0) as visit_count,
+            last_visit_time / 1000 - ${WEBKIT_EPOCH_OFFSET_MS} as last_visit,
+            coalesce(typed_count, 0) as typed
           from urls
-          where hidden = 0 and last_visit_time / 1000 - ${WEBKIT_EPOCH_OFFSET_MS} >= ${since}`,
+          where url is not null and last_visit_time is not null
+            and coalesce(hidden, 0) = 0
+            and last_visit_time / 1000 - ${WEBKIT_EPOCH_OFFSET_MS} >= ${since}
+          order by last_visit_time desc
+          limit ${BrowsingHistory.HISTORY_MAX_ENTRIES}`,
       );
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: snapshotPath })));
 
@@ -67,6 +76,7 @@ export const readChromeHistoryDatabase = Effect.fn("ChromeHistory.readChromeHist
       title: row.title,
       visitCount: Math.max(row.visit_count, 1),
       lastVisit: row.last_visit,
+      typed: row.typed > 0,
     }));
   },
 );
@@ -80,7 +90,13 @@ const copyChromeDatabase = Effect.fn("ChromeHistory.copyChromeDatabase")(functio
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const environment = yield* DesktopEnvironment.DesktopEnvironment;
+  // Under the state directory, which the history service empties at startup,
+  // so a copy left by a crash does not linger.
+  const parent = BrowsingHistory.importCopiesDirectory(environment, path);
+  yield* fileSystem.makeDirectory(parent, { recursive: true, mode: 0o700 });
   const directory = yield* fileSystem.makeTempDirectoryScoped({
+    directory: parent,
     prefix: "t3code-history-import-",
   });
   const target = path.join(directory, "History");
@@ -123,6 +139,8 @@ export const importChromeHistory = Effect.fn("ChromeHistory.importChromeHistory"
     return yield* new ChromeHistoryImportError({ reason: "notInstalled" });
   }
 
+  // A clear while this runs wins: the import is dropped.
+  const generation = yield* history.generation;
   const since = (yield* Clock.currentTimeMillis) - HISTORY_MAX_AGE_MS;
   const entries = yield* Effect.forEach(databases, (databasePath) =>
     // A copy taken mid-write can be torn; a fresh one a moment later is not.
@@ -135,7 +153,7 @@ export const importChromeHistory = Effect.fn("ChromeHistory.importChromeHistory"
   );
 
   return yield* history
-    .importEntries(entries.flat())
+    .importEntries(entries.flat(), { generation })
     .pipe(
       Effect.mapError((cause) => new ChromeHistoryImportError({ reason: "saveFailed", cause })),
     );

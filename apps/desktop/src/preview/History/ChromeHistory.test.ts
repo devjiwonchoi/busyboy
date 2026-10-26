@@ -28,13 +28,30 @@ describe("readChromeHistoryDatabase", () => {
           values
           (${"https://github.com/"}, ${"GitHub"}, ${12}, ${3}, ${webkitTime(now - day)}, ${0}),
           (${"https://old.test/"}, ${"Old"}, ${4}, ${0}, ${webkitTime(now - 60 * day)}, ${0}),
-          (${"https://frame.test/"}, ${"Frame"}, ${1}, ${0}, ${webkitTime(now)}, ${1})`;
+          (${"https://frame.test/"}, ${"Frame"}, ${1}, ${0}, ${webkitTime(now)}, ${1}),
+          (${"https://untitled.test/"}, ${null}, ${null}, ${null}, ${webkitTime(now - 2 * day)}, ${null}),
+          (${null}, ${"No URL"}, ${1}, ${0}, ${webkitTime(now)}, ${0}),
+          (${"https://no-time.test/"}, ${"No time"}, ${1}, ${0}, ${null}, ${0})`;
       }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: snapshotPath })));
 
       const entries = yield* readChromeHistoryDatabase({ snapshotPath, since: now - 42 * day });
 
+      // Newest first; a row with missing fields does not abort the import.
       expect(entries).toEqual([
-        { url: "https://github.com/", title: "GitHub", visitCount: 12, lastVisit: now - day },
+        {
+          url: "https://github.com/",
+          title: "GitHub",
+          visitCount: 12,
+          lastVisit: now - day,
+          typed: true,
+        },
+        {
+          url: "https://untitled.test/",
+          title: "",
+          visitCount: 1,
+          lastVisit: now - 2 * day,
+          typed: false,
+        },
       ]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

@@ -1584,7 +1584,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         wc.ipc.on(RECORDING_INPUT_CHANNEL, recordingInput);
         wc.ipc.on(MOUSE_NAVIGATE_CHANNEL, mouseNavigate);
         detachPasskeys = passkeys.attachGuest(wc);
-        detachHistory = browsingHistory.attachGuest(wc);
+        detachHistory = browsingHistory.attachGuest(wc, {
+          isAgentDriving: () => browserHost.isAgentDriving(wc),
+        });
         wc.setWindowOpenHandler((details) => {
           const action = previewWindowOpenAction(details);
           if (action === "popup") {
@@ -2042,6 +2044,8 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       );
       return;
     }
+    // Only the address bar calls this; agents navigate over CDP.
+    browsingHistory.markTyped(wc);
     if (wc.getURL() === url) {
       yield* attempt({ operation: "navigate.reload", tabId, webContentsId: wc.id }, () =>
         wc.reload(),

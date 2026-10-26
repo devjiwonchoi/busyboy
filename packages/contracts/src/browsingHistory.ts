@@ -3,6 +3,8 @@ import * as Schema from "effect/Schema";
 export const BrowsingHistorySuggestion = Schema.Struct({
   url: Schema.String,
   title: Schema.String,
+  /** Typed or chosen in the address bar; only these complete inline. */
+  typed: Schema.Boolean,
 });
 export type BrowsingHistorySuggestion = typeof BrowsingHistorySuggestion.Type;
 

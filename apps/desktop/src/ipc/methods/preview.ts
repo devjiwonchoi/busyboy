@@ -383,7 +383,7 @@ export const searchBrowsingHistory = DesktopIpc.makeIpcMethod({
   result: Schema.Array(BrowsingHistorySuggestion),
   handler: Effect.fn("desktop.ipc.preview.searchBrowsingHistory")(function* (input) {
     const entries = yield* (yield* BrowsingHistory.BrowsingHistory).search(input);
-    return entries.map(({ url, title }) => ({ url, title }));
+    return entries.map(({ url, title, typed }) => ({ url, title, typed }));
   }),
 });
 

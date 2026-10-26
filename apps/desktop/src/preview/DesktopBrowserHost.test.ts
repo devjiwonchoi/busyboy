@@ -146,4 +146,26 @@ describe("DesktopBrowserHost", () => {
       expect(host.humanStartedDownload(debuggee.tab.webContents)).toBe(false);
     }),
   );
+
+  it.effect("counts the agent as driving a page right after it navigates it", () =>
+    Effect.gen(function* () {
+      const host = yield* DesktopBrowserHost.make;
+      const debuggee = makeDebuggee();
+      host.attach(key, debuggee.tab);
+      expect(host.isAgentDriving(debuggee.tab.webContents)).toBe(false);
+
+      yield* host.handleCommandLine(
+        encodeJson({
+          type: "cdp",
+          ...key,
+          message: encodeJson({
+            id: 1,
+            method: "Page.navigate",
+            params: { url: "https://example.com/" },
+          }),
+        }),
+      );
+      expect(host.isAgentDriving(debuggee.tab.webContents)).toBe(true);
+    }),
+  );
 });

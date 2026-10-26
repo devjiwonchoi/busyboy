@@ -313,6 +313,7 @@ const managerLayer = (platform: NodeJS.Platform = "darwin") =>
     Layer.provideMerge(
       Layer.mock(BrowsingHistory.BrowsingHistory)({
         attachGuest: () => () => {},
+        markTyped: () => {},
       }),
     ),
     Layer.provideMerge(layerEnvironment),

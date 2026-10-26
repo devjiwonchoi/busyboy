@@ -9,7 +9,15 @@ export type HistoryEntry = {
   readonly visitCount: number;
   /** Milliseconds since the epoch. */
   readonly lastVisit: number;
+  /**
+   * The user typed or chose this page in the address bar, so its host may be
+   * completed inline. Pages a site or agent opened are only listed.
+   */
+  readonly typed: boolean;
 };
+
+/** An entry with its search text worked out once, not on every keystroke. */
+export type IndexedHistoryEntry = HistoryEntry & { readonly searchText: string };
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -21,9 +29,11 @@ const SPACES = /[+\s._/-]+/g;
 const DIACRITICS = /[̀-ͯ]/g;
 
 /**
- * Min's frecency: recency scaled by a slowly growing visit-count factor, with
- * a bonus for short URLs (usually a site's front page). `boost` is the
- * relative bonus a search match earns.
+ * Min's score: the visit time scaled by a visit-count factor. The time is
+ * milliseconds since 1970, so a few more visits outweigh weeks of recency;
+ * in effect this ranks by visit count and breaks ties by recency. The
+ * short-URL bonus only settles near ties. `boost` is the relative bonus a
+ * search match earns.
  */
 export const historyScore = (entry: HistoryEntry, boost: number): number => {
   let score = entry.lastVisit * (1 + 0.036 * Math.sqrt(entry.visitCount));
@@ -50,9 +60,12 @@ export const formatSearchUrl = (text: string): string =>
     .replace(DIACRITICS, "")
     .trim();
 
-const searchText = (entry: HistoryEntry) => {
+export const indexHistoryEntry = (entry: HistoryEntry): IndexedHistoryEntry => {
   const url = formatSearchUrl(entry.url);
-  return entry.title === entry.url ? url : `${url} ${formatSearchTitle(entry.title)}`;
+  return {
+    ...entry,
+    searchText: entry.title === entry.url ? url : `${url} ${formatSearchTitle(entry.title)}`,
+  };
 };
 
 /**
@@ -60,15 +73,18 @@ const searchText = (entry: HistoryEntry) => {
  * at the start of the URL ranks far above one elsewhere, and text with spaces
  * also matches entries containing every word in any order.
  */
-export const searchHistory = ({
+export const searchHistory = <Entry extends IndexedHistoryEntry>({
   entries,
   text,
   limit,
+  since = Number.NEGATIVE_INFINITY,
 }: {
-  readonly entries: ReadonlyArray<HistoryEntry>;
+  readonly entries: Iterable<Entry>;
   readonly text: string;
   readonly limit: number;
-}): ReadonlyArray<HistoryEntry> => {
+  /** Entries last visited before this are skipped. */
+  readonly since?: number;
+}): ReadonlyArray<Entry> => {
   const typed = formatSearchUrl(text);
   if (typed === "") {
     return [];
@@ -79,9 +95,12 @@ export const searchHistory = ({
   const containsBoost = 0.4 + 0.075 * text.length;
   const matchesEveryWord = text.includes(" ");
 
-  const matches: Array<{ readonly entry: HistoryEntry; readonly score: number }> = [];
+  const matches: Array<{ readonly entry: Entry; readonly score: number }> = [];
   for (const entry of entries) {
-    const haystack = searchText(entry);
+    if (entry.lastVisit < since) {
+      continue;
+    }
+    const haystack = entry.searchText;
     const index = haystack.indexOf(typed);
     let boost: number | null = null;
     if (index === 0) {
