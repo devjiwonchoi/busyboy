@@ -140,8 +140,18 @@ export function createSidebarSortingStrategy(input: {
     marker("pinned-header");
     projected.push(...groups.pinned);
     marker("pinned-divider");
-    if (groups.active.length > 0) projected.push(...groups.active);
-    else marker("active-placeholder");
+    if (groups.active.length === 0) marker("active-placeholder");
+    // Active rows stay under their project's header, so a row dropped into
+    // another project's section previews where it will actually land.
+    const projectHeaders = items.filter(
+      (item) => item.kind === "marker" && item.marker.startsWith("project:"),
+    );
+    if (projectHeaders.length === 0) projected.push(...groups.active);
+    for (const header of projectHeaders) {
+      if (header.kind !== "marker") continue;
+      const projectKey = header.marker.slice("project:".length);
+      projected.push(header, ...groups.active.filter((item) => item.projectKey === projectKey));
+    }
     if (items.some((item) => item.kind === "marker" && item.marker === "working-header")) {
       marker("working-header");
       projected.push(...groups.working);

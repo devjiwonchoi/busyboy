@@ -104,14 +104,21 @@ export type SidebarListMarker =
   | "pinned-header"
   | "active-placeholder"
   | "pinned-divider"
-  | "working-header";
+  | "working-header"
+  | `project:${string}`;
 
 export function sidebarMarkerId(marker: SidebarListMarker): string {
   return `${SIDEBAR_MARKER_PREFIX}${marker}`;
 }
 
 export type SidebarListItem =
-  | { readonly kind: "thread"; readonly key: string; readonly section: SidebarSection }
+  | {
+      readonly kind: "thread";
+      readonly key: string;
+      readonly section: SidebarSection;
+      // The project section an active row renders under.
+      readonly projectKey?: string | undefined;
+    }
   | { readonly kind: "marker"; readonly marker: SidebarListMarker };
 
 export function sidebarListItemId(item: SidebarListItem): string {
