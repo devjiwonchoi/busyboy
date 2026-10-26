@@ -267,6 +267,14 @@ describe("BrowsingHistory", () => {
         ]);
         expect(result).toEqual({ imported: 1 });
         expect(yield* urlsFor(history, "test")).toEqual(["https://recent.test/"]);
+
+        // Importing again counts only pages it had not seen.
+        expect(
+          yield* history.importEntries([
+            entry("https://recent.test/", now),
+            entry("https://new.test/", now),
+          ]),
+        ).toEqual({ imported: 1 });
       }).pipe(Effect.provide(historyLayer(baseDir))),
     ),
   );

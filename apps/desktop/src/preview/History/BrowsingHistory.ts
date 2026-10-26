@@ -392,29 +392,34 @@ export const make = Effect.gen(function* () {
       return [{ ...existing, title: cleaned }];
     });
 
+  /** Returns how many pages were new; ones already known are merged in. */
   const importEntries = (
     incoming: ReadonlyArray<HistoryEntry>,
     options?: { readonly generation?: number },
   ) =>
-    update(options?.generation ?? generation, (entries, now) => {
-      // Several Chrome profiles can hold the same page.
-      const changed = new Map<string, HistoryEntry>();
-      for (const raw of incoming) {
-        const url = historyUrl(raw.url);
-        if (url === null || raw.lastVisit < now - HISTORY_MAX_AGE_MS) {
-          continue;
-        }
-        changed.set(
-          url,
-          mergeHistoryEntry(changed.get(url) ?? entries.get(url), {
-            ...raw,
+    Effect.suspend(() => {
+      let added = 0;
+      return update(options?.generation ?? generation, (entries, now) => {
+        // Several Chrome profiles can hold the same page.
+        const changed = new Map<string, HistoryEntry>();
+        for (const raw of incoming) {
+          const url = historyUrl(raw.url);
+          if (url === null || raw.lastVisit < now - HISTORY_MAX_AGE_MS) {
+            continue;
+          }
+          changed.set(
             url,
-            title: cleanTitle(raw.title) || url,
-          }),
-        );
-      }
-      return [...changed.values()];
-    }).pipe(Effect.map((imported) => ({ imported })));
+            mergeHistoryEntry(changed.get(url) ?? entries.get(url), {
+              ...raw,
+              url,
+              title: cleanTitle(raw.title) || url,
+            }),
+          );
+        }
+        added = [...changed.keys()].filter((url) => !entries.has(url)).length;
+        return [...changed.values()];
+      }).pipe(Effect.map(() => ({ imported: added })));
+    });
 
   const search = ({ text, limit }: { readonly text: string; readonly limit: number }) =>
     withState((state, now) =>

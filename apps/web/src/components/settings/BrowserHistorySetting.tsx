@@ -64,7 +64,7 @@ export function BrowserHistorySetting({ disabled }: { readonly disabled: boolean
         toastManager.add({
           type: "success",
           title: "Imported Chrome history",
-          description: `${imported.toLocaleString()} ${imported === 1 ? "page" : "pages"} from the last six weeks.`,
+          description: `${imported.toLocaleString()} new ${imported === 1 ? "page" : "pages"} from the last six weeks.`,
         }),
       )
       .catch((cause: unknown) =>
