@@ -129,6 +129,23 @@ const withHarness = <A, E, R>(
     );
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
+/** Installs the computer-use app and its driver; returns the app's executable. */
+const installComputerUse = (resourcesDir: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const driverPath = path.join(resourcesDir, "cua-driver/cua-driver");
+    const hostPath = path.join(
+      resourcesDir,
+      "computer-use/Busyboy Computer Use.app/Contents/MacOS/busyboy-computer-use",
+    );
+    for (const file of [driverPath, hostPath]) {
+      yield* fileSystem.makeDirectory(path.dirname(file), { recursive: true });
+      yield* fileSystem.writeFileString(file, "binary");
+    }
+    return hostPath;
+  });
+
 describe("DesktopBackendConfiguration", () => {
   it.effect("resolvePrimary produces a stable scoped bootstrap token", () =>
     withHarness(
@@ -411,7 +428,7 @@ describe("DesktopBackendConfiguration", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("passes the packaged computer-use driver and the app's bundle ID to the backend", () =>
+  it.effect("starts the packaged driver through Busyboy Computer Use.app", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -419,15 +436,13 @@ describe("DesktopBackendConfiguration", () => {
         prefix: "t3-desktop-backend-config-test-",
       });
       const resourcesPath = path.join(baseDir, "resources");
-      const driverPath = path.join(resourcesPath, "cua-driver/cua-driver");
-      yield* fileSystem.makeDirectory(path.dirname(driverPath), { recursive: true });
-      yield* fileSystem.writeFileString(driverPath, "driver");
+      const hostPath = yield* installComputerUse(resourcesPath);
 
       yield* Effect.gen(function* () {
         const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
         const config = yield* configuration.resolvePrimary;
-        assert.equal(config.bootstrap.computerUseDriverPath, driverPath);
-        assert.equal(config.bootstrap.computerUseHostBundleId, "dev.jiwon.busyboy");
+        assert.equal(config.bootstrap.computerUseDriverPath, hostPath);
+        assert.equal(config.bootstrap.computerUseHostBundleId, "dev.jiwon.busyboy.computer-use");
       }).pipe(
         Effect.provide(
           layerBackendConfiguration().pipe(
@@ -447,7 +462,7 @@ describe("DesktopBackendConfiguration", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("finds the development computer-use driver next to the desktop build", () =>
+  it.effect("finds the development computer-use app next to the desktop build", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -455,14 +470,12 @@ describe("DesktopBackendConfiguration", () => {
         prefix: "t3-desktop-backend-config-test-",
       });
       const dirname = path.join(baseDir, "apps/desktop/dist-electron");
-      const driverPath = path.join(baseDir, "apps/desktop/resources/cua-driver/cua-driver");
-      yield* fileSystem.makeDirectory(path.dirname(driverPath), { recursive: true });
-      yield* fileSystem.writeFileString(driverPath, "driver");
+      const hostPath = yield* installComputerUse(path.join(baseDir, "apps/desktop/resources"));
 
       yield* Effect.gen(function* () {
         const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
         const config = yield* configuration.resolvePrimary;
-        assert.equal(config.bootstrap.computerUseDriverPath, driverPath);
+        assert.equal(config.bootstrap.computerUseDriverPath, hostPath);
       }).pipe(
         Effect.provide(
           layerBackendConfiguration().pipe(
@@ -475,7 +488,7 @@ describe("DesktopBackendConfiguration", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("leaves computer use off when the driver is missing or the platform is not macOS", () =>
+  it.effect("leaves computer use off without the driver and its app, or off macOS", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -509,8 +522,12 @@ describe("DesktopBackendConfiguration", () => {
       assert.notProperty(missing, "computerUseDriverPath");
       assert.notProperty(missing, "computerUseHostBundleId");
 
+      // Without its app the driver would run with Busyboy's own permissions.
       yield* fileSystem.makeDirectory(path.join(resourcesPath, "cua-driver"), { recursive: true });
       yield* fileSystem.writeFileString(path.join(resourcesPath, "cua-driver/cua-driver"), "driver");
+      assert.notProperty(yield* resolveBootstrap("darwin"), "computerUseDriverPath");
+
+      yield* installComputerUse(resourcesPath);
       const linux = yield* resolveBootstrap("linux");
       assert.notProperty(linux, "computerUseDriverPath");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

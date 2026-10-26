@@ -131,7 +131,7 @@ const readPermissions = (worker: CuaDriverLike) =>
 const permissionRequired = (permission: "Accessibility" | "Screen Recording") =>
   fail(
     "permission_required",
-    `Busyboy needs the macOS ${permission} permission for computer use. Ask the user to turn on Busyboy in System Settings > Privacy & Security > ${permission}, then try again.`,
+    `Computer use needs the macOS ${permission} permission for "Busyboy Computer Use", the app that operates the computer for Busyboy. Ask the user to turn it on in System Settings > Privacy & Security > ${permission} (macOS may have just asked them), then try again.`,
   );
 
 const screenLocked = () =>
@@ -381,7 +381,10 @@ export const make = Effect.gen(function* () {
       bundleId: app.bundleId,
     });
     const permissions = yield* readPermissions(worker);
-    if (!permissions.accessibility) return yield* permissionRequired("Accessibility");
+    if (!permissions.accessibility) {
+      yield* driver.requestPermissions;
+      return yield* permissionRequired("Accessibility");
+    }
 
     const { windows } = yield* callDriver(() => worker.listWindows({ pid: app.pid }));
     const window =
@@ -456,6 +459,7 @@ export const make = Effect.gen(function* () {
         const { app, window, windows, permissions } = yield* resolveTarget(worker, input);
         const includeScreenshot = input.includeScreenshot === true;
         if (includeScreenshot && !permissions.screenRecording) {
+          yield* driver.requestPermissions;
           return yield* permissionRequired("Screen Recording");
         }
         const state = yield* callDriver(() =>

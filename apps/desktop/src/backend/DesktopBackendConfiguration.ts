@@ -121,8 +121,12 @@ const resolveResourceMonitorPath = Effect.fn(
   return Option.none<string>();
 });
 
-// Computer use is macOS only for now. scripts/fetch-cua-driver.mjs installs the
-// driver into resources/cua-driver; a missing driver leaves computer use off.
+// Computer use is macOS only for now. The driver runs inside "Busyboy Computer
+// Use.app", which holds the macOS permissions so Busyboy and its agents do not
+// (scripts/build-computer-use-host.mjs). Without that app or the driver beside
+// it (scripts/fetch-cua-driver.mjs), computer use stays off.
+const COMPUTER_USE_HOST_BUNDLE_ID = "dev.jiwon.busyboy.computer-use";
+
 const resolveComputerUseDriverPath = Effect.fn(
   "desktop.backendConfiguration.resolveComputerUseDriverPath",
 )(function* () {
@@ -131,14 +135,23 @@ const resolveComputerUseDriverPath = Effect.fn(
     return Option.none<string>();
   }
   const fileSystem = yield* FileSystem.FileSystem;
-  const relativePath = environment.path.join("cua-driver", "cua-driver");
-  const candidates = environment.isPackaged
-    ? [environment.path.join(environment.resourcesPath, relativePath)]
-    : environment.resolveResourcePathCandidates(relativePath);
+  const exists = (path: string) => fileSystem.exists(path).pipe(Effect.orElseSucceed(() => false));
+  const hostPath = environment.path.join(
+    "computer-use",
+    "Busyboy Computer Use.app",
+    "Contents",
+    "MacOS",
+    "busyboy-computer-use",
+  );
+  const resourceDirs = environment.isPackaged
+    ? [environment.resourcesPath]
+    : environment.resolveResourcePathCandidates(".");
 
-  for (const candidate of candidates) {
-    if (yield* fileSystem.exists(candidate).pipe(Effect.orElseSucceed(() => false))) {
-      return Option.some(candidate);
+  for (const resourceDir of resourceDirs) {
+    const host = environment.path.join(resourceDir, hostPath);
+    const driver = environment.path.join(resourceDir, "cua-driver", "cua-driver");
+    if ((yield* exists(host)) && (yield* exists(driver))) {
+      return Option.some(host);
     }
   }
 
@@ -243,7 +256,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
         onNone: () => ({}),
         onSome: (computerUseDriverPath) => ({
           computerUseDriverPath,
-          computerUseHostBundleId: environment.appUserModelId,
+          computerUseHostBundleId: COMPUTER_USE_HOST_BUNDLE_ID,
         }),
       }),
       ...buildObservabilityFragment(input.observabilitySettings),
