@@ -679,6 +679,12 @@ export const PreviewSignInStatus = Schema.Literals([
    * Load the sign-in page fresh (preview_navigate) and sign in before evaluating.
    */
   "page_modified",
+  /**
+   * The page sent no sign-in request Busyboy could complete (for example it
+   * hashes the password first), so the sign-in did not go through. Ask the
+   * user to sign in themselves.
+   */
+  "unsupported",
 ]);
 export type PreviewSignInStatus = typeof PreviewSignInStatus.Type;
 

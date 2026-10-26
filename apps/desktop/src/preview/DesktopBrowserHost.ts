@@ -22,6 +22,7 @@ import { createCdpRelayConnection, type CdpRelayConnection } from "./CdpRelay.ts
 import { sendPageCommand } from "./GuestInput.ts";
 import { passwordForms } from "./Passwords/CredentialNetworkGuard.ts";
 import * as PasswordSignIn from "./Passwords/PasswordSignIn.ts";
+import { armSubstitution } from "./Passwords/PasswordSubstitution.ts";
 
 const encodeEvent = Schema.encodeSync(Schema.fromJsonString(DesktopBrowserEvent));
 const decodeCommand = Schema.decodeUnknownOption(Schema.fromJsonString(DesktopBrowserCommand));
@@ -71,6 +72,8 @@ interface AttachedTab {
    * is attached: the browser can still hand back old request bodies later.
    */
   readonly scrubbed: Set<string>;
+  /** Consumes the debugger's interception events while a sign-in swaps its password in. */
+  interceptor: ((method: string, params: unknown) => boolean) | null;
   readonly onMessage: (
     event: Electron.Event,
     method: string,
@@ -201,6 +204,12 @@ export const make = Effect.gen(function* () {
             request: params,
             pageModified: tab.agentScriptInDocument,
             lock: (secret) => lockCredentials(tab, secret),
+            substitute: (input) => {
+              const substitution = armSubstitution({ debuggee, ...input });
+              // It lets events through again once interception is off.
+              tab.interceptor = substitution.onDebuggerMessage;
+              return substitution;
+            },
           }),
         credentialLocked: () => tab.credentialLock !== null,
         noteAgentScript: () => {
@@ -255,7 +264,12 @@ export const make = Effect.gen(function* () {
       credentialLock: null,
       agentScriptInDocument: false,
       scrubbed: new Set(),
+      interceptor: null,
       onMessage: (_event, method, params, sessionId) => {
+        // The agent never sees the sign-in's paused requests or answers them.
+        if (!sessionId && tab.interceptor?.(method, params)) {
+          return;
+        }
         if (method === "Browser.downloadWillBegin") {
           const guid = (params as { guid?: unknown } | undefined)?.guid;
           tab.pendingDownloadGuid = typeof guid === "string" ? guid : null;

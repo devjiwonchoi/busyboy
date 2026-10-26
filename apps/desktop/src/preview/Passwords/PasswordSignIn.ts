@@ -16,6 +16,7 @@ import {
   fillAndSubmit,
   pageHoldsPasswordScript,
 } from "./PasswordSignInScripts.ts";
+import { makeStandIn, type Substitution } from "./PasswordSubstitution.ts";
 import * as PasswordVault from "./PasswordVault.ts";
 
 /**
@@ -29,6 +30,15 @@ const SIGN_IN_WORLD_ID = 1_009;
  * while, so an agent cannot keep re-prompting until someone taps through.
  */
 const DECLINE_COOLDOWN_MS = 2 * 60_000;
+
+/** How long the sign-in request may take to leave after the form is submitted. */
+const SUBSTITUTION_WAIT = "15 seconds";
+
+export type SubstitutePassword = (input: {
+  readonly standIn: string;
+  readonly password: string;
+  readonly pageOrigin: string;
+}) => Substitution;
 
 const SignInRequest = PreviewAutomationSignInInput.mapFields(
   ({ tabId: _tabId, ...fields }) => fields,
@@ -139,6 +149,8 @@ export class PasswordSignIn extends Context.Service<
       /** The agent already ran its own JavaScript in this page. */
       readonly pageModified: boolean;
       readonly lock: (secret: string) => void;
+      /** Swaps the real password into the sign-in request in place of `standIn`. */
+      readonly substitute: SubstitutePassword;
     }) => Promise<PreviewSignInResult>;
     readonly pageHoldsPassword: (guest: Electron.WebContents) => Promise<boolean>;
     readonly clearPasswordFields: (guest: Electron.WebContents) => Promise<void>;
@@ -157,11 +169,13 @@ export const make = Effect.gen(function* () {
     request,
     pageModified,
     lock,
+    substitute,
   }: {
     readonly guest: Electron.WebContents;
     readonly request: SignInRequest;
     readonly pageModified: boolean;
     readonly lock: (secret: string) => void;
+    readonly substitute: SubstitutePassword;
   }) {
     // Script the agent left in the page could read the fields as they fill.
     if (pageModified) {
@@ -225,29 +239,57 @@ export const make = Effect.gen(function* () {
       return { status: "unavailable" } satisfies PreviewSignInResult;
     }
 
-    // Both guards go up before the password enters the page: the agent cannot
-    // read it, and the page can only send it to its own origin.
+    // The page only ever holds a stand-in; the real password replaces it in
+    // the sign-in request to this origin. The agent is still kept off the page
+    // and the page's requests guarded, in case the swap is ever bypassed.
     lock(login.password);
     guardPasswordSubmission({ guest, secret: login.password, pageOrigin, scope: "origin" });
+    const standIn = makeStandIn(login.password);
+    const substitution = substitute({ standIn, password: login.password, pageOrigin });
+    const armed = yield* Effect.tryPromise(() => substitution.ready).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+    if (!armed) {
+      substitution.cancel();
+      return { status: "unavailable" } satisfies PreviewSignInResult;
+    }
     const filled = yield* Effect.tryPromise(() =>
       runInSignInWorld(guest, fillAndSubmit, {
         ...selectors,
         submitWithEnter: request.submitWithEnter ?? false,
         username: login.username,
-        password: login.password,
+        password: standIn,
       }),
     ).pipe(Effect.orElseSucceed(() => false));
+    if (!filled) {
+      substitution.cancel();
+      return { status: "locator_invalid" } satisfies PreviewSignInResult;
+    }
 
-    return { status: filled ? "submitted" : "locator_invalid" } satisfies PreviewSignInResult;
+    const swapped = yield* Effect.promise(() => substitution.done).pipe(
+      Effect.timeoutOption(SUBSTITUTION_WAIT),
+      Effect.map(Option.getOrElse(() => false)),
+    );
+    if (!swapped) {
+      // The page sent no sign-in request we could complete, for instance
+      // because it hashes the password first. Only the stand-in left.
+      substitution.cancel();
+      yield* Effect.promise(() =>
+        runInSignInWorld(guest, clearPasswordFieldsScript, null).catch(() => undefined),
+      );
+      return { status: "unsupported" } satisfies PreviewSignInResult;
+    }
+    return { status: "submitted" } satisfies PreviewSignInResult;
   });
 
   return PasswordSignIn.of({
-    signIn: ({ guest, request, pageModified, lock }) =>
+    signIn: ({ guest, request, pageModified, lock, substitute }) =>
       Option.match(decodeSignInRequest(request), {
         onNone: () => Promise.resolve({ status: "locator_invalid" } as const),
         onSome: (decoded) =>
           runPromise(
-            signInEffect({ guest, request: decoded, pageModified, lock }).pipe(
+            signInEffect({ guest, request: decoded, pageModified, lock, substitute }).pipe(
               Effect.catchCause((cause) =>
                 Effect.logWarning("Agent sign-in failed", { cause }).pipe(
                   Effect.as({ status: "unavailable" } as const),
