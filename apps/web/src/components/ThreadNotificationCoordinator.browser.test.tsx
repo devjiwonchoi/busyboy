@@ -228,6 +228,37 @@ describe("thread notifications", () => {
     });
   });
 
+  it("falls back to the service worker on mobile and opens the thread on tap", async () => {
+    // iOS Home Screen apps and Android Chrome reject `new Notification()`.
+    state.notification.mockImplementationOnce(function () {
+      throw new TypeError("Illegal constructor");
+    });
+    const showNotification = vi.fn(() => Promise.resolve());
+    const serviceWorker = Object.assign(new EventTarget(), {
+      ready: Promise.resolve({ showNotification }),
+    });
+    vi.spyOn(navigator, "serviceWorker", "get").mockReturnValue(
+      serviceWorker as unknown as ServiceWorkerContainer,
+    );
+
+    await render();
+    await complete();
+    await act(() => serviceWorker.ready);
+    expect(showNotification).toHaveBeenCalledWith("Thread completed", {
+      body: "Fix the login form",
+      tag: "env-1:thread-1",
+      data: { url: "/env-1/thread-1" },
+    });
+
+    // The worker relays the tap to the open window, which routes to the thread.
+    serviceWorker.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "busyboy:open-url", url: `${location.origin}/env-1/thread-1` },
+      }),
+    );
+    expect(state.navigate).toHaveBeenCalledWith({ href: "/env-1/thread-1" });
+  });
+
   it.each(["active", "archived", "off", "sound"])(
     "does not show a native alert for %s threads",
     async (condition) => {
