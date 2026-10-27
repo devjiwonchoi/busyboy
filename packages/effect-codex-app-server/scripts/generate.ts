@@ -12,7 +12,7 @@ import * as Schema from "effect/Schema";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-const UPSTREAM_REF = "687a119f0fcaace47e1f1abcc77cec6c813fd6da";
+const UPSTREAM_REF = "6aaac694803004a63c6f393d153c96d22521a6b9";
 const USER_AGENT = "effect-codex-app-server-generator";
 const GITHUB_API_BASE =
   "https://api.github.com/repos/openai/codex/contents/codex-rs/app-server-protocol";
