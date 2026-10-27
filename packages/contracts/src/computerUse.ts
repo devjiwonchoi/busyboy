@@ -240,3 +240,18 @@ export const ComputerUseActionResult = Schema.Struct({
   result: Schema.String,
 });
 export type ComputerUseActionResult = typeof ComputerUseActionResult.Type;
+
+export const ComputerUseGetPermissionsInput = Schema.Struct({
+  /** Has macOS ask the user for the permissions that are missing. */
+  request: Schema.Boolean,
+});
+export type ComputerUseGetPermissionsInput = typeof ComputerUseGetPermissionsInput.Type;
+
+/** The macOS permissions of Busyboy Computer Use, the app that operates the computer. */
+export const ComputerUsePermissions = Schema.Struct({
+  /** False when this backend cannot run computer use, such as off macOS. */
+  available: Schema.Boolean,
+  accessibility: Schema.Boolean,
+  screenRecording: Schema.Boolean,
+});
+export type ComputerUsePermissions = typeof ComputerUsePermissions.Type;

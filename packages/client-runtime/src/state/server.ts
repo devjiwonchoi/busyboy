@@ -1315,6 +1315,10 @@ export function createServerEnvironmentAtoms<R, E>(
           JSON.stringify([environmentId, input.threadId, input.turnItemId]),
       },
     }),
+    getComputerUsePermissions: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:computer-use:get-permissions",
+      tag: WS_METHODS.computerUseGetPermissions,
+    }),
     refreshUsageRates: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-usage-rates",
       tag: WS_METHODS.serverRefreshUsageRates,

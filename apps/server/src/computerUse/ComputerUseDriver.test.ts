@@ -77,7 +77,7 @@ describe("ComputerUseDriver", () => {
     }).pipe(Effect.provide(TestLayer)),
   );
 
-  it.effect("has Busyboy Computer Use ask macOS for its permissions, once", () =>
+  it.effect("asks macOS for the permissions once for agents, every time for the user", () =>
     Effect.gen(function* () {
       const runs: Array<ProcessRunner.ProcessRunInput> = [];
       const runner = Layer.mock(ProcessRunner.ProcessRunner)({
@@ -92,12 +92,17 @@ describe("ComputerUseDriver", () => {
       const path = yield* Path.Path;
       const launcherPath = path.join(stateDir, "computer-use", "cua-driver-launcher");
 
-      yield* driver.requestPermissions;
-      yield* driver.requestPermissions;
+      yield* driver.requestPermissions({ askedByUser: false });
+      yield* driver.requestPermissions({ askedByUser: false });
+      assert.strictEqual(runs.length, 1);
 
+      yield* driver.requestPermissions({ askedByUser: true });
       assert.deepStrictEqual(
         runs.map(({ command, args }) => ({ command, args })),
-        [{ command: launcherPath, args: ["--request-permissions"] }],
+        [
+          { command: launcherPath, args: ["--request-permissions"] },
+          { command: launcherPath, args: ["--request-permissions"] },
+        ],
       );
       assert.include(yield* fileSystem.readFileString(launcherPath), "exec ");
     }).pipe(Effect.provide(TestLayer)),

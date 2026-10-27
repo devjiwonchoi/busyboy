@@ -50,8 +50,8 @@ interface FakeDriver {
   /** Each thread's runs; a run counts as active while its status is "running". */
   readonly runs: Map<string, Array<{ id: string; status: string; ordinal: number }>>;
   restarts: number;
-  /** How often the service had macOS ask the user for permissions. */
-  permissionRequests: number;
+  /** Each time the service had macOS ask for permissions: whether the user asked. */
+  readonly permissionRequests: Array<boolean>;
   readonly interrupts: Array<{ readonly threadId: string; readonly runId?: string }>;
   screenLocked: boolean;
 }
@@ -82,7 +82,7 @@ function fakeDriver(): FakeDriver {
     hang: false,
     runs: new Map([[threadId, [{ id: "run-1", status: "running", ordinal: 1 }]]]),
     restarts: 0,
-    permissionRequests: 0,
+    permissionRequests: [],
     interrupts: [],
     screenLocked: false,
   };
@@ -132,9 +132,10 @@ function makeService(
       fake.restarts += 1;
     }),
     setKeepDisplayAwake: () => Effect.void,
-    requestPermissions: Effect.sync(() => {
-      fake.permissionRequests += 1;
-    }),
+    requestPermissions: ({ askedByUser }) =>
+      Effect.sync(() => {
+        fake.permissionRequests.push(askedByUser);
+      }),
   });
   return ComputerUseService.make.pipe(
     Effect.provide(
@@ -362,17 +363,54 @@ describe("ComputerUseService", () => {
       assert.strictEqual(error.code, "permission_required");
       assert.include(error.message, "Accessibility");
       assert.include(error.message, "Busyboy Computer Use");
-      assert.strictEqual(fake.permissionRequests, 1);
+      assert.deepStrictEqual(fake.permissionRequests, [false]);
 
       fake.permissions = { accessibility: true, screen_recording: false };
       const screenshot = yield* Effect.flip(
         service.getAppState({ caller, app: "TextEdit", includeScreenshot: true }),
       );
       assert.include(screenshot.message, "Screen Recording");
-      assert.strictEqual(fake.permissionRequests, 2);
+      assert.deepStrictEqual(fake.permissionRequests, [false, false]);
       assert.lengthOf(fake.stateRequests, 0);
     }),
   );
+
+  it.effect(
+    "shows Settings the permissions, and asks macOS for missing ones only when the user does",
+    () =>
+      Effect.gen(function* () {
+        const fake = fakeDriver();
+        fake.permissions = { accessibility: true, screen_recording: false };
+        // Settings works before any project turns computer use on.
+        const service = yield* makeService(fake);
+
+        assert.deepStrictEqual(yield* service.getPermissions({ request: false }), {
+          available: true,
+          accessibility: true,
+          screenRecording: false,
+        });
+        assert.deepStrictEqual(fake.permissionRequests, []);
+
+        yield* service.getPermissions({ request: true });
+        assert.deepStrictEqual(fake.permissionRequests, [true]);
+
+        fake.permissions = { accessibility: true, screen_recording: true };
+        yield* service.getPermissions({ request: true });
+        assert.deepStrictEqual(fake.permissionRequests, [true]);
+      }),
+  );
+
+  it.effect("tells Settings that computer use is unavailable without the driver", () =>
+    Effect.gen(function* () {
+      const service = yield* makeService(fakeDriver(), { available: false });
+      assert.deepStrictEqual(yield* service.getPermissions({ request: true }), {
+        available: false,
+        accessibility: false,
+        screenRecording: false,
+      });
+    }),
+  );
+
 
   it.effect("reports a locked Mac", () =>
     Effect.gen(function* () {

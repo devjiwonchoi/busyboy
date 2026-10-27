@@ -67,9 +67,10 @@ export class ComputerUseDriver extends Context.Service<
     readonly setKeepDisplayAwake: (enabled: boolean) => Effect.Effect<void>;
     /**
      * Has macOS ask the user to grant Busyboy Computer Use its permissions,
-     * which also lists the app in System Settings. Asks once per run.
+     * which also lists the app in System Settings. Agents' calls ask once per
+     * run, so a missing permission does not prompt on every call.
      */
-    readonly requestPermissions: Effect.Effect<void>;
+    readonly requestPermissions: (input: { readonly askedByUser: boolean }) => Effect.Effect<void>;
   }
 >()("t3/computerUse/ComputerUseDriver") {}
 
@@ -161,7 +162,7 @@ export const make = Effect.fn("ComputerUseDriver.make")(function* (
       withWorker: () => Effect.fail(unavailable),
       restart: Effect.void,
       setKeepDisplayAwake: () => Effect.void,
-      requestPermissions: Effect.void,
+      requestPermissions: () => Effect.void,
     });
   }
 
@@ -213,19 +214,21 @@ export const make = Effect.fn("ComputerUseDriver.make")(function* (
   const restart = lifecycle.withPermits(1)(stopWorker);
 
   const permissionsRequested = yield* Ref.make(false);
-  const requestPermissions = Effect.gen(function* () {
-    if (Option.isNone(runner) || (yield* Ref.getAndSet(permissionsRequested, true))) return;
-    yield* lifecycle.withPermits(1)(writeLauncher);
-    yield* runner.value.run({
-      command: launcherPath,
-      args: [REQUEST_PERMISSIONS_ARGUMENT],
-      timeout: "10 seconds",
-    });
-  }).pipe(
-    Effect.catchCause((cause) =>
-      Effect.logWarning("Could not ask macOS for the computer-use permissions", cause),
-    ),
-  );
+  const requestPermissions = (input: { readonly askedByUser: boolean }) =>
+    Effect.gen(function* () {
+      const alreadyAsked = yield* Ref.getAndSet(permissionsRequested, true);
+      if (Option.isNone(runner) || (alreadyAsked && !input.askedByUser)) return;
+      yield* lifecycle.withPermits(1)(writeLauncher);
+      yield* runner.value.run({
+        command: launcherPath,
+        args: [REQUEST_PERMISSIONS_ARGUMENT],
+        timeout: "10 seconds",
+      });
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Could not ask macOS for the computer-use permissions", cause),
+      ),
+    );
 
   yield* Effect.addFinalizer(() => restart);
 

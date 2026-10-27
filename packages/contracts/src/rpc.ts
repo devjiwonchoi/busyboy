@@ -330,6 +330,11 @@ import {
   ScheduledTaskMutationResult,
 } from "./scheduledTask.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
+import {
+  ComputerUseError,
+  ComputerUseGetPermissionsInput,
+  ComputerUsePermissions,
+} from "./computerUse.ts";
 import { ComputerUseApprovalAnswerInput, ComputerUseApprovalError } from "./computerUseApproval.ts";
 import {
   ProjectCloneActionInput,
@@ -483,6 +488,7 @@ export const WS_METHODS = {
   scheduledTasksRotateWebhookToken: "scheduledTasks.rotateWebhookToken",
   secretsAnswerRequest: "secrets.answerRequest",
   computerUseAnswerApproval: "computerUse.answerApproval",
+  computerUseGetPermissions: "computerUse.getPermissions",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
 
@@ -1716,6 +1722,12 @@ const WsComputerUseAnswerApprovalRpc = Rpc.make(WS_METHODS.computerUseAnswerAppr
   error: Schema.Union([ComputerUseApprovalError, EnvironmentAuthorizationError]),
 });
 
+const WsComputerUseGetPermissionsRpc = Rpc.make(WS_METHODS.computerUseGetPermissions, {
+  payload: ComputerUseGetPermissionsInput,
+  success: ComputerUsePermissions,
+  error: Schema.Union([ComputerUseError, EnvironmentAuthorizationError]),
+});
+
 const WsScheduledTasksListWebhookDeliveriesRpc = Rpc.make(
   WS_METHODS.scheduledTasksListWebhookDeliveries,
   {
@@ -1821,6 +1833,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsScheduledTasksRotateWebhookTokenRpc,
   WsSecretsAnswerRequestRpc,
   WsComputerUseAnswerApprovalRpc,
+  WsComputerUseGetPermissionsRpc,
   WsScheduledTasksListWebhookDeliveriesRpc,
   WsScheduledTasksGetWebhookDeliveryRpc,
   WsServerReportClientActivityRpc,
