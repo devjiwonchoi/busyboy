@@ -42,6 +42,8 @@ const mocks = vi.hoisted(() => ({
     { url: "https://github.com/", title: "GitHub", typed: true },
   ]),
   profileId: undefined as string | undefined,
+  activeTabId: "tab-1" as string | null,
+  openPreviewSession: vi.fn(),
 }));
 
 const STUB_BROWSER_DEFAULTS = {
@@ -98,7 +100,7 @@ vi.mock(import("~/previewStateStore"), async (original) => ({
   ...(await original()),
   rememberPreviewUrl: mocks.rememberPreviewUrl,
   useThreadPreviewState: (() => ({
-    activeTabId: "tab-1",
+    activeTabId: mocks.activeTabId,
     serverEpoch: mocks.serverEpoch,
     desktopByTabId: {
       "tab-1": {
@@ -148,6 +150,10 @@ vi.mock(import("~/components/ui/toast"), async (original) => {
 vi.mock(import("./useDiscoveredLocalServers"), async (original) => ({
   ...(await original()),
   useDiscoveredLocalServers: () => mocks.servers,
+}));
+vi.mock(import("./openPreviewSession"), async (original) => ({
+  ...(await original()),
+  openPreviewSession: mocks.openPreviewSession,
 }));
 vi.mock(import("./usePreviewSession"), async (original) => ({
   ...(await original()),
@@ -224,6 +230,7 @@ describe("PreviewView", () => {
     mocks.recordingTabIds = new Set();
     mocks.recordingRuntimeTabId = null;
     mocks.profileId = undefined;
+    mocks.activeTabId = "tab-1";
     useComposerDraftStore.setState({
       addPreviewAnnotation: mocks.addPreviewAnnotation,
       addImage: mocks.addImage,
@@ -321,6 +328,36 @@ describe("PreviewView", () => {
     expect(mocks.recordVisitForThread).not.toHaveBeenCalled();
     expect(mocks.rememberPreviewUrl).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [DEFAULT_BROWSER_PROFILE_ID, true],
+    [INCOGNITO_BROWSER_PROFILE_ID, false],
+  ])(
+    "remembers a page typed with no tab open only if its new tab opened outside incognito (%s)",
+    async (profileId, remembered) => {
+      mocks.activeTabId = null;
+      mocks.openPreviewSession.mockResolvedValue({
+        _tag: "Success",
+        value: {
+          threadId: "thread-1",
+          tabId: "tab-2",
+          navStatus: { _tag: "Loading", url: "https://github.com/", title: "" },
+          profileId,
+          canGoBack: false,
+          canGoForward: false,
+          updatedAt: "2026-07-13T00:00:00.000Z",
+        },
+      });
+      await render(<PreviewView threadRef={TEST_THREAD_REF} tabId={null} visible />);
+      await submitAddress("https://github.com/");
+
+      await vi.waitFor(() => expect(mocks.openPreviewSession).toHaveBeenCalled());
+      await act(async () => {});
+      expect(mocks.recordVisitForThread.mock.calls).toEqual(
+        remembered ? [[TEST_THREAD_REF, "https://github.com/"]] : [],
+      );
+    },
+  );
 
   it("maps an empty-state localhost server onto the WSL host", async () => {
     mocks.showEmptyState = true;

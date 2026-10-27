@@ -1,10 +1,11 @@
-import type {
-  EnvironmentId,
-  PreviewOpenInput,
-  PreviewRuntime,
-  PreviewSessionSnapshot,
-  PreviewViewportSetting,
-  ScopedThreadRef,
+import {
+  INCOGNITO_BROWSER_PROFILE_ID,
+  type EnvironmentId,
+  type PreviewOpenInput,
+  type PreviewRuntime,
+  type PreviewSessionSnapshot,
+  type PreviewViewportSetting,
+  type ScopedThreadRef,
 } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import * as Cause from "effect/Cause";
@@ -58,7 +59,8 @@ export async function openPreviewSession<E>(
   }
   const snapshot = result.value;
   applyPreviewServerSnapshot(input.threadRef, snapshot);
-  if (input.url !== undefined) {
+  // Incognito tabs leave no trace, recent pages included.
+  if (input.url !== undefined && snapshot.profileId !== INCOGNITO_BROWSER_PROFILE_ID) {
     rememberPreviewUrl(
       input.threadRef,
       snapshot.navStatus._tag === "Idle" ? input.url : snapshot.navStatus.url,

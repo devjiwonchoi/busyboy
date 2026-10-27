@@ -270,17 +270,22 @@ export function PreviewView({
     threadId,
   ]);
 
+  /**
+   * Whether the page may be remembered once it opened: never in incognito,
+   * including a new tab the default profile opened incognito. `null` when it
+   * did not open.
+   */
   const navigateToResolvedUrl = async (resolvedUrl: string) => {
     if (isServerTab && serverSurfaceRef.current) {
-      if (serverInputDisabled) return false;
+      if (serverInputDisabled) return null;
       serverSurfaceRef.current.navigate(resolvedUrl);
       if (!incognito) rememberPreviewUrl(threadRef, resolvedUrl);
-      return true;
+      return { remember: !incognito };
     }
     if (runtimeTabId && previewBridge) {
       await previewBridge.navigate(runtimeTabId, resolvedUrl);
       if (!incognito) rememberPreviewUrl(threadRef, resolvedUrl);
-      return true;
+      return { remember: !incognito };
     }
     const result = await openPreviewSession({ openPreview: open, threadRef, url: resolvedUrl });
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
@@ -293,13 +298,15 @@ export function PreviewView({
         });
       }
     }
-    return result._tag === "Success";
+    return result._tag === "Success"
+      ? { remember: result.value.profileId !== INCOGNITO_BROWSER_PROFILE_ID }
+      : null;
   };
 
   const handleSubmitUrl = async (next: string) => {
     try {
       const resolved = resolveAddressBarInput(next);
-      if ((await navigateToResolvedUrl(resolved)) && !incognito) {
+      if ((await navigateToResolvedUrl(resolved))?.remember) {
         recordVisitForThread(threadRef, resolved);
       }
     } catch {}
@@ -311,7 +318,7 @@ export function PreviewView({
         isServerTab || !previewBridge
           ? normalizePreviewUrl(next)
           : resolveDiscoveredServerUrl(threadRef.environmentId, next);
-      if ((await navigateToResolvedUrl(resolved)) && !incognito) {
+      if ((await navigateToResolvedUrl(resolved))?.remember) {
         recordVisitForThread(threadRef, next);
       }
     } catch {}
