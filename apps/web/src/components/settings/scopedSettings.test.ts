@@ -627,7 +627,7 @@ describe("null patches at project scope", () => {
           settings: {
             ...DEFAULT_SERVER_SETTINGS,
             projectSettingsOverrides: {
-              [projectId]: { defaultThreadEnvMode: "worktree" as const, defaultAutoPull: true },
+              [projectId]: { worktreeSubmodules: "none" as const, defaultAutoPull: true },
             },
           },
           environment: { capabilities: { projectSettingsOverrides: true } },
@@ -635,7 +635,7 @@ describe("null patches at project scope", () => {
       },
     ];
     expect(
-      planScopedSettingsPatch(scope, environments, { defaultThreadEnvMode: null }).serverWrites[0]
+      planScopedSettingsPatch(scope, environments, { worktreeSubmodules: null }).serverWrites[0]
         ?.patch,
     ).toEqual({ projectSettingsOverrides: { [projectId]: { defaultAutoPull: true } } });
     expect(
@@ -674,6 +674,25 @@ describe("global defaults at project scope", () => {
         },
       },
     ]);
+  });
+
+  it("saves the workspace mode to the environment and drops every project's override of it", () => {
+    const withOverrides = environment("Server", {
+      settings: {
+        projectSettingsOverrides: {
+          [projectId]: { defaultThreadEnvMode: "local", defaultAutoPull: true },
+        },
+      },
+    });
+
+    expect(
+      planScopedSettingsPatch(checkout, [laptop, withOverrides], {
+        defaultThreadEnvMode: "worktree",
+      }).serverWrites[0]?.patch,
+    ).toEqual({
+      defaultThreadEnvMode: "worktree",
+      projectSettingsOverrides: { [projectId]: { defaultAutoPull: true } },
+    });
   });
 
   it("keeps the project override for other keys sent alongside", () => {

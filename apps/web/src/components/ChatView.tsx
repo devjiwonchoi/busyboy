@@ -7421,11 +7421,15 @@ export default function ChatView(props: ChatViewProps) {
   const onEnvModeChange = (mode: DraftThreadEnvMode) => {
     if (multipleModelSelections !== null) return;
     if (canOverrideServerThreadEnvMode) {
-      if (activeThread) setPendingServerThreadEnvModeEntry({ threadId: activeThread.id, mode });
+      if (activeThread) {
+        setPendingServerThreadEnvModeEntry({ threadId: activeThread.id, mode });
+        saveGlobalDefaults({ environmentId, patch: { defaultThreadEnvMode: mode } });
+      }
       scheduleComposerFocus();
       return;
     }
     if (isLocalDraftThread) {
+      saveGlobalDefaults({ environmentId, patch: { defaultThreadEnvMode: mode } });
       setDraftThreadContext(composerDraftTarget, {
         envMode: mode,
         startFromOrigin: resolveNewDraftStartFromOrigin({
