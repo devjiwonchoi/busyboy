@@ -67,6 +67,12 @@ const originOf = (url: string) => {
   }
 };
 
+/** A web page's origin; other schemes keep no service workers or caches. */
+const webOriginOf = (url: string) => {
+  const origin = originOf(url);
+  return origin !== null && /^https?:/.test(origin) ? origin : null;
+};
+
 const keyOf = ({ threadId, tabId }: DesktopBrowserTabKey) => `${threadId}\u0000${tabId}`;
 
 interface AttachedTab {
@@ -88,6 +94,20 @@ interface AttachedTab {
    */
   agentScriptInDocument: boolean;
   readonly onNavigate: () => void;
+  /**
+   * Every site any frame of the tab loaded while the agent could drive it.
+   * Script the agent ran there can leave a service worker or cached responses
+   * that serve a doctored login page to the person later, so both are wiped
+   * when the agent lets go.
+   */
+  readonly agentSites: Set<string>;
+  readonly onFrameNavigate: (
+    event: Electron.Event,
+    url: string,
+    httpResponseCode: number,
+    httpStatusText: string,
+    isMainFrame: boolean,
+  ) => void;
   /** Settles once the page was checked for a password the person entered. */
   ready: Promise<void>;
   /**
@@ -372,6 +392,23 @@ export const make = Effect.gen(function* () {
     return true;
   };
 
+  /** Drops what the agent could have planted on the sites it drove the tab through. */
+  const forgetAgentSites = (tab: AttachedTab) => {
+    const session = tab.debuggee.webContents.session;
+    const current = webOriginOf(tab.debuggee.webContents.getURL?.() ?? "");
+    const origins = [...tab.agentSites];
+    // The agent may connect again; until then only the current site is its.
+    tab.agentSites.clear();
+    if (current !== null) {
+      tab.agentSites.add(current);
+    }
+    for (const origin of origins) {
+      void session
+        ?.clearStorageData({ origin, storages: ["serviceworkers", "cachestorage"] })
+        .catch(() => undefined);
+    }
+  };
+
   const detach = (key: DesktopBrowserTabKey) => {
     const id = keyOf(key);
     const tab = tabs.get(id);
@@ -380,6 +417,8 @@ export const make = Effect.gen(function* () {
     tab.credentialLock?.release();
     tab.debuggee.debugger.off("message", tab.onMessage);
     tab.debuggee.webContents.off?.("did-navigate", tab.onNavigate);
+    tab.debuggee.webContents.off?.("did-frame-navigate", tab.onFrameNavigate);
+    forgetAgentSites(tab);
     emit({ type: "detached", ...key });
   };
 
@@ -403,6 +442,13 @@ export const make = Effect.gen(function* () {
       onNavigate: () => {
         tab.agentScriptInDocument = false;
       },
+      agentSites: new Set(),
+      onFrameNavigate: (_event, url) => {
+        const origin = webOriginOf(url);
+        if (origin !== null) {
+          tab.agentSites.add(origin);
+        }
+      },
       onMessage: (_event, method, params, sessionId) => {
         // The agent never sees the sign-in's paused requests or answers them.
         if (!sessionId && tab.interceptor?.(method, params)) {
@@ -418,6 +464,11 @@ export const make = Effect.gen(function* () {
     tabs.set(id, tab);
     debuggee.debugger.on("message", tab.onMessage);
     debuggee.webContents.on?.("did-navigate", tab.onNavigate);
+    debuggee.webContents.on?.("did-frame-navigate", tab.onFrameNavigate);
+    const attachedOrigin = webOriginOf(debuggee.webContents.getURL?.() ?? "");
+    if (attachedOrigin !== null) {
+      tab.agentSites.add(attachedOrigin);
+    }
     // Passwords a person's autofill already put in this document are known.
     const filled = filledByDocument.get(debuggee.webContents);
     if (filled !== undefined && filled.size > 0) {
@@ -456,6 +507,7 @@ export const make = Effect.gen(function* () {
       }
       if (command.value.type === "release") {
         tab.relay = null;
+        forgetAgentSites(tab);
         return;
       }
       if (AGENT_INPUT_COMMAND.test(command.value.message)) tab.agentInputAt = performance.now();

@@ -34,13 +34,20 @@ const makeDebuggee = () => {
         pending.push(() => resolve({ method }));
       }),
   });
+  const cleared: Array<{ readonly origin?: string; readonly storages?: Array<string> }> = [];
   const webContents = Object.assign(new NodeEvents.EventEmitter(), {
     getURL: () => "http://localhost/",
     getTitle: () => "Page",
     getUserAgent: () => "Electron",
     isDestroyed: () => false,
+    session: {
+      clearStorageData: async (options: (typeof cleared)[number]) => {
+        cleared.push(options);
+      },
+    },
   });
   return {
+    cleared,
     tab: {
       webContents: webContents as unknown as Electron.WebContents,
       debugger: debuggee as unknown as Electron.Debugger,
@@ -382,6 +389,33 @@ describe("DesktopBrowserHost", () => {
       const otherTab = makeDebuggee();
       expect(host.isAgentDriving(debuggee.tab.webContents)).toBe(true);
       expect(host.isAgentDriving(otherTab.tab.webContents)).toBe(true);
+    }),
+  );
+
+  it.effect("wipes service workers and caches on every site the agent drove the tab through", () =>
+    Effect.gen(function* () {
+      const host = yield* makeHost;
+      const debuggee = makeDebuggee();
+      host.attach(key, debuggee.tab);
+      const page = debuggee.tab.webContents as unknown as NodeEvents.EventEmitter;
+      const wiped = () =>
+        debuggee.cleared.map(({ origin, storages }) => `${origin} ${storages?.join("+")}`);
+
+      // The agent loads a login page with a third-party frame on it.
+      page.emit("did-frame-navigate", {}, "https://login.example.com/session", 200, "OK", true);
+      page.emit("did-frame-navigate", {}, "https://widgets.example.net/frame", 200, "OK", false);
+      page.emit("did-frame-navigate", {}, "about:blank", 200, "OK", false);
+      yield* host.handleCommandLine(encodeJson({ type: "release", ...key }));
+
+      expect(wiped()).toEqual([
+        "http://localhost serviceworkers+cachestorage",
+        "https://login.example.com serviceworkers+cachestorage",
+        "https://widgets.example.net serviceworkers+cachestorage",
+      ]);
+
+      // Closing the tab wipes the site it was left on too.
+      host.detach(key);
+      expect(wiped().slice(3)).toEqual(["http://localhost serviceworkers+cachestorage"]);
     }),
   );
 });
