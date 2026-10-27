@@ -1651,6 +1651,8 @@ export interface ChatComposerProps {
   setThreadError: (threadId: ThreadId | null, error: string | null) => void;
   onExpandImage: (preview: ExpandedImagePreview) => void;
   onFileOpen: (attachment: ChatFileAttachment) => void;
+  /** The provider's guess at the user's next prompt, shown in the empty composer. */
+  promptSuggestion: string | null;
 }
 
 /**
@@ -1993,6 +1995,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onFileOpen,
     editingQueuedAttachments,
     onRemoveEditingQueuedAttachment,
+    promptSuggestion,
   } = props;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const saveGlobalDefaults = useSaveGlobalDefaults();
@@ -2775,6 +2778,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const nonPersistedComposerImageIdSet = new Set(nonPersistedComposerImageIds);
 
   const isComposerApprovalState = activePendingApproval !== null;
+  // Shown only over an empty composer that would otherwise show the default placeholder.
+  const visiblePromptSuggestion =
+    promptSuggestion !== null &&
+    prompt.length === 0 &&
+    phase === "ready" &&
+    !isComposerApprovalState &&
+    activePendingProgress === null &&
+    !(showPlanFollowUpPrompt && activeProposedPlan) &&
+    !projectSelectionRequired &&
+    !showProviderUnavailable
+      ? promptSuggestion
+      : null;
   const composerSuggestionsVisible = composerMenuOpen && !isComposerApprovalState;
   const composerSuggestionListVisible = composerSuggestionsVisible && composerMenuItems.length > 0;
   const activePendingUserInput = pendingUserInputs[0] ?? null;
@@ -4190,6 +4205,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return true;
     }
     if (key === "Enter" && isTaskItem) return false;
+    if (
+      key === "Tab" &&
+      !event.shiftKey &&
+      !event.isComposing &&
+      visiblePromptSuggestion !== null &&
+      promptRef.current.length === 0
+    ) {
+      replacePromptFromHistory(visiblePromptSuggestion);
+      return true;
+    }
     if (
       !isLiteralPendingAnswer &&
       !event.isComposing &&
@@ -7165,7 +7190,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                 ? "Enable a provider in Settings to send a message"
                                 : phase === "disconnected"
                                   ? DISCONNECTED_COMPOSER_PLACEHOLDER
-                                  : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                                  : visiblePromptSuggestion !== null
+                                    ? `${visiblePromptSuggestion}  (Tab)`
+                                    : "Ask anything, @tag files/folders, $use skills, or / for commands"
                     }
                     disabled={
                       isConnecting ||

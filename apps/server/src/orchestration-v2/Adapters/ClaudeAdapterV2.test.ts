@@ -3759,6 +3759,76 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
+  it.effect("attaches the next-prompt suggestion to the turn it follows", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeWakeHarness;
+      const now = yield* DateTime.now;
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now,
+          attemptId: RunAttemptId.make("attempt-prompt-suggestion"),
+          text: "Fix the bug and run the tests",
+          attachments: [],
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000701", result: "Fixed." }),
+      );
+      yield* Queue.take(harness.terminalReceipts);
+
+      // The CLI sends the suggestion after the result, once the turn has ended.
+      yield* harness.offerAndWait(
+        claudeSdkFrame({
+          type: "prompt_suggestion",
+          suggestion: " run the tests ",
+          uuid: "00000000-0000-4000-8000-000000000702",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+
+      // Events reach the harness on their own fiber.
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (
+          harness.events.some(
+            (event) =>
+              event.type === "provider_turn.updated" &&
+              event.providerTurn.promptSuggestion !== undefined,
+          )
+        ) {
+          break;
+        }
+        yield* Effect.yieldNow;
+      }
+
+      assert.equal(harness.getOpenedOptions()?.promptSuggestions, true);
+      const turnUpdates = harness.events.filter((event) => event.type === "provider_turn.updated");
+      const completed = turnUpdates.at(-2);
+      const suggested = turnUpdates.at(-1);
+      assert.equal(completed?.type, "provider_turn.updated");
+      assert.equal(suggested?.type, "provider_turn.updated");
+      if (
+        completed?.type === "provider_turn.updated" &&
+        suggested?.type === "provider_turn.updated"
+      ) {
+        assert.equal(completed.providerTurn.status, "completed");
+        assert.deepEqual(suggested, {
+          type: "provider_turn.updated",
+          driver: completed.driver,
+          threadId: harness.threadId,
+          providerTurn: { ...completed.providerTurn, promptSuggestion: "run the tests" },
+        });
+      }
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(NodeServices.layer, IdAllocator.layer, McpProviderSessions.layer),
+      ),
+    ),
+  );
+
   it.effect("titles Claude reads, searches, and skills on tool completion", () =>
     Effect.gen(function* () {
       const harness = yield* makeWakeHarness;

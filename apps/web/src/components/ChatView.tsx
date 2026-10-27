@@ -67,6 +67,7 @@ import {
   type KeybindingCommand,
   type MessageId,
   type ModelSelection,
+  type OrchestrationV2ProviderTurn,
   type ProjectScript,
   type PreviewAnnotationPayload,
   ProviderInstanceId,
@@ -1163,6 +1164,15 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadLiveTokenUsage = latestProviderTurnTokenUsage(
     serverProjection?.providerTurns ?? [],
   );
+  // Only the active provider thread's newest turn may carry a suggestion; any
+  // later turn, even a failed one, makes it stale.
+  const promptSuggestion =
+    serverProjection?.providerTurns
+      .filter((turn) => turn.providerThreadId === serverProjection.thread.activeProviderThreadId)
+      .reduce<OrchestrationV2ProviderTurn | null>(
+        (latest, turn) => (latest === null || turn.ordinal > latest.ordinal ? turn : latest),
+        null,
+      )?.promptSuggestion ?? null;
   const serverVisibleTurnItems = useThreadVisibleTurnItems(routeThreadDetailRef);
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
   const threadHistoryControls = (() => {
@@ -8064,6 +8074,7 @@ export default function ChatView(props: ChatViewProps) {
                           {!composerMounted ? null : (
                             <ChatComposer
                               canOperateThread={canOperateThread}
+                              promptSuggestion={promptSuggestion}
                               reportedModelSelection={reportedModelSelection}
                               multipleModelSelections={multipleModelSelections}
                               supportsMultipleModels={
