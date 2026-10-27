@@ -8,7 +8,10 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
 
+import { isElectron } from "../../env";
+
 import { mergeEnvironmentSettings } from "../../hooks/useSettings";
+import { isMacPlatform } from "../../lib/utils";
 import { getCustomModelOptionsByInstance } from "../../modelSelection";
 import {
   applyProviderInstanceSettings,
@@ -77,6 +80,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const mixedWorkspace = useScopedSettingsMixed(["defaultThreadEnvMode"]);
   const mixedSubmodules = useScopedSettingsMixed(["worktreeSubmodules"]);
   const mixedBrowser = useScopedSettingsMixed(["enableAgentBrowserAccess"]);
+  const mixedComputerUse = useScopedSettingsMixed(["enableAgentComputerUse"]);
   const mixedAutoPull = useScopedSettingsMixed(["defaultAutoPull"]);
   const mixedAgentCredits = useScopedSettingsMixed(["removeAgentCreditsOnMerge"]);
   const mixedMergeMethod = useScopedSettingsMixed(["pullRequestMergeMethod"]);
@@ -251,7 +255,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
         category === "general" || category === "project"
           ? "New threads"
           : category === "integrations"
-            ? "Browser"
+            ? "Agent access"
             : "Repositories"
       }
     >
@@ -509,6 +513,41 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               />
             }
           />
+          {isElectron && isMacPlatform(navigator.platform) ? (
+            <SettingsRow
+              serverScoped
+              settingKeys={["enableAgentComputerUse"]}
+              mixed={mixedComputerUse}
+              id={searchableSetting("agent-computer-use").id}
+              title="Agent computer use"
+              description={
+                isProjectScope
+                  ? "Allow agents in this project to read and operate apps on this Mac. They ask before using each app."
+                  : "Allow agents to read and operate apps on this Mac. They ask before using each app. Projects can override it."
+              }
+              resetAction={
+                settings.enableAgentComputerUse !==
+                DEFAULT_SERVER_SETTINGS.enableAgentComputerUse ? (
+                  <SettingResetButton
+                    label="default computer use"
+                    onClick={() =>
+                      updateSettings({
+                        enableAgentComputerUse: DEFAULT_SERVER_SETTINGS.enableAgentComputerUse,
+                      })
+                    }
+                  />
+                ) : null
+              }
+              control={
+                <Switch
+                  aria-label="Agent computer use"
+                  mixed={mixedComputerUse}
+                  checked={mixedComputerUse ? false : settings.enableAgentComputerUse}
+                  onCheckedChange={(enabled) => updateSettings({ enableAgentComputerUse: enabled })}
+                />
+              }
+            />
+          ) : null}
         </>
       )}
     </SettingsSection>

@@ -638,6 +638,13 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
       ? ["Agent browser access"]
       : []),
+    ...(settings.enableAgentComputerUse !== DEFAULT_UNIFIED_SETTINGS.enableAgentComputerUse
+      ? ["Agent computer use"]
+      : []),
+    ...(settings.computerUseKeepDisplayAwake !==
+    DEFAULT_UNIFIED_SETTINGS.computerUseKeepDisplayAwake
+      ? ["Keep display awake for computer use"]
+      : []),
   ];
 
   const restoreDefaults = async () => {
@@ -756,6 +763,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       browserAutoShowFloatingPreview: DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
       pullRequestLinksOpenInApp: DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp,
       enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
+      enableAgentComputerUse: DEFAULT_UNIFIED_SETTINGS.enableAgentComputerUse,
+      computerUseKeepDisplayAwake: DEFAULT_UNIFIED_SETTINGS.computerUseKeepDisplayAwake,
     });
     onRestored?.();
   };
