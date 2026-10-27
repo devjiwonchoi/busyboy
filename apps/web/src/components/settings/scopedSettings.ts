@@ -45,11 +45,12 @@ export function isProjectScopedSettingKey(key: string): key is ProjectScopedServ
   return PROJECT_SCOPED_KEYS.has(key);
 }
 
-// Model (with effort) and permissions always save as environment defaults,
-// even when changed from a project, so new threads in every project use them.
+// Model (with effort), permissions, and workspace mode always save as environment
+// defaults, even when changed from a project, so new threads in every project use them.
 const GLOBAL_DEFAULT_KEYS = [
   "defaultModelSelection",
   "defaultRuntimeMode",
+  "defaultThreadEnvMode",
 ] as const satisfies readonly ProjectScopedServerSettingKey[];
 const GLOBAL_DEFAULT_KEY_SET = new Set<string>(GLOBAL_DEFAULT_KEYS);
 

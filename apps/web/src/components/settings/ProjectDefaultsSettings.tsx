@@ -197,13 +197,9 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       mixed={mixedWorkspace}
       id={searchableSetting("new-threads").id}
       title="Workspace"
-      description={
-        isProjectScope
-          ? "Where new threads in this project start."
-          : "Where new threads start. Projects and their t3.json can override it."
-      }
+      description="Where new threads start in every project. A repository's t3.json applies only while this is unset."
       resetAction={
-        !isProjectScope && settings.defaultThreadEnvMode !== null ? (
+        settings.defaultThreadEnvMode !== null ? (
           <SettingResetButton
             label="default workspace"
             onClick={() => updateSettings({ defaultThreadEnvMode: null })}
