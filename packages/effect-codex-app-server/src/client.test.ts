@@ -124,6 +124,47 @@ it.layer(NodeServices.layer)("effect-codex-app-server client", (it) => {
       ]);
     }),
   );
+  it.effect("routes a claimed thread's traffic to its claim instead of the method handlers", () =>
+    Effect.gen(function* () {
+      const handled = yield* Ref.make<Array<string>>([]);
+      const claimed = yield* Ref.make<Array<string>>([]);
+      const handle = yield* makeHandle();
+      const scope = yield* Scope.make();
+      const context = yield* Layer.buildWithScope(CodexClient.layerChildProcess(handle), scope);
+
+      yield* Effect.gen(function* () {
+        const client = yield* CodexClient.CodexAppServerClient;
+        yield* client.handleServerRequest("item/tool/requestUserInput", () =>
+          Ref.update(handled, (current) => [...current, "item/tool/requestUserInput"]).pipe(
+            Effect.as({ answers: {} }),
+          ),
+        );
+        yield* client.handleServerNotification("item/agentMessage/delta", () =>
+          Ref.update(handled, (current) => [...current, "item/agentMessage/delta"]),
+        );
+        yield* client.claimThread("thread-1", {
+          onNotification: (method) => Ref.update(claimed, (current) => [...current, method]),
+          onRequest: (method) =>
+            Ref.update(claimed, (current) => [...current, method]).pipe(Effect.as({ answers: {} })),
+        });
+
+        yield* client.request("initialize", {
+          clientInfo: { name: "effect-codex-app-server-test", version: "0.0.0" },
+          capabilities: { experimentalApi: true, optOutNotificationMethods: null },
+        });
+        yield* client.notify("initialized", undefined);
+        const path = yield* Path.Path;
+        yield* client.request("skills/list", { cwds: [path.join(import.meta.dirname, "..")] });
+      }).pipe(Effect.provide(context), Effect.ensuring(Scope.close(scope, Exit.void)));
+
+      assert.deepEqual(yield* Ref.get(claimed), [
+        "item/agentMessage/delta",
+        "item/tool/requestUserInput",
+      ]);
+      assert.deepEqual(yield* Ref.get(handled), []);
+    }),
+  );
+
   it.effect("drains child stderr so large diagnostics cannot block protocol responses", () =>
     Effect.gen(function* () {
       const handle = yield* makeHandle({

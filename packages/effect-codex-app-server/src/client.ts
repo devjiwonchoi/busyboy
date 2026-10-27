@@ -75,8 +75,33 @@ export class CodexAppServerClient extends Context.Service<
         params: unknown,
       ) => Effect.Effect<void, CodexError.CodexAppServerError>,
     ) => Effect.Effect<void>;
+    /**
+     * Sends every notification and server request for `threadId` to `handlers`
+     * instead of the method handlers, until the scope closes. For threads the
+     * client runs out of sight, such as an ephemeral fork.
+     */
+    readonly claimThread: (
+      threadId: string,
+      handlers: CodexThreadClaimHandlers,
+    ) => Effect.Effect<void, never, Scope.Scope>;
   }
 >()("effect-codex-app-server/client/CodexAppServerClient") {}
+
+export interface CodexThreadClaimHandlers {
+  readonly onNotification: (method: string, params: unknown) => Effect.Effect<void>;
+  readonly onRequest: (
+    method: string,
+    params: unknown,
+  ) => Effect.Effect<unknown, CodexError.CodexAppServerError>;
+}
+
+const payloadThreadId = (params: unknown): string | undefined => {
+  if (typeof params !== "object" || params === null) {
+    return undefined;
+  }
+  const threadId: unknown = Reflect.get(params, "threadId");
+  return typeof threadId === "string" ? threadId : undefined;
+};
 
 type ServerRequestHandler = (
   payload: unknown,
@@ -107,6 +132,11 @@ export const make = Effect.fn("effect-codex-app-server/CodexAppServerClient.make
   let unknownNotificationHandler:
     | ((method: string, params: unknown) => Effect.Effect<void, CodexError.CodexAppServerError>)
     | undefined;
+  const threadClaims = new Map<string, CodexThreadClaimHandlers>();
+  const claimFor = (params: unknown) => {
+    const threadId = payloadThreadId(params);
+    return threadId === undefined ? undefined : threadClaims.get(threadId);
+  };
 
   const getServerRequestParamSchema = <M extends CodexRpc.ServerRequestMethod>(
     method: M,
@@ -153,6 +183,11 @@ export const make = Effect.fn("effect-codex-app-server/CodexAppServerClient.make
   const dispatchNotification = (
     notification: CodexProtocol.CodexAppServerIncomingNotification,
   ): Effect.Effect<void, never> => {
+    const claim = claimFor(notification.params);
+    if (claim !== undefined) {
+      return claim.onNotification(notification.method, notification.params);
+    }
+
     const schema =
       notification.method in CodexRpc.SERVER_NOTIFICATION_PARAMS
         ? CodexRpc.SERVER_NOTIFICATION_PARAMS[
@@ -178,6 +213,11 @@ export const make = Effect.fn("effect-codex-app-server/CodexAppServerClient.make
   const dispatchRequest = (
     request: CodexProtocol.CodexAppServerIncomingRequest,
   ): Effect.Effect<unknown, CodexError.CodexAppServerError> => {
+    const claim = claimFor(request.params);
+    if (claim !== undefined) {
+      return claim.onRequest(request.method, request.params);
+    }
+
     if (request.method in CodexRpc.SERVER_REQUEST_PARAMS) {
       const method = request.method as CodexRpc.ServerRequestMethod;
       const payloadSchema = getServerRequestParamSchema(method);
@@ -258,6 +298,18 @@ export const make = Effect.fn("effect-codex-app-server/CodexAppServerClient.make
       Effect.sync(() => {
         unknownNotificationHandler = handler;
       }),
+    claimThread: (threadId, handlers) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          threadClaims.set(threadId, handlers);
+        }),
+        () =>
+          Effect.sync(() => {
+            if (threadClaims.get(threadId) === handlers) {
+              threadClaims.delete(threadId);
+            }
+          }),
+      ).pipe(Effect.asVoid),
   });
 });
 
