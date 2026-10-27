@@ -94,6 +94,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import { resolveAttachmentPath, resolveAttachmentPathById } from "../../attachmentStore.ts";
 import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
+import {
+  CODEX_PROMPT_SUGGESTION_INSTRUCTIONS,
+  codexSupportsPredictionFork,
+  normalizeCodexPromptSuggestion,
+} from "./codexPromptSuggestion.ts";
 import { ServerConfig } from "../../config.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import {
@@ -643,6 +648,20 @@ function webSearchPatterns(item: CodexWebSearchItem): ReadonlyArray<string> {
       return compactStrings([item.query]);
   }
 }
+
+const decodeCodexForkedThread = Schema.decodeUnknownEffect(
+  Schema.Struct({ thread: Schema.Struct({ id: Schema.String }) }),
+);
+const decodeCodexFinishedTurn = Schema.decodeUnknownEffect(
+  Schema.Struct({
+    turn: Schema.Struct({
+      status: Schema.String,
+      items: Schema.Array(
+        Schema.Struct({ type: Schema.String, text: Schema.optionalKey(Schema.String) }),
+      ),
+    }),
+  }),
+);
 
 const decodeTurnApprovalPolicy = Schema.decodeUnknownEffect(
   Schema.Union([CodexSchema.V2TurnStartParams__AskForApproval, Schema.Null]),
@@ -1750,6 +1769,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             ),
           );
         const initialized = yield* Ref.make(false);
+        let supportsPredictionFork = false;
+        // The newest completed root turn per native thread; a suggestion for
+        // an older turn is stale once the user moves on.
+        const latestCompletedRootTurn = new Map<string, string>();
         // Threads share this app-server, and Codex rejects a second
         // `initialize`.
         const initializePermit = yield* Semaphore.make(1);
@@ -1760,7 +1783,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               return;
             }
 
-            yield* client
+            const initializeResponse = yield* client
               .request("initialize", {
                 clientInfo: buildCodexInitializeParams().clientInfo,
                 capabilities: CODEX_CLIENT_CAPABILITIES,
@@ -1775,6 +1798,9 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                       : Effect.fail(error),
                 }),
               );
+            if (initializeResponse !== undefined) {
+              supportsPredictionFork = codexSupportsPredictionFork(initializeResponse.userAgent);
+            }
             yield* client.notify("initialized", undefined);
             yield* Ref.set(initialized, true);
           }),
@@ -1980,6 +2006,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             const existing = (yield* Ref.get(activeTurns)).get(input.nativeTurnId);
             if (existing !== undefined) {
               return existing;
+            }
+            const rootNativeThreadId = input.turnInput.providerThread.nativeThreadRef?.nativeId;
+            if (rootNativeThreadId != null) {
+              latestCompletedRootTurn.delete(rootNativeThreadId);
             }
             const providerTurnId = idAllocator.derive.providerTurn({
               driver: CODEX_PROVIDER,
@@ -5721,6 +5751,80 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           },
         );
 
+        // Asks an ephemeral prediction fork of the finished turn for the user's
+        // likely next prompt. The fork reuses the parent's prompt cache, and its
+        // traffic is claimed so none of it reaches the thread's handlers.
+        const suggestNextPrompt = Effect.fn("CodexAdapterV2.suggestNextPrompt")(
+          function* (input: {
+            readonly nativeThreadId: string;
+            readonly nativeTurnId: string;
+            readonly projectionThreadId: ThreadId;
+            readonly completedTurn: OrchestrationV2ProviderTurn;
+          }) {
+            const forked = yield* client.raw
+              .request("thread/fork", {
+                threadId: input.nativeThreadId,
+                ephemeral: true,
+                experimentalPredictionMode: true,
+                excludeTurns: true,
+              })
+              .pipe(Effect.flatMap(decodeCodexForkedThread));
+            const forkThreadId = forked.thread.id;
+            const answer = yield* Deferred.make<string | null>();
+            yield* client.claimThread(forkThreadId, {
+              onNotification: (method, params) =>
+                method === "turn/completed"
+                  ? decodeCodexFinishedTurn(params).pipe(
+                      Effect.map(({ turn }) =>
+                        turn.status === "completed"
+                          ? (turn.items.findLast((item) => item.type === "agentMessage")?.text ??
+                            null)
+                          : null,
+                      ),
+                      Effect.orElseSucceed(() => null),
+                      Effect.flatMap((text) => Deferred.succeed(answer, text)),
+                      Effect.asVoid,
+                    )
+                  : Effect.void,
+              // The fork only predicts; refuse anything it asks to do.
+              onRequest: (method) =>
+                Effect.fail(CodexErrors.CodexAppServerRequestError.methodNotFound(method)),
+            });
+            yield* Effect.addFinalizer(() =>
+              client.raw
+                .request("thread/unsubscribe", { threadId: forkThreadId })
+                .pipe(Effect.ignore),
+            );
+
+            yield* client.raw.request("turn/start", {
+              threadId: forkThreadId,
+              effort: "low",
+              input: [{ type: "text", text: CODEX_PROMPT_SUGGESTION_INSTRUCTIONS }],
+            });
+            const suggestion = normalizeCodexPromptSuggestion(
+              yield* Deferred.await(answer).pipe(Effect.timeout("90 seconds")),
+            );
+            if (
+              suggestion === null ||
+              latestCompletedRootTurn.get(input.nativeThreadId) !== input.nativeTurnId
+            ) {
+              return;
+            }
+
+            latestCompletedRootTurn.delete(input.nativeThreadId);
+            yield* emitProviderEvent({
+              type: "provider_turn.updated",
+              driver: CODEX_PROVIDER,
+              threadId: input.projectionThreadId,
+              providerTurn: { ...input.completedTurn, promptSuggestion: suggestion },
+            });
+          },
+          Effect.scoped,
+          Effect.catchCause((cause) =>
+            Effect.logDebug("orchestration-v2.codex-prompt-suggestion-failed", { cause }),
+          ),
+        );
+
         const finalizeCodexTurn = (input: {
           readonly context: ActiveCodexTurnContext;
           readonly nativeTurnId: string;
@@ -5820,6 +5924,21 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   threadId: input.context.projectionThreadId,
                   providerTurn: completedTurn,
                 });
+              }
+              if (
+                !holdsForGoal &&
+                supportsPredictionFork &&
+                input.context.subagent === null &&
+                input.status === "completed" &&
+                nativeThreadId != null
+              ) {
+                latestCompletedRootTurn.set(nativeThreadId, input.nativeTurnId);
+                yield* suggestNextPrompt({
+                  nativeThreadId,
+                  nativeTurnId: input.nativeTurnId,
+                  projectionThreadId: input.context.projectionThreadId,
+                  completedTurn,
+                }).pipe(Effect.forkIn(scope));
               }
               if (input.context.subagent !== null) {
                 yield* emitProviderEvent({

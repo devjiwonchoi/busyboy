@@ -65,6 +65,7 @@ import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter"
 import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import * as CodexAdapterV2 from "./CodexAdapterV2.ts";
 import { makeReplayServerConfig, withCodexReplayChildMetadata } from "./CodexAdapterV2.testkit.ts";
+import { CODEX_PROMPT_SUGGESTION_INSTRUCTIONS } from "./codexPromptSuggestion.ts";
 import * as CodexAdapterV2Testkit from "./CodexAdapterV2.testkit.ts";
 
 const encodeUnknownJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
@@ -2258,6 +2259,174 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       assert.isDefined(harness.runtime.unloadThread);
       yield* harness.runtime.unloadThread!({ providerThread: harness.providerThread });
       assert.deepEqual(requests, ["initialize", "thread/start", "thread/unsubscribe"]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("suggests the next prompt from a prediction fork the thread never sees", () =>
+    Effect.gen(function* () {
+      const nativeThreadId = "suggestion-thread";
+      const nativeTurnId = "suggestion-turn";
+      const forkThreadId = "prediction-fork-thread";
+      const forkTurnId = "prediction-fork-turn";
+      const prompt = "Fix the failing test.";
+      // Codex 0.164.0 accepts prediction forks; the default preamble's 0.156.1 does not.
+      const preamble = codexReplayPreamble({ nativeThreadId, nativeTurnId, prompt }).map((entry) =>
+        entry.type === "emit_inbound" && entry.label === "initialize"
+          ? {
+              ...entry,
+              frame: {
+                id: 1,
+                result: {
+                  userAgent: "Busyboy/0.164.0 (Mac OS 26.5.2; arm64)",
+                  codexHome: "/tmp/codex-home",
+                  platformFamily: "unix",
+                  platformOs: "macos",
+                },
+              },
+            }
+          : entry,
+      );
+      const forkTurn = (status: "inProgress" | "completed") => ({
+        ...makeCodexReplayTurn({ id: forkTurnId, status }),
+        ...(status === "completed"
+          ? { items: [{ type: "agentMessage", id: "fork-message", text: "run the tests" }] }
+          : {}),
+      });
+      const transcript = makeCodexReplayTranscript({
+        scenario: "prompt-suggestion-fork",
+        entries: [
+          ...preamble,
+          {
+            type: "emit_inbound",
+            label: "turn/completed",
+            frame: {
+              method: "turn/completed",
+              params: {
+                threadId: nativeThreadId,
+                turn: makeCodexReplayTurn({ id: nativeTurnId, status: "completed" }),
+              },
+            },
+          },
+          {
+            type: "expect_outbound",
+            label: "thread/fork",
+            frame: {
+              id: 4,
+              method: "thread/fork",
+              params: {
+                threadId: nativeThreadId,
+                ephemeral: true,
+                experimentalPredictionMode: true,
+                excludeTurns: true,
+              },
+            },
+          },
+          {
+            type: "emit_inbound",
+            label: "thread/fork",
+            frame: { id: 4, result: { thread: { id: forkThreadId } } },
+          },
+          {
+            type: "expect_outbound",
+            label: "turn/start/fork",
+            frame: {
+              id: 5,
+              method: "turn/start",
+              params: {
+                threadId: forkThreadId,
+                effort: "low",
+                input: [{ type: "text", text: CODEX_PROMPT_SUGGESTION_INSTRUCTIONS }],
+              },
+            },
+          },
+          {
+            type: "emit_inbound",
+            label: "turn/start/fork",
+            frame: { id: 5, result: { turn: forkTurn("inProgress") } },
+          },
+          {
+            type: "emit_inbound",
+            label: "turn/started/fork",
+            frame: {
+              method: "turn/started",
+              params: { threadId: forkThreadId, turn: forkTurn("inProgress") },
+            },
+          },
+          {
+            type: "emit_inbound",
+            label: "item/agentMessage/delta/fork",
+            frame: {
+              method: "item/agentMessage/delta",
+              params: {
+                threadId: forkThreadId,
+                turnId: forkTurnId,
+                itemId: "fork-message",
+                delta: "run the tests",
+              },
+            },
+          },
+          {
+            type: "emit_inbound",
+            label: "turn/completed/fork",
+            frame: {
+              method: "turn/completed",
+              params: { threadId: forkThreadId, turn: forkTurn("completed") },
+            },
+          },
+          {
+            type: "expect_outbound",
+            label: "thread/unsubscribe/fork",
+            frame: { id: 6, method: "thread/unsubscribe", params: { threadId: forkThreadId } },
+          },
+          {
+            type: "emit_inbound",
+            label: "thread/unsubscribe/fork",
+            frame: { id: 6, result: { status: "unsubscribed" } },
+          },
+        ],
+      });
+      const harness = yield* makeCodexReplayHarness(transcript);
+      yield* harness.runtime.startTurn(
+        makeCodexTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make("prompt-suggestion-attempt"),
+          text: prompt,
+        }),
+      );
+      yield* harness.firstTerminal;
+
+      // The fork runs on its own fiber after the turn settles.
+      const suggestedTurn = () =>
+        harness.events.find(
+          (event) =>
+            event.type === "provider_turn.updated" &&
+            event.providerTurn.promptSuggestion !== undefined,
+        );
+      for (let attempt = 0; attempt < 200 && suggestedTurn() === undefined; attempt++) {
+        yield* Effect.yieldNow;
+      }
+
+      const providerTurnId = (yield* IdAllocator.IdAllocatorV2).derive.providerTurn({
+        driver: CodexAdapterV2.CODEX_DRIVER_KIND,
+        nativeTurnId,
+      });
+      const suggested = suggestedTurn();
+      assert.equal(suggested?.type, "provider_turn.updated");
+      if (suggested?.type === "provider_turn.updated") {
+        assert.equal(suggested.threadId, harness.threadId);
+        assert.equal(suggested.providerTurn.id, providerTurnId);
+        assert.equal(suggested.providerTurn.status, "completed");
+        assert.equal(suggested.providerTurn.promptSuggestion, "run the tests");
+      }
+      assert.isFalse(JSON.stringify(harness.events).includes(forkThreadId));
+      assert.isFalse(JSON.stringify(harness.events).includes(forkTurnId));
     }).pipe(
       Effect.scoped,
       Effect.provide(
