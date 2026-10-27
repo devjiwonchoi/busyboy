@@ -968,6 +968,12 @@ export const ServerSettings = Schema.Struct({
   computerUseAllowedApps: Schema.Array(TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
+  // Keeps the display from sleeping while an agent uses the computer, so it
+  // can finish while the user is away. Off by default, since a Mac that stays
+  // awake also stays unlocked.
+  computerUseKeepDisplayAwake: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
   defaultAutoPull: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   defaultProjectScripts: Schema.Array(ProjectScript).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
@@ -1249,6 +1255,7 @@ export const ServerSettingsPatch = Schema.Struct({
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
   enableAgentComputerUse: Schema.optionalKey(Schema.Boolean),
   computerUseAllowedApps: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
+  computerUseKeepDisplayAwake: Schema.optionalKey(Schema.Boolean),
   defaultAutoPull: Schema.optionalKey(Schema.Boolean),
   defaultProjectScripts: Schema.optionalKey(Schema.Array(ProjectScript)),
   defaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),

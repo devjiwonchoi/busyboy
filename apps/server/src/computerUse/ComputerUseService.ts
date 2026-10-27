@@ -8,7 +8,9 @@ import {
   ComputerUseError,
   type ComputerUseErrorCode,
   type ComputerUseGetAppStateInput,
+  type ComputerUseGetPermissionsInput,
   type ComputerUseInvokeMenuInput,
+  type ComputerUsePermissions,
   type ComputerUsePressKeyInput,
   type ComputerUseScrollInput,
   type ComputerUseSetValueInput,
@@ -73,6 +75,10 @@ export class ComputerUseService extends Context.Service<
     readonly activity: Stream.Stream<ComputerUseActivity>;
     /** Stops the agent that is operating the computer, as the user asked from the desktop. */
     readonly stopActing: Effect.Effect<void>;
+    /** Busyboy Computer Use's macOS permissions, for Settings. */
+    readonly getPermissions: (
+      input: ComputerUseGetPermissionsInput,
+    ) => Effect.Effect<ComputerUsePermissions, ComputerUseError>;
   }
 >()("t3/computerUse/ComputerUseService") {}
 
@@ -320,20 +326,34 @@ export const make = Effect.gen(function* () {
     }
   });
 
+  // The driver reads the setting when it starts, so a change restarts it on the next call.
+  const applyKeepDisplayAwake = Option.isNone(settings)
+    ? Effect.void
+    : settings.value.getSettings.pipe(
+        Effect.flatMap((current) =>
+          driver.setKeepDisplayAwake(current.computerUseKeepDisplayAwake),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("Could not apply the keep-display-awake setting", cause),
+        ),
+      );
+
+  const useDriver = <A>(use: (worker: CuaDriverLike) => Effect.Effect<A, ComputerUseError>) =>
+    driver.withWorker(use).pipe(
+      Effect.catchTags({
+        ComputerUseUnavailableError: (error) =>
+          Effect.fail(fail("computer_use_unavailable", error.message)),
+        ComputerUseDriverStartError: (error) => Effect.fail(driverFailed(error.cause)),
+      }),
+    );
+
   const withWorker = <A>(
     caller: ComputerUseCaller,
     use: (worker: CuaDriverLike) => Effect.Effect<A, ComputerUseError>,
   ) =>
     requireEnabled(caller.threadId).pipe(
-      Effect.andThen(
-        driver.withWorker(use).pipe(
-          Effect.catchTags({
-            ComputerUseUnavailableError: (error) =>
-              Effect.fail(fail("computer_use_unavailable", error.message)),
-            ComputerUseDriverStartError: (error) => Effect.fail(driverFailed(error.cause)),
-          }),
-        ),
-      ),
+      Effect.andThen(applyKeepDisplayAwake),
+      Effect.andThen(useDriver(use)),
     );
 
   /**
@@ -382,7 +402,7 @@ export const make = Effect.gen(function* () {
     });
     const permissions = yield* readPermissions(worker);
     if (!permissions.accessibility) {
-      yield* driver.requestPermissions;
+      yield* driver.requestPermissions({ askedByUser: false });
       return yield* permissionRequired("Accessibility");
     }
 
@@ -459,7 +479,7 @@ export const make = Effect.gen(function* () {
         const { app, window, windows, permissions } = yield* resolveTarget(worker, input);
         const includeScreenshot = input.includeScreenshot === true;
         if (includeScreenshot && !permissions.screenRecording) {
-          yield* driver.requestPermissions;
+          yield* driver.requestPermissions({ askedByUser: false });
           return yield* permissionRequired("Screen Recording");
         }
         const state = yield* callDriver(() =>
@@ -704,6 +724,22 @@ export const make = Effect.gen(function* () {
       { tool: "invoke_menu", args: { ...windowArgs(target), path: input.path } },
     ]);
 
+  // Settings can read these before any project turns computer use on.
+  const getPermissions: ComputerUseService["Service"]["getPermissions"] = Effect.fn(
+    "ComputerUseService.getPermissions",
+  )(function* (input) {
+    if (!driver.available) {
+      return { available: false, accessibility: false, screenRecording: false };
+    }
+
+    const permissions = yield* useDriver(readPermissions);
+    if (input.request && !(permissions.accessibility && permissions.screenRecording)) {
+      yield* driver.requestPermissions({ askedByUser: true });
+    }
+
+    return { available: true, ...permissions };
+  });
+
   return ComputerUseService.of({
     listApps,
     getAppState,
@@ -716,6 +752,7 @@ export const make = Effect.gen(function* () {
     invokeMenu,
     activity: SubscriptionRef.changes(activity),
     stopActing,
+    getPermissions,
   });
 });
 
