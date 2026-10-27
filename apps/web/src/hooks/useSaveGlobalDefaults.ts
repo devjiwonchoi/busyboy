@@ -11,7 +11,7 @@ import { readEnvironmentScope } from "../state/session";
 import { useAtomCommand } from "../state/use-atom-command";
 
 /**
- * Saves a model, effort, or permission picked in the composer as the
+ * Saves a model, effort, permission, or workspace mode picked in the composer as the
  * environment's default, so the next new thread in any project starts with it.
  */
 export function useSaveGlobalDefaults() {
