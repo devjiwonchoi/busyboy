@@ -52,6 +52,8 @@ interface FakeDriver {
   restarts: number;
   /** Each time the service had macOS ask for permissions: whether the user asked. */
   readonly permissionRequests: Array<boolean>;
+  /** Each keep-display-awake value the service applied. */
+  readonly keepDisplayAwake: Array<boolean>;
   readonly interrupts: Array<{ readonly threadId: string; readonly runId?: string }>;
   screenLocked: boolean;
 }
@@ -83,6 +85,7 @@ function fakeDriver(): FakeDriver {
     runs: new Map([[threadId, [{ id: "run-1", status: "running", ordinal: 1 }]]]),
     restarts: 0,
     permissionRequests: [],
+    keepDisplayAwake: [],
     interrupts: [],
     screenLocked: false,
   };
@@ -120,6 +123,7 @@ function makeService(
     readonly enabled?: boolean;
     readonly available?: boolean;
     readonly threadFails?: boolean;
+    readonly keepDisplayAwake?: boolean;
   },
 ) {
   const driver = ComputerUseDriver.ComputerUseDriver.of({
@@ -131,7 +135,10 @@ function makeService(
     restart: Effect.sync(() => {
       fake.restarts += 1;
     }),
-    setKeepDisplayAwake: () => Effect.void,
+    setKeepDisplayAwake: (enabled) =>
+      Effect.sync(() => {
+        fake.keepDisplayAwake.push(enabled);
+      }),
     requestPermissions: ({ askedByUser }) =>
       Effect.sync(() => {
         fake.permissionRequests.push(askedByUser);
@@ -158,11 +165,12 @@ function makeService(
             answer: () => Effect.void,
           }),
         ),
-        ServerSettings.layerTest(
-          options?.enabled === true
+        ServerSettings.layerTest({
+          computerUseKeepDisplayAwake: options?.keepDisplayAwake === true,
+          ...(options?.enabled === true
             ? { projectSettingsOverrides: { [projectId]: { enableAgentComputerUse: true } } }
-            : {},
-        ),
+            : {}),
+        }),
         Layer.mock(DesktopBrowserChannel.DesktopBrowserChannel)({
           available: true,
           screenLocked: Effect.sync(() => fake.screenLocked),
@@ -411,6 +419,14 @@ describe("ComputerUseService", () => {
     }),
   );
 
+  it.effect("applies the keep-display-awake setting before the driver acts", () =>
+    Effect.gen(function* () {
+      const fake = fakeDriver();
+      const service = yield* makeService(fake, { enabled: true, keepDisplayAwake: true });
+      yield* service.listApps({ caller, includeNotRunning: false });
+      assert.deepStrictEqual(fake.keepDisplayAwake, [true]);
+    }),
+  );
 
   it.effect("reports a locked Mac", () =>
     Effect.gen(function* () {

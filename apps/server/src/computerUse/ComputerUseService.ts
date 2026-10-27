@@ -326,6 +326,18 @@ export const make = Effect.gen(function* () {
     }
   });
 
+  // The driver reads the setting when it starts, so a change restarts it on the next call.
+  const applyKeepDisplayAwake = Option.isNone(settings)
+    ? Effect.void
+    : settings.value.getSettings.pipe(
+        Effect.flatMap((current) =>
+          driver.setKeepDisplayAwake(current.computerUseKeepDisplayAwake),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("Could not apply the keep-display-awake setting", cause),
+        ),
+      );
+
   const useDriver = <A>(use: (worker: CuaDriverLike) => Effect.Effect<A, ComputerUseError>) =>
     driver.withWorker(use).pipe(
       Effect.catchTags({
@@ -340,6 +352,7 @@ export const make = Effect.gen(function* () {
     use: (worker: CuaDriverLike) => Effect.Effect<A, ComputerUseError>,
   ) =>
     requireEnabled(caller.threadId).pipe(
+      Effect.andThen(applyKeepDisplayAwake),
       Effect.andThen(useDriver(use)),
     );
 
