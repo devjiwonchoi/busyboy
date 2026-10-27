@@ -263,6 +263,9 @@ function sessionScopedRuntimeRequestThreadId(
         (event.turnItem.type === "approval_request" || event.turnItem.type === "user_input_request")
         ? event.turnItem.threadId
         : undefined;
+    // A prompt suggestion arrives after its turn's run has ended.
+    case "provider_turn.updated":
+      return event.providerTurn.promptSuggestion === undefined ? undefined : event.threadId;
     default:
       return undefined;
   }

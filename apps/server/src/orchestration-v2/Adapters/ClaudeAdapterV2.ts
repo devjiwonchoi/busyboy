@@ -1117,6 +1117,9 @@ export function makeClaudeQueryOptions(input: {
         ? "bypassPermissions"
         : (input.permissionMode ?? "default")),
     includePartialMessages: true,
+    // The CLI predicts the user's next prompt after each turn, reusing the
+    // turn's prompt cache. The composer shows it as ghost text.
+    promptSuggestions: true,
     ...(compiledSelection.effort === undefined
       ? {}
       : {
@@ -3397,6 +3400,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         });
         const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
         const activeTurn = yield* Ref.make<ActiveClaudeTurnContext | null>(null);
+        const lastCompletedTurn = yield* Ref.make<{
+          readonly threadId: ThreadId;
+          readonly providerTurn: OrchestrationV2ProviderTurn;
+        } | null>(null);
         // Foreground Bash calls whose output file is being tailed, by tool_use_id.
         const taskOutputTails = new Map<
           string,
@@ -5797,25 +5804,34 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   failure: null,
                   threadDisposition,
                 };
+          const finalProviderTurn: OrchestrationV2ProviderTurn = {
+            ...providerTurnPayload({
+              context: input.context,
+              status: input.status,
+              completedAt: input.completedAt,
+            }),
+            turnTokenUsage: normalizeClaudeTurnTokenUsage(
+              input.result,
+              input.context.subagentsByTaskId.size > 0 ||
+                input.context.subagentsByToolUseId.size > 0,
+              input.status,
+              input.context.steeredSegmentUsage,
+            ),
+          };
+          // The CLI sends its prompt suggestion after the result, once this
+          // turn is gone; remember the turn so the suggestion can be attached.
+          yield* Ref.set(
+            lastCompletedTurn,
+            input.status === "completed"
+              ? { threadId: input.context.input.threadId, providerTurn: finalProviderTurn }
+              : null,
+          );
           yield* Effect.all(
             [
               emitProviderEvent({
                 type: "provider_turn.updated",
                 driver: CLAUDE_PROVIDER,
-                providerTurn: {
-                  ...providerTurnPayload({
-                    context: input.context,
-                    status: input.status,
-                    completedAt: input.completedAt,
-                  }),
-                  turnTokenUsage: normalizeClaudeTurnTokenUsage(
-                    input.result,
-                    input.context.subagentsByTaskId.size > 0 ||
-                      input.context.subagentsByToolUseId.size > 0,
-                    input.status,
-                    input.context.steeredSegmentUsage,
-                  ),
-                },
+                providerTurn: finalProviderTurn,
               }),
               // Surface this native thread's roster before the root turn terminals so
               // writeFinalRunEvents preserves it.
@@ -6442,6 +6458,22 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             yield* Ref.update(nestedSubagentTaskIds, (current) =>
               current.has(message.task_id) ? current : new Set(current).add(message.task_id),
             );
+          }
+          if (message.type === "prompt_suggestion") {
+            const completed = yield* Ref.get(lastCompletedTurn);
+            const suggestion = message.suggestion.trim();
+            if (completed === null || (yield* Ref.get(activeTurn)) !== null || suggestion === "") {
+              return;
+            }
+
+            yield* Ref.set(lastCompletedTurn, null);
+            yield* emitProviderEvent({
+              type: "provider_turn.updated",
+              driver: CLAUDE_PROVIDER,
+              threadId: completed.threadId,
+              providerTurn: { ...completed.providerTurn, promptSuggestion: suggestion },
+            });
+            return;
           }
           if (message.type === "rate_limit_event") {
             const rateLimitInfo = message.rate_limit_info;
@@ -8354,6 +8386,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             const attachTurn = Effect.gen(function* () {
               querySession.lastTurn = context;
               yield* Ref.set(activeTurn, context);
+              yield* Ref.set(lastCompletedTurn, null);
               yield* emitProviderEvent({
                 type: "provider_turn.updated",
                 driver: CLAUDE_PROVIDER,
