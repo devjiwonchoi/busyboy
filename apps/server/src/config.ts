@@ -81,6 +81,8 @@ export class ServerConfig extends Context.Service<
     readonly desktopBrowserFd?: number | undefined;
     readonly desktopBrowserControlFd?: number | undefined;
     readonly resourceMonitorPath?: string | undefined;
+    readonly computerUseDriverPath?: string | undefined;
+    readonly computerUseHostBundleId?: string | undefined;
     readonly autoBootstrapProjectFromCwd: boolean;
     readonly logWebSocketEvents: boolean;
     readonly tailscaleServeEnabled: boolean;
@@ -221,6 +223,8 @@ const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
     desktopBrowserFd: undefined,
     desktopBrowserControlFd: undefined,
     resourceMonitorPath: undefined,
+    computerUseDriverPath: undefined,
+    computerUseHostBundleId: undefined,
     staticDir: undefined,
     devUrl,
     devAllowedOrigins: [],

@@ -365,6 +365,8 @@ export const resolveServerConfig = (
     const desktopBrowserFd = bootstrap?.desktopBrowserFd;
     const desktopBrowserControlFd = bootstrap?.desktopBrowserControlFd;
     const resourceMonitorPath = bootstrap?.resourceMonitorPath;
+    const computerUseDriverPath = bootstrap?.computerUseDriverPath;
+    const computerUseHostBundleId = bootstrap?.computerUseHostBundleId;
     const autoBootstrapProjectFromCwd = Option.getOrElse(
       resolveOptionPrecedence(
         Option.fromUndefinedOr(options?.forceAutoBootstrapProjectFromCwd),
@@ -472,6 +474,8 @@ export const resolveServerConfig = (
       desktopBrowserFd,
       desktopBrowserControlFd,
       resourceMonitorPath,
+      computerUseDriverPath,
+      computerUseHostBundleId,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
       tailscaleServeEnabled,

@@ -19,6 +19,8 @@ export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
   "@yuuang/",
   "@ff-labs/",
   "@napi-rs/keyring",
+  // Loads a per-platform native library and N-API runtime by real path.
+  "@trycua/",
   "node-gyp-build",
   "node-addon-api",
   "bufferutil",
