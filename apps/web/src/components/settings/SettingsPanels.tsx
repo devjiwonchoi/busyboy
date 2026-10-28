@@ -3045,7 +3045,7 @@ export function GeneralSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("open-source-licenses")}
-          description="Notices for dependencies, assets, and optional tools used by Busyboy."
+          description="Notices for dependencies, assets, and optional tools used by BusyBoy."
           control={
             <Button
               render={<Link to="/settings/open-source-licenses" />}

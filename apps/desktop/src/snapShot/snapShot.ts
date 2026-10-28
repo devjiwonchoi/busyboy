@@ -428,7 +428,7 @@ export function hideAndWaitForBlur(window: {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       window.removeListener("blur", onBlur);
-      reject(new Error("Timed out waiting for Busyboy to lose focus."));
+      reject(new Error("Timed out waiting for BusyBoy to lose focus."));
     }, WINDOW_BLUR_TIMEOUT_MS);
     const onBlur = () => {
       clearTimeout(timeout);

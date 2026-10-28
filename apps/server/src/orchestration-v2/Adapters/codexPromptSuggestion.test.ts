@@ -36,10 +36,10 @@ describe("normalizeCodexPromptSuggestion", () => {
 
 describe("codexSupportsPredictionFork", () => {
   it.each([
-    ["Busyboy/0.164.0 (Mac OS 26.5.2; arm64) unknown (Busyboy; 0.1.0)", true],
-    ["Busyboy/0.163.0-alpha.11.2 (Mac OS 26.5.2; arm64)", true],
-    ["Busyboy/1.0.0", true],
-    ["Busyboy/0.156.1", false],
+    ["BusyBoy/0.164.0 (Mac OS 26.5.2; arm64) unknown (BusyBoy; 0.1.0)", true],
+    ["BusyBoy/0.163.0-alpha.11.2 (Mac OS 26.5.2; arm64)", true],
+    ["BusyBoy/1.0.0", true],
+    ["BusyBoy/0.156.1", false],
     ["mock-codex-app-server", false],
   ])("reads %j", (userAgent, expected) => {
     expect(codexSupportsPredictionFork(userAgent)).toBe(expected);

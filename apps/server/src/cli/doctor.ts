@@ -114,7 +114,7 @@ export const doctorCommand = Command.make("doctor", {
   ),
 }).pipe(
   Command.withDescription(
-    "Inspect this Busyboy data directory and repair it. Pauses and restarts the background service as needed.",
+    "Inspect this BusyBoy data directory and repair it. Pauses and restarts the background service as needed.",
   ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {

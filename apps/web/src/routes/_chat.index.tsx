@@ -140,9 +140,9 @@ function HostedStaticOnboardingState() {
               <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-xl border border-border/70 bg-background/70 text-muted-foreground">
                 <LinkIcon className="size-5" />
               </div>
-              <EmptyTitle>Connect to a computer running Busyboy</EmptyTitle>
+              <EmptyTitle>Connect to a computer running BusyBoy</EmptyTitle>
               <EmptyDescription>
-                This app connects to Busyboy running on your computer or a server. Start the Busyboy
+                This app connects to BusyBoy running on your computer or a server. Start the BusyBoy
                 desktop app or command-line server on that machine and keep it running.
               </EmptyDescription>
               <EmptyDescription>{description}</EmptyDescription>

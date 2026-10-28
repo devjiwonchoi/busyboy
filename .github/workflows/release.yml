@@ -64,7 +64,7 @@ jobs:
           fi
           gh release create "$TAG" release/*.dmg release/*.zip \
             --target "$GITHUB_SHA" \
-            --title "Busyboy $TAG" \
+            --title "BusyBoy $TAG" \
             --generate-notes \
             --draft
           gh release edit "$TAG" --draft=false --latest

@@ -222,7 +222,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       version: null,
       status: "disabled",
       auth: { status: "unknown" },
-      message: "Codex is disabled in Busyboy settings.",
+      message: "Codex is disabled in BusyBoy settings.",
     });
 
     assert.deepStrictEqual(

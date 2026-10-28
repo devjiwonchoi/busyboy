@@ -250,7 +250,7 @@ describe("scoped settings writes", () => {
     const unsupported = [
       {
         label: server.label,
-        message: "This environment does not support this setting. Update Busyboy on it.",
+        message: "This environment does not support this setting. Update BusyBoy on it.",
       },
     ];
 

@@ -159,7 +159,7 @@ export async function startDesktopAppControlServer(input: {
       activeRequestId = parsed.requestId;
       void input.handle(parsed).then(finish, () => {
         finish(
-          invalidResponse(parsed.requestId, "Busyboy could not process the desktop app request."),
+          invalidResponse(parsed.requestId, "BusyBoy could not process the desktop app request."),
         );
       });
     });

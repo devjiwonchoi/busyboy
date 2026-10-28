@@ -13,7 +13,7 @@ const repoRoot = NodePath.resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = NodePath.basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-const APP_DISPLAY_NAME = isDevelopment ? "Busyboy (Dev)" : "Busyboy (Beta)";
+const APP_DISPLAY_NAME = isDevelopment ? "BusyBoy (Dev)" : "BusyBoy (Beta)";
 const APP_BUNDLE_ID = isDevelopment
   ? `dev.jiwon.busyboy.dev.${devBundleIdSuffix || "local"}`
   : "dev.jiwon.busyboy";
@@ -263,8 +263,8 @@ export function resolveMacBundleInfoPlistStrings(executableName) {
     CFBundleExecutable: executableName,
     CFBundleIconFile: "icon.icns",
     NSScreenCaptureUsageDescription:
-      "Busyboy captures the active window when you use the snapshot shortcut.",
-    NSDocumentsFolderUsageDescription: "Busyboy reads project files you open in the desktop app.",
+      "BusyBoy captures the active window when you use the snapshot shortcut.",
+    NSDocumentsFolderUsageDescription: "BusyBoy reads project files you open in the desktop app.",
   };
 }
 
@@ -396,7 +396,7 @@ function buildMacLauncher(electronBinaryPath) {
   patchHelperBundleInfoPlists(targetAppBundlePath);
   if (isDevelopment) {
     // Launching the node_modules copy makes macOS associate the process (and Dock label) with
-    // Electron.app even though this bundle's Info.plist has the Busyboy name. Its conventional
+    // Electron.app even though this bundle's Info.plist has the BusyBoy name. Its conventional
     // executable name also keeps Electron's default-app runtime in development mode instead of
     // making app.isPackaged report true.
     writeDevelopmentEnvironmentScript();

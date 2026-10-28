@@ -270,7 +270,7 @@ export const make = Effect.gen(function* () {
 
   const giveUp = (target: WatchTarget) =>
     record(target, null, {
-      text: `Busyboy stopped watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Check it yourself, and call watch_pull_request to watch it again.`,
+      text: `BusyBoy stopped watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Check it yourself, and call watch_pull_request to watch it again.`,
       notification: {
         source: { kind: "monitor" },
         outcome: "failed",
@@ -337,7 +337,7 @@ export const make = Effect.gen(function* () {
 
   const closed = (target: WatchTarget) =>
     record(target, null, {
-      text: `Pull request #${target.link.number} (${target.link.url}) was closed, so Busyboy stopped watching it. Call watch_pull_request if it reopens.`,
+      text: `Pull request #${target.link.number} (${target.link.url}) was closed, so BusyBoy stopped watching it. Call watch_pull_request if it reopens.`,
       notification: {
         source: { kind: "monitor" },
         outcome: "updated",

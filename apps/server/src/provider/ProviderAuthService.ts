@@ -80,7 +80,7 @@ export const makeProviderAuthService = Effect.gen(function* () {
         instanceId,
         operation,
         detail: instance
-          ? "This provider does not support sign-in in Busyboy."
+          ? "This provider does not support sign-in in BusyBoy."
           : "This provider instance is no longer available.",
       });
     }

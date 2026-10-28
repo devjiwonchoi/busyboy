@@ -14,9 +14,9 @@ const defaultInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "0.0.22",
-  appPath: "/Applications/Busyboy.app/Contents/Resources/app.asar",
+  appPath: "/Applications/BusyBoy.app/Contents/Resources/app.asar",
   isPackaged: false,
-  resourcesPath: "/Applications/Busyboy.app/Contents/Resources",
+  resourcesPath: "/Applications/BusyBoy.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -74,7 +74,7 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.backendCwd, "/repo");
       assert.equal(environment.appUserModelId, "dev.jiwon.busyboy.dev");
       assert.equal(environment.linuxWmClass, "busyboy-dev");
-      assert.equal(environment.linuxDesktopEntryName, "dev.jiwon.Busyboy.Development.desktop");
+      assert.equal(environment.linuxDesktopEntryName, "dev.jiwon.BusyBoy.Development.desktop");
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
@@ -146,7 +146,7 @@ describe("DesktopEnvironment", () => {
         resourcesPath: "/tmp/.mount_t3code/resources",
       });
 
-      assert.equal(environment.linuxDesktopEntryName, "dev.jiwon.Busyboy.desktop");
+      assert.equal(environment.linuxDesktopEntryName, "dev.jiwon.BusyBoy.desktop");
     }),
   );
 

@@ -530,7 +530,7 @@ export async function persistScopedSettingsPatch(
       return [
         {
           ...environment,
-          message: "This environment does not support this setting. Update Busyboy on it.",
+          message: "This environment does not support this setting. Update BusyBoy on it.",
         },
       ];
     }

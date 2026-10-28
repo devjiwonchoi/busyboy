@@ -1829,7 +1829,7 @@ it("follows a changed server PR link without replacing an unrelated open panel",
     id: "pull-request:previous",
     kind: "pull-request",
     projectId: previous.projectId,
-    repository: "DevJiwonChoi/Busyboy",
+    repository: "DevJiwonChoi/BusyBoy",
     number: previous.number,
   } satisfies RightPanelSurface;
 

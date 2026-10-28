@@ -23,7 +23,7 @@ export function subscribeCodexAuthCallback(input: CodexAuthCallbackInput) {
           codexAuthorizationRequest(input.authorizationUrl);
           const destination = providerAuthReturnUrl(input.returnUrl);
           if (!destination || !isLoopbackHost(new URL(destination).hostname))
-            throw new Error("The local sign-in receiver needs a local Busyboy return address.");
+            throw new Error("The local sign-in receiver needs a local BusyBoy return address.");
           return destination;
         },
         catch: failure,

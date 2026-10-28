@@ -623,7 +623,7 @@ function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boo
 
 const LINK_TARGET_LABELS: Readonly<Record<BrowserLinkTarget, string>> = {
   system: "Your default browser",
-  app: "Busyboy",
+  app: "BusyBoy",
 };
 
 function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) {
@@ -675,11 +675,11 @@ function PullRequestLinksOpenInAppSetting() {
   return (
     <SettingsRow
       {...searchableSetting("pull-request-links-open-in-app")}
-      description="Clicking a pull request link opens it in Busyboy. Turn off to open pull request links like any other link, on GitHub or your git host."
+      description="Clicking a pull request link opens it in BusyBoy. Turn off to open pull request links like any other link, on GitHub or your git host."
       resetAction={
         openInApp ? null : (
           <SettingResetButton
-            label="open pull requests in Busyboy"
+            label="open pull requests in BusyBoy"
             onClick={() => updateSettings({ pullRequestLinksOpenInApp: true })}
           />
         )
@@ -690,7 +690,7 @@ function PullRequestLinksOpenInAppSetting() {
           onCheckedChange={(checked) =>
             updateSettings({ pullRequestLinksOpenInApp: Boolean(checked) })
           }
-          aria-label="Open pull requests in Busyboy"
+          aria-label="Open pull requests in BusyBoy"
         />
       }
     />

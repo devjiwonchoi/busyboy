@@ -157,7 +157,7 @@ export function getChangedBrowserSettingLabels(settings: BrowserDefaultSettings)
       ? ["Floating preview"]
       : []),
     ...(settings.pullRequestLinksOpenInApp !== DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp
-      ? ["Open pull requests in Busyboy"]
+      ? ["Open pull requests in BusyBoy"]
       : []),
   ];
 }

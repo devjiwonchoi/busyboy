@@ -57,9 +57,9 @@ describe("T3 orchestration provider instructions", () => {
       state: { interactionMode: "default", hasT3Mcp: true },
     });
 
-    assert.include(injected, "Busyboy interaction mode: Default");
-    assert.include(injected, "Busyboy collaborative browser");
-    assert.include(injected, "Busyboy orchestration");
+    assert.include(injected, "BusyBoy interaction mode: Default");
+    assert.include(injected, "BusyBoy collaborative browser");
+    assert.include(injected, "BusyBoy orchestration");
     assert.include(injected, "<user_request>\nInspect the repository.\n</user_request>");
   });
 
@@ -77,14 +77,14 @@ describe("T3 orchestration provider instructions", () => {
         state: { ...defaultState, interactionMode: "plan" },
         previousState: defaultState,
       }),
-      "Busyboy interaction mode: Plan",
+      "BusyBoy interaction mode: Plan",
     );
     const withoutMcp = t3AcpPromptWithInstructions({
       prompt,
       state: { interactionMode: "default", hasT3Mcp: false },
     });
-    assert.include(withoutMcp, "Busyboy interaction mode: Default");
-    assert.notInclude(withoutMcp, "Busyboy collaborative browser");
-    assert.notInclude(withoutMcp, "Busyboy orchestration");
+    assert.include(withoutMcp, "BusyBoy interaction mode: Default");
+    assert.notInclude(withoutMcp, "BusyBoy collaborative browser");
+    assert.notInclude(withoutMcp, "BusyBoy orchestration");
   });
 });

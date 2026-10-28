@@ -151,13 +151,13 @@ describe("DesktopPreReadyPlatform", () => {
     let desktopEntry = previousEntry;
     let iconInstalled = false;
     copyFileSyncMock.mockImplementation((_source: string, destination: string) => {
-      iconInstalled = destination === "/xdg/icons/dev.jiwon.Busyboy.desktop.png";
+      iconInstalled = destination === "/xdg/icons/dev.jiwon.BusyBoy.desktop.png";
     });
     setDesktopNameMock.mockImplementation((name: string) => {
       desktopName = name;
     });
     writeFileSyncMock.mockImplementation((path: string, contents: string) => {
-      if (path === "/xdg/applications/dev.jiwon.Busyboy.desktop") desktopEntry = contents;
+      if (path === "/xdg/applications/dev.jiwon.BusyBoy.desktop") desktopEntry = contents;
     });
 
     return Effect.scoped(
@@ -173,13 +173,13 @@ describe("DesktopPreReadyPlatform", () => {
           ),
         );
         const identity = yield* Effect.promise(() => portalIdentity);
-        assert.equal(identity.desktopName, "dev.jiwon.Busyboy.desktop");
+        assert.equal(identity.desktopName, "dev.jiwon.BusyBoy.desktop");
         assert.include(identity.desktopEntry ?? "", 'Exec="/Applications/current.AppImage" %U');
-        assert.include(identity.desktopEntry ?? "", "Name=Busyboy (Beta)");
+        assert.include(identity.desktopEntry ?? "", "Name=BusyBoy (Beta)");
         assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t3code;");
         assert.include(
           identity.desktopEntry ?? "",
-          "Icon=/xdg/icons/dev.jiwon.Busyboy.desktop.png",
+          "Icon=/xdg/icons/dev.jiwon.BusyBoy.desktop.png",
         );
         assert.isTrue(identity.iconInstalled);
       }),

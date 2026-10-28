@@ -36,26 +36,33 @@ describe("resolveAvailableUpdate", () => {
     GitHubReleaseUpdater.resolveAvailableUpdate({
       release: release(tag, assets),
       currentVersion,
-      productName: "Busyboy",
+      productName: "BusyBoy",
       arch: "arm64",
     });
 
   it("offers a newer release that ships this architecture's zip", () => {
-    assert.deepStrictEqual(resolve("v0.0.10", ["Busyboy-0.0.10-arm64.zip"]), {
+    assert.deepStrictEqual(resolve("v0.0.10", ["BusyBoy-0.0.10-arm64.zip"]), {
       version: "0.0.10",
       releaseNotes: "Notes for v0.0.10",
-      zipUrl: "https://example.test/Busyboy-0.0.10-arm64.zip",
+      zipUrl: "https://example.test/BusyBoy-0.0.10-arm64.zip",
     });
   });
 
+  it("matches the zip regardless of the product name's casing", () => {
+    assert.strictEqual(
+      resolve("v0.0.4", ["busyboy-0.0.4-arm64.zip"])?.zipUrl,
+      "https://example.test/busyboy-0.0.4-arm64.zip",
+    );
+  });
+
   it("ignores the running version, older ones, and releases without the zip", () => {
-    assert.strictEqual(resolve("v0.0.3", ["Busyboy-0.0.3-arm64.zip"]), null);
-    assert.strictEqual(resolve("v0.0.2", ["Busyboy-0.0.2-arm64.zip"]), null);
-    assert.strictEqual(resolve("v0.0.4", ["Busyboy-0.0.4-x64.zip"]), null);
+    assert.strictEqual(resolve("v0.0.3", ["BusyBoy-0.0.3-arm64.zip"]), null);
+    assert.strictEqual(resolve("v0.0.2", ["BusyBoy-0.0.2-arm64.zip"]), null);
+    assert.strictEqual(resolve("v0.0.4", ["BusyBoy-0.0.4-x64.zip"]), null);
   });
 
   it("treats a local-app build's commit suffix as its base version", () => {
-    assert.strictEqual(resolve("v0.0.3", ["Busyboy-0.0.3-arm64.zip"], "0.0.3+abc1234"), null);
+    assert.strictEqual(resolve("v0.0.3", ["BusyBoy-0.0.3-arm64.zip"], "0.0.3+abc1234"), null);
   });
 });
 
@@ -75,15 +82,15 @@ describe.runIf(isMac)("updating from a GitHub release", () => {
   it.effect("checks, downloads, and stages the new app bundle", () =>
     Effect.gen(function* () {
       const root = tempDir();
-      const bundle = NodePath.join(root, "build/Busyboy.app");
+      const bundle = NodePath.join(root, "build/BusyBoy.app");
       makeBundle(bundle, "0.0.4");
-      const zipPath = NodePath.join(root, "Busyboy-0.0.4-arm64.zip");
+      const zipPath = NodePath.join(root, "BusyBoy-0.0.4-arm64.zip");
       NodeChildProcess.execFileSync("ditto", ["-c", "-k", "--keepParent", bundle, zipPath]);
       const zip = NodeFS.readFileSync(zipPath);
 
       const fetch = (async (url: string) =>
         url.endsWith("/releases/latest")
-          ? Response.json(release("v0.0.4", ["Busyboy-0.0.4-arm64.zip"]))
+          ? Response.json(release("v0.0.4", ["BusyBoy-0.0.4-arm64.zip"]))
           : new Response(zip, {
               headers: { "content-length": String(zip.byteLength) },
             })) as typeof globalThis.fetch;
@@ -91,7 +98,7 @@ describe.runIf(isMac)("updating from a GitHub release", () => {
       const updater = yield* GitHubReleaseUpdater.make({
         owner: "devjiwonchoi",
         repo: "busyboy",
-        productName: "Busyboy",
+        productName: "BusyBoy",
         currentVersion: "0.0.3",
         arch: "arm64",
         stagingDir: NodePath.join(root, "pending-update"),
@@ -113,15 +120,15 @@ describe.runIf(isMac)("updating from a GitHub release", () => {
       ]);
       assert.deepStrictEqual(seen.at(-1), ["update-downloaded", { version: "0.0.4" }]);
       assert.deepStrictEqual(seen.at(-2), ["download-progress", { percent: 100 }]);
-      const staged = NodePath.join(root, "pending-update/0.0.4/app/Busyboy.app/Contents/marker");
+      const staged = NodePath.join(root, "pending-update/0.0.4/app/BusyBoy.app/Contents/marker");
       assert.strictEqual(NodeFS.readFileSync(staged, "utf8"), "0.0.4");
     }).pipe(Effect.provideService(Scope.Scope, Scope.makeUnsafe())),
   );
 
   it("swaps the bundle once the app exits, then reopens it", () => {
     const root = tempDir();
-    const target = NodePath.join(root, "Applications/Busyboy.app");
-    const staged = NodePath.join(root, "staged/Busyboy.app");
+    const target = NodePath.join(root, "Applications/BusyBoy.app");
+    const staged = NodePath.join(root, "staged/BusyBoy.app");
     makeBundle(target, "old");
     makeBundle(staged, "new");
 

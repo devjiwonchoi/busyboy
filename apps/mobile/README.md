@@ -1,7 +1,7 @@
-# Busyboy Mobile
+# BusyBoy Mobile
 
 > [!NOTE]
-> Busyboy Mobile is based on T3 Code Mobile. It is not distributed yet; build it from source.
+> BusyBoy Mobile is based on T3 Code Mobile. It is not distributed yet; build it from source.
 
 ## Quickstart
 
@@ -10,13 +10,13 @@
 
 This app has three variants:
 
-- `development`: Expo dev client, installable side-by-side as `Busyboy Dev`
-- `preview`: persistent internal preview build, installable side-by-side as `Busyboy Preview`
-- `production`: store/release build as `Busyboy`
+- `development`: Expo dev client, installable side-by-side as `BusyBoy Dev`
+- `preview`: persistent internal preview build, installable side-by-side as `BusyBoy Preview`
+- `production`: store/release build as `BusyBoy`
 
 Run commands from `apps/mobile`.
 
-The app connects to a Busyboy server by direct pairing: scan the QR code from `t3 pair` or the
+The app connects to a BusyBoy server by direct pairing: scan the QR code from `t3 pair` or the
 desktop Connections settings, or enter the host and pairing code by hand. The phone must reach the
 server over your LAN or a tailnet. There is no hosted relay, sign-in or remote push.
 

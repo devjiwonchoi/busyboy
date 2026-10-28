@@ -328,7 +328,7 @@ export function DesktopUpdateLaunchNotice() {
       stackedThreadToast({
         type: "error",
         title: "Update did not apply",
-        description: `Busyboy is still on ${APP_VERSION}. Install ${notAppliedVersion} again from the update button.`,
+        description: `BusyBoy is still on ${APP_VERSION}. Install ${notAppliedVersion} again from the update button.`,
       }),
     );
   }, [notAppliedVersion]);

@@ -189,10 +189,10 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
       yield* fs.writeFileString(shim, "@echo off\r\n");
       const hostCommand = (platform: NodeJS.Platform, env: Record<string, string>) =>
         resolveHostCliCommand("doctor", ["--base-dir", "C:\\Users\\Jane Doe\\.t3"]).pipe(
-          Effect.provideService(HostProcess.ExecutablePath, "C:\\Program Files\\Busyboy\\t3.exe"),
+          Effect.provideService(HostProcess.ExecutablePath, "C:\\Program Files\\BusyBoy\\t3.exe"),
           Effect.provideService(HostProcess.Arguments, [
-            "C:\\Program Files\\Busyboy\\t3.exe",
-            "C:\\Program Files\\Busyboy\\resources\\app.asar\\apps\\server\\dist\\bin.mjs",
+            "C:\\Program Files\\BusyBoy\\t3.exe",
+            "C:\\Program Files\\BusyBoy\\resources\\app.asar\\apps\\server\\dist\\bin.mjs",
           ]),
           Effect.provideService(HostProcess.IsExecutable, false),
           Effect.provideService(HostProcess.Platform, platform),

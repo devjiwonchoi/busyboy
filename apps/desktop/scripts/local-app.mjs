@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Runs Busyboy from its own source checkout and updates it from origin/main.
+// Runs BusyBoy from its own source checkout and updates it from origin/main.
 //
 //   pnpm local-app:install   one-time setup: clones into ~/.busyboy/source, builds,
-//                            and creates ~/Applications/Busyboy.app
+//                            and creates ~/Applications/BusyBoy.app
 //
 // The app's updater runs the other commands from the checkout it is running:
 //   check     fetch origin/main and print what is new (JSON)
 //   prepare   build origin/main in the idle slot, printing progress (JSON lines)
 //   switch    point `current` at the prepared slot
-//   bundle    rebuild Busyboy.app from this checkout's Electron
+//   bundle    rebuild BusyBoy.app from this checkout's Electron
 //
 // Two slots (a, b) let an update build without touching the copy that is running.
 
@@ -27,8 +27,8 @@ const root =
 const currentLink = NodePath.join(root, "current");
 const preparedPath = NodePath.join(root, "prepared.json");
 const logPath = NodePath.join(root, "update.log");
-const appBundlePath = NodePath.join(homeDir, "Applications", "Busyboy.app");
-const ELECTRON_VERSION_KEY = "BusyboyElectronVersion";
+const appBundlePath = NodePath.join(homeDir, "Applications", "BusyBoy.app");
+const ELECTRON_VERSION_KEY = "BusyBoyElectronVersion";
 
 // Build tools must run as plain Node even when the app runs this script through Electron.
 const toolEnv = { ...process.env };

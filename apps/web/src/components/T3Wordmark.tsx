@@ -1,7 +1,7 @@
 import type { SVGProps } from "react";
 export function T3Wordmark(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 132 28" role="img" aria-label="Busyboy" {...props}>
+    <svg viewBox="0 0 132 28" role="img" aria-label="BusyBoy" {...props}>
       <text
         x="0"
         y="22"
@@ -10,7 +10,7 @@ export function T3Wordmark(props: SVGProps<SVGSVGElement>) {
         fontWeight="700"
         fontSize="26"
       >
-        Busyboy
+        BusyBoy
       </text>
     </svg>
   );

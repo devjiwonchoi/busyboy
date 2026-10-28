@@ -291,7 +291,7 @@ describe("new project publish targets", () => {
     },
   });
 
-  it("offers only hosts Busyboy ships and defaults to GitHub", () => {
+  it("offers only hosts BusyBoy ships and defaults to GitHub", () => {
     const targets = getNewProjectPublishTargets({
       versionControlSystems: [],
       sourceControlProviders: [readyHost("gitlab", "group"), readyHost("github", null)],

@@ -3,14 +3,14 @@
   <id>dev.jiwon.busyboy</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <name>Busyboy</name>
+  <name>BusyBoy</name>
   <summary>Desktop GUI for coding agents</summary>
   <developer id="com.t3tools">
     <name>T3 Tools Inc.</name>
   </developer>
   <description>
     <p>
-      Busyboy is an open-source desktop app for coding agents. Work with your
+      BusyBoy is an open-source desktop app for coding agents. Work with your
       existing agent subscriptions, review code changes, and run commands in
       your projects.
     </p>

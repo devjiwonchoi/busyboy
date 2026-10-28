@@ -73,7 +73,7 @@ export const makeProviderInstallation = Effect.fn("makeProviderInstallation")(fu
       return yield* new ProviderSetupError({
         instanceId,
         operation,
-        detail: "Choose managed setup to install Codex in Busyboy.",
+        detail: "Choose managed setup to install Codex in BusyBoy.",
       });
     }
     if (managedOnly && config.binaryPath && config.binaryPath !== "codex") {
@@ -81,7 +81,7 @@ export const makeProviderInstallation = Effect.fn("makeProviderInstallation")(fu
         instanceId,
         operation,
         detail:
-          "This instance uses a custom executable. Clear its binary path to manage installation in Busyboy.",
+          "This instance uses a custom executable. Clear its binary path to manage installation in BusyBoy.",
       });
     }
     return { installation, driver: instance.driverKind };

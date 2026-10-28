@@ -84,7 +84,7 @@ describe("DesktopEarlyElectronStartup", () => {
     assert.deepEqual(options, {
       isDevelopment: true,
       linuxWmClass: "busyboy-dev",
-      linuxDesktopEntryName: "dev.jiwon.Busyboy.Development.desktop",
+      linuxDesktopEntryName: "dev.jiwon.BusyBoy.Development.desktop",
       passwordStore: "gnome-libsecret",
     });
   });

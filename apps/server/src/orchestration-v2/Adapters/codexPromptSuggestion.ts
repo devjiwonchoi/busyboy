@@ -18,7 +18,7 @@ Match the user's language and tone. Use 2 to 12 words on one line, with no quote
 
 /**
  * Reads the Codex version from an `initialize` user agent such as
- * `Busyboy/0.164.0 (Mac OS 26.5.2; arm64) ...`.
+ * `BusyBoy/0.164.0 (Mac OS 26.5.2; arm64) ...`.
  */
 export function codexSupportsPredictionFork(userAgent: string): boolean {
   const match = /^[^/\s]+\/(\d+)\.(\d+)\.(\d+)/.exec(userAgent);
