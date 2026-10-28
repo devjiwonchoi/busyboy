@@ -54,6 +54,7 @@ export const PREVIEW_AUTOMATION_SERVER_OPERATIONS = [
   "hover",
   "select",
   "drag",
+  "signIn",
 ] as const;
 export const PreviewAutomationOperation = Schema.Literals(PREVIEW_AUTOMATION_SERVER_OPERATIONS);
 export type PreviewAutomationOperation = typeof PreviewAutomationOperation.Type;
@@ -630,6 +631,78 @@ export const PreviewAutomationEvaluateInput = Schema.Struct({
     "Evaluates JavaScript in the page. Prefer snapshot and semantic actions; use evaluate for inspection or unsupported interactions.",
 });
 export type PreviewAutomationEvaluateInput = typeof PreviewAutomationEvaluateInput.Type;
+
+const SignInSelector = Schema.String.check(Schema.isTrimmed())
+  .check(Schema.isNonEmpty())
+  .check(Schema.isMaxLength(512));
+
+/**
+ * Asks the user to approve signing in with a login saved in Busyboy. Only
+ * selectors travel; the desktop fills and submits the values itself.
+ */
+export const PreviewAutomationSignInInput = Schema.Struct({
+  ...PreviewAutomationTabTargetFields,
+  passwordSelector: SignInSelector.annotate({
+    description: "CSS selector matching exactly one visible password input on the current page.",
+  }),
+  usernameSelector: Schema.optional(SignInSelector).annotate({
+    description:
+      "CSS selector for the visible username or email input on the same page. Omit on password-only steps.",
+  }),
+  submitSelector: Schema.optional(SignInSelector).annotate({
+    description:
+      "CSS selector for the one visible sign-in button. Omit when the form submits by itself; set submitWithEnter instead when Enter in the password field submits.",
+  }),
+  submitWithEnter: Schema.optional(Schema.Boolean).annotate({
+    description: "Submit by pressing Enter in the password field.",
+  }),
+  account: Schema.optional(Schema.String.check(Schema.isMaxLength(320))).annotate({
+    description:
+      "The username or email already entered or shown as the selected account, so the matching saved login is offered. Never guess.",
+  }),
+});
+export type PreviewAutomationSignInInput = typeof PreviewAutomationSignInInput.Type;
+
+export const PreviewSignInStatus = Schema.Literals([
+  /** Filled and, when asked, submitted. Not proof that sign-in succeeded. */
+  "submitted",
+  /** The user declined or did not approve. */
+  "declined",
+  /** No saved login for this site, or this tab cannot use saved logins. */
+  "unavailable",
+  /** A selector matched no visible, enabled field of the expected kind. */
+  "locator_invalid",
+  /** The page navigated or changed site while waiting for approval. */
+  "origin_changed",
+  /**
+   * The agent ran JavaScript in this page, which could intercept the login.
+   * Load the sign-in page fresh (preview_navigate) and sign in before evaluating.
+   */
+  "page_modified",
+  /**
+   * The page sent no sign-in request Busyboy could complete (for example it
+   * hashes the password first), so the sign-in did not go through. Ask the
+   * user to sign in themselves.
+   */
+  "unsupported",
+]);
+export type PreviewSignInStatus = typeof PreviewSignInStatus.Type;
+
+export const PreviewSignInResult = Schema.Struct({ status: PreviewSignInStatus });
+export type PreviewSignInResult = typeof PreviewSignInResult.Type;
+
+/**
+ * The CDP method the server sends over a desktop tab's relay; the desktop
+ * answers it itself instead of forwarding it to the page.
+ */
+export const PREVIEW_SIGN_IN_CDP_METHOD = "Busyboy.signIn";
+
+/**
+ * Sent over a desktop tab's relay just before the server runs JavaScript the
+ * agent wrote, so the desktop knows the current page can no longer be trusted
+ * with a password.
+ */
+export const PREVIEW_AGENT_SCRIPT_CDP_METHOD = "Busyboy.noteAgentScript";
 
 export const PreviewAutomationWaitForInput = Schema.Struct({
   ...PreviewAutomationTabTargetFields,

@@ -9,15 +9,24 @@ import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-const { listBrowserImportSources } = vi.hoisted(() => ({
-  listBrowserImportSources: vi.fn().mockResolvedValue([]),
-}));
+const { listBrowserImportSources, getChromePasswordSource, getSavedPasswordStatus } = vi.hoisted(
+  () => ({
+    listBrowserImportSources: vi.fn().mockResolvedValue([]),
+    getChromePasswordSource: vi.fn().mockResolvedValue({ profiles: [] }),
+    getSavedPasswordStatus: vi.fn().mockResolvedValue({ count: 0, chromeSync: null }),
+  }),
+);
 
 vi.mock(import("../preview/previewBridge"), async (original) => {
   const actual = await original();
   return {
     ...actual,
-    previewBridge: { ...actual.previewBridge, listBrowserImportSources } as never,
+    previewBridge: {
+      ...actual.previewBridge,
+      listBrowserImportSources,
+      getChromePasswordSource,
+      getSavedPasswordStatus,
+    } as never,
   };
 });
 vi.mock(import("../../env"), async (original) => ({ ...(await original()), isElectron: true }));
@@ -62,6 +71,7 @@ let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   listBrowserImportSources.mockClear();
+  getChromePasswordSource.mockClear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -93,10 +103,12 @@ describe("Integrations browser discovery", () => {
   it("does not scan browser files when entering or revisiting settings", async () => {
     await openSettings();
     expect(listBrowserImportSources).not.toHaveBeenCalled();
+    expect(getChromePasswordSource).not.toHaveBeenCalled();
 
     await act(async () => root.unmount());
     root = createRoot(container);
     await openSettings();
     expect(listBrowserImportSources).not.toHaveBeenCalled();
+    expect(getChromePasswordSource).not.toHaveBeenCalled();
   });
 });

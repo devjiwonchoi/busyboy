@@ -60,6 +60,7 @@ import { closePreviewSession } from "./closePreviewSession";
 import { openPreviewSession } from "./openPreviewSession";
 import { showPreviewPopup } from "./showPreviewPopup";
 import { PreviewChromeRow } from "./PreviewChromeRow";
+import { PasswordImportDialog } from "../passwords/PasswordImportDialog";
 import { PreviewEmptyState } from "./PreviewEmptyState";
 import { PreviewMoreMenu, type PreviewMoreMenuActions } from "./PreviewMoreMenu";
 import {
@@ -147,6 +148,9 @@ export function PreviewView({
 }: Props) {
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
   const [pickActive, setPickActive] = useState(false);
+  const [passwordImportOpen, setPasswordImportOpen] = useState(false);
+  // Saved passwords fill desktop webviews, so the import lives where they do.
+  const openPasswordImport = previewBridge ? () => setPasswordImportOpen(true) : undefined;
   const canSendAnnotation =
     useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope) &&
     Boolean(onSendAnnotation);
@@ -474,10 +478,13 @@ export function PreviewView({
         resetZoom: handleResetZoom,
         clearCookies: () => void adjustServerTab({ clear: "cookies" }),
         clearCache: () => void adjustServerTab({ clear: "cache" }),
+        // A server tab the desktop draws natively is a desktop webview too, so
+        // saved passwords fill it like any desktop tab.
         ...(nativeServerTab && previewBridge
           ? {
               openDevTools: desktopCall(previewBridge.openDevTools),
               toggleNativePictureInPicture: () => handleNativePictureInPicture(),
+              ...(openPasswordImport ? { importPasswords: openPasswordImport } : {}),
             }
           : {}),
       }
@@ -501,6 +508,7 @@ export function PreviewView({
               .catch(() => undefined),
           openDevTools: desktopCall(previewBridge.openDevTools),
           toggleNativePictureInPicture: () => handleNativePictureInPicture(),
+          ...(openPasswordImport ? { importPasswords: openPasswordImport } : {}),
         }
       : null;
 
@@ -1035,7 +1043,11 @@ export function PreviewView({
             recentEntries={recentHistoryEntries}
             onRemoveRecent={(url) => removeUrlForThread(threadRef, url)}
             onOpenUrl={(next) => void handleOpenServerUrl(next)}
+            onImportPasswords={isServerTab ? undefined : openPasswordImport}
           />
+        ) : null}
+        {openPasswordImport ? (
+          <PasswordImportDialog open={passwordImportOpen} onOpenChange={setPasswordImportOpen} />
         ) : null}
         {snapshot && desktopOverlay ? (
           <ZoomIndicator zoomFactor={desktopOverlay.zoomFactor} />

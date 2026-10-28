@@ -14,6 +14,7 @@ import {
   type PreviewAutomationRecordingStatus,
   type PreviewAutomationResizeResult,
   type PreviewAutomationSelectResult,
+  type PreviewSignInResult,
   type PreviewAutomationSetColorSchemeResult,
   type PreviewAutomationSnapshot,
   type PreviewAutomationStatus,
@@ -234,6 +235,9 @@ const handlers = {
         ...(toolIcon ? { toolIcon } : {}),
       })),
     ),
+  ),
+  preview_sign_in: McpToolAccess.actsAsCaller((input) =>
+    invokeTargeted<PreviewSignInResult>("signIn", input, 120_000),
   ),
   preview_wait_for: McpToolAccess.readsAsCaller((input) =>
     invokeTargeted<object>("waitFor", input, input.timeoutMs),

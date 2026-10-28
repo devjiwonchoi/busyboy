@@ -14,3 +14,4 @@ export const RECORDING_CONTROLLER_CHANNEL = "preview:recording-controller";
 export const PASSKEY_CREATE_CHANNEL = "preview:passkey-create";
 export const PASSKEY_GET_CHANNEL = "preview:passkey-get";
 export const PASSKEY_BRIDGE_ARGUMENT = "--t3code-preview-passkey-bridge";
+export const PASSWORD_FILL_CHANNEL = "preview:password-fill";

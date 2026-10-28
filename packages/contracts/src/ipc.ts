@@ -8,6 +8,13 @@ import type {
   BrowserImportSource,
   BrowserImportSourceId,
 } from "./browserImport.ts";
+import type {
+  ChromePasswordSource,
+  PasswordFileImportResult,
+  PasswordFileImportSourceId,
+  PasswordImportResult,
+  SavedPasswordStatus,
+} from "./passwordImport.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
@@ -1048,6 +1055,20 @@ export interface DesktopPreviewBridge {
     readonly sourceProfileDirectory: string;
     readonly targetProfileId: string;
   }) => Promise<BrowserImportResult>;
+  getChromePasswordSource: () => Promise<ChromePasswordSource>;
+  /** Imports once, then keeps syncing from that Chrome profile in the background. */
+  importChromePasswords: (input: {
+    readonly sourceProfileDirectory: string;
+  }) => Promise<PasswordImportResult>;
+  stopChromePasswordSync: () => Promise<void>;
+  /** Resolves `null` when the user cancels the file picker. */
+  importPasswordFile: (input: {
+    readonly sourceId: PasswordFileImportSourceId;
+  }) => Promise<PasswordFileImportResult | null>;
+  /** Opens Apple's Passwords app so the user can export; `false` if it could not. */
+  openPasswordsApp: () => Promise<boolean>;
+  getSavedPasswordStatus: () => Promise<SavedPasswordStatus>;
+  clearSavedPasswords: () => Promise<void>;
   setAnnotationTheme: (theme: DesktopPreviewAnnotationTheme) => Promise<void>;
   setAnnotationSendEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   /**

@@ -1,10 +1,19 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { createCdpRelayConnection, type CdpRelayTarget } from "./CdpRelay.ts";
+import {
+  CREDENTIAL_LOCKED_MESSAGE,
+  createCdpRelayConnection,
+  type CdpRelayTarget,
+} from "./CdpRelay.ts";
 
 const makeTarget = (
   send: CdpRelayTarget["send"],
   setDownloadDirectory: CdpRelayTarget["setDownloadDirectory"] = () => {},
+  credentials: Pick<CdpRelayTarget, "signIn" | "credentialLocked" | "noteAgentScript"> = {
+    signIn: async () => ({ status: "unavailable" }),
+    credentialLocked: () => false,
+    noteAgentScript: () => {},
+  },
 ): CdpRelayTarget => ({
   send,
   targetId: async () => "GUEST-TARGET",
@@ -12,6 +21,7 @@ const makeTarget = (
   title: () => "Fixture",
   userAgent: () => "Electron",
   setDownloadDirectory,
+  ...credentials,
 });
 
 // Each relay reply resolves after a few microtasks; one macrotask lets them all land.
@@ -188,5 +198,137 @@ describe("CDP relay downloads", () => {
     expect(written).toEqual([
       { method: "Browser.downloadWillBegin", params: { guid: "g1", suggestedFilename: "r.csv" } },
     ]);
+  });
+
+  it("answers sign-in itself and never forwards it to the page", async () => {
+    const send = vi.fn(async () => ({}));
+    const signIn = vi.fn(async () => ({ status: "submitted" }));
+    const written: Array<Record<string, unknown>> = [];
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, {
+        signIn,
+        credentialLocked: () => false,
+        noteAgentScript: () => {},
+      }),
+      (raw) => written.push(JSON.parse(raw)),
+    );
+    relay.receive(
+      JSON.stringify({
+        id: 1,
+        method: "Busyboy.signIn",
+        params: { passwordSelector: "#pw" },
+        sessionId: "t3-preview-page",
+      }),
+    );
+    await settle();
+    expect(signIn).toHaveBeenCalledWith({ passwordSelector: "#pw" });
+    expect(send).not.toHaveBeenCalled();
+    expect(written).toEqual([
+      { id: 1, result: { status: "submitted" }, sessionId: "t3-preview-page" },
+    ]);
+  });
+
+  it("refuses page reads but allows leaving while a saved password is in the page", async () => {
+    const send = vi.fn(async () => ({}));
+    const written: Array<Record<string, unknown>> = [];
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, {
+        signIn: async () => ({}),
+        credentialLocked: () => true,
+        noteAgentScript: () => {},
+      }),
+      (raw) => written.push(JSON.parse(raw)),
+    );
+    for (const [id, method] of [
+      [1, "Runtime.evaluate"],
+      [2, "Runtime.callFunctionOn"],
+      [3, "DOM.getDocument"],
+      [4, "Input.dispatchMouseEvent"],
+      [5, "Page.captureScreenshot"],
+      [6, "Page.navigate"],
+    ] as const) {
+      relay.receive(JSON.stringify({ id, method, sessionId: "t3-preview-page" }));
+    }
+    await settle();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("Page.navigate", {}, undefined);
+    expect(
+      written.filter((message) => message["error"] !== undefined).map((message) => message["id"]),
+    ).toEqual([1, 2, 3, 4, 5]);
+    expect(written[0]).toEqual({
+      id: 1,
+      error: { code: -32000, message: CREDENTIAL_LOCKED_MESSAGE },
+      sessionId: "t3-preview-page",
+    });
+  });
+
+  it("treats script the agent runs in the page as agent script, and refuses it while locked", async () => {
+    const send = vi.fn(async () => ({}));
+    let locked = false;
+    const noteAgentScript = vi.fn();
+    const written: Array<Record<string, unknown>> = [];
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, {
+        signIn: async () => ({}),
+        credentialLocked: () => locked,
+        noteAgentScript,
+      }),
+      (raw) => written.push(JSON.parse(raw)),
+    );
+    const page = (id: number, method: string, params: Record<string, unknown>) =>
+      relay.receive(JSON.stringify({ id, method, params, sessionId: "t3-preview-page" }));
+
+    page(1, "Busyboy.noteAgentScript", {});
+    page(2, "Page.navigate", { url: " JavaScript:alert(1)" });
+    page(3, "Page.reload", { scriptToEvaluateOnLoad: "steal()" });
+    page(4, "Page.navigate", { url: "https://example.com/" });
+    await settle();
+    // The Busyboy note, then each script both before and after it runs.
+    expect(noteAgentScript).toHaveBeenCalledTimes(5);
+
+    locked = true;
+    page(5, "Page.navigate", { url: "javascript:void 0" });
+    page(6, "Page.reload", { scriptToEvaluateOnLoad: "steal()" });
+    page(7, "Page.reload", {});
+    await settle();
+    expect(
+      written.filter((message) => message["error"] !== undefined).map((message) => message["id"]),
+    ).toEqual([5, 6]);
+    expect(send).toHaveBeenLastCalledWith("Page.reload", {}, undefined);
+  });
+
+  it("marks the page the agent's evaluate ran in, even if it navigated meanwhile", async () => {
+    let finish: () => void = () => {};
+    const send = vi.fn(
+      (method: string) =>
+        new Promise<unknown>((resolve) => {
+          if (method === "Runtime.evaluate") finish = () => resolve({});
+          else resolve({});
+        }),
+    );
+    const marks: Array<string> = [];
+    let documentId = "A";
+    const relay = createCdpRelayConnection(
+      makeTarget(send, () => {}, {
+        signIn: async () => ({}),
+        credentialLocked: () => false,
+        noteAgentScript: () => marks.push(documentId),
+      }),
+      () => {},
+    );
+    const page = (id: number, method: string, params: Record<string, unknown>) =>
+      relay.receive(JSON.stringify({ id, method, params, sessionId: "t3-preview-page" }));
+
+    // Playwright's own evaluations name a context and are not the agent's.
+    page(1, "Runtime.evaluate", { expression: "1", contextId: 7 });
+    await settle();
+    expect(marks).toEqual([]);
+
+    page(2, "Runtime.evaluate", { expression: "steal()" });
+    await settle();
+    documentId = "B";
+    finish();
+    await settle();
+    expect(marks).toEqual(["A", "B"]);
   });
 });

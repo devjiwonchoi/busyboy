@@ -60,6 +60,10 @@ export class ElectronShell extends Context.Service<
     readonly openExternal: (rawUrl: unknown) => Effect.Effect<boolean>;
     readonly openSystemSettings: (pane: SystemSettingsPane) => Effect.Effect<boolean>;
     readonly copyText: (text: string) => Effect.Effect<void>;
+    /** Opens a local file or app the way Finder would. */
+    readonly openPath: (path: string) => Effect.Effect<boolean>;
+    /** Moves a file to the Trash, where the user can still restore it. */
+    readonly trashItem: (path: string) => Effect.Effect<boolean>;
   }
 >()("@t3tools/desktop/electron/ElectronShell") {}
 
@@ -85,6 +89,21 @@ export const make = ElectronShell.of({
     ),
   copyText: (text) =>
     Effect.promise(() => Electron.clipboard.writeText(text).catch(() => undefined)),
+  // `openPath` resolves with an error message rather than rejecting.
+  openPath: (path) =>
+    Effect.promise(() =>
+      Electron.shell.openPath(path).then(
+        (error) => error === "",
+        () => false,
+      ),
+    ),
+  trashItem: (path) =>
+    Effect.promise(() =>
+      Electron.shell.trashItem(path).then(
+        () => true,
+        () => false,
+      ),
+    ),
 });
 
 export const layer = Layer.succeed(ElectronShell, make);

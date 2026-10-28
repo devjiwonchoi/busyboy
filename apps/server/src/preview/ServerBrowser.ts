@@ -19,6 +19,10 @@ import {
   type PreviewAutomationConsoleEntry,
   type PreviewAutomationDragInput,
   type PreviewAutomationEvaluateInput,
+  type PreviewAutomationSignInInput,
+  PREVIEW_AGENT_SCRIPT_CDP_METHOD,
+  PREVIEW_SIGN_IN_CDP_METHOD,
+  PreviewSignInResult,
   type PreviewAutomationHoverInput,
   type PreviewAutomationNavigateInput,
   type PreviewAutomationNetworkEntry,
@@ -82,6 +86,8 @@ import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
+
+const decodeSignInResult = Schema.decodeUnknownSync(PreviewSignInResult);
 
 const SERVER_HOST_CLIENT_ID = SERVER_BROWSER_AUTOMATION_CLIENT_ID;
 const RENDER_SCALE = 2;
@@ -1934,11 +1940,28 @@ const make = Effect.gen(function* () {
           ServerBrowserPage.scroll(tab.page, input as PreviewAutomationScrollInput),
         );
       case "evaluate":
+        // The desktop stops trusting this page with saved passwords from here on.
+        if (tab.desktop) {
+          await (
+            tab.cdp as unknown as { send: (method: string, params: object) => Promise<unknown> }
+          ).send(PREVIEW_AGENT_SCRIPT_CDP_METHOD, {});
+        }
         return ServerBrowserPage.evaluate(
           tab.cdp,
           input as PreviewAutomationEvaluateInput,
           request.timeoutMs,
         );
+      case "signIn": {
+        // Saved logins live in the desktop app, so only its tabs can sign in.
+        if (!tab.desktop) {
+          return { status: "unavailable" } satisfies PreviewSignInResult;
+        }
+        const { tabId: _tabId, ...signIn } = input as PreviewAutomationSignInInput;
+        const session = tab.cdp as unknown as {
+          send: (method: string, params: object) => Promise<unknown>;
+        };
+        return decodeSignInResult(await session.send(PREVIEW_SIGN_IN_CDP_METHOD, signIn));
+      }
       case "waitFor":
         return ServerBrowserPage.waitFor(tab.page, input as PreviewAutomationWaitForInput);
       case "recordingStart": {

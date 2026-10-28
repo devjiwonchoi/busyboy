@@ -15,6 +15,12 @@ import {
   BrowserImportSource,
   DesktopPreviewClearDataInputSchema,
   DesktopPreviewImportCookiesInputSchema,
+  ChromePasswordSource,
+  DesktopPreviewImportChromePasswordsInputSchema,
+  DesktopPreviewImportPasswordFileInputSchema,
+  PasswordFileImportResult,
+  PasswordImportResult,
+  SavedPasswordStatus,
   DesktopPreviewCreateTabInputSchema,
   DesktopPreviewTabInputSchema,
   DesktopPreviewWebviewConfigSchema,
@@ -31,6 +37,10 @@ import * as NodeURL from "node:url";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
+import * as PasswordImport from "../../preview/Passwords/PasswordImport.ts";
+import * as PasswordVault from "../../preview/Passwords/PasswordVault.ts";
+import * as ElectronDialog from "../../electron/ElectronDialog.ts";
+import * as ElectronShell from "../../electron/ElectronShell.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
@@ -351,6 +361,91 @@ export const importBrowserCookies = DesktopIpc.makeIpcMethod({
       persistent,
       ...(namespace === undefined ? {} : { namespace }),
     });
+  }),
+});
+
+export const getChromePasswordSource = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_CHROME_PASSWORD_SOURCE_CHANNEL,
+  payload: Schema.Void,
+  result: ChromePasswordSource,
+  handler: Effect.fn("desktop.ipc.preview.getChromePasswordSource")(function* () {
+    return yield* (yield* PasswordImport.PasswordImport).chromeSource;
+  }),
+});
+
+export const importChromePasswords = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_IMPORT_CHROME_PASSWORDS_CHANNEL,
+  payload: DesktopPreviewImportChromePasswordsInputSchema,
+  result: PasswordImportResult,
+  handler: Effect.fn("desktop.ipc.preview.importChromePasswords")(function* (input) {
+    return yield* (yield* PasswordImport.PasswordImport).importChrome(input);
+  }),
+});
+
+export const importPasswordFile = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_IMPORT_PASSWORD_FILE_CHANNEL,
+  payload: DesktopPreviewImportPasswordFileInputSchema,
+  result: Schema.NullOr(PasswordFileImportResult),
+  handler: Effect.fn("desktop.ipc.preview.importPasswordFile")(function* ({ sourceId }) {
+    // Main opens the picker and reads the file itself, so the plaintext export
+    // never passes through the renderer.
+    const owner = yield* (yield* ElectronWindow.ElectronWindow).main;
+    const [filePath] = yield* (yield* ElectronDialog.ElectronDialog).pickFiles({
+      owner,
+      defaultPath: Option.none(),
+      filters: [{ name: "Password export", extensions: ["csv"] }],
+      multiple: false,
+    });
+    if (filePath === undefined) {
+      return null;
+    }
+
+    const result = yield* (yield* PasswordImport.PasswordImport).importFile({
+      sourceId,
+      filePath,
+    });
+    // The export holds every password in plain text, so it does not stay
+    // behind once its contents are encrypted in the vault.
+    const exportTrashed = yield* (yield* ElectronShell.ElectronShell).trashItem(filePath);
+    return { ...result, exportTrashed };
+  }),
+});
+
+const PASSWORDS_APP_PATH = "/System/Applications/Passwords.app";
+
+export const openPasswordsApp = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_OPEN_PASSWORDS_APP_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Boolean,
+  handler: Effect.fn("desktop.ipc.preview.openPasswordsApp")(function* () {
+    return yield* (yield* ElectronShell.ElectronShell).openPath(PASSWORDS_APP_PATH);
+  }),
+});
+
+export const stopChromePasswordSync = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_STOP_CHROME_PASSWORD_SYNC_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.stopChromePasswordSync")(function* () {
+    yield* (yield* PasswordImport.PasswordImport).stopChromeSync;
+  }),
+});
+
+export const getSavedPasswordStatus = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_SAVED_PASSWORD_STATUS_CHANNEL,
+  payload: Schema.Void,
+  result: SavedPasswordStatus,
+  handler: Effect.fn("desktop.ipc.preview.getSavedPasswordStatus")(function* () {
+    return yield* (yield* PasswordImport.PasswordImport).status;
+  }),
+});
+
+export const clearSavedPasswords = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_CLEAR_SAVED_PASSWORDS_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.clearSavedPasswords")(function* () {
+    yield* (yield* PasswordVault.PasswordVault).clear;
   }),
 });
 

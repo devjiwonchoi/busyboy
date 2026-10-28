@@ -6,6 +6,8 @@ import {
   PreviewAutomationDragInput,
   PreviewAutomationError,
   PreviewAutomationEvaluateInput,
+  PreviewAutomationSignInInput,
+  PreviewSignInResult,
   PreviewAutomationHoverInput,
   PreviewAutomationNavigateInput,
   PreviewAutomationOpenInput,
@@ -175,7 +177,7 @@ const PreviewClickTool = browserTool(
 const PreviewTypeTool = browserTool(
   Tool.make("preview_type", {
     description:
-      "Insert literal text into one input in the tab selected by tabId, or this agent session's current tab when omitted. Prefer a Playwright locator; set clear=true to replace existing text.",
+      "Insert literal text into one input in the tab selected by tabId, or this agent session's current tab when omitted. Prefer a Playwright locator; set clear=true to replace existing text. Never type passwords, one-time codes or other sign-in secrets; use preview_sign_in.",
     parameters: PreviewAutomationTypeInput,
     success: PreviewActionResult,
     failure: PreviewToolFailure,
@@ -267,12 +269,23 @@ export const PreviewEvaluateResult = Schema.Struct({
 const PreviewEvaluateTool = browserTool(
   Tool.make("preview_evaluate", {
     description:
-      "Evaluate JavaScript in the tab selected by tabId, or this agent session's current tab when omitted. Needs the same control as clicking: it works on your own tabs and on the user's tab only while nobody controls it. To read a tab the user is driving, use preview_snapshot. Returns {value} with a serializable result up to 64 KB; the expression may mutate page state.",
+      "Evaluate JavaScript in the tab selected by tabId, or this agent session's current tab when omitted. Needs the same control as clicking: it works on your own tabs and on the user's tab only while nobody controls it. To read a tab the user is driving, use preview_snapshot. Returns {value} with a serializable result up to 64 KB; the expression may mutate page state. Unavailable while a saved password filled by preview_sign_in is still in the page.",
     parameters: PreviewAutomationEvaluateInput,
     success: PreviewEvaluateResult,
     failure: PreviewToolFailure,
     dependencies,
   }).annotate(Tool.Title, "Evaluate JavaScript in preview"),
+);
+
+const PreviewSignInTool = browserTool(
+  Tool.make("preview_sign_in", {
+    description:
+      "Sign in on the current sign-in form with a login the user saved in Busyboy, in the desktop tab selected by tabId or this agent session's current tab. Pass CSS selectors for the visible fields and submit control; the user approves each sign-in, and Busyboy fills and submits the values without returning them to you. While the sign-in is in progress, reading or driving the page is blocked. Returns {status}: submitted (not proof of success; inspect the next page), declined, unavailable (no saved login or not a desktop tab; ask the user to sign in themselves), locator_invalid (re-inspect and fix selectors), origin_changed, page_modified (you ran preview_evaluate on this page; load the sign-in page fresh with preview_navigate and sign in before evaluating anything), or unsupported (this site's sign-in cannot be completed for you; ask the user to sign in themselves). The page never receives the real password, so do not try to read it. Never ask for passwords in chat or type them with preview_type.",
+    parameters: PreviewAutomationSignInInput,
+    success: Schema.Struct({ ...PreviewSignInResult.fields, ...presentationFields }),
+    failure: PreviewToolFailure,
+    dependencies,
+  }).annotate(Tool.Title, "Sign in with a saved password"),
 );
 
 const PreviewWaitForTool = readonlyBrowserTool(
@@ -325,6 +338,7 @@ export const PreviewToolkit = Toolkit.make(
   PreviewPressTool,
   PreviewScrollTool,
   PreviewEvaluateTool,
+  PreviewSignInTool,
   PreviewWaitForTool,
   PreviewRecordingStartTool,
   PreviewRecordingStopTool,
@@ -346,6 +360,7 @@ export const PreviewStandardToolkit = Toolkit.make(
   PreviewPressTool,
   PreviewScrollTool,
   PreviewEvaluateTool,
+  PreviewSignInTool,
   PreviewWaitForTool,
   PreviewRecordingStartTool,
   PreviewRecordingStopTool,

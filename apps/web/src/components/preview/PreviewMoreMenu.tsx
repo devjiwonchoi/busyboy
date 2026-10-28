@@ -39,6 +39,7 @@ export interface PreviewMoreMenuActions {
   readonly clearCache: () => void;
   readonly openDevTools?: () => void;
   readonly toggleNativePictureInPicture?: () => void;
+  readonly importPasswords?: () => void;
 }
 
 interface Props {
@@ -177,6 +178,12 @@ export function PreviewMoreMenu({
           <MenuItem onClick={actions.clearCookies}>Clear cookies</MenuItem>
           <MenuItem onClick={actions.clearCache}>Clear cache</MenuItem>
         </MenuGroup>
+        {actions.importPasswords ? (
+          <>
+            <MenuSeparator />
+            <MenuItem onClick={actions.importPasswords}>Import passwords…</MenuItem>
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

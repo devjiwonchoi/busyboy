@@ -652,6 +652,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["pr links github browser external click default pull request view panel"],
   },
   {
+    id: "browser-saved-passwords",
+    title: "Saved passwords",
+    to: "/settings/integrations",
+    searchTerms: ["passwords logins autofill import chrome 1password apple keychain sign in"],
+  },
+  {
     id: "browser-auto-show-floating-preview",
     title: "Auto-show floating preview",
     to: "/settings/integrations",
