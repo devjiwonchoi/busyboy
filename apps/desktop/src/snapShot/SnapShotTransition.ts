@@ -113,7 +113,7 @@ function createWindow(
     resizable: false,
     show: false,
     skipTaskbar: true,
-    title: "Busyboy Snapshot Animation",
+    title: "BusyBoy Snapshot Animation",
     transparent: true,
     webPreferences: {
       backgroundThrottling: false,

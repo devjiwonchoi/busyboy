@@ -22,7 +22,7 @@ import {
 } from "./versionSkew";
 
 const MISMATCH_HINT =
-  "Version mismatch. Try syncing the client and server to the same Busyboy version.";
+  "Version mismatch. Try syncing the client and server to the same BusyBoy version.";
 
 describe("versionSkew", () => {
   it("updates only the proven npm prefix and safely quotes its path", () => {

@@ -75,8 +75,11 @@ export function resolveAvailableUpdate(input: {
 }): AvailableUpdate | null {
   const version = input.release.tag_name.replace(/^v/, "");
   if (compareVersions(version, input.currentVersion) <= 0) return null;
-  const assetName = zipAssetName(input.productName, version, input.arch);
-  const asset = input.release.assets.find((candidate) => candidate.name === assetName);
+  // Case-insensitive so a change in the product name's casing keeps matching.
+  const assetName = zipAssetName(input.productName, version, input.arch).toLowerCase();
+  const asset = input.release.assets.find(
+    (candidate) => candidate.name.toLowerCase() === assetName,
+  );
   if (asset === undefined) return null;
   return {
     version,
@@ -85,7 +88,7 @@ export function resolveAvailableUpdate(input: {
   };
 }
 
-/** `/Applications/Busyboy.app/Contents/MacOS/Busyboy` → `/Applications/Busyboy.app`. */
+/** `/Applications/BusyBoy.app/Contents/MacOS/BusyBoy` → `/Applications/BusyBoy.app`. */
 export function resolveAppBundlePath(executablePath: string): string | null {
   const bundle = NodePath.resolve(executablePath, "../../..");
   return bundle.endsWith(".app") ? bundle : null;
@@ -304,7 +307,7 @@ export const isGitHubReleaseUpdaterFailure = (cause: unknown): cause is Error =>
   cause instanceof GitHubReleaseUpdaterFailure;
 
 // Matches PRODUCT_NAME in scripts/build-desktop-release.ts, which names the ZIP.
-const PRODUCT_NAME = "Busyboy";
+const PRODUCT_NAME = "BusyBoy";
 
 /** Reads `owner` and `repo` from the github feed electron-builder writes to app-update.yml. */
 export function parseGitHubFeed(appUpdateYml: string): { owner: string; repo: string } | null {

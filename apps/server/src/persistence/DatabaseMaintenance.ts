@@ -16,7 +16,7 @@ export class DatabaseMissingError extends Schema.TaggedError<DatabaseMissingErro
   { path: Schema.String },
 ) {
   override get message() {
-    return "No existing Busyboy database was found in this data directory.";
+    return "No existing BusyBoy database was found in this data directory.";
   }
 }
 
@@ -25,7 +25,7 @@ export class DatabaseInUseError extends Schema.TaggedError<DatabaseInUseError>()
   { path: Schema.String, cause: Schema.Defect() },
 ) {
   override get message() {
-    return "Stop the Busyboy server and desktop app before repairing the database.";
+    return "Stop the BusyBoy server and desktop app before repairing the database.";
   }
 }
 
@@ -34,7 +34,7 @@ export class DatabaseProjectionsInvalidError extends Schema.TaggedError<Database
   { path: Schema.String },
 ) {
   override get message() {
-    return "Database projections need repair before compaction. Start Busyboy once so it rebuilds them, then run doctor again. If this CLI is older than the one that wrote the database, update Busyboy first.";
+    return "Database projections need repair before compaction. Start BusyBoy once so it rebuilds them, then run doctor again. If this CLI is older than the one that wrote the database, update BusyBoy first.";
   }
 }
 

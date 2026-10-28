@@ -145,7 +145,7 @@ function ChatRouteGlobalShortcuts() {
             stackedThreadToast({
               type: "info",
               title: "Preview is desktop-only",
-              description: "Open Busyboy in the desktop app to use the in-app preview.",
+              description: "Open BusyBoy in the desktop app to use the in-app preview.",
             }),
           );
           return;

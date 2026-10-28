@@ -22,9 +22,9 @@ const defaultEnvironmentInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "1.2.3",
-  appPath: "/Applications/Busyboy.app/Contents/Resources/app.asar",
+  appPath: "/Applications/BusyBoy.app/Contents/Resources/app.asar",
   isPackaged: true,
-  resourcesPath: "/Applications/Busyboy.app/Contents/Resources",
+  resourcesPath: "/Applications/BusyBoy.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -41,7 +41,7 @@ interface ElectronAppCalls {
 const layerElectronApp = (calls: ElectronAppCalls) =>
   Layer.succeed(ElectronApp.ElectronApp, {
     metadata: Effect.die("unexpected metadata read"),
-    name: Effect.succeed("Busyboy"),
+    name: Effect.succeed("BusyBoy"),
     systemLocale: Effect.succeed("en-US"),
     whenReady: Effect.void,
     quit: Effect.void,
@@ -217,8 +217,8 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         yield* identity.configure;
 
-        assert.deepEqual(calls.setName, ["Busyboy Beta"]);
-        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "Busyboy (Beta)");
+        assert.deepEqual(calls.setName, ["BusyBoy Beta"]);
+        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "BusyBoy (Beta)");
         assert.equal(calls.setAboutPanelOptions[0]?.applicationVersion, "1.2.3");
         assert.equal(calls.setAboutPanelOptions[0]?.version, "0123456789ab");
         assert.deepEqual(calls.setDockIcon, []);
@@ -259,9 +259,9 @@ describe("DesktopAppIdentity", () => {
 
         const runtimeName = calls.setName[0];
         assert.isDefined(runtimeName);
-        assert.equal(runtimeName, `Busyboy ${stage}`);
+        assert.equal(runtimeName, `BusyBoy ${stage}`);
         assert.match(runtimeName.replaceAll(" ", ""), /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/);
-        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `Busyboy (${stage})`);
+        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `BusyBoy (${stage})`);
       }),
       { calls, environment },
     );

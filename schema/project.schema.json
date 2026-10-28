@@ -9,19 +9,19 @@
     },
     "iconPath": {
       "type": "string",
-      "description": "Workspace-relative path to the project icon (e.g. \"assets/logo.svg\"). Checked before Busyboy's built-in icon locations.",
+      "description": "Workspace-relative path to the project icon (e.g. \"assets/logo.svg\"). Checked before BusyBoy's built-in icon locations.",
       "minLength": 1,
       "maxLength": 512
     },
     "defaultThreadEnvMode": {
       "type": "string",
       "enum": ["local", "worktree"],
-      "description": "Where new threads start for this repository: \"worktree\" for a fresh git worktree, \"local\" for the current checkout. A per-project setting in Busyboy overrides this; when neither is set, the global default applies."
+      "description": "Where new threads start for this repository: \"worktree\" for a fresh git worktree, \"local\" for the current checkout. A per-project setting in BusyBoy overrides this; when neither is set, the global default applies."
     },
     "worktreeSubmodules": {
       "type": "string",
       "enum": ["recursive", "top-level", "none"],
-      "description": "How new worktrees populate git submodules: \"recursive\" (the default) initializes nested submodules too, \"top-level\" initializes only those declared by this repository, and \"none\" leaves every submodule empty for a setup script to handle. A project or environment setting in Busyboy overrides this."
+      "description": "How new worktrees populate git submodules: \"recursive\" (the default) initializes nested submodules too, \"top-level\" initializes only those declared by this repository, and \"none\" leaves every submodule empty for a setup script to handle. A project or environment setting in BusyBoy overrides this."
     },
     "scripts": {
       "type": "array",
@@ -30,12 +30,12 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "Display name for the script, shown in the Busyboy scripts menu.",
+            "description": "Display name for the script, shown in the BusyBoy scripts menu.",
             "minLength": 1
           },
           "command": {
             "type": "string",
-            "description": "Shell command executed in a Busyboy terminal at the project root.",
+            "description": "Shell command executed in a BusyBoy terminal at the project root.",
             "minLength": 1
           },
           "icon": {
@@ -63,13 +63,13 @@
         },
         "required": ["name", "command"],
         "additionalProperties": false,
-        "description": "A project script that team members can import into Busyboy."
+        "description": "A project script that team members can import into BusyBoy."
       },
-      "description": "Project scripts shared with everyone who opens this repository in Busyboy.",
+      "description": "Project scripts shared with everyone who opens this repository in BusyBoy.",
       "maxItems": 50
     }
   },
   "additionalProperties": false,
-  "title": "Busyboy project file",
-  "description": "Checked-in project configuration for Busyboy (t3.json at the repository root). See https://github.com/devjiwonchoi/busyboy for documentation."
+  "title": "BusyBoy project file",
+  "description": "Checked-in project configuration for BusyBoy (t3.json at the repository root). See https://github.com/devjiwonchoi/busyboy for documentation."
 }

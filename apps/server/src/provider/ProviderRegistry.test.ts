@@ -2306,7 +2306,7 @@ it.layer(
         assert.strictEqual(status.enabled, false);
         assert.strictEqual(status.status, "disabled");
         assert.strictEqual(status.installed, false);
-        assert.strictEqual(status.message, "Codex is disabled in Busyboy settings.");
+        assert.strictEqual(status.message, "Codex is disabled in BusyBoy settings.");
       }),
     );
   });

@@ -112,7 +112,7 @@ describe("DesktopUpdates", () => {
       env: {
         T3CODE_DESKTOP_MOCK_UPDATES: "false",
         T3CODE_LOCAL_APP_ROOT: "/Users/me/.busyboy/source",
-        T3CODE_LOCAL_APP_LAUNCHER: "/Users/me/Applications/Busyboy.app/Contents/MacOS/Launcher",
+        T3CODE_LOCAL_APP_LAUNCHER: "/Users/me/Applications/BusyBoy.app/Contents/MacOS/Launcher",
         T3CODE_LOCAL_APP_COMMIT: "abcdef1234567890abcdef1234567890abcdef12",
       },
       checkForUpdates: Effect.fail(

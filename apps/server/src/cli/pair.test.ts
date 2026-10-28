@@ -264,7 +264,7 @@ describe("t3 pair", () => {
       const rendered = String(
         typeof error === "object" && error !== null && "cause" in error ? error.cause : error,
       );
-      assert.include(rendered, "No running Busyboy server found.");
+      assert.include(rendered, "No running BusyBoy server found.");
       assert.include(rendered, "pnpm start");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -290,7 +290,7 @@ describe("t3 pair", () => {
         const rendered = String(
           typeof error === "object" && error !== null && "cause" in error ? error.cause : error,
         );
-        assert.include(rendered, "No running Busyboy server found.");
+        assert.include(rendered, "No running BusyBoy server found.");
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -314,7 +314,7 @@ describe("t3 pair", () => {
       const rendered = String(
         typeof error === "object" && error !== null && "cause" in error ? error.cause : error,
       );
-      assert.include(rendered, "No running Busyboy server found.");
+      assert.include(rendered, "No running BusyBoy server found.");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

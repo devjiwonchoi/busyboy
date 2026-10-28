@@ -53,7 +53,7 @@ describe("window capture IPC", () => {
           borderWidth: 1,
           cornerRadius: 8,
           details: {
-            appName: "Busyboy",
+            appName: "BusyBoy",
             windowTitle: "Capture animation",
             appIconDataUrl: "data:image/png;base64,aWNvbg==",
           },
@@ -71,7 +71,7 @@ describe("window capture IPC", () => {
           cornerRadius: 10,
           scaleFactor: 1.25,
           details: {
-            appName: "Busyboy",
+            appName: "BusyBoy",
             windowTitle: "Capture animation",
             appIconDataUrl: "data:image/png;base64,aWNvbg==",
           },

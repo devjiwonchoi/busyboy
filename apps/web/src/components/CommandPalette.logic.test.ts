@@ -76,7 +76,7 @@ describe("buildCommandPaletteProjectMetadata", () => {
       projects: [
         {
           environmentId: localEnvironmentId,
-          title: "Busyboy",
+          title: "BusyBoy",
           workspaceRoot: "/Users/theo/Projects/t3code",
         },
         {
@@ -89,7 +89,7 @@ describe("buildCommandPaletteProjectMetadata", () => {
     });
 
     expect(metadata.searchTerms).toEqual([
-      "Busyboy",
+      "BusyBoy",
       "/Users/theo/Projects/t3code",
       "Local",
       "t3code",
@@ -106,7 +106,7 @@ describe("buildCommandPaletteProjectMetadata", () => {
         {
           kind: "action",
           value: "project:t3code",
-          title: "Busyboy",
+          title: "BusyBoy",
           searchTerms: metadata.searchTerms,
           icon: null,
           run: async () => undefined,
@@ -122,12 +122,12 @@ describe("buildCommandPaletteProjectMetadata", () => {
       projects: [
         {
           environmentId: remoteEnvironmentId,
-          title: "Busyboy",
+          title: "BusyBoy",
           workspaceRoot: "/srv/t3code",
         },
         {
           environmentId: remoteEnvironmentId,
-          title: "Busyboy worktree",
+          title: "BusyBoy worktree",
           workspaceRoot: "/srv/t3code-feature",
         },
       ],
@@ -143,12 +143,12 @@ describe("buildCommandPaletteProjectMetadata", () => {
       projects: [
         {
           environmentId: remoteEnvironmentId,
-          title: "Busyboy",
+          title: "BusyBoy",
           workspaceRoot: "/srv/t3code",
         },
         {
           environmentId: secondRemoteEnvironmentId,
-          title: "Busyboy mirror",
+          title: "BusyBoy mirror",
           workspaceRoot: "/srv/mirror/t3code",
         },
       ],
@@ -166,7 +166,7 @@ describe("buildCommandPaletteProjectMetadata", () => {
       projects: [
         {
           environmentId: remoteEnvironmentId,
-          title: "Busyboy",
+          title: "BusyBoy",
           workspaceRoot: "/srv/t3code",
         },
       ],
@@ -461,7 +461,7 @@ describe("buildThreadActionItems", () => {
     ];
     const items = buildThreadActionItems({
       threads,
-      projectTitleById: new Map([[PROJECT_ID, "Busyboy"]]),
+      projectTitleById: new Map([[PROJECT_ID, "BusyBoy"]]),
       sortOrder: "created_at",
       icon: null,
       getContentMatch: (thread) =>
@@ -610,7 +610,7 @@ describe("buildThreadActionItems", () => {
   it("keeps message excerpts searchable without replacing thread metadata", () => {
     const [item] = buildThreadActionItems({
       threads: [makeThread({ branch: "feat/search" })],
-      projectTitleById: new Map([[PROJECT_ID, "Busyboy"]]),
+      projectTitleById: new Map([[PROJECT_ID, "BusyBoy"]]),
       sortOrder: "updated_at",
       icon: null,
       getContentMatch: () => ({
@@ -627,7 +627,7 @@ describe("buildThreadActionItems", () => {
       snippet: "The relay reconnect is now bounded.",
       query: "reconnect",
     });
-    expect(item?.description).toBe("Busyboy · #feat/search");
+    expect(item?.description).toBe("BusyBoy · #feat/search");
   });
 
   it("surfaces threads when the query is their ID, without outranking title matches", () => {
@@ -643,7 +643,7 @@ describe("buildThreadActionItems", () => {
     });
     const items = buildThreadActionItems({
       threads: [idThread, titleThread],
-      projectTitleById: new Map([[PROJECT_ID, "Busyboy"]]),
+      projectTitleById: new Map([[PROJECT_ID, "BusyBoy"]]),
       sortOrder: "updated_at",
       icon: null,
       runThread: async (_thread) => undefined,
@@ -667,7 +667,7 @@ describe("buildThreadActionItems", () => {
   it("prefers renderDescription when provided", () => {
     const [item] = buildThreadActionItems({
       threads: [makeThread({ branch: "feat/search", worktreePath: "/tmp/wt" })],
-      projectTitleById: new Map([[PROJECT_ID, "Busyboy"]]),
+      projectTitleById: new Map([[PROJECT_ID, "BusyBoy"]]),
       sortOrder: "updated_at",
       icon: null,
       renderDescription: (thread, { projectTitle }) =>
@@ -675,7 +675,7 @@ describe("buildThreadActionItems", () => {
       runThread: async (_thread) => undefined,
     });
 
-    expect(item?.description).toBe("Busyboy:feat/search:wt");
+    expect(item?.description).toBe("BusyBoy:feat/search:wt");
   });
 
   it("filters archived threads out of thread search items", () => {

@@ -251,7 +251,7 @@ describe("getChangedBrowserSettingLabels", () => {
       "Recording mouse presses",
       "Open links in",
       "Floating preview",
-      "Open pull requests in Busyboy",
+      "Open pull requests in BusyBoy",
     ]);
   });
 });

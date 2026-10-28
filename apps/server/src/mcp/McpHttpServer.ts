@@ -58,7 +58,7 @@ const mcpResourceMetadataUrl = (request: HttpServerRequest.HttpServerRequest) =>
   );
 
 /**
- * Agents Busyboy launched carry a registry token and must never be sent into an
+ * Agents BusyBoy launched carry a registry token and must never be sent into an
  * OAuth flow when it dies: they cannot open a browser, and a sign-in would mint
  * a credential that outlives their session.
  */
@@ -82,7 +82,7 @@ const unauthorized = (input: {
   return HttpServerResponse.jsonUnsafe(
     {
       error: "invalid_mcp_credential",
-      message: "A valid Busyboy MCP credential is required.",
+      message: "A valid BusyBoy MCP credential is required.",
     },
     {
       status: 401,
@@ -783,7 +783,7 @@ export const layerPullRequestsToolkit = toolkitRegistration(
 );
 
 export const layerMcpTransport = McpServer.layerHttp({
-  name: "Busyboy",
+  name: "BusyBoy",
   version: packageJson.version,
   path: "/mcp",
   protocols: [McpProtocol.v2025_06_18],

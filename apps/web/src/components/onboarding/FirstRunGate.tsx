@@ -203,7 +203,7 @@ function FirstRunRecovery({
         <p className="mt-2 text-sm text-muted-foreground">
           {settingsReadFailed
             ? "Your saved settings could not be loaded."
-            : "Busyboy could not confirm this workspace."}
+            : "BusyBoy could not confirm this workspace."}
         </p>
         <Button
           className="mt-5"

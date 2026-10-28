@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-/** Local instrumentation boundary. Busyboy does not collect product analytics. */
+/** Local instrumentation boundary. BusyBoy does not collect product analytics. */
 export class AnalyticsService extends Context.Service<
   AnalyticsService,
   {

@@ -843,7 +843,7 @@ describe("CodexAdapterV2 dynamic tool projection", () => {
         status: "failed",
         arguments: {
           title: "Restrict the breakpoint to Git actions",
-          code: "await sky.type_text({app:'Busyboy (Nightly)',text:'debug(ga.run)'});",
+          code: "await sky.type_text({app:'BusyBoy (Nightly)',text:'debug(ga.run)'});",
         },
         result: { content: [{ type: "text", text: "Illegal Unicode escape sequence" }] },
       });
@@ -1616,7 +1616,7 @@ function codexReplayPreamble(input: {
         id: 1,
         method: "initialize",
         params: {
-          clientInfo: { name: "Busyboy", title: "Busyboy", version: packageJson.version },
+          clientInfo: { name: "BusyBoy", title: "BusyBoy", version: packageJson.version },
           capabilities: {
             experimentalApi: true,
             optOutNotificationMethods: ["turn/diff/updated"],
@@ -1633,7 +1633,7 @@ function codexReplayPreamble(input: {
       frame: {
         id: 1,
         result: {
-          userAgent: "Busyboy/0.156.1",
+          userAgent: "BusyBoy/0.156.1",
           codexHome: "/tmp/codex-home",
           platformFamily: "unix",
           platformOs: "macos",
@@ -2208,7 +2208,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       );
       assert.deepEqual(initializeParams, [
         {
-          clientInfo: { name: "Busyboy", title: "Busyboy", version: packageJson.version },
+          clientInfo: { name: "BusyBoy", title: "BusyBoy", version: packageJson.version },
           capabilities: {
             experimentalApi: true,
             optOutNotificationMethods: ["turn/diff/updated"],
@@ -2282,7 +2282,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
               frame: {
                 id: 1,
                 result: {
-                  userAgent: "Busyboy/0.164.0 (Mac OS 26.5.2; arm64)",
+                  userAgent: "BusyBoy/0.164.0 (Mac OS 26.5.2; arm64)",
                   codexHome: "/tmp/codex-home",
                   platformFamily: "unix",
                   platformOs: "macos",

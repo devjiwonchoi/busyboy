@@ -14,9 +14,9 @@ const defaultInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "0.0.22",
-  appPath: "/Applications/Busyboy.app/Contents/Resources/app.asar",
+  appPath: "/Applications/BusyBoy.app/Contents/Resources/app.asar",
   isPackaged: false,
-  resourcesPath: "/Applications/Busyboy.app/Contents/Resources",
+  resourcesPath: "/Applications/BusyBoy.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 

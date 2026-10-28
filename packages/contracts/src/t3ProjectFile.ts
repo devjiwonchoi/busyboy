@@ -26,10 +26,10 @@ const trimmedNonEmpty = (annotations: { readonly description: string }, maxLengt
 
 export const T3ProjectFileScript = Schema.Struct({
   name: trimmedNonEmpty({
-    description: "Display name for the script, shown in the Busyboy scripts menu.",
+    description: "Display name for the script, shown in the BusyBoy scripts menu.",
   }),
   command: trimmedNonEmpty({
-    description: "Shell command executed in a Busyboy terminal at the project root.",
+    description: "Shell command executed in a BusyBoy terminal at the project root.",
   }),
   icon: Schema.optionalKey(
     ProjectScriptIcon.annotate({
@@ -61,7 +61,7 @@ export const T3ProjectFileScript = Schema.Struct({
     }),
   ),
 }).annotate({
-  description: "A project script that team members can import into Busyboy.",
+  description: "A project script that team members can import into BusyBoy.",
 });
 export type T3ProjectFileScript = typeof T3ProjectFileScript.Type;
 
@@ -75,7 +75,7 @@ export const T3ProjectFile = Schema.Struct({
     trimmedNonEmpty(
       {
         description:
-          'Workspace-relative path to the project icon (e.g. "assets/logo.svg"). Checked before Busyboy\'s built-in icon locations.',
+          'Workspace-relative path to the project icon (e.g. "assets/logo.svg"). Checked before BusyBoy\'s built-in icon locations.',
       },
       T3_PROJECT_FILE_PATH_MAX_LENGTH,
     ),
@@ -83,26 +83,26 @@ export const T3ProjectFile = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(
     ThreadEnvMode.annotate({
       description:
-        'Where new threads start for this repository: "worktree" for a fresh git worktree, "local" for the current checkout. A per-project setting in Busyboy overrides this; when neither is set, the global default applies.',
+        'Where new threads start for this repository: "worktree" for a fresh git worktree, "local" for the current checkout. A per-project setting in BusyBoy overrides this; when neither is set, the global default applies.',
     }),
   ),
   worktreeSubmodules: Schema.optionalKey(
     WorktreeSubmodules.annotate({
       description:
-        'How new worktrees populate git submodules: "recursive" (the default) initializes nested submodules too, "top-level" initializes only those declared by this repository, and "none" leaves every submodule empty for a setup script to handle. A project or environment setting in Busyboy overrides this.',
+        'How new worktrees populate git submodules: "recursive" (the default) initializes nested submodules too, "top-level" initializes only those declared by this repository, and "none" leaves every submodule empty for a setup script to handle. A project or environment setting in BusyBoy overrides this.',
     }),
   ),
   scripts: Schema.optionalKey(
     Schema.Array(T3ProjectFileScript)
       .annotate({
-        description: "Project scripts shared with everyone who opens this repository in Busyboy.",
+        description: "Project scripts shared with everyone who opens this repository in BusyBoy.",
       })
       .check(Schema.isMaxLength(T3_PROJECT_FILE_MAX_SCRIPTS)),
   ),
 }).annotate({
-  title: "Busyboy project file",
+  title: "BusyBoy project file",
   description:
-    "Checked-in project configuration for Busyboy (t3.json at the repository root). See https://github.com/devjiwonchoi/busyboy for documentation.",
+    "Checked-in project configuration for BusyBoy (t3.json at the repository root). See https://github.com/devjiwonchoi/busyboy for documentation.",
 });
 export type T3ProjectFile = typeof T3ProjectFile.Type;
 

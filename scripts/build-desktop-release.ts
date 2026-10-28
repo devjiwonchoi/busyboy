@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off - A plain build script that shells out to pnpm, cargo, and electron-builder.
-// Packages Busyboy for macOS as a DMG (for first installs) and a ZIP (for the
+// Packages BusyBoy for macOS as a DMG (for first installs) and a ZIP (for the
 // in-app updater). A trimmed, mac-only port of t3code's build-desktop-artifact.
 //
 //   node scripts/build-desktop-release.ts --version 0.0.3 [--skip-build] [--out release]
@@ -19,7 +19,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 
-export const PRODUCT_NAME = "Busyboy";
+export const PRODUCT_NAME = "BusyBoy";
 export const APP_ID = "dev.jiwon.busyboy";
 export const UPDATE_REPOSITORY = { owner: "devjiwonchoi", repo: "busyboy" } as const;
 
@@ -198,11 +198,11 @@ function createBuilderConfig(version: string) {
       extendInfo: {
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSScreenCaptureUsageDescription:
-          "Busyboy captures the active window when you use the snapshot shortcut.",
+          "BusyBoy captures the active window when you use the snapshot shortcut.",
         NSDocumentsFolderUsageDescription:
-          "Busyboy reads project files you open in the desktop app.",
+          "BusyBoy reads project files you open in the desktop app.",
         NSLocalNetworkUsageDescription:
-          "Busyboy connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
+          "BusyBoy connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
       },
       protocols: [{ name: PRODUCT_NAME, schemes: ["t3code"] }],
     },
@@ -290,7 +290,7 @@ export function buildDesktopRelease(options: {
           productName: PRODUCT_NAME,
           version,
           private: true,
-          description: "Busyboy desktop app for coding agents.",
+          description: "BusyBoy desktop app for coding agents.",
           author: "Jiwon Choi",
           license: "MIT",
           main: "apps/desktop/dist-electron/boot.cjs",

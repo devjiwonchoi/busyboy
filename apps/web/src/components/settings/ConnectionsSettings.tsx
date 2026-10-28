@@ -2943,8 +2943,8 @@ export function ConnectionsSettings() {
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {pendingDesktopServerExposureMode === "network-accessible"
-                    ? "Let your other devices connect to Busyboy over the network. Pair devices to give them access. Busyboy will restart."
-                    : "Devices connected over your local network will disconnect. Tailscale HTTPS keeps working. Busyboy will restart."}
+                    ? "Let your other devices connect to BusyBoy over the network. Pair devices to give them access. BusyBoy will restart."
+                    : "Devices connected over your local network will disconnect. Tailscale HTTPS keeps working. BusyBoy will restart."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -2986,7 +2986,7 @@ export function ConnectionsSettings() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Disable Tailscale HTTPS?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Busyboy will restart the local backend without Tailscale Serve.
+                  BusyBoy will restart the local backend without Tailscale Serve.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -3024,7 +3024,7 @@ export function ConnectionsSettings() {
               <DialogHeader>
                 <DialogTitle>Set up Tailscale HTTPS?</DialogTitle>
                 <DialogDescription>
-                  Busyboy will restart the local backend with Tailscale Serve enabled and ask
+                  BusyBoy will restart the local backend with Tailscale Serve enabled and ask
                   Tailscale to proxy HTTPS traffic to this backend.
                 </DialogDescription>
               </DialogHeader>

@@ -61,7 +61,7 @@ vi.mock("electron", async () => {
   }
   return {
     app: {
-      getPath: () => "/Applications/Busyboy (Nightly).app/Contents/MacOS/Busyboy",
+      getPath: () => "/Applications/BusyBoy (Nightly).app/Contents/MacOS/BusyBoy",
     },
     nativeImage: { createFromPath: mocks.createFromPath },
     BrowserWindow: class extends MockWindow {},
@@ -124,11 +124,11 @@ function send(action: string, trusted = true) {
 
 describe("macAppBundlePath", () => {
   it("resolves bundles with spaces and refuses non-bundle executables", () => {
-    expect(macAppBundlePath("/Applications/Busyboy.app/Contents/MacOS/Busyboy")).toBe(
-      "/Applications/Busyboy.app",
+    expect(macAppBundlePath("/Applications/BusyBoy.app/Contents/MacOS/BusyBoy")).toBe(
+      "/Applications/BusyBoy.app",
     );
     expect(macAppBundlePath("/usr/local/bin/electron")).toBeUndefined();
-    expect(macAppBundlePath("/Applications/Busyboy.app/other/MacOS/Busyboy")).toBeUndefined();
+    expect(macAppBundlePath("/Applications/BusyBoy.app/other/MacOS/BusyBoy")).toBeUndefined();
   });
 });
 it("drags the running app bundle only for the helper's own renderer", async () => {
@@ -138,11 +138,11 @@ it("drags the running app bundle only for the helper's own renderer", async () =
   send("drag");
   expect(mocks.createFromPath).toHaveBeenCalledWith("/bundle/prod-resources/icon.png");
   expect(mocks.startDrag).toHaveBeenCalledWith({
-    file: "/Applications/Busyboy (Nightly).app",
+    file: "/Applications/BusyBoy (Nightly).app",
     icon: mocks.createFromPath.mock.results[0]!.value.resize(),
   });
   send("finder");
-  expect(mocks.showItemInFolder).toHaveBeenCalledWith("/Applications/Busyboy (Nightly).app");
+  expect(mocks.showItemInFolder).toHaveBeenCalledWith("/Applications/BusyBoy (Nightly).app");
 });
 it("rechecks permissions and releases resources when granted", async () => {
   await open();
@@ -168,7 +168,7 @@ it("does not open for a permission already granted", async () => {
 });
 it("does not show a helper with a missing packaged icon", async () => {
   mocks.createFromPath.mockReturnValueOnce({ isEmpty: () => true });
-  await expect(open()).rejects.toThrow("packaged Busyboy icon is missing");
+  await expect(open()).rejects.toThrow("packaged BusyBoy icon is missing");
   expect(windows).toHaveLength(0);
 });
 it("cleans up when the helper page fails to load", async () => {
@@ -184,7 +184,7 @@ it("offers the Finder fallback when native dragging fails", async () => {
     throw new Error("drag failed");
   });
   send("drag");
-  expect(mocks.showItemInFolder).toHaveBeenCalledWith("/Applications/Busyboy (Nightly).app");
+  expect(mocks.showItemInFolder).toHaveBeenCalledWith("/Applications/BusyBoy (Nightly).app");
   expect(windows[0]!.destroyed).toBe(false);
 });
 

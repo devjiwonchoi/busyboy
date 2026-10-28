@@ -63,10 +63,10 @@ export function formatServiceStatus(
   cliVersion: string,
 ): string {
   if (!status.supported) {
-    return "Busyboy service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd";
+    return "BusyBoy service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd";
   }
   if (!status.installed) {
-    return "Busyboy service\n  Status: not installed\n  Next: Run `t3 service install`.";
+    return "BusyBoy service\n  Status: not installed\n  Next: Run `t3 service install`.";
   }
   const installedVersion = status.installedVersion ?? cliVersion;
   const problems = (status.problems ?? []).map(
@@ -78,7 +78,7 @@ export function formatServiceStatus(
     compareExactServiceVersions(status.installedVersion, cliVersion) > 0
   ) {
     return [
-      "Busyboy service",
+      "BusyBoy service",
       `  Status: installed · t3@${installedVersion} (newer than this t3@${cliVersion} CLI)`,
       `  Unit: ${status.unitPath}`,
       `  Logs: ${status.logPath}`,
@@ -87,7 +87,7 @@ export function formatServiceStatus(
     ].join("\n");
   }
   return [
-    "Busyboy service",
+    "BusyBoy service",
     `  Status: ${status.current ? `installed · t3@${installedVersion}` : "needs an update or repair"}`,
     `  Unit: ${status.unitPath}`,
     `  Logs: ${status.logPath}`,
@@ -114,7 +114,7 @@ const serviceReconcileFlags = {
 };
 
 const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pipe(
-  Command.withDescription("Install Busyboy as a background service for this user."),
+  Command.withDescription("Install BusyBoy as a background service for this user."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
@@ -122,12 +122,12 @@ const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pip
         const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
         if (!result.changed) {
           yield* Console.log(
-            `Busyboy service is already installed with t3@${packageJson.version}.`,
+            `BusyBoy service is already installed with t3@${packageJson.version}.`,
           );
           return;
         }
         yield* Console.log(
-          `${result.previouslyInstalled ? "Updated" : "Installed"} Busyboy service with t3@${packageJson.version}.\nLogs: ${result.plan.logPath}`,
+          `${result.previouslyInstalled ? "Updated" : "Installed"} BusyBoy service with t3@${packageJson.version}.\nLogs: ${result.plan.logPath}`,
         );
       }),
     ),
@@ -146,11 +146,11 @@ const serviceUpdateCommand = Command.make("update", serviceReconcileFlags).pipe(
         );
         const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
         if (!result.changed) {
-          yield* Console.log(`Busyboy service is already using t3@${packageJson.version}.`);
+          yield* Console.log(`BusyBoy service is already using t3@${packageJson.version}.`);
           return;
         }
         yield* Console.log(
-          `${result.previouslyInstalled ? "Updated" : "Installed"} Busyboy service with t3@${packageJson.version}.\nLogs: ${result.plan.logPath}`,
+          `${result.previouslyInstalled ? "Updated" : "Installed"} BusyBoy service with t3@${packageJson.version}.\nLogs: ${result.plan.logPath}`,
         );
       }),
     ),
@@ -170,8 +170,8 @@ const serviceRestartCommand = Command.make("restart", projectLocationFlags).pipe
         const restarted = yield* service.restart;
         yield* Console.log(
           restarted
-            ? `Restarted the Busyboy service${status.installedVersion === undefined ? "" : ` on t3@${status.installedVersion}`}.`
-            : "Busyboy service is not installed.",
+            ? `Restarted the BusyBoy service${status.installedVersion === undefined ? "" : ` on t3@${status.installedVersion}`}.`
+            : "BusyBoy service is not installed.",
         );
       }),
     ),
@@ -179,7 +179,7 @@ const serviceRestartCommand = Command.make("restart", projectLocationFlags).pipe
 );
 
 const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).pipe(
-  Command.withDescription("Stop and remove the Busyboy background service."),
+  Command.withDescription("Stop and remove the BusyBoy background service."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
@@ -187,7 +187,7 @@ const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).
         const service = yield* BootService.BootService;
         const removed = yield* service.uninstall;
         yield* Console.log(
-          removed ? "Removed the Busyboy service." : "Busyboy service is not installed.",
+          removed ? "Removed the BusyBoy service." : "BusyBoy service is not installed.",
         );
       }),
     ),
@@ -195,7 +195,7 @@ const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).
 );
 
 const serviceStatusCommand = Command.make("status", projectLocationFlags).pipe(
-  Command.withDescription("Show whether the Busyboy background service is installed."),
+  Command.withDescription("Show whether the BusyBoy background service is installed."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
@@ -215,7 +215,7 @@ export const offerServiceDuringOnboarding = Effect.gen(function* () {
     return false;
   }
   if (installed && current) {
-    yield* Console.log("Busyboy is already set up to run in the background on this machine.");
+    yield* Console.log("BusyBoy is already set up to run in the background on this machine.");
     return true;
   }
   for (const problem of status.problems ?? []) {
@@ -235,11 +235,11 @@ export const offerServiceDuringOnboarding = Effect.gen(function* () {
   const wanted = yield* Prompt.run(
     Prompt.Confirm({
       message: installed
-        ? "The installed Busyboy service needs an update or repair. Update it now?"
+        ? "The installed BusyBoy service needs an update or repair. Update it now?"
         : platform === "darwin"
-          ? "Run Busyboy in the background whenever you log in to this Mac? " +
+          ? "Run BusyBoy in the background whenever you log in to this Mac? " +
             "It runs while you are logged in."
-          : "Run Busyboy in the background whenever this machine boots? " +
+          : "Run BusyBoy in the background whenever this machine boots? " +
             "It runs even after you log out.",
       initial: true,
     }),
@@ -278,7 +278,7 @@ export const recoverServiceOnboardingOffer = <R>(
   );
 
 export const serviceCommand = Command.make("service").pipe(
-  Command.withDescription("Manage the Busyboy background service."),
+  Command.withDescription("Manage the BusyBoy background service."),
   Command.withSubcommands([
     serviceInstallCommand,
     serviceRestartCommand,

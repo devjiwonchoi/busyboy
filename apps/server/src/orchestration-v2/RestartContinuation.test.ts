@@ -1042,13 +1042,13 @@ it.effect("tells a turn cut mid-way about the background work it lost", () =>
   }),
 );
 
-it.effect("shows a continuation as a Busyboy notice whose detail is the prompt", () =>
+it.effect("shows a continuation as a BusyBoy notice whose detail is the prompt", () =>
   Effect.gen(function* () {
     const [resumed] = yield* continuationDispatches(cutMidTurn());
     assert.deepEqual(resumed?.notification, {
       source: { kind: "system" },
       outcome: "updated",
-      summary: "Busyboy restarted and resumed this turn",
+      summary: "BusyBoy restarted and resumed this turn",
       detail: "Continue where you left off.",
     });
   }),

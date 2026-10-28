@@ -63,7 +63,7 @@ vi.mock("electron", () => ({
     getSystemLocale: getSystemLocaleMock,
     getVersion: getVersionMock,
     isPackaged: true,
-    name: "Busyboy",
+    name: "BusyBoy",
     on: onMock,
     quit: quitMock,
     relaunch: relaunchMock,

@@ -61,7 +61,7 @@ describe("pull request project filter choices", () => {
 
   it("matches canonical repositories regardless of casing", () => {
     const main = project("main");
-    const worktree = project("worktree", nucbox, "GitHub.com/DevJiwonChoi/Busyboy");
+    const worktree = project("worktree", nucbox, "GitHub.com/DevJiwonChoi/BusyBoy");
 
     expect(pullRequestFilterProjects([main, worktree], labels)).toEqual([main]);
   });

@@ -515,7 +515,7 @@ export const makeCodexChatGptAuth = Effect.fn("makeCodexChatGptAuth")(function* 
               ? { prompt: "consent" }
               : {}),
           }
-        : { agent_name_hint: "Busyboy" }),
+        : { agent_name_hint: "BusyBoy" }),
       ext_agent_host_id: hostId,
       response_type: "code",
       redirect_uri: redirectUri,

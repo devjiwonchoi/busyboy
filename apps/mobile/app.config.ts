@@ -71,21 +71,21 @@ const RELEASE_ASSETS = {
 
 const VARIANT_CONFIG = {
   development: {
-    appName: "Busyboy Dev",
+    appName: "BusyBoy Dev",
     scheme: "t3code-dev",
     iosBundleIdentifier: "com.devjiwonchoi.busyboy.dev",
     androidPackage: "com.devjiwonchoi.busyboy.dev",
     assets: DEVELOPMENT_ASSETS,
   },
   preview: {
-    appName: "Busyboy Preview",
+    appName: "BusyBoy Preview",
     scheme: "t3code-preview",
     iosBundleIdentifier: "com.devjiwonchoi.busyboy.preview",
     androidPackage: "com.devjiwonchoi.busyboy.preview",
     assets: PREVIEW_ASSETS,
   },
   production: {
-    appName: "Busyboy",
+    appName: "BusyBoy",
     scheme: "t3code",
     iosBundleIdentifier: "com.devjiwonchoi.busyboy",
     androidPackage: "com.devjiwonchoi.busyboy",
@@ -133,7 +133,7 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
       {
         name: "SubscriptionUsage",
         displayName: "Subscription usage",
-        description: "Subscription quotas from your connected Busyboy environments.",
+        description: "Subscription quotas from your connected BusyBoy environments.",
         ios: {
           configuration: {
             title: "Subscription usage",
@@ -184,7 +184,7 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
       {
         name: "AgentActivity",
         displayName: "Agent Activity",
-        description: "Shows the current state of active Busyboy agents.",
+        description: "Shows the current state of active BusyBoy agents.",
         android: null,
         ios: { supportedFamilies: ["systemSmall", "systemMedium", "accessoryRectangular"] },
       },
@@ -264,8 +264,8 @@ const config: ExpoConfig = {
         NSAllowsArbitraryLoads: true,
       },
       NSLocalNetworkUsageDescription:
-        "Allow Busyboy to connect to Busyboy servers on your local network or tailnet.",
-      NSPhotoLibraryAddUsageDescription: "Allow Busyboy to save images to your photo library.",
+        "Allow BusyBoy to connect to BusyBoy servers on your local network or tailnet.",
+      NSPhotoLibraryAddUsageDescription: "Allow BusyBoy to save images to your photo library.",
       // "Audio, AirPlay, and Picture in Picture": the browser screen's system
       // picture in picture needs it to start and to stay up outside the app.
       UIBackgroundModes: ["audio"],
@@ -370,7 +370,7 @@ const config: ExpoConfig = {
     [
       "expo-audio",
       {
-        microphonePermission: "Allow Busyboy to use your microphone for voice input.",
+        microphonePermission: "Allow BusyBoy to use your microphone for voice input.",
         recordAudioAndroid: false,
         enableBackgroundPlayback: false,
         enableBackgroundRecording: false,
@@ -379,7 +379,7 @@ const config: ExpoConfig = {
     [
       "expo-camera",
       {
-        cameraPermission: "Allow Busyboy to access your camera so you can scan pairing QR codes.",
+        cameraPermission: "Allow BusyBoy to access your camera so you can scan pairing QR codes.",
         microphonePermission: false,
         barcodeScannerEnabled: true,
         recordAudioAndroid: false,

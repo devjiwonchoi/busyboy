@@ -95,7 +95,7 @@ export function callAcpMcpTool(
         if (!response.ok) {
           yield* discardResponseBody(response);
           return yield* Effect.fail(
-            new AcpMcpBridgeError(`Busyboy MCP endpoint responded with HTTP ${response.status}.`),
+            new AcpMcpBridgeError(`BusyBoy MCP endpoint responded with HTTP ${response.status}.`),
           );
         }
         const payloads = yield* Stream.runCollect(responsePayloads(response, bridgeError));
@@ -119,7 +119,7 @@ export function callAcpMcpTool(
     const initializeResponse = initialized.find((entry) => asEnvelope(entry)?.id === initializeId);
     if (initializeResponse === undefined || asEnvelope(initializeResponse)?.error !== undefined) {
       return yield* Effect.fail(
-        new AcpMcpBridgeError("Busyboy MCP endpoint rejected initialization."),
+        new AcpMcpBridgeError("BusyBoy MCP endpoint rejected initialization."),
       );
     }
     yield* send({ jsonrpc: "2.0", method: "notifications/initialized" });
@@ -136,7 +136,7 @@ export function callAcpMcpTool(
     if (envelope === null || envelope.error !== undefined) {
       return yield* Effect.fail(
         new AcpMcpBridgeError(
-          `Busyboy MCP tool call failed${envelope?.error === undefined ? "." : `: ${JSON.stringify(envelope.error)}`}`,
+          `BusyBoy MCP tool call failed${envelope?.error === undefined ? "." : `: ${JSON.stringify(envelope.error)}`}`,
         ),
       );
     }
@@ -197,7 +197,7 @@ export function runAcpMcpStdioBridge(options: AcpMcpStdioBridgeOptions): Effect.
           if (envelope.id !== undefined) {
             yield* respondWithError(
               envelope.id,
-              `Busyboy MCP endpoint responded with HTTP ${response.status}.`,
+              `BusyBoy MCP endpoint responded with HTTP ${response.status}.`,
             );
           }
           return yield* discardResponseBody(response);
@@ -209,7 +209,7 @@ export function runAcpMcpStdioBridge(options: AcpMcpStdioBridgeOptions): Effect.
           const error = Cause.squash(cause);
           return respondWithError(
             envelope.id,
-            `Busyboy MCP bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+            `BusyBoy MCP bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
           );
         }),
       );
