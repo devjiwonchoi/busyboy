@@ -28,7 +28,7 @@ const currentLink = NodePath.join(root, "current");
 const preparedPath = NodePath.join(root, "prepared.json");
 const logPath = NodePath.join(root, "update.log");
 const appBundlePath = NodePath.join(homeDir, "Applications", "BusyBoy.app");
-const ELECTRON_VERSION_KEY = "BusyboyElectronVersion";
+const ELECTRON_VERSION_KEY = "BusyBoyElectronVersion";
 
 // Build tools must run as plain Node even when the app runs this script through Electron.
 const toolEnv = { ...process.env };

@@ -50,8 +50,8 @@ describe("resolveAvailableUpdate", () => {
 
   it("matches the zip regardless of the product name's casing", () => {
     assert.strictEqual(
-      resolve("v0.0.4", ["Busyboy-0.0.4-arm64.zip"])?.zipUrl,
-      "https://example.test/Busyboy-0.0.4-arm64.zip",
+      resolve("v0.0.4", ["busyboy-0.0.4-arm64.zip"])?.zipUrl,
+      "https://example.test/busyboy-0.0.4-arm64.zip",
     );
   });
 
