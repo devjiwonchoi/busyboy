@@ -21,7 +21,8 @@
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus",
     "prepare": "effect-tsgo patch",
     "build": "vp run --filter @t3tools/desktop build",
-    "build:release": "node scripts/build-desktop-release.ts"
+    "build:release": "node scripts/build-desktop-release.ts",
+    "release": "gh workflow run release.yml --ref main"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
