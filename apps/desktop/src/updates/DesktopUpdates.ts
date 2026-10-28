@@ -33,6 +33,7 @@ import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import { isGitHubReleaseUpdaterFailure } from "./GitHubReleaseUpdater.ts";
 import { isLocalAppUpdateError } from "./LocalAppUpdater.ts";
 import { normalizeDesktopUpdateReleaseNotes } from "./releaseNotes.ts";
 import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
@@ -285,9 +286,11 @@ function createBaseUpdateState(
   };
 }
 
-// A local-app failure carries the script's own reason, including the log path.
+// Local-app and GitHub release failures carry a reason written for the user.
 function updateErrorMessage(error: { readonly message: string; readonly cause: unknown }): string {
-  return isLocalAppUpdateError(error.cause) ? error.cause.message : error.message;
+  return isLocalAppUpdateError(error.cause) || isGitHubReleaseUpdaterFailure(error.cause)
+    ? error.cause.message
+    : error.message;
 }
 
 function getCanRetryFromState(state: DesktopUpdateState): boolean {

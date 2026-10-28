@@ -11,6 +11,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
+import * as GitHubReleaseUpdater from "./GitHubReleaseUpdater.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 
 /** A failed local-app step. Its message is what the update UI shows. */
@@ -217,12 +218,12 @@ export const make = Effect.fn("desktop.localApp.makeUpdater")(function* (input: 
   });
 });
 
-/** The local app updates from its source checkout; every other build uses electron-updater. */
+/** The local app updates from its source checkout; release builds update from GitHub Releases. */
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     if (Option.isNone(environment.localApp)) {
-      return ElectronUpdater.layer;
+      return GitHubReleaseUpdater.layer;
     }
 
     const electronApp = yield* ElectronApp.ElectronApp;
