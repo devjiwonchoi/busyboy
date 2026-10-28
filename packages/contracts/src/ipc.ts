@@ -8,6 +8,7 @@ import type {
   BrowserImportSource,
   BrowserImportSourceId,
 } from "./browserImport.ts";
+import type { BrowsingHistorySuggestion, ChromeHistoryImportResult } from "./browsingHistory.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
@@ -1048,6 +1049,15 @@ export interface DesktopPreviewBridge {
     readonly sourceProfileDirectory: string;
     readonly targetProfileId: string;
   }) => Promise<BrowserImportResult>;
+  /** Visited pages matching typed address-bar text, best match first. */
+  searchBrowsingHistory: (input: {
+    readonly text: string;
+    readonly limit: number;
+  }) => Promise<ReadonlyArray<BrowsingHistorySuggestion>>;
+  /** Adds recent history from every Chrome profile; Chrome can stay open. */
+  importChromeHistory: () => Promise<ChromeHistoryImportResult>;
+  /** Forgets every page visited in the in-app browser. */
+  clearBrowsingHistory: () => Promise<void>;
   setAnnotationTheme: (theme: DesktopPreviewAnnotationTheme) => Promise<void>;
   setAnnotationSendEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   /**

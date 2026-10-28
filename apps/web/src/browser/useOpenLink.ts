@@ -3,7 +3,6 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { recordVisitForThread } from "~/browserHistoryStore";
 import { readLocalApi } from "~/localApi";
 import { previewEnvironment } from "~/state/preview";
 import { readEnvironmentScope } from "~/state/session";
@@ -46,12 +45,14 @@ export function useOpenLink(threadRef: ScopedThreadRef | null | undefined): (
         canOpenLinksInApp(targetThreadRef),
     });
     if (target === "app" && targetThreadRef) {
-      const result = await openUrlInPreview({ threadRef: targetThreadRef, url, openPreview });
+      const result = await openUrlInPreview({
+        threadRef: targetThreadRef,
+        url,
+        openPreview,
+        recordVisit: true,
+      });
       if (isAtomCommandInterrupted(result)) return;
-      if (result._tag === "Success") {
-        recordVisitForThread(targetThreadRef, url);
-        return;
-      }
+      if (result._tag === "Success") return;
       const failure = squashAtomCommandFailure(result);
       if (failure instanceof BrowserSettingsReadError) throw failure;
       console.error(result.cause);

@@ -2,6 +2,7 @@ import {
   DEFAULT_BROWSER_PROFILE_ID,
   DEFAULT_CLIENT_SETTINGS,
   FILL_PREVIEW_VIEWPORT,
+  INCOGNITO_BROWSER_PROFILE_ID,
   type PreviewOpenInput,
   type PreviewSessionSnapshot,
   type ScopedThreadRef,
@@ -71,6 +72,22 @@ describe("openPreviewSession", () => {
       profileId: DEFAULT_BROWSER_PROFILE_ID,
     });
     expect(readThreadPreviewState(threadRef).snapshot).toEqual(idleSnapshot);
+    expect(readThreadPreviewState(threadRef).recentlySeenUrls).toEqual([]);
+  });
+
+  it("keeps a page opened in an incognito tab out of recent pages", async () => {
+    const incognitoSnapshot: PreviewSessionSnapshot = {
+      ...snapshot,
+      profileId: INCOGNITO_BROWSER_PROFILE_ID,
+    };
+
+    await openPreviewSession({
+      openPreview: async () => AsyncResult.success(incognitoSnapshot),
+      threadRef,
+      url: "https://t3.chat/",
+    });
+
+    expect(readThreadPreviewState(threadRef).snapshot).toEqual(incognitoSnapshot);
     expect(readThreadPreviewState(threadRef).recentlySeenUrls).toEqual([]);
   });
 

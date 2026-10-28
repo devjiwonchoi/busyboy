@@ -148,4 +148,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   }
   yield* ipc.handle(PreviewIpc.listBrowserImportSources);
   yield* ipc.handle(PreviewIpc.importBrowserCookies);
+  yield* ipc.handle(PreviewIpc.searchBrowsingHistory);
+  yield* ipc.handle(PreviewIpc.importChromeHistory);
+  yield* ipc.handle(PreviewIpc.clearBrowsingHistory);
 });

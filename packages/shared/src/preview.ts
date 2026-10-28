@@ -129,3 +129,58 @@ export function normalizePreviewUrl(rawUrl: string): string {
   }
   return parsed.href;
 }
+
+/**
+ * Query parameters that tend to carry sign-in links, reset links, signed
+ * URLs and API keys. Matched on the name lowercased with `-`, `_` and `.`
+ * removed.
+ */
+const SECRET_SEARCH_PARAMS: ReadonlySet<string> = new Set([
+  "auth",
+  "code",
+  "jwt",
+  "key",
+  "otp",
+  "pass",
+  "pwd",
+  "saml",
+  "samlrequest",
+  "samlresponse",
+  "sid",
+  "sig",
+  "ticket",
+]);
+const SECRET_SEARCH_PARAM_PARTS = [
+  "accesskey",
+  "apikey",
+  "authorization",
+  "credential",
+  "oauth",
+  "passwd",
+  "password",
+  "reset",
+  "secret",
+  "session",
+  "signature",
+  "token",
+  "verifier",
+];
+const SECRET_SEARCH_PARAM_PREFIXES = ["xamz", "xgoog"];
+
+export function isSecretSearchParam(name: string): boolean {
+  const key = name.toLowerCase().replace(/[-_.\s]/g, "");
+  return (
+    SECRET_SEARCH_PARAMS.has(key) ||
+    SECRET_SEARCH_PARAM_PARTS.some((part) => key.includes(part)) ||
+    SECRET_SEARCH_PARAM_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+}
+
+/** Drops query parameters that look secret, so history never keeps them. */
+export function stripSecretSearchParams(url: URL): void {
+  const params = Array.from(url.searchParams);
+  const kept = params.filter(([name]) => !isSecretSearchParam(name));
+  if (kept.length !== params.length) {
+    url.search = new URLSearchParams(kept).toString();
+  }
+}

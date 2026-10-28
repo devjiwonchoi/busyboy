@@ -24,8 +24,10 @@ const encodeEvent = Schema.encodeSync(Schema.fromJsonString(DesktopBrowserEvent)
 const decodeCommand = Schema.decodeUnknownOption(Schema.fromJsonString(DesktopBrowserCommand));
 const lineEncoder = new TextEncoder();
 const AGENT_INPUT_COMMAND =
-  /"method":"(?:Input\.|Page\.navigate"|Runtime\.(?:evaluate|callFunctionOn)")/;
+  /"method":"(?:Input\.|Page\.navigate(?:ToHistoryEntry)?"|Runtime\.(?:evaluate|callFunctionOn)")/;
 const AGENT_DOWNLOAD_WINDOW_MS = 5_000;
+/** Agent input this recent means the agent is behind what the page does. */
+const AGENT_DRIVING_WINDOW_MS = 3_000;
 
 export interface DesktopBrowserTabKey {
   readonly threadId: string;
@@ -62,6 +64,8 @@ export class DesktopBrowserHost extends Context.Service<
     readonly attach: (key: DesktopBrowserTabKey, debuggee: DesktopBrowserTabDebugger) => void;
     readonly detach: (key: DesktopBrowserTabKey) => void;
     readonly humanStartedDownload: (source: Electron.WebContents) => boolean;
+    /** True when the agent sent this page input moments ago. */
+    readonly isAgentDriving: (source: Electron.WebContents) => boolean;
     readonly placeDownload: (source: Electron.WebContents, item: Electron.DownloadItem) => boolean;
     readonly pointers: Stream.Stream<{
       readonly key: DesktopBrowserTabKey;
@@ -185,6 +189,13 @@ export const make = Effect.gen(function* () {
     return tab !== undefined && performance.now() - tab.agentInputAt > AGENT_DOWNLOAD_WINDOW_MS;
   };
 
+  const isAgentDriving = (source: Electron.WebContents) =>
+    [...tabs.values()].some(
+      (candidate) =>
+        candidate.debuggee.webContents === source &&
+        performance.now() - candidate.agentInputAt < AGENT_DRIVING_WINDOW_MS,
+    );
+
   const announceAll = Effect.suspend(() =>
     Effect.forEach(
       [...tabs.values()],
@@ -211,6 +222,7 @@ export const make = Effect.gen(function* () {
     detach,
     placeDownload,
     humanStartedDownload,
+    isAgentDriving,
   });
 });
 

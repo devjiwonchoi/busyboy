@@ -652,6 +652,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["pr links github browser external click default pull request view panel"],
   },
   {
+    id: "browser-history",
+    title: "Browsing history",
+    to: "/settings/integrations",
+    searchTerms: ["history visited pages address bar suggestions autocomplete import chrome"],
+  },
+  {
     id: "browser-auto-show-floating-preview",
     title: "Auto-show floating preview",
     to: "/settings/integrations",

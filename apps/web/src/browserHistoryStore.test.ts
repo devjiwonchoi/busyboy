@@ -56,6 +56,19 @@ describe("normalizeHistoryUrl", () => {
     expect(normalizeHistoryUrl("https://user:secret@example.com/")).toBe("https://example.com/");
   });
 
+  it("drops query parameters that look secret, including from saved entries", () => {
+    expect(normalizeHistoryUrl("https://app.test/reset?token=abc&lang=en&X-Amz-Signature=s")).toBe(
+      "https://app.test/reset?lang=en",
+    );
+    expect(
+      migratePersistedBrowserHistoryState({
+        byProjectKey: {
+          project: [{ url: "https://app.test/login?session=s3cret", lastVisitedAt: 1 }],
+        },
+      }).byProjectKey.project?.map((entry) => entry.url),
+    ).toEqual(["https://app.test/login"]);
+  });
+
   it("rejects non-http(s), unparseable, and oversized urls", () => {
     expect(normalizeHistoryUrl("ftp://example.com")).toBeNull();
     expect(normalizeHistoryUrl("")).toBeNull();

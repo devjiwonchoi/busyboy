@@ -15,6 +15,9 @@ import {
   BrowserImportSource,
   DesktopPreviewClearDataInputSchema,
   DesktopPreviewImportCookiesInputSchema,
+  BrowsingHistorySuggestion,
+  ChromeHistoryImportResult,
+  DesktopPreviewSearchHistoryInputSchema,
   DesktopPreviewCreateTabInputSchema,
   DesktopPreviewTabInputSchema,
   DesktopPreviewWebviewConfigSchema,
@@ -31,6 +34,8 @@ import * as NodeURL from "node:url";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
+import * as BrowsingHistory from "../../preview/History/BrowsingHistory.ts";
+import * as ChromeHistory from "../../preview/History/ChromeHistory.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
@@ -351,6 +356,34 @@ export const importBrowserCookies = DesktopIpc.makeIpcMethod({
       persistent,
       ...(namespace === undefined ? {} : { namespace }),
     });
+  }),
+});
+
+export const clearBrowsingHistory = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_CLEAR_HISTORY_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.clearBrowsingHistory")(function* () {
+    yield* (yield* BrowsingHistory.BrowsingHistory).clear;
+  }),
+});
+
+export const importChromeHistory = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_IMPORT_CHROME_HISTORY_CHANNEL,
+  payload: Schema.Void,
+  result: ChromeHistoryImportResult,
+  handler: Effect.fn("desktop.ipc.preview.importChromeHistory")(function* () {
+    return yield* ChromeHistory.importChromeHistory();
+  }),
+});
+
+export const searchBrowsingHistory = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_SEARCH_HISTORY_CHANNEL,
+  payload: DesktopPreviewSearchHistoryInputSchema,
+  result: Schema.Array(BrowsingHistorySuggestion),
+  handler: Effect.fn("desktop.ipc.preview.searchBrowsingHistory")(function* (input) {
+    const entries = yield* (yield* BrowsingHistory.BrowsingHistory).search(input);
+    return entries.map(({ url, title, typed }) => ({ url, title, typed }));
   }),
 });
 
