@@ -611,6 +611,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "browser-profiles",
   },
   {
+    id: "browser-history",
+    title: "Browsing history",
+    to: "/settings/integrations",
+    searchTerms: ["visited pages recent sites clear browsing data cookies cache delete"],
+    desktopOnly: true,
+  },
+  {
     id: "browser-default-viewport",
     title: "Default browser viewport",
     to: "/settings/integrations",

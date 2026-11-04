@@ -327,6 +327,28 @@ export function lookupFavicon(
   }
 }
 
+/**
+ * Finds a favicon already cached for this URL's origin in any project. Used
+ * where there is no thread to scope by (Settings); never fetches.
+ */
+export function lookupFaviconForAnyProject(
+  byKey: Record<string, BrowserFaviconEntry>,
+  url: string,
+): string | null {
+  const probe = faviconKey("_", url, null);
+  if (!probe) return null;
+  const suffix = probe.slice(1);
+  let best: BrowserFaviconEntry | null = null;
+  for (const [key, entry] of Object.entries(byKey)) {
+    if (key.endsWith(suffix) && (!best || entry.capturedAt > best.capturedAt)) best = entry;
+  }
+  return best?.dataUrl ?? null;
+}
+
+export function useCachedFaviconForUrl(url: string): string | null {
+  return useBrowserFaviconStore((state) => lookupFaviconForAnyProject(state.byKey, url));
+}
+
 export function resetBrowserFaviconsForTests(): void {
   useBrowserFaviconStore.setState({
     byKey: {},

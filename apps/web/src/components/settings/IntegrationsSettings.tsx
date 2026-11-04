@@ -100,6 +100,8 @@ import { searchableSetting } from "./settingsSearch";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
+import { BrowserHistorySetting } from "./BrowserHistorySettings";
+import { clearAllBrowserHistory, readBrowserHistoryBridge } from "~/browser/browserHistory";
 import type { ImportOutcome } from "./browserImportWizard.logic";
 
 const FILL_VALUE = "fill";
@@ -839,12 +841,15 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
     setProfileRemovalError(null);
     setProfileRemovalInFlight(true);
     try {
-      await clearBrowserProfileData(
-        previewBridge,
-        environmentsReady ? environments.map((environment) => environment.environmentId) : [],
-        id,
-        serverProfileData,
-      );
+      await Promise.all([
+        clearBrowserProfileData(
+          previewBridge,
+          environmentsReady ? environments.map((environment) => environment.environmentId) : [],
+          id,
+          serverProfileData,
+        ),
+        clearAllBrowserHistory(readBrowserHistoryBridge(), id),
+      ]);
     } catch {
       setProfileRemovalError("Profile data could not be deleted. Try again.");
       setProfileRemovalInFlight(false);
@@ -1096,8 +1101,8 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove “{profilePendingRemoval?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              Its cookies and logins are deleted. Desktop tabs already open in this profile stay
-              open until you close them; server browser tabs close now.
+              Its cookies, logins and browsing history are deleted. Desktop tabs already open in
+              this profile stay open until you close them; server browser tabs close now.
             </AlertDialogDescription>
             {profileRemovalError ? (
               <p aria-live="polite" className="text-sm text-destructive">
@@ -1199,6 +1204,7 @@ export function IntegrationsSettingsPanel() {
   const previewDefaults = (
     <>
       <BrowserProfilesSetting disabled={previewDefaultsDisabled} />
+      <BrowserHistorySetting />
       <BrowserViewportSetting disabled={previewDefaultsDisabled} />
       <BrowserZoomSetting disabled={previewDefaultsDisabled} />
       <BrowserAppearanceSetting disabled={previewDefaultsDisabled} />

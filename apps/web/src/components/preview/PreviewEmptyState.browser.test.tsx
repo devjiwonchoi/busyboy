@@ -58,7 +58,7 @@ async function render(
       <PreviewEmptyState
         threadRef={threadRef}
         environmentId={environmentId}
-        recentEntries={recentEntries}
+        recentEntries={recentEntries.map((entry) => ({ ...entry, title: entry.title ?? null }))}
         onRemoveRecent={onRemoveRecent}
         onOpenUrl={onOpenUrl}
       />,

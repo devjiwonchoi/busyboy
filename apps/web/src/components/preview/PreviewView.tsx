@@ -1,6 +1,6 @@
 "use client";
 
-import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { previewStreamDownloadUrl } from "@t3tools/client-runtime/preview/server-browser-stream";
 import {
@@ -9,7 +9,9 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
+  type BrowserHistoryNavigationHint,
   DEFAULT_BROWSER_PROFILE_ID,
+  findBrowserProfile,
   FILL_PREVIEW_VIEWPORT,
   type PreviewAnnotationPayload,
   type PreviewViewportSetting,
@@ -21,13 +23,6 @@ import {
 import { normalizePreviewUrl, resolveAddressBarInput } from "@t3tools/shared/preview";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import {
-  BROWSER_HISTORY_MAX_ENTRIES_PER_PROJECT,
-  recordVisitForThread,
-  removeUrlForThread,
-  setTitleForThreadUrl,
-  useThreadRecentHistory,
-} from "~/browserHistoryStore";
 import { type ComposerImageAttachment, useComposerDraftStore } from "~/composerDraftStore";
 import { capturePreviewAnnotationScreenshot } from "~/lib/previewAnnotation";
 import { ensureLocalApi } from "~/localApi";
@@ -38,12 +33,9 @@ import {
 } from "~/previewStateStore";
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { useEnvironmentSupportsServerBrowser } from "~/state/entities";
-import {
-  useEnvironment,
-  useEnvironmentHttpBaseUrl,
-  usePrimaryEnvironmentId,
-} from "~/state/environments";
+import { useEnvironment, usePrimaryEnvironmentId } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
+import { removeBrowserHistoryUrl, useBrowserHistoryRecent } from "~/browser/browserHistory";
 import { usePreviewStreamAccess } from "~/state/previewStream";
 import { useAtomCommand } from "~/state/use-atom-command";
 import {
@@ -112,6 +104,8 @@ function previewProfileName(
   return profiles.find((profile) => profile.id === profileId)?.name ?? "Removed profile";
 }
 
+const PREVIEW_EMPTY_STATE_RECENT_LIMIT = 8;
+
 const localApi = typeof window === "undefined" ? null : ensureLocalApi();
 
 function ServerTabFileNotShown(props: {
@@ -154,19 +148,11 @@ export function PreviewView({
   const pickActiveRef = useRef<{ cancelled: boolean } | null>(null);
   const isMountedRef = useRef(true);
   const previewState = useThreadPreviewState(threadRef);
-  const recentHistoryEntries = useThreadRecentHistory(
-    threadRef,
-    BROWSER_HISTORY_MAX_ENTRIES_PER_PROJECT,
-  );
   const miniPlayerTabId = usePreviewMiniPlayerStore((state) =>
     selectThreadPreviewMiniPlayerTabId(state.byThreadKey, threadRef),
   );
   const addPreviewAnnotation = useComposerDraftStore((store) => store.addPreviewAnnotation);
   const addImage = useComposerDraftStore((store) => store.addImage);
-  const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(threadRef.environmentId);
-  const environmentHostname = environmentHttpBaseUrl
-    ? new URL(environmentHttpBaseUrl).hostname
-    : null;
   const open = useAtomCommand(previewEnvironment.open);
   const closePreview = useAtomCommand(previewEnvironment.close, "preview close");
   const environmentLabel = useEnvironment(threadRef.environmentId)?.label ?? "the environment";
@@ -232,26 +218,21 @@ export function PreviewView({
   // as "every profile".
   const activeProfileId = snapshot?.profileId ?? DEFAULT_BROWSER_PROFILE_ID;
   const activeProfileName = previewProfileName(browserDefaults.profiles, activeProfileId);
+  const activeProfileIsIncognito =
+    findBrowserProfile(browserDefaults.profiles, activeProfileId)?.kind === "incognito";
+  // Incognito never records history, so it never shows any either.
+  const recentHistoryEntries = useBrowserHistoryRecent(
+    activeProfileIsIncognito ? null : activeProfileId,
+    PREVIEW_EMPTY_STATE_RECENT_LIMIT,
+  );
   const panelRect = useBrowserSurfaceStore((state) =>
     runtimeTabId ? (state.byTabId[runtimeTabId]?.rect ?? null) : null,
   );
 
-  const navUrl = navStatus._tag === "Success" ? navStatus.url : null;
-  const navTitle = navStatus._tag === "Success" ? navStatus.title : null;
-  const latestHistoryUrl = recentHistoryEntries[0]?.url;
-  // Keyed on the ids rather than threadRef, which is recreated on every update.
-  const { environmentId: threadEnvironmentId, threadId } = threadRef;
-  useEffect(() => {
-    if (!navUrl || !navTitle || !latestHistoryUrl) return;
-    setTitleForThreadUrl(
-      scopeThreadRef(threadEnvironmentId, threadId),
-      navUrl,
-      navTitle,
-      environmentHostname,
-    );
-  }, [environmentHostname, latestHistoryUrl, navTitle, navUrl, threadEnvironmentId, threadId]);
-
-  const navigateToResolvedUrl = async (resolvedUrl: string) => {
+  const navigateToResolvedUrl = async (
+    resolvedUrl: string,
+    transition?: BrowserHistoryNavigationHint,
+  ) => {
     if (isServerTab && serverSurfaceRef.current) {
       if (serverInputDisabled) return false;
       serverSurfaceRef.current.navigate(resolvedUrl);
@@ -259,7 +240,7 @@ export function PreviewView({
       return true;
     }
     if (runtimeTabId && previewBridge) {
-      await previewBridge.navigate(runtimeTabId, resolvedUrl);
+      await previewBridge.navigate(runtimeTabId, resolvedUrl, transition);
       rememberPreviewUrl(threadRef, resolvedUrl);
       return true;
     }
@@ -279,10 +260,7 @@ export function PreviewView({
 
   const handleSubmitUrl = async (next: string) => {
     try {
-      const resolved = resolveAddressBarInput(next);
-      if (await navigateToResolvedUrl(resolved)) {
-        recordVisitForThread(threadRef, resolved);
-      }
+      await navigateToResolvedUrl(resolveAddressBarInput(next), "typed");
     } catch {}
   };
 
@@ -292,9 +270,7 @@ export function PreviewView({
         isServerTab || !previewBridge
           ? normalizePreviewUrl(next)
           : resolveDiscoveredServerUrl(threadRef.environmentId, next);
-      if (await navigateToResolvedUrl(resolved)) {
-        recordVisitForThread(threadRef, next);
-      }
+      await navigateToResolvedUrl(resolved);
     } catch {}
   };
 
@@ -1033,7 +1009,11 @@ export function PreviewView({
             environmentId={threadRef.environmentId}
             configuredUrls={configuredUrls}
             recentEntries={recentHistoryEntries}
-            onRemoveRecent={(url) => removeUrlForThread(threadRef, url)}
+            onRemoveRecent={(url) =>
+              void removeBrowserHistoryUrl(activeProfileId, url).catch(() => {
+                toastManager.add({ type: "error", title: "Could not remove page from history" });
+              })
+            }
             onOpenUrl={(next) => void handleOpenServerUrl(next)}
           />
         ) : null}

@@ -1,7 +1,6 @@
-import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import type { BrowserHistoryRecentEntry, EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { Globe, History, RadioTower } from "lucide-react";
 
-import type { BrowserHistoryEntry } from "~/browserHistoryStore";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { DiscoveryList } from "../ui/discovery-list";
 
@@ -13,7 +12,7 @@ interface Props {
   threadRef: ScopedThreadRef;
   environmentId: EnvironmentId;
   configuredUrls?: ReadonlyArray<string> | undefined;
-  recentEntries: ReadonlyArray<BrowserHistoryEntry>;
+  recentEntries: ReadonlyArray<BrowserHistoryRecentEntry>;
   onRemoveRecent: (url: string) => void;
   onOpenUrl: (url: string) => void;
 }

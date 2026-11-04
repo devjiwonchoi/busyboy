@@ -14,6 +14,7 @@ import {
 } from "./lib/windowControlsOverlay";
 import { AppRoot } from "./AppRoot";
 import { clearChunkReloadGuard, reloadOnceForChunkLoadError } from "./lib/chunkReloadGuard";
+import { startLegacyBrowserHistoryImport } from "./browser/browserHistoryLegacyImport";
 
 prepareProviderAuthDelivery();
 
@@ -32,6 +33,7 @@ if (!isElectron && window.isSecureContext && "serviceWorker" in navigator) {
 if (isElectron) {
   syncDocumentElectronPlatformClasses(navigator.platform);
   syncDocumentWindowControlsOverlayClass();
+  startLegacyBrowserHistoryImport();
 }
 
 // A failed split-chunk fetch usually means the hashed assets went stale under
