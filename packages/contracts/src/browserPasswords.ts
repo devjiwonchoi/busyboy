@@ -150,6 +150,53 @@ export type BrowserPasswordsProfileInput = typeof BrowserPasswordsProfileInput.T
 export const BrowserPasswordsChangedEvent = Schema.Struct({ profileId: BrowserProfileId });
 export type BrowserPasswordsChangedEvent = typeof BrowserPasswordsChangedEvent.Type;
 
+/** What an import did. Never includes passwords. */
+export const BrowserPasswordImportSummary = Schema.Struct({
+  imported: Schema.Int,
+  updated: Schema.Int,
+  /** Already saved with the same password, or BusyBoy's copy was newer. */
+  skipped: Schema.Int,
+  /** Rows Chrome had that couldn't be decrypted. */
+  failed: Schema.Int,
+  /** Sites newly added to "Never saved". */
+  neverSave: Schema.Int,
+});
+export type BrowserPasswordImportSummary = typeof BrowserPasswordImportSummary.Type;
+
+export const BrowserPasswordImportSourceProfile = Schema.Struct({
+  sourceId: Schema.String,
+  sourceName: Schema.String,
+  directory: Schema.String,
+  name: Schema.String,
+});
+export type BrowserPasswordImportSourceProfile = typeof BrowserPasswordImportSourceProfile.Type;
+
+export const BrowserPasswordImportInput = Schema.Struct({
+  profileId: BrowserProfileId,
+  sourceId: Schema.String.check(Schema.isMaxLength(64)),
+  sourceProfileDirectory: Schema.String.check(Schema.isMaxLength(512)),
+});
+export type BrowserPasswordImportInput = typeof BrowserPasswordImportInput.Type;
+
+export const BrowserPasswordImportFailure = Schema.Literals([
+  /** macOS is waiting for the person to allow access to "Chrome Safe Storage". */
+  "needsKeychainApproval",
+  "keychainItemMissing",
+  "keychainUnavailable",
+  "unsupportedPlatform",
+  "unknownSourceProfile",
+  "readFailed",
+  /** The vault is unavailable (no OS encryption) or the profile is incognito. */
+  "unavailable",
+]);
+export type BrowserPasswordImportFailure = typeof BrowserPasswordImportFailure.Type;
+
+export const BrowserPasswordImportResult = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("imported"), summary: BrowserPasswordImportSummary }),
+  Schema.Struct({ kind: Schema.Literal("failed"), reason: BrowserPasswordImportFailure }),
+]);
+export type BrowserPasswordImportResult = typeof BrowserPasswordImportResult.Type;
+
 /** Where the fill list goes, in CSS pixels relative to the webview's top-left. */
 export const BrowserPasswordAnchorRect = Schema.Struct({
   x: Schema.Number,
@@ -301,6 +348,10 @@ export interface DesktopBrowserPasswordsBridge {
   /** Copies in main and clears the clipboard after 30 s if it still holds the password. */
   copy: (input: BrowserPasswordsIdInput) => Promise<BrowserPasswordsGatedResult>;
   deleteAll: (input: BrowserPasswordsProfileInput) => Promise<BrowserPasswordsDeleteAllResult>;
+  /** Chrome profiles that passwords can be imported from. */
+  importSources: () => Promise<ReadonlyArray<BrowserPasswordImportSourceProfile>>;
+  /** Asks macOS for Chrome's key (the person approves), then imports into the vault. */
+  importFromChrome: (input: BrowserPasswordImportInput) => Promise<BrowserPasswordImportResult>;
   neverSave: {
     list: (input: BrowserPasswordsProfileInput) => Promise<ReadonlyArray<BrowserNeverSaveEntry>>;
     remove: (input: BrowserPasswordsIdsInput) => Promise<void>;

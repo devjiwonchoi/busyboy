@@ -452,6 +452,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     copy: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_COPY_CHANNEL, input),
     deleteAll: (input) =>
       ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_DELETE_ALL_CHANNEL, input),
+    importSources: () => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_IMPORT_SOURCES_CHANNEL),
+    importFromChrome: (input) =>
+      ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_IMPORT_CHROME_CHANNEL, input),
     neverSave: {
       list: (input) =>
         ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_NEVER_SAVE_LIST_CHANNEL, input),

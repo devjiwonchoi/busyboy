@@ -154,3 +154,5 @@ export const BROWSER_PASSWORDS_AUTOFILL_REOPEN_CHANNEL =
 export const BROWSER_PASSWORDS_SIGN_IN_OPTIONS_CHANNEL =
   "desktop:browser-passwords-sign-in-options";
 export const BROWSER_PASSWORDS_SIGN_IN_CHANNEL = "desktop:browser-passwords-sign-in";
+export const BROWSER_PASSWORDS_IMPORT_SOURCES_CHANNEL = "desktop:browser-passwords-import-sources";
+export const BROWSER_PASSWORDS_IMPORT_CHROME_CHANNEL = "desktop:browser-passwords-import-chrome";

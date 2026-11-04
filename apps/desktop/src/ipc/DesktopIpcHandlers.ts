@@ -161,6 +161,8 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   for (const autofillMethod of BrowserPasswordsIpc.autofillMethods) {
     yield* ipc.handle(autofillMethod);
   }
+  yield* ipc.handle(BrowserPasswordsIpc.importFromChrome);
+  yield* ipc.handle(BrowserPasswordsIpc.importSources);
   yield* ipc.handle(PreviewIpc.listBrowserImportSources);
   yield* ipc.handle(PreviewIpc.importBrowserCookies);
 });

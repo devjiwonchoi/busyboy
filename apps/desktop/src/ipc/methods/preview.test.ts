@@ -86,6 +86,8 @@ describe("preview IPC methods", () => {
       [];
     const browserImport = BrowserImport.BrowserImport.of({
       listSources: Effect.succeed([]),
+      listPasswordSources: Effect.succeed([]),
+      readChromiumLogins: () => Effect.die("unused"),
       importCookies: (input) =>
         Effect.sync(() => {
           received.push(input);
