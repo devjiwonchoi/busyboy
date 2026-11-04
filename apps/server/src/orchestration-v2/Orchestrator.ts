@@ -6690,6 +6690,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: `Delegated task ${command.taskId} is not an app-owned task of thread ${command.parentThreadId}.`,
       });
     }
+    if (task.completionWake === "never") {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Delegated task ${command.taskId} never wakes the parent; its wake policy is fixed.`,
+      });
+    }
     if (task.completionWake === command.completionWake) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
@@ -9502,7 +9509,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       };
     }
     const cohort = input.parentRun?.delegatedCompletion;
+    // "never" tasks report through another channel, so their completion is
+    // disposed exactly like one whose parent can no longer be woken.
     if (
+      input.updatedTask.completionWake === "never" ||
       input.parentRun === undefined ||
       input.parentProjection.thread.archivedAt !== null ||
       input.parentProjection.thread.deletedAt !== null ||
@@ -10140,6 +10150,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             task.origin === "app_owned" &&
             task.runId === parentRun.id &&
             isTerminalDelegatedTaskStatus(task.status) &&
+            task.completionWake !== "never" &&
             (task.completionDelivery?.state === "pending" ||
               nextTaskStates.get(task.id)?.state === "pending"),
         )
@@ -10257,6 +10268,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 task.runId === parentRun.id &&
                 task.completionDelivery?.state === "pending" &&
                 isTerminalDelegatedTaskStatus(task.status) &&
+                task.completionWake !== "never" &&
                 (!parentIsLive || task.completionWake === "always"),
             )
             .map((task) => task.id)

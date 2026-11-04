@@ -809,7 +809,7 @@ const seedRestartCancelledChild = (input: {
   readonly parentRunId: RunId;
   readonly rootNodeId: NodeId;
   readonly name: string;
-  readonly completionWake: "always" | "settled_only";
+  readonly completionWake: "always" | "settled_only" | "never";
   readonly continuationPending: boolean;
   readonly runStatus?: "cancelled" | "completed";
   readonly lostWork?: OrchestrationV2Run["restartCancelledBackgroundWork"];
@@ -1926,6 +1926,72 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
         projection.runs.find((row) => row.id === runId)?.delegatedCompletion?.delivery?.taskIds,
         [child.taskId],
       );
+    }),
+  );
+
+  it.effect("disposes a never task's completion instead of waking the parent", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("thread:never-wake");
+      const projectId = ProjectId.make("project:never-wake");
+      const runId = RunId.make("run:never-wake");
+      const rootNodeId = NodeId.make("node:never-wake-root");
+      yield* seedParentWithTerminalTask({
+        threadId,
+        projectId,
+        runId,
+        rootNodeId,
+        taskId: NodeId.make("node:never-wake-settled"),
+        deliveryState: "delivered",
+        now,
+      });
+      yield* eventSink.write({
+        commandId: reconcileCommandId("never-wake"),
+        events: [
+          runEvent({
+            threadId,
+            runId,
+            ordinal: 1,
+            status: "cancelled",
+            now,
+            providerThreadId: parentProviderThreadId(threadId),
+            userMessageId: MessageId.make(`message:seed-user:${threadId}`),
+            delegatedCompletion: { disposition: "open", nextGeneration: 2, delivery: null },
+          }),
+          runEvent({
+            threadId,
+            runId: RunId.make("run:never-wake:continuation"),
+            ordinal: 2,
+            status: "running",
+            now,
+            providerThreadId: parentProviderThreadId(threadId),
+          }),
+        ],
+      });
+      const child = yield* seedRestartCancelledChild({
+        parentThreadId: threadId,
+        projectId,
+        parentRunId: runId,
+        rootNodeId,
+        name: "never-wake-child",
+        completionWake: "never",
+        continuationPending: false,
+        now,
+      });
+
+      yield* orchestrator.recoverDelegatedTasks;
+
+      const projection = yield* orchestrator.getThreadProjection(threadId);
+      const task = projection.subagents.find((row) => row.id === child.taskId);
+      assert.notEqual(task?.status, "running");
+      assert.equal(task?.completionWake, "never");
+      assert.equal(task?.completionDelivery?.state, "disposed");
+      assert.isNull(
+        projection.runs.find((row) => row.id === runId)?.delegatedCompletion?.delivery ?? null,
+      );
+      assert.isFalse(projection.messages.some((message) => message.delegatedCompletion));
     }),
   );
 });
