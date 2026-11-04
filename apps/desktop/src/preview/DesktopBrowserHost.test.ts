@@ -146,4 +146,25 @@ describe("DesktopBrowserHost", () => {
       expect(host.humanStartedDownload(debuggee.tab.webContents)).toBe(false);
     }),
   );
+
+  it.effect("attributes navigations to the agent thread that just drove the page", () =>
+    Effect.gen(function* () {
+      const host = yield* DesktopBrowserHost.make;
+      const debuggee = makeDebuggee();
+      host.attach(key, debuggee.tab);
+      const send = (id: number, method: string) =>
+        host.handleCommandLine(
+          encodeJson({ type: "cdp", ...key, message: encodeJson({ id, method, params: {} }) }),
+        );
+
+      expect(host.agentAttribution(debuggee.tab.webContents)).toBeNull();
+      // Reading the page is not driving it.
+      yield* send(1, "Runtime.evaluate");
+      yield* send(2, "DOM.getDocument");
+      expect(host.agentAttribution(debuggee.tab.webContents)).toBeNull();
+      yield* send(3, "Page.navigate");
+      expect(host.agentAttribution(debuggee.tab.webContents)).toEqual({ threadId: "thread-1" });
+      expect(host.agentAttribution(makeDebuggee().tab.webContents)).toBeNull();
+    }),
+  );
 });

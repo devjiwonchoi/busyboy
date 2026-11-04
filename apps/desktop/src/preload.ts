@@ -306,8 +306,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     closeTab: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_CLOSE_TAB_CHANNEL, { tabId }),
     registerWebview: (tabId, webContentsId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_REGISTER_WEBVIEW_CHANNEL, { tabId, webContentsId }),
-    navigate: (tabId, url) =>
-      ipcRenderer.invoke(IpcChannels.PREVIEW_NAVIGATE_CHANNEL, { tabId, url }),
+    navigate: (tabId, url, transition) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_NAVIGATE_CHANNEL, { tabId, url, transition }),
     goBack: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_GO_BACK_CHANNEL, { tabId }),
     goForward: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_GO_FORWARD_CHANNEL, { tabId }),
     refresh: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_REFRESH_CHANNEL, { tabId }),
@@ -414,6 +414,25 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.on(IpcChannels.PREVIEW_OPEN_LINK_CHANNEL, wrappedListener);
       return () =>
         ipcRenderer.removeListener(IpcChannels.PREVIEW_OPEN_LINK_CHANNEL, wrappedListener);
+    },
+  },
+  browserHistory: {
+    search: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_SEARCH_CHANNEL, input),
+    recent: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_RECENT_CHANNEL, input),
+    remove: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_REMOVE_CHANNEL, input),
+    clear: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_CLEAR_CHANNEL, input),
+    importLegacy: (input) =>
+      ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_IMPORT_LEGACY_CHANNEL, input),
+    status: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_STATUS_CHANNEL, input),
+    onChanged: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, changed: unknown) => {
+        if (typeof changed !== "object" || changed === null) return;
+        const { profileId } = changed as { profileId?: unknown };
+        if (typeof profileId === "string") listener({ profileId });
+      };
+      ipcRenderer.on(IpcChannels.BROWSER_HISTORY_CHANGED_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(IpcChannels.BROWSER_HISTORY_CHANGED_CHANNEL, wrappedListener);
     },
   },
 } satisfies DesktopBridge);

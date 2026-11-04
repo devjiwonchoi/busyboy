@@ -3,6 +3,10 @@ import * as Schema from "effect/Schema";
 import { SnapShotSource } from "./chatAttachment.ts";
 import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { BrowserProfileId } from "./browserProfile.ts";
+import {
+  BrowserHistoryNavigationHint,
+  type DesktopBrowserHistoryBridge,
+} from "./browserHistory.ts";
 import type {
   BrowserImportResult,
   BrowserImportSource,
@@ -849,6 +853,8 @@ export const DesktopPreviewRegisterWebviewInputSchema = Schema.Struct({
 export const DesktopPreviewNavigateInputSchema = Schema.Struct({
   tabId: DesktopPreviewTabIdSchema,
   url: Schema.String,
+  /** How the user started this navigation, for browsing history. Defaults to `link`. */
+  transition: Schema.optional(BrowserHistoryNavigationHint),
 });
 
 export const DesktopPreviewConfigInputSchema = Schema.Struct({
@@ -1013,6 +1019,7 @@ export interface DesktopBridge {
     onRequest: (listener: (request: DesktopAppActivationRequest) => void) => () => void;
   };
   preview?: DesktopPreviewBridge;
+  browserHistory?: DesktopBrowserHistoryBridge;
 }
 
 /** Renderer callback invoked by Electron with a fresh user gesture before display-media capture. */
@@ -1023,7 +1030,11 @@ export interface DesktopPreviewBridge {
   createTab: (tabId: string, defaults?: DesktopPreviewTabDefaults) => Promise<void>;
   closeTab: (tabId: string) => Promise<void>;
   registerWebview: (tabId: string, webContentsId: number) => Promise<void>;
-  navigate: (tabId: string, url: string) => Promise<void>;
+  navigate: (
+    tabId: string,
+    url: string,
+    transition?: BrowserHistoryNavigationHint,
+  ) => Promise<void>;
   goBack: (tabId: string) => Promise<void>;
   goForward: (tabId: string) => Promise<void>;
   refresh: (tabId: string) => Promise<void>;
