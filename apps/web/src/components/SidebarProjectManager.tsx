@@ -95,8 +95,6 @@ export function SidebarProjectManagerHeading(props: {
   pmThreadRef: ScopedThreadRef;
   pmThreadWorking: boolean;
   isActive: boolean;
-  expanded: boolean;
-  onToggle: () => void;
   onOpenThread: (threadRef: ScopedThreadRef) => void;
   onNewThread: (() => void) | null;
   tasks: readonly SidebarProjectManagerTask[];
@@ -118,21 +116,6 @@ export function SidebarProjectManagerHeading(props: {
           props.isActive ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
         )}
       >
-        <button
-          type="button"
-          aria-expanded={props.expanded}
-          aria-label={`${props.expanded ? "Collapse" : "Expand"} ${projectName}`}
-          onClick={props.onToggle}
-          className={cn(
-            "flex h-7 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
-            props.expanded ? hoverOnlyClassName : null,
-          )}
-        >
-          <ChevronRightIcon
-            aria-hidden
-            className={cn("size-3 transition-transform", props.expanded && "rotate-90")}
-          />
-        </button>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -140,7 +123,7 @@ export function SidebarProjectManagerHeading(props: {
                 type="button"
                 aria-current={props.isActive ? "page" : undefined}
                 onClick={() => props.onOpenThread(pmThreadRef)}
-                className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md pr-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+                className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
               />
             }
           >
@@ -181,8 +164,8 @@ export function SidebarProjectManagerHeading(props: {
           ) : null}
         </span>
       </div>
-      {props.expanded && taskCount > 0 ? (
-        <div className="pl-5">
+      {taskCount > 0 ? (
+        <div className="pl-2">
           <button
             type="button"
             aria-expanded={props.tasksOpen}

@@ -20,6 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
@@ -37,8 +38,10 @@ import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManag
 import * as ThreadLaunch from "./orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagement from "./orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "./project/ProjectService.ts";
+import * as ProjectTeam from "./projectTeam/ProjectTeamService.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
+import type * as ProjectTeamRepository from "./persistence/ProjectTeamRepository.ts";
 
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerSettings from "./serverSettings.ts";
@@ -254,13 +257,14 @@ export const resolveWelcomeBase = Effect.gen(function* () {
   } as const;
 });
 
-const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
+export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const randomUUID = crypto.randomUUIDv4();
   const serverConfig = yield* ServerConfig.ServerConfig;
   const projects = yield* ProjectService.ProjectService;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const threadLaunch = yield* ThreadLaunch.ThreadLaunchService;
+  const projectTeam = yield* ProjectTeam.ProjectTeamService;
   const path = yield* Path.Path;
 
   let bootstrapProjectId: ProjectId | undefined;
@@ -274,12 +278,28 @@ const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
       title: path.basename(serverConfig.cwd) || "project",
       workspaceRoot: serverConfig.cwd,
     });
+    // The project's PM is its heading in the sidebar, so it is the welcome target and
+    // the project needs no starter thread.
+    const manager = yield* projectTeam.ensureManager(project.id).pipe(
+      Effect.asSome,
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Could not set up the bootstrapped project's PM", {
+          projectId: project.id,
+          cause: Cause.pretty(cause),
+        }).pipe(Effect.as(Option.none<ProjectTeamRepository.ProjectManagerRecord>())),
+      ),
+    );
     const shell = yield* threads.getShellSnapshot();
     const existingThread = shell.threads.find(
       (thread) =>
-        thread.projectId === project.id && thread.lineage.relationshipToParent !== "subagent",
+        thread.projectId === project.id &&
+        thread.lineage.relationshipToParent !== "subagent" &&
+        (Option.isNone(manager) || thread.id !== manager.value.threadId),
     );
-    if (existingThread === undefined) {
+    if (Option.isSome(manager) && manager.value.settings.enabled) {
+      bootstrapProjectId = project.id;
+      bootstrapThreadId = manager.value.threadId;
+    } else if (existingThread === undefined) {
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const settings = yield* serverSettings.getSettings;
       const launched = yield* threadLaunch.launch({

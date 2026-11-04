@@ -447,7 +447,6 @@ function useSidebarThreads(input: {
     NO_COLLAPSED_PROJECTS,
     Schema.Array(Schema.String),
   );
-  const collapsedProjectKeys = new Set(collapsedProjectKeyList);
   const [openPmTaskProjectKeyList, setOpenPmTaskProjectKeyList] = useLocalStorage(
     OPEN_PM_TASKS_KEY,
     NO_COLLAPSED_PROJECTS,
@@ -497,6 +496,11 @@ function useSidebarThreads(input: {
   }
   const headingThreadKeys = new Set(
     [...projectManagerByProjectKey.values()].map((manager) => manager.threadKey),
+  );
+  // A manager's section has no collapse control, so a key stored before it had a
+  // manager must not keep it collapsed.
+  const collapsedProjectKeys = new Set(
+    collapsedProjectKeyList.filter((projectKey) => !projectManagerByProjectKey.has(projectKey)),
   );
   const partition = partitionSidebarThreads({
     threads,
@@ -1207,8 +1211,6 @@ function SidebarProjectHeader(props: {
             resolveSidebarThreadStatus(pm.manager.thread) === "working"
           }
           isActive={pm.isActive}
-          expanded={props.expanded}
-          onToggle={props.onToggle}
           onOpenThread={pm.onOpenThread}
           onNewThread={props.onNewThread}
           tasks={pm.tasks}

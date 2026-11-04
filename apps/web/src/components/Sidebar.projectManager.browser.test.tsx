@@ -170,8 +170,6 @@ async function renderHeading(
     pmThreadRef,
     pmThreadWorking: false,
     isActive: false,
-    expanded: true,
-    onToggle: vi.fn(),
     onOpenThread: vi.fn(),
     onNewThread: vi.fn(),
     tasks: [] as SidebarProjectManagerTask[],
@@ -203,11 +201,9 @@ describe("project manager sidebar heading", () => {
 
     await act(async () => button("🦝busyboyRemy")!.click());
     expect(props.onOpenThread).toHaveBeenCalledExactlyOnceWith(pmThreadRef);
-    expect(props.onToggle).not.toHaveBeenCalled();
-
-    await act(async () => button("Collapse busyboy")!.click());
-    expect(props.onToggle).toHaveBeenCalledOnce();
     expect(button("New thread in busyboy")).toBeDefined();
+    // The section is always open, so the heading has no collapse control.
+    expect(heading.querySelector("[aria-expanded]")).toBeNull();
   });
 
   it("marks the heading current while the PM thread is open and shows a working avatar", async () => {
@@ -239,12 +235,9 @@ describe("project manager sidebar heading", () => {
     expect(props.onOpenThread).toHaveBeenLastCalledWith(tasks[1]!.threadRef);
   });
 
-  it("hides the tasks line when there are no tasks or the section is collapsed", async () => {
+  it("hides the tasks line when there are no tasks", async () => {
     await renderHeading();
     expect(container.textContent).not.toMatch(/tasks?$/);
-    await renderHeading({ expanded: false, tasks: [task("lead-1", "Fix login")] });
-    expect(button("1 task")).toBeUndefined();
-    expect(button("Expand busyboy")).toBeDefined();
   });
 
   it("asks for a sitrep and opens the PM thread from the heading's Sitrep button", async () => {
