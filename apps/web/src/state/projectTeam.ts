@@ -22,6 +22,7 @@ import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useAtomCommand } from "./use-atom-command";
 
 export const projectTeamEnvironment = createProjectTeamEnvironmentAtoms(connectionAtomRuntime);
@@ -75,6 +76,40 @@ const projectManagerThreadKeysAtom = Atom.family((environmentIdsKey: string) =>
   }).pipe(Atom.withLabel(`web-project-team:pm-thread-keys:${environmentIdsKey}`)),
 );
 
+export interface ProjectManagerEntry {
+  readonly environmentId: EnvironmentId;
+  readonly summary: ProjectTeamAttentionSummary;
+}
+
+const projectManagerEntriesAtom = Atom.family((environmentIdsKey: string) =>
+  Atom.make((get): readonly ProjectManagerEntry[] =>
+    (environmentIdsKey.split(",") as EnvironmentId[]).flatMap((environmentId) =>
+      environmentId === ""
+        ? []
+        : [...get(environmentProjectTeamAttentionAtom(environmentId)).byProjectId.values()].map(
+            (summary) => ({ environmentId, summary }),
+          ),
+    ),
+  ).pipe(Atom.withLabel(`web-project-team:entries:${environmentIdsKey}`)),
+);
+
+/** Every project manager across these environments. */
+export function useProjectManagerEntries(
+  environmentIds: readonly EnvironmentId[],
+): readonly ProjectManagerEntry[] {
+  return useAtomValue(projectManagerEntriesAtom(environmentIds.join(",")));
+}
+
+export const PROJECT_MANAGER_ARCHIVE_BLOCKED_REASON =
+  "The project manager stays for the life of the project.";
+
+/** Reads outside React whether this thread is a project's manager. */
+export function readIsProjectManagerThread(ref: ScopedThreadRef): boolean {
+  return appAtomRegistry
+    .get(environmentProjectTeamAttentionAtom(ref.environmentId))
+    .byPmThreadId.has(ref.threadId);
+}
+
 /** Scoped keys of every PM thread across these environments. */
 export function useProjectManagerThreadKeys(
   environmentIds: readonly EnvironmentId[],
@@ -118,7 +153,7 @@ export function useRequestSitrep() {
 
 export type ProjectTeamSettingsPatch = Omit<ProjectTeamUpdateSettingsInput, "projectId">;
 
-/** Saves the user's sitrep settings; the server then holds them for 24 hours before adjusting. */
+/** Saves the user's PM settings; the server then holds sitrep values for 24 hours before adjusting. */
 export function useUpdateTeamSettings() {
   const updateSettings = useAtomCommand(projectTeamEnvironment.updateSettings);
   return (ref: ScopedProjectRef, patch: ProjectTeamSettingsPatch) =>

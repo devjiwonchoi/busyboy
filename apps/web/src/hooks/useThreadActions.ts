@@ -57,6 +57,10 @@ import { showThreadUndoNotice } from "./showThreadUndoNotice";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import {
+  PROJECT_MANAGER_ARCHIVE_BLOCKED_REASON,
+  readIsProjectManagerThread,
+} from "../state/projectTeam";
 
 export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveBlockedError>()(
   "ThreadArchiveBlockedError",
@@ -67,6 +71,18 @@ export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveB
 ) {
   override get message(): string {
     return "Cannot archive while the provider is active.";
+  }
+}
+
+export class ProjectManagerArchiveBlockedError extends Schema.TaggedError<ProjectManagerArchiveBlockedError>()(
+  "ProjectManagerArchiveBlockedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return PROJECT_MANAGER_ARCHIVE_BLOCKED_REASON;
   }
 }
 
@@ -279,6 +295,16 @@ export function useThreadActions() {
     const resolved = resolveThreadTarget(target);
     if (!resolved) return AsyncResult.success(undefined);
     const { thread, threadRef } = resolved;
+    if (readIsProjectManagerThread(threadRef)) {
+      return AsyncResult.failure(
+        Cause.fail(
+          new ProjectManagerArchiveBlockedError({
+            environmentId: threadRef.environmentId,
+            threadId: threadRef.threadId,
+          }),
+        ),
+      );
+    }
     if (!threadRuntimeCanArchive(thread.runtime)) {
       return AsyncResult.failure(
         Cause.fail(

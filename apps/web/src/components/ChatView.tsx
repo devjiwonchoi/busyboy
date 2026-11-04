@@ -1899,6 +1899,20 @@ export default function ChatView(props: ChatViewProps) {
     });
   };
   const handleOpenDraftProjectSettingsStable = useStableCallback(handleOpenDraftProjectSettings);
+  const handleOpenProjectManagerSettings = () => {
+    if (!activeProject) return;
+    void navigate({
+      to: "/settings/projects",
+      search: {
+        project: deriveLogicalProjectKeyFromSettings(activeProject, projectGroupingSettings),
+      },
+      hash: "project-manager",
+      hashScrollIntoView: false,
+    });
+  };
+  const handleOpenProjectManagerSettingsStable = useStableCallback(
+    handleOpenProjectManagerSettings,
+  );
   const activeEnvironmentBootstrapComplete = useEnvironmentShellHasSnapshot(
     activeThread?.environmentId ?? null,
   );
@@ -7804,6 +7818,7 @@ export default function ChatView(props: ChatViewProps) {
               {...(activeDraftLogicalProjectKey
                 ? { onOpenProjectSettings: handleOpenDraftProjectSettingsStable }
                 : {})}
+              onOpenProjectManagerSettings={handleOpenProjectManagerSettingsStable}
             />
           </header>
         )}

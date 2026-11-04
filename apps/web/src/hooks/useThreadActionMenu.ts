@@ -36,6 +36,7 @@ import {
 } from "../logicalProject";
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
+import { readIsProjectManagerThread } from "../state/projectTeam";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
@@ -113,6 +114,7 @@ export function useThreadActionMenu(input: {
         isPinned: thread.pinnedAt != null,
         isRegeneratingTitle,
         isRunning: !threadRuntimeCanArchive(thread.runtime),
+        isProjectManager: readIsProjectManagerThread(threadRef),
         supports,
       });
       const clicked = await settlePromise(() => api.contextMenu.show(items, position));

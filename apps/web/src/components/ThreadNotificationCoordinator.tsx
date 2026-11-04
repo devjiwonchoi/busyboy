@@ -227,7 +227,7 @@ function EnvironmentNotifications({
     if (prior === null || prior.byProjectId.size === 0) return;
     for (const summary of projectTeam.byProjectId.values()) {
       const before = prior.byProjectId.get(summary.projectId);
-      if (!before) continue;
+      if (!before || !summary.enabled) continue;
       const projectTitle =
         projects?.find((project) => project.id === summary.projectId)?.title ?? "Project";
       // Distinct tags keep a sitrep from replacing an unseen Needs-you notification.
@@ -249,14 +249,14 @@ function EnvironmentNotifications({
             hasNotificationSound(getClientSettings().notificationMode),
           );
         }
-        notify(`Needs you: ${summary.openCount}`, "attention");
+        notify(`${summary.persona.name} · Needs you: ${summary.openCount}`, "attention");
       }
       if (
         summary.settings.sitrepNotify &&
         summary.latestSitrepId !== null &&
         summary.latestSitrepId !== before.latestSitrepId
       ) {
-        notify(`${projectTitle} PM · Sitrep`, "sitrep");
+        notify(`${summary.persona.name} · Sitrep`, "sitrep");
       }
     }
   }, [

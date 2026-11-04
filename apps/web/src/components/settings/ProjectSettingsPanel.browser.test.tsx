@@ -113,6 +113,10 @@ vi.mock(import("./ProjectActionsSettings"), async (original) => ({
   ...(await original()),
   ProjectActionsSettings: (() => null) as never,
 }));
+vi.mock(import("./ProjectManagerSettings"), async (original) => ({
+  ...(await original()),
+  ProjectManagerSettings: (() => null) as never,
+}));
 
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { appAtomRegistry } from "../../rpc/atomRegistry";

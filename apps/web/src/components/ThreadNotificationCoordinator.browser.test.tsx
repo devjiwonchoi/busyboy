@@ -139,6 +139,7 @@ vi.mock(import("../threadNotifications"), async (original) => ({
   setNotificationBadge: vi.fn(),
 }));
 
+import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import { ThreadNotificationCoordinator } from "./ThreadNotificationCoordinator";
 
 let root: Root;
@@ -191,16 +192,11 @@ afterEach(async () => {
 });
 
 function setProjectTeam(latestBatchId: string | null, latestSitrepId: string | null) {
-  const summary = {
-    projectId: "project-1",
-    pmThreadId: "pm-thread",
+  const summary = makeProjectManagerSummaryFixture({
     openCount: 2,
-    latestBatchId,
-    latestSitrepId,
-    unreadSitrepCount: 0,
-    sitrepInProgress: false,
-    settings: { maxConcurrentTasks: 6, sitrepIntervalMinutes: 60, sitrepNotify: true },
-  };
+    latestBatchId: latestBatchId as never,
+    latestSitrepId: latestSitrepId as never,
+  });
   state.team = {
     byProjectId: new Map([["project-1", summary]]),
     byPmThreadId: new Map([["pm-thread", summary]]),
@@ -217,12 +213,12 @@ describe("thread notifications", () => {
     setProjectTeam("batch-1", "sitrep-1");
     await render();
     expect(state.notification).toHaveBeenCalledTimes(2);
-    expect(state.notification).toHaveBeenNthCalledWith(1, "Needs you: 2", {
+    expect(state.notification).toHaveBeenNthCalledWith(1, "Remy · Needs you: 2", {
       body: "Project",
       tag: "env-1:pm-thread:attention",
       silent: true,
     });
-    expect(state.notification).toHaveBeenNthCalledWith(2, "Project PM · Sitrep", {
+    expect(state.notification).toHaveBeenNthCalledWith(2, "Remy · Sitrep", {
       body: "Project",
       tag: "env-1:pm-thread:sitrep",
       silent: true,
