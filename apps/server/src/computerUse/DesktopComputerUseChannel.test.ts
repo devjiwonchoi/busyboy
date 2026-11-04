@@ -147,14 +147,14 @@ describe("DesktopComputerUseChannel without a desktop", () => {
 });
 
 /** A desktop that answers `permissions.status` and records every request. */
-const fakeChannel = (requests: Array<string>) =>
+const fakeChannel = (requests: Array<string>, helperState: "running" | "stopped" = "running") =>
   Layer.succeed(
     DesktopComputerUseChannel.DesktopComputerUseChannel,
     DesktopComputerUseChannel.DesktopComputerUseChannel.of({
       available: true,
-      request: (method) =>
+      request: (method, _params, options) =>
         Effect.sync(() => {
-          requests.push(method);
+          requests.push(options?.passive ? `${method} (passive)` : method);
           return method === "permissions.status"
             ? {
                 accessibility: "granted",
@@ -166,7 +166,7 @@ const fakeChannel = (requests: Array<string>) =>
       configure: () => Effect.void,
       notifications: Stream.empty,
       statusChanges: Stream.empty,
-      status: Effect.succeed({ state: "running" }),
+      status: Effect.succeed({ state: helperState }),
     }),
   );
 
@@ -199,7 +199,7 @@ describe("ComputerUseSettings", () => {
       yield* ComputerUseSettings.requestPermission("screen_recording");
       yield* ComputerUseSettings.restartHelper();
       expect(requests).toEqual([
-        "permissions.status",
+        "permissions.status (passive)",
         "permissions.request",
         "helper.restart",
         "permissions.status",
@@ -208,6 +208,25 @@ describe("ComputerUseSettings", () => {
       Effect.provide(
         Layer.merge(
           fakeChannel(requests),
+          ServerSettings.layerTest({ enableAgentComputerUse: true }),
+        ),
+      ),
+    );
+  });
+
+  effectIt.effect("polling does not start a stopped helper unless asked to", () => {
+    const requests: Array<string> = [];
+    return Effect.gen(function* () {
+      const status = yield* ComputerUseSettings.readStatus();
+      expect(status.helper).toEqual({ state: "stopped" });
+      expect(status.permissions).toBeUndefined();
+      expect(requests).toEqual([]);
+      yield* ComputerUseSettings.readStatus({ start: true });
+      expect(requests).toEqual(["permissions.status"]);
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          fakeChannel(requests, "stopped"),
           ServerSettings.layerTest({ enableAgentComputerUse: true }),
         ),
       ),

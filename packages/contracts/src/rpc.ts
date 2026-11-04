@@ -752,9 +752,10 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
 
-// Starts the helper lazily while computer use is on; the settings section polls it.
+// Reads cached status unless the helper is running. `start: true` (settings:write)
+// starts it lazily while computer use is on; the settings section polls with it.
 const WsComputerUseStatusRpc = Rpc.make(WS_METHODS.computerUseStatus, {
-  payload: Schema.Struct({}),
+  payload: Schema.Struct({ start: Schema.optionalKey(Schema.Boolean) }),
   success: ComputerUseSettingsStatus,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });

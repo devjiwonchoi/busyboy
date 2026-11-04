@@ -12,8 +12,8 @@ import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
 import { MAC_PERMISSION_SETTINGS_URLS } from "../permissions/MacPermission.ts";
-import { ComputerUseRouter } from "./ComputerUseChannelHost.ts";
-import type { HelperClient } from "./HelperClient.ts";
+import { ComputerUseRouter, toErrorObject } from "./ComputerUseChannelHost.ts";
+import { HelperRequestError, type HelperClient } from "./HelperClient.ts";
 import { HelperSupervisor, type HelperExit, type SpawnHelper } from "./HelperSupervisor.ts";
 
 const FAKE_HELPER = NodeURL.fileURLToPath(new URL("./testing/FakeHelper.ts", import.meta.url));
@@ -55,7 +55,7 @@ const withHelperProcess = () => {
     supported: true,
     env: { BUSYBOY_CU_SOCKET_DIR: socketDir },
     spawn,
-    onStatus: (status) => events.push(router!.statusEvent(status)),
+    onStatus: (status) => events.push(router!.helperStatusChanged(status)),
   });
   router = new ComputerUseRouter(supervisor, (event) => events.push(event));
   cleanups.push(async () => {
@@ -133,9 +133,7 @@ describe("ComputerUseRouter with a helper process", () => {
     });
     expect(router.activeSessions).toEqual([{ threadId: "t", turnId: "u" }]);
 
-    const started = performance.now();
     await router.handle({ type: "configure", enabled: false });
-    expect(performance.now() - started).toBeLessThan(2_000);
     expect(isAlive(children[0]!.pid)).toBe(false);
     expect(router.activeSessions).toEqual([]);
     expect(events.at(-1)).toEqual({ type: "status", state: "stopped" });
@@ -157,9 +155,19 @@ describe("ComputerUseRouter with a helper process", () => {
 });
 
 /** An in-process stand-in for the helper connection. */
-const fakeSupervisor = () => {
+const fakeSupervisor = (
+  options: {
+    /** Methods whose responses never arrive. */
+    readonly hang?: ReadonlyArray<string>;
+    /** Resolves `client()`; immediate when absent. */
+    readonly clientGate?: Promise<void>;
+    /** While `value` is true, `stop()` never finishes. */
+    readonly stopHangs?: { value: boolean };
+  } = {},
+) => {
   const sent: Array<{ id: number; method: string; params: unknown }> = [];
   const resolvers = new Map<number, (value: unknown) => void>();
+  const log: Array<string> = [];
   let nextId = 100;
   const client = {
     closed: false,
@@ -168,7 +176,7 @@ const fakeSupervisor = () => {
       sent.push({ id, method, params });
       const response = new Promise<unknown>((resolve) => {
         if (method === "app.state") resolvers.set(id, resolve);
-        else resolve({});
+        else if (!options.hang?.includes(method)) resolve({});
       });
       return { id, response };
     },
@@ -176,6 +184,7 @@ const fakeSupervisor = () => {
   };
   let running = false;
   let stops = 0;
+  let starts = 0;
   const supervisor = {
     status: { state: "stopped" } as ComputerUseHelperStatus,
     install: null,
@@ -184,16 +193,21 @@ const fakeSupervisor = () => {
       return running ? (client as unknown as HelperClient) : null;
     },
     client: async () => {
+      starts += 1;
+      if (options.clientGate) await options.clientGate;
       running = true;
       return client as unknown as HelperClient;
     },
     stop: async () => {
+      log.push("stop");
       running = false;
       stops += 1;
+      if (options.stopHangs?.value) await new Promise(() => {});
     },
     restart: async () => client as unknown as HelperClient,
+    setStartAllowed: (allowed: boolean) => void log.push(`allowed:${allowed}`),
   };
-  return { supervisor, sent, resolvers, stops: () => stops };
+  return { supervisor, sent, resolvers, log, stops: () => stops, starts: () => starts };
 };
 
 class ManualTimers {
@@ -299,6 +313,152 @@ describe("ComputerUseRouter routing", () => {
     expect(fake.stops()).toBe(stopsAfterEnable);
     timers.advance(60_000);
     expect(fake.stops()).toBe(stopsAfterEnable + 1);
+  });
+
+  it("answers a request cancelled before it reached the helper as stopped, without sending it", async () => {
+    let open: () => void = () => {};
+    const fake = fakeSupervisor({ clientGate: new Promise<void>((resolve) => (open = resolve)) });
+    const events: Array<DesktopComputerUseEvent> = [];
+    const router = new ComputerUseRouter(fake.supervisor, (event) => events.push(event));
+    await router.configure(true);
+    const pending = router.handle({ type: "request", id: 5, method: "apps.list", params: {} });
+    await router.handle({ type: "request", id: 6, method: "cancel", params: { requestId: 5 } });
+    open();
+    await pending;
+    expect(fake.sent).toEqual([]);
+    expect(events).toEqual([
+      { type: "response", id: 6, result: {} },
+      { type: "response", id: 5, error: expect.objectContaining({ code: "stopped" }) },
+    ]);
+  });
+
+  it("forgets sessions when the helper reconnects, crashes, or stops, so idle stop can run", async () => {
+    const fake = fakeSupervisor();
+    const timers = new ManualTimers();
+    const router = new ComputerUseRouter(fake.supervisor, () => {}, { timers });
+    await router.configure(true);
+    const begin = (turnId: string) =>
+      router.handle({
+        type: "request",
+        id: 1,
+        method: "session.begin",
+        params: { threadId: "t", turnId },
+      });
+    for (const state of ["running", "error", "stopped"] as const) {
+      await begin(state);
+      expect(router.activeSessions).toHaveLength(1);
+      router.helperStatusChanged({ state: "starting" });
+      expect(router.activeSessions).toHaveLength(1);
+      router.helperStatusChanged({ state });
+      expect(router.activeSessions).toEqual([]);
+    }
+    const stops = fake.stops();
+    timers.advance(10 * 60_000);
+    expect(fake.stops()).toBe(stops + 1);
+  });
+
+  it("turns off within one 2 s deadline and holds starts before stopping", async () => {
+    const stopHangs = { value: false };
+    const fake = fakeSupervisor({ hang: ["session.end"], stopHangs });
+    const timers = new ManualTimers();
+    const router = new ComputerUseRouter(fake.supervisor, () => {}, { timers });
+    await router.configure(true);
+    await router.handle({
+      type: "request",
+      id: 1,
+      method: "session.begin",
+      params: { threadId: "t", turnId: "u" },
+    });
+    fake.log.length = 0;
+    stopHangs.value = true;
+    let done = false;
+    const disabling = router.configure(false).then(() => {
+      done = true;
+    });
+    await Promise.resolve();
+    expect(fake.log).toEqual(["allowed:false"]);
+    timers.advance(1_999);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    timers.advance(1);
+    await disabling;
+    expect(done).toBe(true);
+  });
+
+  it("answers passive polls only from a running helper, without starting it or extending idle", async () => {
+    const fake = fakeSupervisor();
+    const timers = new ManualTimers();
+    const events: Array<DesktopComputerUseEvent> = [];
+    const router = new ComputerUseRouter(fake.supervisor, (event) => events.push(event), {
+      timers,
+    });
+    await router.configure(true);
+    await router.handle({
+      type: "request",
+      id: 1,
+      method: "permissions.status",
+      params: {},
+      passive: true,
+    });
+    expect(fake.starts()).toBe(0);
+    expect(events.at(-1)).toMatchObject({
+      id: 1,
+      error: { code: "computer_use_unavailable" },
+    });
+
+    await router.handle({ type: "request", id: 2, method: "apps.list", params: {} });
+    const stops = fake.stops();
+    timers.advance(9 * 60_000);
+    await router.handle({
+      type: "request",
+      id: 3,
+      method: "permissions.status",
+      params: {},
+      passive: true,
+    });
+    expect(events.at(-1)).toEqual({ type: "response", id: 3, result: {} });
+    timers.advance(60_000);
+    expect(fake.stops()).toBe(stops + 1);
+  });
+
+  it("shows helper-level and terminal failures to tool callers as non-retryable unavailability", () => {
+    const helperError = (code: string, details?: unknown, retryable = true) =>
+      new HelperRequestError({
+        code,
+        message: "m",
+        retryable,
+        ...(details === undefined ? {} : { details }),
+      });
+    for (const code of ["invalid_frame", "version_mismatch", "internal_error"]) {
+      expect(toErrorObject(helperError(code))).toEqual({
+        code: "computer_use_unavailable",
+        message: `${code}: m`,
+        details: { reason: code },
+        retryable: false,
+      });
+    }
+    expect(toErrorObject(helperError("made_up"))).toMatchObject({
+      code: "computer_use_unavailable",
+      details: { reason: "internal_error" },
+    });
+    for (const reason of [
+      "helper_signature_invalid",
+      "version_mismatch",
+      "helper_foreign_instance",
+      "helper_not_bundled",
+      "unsupported_platform",
+      "unsafe_socket_dir",
+    ]) {
+      expect(toErrorObject(helperError("computer_use_unavailable", { reason })).retryable).toBe(
+        false,
+      );
+    }
+    // helper_crashed is terminal only when the supervisor says so (after the cutoff).
+    expect(
+      toErrorObject(helperError("computer_use_unavailable", { reason: "helper_crashed" }))
+        .retryable,
+    ).toBe(true);
+    expect(toErrorObject(helperError("timeout", undefined, true)).retryable).toBe(true);
   });
 
   it("links to the same System Settings panes as the desktop permission helper", () => {

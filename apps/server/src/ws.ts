@@ -2407,8 +2407,8 @@ const layerWsRpc = (
               : serverSettings.updateProviderInstance(providerInstanceMutation, patch);
             return ServerSettings.redactServerSettingsForClient(settings);
           }),
-        [WS_METHODS.computerUseStatus]: (_input) =>
-          withComputerUse(ComputerUseSettings.readStatus()),
+        [WS_METHODS.computerUseStatus]: ({ start }) =>
+          withComputerUse(ComputerUseSettings.readStatus({ start: start === true })),
         [WS_METHODS.computerUseRequestPermission]: ({ kind }) =>
           withComputerUse(ComputerUseSettings.requestPermission(kind)),
         [WS_METHODS.computerUseRestartHelper]: (_input) =>

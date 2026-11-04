@@ -40,6 +40,12 @@ export interface ComputerUseNotification {
   readonly params: unknown;
 }
 
+export interface RequestOptions {
+  readonly timeoutMs?: number;
+  /** Answer only from a running helper: do not start it or extend its idle time. */
+  readonly passive?: boolean;
+}
+
 export class DesktopComputerUseChannel extends Context.Service<
   DesktopComputerUseChannel,
   {
@@ -52,7 +58,7 @@ export class DesktopComputerUseChannel extends Context.Service<
     readonly request: (
       method: string,
       params: unknown,
-      options?: { readonly timeoutMs?: number },
+      options?: RequestOptions,
     ) => Effect.Effect<unknown, ComputerUseError>;
     readonly configure: (enabled: boolean) => Effect.Effect<void>;
     readonly notifications: Stream.Stream<ComputerUseNotification>;
@@ -175,7 +181,7 @@ export const make = Effect.gen(function* () {
   const request = (
     method: string,
     params: unknown,
-    options?: { readonly timeoutMs?: number },
+    options?: RequestOptions,
   ): Effect.Effect<unknown, ComputerUseError> =>
     Effect.suspend(() => {
       if (closed) return Effect.fail(desktopDisconnected);
@@ -184,9 +190,13 @@ export const make = Effect.gen(function* () {
       return Effect.gen(function* () {
         const deferred = yield* Deferred.make<unknown, ComputerUseError>();
         pending.set(id, deferred);
-        yield* write({ type: "request", id, method, params }).pipe(
-          Effect.catchCause(() => settle(id, Effect.fail(desktopDisconnected))),
-        );
+        yield* write({
+          type: "request",
+          id,
+          method,
+          params,
+          ...(options?.passive ? { passive: true } : {}),
+        }).pipe(Effect.catchCause(() => settle(id, Effect.fail(desktopDisconnected))));
         const result = yield* Deferred.await(deferred).pipe(Effect.timeoutOption(timeoutMs));
         if (Option.isSome(result)) return result.value;
         pending.delete(id);

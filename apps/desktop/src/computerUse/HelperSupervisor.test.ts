@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Launches a fake helper process on a Unix socket.
 // @effect-diagnostics globalTimers:off - Drives a fake clock and flushes Node's event loop.
+// @effect-diagnostics globalDate:off - Bounds polls for process exits in the process tests.
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
@@ -13,6 +14,7 @@ import type { ComputerUseHelperStatus } from "@t3tools/contracts";
 import { encodeHelperFrame, HelperFrameDecoder } from "./HelperFraming.ts";
 import {
   HelperSupervisor,
+  helperSpawnEnv,
   resolveHelperSocketPath,
   type HelperChild,
   type HelperExit,
@@ -55,12 +57,20 @@ const installer = () => {
   };
 };
 
-/** Runs FakeHelper.ts with `extraEnv`; records every child so tests can check it is gone. */
-const processSpawner = (extraEnv: Record<string, string> = {}) => {
+/**
+ * Runs FakeHelper.ts with `extraEnv` (or the n-th entry of a list, one per
+ * spawn); records every child so tests can check it is gone.
+ */
+const processSpawner = (
+  extraEnv: Record<string, string> | ReadonlyArray<Record<string, string>> = {},
+) => {
   const children: Array<NodeChildProcess.ChildProcess> = [];
   const spawn: SpawnHelper = (_executable, env) => {
+    const extra = Array.isArray(extraEnv)
+      ? (extraEnv[Math.min(children.length, extraEnv.length - 1)] ?? {})
+      : (extraEnv as Record<string, string>);
     const child = NodeChildProcess.spawn(process.execPath, [FAKE_HELPER], {
-      env: { ...process.env, ...env, ...extraEnv },
+      env: { ...process.env, ...env, ...extra },
       stdio: ["ignore", "ignore", "inherit"],
     });
     children.push(child);
@@ -72,13 +82,41 @@ const processSpawner = (extraEnv: Record<string, string> = {}) => {
   return { spawn, children };
 };
 
-const isAlive = (pid: number | undefined) => {
-  if (pid === undefined) return false;
+const isAlive = (pid: number | undefined | null) => {
+  if (pid === undefined || pid === null) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch {
     return false;
+  }
+};
+
+/** A FakeHelper the test starts itself, as if another launcher had. */
+const startOutsideHelper = async (socketDir: string, extraEnv: Record<string, string> = {}) => {
+  const child = NodeChildProcess.spawn(process.execPath, [FAKE_HELPER], {
+    env: { ...process.env, BUSYBOY_CU_SOCKET_DIR: socketDir, ...extraEnv },
+    stdio: ["ignore", "ignore", "inherit"],
+  });
+  outside.push(child);
+  const socketPath = NodePath.join(socketDir, "helper.sock");
+  for (let tries = 0; !NodeFS.existsSync(socketPath); tries += 1) {
+    if (tries > 200) throw new Error("the outside helper did not open its socket");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return child;
+};
+const outside: Array<NodeChildProcess.ChildProcess> = [];
+afterEach(() => {
+  for (const child of outside.splice(0)) if (child.exitCode === null) child.kill("SIGKILL");
+});
+
+/** Polls until `check` holds; for process exits the test cannot await directly. */
+const eventually = async (check: () => boolean, timeoutMs = 3_000) => {
+  const end = Date.now() + timeoutMs;
+  while (!check()) {
+    if (Date.now() > end) throw new Error("condition did not hold in time");
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 };
 
@@ -116,10 +154,9 @@ describe("HelperSupervisor with a helper process", () => {
     expect(statuses.map((status) => status.state)).toEqual(["starting", "running"]);
 
     const pid = children[0]!.pid;
-    const started = performance.now();
     await supervisor.stop();
-    expect(performance.now() - started).toBeLessThan(2_000);
     expect(isAlive(pid)).toBe(false);
+    expect(NodeFS.existsSync(NodePath.join(socketDir, "helper.sock"))).toBe(false);
     expect(supervisor.status).toEqual({ state: "stopped" });
   });
 
@@ -128,10 +165,78 @@ describe("HelperSupervisor with a helper process", () => {
     const { spawn, children } = processSpawner({ FAKE_HELPER_IGNORE_SIGTERM: "1" });
     const { supervisor } = make({ socketDir, spawn });
     await supervisor.client();
-    const started = performance.now();
     await supervisor.stop();
-    expect(performance.now() - started).toBeLessThan(2_500);
     expect(isAlive(children[0]!.pid)).toBe(false);
+  });
+
+  it("leaves no process behind when the helper runs as two stages", async () => {
+    const socketDir = tempDir();
+    const { spawn, children } = processSpawner({ FAKE_HELPER_TWO_STAGE: "1" });
+    const { supervisor } = make({ socketDir, spawn });
+    await supervisor.client();
+    const stage1 = children[0]!.pid;
+    const stage2 = supervisor.hello?.pid;
+    expect(stage2).toBeTypeOf("number");
+    expect(stage2).not.toBe(stage1);
+
+    await supervisor.stop();
+    expect(isAlive(stage1)).toBe(false);
+    expect(isAlive(stage2)).toBe(false);
+    expect(NodeFS.existsSync(NodePath.join(socketDir, "helper.sock"))).toBe(false);
+  });
+
+  it("stops the serving stage even when stage 1 ignores SIGTERM and is killed", async () => {
+    const socketDir = tempDir();
+    const { spawn, children } = processSpawner({
+      FAKE_HELPER_TWO_STAGE: "1",
+      FAKE_HELPER_STAGE1_IGNORE_SIGTERM: "1",
+    });
+    const { supervisor } = make({ socketDir, spawn });
+    await supervisor.client();
+    const stage2 = supervisor.hello?.pid;
+    await supervisor.stop();
+    expect(isAlive(children[0]!.pid)).toBe(false);
+    // stop() returned once the socket was gone; the process exits right after.
+    await eventually(() => !isAlive(stage2));
+  });
+
+  it("stops the helper it reached after exit 66 by its hello pid", async () => {
+    const socketDir = tempDir();
+    const existing = await startOutsideHelper(socketDir);
+    const { spawn } = processSpawner({ FAKE_HELPER_EXIT: "66" });
+    const { supervisor } = make({ socketDir, spawn });
+    await supervisor.client();
+    expect(supervisor.hello?.pid).toBe(existing.pid);
+
+    await supervisor.stop();
+    await eventually(() => !isAlive(existing.pid));
+    expect(NodeFS.existsSync(NodePath.join(socketDir, "helper.sock"))).toBe(false);
+  });
+
+  it("reports a foreign helper that refuses us without counting crashes, and Restart stops it", async () => {
+    const socketDir = tempDir();
+    const foreign = await startOutsideHelper(socketDir, { FAKE_HELPER_REJECT: "1" });
+    // The first launch finds the foreign helper; the one after Restart serves.
+    const { spawn, children } = processSpawner([{ FAKE_HELPER_EXIT: "66" }, {}]);
+    const { supervisor } = make({
+      socketDir,
+      spawn,
+      findSocketOwner: async () => foreign.pid ?? null,
+    });
+
+    const failure = {
+      error: { details: { reason: "helper_foreign_instance" }, retryable: false },
+    };
+    await expect(supervisor.client()).rejects.toMatchObject(failure);
+    expect(supervisor.status).toMatchObject({ state: "error", reason: "helper_foreign_instance" });
+    // Terminal, so no restart is scheduled and nothing respawns.
+    await expect(supervisor.client()).rejects.toMatchObject(failure);
+    expect(children).toHaveLength(1);
+
+    const client = await supervisor.restart();
+    expect(isAlive(foreign.pid)).toBe(false);
+    expect(children).toHaveLength(2);
+    expect(await client.request("apps.list", {})).toMatchObject({ method: "apps.list" });
   });
 
   it("connects to the helper that is already running after exit 66", async () => {
@@ -335,6 +440,63 @@ describe("HelperSupervisor restart policy", () => {
     await supervisor.stop();
   });
 
+  it("escalates to SIGKILL at 1.5 s and waits at most 2 s more for the socket", async () => {
+    const timers = new FakeTimers();
+    const signals: Array<string> = [];
+    let resolveExit: (exit: HelperExit) => void = () => {};
+    const exited = new Promise<HelperExit>((resolve) => {
+      resolveExit = resolve;
+    });
+    const spawn: SpawnHelper = () => ({
+      pid: 4242,
+      kill: (signal) => {
+        signals.push(signal);
+        if (signal === "SIGKILL") resolveExit({ code: null, signal });
+      },
+      exited,
+    });
+    let socketAnswers = false;
+    const { supervisor } = make({
+      socketDir: "/nonexistent",
+      timers,
+      spawn,
+      // Missing while starting; once stopping, it answers forever, so only the deadline ends the wait.
+      checkSocket: async () => (socketAnswers ? "ready" : "missing"),
+      probeSocket: async () => true,
+    });
+    void supervisor.client().catch(() => {});
+    await timers.advance(10);
+    socketAnswers = true;
+    let stopped = false;
+    void supervisor.stop().then(() => {
+      stopped = true;
+    });
+    await timers.advance(1_499);
+    expect(signals).toEqual(["SIGTERM"]);
+    await timers.advance(1);
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+    await timers.advance(1_900);
+    expect(stopped).toBe(false);
+    await timers.advance(200);
+    expect(stopped).toBe(true);
+  });
+
+  it("never starts, not even a pending restart, while starts are held", async () => {
+    const timers = new FakeTimers();
+    const { spawn, spawnedAt } = fakeSpawner(timers, true);
+    const { supervisor } = makeFake(timers, spawn);
+    const first = supervisor.client().catch(() => {});
+    await timers.advance(100);
+    await first;
+    expect(spawnedAt).toHaveLength(1);
+    supervisor.setStartAllowed(false);
+    await timers.advance(60_000);
+    expect(spawnedAt).toHaveLength(1);
+    await expect(supervisor.client()).rejects.toMatchObject({
+      error: { details: { reason: "disabled" }, retryable: false },
+    });
+  });
+
   it("does not restart after an intentional stop", async () => {
     const timers = new FakeTimers();
     const { spawn, spawnedAt } = fakeSpawner(timers, true);
@@ -346,6 +508,17 @@ describe("HelperSupervisor restart policy", () => {
     await timers.advance(60_000);
     expect(spawnedAt).toHaveLength(1);
     expect(supervisor.status).toEqual({ state: "stopped" });
+  });
+});
+
+describe("helperSpawnEnv", () => {
+  it("drops inherited BUSYBOY_CU_* variables and keeps explicit overrides", () => {
+    expect(
+      helperSpawnEnv(
+        { PATH: "/bin", BUSYBOY_CU_SOCKET_DIR: "/elsewhere", BUSYBOY_CU_DEV_CALLERS: "1" },
+        { BUSYBOY_CU_SOCKET_DIR: "/test" },
+      ),
+    ).toEqual({ PATH: "/bin", BUSYBOY_CU_SOCKET_DIR: "/test" });
   });
 });
 

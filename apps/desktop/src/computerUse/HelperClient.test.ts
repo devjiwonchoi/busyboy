@@ -143,4 +143,80 @@ describe("HelperClient", () => {
       error: { code: "computer_use_unavailable" },
     });
   });
+
+  it("gives up on a helper that accepts but never answers hello", async () => {
+    const socketPath = await fakeHelper(() => {});
+    await expect(
+      HelperClient.connect({
+        socketPath,
+        clientVersion: "test",
+        onNotification: () => {},
+        onClose: () => {},
+        timeoutMs: 100,
+      }),
+    ).rejects.toMatchObject({
+      error: { code: "computer_use_unavailable", details: { reason: "helper_unreachable" } },
+    });
+  });
+
+  it("reports a connection closed before hello as helper_disconnected", async () => {
+    const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "cu-"));
+    dirs.push(dir);
+    const socketPath = NodePath.join(dir, "h.sock");
+    const server = NodeNet.createServer((socket) => socket.destroy());
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await expect(
+      HelperClient.connect({
+        socketPath,
+        clientVersion: "test",
+        onNotification: () => {},
+        onClose: () => {},
+      }),
+    ).rejects.toMatchObject({ error: { details: { reason: "helper_disconnected" } } });
+  });
+
+  it("drops malformed messages and types malformed errors as internal_error", async () => {
+    const socketPath = await fakeHelper((message, reply) => {
+      if (message.method === "hello") {
+        reply({ jsonrpc: "2.0", id: message.id, result: { ...helloResult, pid: 1234 } });
+        return;
+      }
+      reply(null);
+      reply(7);
+      reply({ jsonrpc: "2.0", id: "x", result: 1 });
+      reply({ jsonrpc: "2.0", id: message.id, error: { code: "turn_inactive" } });
+    });
+    const { client, hello } = await HelperClient.connect({
+      socketPath,
+      clientVersion: "test",
+      onNotification: () => {},
+      onClose: () => {},
+    });
+    expect(hello.pid).toBe(1234);
+    await expect(client.request("app.state", {})).rejects.toMatchObject({
+      error: { code: "internal_error", retryable: false },
+    });
+    expect(client.closed).toBe(false);
+    client.close();
+  });
+
+  it("refuses a request too large to frame without leaving it pending", async () => {
+    const socketPath = await fakeHelper((message, reply) => {
+      if (message.method === "hello") {
+        reply({ jsonrpc: "2.0", id: message.id, result: helloResult });
+      }
+    });
+    const { client } = await HelperClient.connect({
+      socketPath,
+      clientVersion: "test",
+      onNotification: () => {},
+      onClose: () => {},
+    });
+    await expect(
+      client.request("type", { text: "x".repeat(17 * 1024 * 1024) }),
+    ).rejects.toMatchObject({ error: { code: "invalid_argument" } });
+    expect((client as unknown as { pending: Map<number, unknown> }).pending.size).toBe(0);
+    client.close();
+  });
 });

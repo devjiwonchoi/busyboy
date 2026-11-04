@@ -27,14 +27,25 @@ const fakeHelper = (contents: string) => {
 };
 
 describe("computer-use helper in the release build", () => {
-  it("ships the helper as an extra resource that electron-builder does not re-sign", () => {
+  it("leaves the helper out unless --computer-use is passed", () => {
     const config = createBuilderConfig("1.2.3");
+    expect(config.extraResources).toEqual([
+      { from: "apps/desktop/prod-resources/resource-monitor", to: "resource-monitor" },
+    ]);
+    expect(config.mac).not.toHaveProperty("signIgnore");
+    expect(config.files.some((pattern) => pattern.includes("computer-use"))).toBe(false);
+  });
+
+  it("with --computer-use, ships the helper as an extra resource that electron-builder does not re-sign", () => {
+    const config = createBuilderConfig("1.2.3", { computerUse: true });
+    // BusyBoy itself is Developer ID signed and notarized; only the helper is left alone.
+    expect(config.forceCodeSigning).toBe(true);
     expect(config.extraResources).toContainEqual({
       from: "apps/desktop/prod-resources/computer-use",
       to: "computer-use",
     });
-    const ignore = new RegExp(config.mac.signIgnore[0]!);
     expect(config.mac.signIgnore).toEqual([COMPUTER_USE_SIGN_IGNORE]);
+    const ignore = new RegExp(config.mac.signIgnore![0]!);
     expect(
       ignore.test(
         "/x/BusyBoy.app/Contents/Resources/computer-use/BusyBoy Computer Use.app/Contents/MacOS/busyboy-computer-use",

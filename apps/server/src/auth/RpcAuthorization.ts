@@ -254,6 +254,11 @@ const requiredScopesForRpcCall = (
     ];
   }
   if (method === WS_METHODS.serverUpdateSettings) return requiredScopesForSettingsUpdate(payload);
+  // Reading is orchestration:read; starting the helper is a settings action.
+  if (method === WS_METHODS.computerUseStatus) {
+    const start = (payload as { start?: unknown } | null)?.start === true;
+    return start ? [AuthSettingsWriteScope] : [AuthOrchestrationReadScope];
+  }
   if (method === WS_METHODS.projectsMutate) {
     return requiredScopesForProjectMutation(decodeProjectMutation(payload));
   }

@@ -19,6 +19,7 @@ export const HELPER_REQUIREMENT = `anchor apple generic and identifier "${HELPER
 
 export type HelperInstallFailureReason =
   | "helper_missing"
+  | "helper_not_bundled"
   | "helper_signature_invalid"
   | "helper_install_failed";
 
@@ -86,12 +87,17 @@ export async function readHelperFingerprint(bundle: string): Promise<HelperFinge
 }
 
 export interface HelperInstallerOptions {
-  /** The helper shipped with this BusyBoy build; `null` when none was found. */
+  /**
+   * The helper shipped with this BusyBoy build; `null` when the build has none
+   * (release builds made without `--computer-use`, dev without the identity).
+   */
   readonly bundledPath: string | null;
   /** `~/Library/Application Support/BusyBoy/ComputerUse`. */
   readonly installRoot: string;
   readonly run?: CommandRunner;
   readonly requirement?: string;
+  /** For tests: `fs.rename`. */
+  readonly rename?: (from: string, to: string) => Promise<void>;
 }
 
 export class HelperInstaller {
@@ -119,12 +125,16 @@ export class HelperInstaller {
   async ensureInstalled(
     options: { readonly beforeReplace?: () => Promise<void> } = {},
   ): Promise<HelperInstallInfo> {
-    const bundled =
-      this.options.bundledPath === null
-        ? null
-        : await readHelperFingerprint(this.options.bundledPath);
+    if (this.options.bundledPath === null) {
+      // Never fall back to an earlier install: this build cannot vouch for it.
+      throw new HelperInstallError(
+        "helper_not_bundled",
+        "this BusyBoy build does not include Computer Use",
+      );
+    }
+    const bundled = await readHelperFingerprint(this.options.bundledPath);
     const installed = await readHelperFingerprint(this.installedPath);
-    if (bundled === null || this.options.bundledPath === null) {
+    if (bundled === null) {
       if (installed !== null) return { ...installed, path: this.installedPath, copied: false };
       throw new HelperInstallError(
         "helper_missing",
@@ -147,6 +157,10 @@ export class HelperInstaller {
       this.options.installRoot,
       `.${HELPER_BUNDLE_NAME}.${suffix}.old`,
     );
+    const rename = this.options.rename ?? NodeFS.rename;
+    // `previous` is deleted only once the new copy is in place (or the old one
+    // is back); otherwise it is the only copy left and stays for the next run.
+    let previousDisposable = true;
     try {
       // --noqtn drops the quarantine attribute a downloaded BusyBoy carries.
       const copy = await this.run("ditto", ["--noqtn", this.options.bundledPath, staging]);
@@ -158,11 +172,16 @@ export class HelperInstaller {
       }
       await this.verify(staging);
       const hadInstall = await exists(this.installedPath);
-      if (hadInstall) await NodeFS.rename(this.installedPath, previous);
+      if (hadInstall) await rename(this.installedPath, previous);
       try {
-        await NodeFS.rename(staging, this.installedPath);
+        await rename(staging, this.installedPath);
       } catch (error) {
-        if (hadInstall) await NodeFS.rename(previous, this.installedPath).catch(() => undefined);
+        if (hadInstall) {
+          previousDisposable = await rename(previous, this.installedPath).then(
+            () => true,
+            () => false,
+          );
+        }
         throw new HelperInstallError(
           "helper_install_failed",
           `could not move the helper into place: ${String(error)}`,
@@ -170,7 +189,7 @@ export class HelperInstaller {
       }
     } finally {
       await NodeFS.rm(staging, { recursive: true, force: true });
-      await NodeFS.rm(previous, { recursive: true, force: true });
+      if (previousDisposable) await NodeFS.rm(previous, { recursive: true, force: true });
     }
     return { ...bundled, path: this.installedPath, copied: true };
   }

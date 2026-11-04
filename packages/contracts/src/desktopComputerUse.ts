@@ -39,17 +39,35 @@ export const ComputerUseUnavailableReason = Schema.Literals([
   "desktop_unavailable",
   "desktop_disconnected",
   "helper_missing",
+  "helper_not_bundled",
   "helper_signature_invalid",
   "helper_install_failed",
   "helper_start_failed",
   "helper_crashed",
   "helper_disconnected",
   "helper_unreachable",
+  "helper_foreign_instance",
   "unsafe_socket_dir",
   "version_mismatch",
   "invalid_frame",
+  "internal_error",
 ]);
 export type ComputerUseUnavailableReason = typeof ComputerUseUnavailableReason.Type;
+
+/**
+ * Reasons that a retry cannot fix without the user acting. `helper_crashed` is
+ * terminal only after the crash cutoff, so the desktop decides it per error.
+ */
+export const COMPUTER_USE_TERMINAL_REASONS: ReadonlySet<string> =
+  new Set<ComputerUseUnavailableReason>([
+    "disabled",
+    "unsupported_platform",
+    "helper_not_bundled",
+    "helper_signature_invalid",
+    "helper_foreign_instance",
+    "unsafe_socket_dir",
+    "version_mismatch",
+  ]);
 
 const errorFields = {
   code: ComputerUseErrorCode,
@@ -76,7 +94,7 @@ export class ComputerUseError extends Schema.TaggedError<ComputerUseError>()(
       code: "computer_use_unavailable",
       message,
       details: { reason },
-      retryable: reason !== "disabled" && reason !== "unsupported_platform",
+      retryable: !COMPUTER_USE_TERMINAL_REASONS.has(reason),
     });
   }
 }
@@ -144,6 +162,8 @@ export const DesktopComputerUseCommand = Schema.Union([
     id: Schema.Int,
     method: Schema.String,
     params: Schema.Unknown,
+    /** Answer only from a running helper: never start it or extend its idle time. */
+    passive: Schema.optionalKey(Schema.Boolean),
   }),
   Schema.Struct({ type: Schema.Literal("configure"), enabled: Schema.Boolean }),
 ]);

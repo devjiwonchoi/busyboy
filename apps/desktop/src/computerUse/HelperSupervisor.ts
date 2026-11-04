@@ -8,10 +8,11 @@
  */
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs/promises";
+import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import type { ComputerUseHelperStatus } from "@t3tools/contracts";
+import { COMPUTER_USE_TERMINAL_REASONS, type ComputerUseHelperStatus } from "@t3tools/contracts";
 
 import {
   HelperClient,
@@ -20,6 +21,7 @@ import {
   type HelperNotification,
 } from "./HelperClient.ts";
 import {
+  HELPER_EXECUTABLE,
   HelperInstallError,
   type HelperInstallInfo,
   type HelperInstaller,
@@ -39,6 +41,10 @@ export const RESTART_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 30_000] as const;
 export const CRASH_WINDOW_MS = 2 * 60_000;
 export const MAX_CRASHES_IN_WINDOW = 5;
 export const STOP_GRACE_MS = 1_500;
+/** How long a stop waits for the socket to go away before it escalates or gives up. */
+export const SOCKET_GONE_TIMEOUT_MS = 2_000;
+/** Connections closed without a `hello` reply, after exit 66, that mean a foreign helper. */
+const FOREIGN_CLOSE_LIMIT = 2;
 const SOCKET_POLL_MS = 50;
 const DEFAULT_SOCKET_TIMEOUT_MS = 5_000;
 /** `sun_path` minus the terminator, as in the helper. */
@@ -72,11 +78,26 @@ export const systemTimers: SupervisorTimers = {
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
+/**
+ * The helper's environment: BusyBoy's own, minus any inherited `BUSYBOY_CU_*`
+ * (socket dir, dev switches), plus the supervisor's explicit overrides.
+ */
+export function helperSpawnEnv(
+  inherited: Readonly<Record<string, string | undefined>>,
+  overrides: Readonly<Record<string, string | undefined>>,
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(inherited)) {
+    if (!key.startsWith("BUSYBOY_CU_")) env[key] = value;
+  }
+  return { ...env, ...overrides };
+}
+
 export const spawnHelperProcess =
   (log: (line: string) => void): SpawnHelper =>
   (executable, env) => {
     const child = NodeChildProcess.spawn(executable, [], {
-      env: { ...process.env, ...env },
+      env: helperSpawnEnv(process.env, env),
       stdio: ["ignore", "ignore", "pipe"],
     });
     child.stderr?.setEncoding("utf8");
@@ -125,17 +146,65 @@ export const defaultSocketOwnerCheck = async (
   return stat.uid === NodeOS.userInfo().uid ? "ready" : "unsafe";
 };
 
-const unavailable = (reason: string, message: string) =>
+/** True when the socket accepts a connection. */
+export const defaultSocketProbe = (path: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = NodeNet.createConnection(path);
+    const finish = (alive: boolean) => {
+      socket.destroy();
+      resolve(alive);
+    };
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+    socket.setTimeout(500, () => finish(false));
+  });
+
+const execText = (command: string, args: ReadonlyArray<string>) =>
+  new Promise<string>((resolve) => {
+    NodeChildProcess.execFile(
+      command,
+      [...args],
+      { encoding: "utf8", timeout: 5_000 },
+      (error, stdout) => resolve(error === null ? stdout : ""),
+    );
+  });
+
+/**
+ * The helper process listening on `path`, found with lsof. Only a process named
+ * like the helper counts, and never BusyBoy itself.
+ */
+export const defaultFindSocketOwner = async (path: string): Promise<number | null> => {
+  const listing = await execText("lsof", ["-n", "-P", "-U", "-F", "pn"]);
+  let pid: number | null = null;
+  const owners = new Set<number>();
+  for (const line of listing.split("\n")) {
+    if (line.startsWith("p")) pid = Number.parseInt(line.slice(1), 10);
+    else if (line.startsWith("n") && line.slice(1) === path && pid !== null) owners.add(pid);
+  }
+  owners.delete(process.pid);
+  for (const owner of owners) {
+    const command = (await execText("ps", ["-o", "comm=", "-p", String(owner)])).trim();
+    if (NodePath.basename(command) === HELPER_EXECUTABLE) return owner;
+  }
+  return null;
+};
+
+/** `process.kill`: throws when the process is gone or not ours. */
+export type SignalProcess = (pid: number, signal: NodeJS.Signals | 0) => void;
+
+const unavailable = (reason: string, message: string, terminal = false) =>
   new HelperRequestError({
     code: "computer_use_unavailable",
     message,
     details: { reason },
-    retryable: reason !== "unsupported_platform",
+    retryable: !terminal && !COMPUTER_USE_TERMINAL_REASONS.has(reason),
   });
 
 interface Attempt {
   child: HelperChild | null;
   client: HelperClient | null;
+  /** `hello.pid`: the process serving the socket, ours or one found after exit 66. */
+  pid: number | null;
   done: boolean;
 }
 
@@ -163,6 +232,12 @@ export interface HelperSupervisorOptions {
   readonly timers?: SupervisorTimers;
   readonly socketTimeoutMs?: number;
   readonly checkSocket?: (path: string) => Promise<"ready" | "missing" | "unsafe">;
+  /** True when the socket accepts a connection. */
+  readonly probeSocket?: (path: string) => Promise<boolean>;
+  /** The process listening on the socket, for a helper that never said hello to us. */
+  readonly findSocketOwner?: (path: string) => Promise<number | null>;
+  readonly signalProcess?: SignalProcess;
+  readonly handshakeTimeoutMs?: number;
   readonly onStatus?: (status: ComputerUseHelperStatus) => void;
   readonly onNotification?: (notification: HelperNotification) => void;
   readonly log?: (message: string) => void;
@@ -179,6 +254,8 @@ export class HelperSupervisor {
   private runningSince: number | null = null;
   private restartTimer: unknown = null;
   private mismatchReinstalled = false;
+  /** While false (computer use is off), nothing starts the helper, not even a pending restart. */
+  private startAllowed = true;
   private currentStatus: ComputerUseHelperStatus = { state: "stopped" };
   private readonly timers: SupervisorTimers;
   private readonly spawn: SpawnHelper;
@@ -193,6 +270,12 @@ export class HelperSupervisor {
     this.timers = options.timers ?? systemTimers;
     this.log = options.log ?? (() => {});
     this.spawn = options.spawn ?? spawnHelperProcess(this.log);
+  }
+
+  /** Turning computer use off holds starts first, so a pending restart cannot slip in. */
+  setStartAllowed(allowed: boolean): void {
+    this.startAllowed = allowed;
+    if (!allowed) this.cancelRestart();
   }
 
   get status(): ComputerUseHelperStatus {
@@ -211,8 +294,11 @@ export class HelperSupervisor {
       return Promise.resolve(this.current.client);
     }
     if (this.starting) return this.starting;
+    if (!this.startAllowed) {
+      return Promise.reject(unavailable("disabled", "computer use is turned off", true));
+    }
     if (this.terminal) {
-      return Promise.reject(unavailable(this.terminal.reason, this.terminal.detail));
+      return Promise.reject(unavailable(this.terminal.reason, this.terminal.detail, true));
     }
     if (this.restartTimer !== null) {
       return Promise.reject(
@@ -241,14 +327,19 @@ export class HelperSupervisor {
     if (attempt) {
       attempt.done = true;
       attempt.client?.close();
-      if (attempt.child) await this.terminate(attempt.child);
+      await this.terminateAttempt(attempt);
     }
     if (!this.terminal) this.setStatus({ state: "stopped" });
   }
 
-  /** "Restart helper": clears the crash counter and starts again. */
+  /**
+   * "Restart helper": clears the crash counter and starts again. A foreign
+   * helper holding the socket is stopped first, if it runs as this user.
+   */
   async restart(): Promise<HelperClient> {
+    const foreign = this.terminal?.reason === "helper_foreign_instance";
     await this.stop({ reset: true });
+    if (foreign) await this.stopSocketOwner();
     return this.client();
   }
 
@@ -264,7 +355,7 @@ export class HelperSupervisor {
       this.fatal("unsupported_platform", "computer use needs macOS 14 or later");
       throw unavailable("unsupported_platform", "computer use needs macOS 14 or later");
     }
-    const attempt: Attempt = { child: null, client: null, done: false };
+    const attempt: Attempt = { child: null, client: null, pid: null, done: false };
     this.current = attempt;
     this.setStatus({ state: "starting" });
     try {
@@ -278,11 +369,15 @@ export class HelperSupervisor {
       attempt.done = true;
       if (this.current === attempt) this.current = null;
       attempt.client?.close();
-      if (attempt.child) void this.terminate(attempt.child);
+      void this.terminateAttempt(attempt);
       if (error instanceof StartFailure) {
         if (error.terminal) this.fatal(error.reason, error.message);
         else this.recordCrash(error.reason, error.message);
-        throw unavailable(this.terminal?.reason ?? error.reason, error.message);
+        throw unavailable(
+          this.terminal?.reason ?? error.reason,
+          error.message,
+          this.terminal !== null,
+        );
       }
       throw error;
     }
@@ -291,8 +386,10 @@ export class HelperSupervisor {
   private async launch(attempt: Attempt): Promise<HelperClient> {
     try {
       this.install = await this.options.installer.ensureInstalled({
+        // Stop any running helper, ours or not, before its bundle is replaced.
         beforeReplace: async () => {
-          if (attempt.child) await this.terminate(attempt.child);
+          if (attempt.child || attempt.pid !== null) await this.terminateAttempt(attempt);
+          else await this.stopSocketOwner(this.hello?.pid ?? null);
         },
       });
       await this.options.installer.verifyInstalled();
@@ -314,9 +411,21 @@ export class HelperSupervisor {
     const deadline =
       this.timers.now() + (this.options.socketTimeoutMs ?? DEFAULT_SOCKET_TIMEOUT_MS);
     const checkSocket = this.options.checkSocket ?? defaultSocketOwnerCheck;
+    let alreadyRunning = false;
+    let closedWithoutReply = 0;
     for (;;) {
       this.checkCancelled(attempt);
       const exited = exit as HelperExit | null;
+      if (exited?.code === HELPER_EXIT.alreadyRunning) alreadyRunning = true;
+      if (alreadyRunning && closedWithoutReply >= FOREIGN_CLOSE_LIMIT) {
+        // Not a crash: a helper this app did not launch (say, a dev build left
+        // by an old launcher) holds the socket and rejects us.
+        throw new StartFailure(
+          "helper_foreign_instance",
+          "another BusyBoy Computer Use helper owns the socket and refuses this app; restart the helper to stop it",
+          true,
+        );
+      }
       if (exited !== null && exited.code !== HELPER_EXIT.alreadyRunning) {
         if (exited.code === HELPER_EXIT.unsafeSocketDir) {
           throw new StartFailure(
@@ -355,7 +464,8 @@ export class HelperSupervisor {
           attempt.child = null;
           return this.launch(attempt);
         }
-        if (connected !== "unreachable") return connected;
+        if (connected === "closed") closedWithoutReply += 1;
+        else if (connected !== "unreachable") return connected;
         // A stale socket from an earlier run stays until the new helper replaces it.
       }
       if (this.timers.now() >= deadline) {
@@ -371,7 +481,9 @@ export class HelperSupervisor {
     }
   }
 
-  private async connect(attempt: Attempt): Promise<HelperClient | "mismatch" | "unreachable"> {
+  private async connect(
+    attempt: Attempt,
+  ): Promise<HelperClient | "mismatch" | "unreachable" | "closed"> {
     let connected: Awaited<ReturnType<typeof HelperClient.connect>>;
     try {
       connected = await HelperClient.connect({
@@ -379,18 +491,26 @@ export class HelperSupervisor {
         clientVersion: this.options.clientVersion,
         onNotification: (notification) => this.options.onNotification?.(notification),
         onClose: (error) => this.onConnectionClosed(attempt, error),
+        ...(this.options.handshakeTimeoutMs === undefined
+          ? {}
+          : { timeoutMs: this.options.handshakeTimeoutMs }),
       });
     } catch (error) {
       if (error instanceof HelperRequestError && error.error.code === "version_mismatch") {
         return "mismatch";
       }
-      return "unreachable";
+      const reason =
+        error instanceof HelperRequestError
+          ? (error.error.details as { reason?: unknown } | undefined)?.reason
+          : undefined;
+      return reason === "helper_disconnected" ? "closed" : "unreachable";
     }
     if (attempt.done) {
       connected.client.close();
       this.checkCancelled(attempt);
     }
     attempt.client = connected.client;
+    attempt.pid = connected.hello.pid ?? null;
     this.hello = connected.hello;
     this.runningSince = this.timers.now();
     this.setStatus({ state: "running" });
@@ -421,7 +541,7 @@ export class HelperSupervisor {
     attempt.done = true;
     if (this.current === attempt) this.current = null;
     attempt.client?.close();
-    if (attempt.child) void this.terminate(attempt.child);
+    void this.terminateAttempt(attempt);
     this.log(`computer-use helper failed: ${detail}`);
     this.recordCrash("helper_crashed", detail);
   }
@@ -449,9 +569,10 @@ export class HelperSupervisor {
       detail: `${detail}; restarting in ${delay / 1000} s`,
     });
     this.cancelRestart();
+    if (!this.startAllowed) return;
     this.restartTimer = this.timers.setTimeout(() => {
       this.restartTimer = null;
-      this.client().catch(() => undefined);
+      if (this.startAllowed) this.client().catch(() => undefined);
     }, delay);
   }
 
@@ -466,9 +587,26 @@ export class HelperSupervisor {
     this.restartTimer = null;
   }
 
-  /** SIGTERM, then SIGKILL after the grace period. */
-  private async terminate(child: HelperChild): Promise<void> {
+  /** Stops what an attempt runs: its child if it has one, else the pid it said hello from. */
+  private async terminateAttempt(attempt: Attempt): Promise<void> {
+    const child = attempt.child;
+    if (child) {
+      await this.terminate(child, attempt.pid);
+    } else if (attempt.pid !== null) {
+      await this.terminatePid(attempt.pid);
+    }
+  }
+
+  /**
+   * SIGTERM, then SIGKILL after the grace period; then wait for the socket to
+   * go. Stage 1 forwards SIGTERM to the serving process, and the serving
+   * process stops itself when stage 1 dies, so the socket is the real signal.
+   */
+  private async terminate(child: HelperChild, servingPid: number | null = null): Promise<void> {
     child.kill("SIGTERM");
+    // The child may be one that exited 66 (or is about to) while another serves.
+    const other = servingPid !== null && servingPid !== child.pid ? servingPid : null;
+    if (other !== null && this.ownsProcess(other)) this.signal(other, "SIGTERM");
     let timer: unknown = null;
     const killed = await Promise.race([
       child.exited.then(() => false),
@@ -480,6 +618,57 @@ export class HelperSupervisor {
     if (killed) {
       child.kill("SIGKILL");
       await child.exited;
+    }
+    if (await this.waitForSocketGone(SOCKET_GONE_TIMEOUT_MS)) return;
+    if (other !== null && this.ownsProcess(other)) {
+      this.signal(other, "SIGKILL");
+      await this.waitForSocketGone(SOCKET_GONE_TIMEOUT_MS, other);
+    }
+  }
+
+  /** A helper BusyBoy did not spawn: SIGTERM, wait for the socket to go, then SIGKILL. */
+  private async terminatePid(pid: number): Promise<void> {
+    if (!this.ownsProcess(pid)) return;
+    this.signal(pid, "SIGTERM");
+    if (await this.waitForSocketGone(SOCKET_GONE_TIMEOUT_MS, pid)) return;
+    if (this.ownsProcess(pid)) this.signal(pid, "SIGKILL");
+    await this.waitForSocketGone(SOCKET_GONE_TIMEOUT_MS, pid);
+  }
+
+  /** Stops whatever listens on the socket, when it is a helper running as this user. */
+  private async stopSocketOwner(hint: number | null = null): Promise<void> {
+    const find = this.options.findSocketOwner ?? defaultFindSocketOwner;
+    const pid = hint ?? (await find(this.options.socketPath).catch(() => null));
+    if (pid !== null) await this.terminatePid(pid);
+  }
+
+  /** Same user: signal 0 succeeds only for live processes we may signal. */
+  private ownsProcess(pid: number): boolean {
+    try {
+      this.signal(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private signal(pid: number, signal: NodeJS.Signals | 0): void {
+    if (this.options.signalProcess) this.options.signalProcess(pid, signal);
+    else process.kill(pid, signal);
+  }
+
+  /** True once the socket file is gone or refuses connections, or `pid` has exited. */
+  private async waitForSocketGone(timeoutMs: number, pid: number | null = null): Promise<boolean> {
+    const checkSocket = this.options.checkSocket ?? defaultSocketOwnerCheck;
+    const probe = this.options.probeSocket ?? defaultSocketProbe;
+    const deadline = this.timers.now() + timeoutMs;
+    for (;;) {
+      if (pid !== null && !this.ownsProcess(pid)) return true;
+      const socket = await checkSocket(this.options.socketPath).catch(() => "missing" as const);
+      if (socket !== "ready") return true;
+      if (!(await probe(this.options.socketPath).catch(() => false))) return true;
+      if (this.timers.now() >= deadline) return false;
+      await new Promise<void>((resolve) => this.timers.setTimeout(resolve, SOCKET_POLL_MS));
     }
   }
 

@@ -25,7 +25,7 @@ const writeBundle = (bundle: string, version: string, executable: string) => {
   NodeFS.writeFileSync(NodePath.join(bundle, "Contents/MacOS/busyboy-computer-use"), executable);
 };
 
-const setup = () => {
+const setup = (options: { readonly rename?: (from: string, to: string) => Promise<void> } = {}) => {
   const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "cu-install-"));
   dirs.push(root);
   const bundled = NodePath.join(root, "resources", HELPER_BUNDLE_NAME);
@@ -46,7 +46,7 @@ const setup = () => {
     }
     throw new Error(`unexpected ${command}`);
   };
-  const installer = new HelperInstaller({ bundledPath: bundled, installRoot, run });
+  const installer = new HelperInstaller({ bundledPath: bundled, installRoot, run, ...options });
   const installedExecutable = () =>
     NodeFS.readFileSync(
       NodePath.join(installer.installedPath, "Contents/MacOS/busyboy-computer-use"),
@@ -130,5 +130,50 @@ describe("HelperInstaller", () => {
     await expect(test.installer.verifyInstalled()).rejects.toMatchObject({
       reason: "helper_missing",
     });
+  });
+
+  it("reports a build without the helper as not bundled, even over an earlier install", async () => {
+    const test = setup();
+    writeBundle(test.bundled, "100", "good");
+    await test.installer.ensureInstalled();
+    const calls = test.calls.length;
+    const unbundled = new HelperInstaller({
+      bundledPath: null,
+      installRoot: test.installRoot,
+      run: async () => {
+        throw new Error("nothing should run");
+      },
+    });
+    await expect(unbundled.ensureInstalled()).rejects.toMatchObject({
+      reason: "helper_not_bundled",
+    });
+    expect(test.calls.length).toBe(calls);
+  });
+
+  it("keeps the previous install when neither the new copy nor the old one can be moved back", async () => {
+    let failMoves = false;
+    const test = setup({
+      rename: async (from, to) => {
+        // The first move (old install aside) works; the next two fail.
+        if (failMoves && !from.endsWith(HELPER_BUNDLE_NAME)) throw new Error("EIO");
+        NodeFS.renameSync(from, to);
+      },
+    });
+    writeBundle(test.bundled, "100", "good");
+    await test.installer.ensureInstalled();
+
+    writeBundle(test.bundled, "101", "next");
+    failMoves = true;
+    await expect(test.installer.ensureInstalled()).rejects.toMatchObject({
+      reason: "helper_install_failed",
+    });
+    const kept = test.leftovers().filter((name) => name.endsWith(".old"));
+    expect(kept).toHaveLength(1);
+    expect(
+      NodeFS.readFileSync(
+        NodePath.join(test.installRoot, kept[0]!, "Contents/MacOS/busyboy-computer-use"),
+        "utf8",
+      ),
+    ).toBe("good");
   });
 });

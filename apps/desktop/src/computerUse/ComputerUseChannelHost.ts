@@ -6,6 +6,7 @@
  * while enabled) and writes response, notification, and status lines back.
  */
 import {
+  COMPUTER_USE_TERMINAL_REASONS,
   ComputerUseErrorCode,
   DESKTOP_COMPUTER_USE_METHODS,
   DesktopComputerUseCommand,
@@ -40,26 +41,60 @@ import {
 
 /** Stop the helper after this long without a session or a request. */
 export const IDLE_STOP_MS = 10 * 60_000;
-const SESSION_END_TIMEOUT_MS = 1_000;
+/** Turning computer use off ends sessions and stops the helper within this, together. */
+export const DISABLE_DEADLINE_MS = 2_000;
 
 const isErrorCode = Schema.is(ComputerUseErrorCode);
 
-const toErrorObject = (error: unknown): ComputerUseErrorObject => {
-  if (error instanceof HelperRequestError) {
-    const { code, message, hint, details, retryable } = error.error;
-    if (isErrorCode(code)) {
-      return {
-        code,
-        message,
-        retryable,
-        ...(hint === undefined ? {} : { hint }),
-        ...(details === undefined ? {} : { details }),
-      };
-    }
-    return { code: "internal_error", message: `${code}: ${message}`, retryable: false };
+/** Helper-level failures: tool callers see them as computer use being unavailable. */
+const HELPER_LEVEL_CODES: ReadonlySet<string> = new Set([
+  "invalid_frame",
+  "version_mismatch",
+  "internal_error",
+]);
+
+const unavailableFor = (reason: string, message: string): ComputerUseErrorObject => ({
+  code: "computer_use_unavailable",
+  message,
+  details: { reason },
+  retryable: false,
+});
+
+/** The error a tool caller gets. Helper status keeps the raw reason. */
+export const toErrorObject = (error: unknown): ComputerUseErrorObject => {
+  if (!(error instanceof HelperRequestError)) {
+    return unavailableFor("internal_error", String(error));
   }
-  return { code: "internal_error", message: String(error), retryable: false };
+  const { code, message, hint, details, retryable } = error.error;
+  if (!isErrorCode(code) || HELPER_LEVEL_CODES.has(code)) {
+    return unavailableFor(isErrorCode(code) ? code : "internal_error", `${code}: ${message}`);
+  }
+  const reason =
+    code === "computer_use_unavailable" && typeof details === "object" && details !== null
+      ? (details as { reason?: unknown }).reason
+      : undefined;
+  return {
+    code,
+    message,
+    retryable:
+      retryable && !(typeof reason === "string" && COMPUTER_USE_TERMINAL_REASONS.has(reason)),
+    ...(hint === undefined ? {} : { hint }),
+    ...(details === undefined ? {} : { details }),
+  };
 };
+
+const cancelledBeforeSendError = new HelperRequestError({
+  code: "stopped",
+  message: "the request was cancelled before it reached the helper",
+  retryable: false,
+});
+
+const notRunningError = new HelperRequestError({
+  code: "computer_use_unavailable",
+  message: "the helper is not running",
+  details: { reason: "helper_unreachable" },
+  retryable: true,
+});
 
 const disabledError: ComputerUseErrorObject = {
   code: "computer_use_unavailable",
@@ -70,7 +105,7 @@ const disabledError: ComputerUseErrorObject = {
 
 type Supervisor = Pick<
   HelperSupervisor,
-  "client" | "connected" | "stop" | "restart" | "status" | "install" | "hello"
+  "client" | "connected" | "stop" | "restart" | "status" | "install" | "hello" | "setStartAllowed"
 >;
 
 interface Session {
@@ -90,6 +125,9 @@ export class ComputerUseRouter {
   private readonly sessions = new Map<string, Session>();
   /** Server request id → helper request id, for `cancel {requestId}`. */
   private readonly inFlight = new Map<number, number>();
+  /** Server ids waiting for the helper to start, and those cancelled meanwhile. */
+  private readonly awaitingSend = new Set<number>();
+  private readonly cancelledBeforeSend = new Set<number>();
   private idleTimer: unknown = null;
   private readonly timers: SupervisorTimers;
   private readonly idleStopMs: number;
@@ -106,6 +144,8 @@ export class ComputerUseRouter {
     this.emit = emit;
     this.timers = options.timers ?? systemTimers;
     this.idleStopMs = options.idleStopMs ?? IDLE_STOP_MS;
+    // Starts disabled: nothing may start the helper until configure(true).
+    supervisor.setStartAllowed(false);
   }
 
   get isEnabled(): boolean {
@@ -122,6 +162,15 @@ export class ComputerUseRouter {
     return { type: "status", ...status };
   }
 
+  /**
+   * Every helper status change. A new connection, a crash, or a stop means the
+   * helper no longer has our sessions, so forget them (and let idle stop run).
+   */
+  helperStatusChanged(status: ComputerUseHelperStatus): DesktopComputerUseEventType {
+    if (status.state !== "starting") this.sessions.clear();
+    return this.statusEvent(status);
+  }
+
   async handle(command: DesktopComputerUseCommandType): Promise<void> {
     if (command.type === "configure") {
       await this.configure(command.enabled);
@@ -129,12 +178,14 @@ export class ComputerUseRouter {
     }
     const { id, method, params } = command;
     try {
-      const result = await this.route(id, method, params);
+      const result = await this.route(id, method, params, command.passive === true);
       this.emit({ type: "response", id, result });
     } catch (error) {
       this.emit({ type: "response", id, error: toErrorObject(error) });
     } finally {
       this.inFlight.delete(id);
+      this.awaitingSend.delete(id);
+      this.cancelledBeforeSend.delete(id);
     }
   }
 
@@ -142,9 +193,18 @@ export class ComputerUseRouter {
     if (enabled === this.enabled) return;
     this.enabled = enabled;
     this.clearIdle();
-    if (!enabled) await this.endAllSessions();
-    // Toggling also clears a crash cutoff or other terminal error.
-    await this.supervisor.stop({ reset: true });
+    if (enabled) {
+      this.supervisor.setStartAllowed(true);
+      // Toggling also clears a crash cutoff or other terminal error.
+      await this.supervisor.stop({ reset: true });
+      return;
+    }
+    // Hold starts first, so a pending restart cannot run while we stop.
+    this.supervisor.setStartAllowed(false);
+    await this.withDeadline(DISABLE_DEADLINE_MS, async (remaining) => {
+      await this.endAllSessions(remaining());
+      await this.supervisor.stop({ reset: true });
+    });
   }
 
   /** A backend (re)attached: turns from the previous one are gone. */
@@ -155,8 +215,26 @@ export class ComputerUseRouter {
   async shutdown(): Promise<void> {
     this.enabled = false;
     this.clearIdle();
-    await this.endAllSessions();
-    await this.supervisor.stop();
+    this.supervisor.setStartAllowed(false);
+    await this.withDeadline(DISABLE_DEADLINE_MS, async (remaining) => {
+      await this.endAllSessions(remaining());
+      await this.supervisor.stop();
+    });
+  }
+
+  /** Runs `work` but returns by `ms`; the rest finishes in the background. */
+  private async withDeadline(
+    ms: number,
+    work: (remaining: () => number) => Promise<void>,
+  ): Promise<void> {
+    const end = this.timers.now() + ms;
+    let timer: unknown = null;
+    const expired = new Promise<void>((resolve) => {
+      timer = this.timers.setTimeout(resolve, ms);
+    });
+    const running = work(() => Math.max(0, end - this.timers.now())).catch(() => undefined);
+    await Promise.race([running, expired]);
+    this.timers.clearTimeout(timer);
   }
 
   private info(): DesktopComputerUseHelperInfo {
@@ -171,9 +249,20 @@ export class ComputerUseRouter {
     };
   }
 
-  private async route(id: number, method: string, params: unknown): Promise<unknown> {
+  private async route(
+    id: number,
+    method: string,
+    params: unknown,
+    passive: boolean,
+  ): Promise<unknown> {
     if (method === DESKTOP_COMPUTER_USE_METHODS.helperStatus) return this.info();
     if (!this.enabled) throw new HelperRequestError(disabledError);
+    if (passive) {
+      // Polling: answer from a running helper only, and leave its idle clock alone.
+      const client = this.supervisor.connected;
+      if (!client) throw notRunningError;
+      return client.send(method, params).response;
+    }
     this.touch();
     if (method === DESKTOP_COMPUTER_USE_METHODS.helperRestart) {
       await this.supervisor.restart();
@@ -187,11 +276,15 @@ export class ComputerUseRouter {
         const session = sessionOf(params);
         if (session) this.sessions.delete(session.turnId);
       }
+      if (method === "cancel" && this.cancelBeforeSend(params)) return {};
       if (!client) return {};
       return client.send(method, method === "cancel" ? this.cancelParams(params) : params).response;
     }
 
+    this.awaitingSend.add(id);
     const client = await this.supervisor.client();
+    this.awaitingSend.delete(id);
+    if (this.cancelledBeforeSend.has(id)) throw cancelledBeforeSendError;
     const sent = client.send(method, params);
     this.inFlight.set(id, sent.id);
     const result = await sent.response;
@@ -200,6 +293,14 @@ export class ComputerUseRouter {
       if (session) this.sessions.set(session.turnId, session);
     }
     return result;
+  }
+
+  /** A cancel for a request still waiting for the helper: answer it `stopped` without sending. */
+  private cancelBeforeSend(params: unknown): boolean {
+    const requestId = (params as { requestId?: unknown } | null)?.requestId;
+    if (typeof requestId !== "number" || !this.awaitingSend.has(requestId)) return false;
+    this.cancelledBeforeSend.add(requestId);
+    return true;
   }
 
   /** Server ids mean nothing to the helper; translate, or cancel nothing. */
@@ -211,21 +312,21 @@ export class ComputerUseRouter {
     return { requestId: helperId ?? -1 };
   }
 
-  private async endAllSessions(): Promise<void> {
+  private async endAllSessions(timeoutMs = DISABLE_DEADLINE_MS): Promise<void> {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     const client = this.supervisor.connected;
     if (!client || sessions.length === 0) return;
-    await Promise.all(
-      sessions.map((session) =>
-        Promise.race([
-          client.request("session.end", session).catch(() => undefined),
-          new Promise((resolve) =>
-            this.timers.setTimeout(() => resolve(undefined), SESSION_END_TIMEOUT_MS),
-          ),
-        ]),
+    let timer: unknown = null;
+    await Promise.race([
+      Promise.all(
+        sessions.map((session) => client.request("session.end", session).catch(() => undefined)),
       ),
-    );
+      new Promise((resolve) => {
+        timer = this.timers.setTimeout(() => resolve(undefined), timeoutMs);
+      }),
+    ]);
+    this.timers.clearTimeout(timer);
   }
 
   private touch(): void {
@@ -316,7 +417,7 @@ export const make = Effect.gen(function* () {
       if (status.state === "error") {
         runFork(logWarning("computer-use helper unavailable", { ...status }));
       }
-      emit(router.statusEvent(status));
+      emit(router.helperStatusChanged(status));
     },
     onNotification: (notification) =>
       emit({ type: "notification", method: notification.method, params: notification.params }),

@@ -21,6 +21,18 @@ describe("HelperFraming", () => {
     ]);
   });
 
+  it("decodes a large frame delivered one byte at a time", () => {
+    const body = { text: "y".repeat(200_000) };
+    const frame = encodeHelperFrame(body);
+    const decoder = new HelperFrameDecoder();
+    const received: Array<unknown> = [];
+    for (let index = 0; index < frame.length; index += 1) {
+      received.push(...decoder.push(frame.subarray(index, index + 1)));
+    }
+    expect(received).toEqual([body]);
+    expect(decoder.push(new Uint8Array(0))).toEqual([]);
+  });
+
   it("refuses oversized frames", () => {
     const header = new Uint8Array(4);
     new DataView(header.buffer).setUint32(0, MAX_FRAME_BYTES + 1, false);
