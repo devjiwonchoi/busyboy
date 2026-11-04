@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 
 import {
+  PROJECT_MANAGER_INSTRUCTIONS,
   T3_CODE_ORCHESTRATION_INSTRUCTIONS,
   t3AcpPromptWithInstructions,
   t3OrchestrationPromptForFirstRun,
@@ -61,6 +62,36 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(injected, "BusyBoy collaborative browser");
     assert.include(injected, "BusyBoy orchestration");
     assert.include(injected, "<user_request>\nInspect the repository.\n</user_request>");
+  });
+
+  it("adds ACP team instructions after orchestration and reinjects when they change", () => {
+    const prompt = "Ship the login fix.";
+    const otherState = { interactionMode: "default", hasT3Mcp: true } as const;
+    const pmState = { ...otherState, teamInstructions: PROJECT_MANAGER_INSTRUCTIONS };
+
+    const pm = t3AcpPromptWithInstructions({ prompt, state: pmState });
+    assert.isAbove(pm.indexOf("BusyBoy project manager"), pm.indexOf("BusyBoy orchestration"));
+    assert.notInclude(
+      t3AcpPromptWithInstructions({ prompt, state: otherState }),
+      "BusyBoy project manager",
+    );
+    assert.equal(
+      t3AcpPromptWithInstructions({ prompt, state: pmState, previousState: pmState }),
+      prompt,
+    );
+    assert.include(
+      t3AcpPromptWithInstructions({ prompt, state: pmState, previousState: otherState }),
+      "BusyBoy project manager",
+    );
+  });
+
+  it("tells the PM to report only on a due sitrep", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "call `team_status` first");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "[Sitrep due] since <time>");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "keep it to one short line naming what you did");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, 'reason: "user_asked"');
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "Mention: ...");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "never the user's approval");
   });
 
   it("reinjects ACP guidance only when mode or tool availability changes", () => {

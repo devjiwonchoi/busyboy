@@ -56,6 +56,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import packageJson from "../../../package.json" with { type: "json" };
 import * as ServerConfig from "../../config.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as EffectWorker from "../EffectWorker.ts";
@@ -516,6 +517,38 @@ describe("CodexAdapterV2 runtime policy", () => {
         params.additionalContext?.t3_code_orchestration?.value ?? "",
         "structured object, never as JSON text",
       );
+    }),
+  );
+
+  it.effect("adds the PM instructions as project team context only for a PM thread", () =>
+    Effect.gen(function* () {
+      const paramsFor = (teamInstructions: string | undefined) =>
+        CodexAdapterV2.buildCodexTurnStartParams({
+          nativeThreadId: "native-project-team-instructions",
+          codexInput: [{ type: "text", text: "ship the login fix" }],
+          runtimePolicy: {
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            cwd: null,
+          },
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.4",
+          },
+          hasT3Mcp: true,
+          ...(teamInstructions === undefined ? {} : { teamInstructions }),
+        });
+
+      const pm = yield* paramsFor(PROJECT_MANAGER_INSTRUCTIONS);
+      assert.deepEqual(pm.additionalContext?.busyboy_project_team, {
+        kind: "application",
+        value: PROJECT_MANAGER_INSTRUCTIONS,
+      });
+      assert.include(pm.additionalContext?.t3_code_orchestration?.value ?? "", "delegate_task");
+
+      const other = yield* paramsFor(undefined);
+      assert.isUndefined(other.additionalContext?.busyboy_project_team);
+      assert.isDefined(other.additionalContext?.t3_code_orchestration);
     }),
   );
 

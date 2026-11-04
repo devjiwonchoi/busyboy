@@ -47,6 +47,8 @@ import {
 import * as WorktreeHandlers from "./toolkits/worktree/handlers.ts";
 import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
+import * as ProjectTeamHandlers from "./toolkits/projectTeam/handlers.ts";
+import { ProjectTeamToolkit } from "./toolkits/projectTeam/tools.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
@@ -753,6 +755,11 @@ export const layerOrchestratorToolkit = toolkitRegistration(
   OrchestratorHandlers.layer,
 ).pipe(Layer.provide(OrchestratorMcpService.layer), Layer.provide(ThreadMetadataMcpService.layer));
 
+export const layerProjectTeamToolkit = toolkitRegistration(
+  ProjectTeamToolkit,
+  ProjectTeamHandlers.layer,
+).pipe(Layer.provide(OrchestratorMcpService.layer));
+
 export const layerThreadToolkit = toolkitRegistration(ThreadToolkit, ThreadHandlers.layer);
 
 const layerWorktreeToolkitRegistration = toolkitRegistration(
@@ -793,6 +800,7 @@ export const layerMcpTransport = McpServer.layerHttp({
 export const layer = Layer.mergeAll(
   layerPreviewToolkit,
   layerOrchestratorToolkit,
+  layerProjectTeamToolkit,
   layerThreadToolkit,
   layerAttachmentToolkit,
   layerProjectRegistration,

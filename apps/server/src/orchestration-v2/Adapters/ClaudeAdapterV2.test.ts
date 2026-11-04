@@ -73,11 +73,13 @@ import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 import { attachmentRelativePath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { PreviewControlsToolkit } from "../../mcp/toolkits/previewControls/tools.ts";
 import { HtmlToolkit } from "../../mcp/toolkits/html/tools.ts";
 import { EnvironmentToolkit } from "../../mcp/toolkits/environment/tools.ts";
 import { ProjectToolkit } from "../../mcp/toolkits/project/tools.ts";
+import { ProjectTeamToolkit } from "../../mcp/toolkits/projectTeam/tools.ts";
 import { WorktreeToolkit } from "../../mcp/toolkits/worktree/tools.ts";
 import { ThreadToolkit } from "../../mcp/toolkits/thread/tools.ts";
 import { OrchestratorToolkit } from "../../mcp/toolkits/orchestrator/tools.ts";
@@ -559,6 +561,43 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     assert.deepEqual(overrides, {});
   });
 
+  it("appends the PM instructions to the system prompt only for a PM thread", () => {
+    const appendFor = (mcpSession: McpProviderSession.McpProviderSessionConfig) => {
+      const overrides = ClaudeAdapterV2.claudeMcpQueryOverrides({
+        mcpSession,
+        readOnlySandbox: false,
+      });
+      const options = ClaudeAdapterV2.makeClaudeQueryOptions({
+        modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+        nativeThreadId: "native-project-team",
+        resume: false,
+        cwd: "/workspace",
+        ...overrides,
+      });
+      const systemPrompt = options.systemPrompt;
+      assert.isTrue(typeof systemPrompt === "object" && !Array.isArray(systemPrompt));
+      return {
+        append: (systemPrompt as { readonly append?: string }).append ?? "",
+        policyKey: ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(
+          ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(CLAUDE_TEST_RUNTIME_POLICY),
+          overrides,
+        ),
+      };
+    };
+    const threadId = ThreadId.make("thread-claude-project-team");
+    const pm = appendFor({
+      ...mcpSessionFor(threadId),
+      teamInstructions: PROJECT_MANAGER_INSTRUCTIONS,
+    });
+    const other = appendFor(mcpSessionFor(threadId));
+
+    assert.include(pm.append, "BusyBoy orchestration");
+    assert.isTrue(pm.append.endsWith(PROJECT_MANAGER_INSTRUCTIONS));
+    assert.include(other.append, "BusyBoy orchestration");
+    assert.notInclude(other.append, "BusyBoy project manager");
+    assert.notEqual(pm.policyKey, other.policyKey);
+  });
+
   it("preserves an explicit allowlist when no MCP session exists", () => {
     const overrides = ClaudeAdapterV2.claudeMcpQueryOverrides({
       mcpSession: undefined,
@@ -692,6 +731,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
       ...Object.values(ThreadToolkit.tools),
       ...Object.values(WorktreeToolkit.tools),
       ...Object.values(ProjectToolkit.tools),
+      ...Object.values(ProjectTeamToolkit.tools),
       ...Object.values(EnvironmentToolkit.tools),
       ...Object.values(PreviewControlsToolkit.tools),
       ...Object.values(HtmlToolkit.tools),
