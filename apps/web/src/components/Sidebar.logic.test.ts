@@ -10,6 +10,7 @@ import {
   archiveSelectedThreadEntries,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
+  buildProjectHeaderMenuItems,
   buildMultiSelectThreadContextMenuItems,
   createThreadJumpHintVisibilityController,
   deleteSelectedThreadEntries,
@@ -2214,5 +2215,36 @@ describe("Working shelf (beta)", () => {
         unpin: true,
       });
     });
+  });
+});
+
+describe("buildProjectHeaderMenuItems", () => {
+  it("offers settings and removal on a plain project heading", () => {
+    expect(buildProjectHeaderMenuItems({ hasProjectManager: false, canRemove: true })).toEqual([
+      { id: "project-settings", label: "Project settings", icon: "settings" },
+      {
+        id: "remove-project",
+        label: "Remove project…",
+        icon: "trash",
+        destructive: true,
+        disabled: false,
+        separatorBefore: true,
+      },
+    ]);
+  });
+
+  it("adds project manager settings on a manager heading", () => {
+    expect(
+      buildProjectHeaderMenuItems({ hasProjectManager: true, canRemove: true }).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["project-settings", "project-manager-settings", "remove-project"]);
+  });
+
+  it("keeps settings but disables removal without operate access", () => {
+    const items = buildProjectHeaderMenuItems({ hasProjectManager: true, canRemove: false });
+    expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual([
+      "remove-project",
+    ]);
   });
 });

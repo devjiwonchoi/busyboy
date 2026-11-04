@@ -557,6 +557,38 @@ export function buildBulkUnpinContextMenuItem(input: {
   return { id: "unpin", label: `Unpin (${input.pinnedCount})` };
 }
 
+export type ProjectHeaderMenuId =
+  | "project-settings"
+  | "project-manager-settings"
+  | "remove-project";
+
+/** Settings stay reachable read-only; removal needs operate access on every checkout. */
+export function buildProjectHeaderMenuItems(input: {
+  readonly hasProjectManager: boolean;
+  readonly canRemove: boolean;
+}): ReadonlyArray<ContextMenuItem<ProjectHeaderMenuId>> {
+  return [
+    { id: "project-settings", label: "Project settings", icon: "settings" },
+    ...(input.hasProjectManager
+      ? [
+          {
+            id: "project-manager-settings" as const,
+            label: "Project manager settings",
+            icon: "settings",
+          },
+        ]
+      : []),
+    {
+      id: "remove-project",
+      label: "Remove project…",
+      icon: "trash",
+      destructive: true,
+      disabled: !input.canRemove,
+      separatorBefore: true,
+    },
+  ];
+}
+
 export interface ThreadStatusPill {
   label:
     | "Working"

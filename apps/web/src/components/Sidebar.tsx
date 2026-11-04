@@ -129,6 +129,7 @@ import { useClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
+import { useRemoveProjectMembers } from "../hooks/useRemoveProjectMembers";
 import {
   useEnvironmentIdentities,
   useEnvironmentIds,
@@ -160,7 +161,11 @@ import {
 } from "../state/projectTeam";
 import { SidebarProjectManagerBadges, SidebarProjectManagerHeading } from "./SidebarProjectManager";
 import { SidebarThreadStatusIcon } from "./SidebarThreadStatusIcon";
-import { buildThreadRouteParams, resolveActiveThreadRouteRef } from "../threadRoutes";
+import {
+  buildThreadRouteParams,
+  resolveActiveThreadRouteRef,
+  resolveThreadRouteTarget,
+} from "../threadRoutes";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import type { SidebarThreadSummary } from "../types";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
@@ -179,6 +184,7 @@ import {
   filterSidebarV2VisibleThreads,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
+  buildProjectHeaderMenuItems,
   deleteSelectedThreadEntries,
   filterSidebarProjectScopeItems,
   formatWorkingDurationLabel,
@@ -1046,6 +1052,7 @@ function SortableSidebarMarker(props: {
   className?: string;
   children?: ReactNode;
   "data-testid"?: string;
+  onContextMenu?: (event: ReactMouseEvent) => void;
 }) {
   const { setNodeRef, transform, transition } = useSortable({
     id: sidebarMarkerId(props.marker),
@@ -1058,6 +1065,7 @@ function SortableSidebarMarker(props: {
       data-thread-selection-safe
       data-testid={props["data-testid"]}
       className={cn("list-none", props.className)}
+      onContextMenu={props.onContextMenu}
       style={{
         transform: CSS.Translate.toString(transform),
         transition: props.marker.endsWith("-placeholder") ? "none" : transition,
@@ -1163,6 +1171,7 @@ function SidebarProjectHeader(props: {
   expanded: boolean;
   onToggle: () => void;
   onNewThread: (() => void) | null;
+  onContextMenu: ((position: { x: number; y: number }) => void) | null;
   projectManager?: {
     readonly manager: SidebarSectionProjectManager;
     readonly isActive: boolean;
@@ -1170,12 +1179,20 @@ function SidebarProjectHeader(props: {
   };
 }) {
   const pm = props.projectManager;
+  const { onContextMenu } = props;
+  const handleContextMenu = onContextMenu
+    ? (event: ReactMouseEvent) => {
+        event.preventDefault();
+        onContextMenu({ x: event.clientX, y: event.clientY });
+      }
+    : undefined;
   if (pm) {
     return (
       <SortableSidebarMarker
         marker={props.marker}
         data-testid="sidebar-project-header"
         className="mx-0.5 mt-2"
+        {...(handleContextMenu ? { onContextMenu: handleContextMenu } : {})}
       >
         <SidebarProjectManagerHeading
           projectName={props.label}
@@ -1197,6 +1214,7 @@ function SidebarProjectHeader(props: {
       marker={props.marker}
       data-testid="sidebar-project-header"
       className="group/project mx-0.5 mt-2 flex h-7 items-center"
+      {...(handleContextMenu ? { onContextMenu: handleContextMenu } : {})}
     >
       <button
         type="button"
@@ -2509,6 +2527,19 @@ export default function Sidebar() {
       });
     },
   );
+  const openProjectManagerSettings = useStableCallback((projectGroup: SidebarProjectSnapshot) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    void router.navigate({
+      to: "/settings/projects",
+      search: {
+        project: getSidebarProjectSettingsKey(projectGroup, projectGroupingSettings, projects),
+      },
+      hash: "project-manager",
+      hashScrollIntoView: false,
+    });
+  });
   const handleProjectSettings = useStableCallback(
     (
       event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLInputElement>,
@@ -3339,6 +3370,71 @@ export default function Sidebar() {
     },
   );
 
+  const removeProjectMembers = useRemoveProjectMembers();
+  const handleProjectHeaderContextMenu = useStableCallback(
+    (
+      projectGroup: SidebarProjectSnapshot,
+      hasProjectManager: boolean,
+      position: { x: number; y: number },
+    ) => {
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) return;
+        const clicked = await settlePromise(() =>
+          api.contextMenu.show(
+            buildProjectHeaderMenuItems({
+              hasProjectManager,
+              canRemove: projectGroup.memberProjects.every((member) =>
+                readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
+              ),
+            }),
+            position,
+          ),
+        );
+        if (clicked._tag === "Failure") return;
+        switch (clicked.value) {
+          case "project-settings":
+            openProjectSettings(projectGroup);
+            return;
+          case "project-manager-settings":
+            openProjectManagerSettings(projectGroup);
+            return;
+          case "remove-project": {
+            const removed = await removeProjectMembers({
+              group: projectGroup,
+              members: projectGroup.memberProjects,
+              hasOtherMembers: false,
+            });
+            if (!removed) return;
+            // Read the route after the removal: only leave a thread or draft
+            // that went with the project.
+            const routeParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};
+            const target = resolveThreadRouteTarget(routeParams);
+            const removedProjectKeys = new Set(
+              projectGroup.memberProjects.map((member) => `${member.environmentId}:${member.id}`),
+            );
+            const draftSession =
+              target?.kind === "draft"
+                ? useComposerDraftStore.getState().getDraftSession(target.draftId)
+                : null;
+            const viewingRemovedProject =
+              target?.kind === "server"
+                ? removed.removedThreadRefs.some(
+                    (ref) => scopedThreadKey(ref) === scopedThreadKey(target.threadRef),
+                  )
+                : target?.kind === "draft" &&
+                  (draftSession === null ||
+                    removedProjectKeys.has(
+                      `${draftSession.environmentId}:${draftSession.projectId}`,
+                    ));
+            if (viewingRemovedProject) void router.navigate({ to: "/", replace: true });
+            return;
+          }
+        }
+      })();
+    },
+  );
+
   const handleDraftContextMenu = useStableCallback(
     (draftId: DraftId, position: { x: number; y: number }) => {
       void (async () => {
@@ -4110,6 +4206,16 @@ export default function Sidebar() {
                                 onToggle={() => toggleProjectCollapsed(projectKey)}
                                 onNewThread={
                                   projectGroup ? () => handleProjectNewThread(projectGroup) : null
+                                }
+                                onContextMenu={
+                                  projectGroup
+                                    ? (position) =>
+                                        handleProjectHeaderContextMenu(
+                                          projectGroup,
+                                          manager !== undefined,
+                                          position,
+                                        )
+                                    : null
                                 }
                                 {...(manager
                                   ? {
