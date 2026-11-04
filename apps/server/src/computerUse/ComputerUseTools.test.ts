@@ -55,17 +55,22 @@ const appState = (bundleId: string) => ({
 interface Harness {
   readonly requests: Array<{ method: string; params: Record<string, unknown> }>;
   readonly interrupted: Array<string>;
+  /** Requests and the cancels of interrupted requests (`cancel:<method>`), in order. */
+  readonly traffic: Array<string>;
   readonly dispatches: Array<unknown>;
   readonly items: Array<OrchestrationV2TurnItem>;
   readonly runs: Map<ThreadId, Array<{ id: RunId; status: string; ordinal: number }>>;
   hang: Set<string>;
   /** Requests for these methods wait until the gate opens, then answer as usual. */
   held: Map<string, Deferred.Deferred<void>>;
+  /** How many `run.interrupt` dispatches fail before one goes through. */
+  failInterrupts: number;
 }
 
 const makeHarness = (): Harness => ({
   requests: [],
   interrupted: [],
+  traffic: [],
   dispatches: [],
   items: [],
   runs: new Map([
@@ -74,6 +79,7 @@ const makeHarness = (): Harness => ({
   ]),
   hang: new Set(),
   held: new Map(),
+  failInterrupts: 0,
 });
 
 const fakeChannel = (harness: Harness) =>
@@ -83,11 +89,23 @@ const fakeChannel = (harness: Harness) =>
       Effect.gen(function* () {
         const input = params as Record<string, unknown>;
         harness.requests.push({ method, params: input });
+        harness.traffic.push(method);
         const gate = harness.held.get(method);
         if (gate !== undefined) yield* Deferred.await(gate);
         if (harness.hang.has(method)) {
           return yield* Effect.never.pipe(
-            Effect.onInterrupt(() => Effect.sync(() => harness.interrupted.push(method))),
+            // Like the real channel, sending the cancel takes a few ticks.
+            Effect.onInterrupt(() =>
+              Effect.yieldNow.pipe(
+                Effect.repeat({ times: 3 }),
+                Effect.andThen(
+                  Effect.sync(() => {
+                    harness.interrupted.push(method);
+                    harness.traffic.push(`cancel:${method}`);
+                  }),
+                ),
+              ),
+            ),
           );
         }
         switch (method) {
@@ -170,6 +188,12 @@ const fakeThreads = (harness: Harness) =>
     }) =>
       Effect.sync(() => {
         harness.dispatches.push(command);
+        if (command.type === "run.interrupt" && harness.failInterrupts > 0) {
+          harness.failInterrupts -= 1;
+          throw new Error("the orchestrator is busy");
+        }
+        // The run ends later, when the test sends its `run.updated` event.
+        if (command.type === "run.interrupt") return {};
         const index = harness.items.findIndex((item) => item.id === command.turnItemId);
         const existing = harness.items[index] as
           | Extract<OrchestrationV2TurnItem, { type: "computer_use_app_request" }>
@@ -218,10 +242,13 @@ const setup = (
       DesktopComputerUseChannel.DesktopComputerUseChannel,
       fakeChannel(harness),
     );
+    const threadsLayer = fakeThreads(harness);
     const layer = Layer.mergeAll(
-      ComputerUseTurns.layerWithoutEvents.pipe(Layer.provide(channelLayer)),
+      ComputerUseTurns.layerWithoutEvents.pipe(
+        Layer.provide(Layer.merge(channelLayer, threadsLayer)),
+      ),
       channelLayer,
-      fakeThreads(harness),
+      threadsLayer,
       ServerSettings.layerTest({ enableAgentComputerUse: true, ...settings }),
     );
     const context = yield* Layer.build(layer);
@@ -316,11 +343,48 @@ const setup = (
           } as never),
         ),
       );
+    const withTurns = <A>(
+      use: (turns: ComputerUseTurns.ComputerUseTurns["Service"]) => Effect.Effect<A>,
+    ) => run(Effect.flatMap(ComputerUseTurns.ComputerUseTurns, use));
+    /** What the helper sends when the user presses Esc or takes over the app. */
+    const helperStopped = (reason: string, turnId: string = RUN_1, threadId: ThreadId = THREAD_A) =>
+      withTurns((turns) =>
+        turns.handleNotification({ method: "stopped", params: { threadId, turnId, reason } }),
+      );
+    /** The run reaches a terminal state, as the orchestrator reports it. */
+    const runEnded = (status: string, threadId: ThreadId = THREAD_A, id: RunId = RUN_1) =>
+      Effect.gen(function* () {
+        const entry = harness.runs.get(threadId)?.find((candidate) => candidate.id === id);
+        if (entry !== undefined) entry.status = status;
+        yield* withTurns((turns) =>
+          turns.handleDomainEvent({
+            type: "run.updated",
+            threadId,
+            payload: { id, status },
+          } as never),
+        );
+      });
+    const waitForMethod = (method: string) =>
+      Effect.gen(function* () {
+        for (let attempt = 0; attempt < 200 && !methods().includes(method); attempt++) {
+          yield* Effect.yieldNow;
+        }
+        expect(methods()).toContain(method);
+      });
+    const interrupts = () =>
+      harness.dispatches.filter(
+        (command) => (command as { type: string }).type === "run.interrupt",
+      );
     return {
       hold,
       until,
       count,
       endRun,
+      withTurns,
+      helperStopped,
+      runEnded,
+      waitForMethod,
+      interrupts,
       harness,
       run,
       failure,
@@ -657,6 +721,193 @@ it.effect(
         expect(t.harness.requests.at(-1)?.params).toEqual({ threadId: THREAD_A, turnId: RUN_1 });
       }),
     ),
+);
+
+// ---------------------------------------------------------------------------
+// Stopping a turn: the user takes over, or a client presses Stop
+
+it.effect(
+  "a helper stop fails the in-flight call, interrupts the run like Stop, then cancels and ends",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+        t.harness.hang.add("app.act");
+        const fiber = yield* t
+          .run(ComputerUseTools.click({ app: "TextEdit", ref: "e2" }))
+          .pipe(Effect.forkChild);
+        yield* t.waitForMethod("app.act");
+
+        yield* t.helperStopped("user_escape");
+        expect(Exit.findErrorOption(yield* Fiber.await(fiber))).toMatchObject({
+          value: { code: "stopped", details: { reason: "user_escape" } },
+        });
+        expect(t.harness.traffic.at(-1)).toBe("cancel:app.act");
+        // The same command the web Stop button sends, holding queued messages.
+        yield* t.until(() => t.interrupts().length === 1);
+        expect(t.interrupts()).toEqual([
+          expect.objectContaining({
+            type: "run.interrupt",
+            threadId: THREAD_A,
+            runId: RUN_1,
+            holdQueue: true,
+          }),
+        ]);
+
+        // Until the run ends, later calls in the turn are stopped before reaching the helper.
+        const sent = t.methods().length;
+        expect(yield* t.failure(snapshotTextEdit)).toEqual({
+          code: "stopped",
+          details: { reason: "user_escape" },
+        });
+        expect(t.methods()).toHaveLength(sent);
+
+        // The run ends from our interrupt: one session.end, and nothing is sent twice.
+        yield* t.runEnded("interrupted");
+        expect(t.harness.traffic.slice(-2)).toEqual(["cancel:app.act", "session.end"]);
+        expect(t.methods().filter((method) => method === "session.end")).toHaveLength(1);
+        expect(t.harness.interrupted).toEqual(["app.act"]);
+        expect(t.interrupts()).toHaveLength(1);
+      }),
+    ),
+);
+
+it.effect("Stop from a client cancels the in-flight request before it ends the session", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      t.harness.hang.add("app.act");
+      const fiber = yield* t
+        .run(ComputerUseTools.click({ app: "TextEdit", ref: "e2" }))
+        .pipe(Effect.forkChild);
+      yield* t.waitForMethod("app.act");
+
+      yield* t.runEnded("interrupted");
+      expect(Exit.findErrorOption(yield* Fiber.await(fiber))).toMatchObject({
+        value: { code: "stopped", details: { reason: "client_stop" } },
+      });
+      expect(t.harness.traffic.slice(-2)).toEqual(["cancel:app.act", "session.end"]);
+      // Nothing to interrupt: the client already did.
+      expect(t.interrupts()).toEqual([]);
+    }),
+  ),
+);
+
+it.effect("repeated, unknown-turn, and session-less helper stops are ignored", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      // No session yet for this turn.
+      yield* t.helperStopped("user_input");
+      yield* t.helperStopped("user_input", "run-unknown");
+      expect(t.interrupts()).toEqual([]);
+      expect(Exit.isSuccess(yield* t.run(snapshotTextEdit).pipe(Effect.exit))).toBe(true);
+
+      yield* t.helperStopped("user_input");
+      yield* t.helperStopped("user_escape");
+      yield* t.helperStopped("user_input");
+      yield* t.until(() => t.interrupts().length === 1);
+      for (let index = 0; index < 20; index++) yield* Effect.yieldNow;
+      expect(t.interrupts()).toHaveLength(1);
+      expect(yield* t.failure(snapshotTextEdit)).toEqual({
+        code: "stopped",
+        details: { reason: "user_input" },
+      });
+
+      // After the run ends, a late stop for it does nothing.
+      yield* t.runEnded("interrupted");
+      yield* t.helperStopped("user_escape");
+      expect(t.interrupts()).toHaveLength(1);
+      expect(t.methods().filter((method) => method === "session.end")).toHaveLength(1);
+    }),
+  ),
+);
+
+it.effect("a helper stop that arrives while session.begin is in flight still stops the turn", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      const gate = yield* t.hold("session.begin");
+      const fiber = yield* t.run(snapshotTextEdit).pipe(Effect.forkChild);
+      yield* t.until(() => t.count("session.begin") === 1);
+
+      // The helper began the session and the user pressed Esc before its reply came back.
+      yield* t.helperStopped("user_escape");
+      yield* t.until(() => t.interrupts().length === 1);
+      yield* Deferred.succeed(gate, undefined);
+      expect(Exit.findErrorOption(yield* Fiber.await(fiber))).toMatchObject({
+        value: { code: "stopped", details: { reason: "user_escape" } },
+      });
+
+      // Ending the turn still ends the session that was beginning.
+      yield* t.runEnded("interrupted");
+      expect(t.count("session.end")).toBe(1);
+    }),
+  ),
+);
+
+it.effect("a failed run interrupt after a helper stop is tried once more", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      yield* t.run(snapshotTextEdit);
+      t.harness.failInterrupts = 1;
+      yield* t.helperStopped("user_input");
+      yield* t.until(() => t.interrupts().length === 2);
+      expect(t.harness.failInterrupts).toBe(0);
+
+      // When both tries fail, it only logs: the turn stays stopped and nothing else is sent.
+      yield* t.run(snapshotTextEdit, THREAD_B);
+      t.harness.failInterrupts = 2;
+      yield* t.helperStopped("user_input", "run-b1", THREAD_B);
+      yield* t.until(() => t.interrupts().length === 4);
+      for (let index = 0; index < 20; index++) yield* Effect.yieldNow;
+      expect(t.interrupts()).toHaveLength(4);
+      expect(yield* t.failure(snapshotTextEdit, THREAD_B)).toEqual({
+        code: "stopped",
+        details: { reason: "user_input" },
+      });
+    }),
+  ),
+);
+
+it.effect("a locked screen does not stop the turn", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      yield* t.run(snapshotTextEdit);
+      yield* t.helperStopped("screen_locked");
+      expect(t.interrupts()).toEqual([]);
+      expect(Exit.isSuccess(yield* t.run(snapshotTextEdit).pipe(Effect.exit))).toBe(true);
+    }),
+  ),
+);
+
+it.effect("a helper stop while a card is open cancels the card and returns stopped", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      yield* t.run(snapshotTextEdit);
+      const fiber = yield* t
+        .run(ComputerUseTools.snapshot({ app: "System Settings" }))
+        .pipe(Effect.forkChild);
+      for (let attempt = 0; attempt < 200 && t.pendingCards().length === 0; attempt++) {
+        yield* Effect.yieldNow;
+      }
+      expect(t.pendingCards()).toHaveLength(1);
+
+      yield* t.helperStopped("user_input");
+      expect(Exit.findErrorOption(yield* Fiber.await(fiber))).toMatchObject({
+        value: { code: "stopped", details: { reason: "user_input" } },
+      });
+      expect(t.harness.items.at(-1)).toMatchObject({
+        bundleId: "com.apple.systempreferences",
+        appRequestStatus: "cancelled",
+      });
+      expect(t.pendingCards()).toEqual([]);
+      yield* t.until(() => t.interrupts().length === 1);
+    }),
+  ),
 );
 
 it.effect("each tool maps its arguments to the helper's action", () =>

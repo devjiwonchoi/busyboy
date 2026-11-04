@@ -4,14 +4,20 @@
  * the answers given in the turn.
  * A turn here is an orchestration run. When the run ends, in-flight helper
  * requests for it are interrupted (the channel sends `cancel` for each) and the
- * helper gets `session.end`.
+ * helper gets `session.end`. A helper `stopped` notification (Esc or the user
+ * taking over the app) stops the turn and interrupts its run, the same way the
+ * web Stop button does.
  */
 import {
+  CommandId,
   ComputerUseError,
+  ComputerUseStopReason,
+  RunId,
+  ThreadId,
   type ComputerUseAppRequestStatus,
-  type ComputerUseStopReason,
   type OrchestrationV2DomainEvent,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -19,6 +25,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
@@ -26,6 +33,12 @@ import { forkParked } from "../serverActivation.ts";
 import * as DesktopComputerUseChannel from "./DesktopComputerUseChannel.ts";
 
 const SESSION_TIMEOUT_MS = 10_000;
+/** How long the end of a turn waits for its in-flight requests to cancel. */
+const DRAIN_TIMEOUT_MS = 1_000;
+
+const decodeStopped = Schema.decodeUnknownOption(
+  Schema.Struct({ turnId: Schema.String, reason: ComputerUseStopReason }),
+);
 
 /**
  * How many ended turns to remember. A call that races a turn's end (for
@@ -78,6 +91,8 @@ interface Card {
 }
 
 interface TurnState {
+  readonly threadId: string;
+  readonly turnId: string;
   readonly ended: Deferred.Deferred<TurnEnd>;
   stopped: ComputerUseStopReason | undefined;
   session: "none" | "beginning" | "begun";
@@ -89,6 +104,8 @@ interface TurnState {
   readonly openByApp: Map<string, string>;
   /** The latest answer for each bundle ID in this turn. */
   readonly answers: Map<string, ComputerUseAppRequestStatus>;
+  /** One latch per running `whileActive` call, done when the call has finished. */
+  readonly inflight: Set<Deferred.Deferred<void>>;
 }
 
 export interface NewCard<E> {
@@ -165,6 +182,14 @@ export class ComputerUseTurns extends Context.Service<
     /** Ends the turn: in-flight work is interrupted and the helper session ends. */
     readonly endTurn: (threadId: string, turnId: string, end: TurnEnd) => Effect.Effect<void>;
     readonly handleDomainEvent: (event: OrchestrationV2DomainEvent) => Effect.Effect<void>;
+    /**
+     * A helper `stopped` notification for a turn whose session has begun or
+     * is beginning: stops the turn and interrupts its run. Unknown, ended, or
+     * already stopped turns are ignored.
+     */
+    readonly handleNotification: (
+      notification: DesktopComputerUseChannel.ComputerUseNotification,
+    ) => Effect.Effect<void>;
   }
 >()("t3/computerUse/ComputerUseTurns") {}
 
@@ -172,6 +197,9 @@ const keyOf = (threadId: string, turnId: string) => `${threadId}\u0000${turnId}`
 
 export const make = Effect.gen(function* () {
   const channel = yield* DesktopComputerUseChannel.DesktopComputerUseChannel;
+  const threads = yield* ThreadManagementService.ThreadManagementService;
+  /** Background run interrupts live here, so they end with the service. */
+  const scope = yield* Effect.scope;
   const turns = new Map<string, TurnState>();
   /** Ended turns, oldest first. */
   const endedTurns = new Map<string, TurnEnd>();
@@ -186,11 +214,14 @@ export const make = Effect.gen(function* () {
   };
 
   /** Ignores the stopped flag; callers that act must use `stateFor`. */
-  const rawStateFor = (key: string) =>
+  const rawStateFor = (threadId: string, turnId: string) =>
     Effect.gen(function* () {
+      const key = keyOf(threadId, turnId);
       const existing = turns.get(key);
       if (existing !== undefined) return existing;
       const state: TurnState = {
+        threadId,
+        turnId,
         ended: yield* Deferred.make<TurnEnd>(),
         stopped: undefined,
         session: "none",
@@ -198,6 +229,7 @@ export const make = Effect.gen(function* () {
         cards: new Map(),
         openByApp: new Map(),
         answers: new Map(),
+        inflight: new Set(),
       };
       turns.set(key, state);
       return state;
@@ -209,7 +241,7 @@ export const make = Effect.gen(function* () {
       const key = keyOf(threadId, turnId);
       const end = endedTurns.get(key);
       if (end !== undefined) return yield* turnEndError(end);
-      const state = yield* rawStateFor(key);
+      const state = yield* rawStateFor(threadId, turnId);
       if (state.stopped !== undefined) return yield* stoppedError(state.stopped);
       return state;
     });
@@ -256,7 +288,7 @@ export const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const key = keyOf(threadId, turnId);
       if (endedTurns.has(key)) return;
-      const state = yield* rawStateFor(key);
+      const state = yield* rawStateFor(threadId, turnId);
       if (state.stopped !== undefined) return;
       state.stopped = reason;
       yield* cancelCards(state);
@@ -291,7 +323,13 @@ export const make = Effect.gen(function* () {
             .pipe(
               Effect.onExit((exit) =>
                 Effect.sync(() => {
-                  state.session = Exit.isSuccess(exit) ? "begun" : "none";
+                  // An interrupted begin may already have reached the helper, so
+                  // keep it as "beginning": the turn's end then sends `session.end`.
+                  state.session = Exit.isSuccess(exit)
+                    ? "begun"
+                    : Exit.hasInterrupts(exit)
+                      ? "beginning"
+                      : "none";
                 }),
               ),
             );
@@ -302,9 +340,20 @@ export const make = Effect.gen(function* () {
   const whileActive: ComputerUseTurns["Service"]["whileActive"] = (threadId, turnId, effect) =>
     Effect.gen(function* () {
       const state = yield* stateFor(threadId, turnId);
+      const finished = yield* Deferred.make<void>();
+      state.inflight.add(finished);
+      // The race interrupts the losing `effect` and waits for it, so the
+      // channel has sent `cancel` by the time `finished` is done.
       return yield* Effect.raceFirst(
         effect,
         Deferred.await(state.ended).pipe(Effect.flatMap((end) => Effect.fail(turnEndError(end)))),
+      ).pipe(
+        Effect.ensuring(
+          Effect.suspend(() => {
+            state.inflight.delete(finished);
+            return Deferred.succeed(finished, undefined);
+          }),
+        ),
       );
     });
 
@@ -374,12 +423,18 @@ export const make = Effect.gen(function* () {
       );
       if (state === undefined) return;
       turns.delete(key);
-      // Read first: interrupting a `session.begin` in flight resets this, but
-      // the helper may already have begun the session.
+      // A begin that is in flight or was interrupted counts: the helper may
+      // already have begun the session.
       const hadSession = state.session !== "none";
       yield* cancelCards(state);
       // Interrupts in-flight requests; the channel cancels each on the helper.
+      // A stopped turn keeps its first reason: this does nothing then.
+      const inflight = [...state.inflight];
       yield* Deferred.succeed(state.ended, end);
+      // Send `session.end` only after every in-flight request has sent its `cancel`.
+      yield* Effect.forEach(inflight, (finished) => Deferred.await(finished), {
+        discard: true,
+      }).pipe(Effect.timeoutOption(DRAIN_TIMEOUT_MS));
       if (hadSession) {
         yield* channel
           .request("session.end", { threadId, turnId }, { timeoutMs: SESSION_TIMEOUT_MS })
@@ -404,6 +459,51 @@ export const make = Effect.gen(function* () {
     );
   };
 
+  const handleNotification: ComputerUseTurns["Service"]["handleNotification"] = (notification) =>
+    Effect.gen(function* () {
+      if (notification.method !== "stopped") return;
+      const params = decodeStopped(notification.params);
+      if (Option.isNone(params)) return;
+      const { turnId, reason } = params.value;
+      // A locked screen is not a stop: the helper fails the in-flight call with
+      // `screen_locked`, and the turn goes on after the user unlocks (spec 5.5).
+      if (reason === "screen_locked") return;
+      // A stop can arrive before the `session.begin` response does: the helper
+      // may already be running the session.
+      const state = [...turns.values()].find(
+        (candidate) => candidate.turnId === turnId && candidate.session !== "none",
+      );
+      if (state === undefined || state.stopped !== undefined) return;
+      yield* markStopped(state.threadId, turnId, reason);
+      // `markStopped` already failed the in-flight calls, which sends their
+      // `cancel`. Now stop the run with the same command as the web Stop
+      // button, which holds queued messages so none starts a new run. When the
+      // run ends, `endTurn` sends `session.end`.
+      const interrupt = threads.dispatch({
+        type: "run.interrupt",
+        // The same id on retry, so a first try that did land is not applied twice.
+        commandId: CommandId.make(`computer-use-stop:${state.threadId}:${turnId}`),
+        threadId: ThreadId.make(state.threadId),
+        runId: RunId.make(turnId),
+        reason: `computer use stopped: ${reason}`,
+        holdQueue: true,
+      });
+      // Runs in the background so a slow interrupt never delays stops for other turns.
+      yield* interrupt.pipe(
+        // Try once more before giving up: the user expects the turn to stop.
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterruptsOnly(cause),
+          () => interrupt,
+        ),
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logWarning("could not interrupt a turn after computer use stopped", { cause }),
+        ),
+        Effect.forkIn(scope),
+      );
+    });
+
   return ComputerUseTurns.of({
     markStopped,
     stoppedReason,
@@ -414,15 +514,24 @@ export const make = Effect.gen(function* () {
     closeCard,
     endTurn,
     handleDomainEvent,
+    handleNotification,
   });
 });
 
-/** Ends helper sessions when their runs end. */
+/** Ends helper sessions when their runs end, and stops turns on helper `stopped`. */
 export const layer = Layer.effect(
   ComputerUseTurns,
   Effect.gen(function* () {
     const service = yield* make;
     const threads = yield* ThreadManagementService.ThreadManagementService;
+    const channel = yield* DesktopComputerUseChannel.DesktopComputerUseChannel;
+    yield* forkParked(
+      Stream.runForEach(channel.notifications, service.handleNotification).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("computer-use notification stream failed", { cause }),
+        ),
+      ),
+    );
     yield* forkParked(
       Stream.runForEach(threads.streamDomainEvents, service.handleDomainEvent).pipe(
         Effect.catchCause((cause) =>
@@ -434,5 +543,5 @@ export const layer = Layer.effect(
   }),
 );
 
-/** Without the run event stream, for tests. */
+/** Without the run event and notification streams, for tests. */
 export const layerWithoutEvents = Layer.effect(ComputerUseTurns, make);
