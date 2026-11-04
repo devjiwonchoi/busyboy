@@ -1,8 +1,10 @@
-import type {
-  OrchestrationV2DomainEvent,
-  OrchestrationV2Run,
-  ProjectTask,
-  ProjectTaskOutcome,
+import {
+  CommandId,
+  MessageId,
+  type OrchestrationV2DomainEvent,
+  type OrchestrationV2Run,
+  type ProjectTask,
+  type ProjectTaskOutcome,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -16,6 +18,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
+import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 
 type TerminalRunStatus = Extract<
   OrchestrationV2Run["status"],
@@ -47,6 +50,50 @@ export function classifyTaskOutcome(input: {
   return "stalled";
 }
 
+/**
+ * The inbox task the PM could start next: the lowest-numbered one whose
+ * dependencies are done or in review. Null when none is ready.
+ */
+export function nextInboxTask(
+  tasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>,
+): Pick<ProjectTask, "number"> | null {
+  const stageById = new Map(tasks.map((task) => [task.id as string, task.stage]));
+  const ready = tasks
+    .filter((task) => task.stage === "inbox")
+    .filter((task) =>
+      task.waitsOn.every((dependencyId) => {
+        const stage = stageById.get(dependencyId);
+        return stage === "done" || stage === "in_review";
+      }),
+    )
+    .toSorted((a, b) => a.number - b.number);
+  return ready[0] ?? null;
+}
+
+/**
+ * The one line that wakes the PM after a task lead's turn, or null to stay quiet.
+ * Only a failure, or a finished task that frees room for a ready inbox task, wakes it;
+ * stalls are left to StalledTaskSweep.
+ */
+export function outcomeWakeText(input: {
+  readonly task: Pick<ProjectTask, "number" | "title">;
+  readonly outcome: ProjectTaskOutcome;
+  readonly projectTasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>;
+  readonly maxConcurrentTasks: number;
+}): string | null {
+  if (input.outcome === "failed") {
+    return `#${input.task.number} failed: ${input.task.title} (the lead's turn failed; a blocker is open)`;
+  }
+  if (input.outcome !== "done" && input.outcome !== "in_review") return null;
+  const active = input.projectTasks.filter((task) =>
+    (ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage),
+  ).length;
+  if (active >= input.maxConcurrentTasks) return null;
+  const next = nextInboxTask(input.projectTasks);
+  if (next === null) return null;
+  return `#${input.task.number} done · #${next.number} is next in the inbox`;
+}
+
 export class TaskOutcomeReactor extends Context.Service<
   TaskOutcomeReactor,
   {
@@ -60,6 +107,40 @@ const make = Effect.gen(function* () {
   const threads = yield* ThreadManagement.ThreadManagementService;
   // A terminal run can be reported more than once; key by lead thread.
   const lastSeen = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
+
+  /** Wakes the PM with one short line when the outcome needs its attention. */
+  const wakeManager = (input: {
+    readonly task: ProjectTask;
+    readonly outcome: ProjectTaskOutcome;
+    readonly runId: string;
+  }) =>
+    Effect.gen(function* () {
+      const manager = yield* repository.getManager(input.task.projectId);
+      if (Option.isNone(manager) || !manager.value.settings.enabled) return;
+      const text = outcomeWakeText({
+        task: input.task,
+        outcome: input.outcome,
+        projectTasks: yield* repository.listTasks({ projectId: input.task.projectId }),
+        maxConcurrentTasks: manager.value.settings.maxConcurrentTasks,
+      });
+      if (text === null) return;
+      const pmThreadId = manager.value.threadId;
+      const shell = yield* threads.getThreadShell(pmThreadId);
+      if (shell === null || shell.deletedAt !== null || shell.archivedAt !== null) return;
+      // Keyed by run so a retried or re-reported run wakes the PM once.
+      const key = `project-team:outcome:${input.runId}`;
+      yield* threads.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make(key),
+        threadId: pmThreadId,
+        messageId: MessageId.make(key),
+        text,
+        attachments: [],
+        dispatchMode: { type: "queue_after_active" },
+        createdBy: "system",
+        creationSource: "server",
+      });
+    });
 
   const handle: TaskOutcomeReactor["Service"]["handle"] = (event) =>
     Effect.gen(function* () {
@@ -88,10 +169,15 @@ const make = Effect.gen(function* () {
       // A lead that fanned out delegated children ends its turn while they work;
       // their completion wakes it, and that turn's end reclassifies.
       if (outcome === "stalled" && (yield* isLeadBusy(threads, run.threadId, run.id))) return;
-      yield* team.recordOutcome({
+      const recorded = yield* team.recordOutcome({
         task: task.value,
         outcome,
         ...(outcome === "failed" ? { detail: run.status } : {}),
+      });
+      yield* wakeManager({
+        task: recorded.task,
+        outcome,
+        runId: run.id,
       });
     }).pipe(
       Effect.catchCause((cause) =>

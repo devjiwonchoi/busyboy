@@ -55,6 +55,7 @@ import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
 import { projectTurnItemForDetail } from "./WireProjection.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 
 export type ThreadManagementSendMode = "auto" | "queue" | "steer" | "restart";
 
@@ -448,12 +449,18 @@ function latestSteerableRun(
     .toSorted((left, right) => right.ordinal - left.ordinal)[0];
 }
 
+export const PROJECT_MANAGER_ARCHIVE_REJECTION = "The project manager can't be archived.";
+
 const make = Effect.gen(function* () {
   const threadDispatch = yield* ThreadCommandExecutor.ThreadCommandExecutor;
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const sessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const receipts = yield* CommandReceiptStore.CommandReceiptStoreV2;
+  // Optional so layers without project teams (most tests) need not provide it.
+  const projectTeamRepository = yield* Effect.serviceOption(
+    ProjectTeamRepository.ProjectTeamRepository,
+  );
 
   const assertProviderInstanceEnabled: ThreadManagementServiceShape["assertProviderInstanceEnabled"] =
     (input) =>
@@ -550,10 +557,41 @@ const make = Effect.gen(function* () {
             }),
           ),
         );
+      case "thread.archive":
+        return assertNotProjectManager(command);
       default:
         return Effect.void;
     }
   };
+
+  /**
+   * A project's PM is long-lived, so no path (client, MCP tool, lifecycle service)
+   * may archive its thread. An unreadable role lets the archive through.
+   */
+  const assertNotProjectManager = (
+    command: Extract<OrchestrationV2ServerCommand, { readonly type: "thread.archive" }>,
+  ) =>
+    Option.isNone(projectTeamRepository)
+      ? Effect.void
+      : projectTeamRepository.value.getManagerByThreadId(command.threadId).pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("Could not read the thread's team role.", {
+              threadId: command.threadId,
+              cause,
+            }).pipe(Effect.as(Option.none())),
+          ),
+          Effect.flatMap((manager) =>
+            Option.isSome(manager)
+              ? Effect.fail(
+                  new Orchestrator.OrchestratorDispatchError({
+                    commandId: command.commandId,
+                    commandType: command.type,
+                    cause: PROJECT_MANAGER_ARCHIVE_REJECTION,
+                  }),
+                )
+              : Effect.void,
+          ),
+        );
 
   const dispatch: ThreadManagementServiceShape["dispatch"] = (command) =>
     assertDispatchTargetEnabled(command).pipe(Effect.andThen(orchestrator.dispatch(command)));

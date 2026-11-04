@@ -10,10 +10,11 @@ import {
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
 
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { classifyTaskOutcome, TaskOutcomeReactor } from "./taskOutcomeReactor.ts";
+import { classifyTaskOutcome, nextInboxTask, TaskOutcomeReactor } from "./taskOutcomeReactor.ts";
 import { PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
 
 function leadTurnEnded(input: {
@@ -328,4 +329,154 @@ describe("TaskOutcomeReactor", () => {
       }),
     ),
   );
+
+  it.effect("wakes the PM with one line when a task fails", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Fragile", harness.delegate);
+        const ended = leadTurnEnded({
+          lead: lead.leadThreadId,
+          status: "failed",
+          completedAt: "2026-11-04T00:05:00.000Z",
+        });
+        yield* reactor.handle(ended);
+        yield* reactor.handle(ended);
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), [
+          "#1 failed: Fragile (the lead's turn failed; a blocker is open)",
+        ]);
+        const [command] = (yield* Ref.get(harness.dispatched)).filter(
+          (entry) => entry.type === "message.dispatch",
+        );
+        assert.strictEqual(command?.commandId, `project-team:outcome:run-${lead.leadThreadId}-1`);
+      }),
+    ),
+  );
+
+  it.effect("wakes the PM when a finished task makes room for a ready inbox task", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        yield* team.updateSettingsAsManager(pm, { maxConcurrentTasks: 2 });
+        const first = yield* startLead(pm, "First", harness.delegate);
+        const base = yield* startLead(pm, "Base", harness.delegate);
+        yield* team.createTask(pm, {
+          title: "After base",
+          request: "After base.",
+          waitsOn: [base.task.id],
+        });
+        yield* team.createTask(pm, { title: "Free", request: "Free." });
+        yield* team.updateTask(first.leadThreadId, { stage: "done" });
+
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: first.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        // #3 waits on #2, which is still running.
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), [
+          "#1 done · #4 is next in the inbox",
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("stays quiet for a done task with an empty inbox, waiting_user, and stalled", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const finished = yield* startLead(pm, "Finished", harness.delegate);
+        const asking = yield* startLead(pm, "Asking", harness.delegate);
+        const quiet = yield* startLead(pm, "Quiet", harness.delegate);
+        yield* team.updateTask(finished.leadThreadId, { stage: "done" });
+        yield* team.askUser(asking.leadThreadId, { kind: "approval", question: "Plan?" });
+
+        const at = "2026-11-04T00:05:00.000Z";
+        for (const lead of [finished, asking, quiet]) {
+          yield* reactor.handle(
+            leadTurnEnded({ lead: lead.leadThreadId, status: "completed", completedAt: at }),
+          );
+        }
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+      }),
+    ),
+  );
+
+  it.effect("stays quiet when task leads are at capacity", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        yield* team.updateSettingsAsManager(pm, { maxConcurrentTasks: 2 });
+        const finished = yield* startLead(pm, "Finished", harness.delegate);
+        yield* startLead(pm, "Busy one", harness.delegate);
+        yield* team.updateTask(finished.leadThreadId, { stage: "done" });
+        yield* startLead(pm, "Busy two", harness.delegate);
+        yield* team.createTask(pm, { title: "Queued", request: "Queued." });
+
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: finished.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+      }),
+    ),
+  );
+
+  it.effect("stays quiet while the PM is turned off", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Fragile", harness.delegate);
+        yield* team.updateSettings({ projectId: PROJECT_ID, enabled: false });
+
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "failed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        assert.strictEqual(
+          (yield* team.readTask(pm, { taskId: lead.task.id })).task.lastOutcome,
+          "failed",
+        );
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+      }),
+    ),
+  );
+});
+
+describe("nextInboxTask", () => {
+  it("picks the lowest-numbered inbox task whose dependencies are done or in review", () => {
+    const task = (id: string, number: number, stage: string, waitsOn: Array<string> = []) =>
+      ({ id, number, stage, waitsOn }) as never;
+    assert.strictEqual(
+      nextInboxTask([
+        task("a", 1, "running"),
+        task("b", 2, "inbox", ["a"]),
+        task("c", 3, "inbox"),
+        task("d", 4, "inbox"),
+      ])?.number,
+      3,
+    );
+    assert.strictEqual(
+      nextInboxTask([task("a", 1, "in_review"), task("b", 2, "inbox", ["a"])])?.number,
+      2,
+    );
+    assert.isNull(nextInboxTask([task("a", 1, "running"), task("b", 2, "inbox", ["a"])]));
+  });
 });

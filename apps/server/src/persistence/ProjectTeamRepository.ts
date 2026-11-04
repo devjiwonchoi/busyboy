@@ -166,9 +166,19 @@ export class ProjectTeamRepository extends Context.Service<
       readonly taskId: ProjectTaskId;
       readonly limit: number;
     }) => Result<ReadonlyArray<ProjectTaskEvent>>;
+    /** The newest log entry a thread wrote in a project. */
+    readonly getLatestEventByActor: (input: {
+      readonly projectId: ProjectId;
+      readonly actorThreadId: ThreadId;
+    }) => Result<Option.Option<ProjectTaskEvent>>;
     readonly listProjectEventsSince: (input: {
       readonly projectId: ProjectId;
       readonly since: IsoDateTime;
+    }) => Result<ReadonlyArray<ProjectTaskEvent>>;
+    /** The newest stage changes to done and failed outcomes, newest first. */
+    readonly listRecentTaskEndings: (input: {
+      readonly projectId: ProjectId;
+      readonly limit: number;
     }) => Result<ReadonlyArray<ProjectTaskEvent>>;
 
     readonly createAttentionItem: (
@@ -190,6 +200,11 @@ export class ProjectTeamRepository extends Context.Service<
     readonly listAttentionItemsSince: (input: {
       readonly projectId: ProjectId;
       readonly since: IsoDateTime;
+    }) => Result<ReadonlyArray<ProjectAttentionItem>>;
+    /** The most recently answered items, newest answer first. */
+    readonly listRecentlyAnsweredAttentionItems: (input: {
+      readonly projectId: ProjectId;
+      readonly limit: number;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
     /** The newest item, answered or not, for batching. */
     readonly getLatestAttentionItem: (
@@ -223,6 +238,11 @@ export class ProjectTeamRepository extends Context.Service<
     readonly getLatestSitrep: (projectId: ProjectId) => Result<Option.Option<ProjectSitrep>>;
     /** The newest sitrep that has a body. */
     readonly getLatestPostedSitrep: (projectId: ProjectId) => Result<Option.Option<ProjectSitrep>>;
+    /** The newest sitreps that have a body, newest first. */
+    readonly listRecentPostedSitreps: (input: {
+      readonly projectId: ProjectId;
+      readonly limit: number;
+    }) => Result<ReadonlyArray<ProjectSitrep>>;
     /** Posted sitreps (with a body) that are not read yet. */
     readonly countUnreadSitreps: (projectId: ProjectId) => Result<number>;
   }
@@ -552,6 +572,18 @@ export const make = Effect.gen(function* () {
       ORDER BY "createdAt" ASC, "sequence" ASC
     `,
   });
+  const findLatestEventByActor = SqlSchema.findOneOption({
+    Request: Schema.Struct({ projectId: ProjectId, actorThreadId: ThreadId }),
+    Result: ProjectTaskEvent,
+    execute: ({ projectId, actorThreadId }) => sql`
+      SELECT ${eventColumns}
+      FROM project_task_events
+      WHERE project_id = ${projectId} AND actor_thread_id = ${actorThreadId}
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1
+    `,
+  });
+
   const findProjectEventsSince = SqlSchema.findAll({
     Request: Schema.Struct({ projectId: ProjectId, since: IsoDateTime }),
     Result: ProjectTaskEvent,
@@ -560,6 +592,22 @@ export const make = Effect.gen(function* () {
       FROM project_task_events
       WHERE project_id = ${projectId} AND created_at > ${since}
       ORDER BY created_at ASC, rowid ASC
+    `,
+  });
+
+  const findRecentTaskEndings = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId, limit: Schema.Int }),
+    Result: ProjectTaskEvent,
+    execute: ({ projectId, limit }) => sql`
+      SELECT ${eventColumns}
+      FROM project_task_events
+      WHERE project_id = ${projectId}
+        AND (
+          (kind = 'stage_changed' AND body LIKE '% → done')
+          OR (kind = 'outcome' AND body LIKE 'failed%')
+        )
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT ${limit}
     `,
   });
 
@@ -632,6 +680,17 @@ export const make = Effect.gen(function* () {
       FROM project_attention_items
       WHERE project_id = ${projectId} AND created_at > ${since}
       ORDER BY created_at ASC, rowid ASC
+    `,
+  });
+  const findRecentlyAnswered = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId, limit: Schema.Int }),
+    Result: AttentionRow,
+    execute: ({ projectId, limit }) => sql`
+      SELECT ${attentionColumns}
+      FROM project_attention_items
+      WHERE project_id = ${projectId} AND answered_at IS NOT NULL
+      ORDER BY answered_at DESC, rowid DESC
+      LIMIT ${limit}
     `,
   });
   const findLatestAttention = SqlSchema.findOneOption({
@@ -733,6 +792,17 @@ export const make = Effect.gen(function* () {
       LIMIT 1
     `,
   });
+  const findRecentPostedSitreps = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId, limit: Schema.Int }),
+    Result: ProjectSitrep,
+    execute: ({ projectId, limit }) => sql`
+      SELECT ${sitrepColumns}
+      FROM project_sitreps
+      WHERE project_id = ${projectId} AND body IS NOT NULL
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT ${limit}
+    `,
+  });
   const countUnreadSitrepRows = SqlSchema.findOne({
     Request: ProjectIdRequest,
     Result: CountRow,
@@ -789,9 +859,17 @@ export const make = Effect.gen(function* () {
       insertEvent(input).pipe(Effect.mapError(toRepositoryError("appendTaskEvent"))),
     listTaskEvents: (input) =>
       findTaskEvents(input).pipe(Effect.mapError(toRepositoryError("listTaskEvents"))),
+    getLatestEventByActor: (input) =>
+      findLatestEventByActor(input).pipe(
+        Effect.mapError(toRepositoryError("getLatestEventByActor")),
+      ),
     listProjectEventsSince: (input) =>
       findProjectEventsSince(input).pipe(
         Effect.mapError(toRepositoryError("listProjectEventsSince")),
+      ),
+    listRecentTaskEndings: (input) =>
+      findRecentTaskEndings(input).pipe(
+        Effect.mapError(toRepositoryError("listRecentTaskEndings")),
       ),
 
     createAttentionItem: (input) =>
@@ -804,6 +882,10 @@ export const make = Effect.gen(function* () {
       findOpenAttention(input).pipe(Effect.mapError(toRepositoryError("listOpenAttentionItems"))),
     listAttentionItemsSince: (input) =>
       findAttentionSince(input).pipe(Effect.mapError(toRepositoryError("listAttentionItemsSince"))),
+    listRecentlyAnsweredAttentionItems: (input) =>
+      findRecentlyAnswered(input).pipe(
+        Effect.mapError(toRepositoryError("listRecentlyAnsweredAttentionItems")),
+      ),
     getLatestAttentionItem: (projectId) =>
       findLatestAttention({ projectId }).pipe(
         Effect.mapError(toRepositoryError("getLatestAttentionItem")),
@@ -833,6 +915,10 @@ export const make = Effect.gen(function* () {
     getLatestPostedSitrep: (projectId) =>
       findLatestPostedSitrep({ projectId }).pipe(
         Effect.mapError(toRepositoryError("getLatestPostedSitrep")),
+      ),
+    listRecentPostedSitreps: (input) =>
+      findRecentPostedSitreps(input).pipe(
+        Effect.mapError(toRepositoryError("listRecentPostedSitreps")),
       ),
     countUnreadSitreps: (projectId) =>
       countUnreadSitrepRows({ projectId }).pipe(

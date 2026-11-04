@@ -5,6 +5,7 @@ import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReact
 import * as PullRequestWatchReactor from "./orchestration-v2/PullRequestWatchReactor.ts";
 import * as DelegatedTaskQuestionReactor from "./orchestration-v2/DelegatedTaskQuestionReactor.ts";
 import * as ProjectTeamRepository from "./persistence/ProjectTeamRepository.ts";
+import * as ContextCare from "./projectTeam/ContextCare.ts";
 import * as DefaultManagerReactor from "./projectTeam/defaultManagerReactor.ts";
 import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
 import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
@@ -452,6 +453,7 @@ const layerProjectTeam = Layer.mergeAll(
   TaskOutcomeReactor.layerWorker,
   StalledTaskSweep.layerWorker,
   DefaultManagerReactor.layerWorker,
+  ContextCare.layerWorker,
 ).pipe(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(ProjectTeamService.layerWithDependencies),

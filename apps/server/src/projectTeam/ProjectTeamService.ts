@@ -11,7 +11,13 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
+  type ProjectSitrep,
   type ProjectId,
+  type ProjectManagerAvatar,
+  type ProjectManagerLastAction,
+  type ProjectManagerPersona,
+  type ProjectManagerPresence,
+  type ProjectManagerVoice,
   ProjectMemoryEntryId,
   type ProjectTask,
   type ProjectTaskBrief,
@@ -29,6 +35,7 @@ import {
   type ProjectTeamAttentionSnapshot,
   type ProjectTeamAttentionSummary,
   type ProjectTeamError,
+  type ProjectTeamJournalEntry,
   type ProjectTeamMemoryDeleteInput,
   type ProjectTeamMemoryDeleteResult,
   type ProjectTeamMemoryListResult,
@@ -83,12 +90,20 @@ import {
   orTeamError,
   teamError,
 } from "./common.ts";
+import { resolvePersona } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
 export const MAX_TASK_NUDGES = 2;
 export const SETTINGS_PIN_MS = 24 * 60 * MINUTE_MS;
 const DEFAULT_TASK_EVENT_LIMIT = 20;
+/** Stages the PM presence counts; done and cancelled tasks never show. */
+const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
+  "inbox",
+  "planning",
+  "running",
+  "in_review",
+];
 const DEFAULT_TASK_SEARCH_LIMIT = 20;
 const LEAD_MESSAGE_SUMMARY_MAX_CHARS = 300;
 /** Stages whose task lead has work to show; stalled tasks come from these. */
@@ -97,6 +112,76 @@ const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
   "running",
   "in_review",
 ]);
+
+export const JOURNAL_LIMIT = 20;
+const JOURNAL_TEXT_MAX_CHARS = 200;
+
+const trimJournalText = (text: string): string =>
+  text.length <= JOURNAL_TEXT_MAX_CHARS ? text : `${text.slice(0, JOURNAL_TEXT_MAX_CHARS - 1)}…`;
+
+/**
+ * The team's recent history for team_status, newest first: tasks that finished or
+ * failed, the user's answered questions, and posted sitreps.
+ */
+export function buildJournal(input: {
+  readonly tasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "title">>;
+  readonly endings: ReadonlyArray<Pick<ProjectTaskEvent, "taskId" | "kind" | "body" | "createdAt">>;
+  readonly answered: ReadonlyArray<
+    Pick<ProjectAttentionItem, "taskId" | "question" | "answer" | "answeredAt">
+  >;
+  readonly sitreps: ReadonlyArray<Pick<ProjectSitrep, "body" | "createdAt">>;
+  readonly limit?: number;
+}): Array<ProjectTeamJournalEntry> {
+  const taskById = new Map(input.tasks.map((task) => [task.id as string, task]));
+  const label = (taskId: string | null) => {
+    const task = taskId === null ? undefined : taskById.get(taskId);
+    return task === undefined ? "a task" : `#${task.number}`;
+  };
+  const entries: Array<ProjectTeamJournalEntry> = [];
+  for (const event of input.endings) {
+    const task = event.taskId === null ? undefined : taskById.get(event.taskId);
+    if (event.kind === "outcome") {
+      entries.push({
+        at: event.createdAt,
+        kind: "failed",
+        text: trimJournalText(
+          task === undefined
+            ? `A task failed: ${event.body}`
+            : `#${task.number} failed: ${task.title}`,
+        ),
+      });
+    } else {
+      entries.push({
+        at: event.createdAt,
+        kind: "done",
+        text: trimJournalText(
+          task === undefined ? "A task is done" : `#${task.number} ${task.title} done`,
+        ),
+      });
+    }
+  }
+  for (const item of input.answered) {
+    if (item.answeredAt === null) continue;
+    entries.push({
+      at: item.answeredAt,
+      kind: "decision",
+      text: trimJournalText(
+        `Decided on ${label(item.taskId)}: ${item.question} → ${item.answer ?? ""}`,
+      ),
+    });
+  }
+  for (const sitrep of input.sitreps) {
+    const firstLine = sitrep.body
+      ?.split("\n")
+      .find((line) => line.trim() !== "")
+      ?.trim();
+    if (firstLine === undefined) continue;
+    entries.push({ at: sitrep.createdAt, kind: "sitrep", text: trimJournalText(firstLine) });
+  }
+  return entries
+    .toSorted((a, b) => isoMillis(b.at) - isoMillis(a.at))
+    .slice(0, input.limit ?? JOURNAL_LIMIT);
+}
 
 /**
  * Picks the PM's model when neither the project nor the server sets a default:
@@ -167,6 +252,61 @@ export function toTaskBrief(task: ProjectTask): ProjectTaskBrief {
     nudgeCount: task.nudgeCount,
     waitsOn: task.waitsOn,
     stageChangedAt: task.stageChangedAt,
+  };
+}
+
+/** The title a PM thread had before PMs had names; such threads take the persona's name. */
+export const legacyManagerTitle = (projectTitle: string): string => `${projectTitle} PM`;
+
+/** Short text for the PM's latest logged action, such as "started #7". */
+export function describeManagerAction(
+  event: Pick<ProjectTaskEvent, "kind" | "body">,
+  taskNumber: number | null,
+): string {
+  const task = taskNumber === null ? "a task" : `#${taskNumber}`;
+  switch (event.kind) {
+    case "created":
+      return `created ${task}`;
+    case "stage_changed": {
+      const [from, to] = event.body.split(" → ").map((part) => part.trim());
+      if (from === "inbox" && to === "planning") return `started ${task}`;
+      if (to === "cancelled") return `cancelled ${task}`;
+      if (to === "done") return `closed ${task}`;
+      if (to === "blocked") return `blocked ${task}`;
+      return to === undefined || to.length === 0 ? `moved ${task}` : `moved ${task} to ${to}`;
+    }
+    case "nudge":
+      return `nudged ${task}`;
+    case "note":
+      return event.body.startsWith("Nudge limit reached")
+        ? `escalated ${task}`
+        : `noted on ${task}`;
+    case "summary":
+      return `updated ${task}`;
+    case "outcome":
+      return `recorded an outcome for ${task}`;
+    case "preference_changed":
+      return "changed the sitrep interval";
+  }
+}
+
+export interface PersonaPatch {
+  readonly name?: string | undefined;
+  readonly avatar?: ProjectManagerAvatar | undefined;
+  readonly voice?: ProjectManagerVoice | undefined;
+  readonly voiceCustom?: string | undefined;
+}
+
+const hasPersonaChange = (patch: PersonaPatch | undefined): patch is PersonaPatch =>
+  patch !== undefined && Object.values(patch).some((value) => value !== undefined);
+
+function mergePersona(base: ProjectManagerPersona, patch: PersonaPatch): ProjectManagerPersona {
+  const voiceCustom = patch.voiceCustom ?? base.voiceCustom;
+  return {
+    name: patch.name ?? base.name,
+    avatar: patch.avatar ?? base.avatar,
+    voice: patch.voice ?? base.voice,
+    ...(voiceCustom === undefined ? {} : { voiceCustom }),
   };
 }
 
@@ -364,6 +504,58 @@ const make = Effect.gen(function* () {
       if ((yield* activeTasks(projectId)).length === 0) yield* sitreps.noteMilestone(projectId);
     });
 
+  /** Stores the resolved persona so a default name stays put even if the defaults change. */
+  const persistPersona = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
+    Effect.gen(function* () {
+      if (manager.settings.persona !== undefined) return manager;
+      const settings = {
+        ...manager.settings,
+        persona: resolvePersona(manager.projectId, manager.settings),
+      };
+      const updated = yield* repository.updateManagerSettings({
+        projectId: manager.projectId,
+        settings,
+        now: yield* nowIso,
+      });
+      return Option.getOrElse(updated, () => ({ ...manager, settings }));
+    });
+
+  const renameManagerThread = (threadId: ThreadId, title: string) =>
+    Effect.gen(function* () {
+      yield* threads.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make(`project-team:rename-pm:${yield* newId(threadId)}`),
+        threadId,
+        title,
+      });
+    });
+
+  /** Brings an existing PM thread up to date: stored persona, named title, not archived. */
+  const reviveManager = (
+    existing: ProjectTeamRepository.ProjectManagerRecord,
+    shell: { readonly title: string; readonly archivedAt: unknown },
+    projectTitle: string,
+  ) =>
+    Effect.gen(function* () {
+      const manager = yield* persistPersona(existing);
+      const persona = resolvePersona(manager.projectId, manager.settings);
+      let changed = manager !== existing;
+      if (shell.title === legacyManagerTitle(projectTitle) && shell.title !== persona.name) {
+        yield* renameManagerThread(manager.threadId, persona.name);
+        changed = true;
+      }
+      if (shell.archivedAt !== null) {
+        yield* threads.dispatch({
+          type: "thread.unarchive",
+          commandId: CommandId.make(`project-team:unarchive-pm:${yield* newId(manager.threadId)}`),
+          threadId: manager.threadId,
+        });
+        changed = true;
+      }
+      if (changed) yield* router.publish(manager.projectId);
+      return manager;
+    });
+
   const ensureManager: ProjectTeamService["Service"]["ensureManager"] = (projectId) =>
     managerLocks.withLock(
       projectId,
@@ -375,8 +567,14 @@ const make = Effect.gen(function* () {
         const existing = yield* repository.getManager(projectId);
         if (Option.isSome(existing)) {
           const shell = yield* threads.getThreadShell(existing.value.threadId);
-          if (shell !== null && shell.deletedAt === null) return existing.value;
+          if (shell !== null && shell.deletedAt === null) {
+            return yield* reviveManager(existing.value, shell, project.value.title);
+          }
         }
+        const persona = resolvePersona(
+          projectId,
+          Option.isSome(existing) ? existing.value.settings : DEFAULT_PROJECT_TEAM_SETTINGS,
+        );
         const settings = resolveProjectSettings(
           yield* serverSettings.getSettings,
           projectId,
@@ -393,7 +591,7 @@ const make = Effect.gen(function* () {
           commandId: CommandId.make(`project-team:create-pm:${threadId}`),
           threadId,
           projectId,
-          title: `${project.value.title} PM`,
+          title: persona.name,
           modelSelection,
           runtimeMode: settings.defaultRuntimeMode,
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -402,12 +600,13 @@ const make = Effect.gen(function* () {
           createdBy: "system",
           creationSource: "server",
         });
-        const manager = yield* repository.upsertManager({
+        const upserted = yield* repository.upsertManager({
           projectId,
           threadId,
-          settings: DEFAULT_PROJECT_TEAM_SETTINGS,
+          settings: { ...DEFAULT_PROJECT_TEAM_SETTINGS, persona },
           now: yield* nowIso,
         });
+        const manager = yield* persistPersona(upserted);
         // A sitrep the old PM thread was writing will never be posted.
         if (Option.isSome(existing)) yield* sitreps.abandonPending(projectId);
         yield* router.publish(projectId);
@@ -431,6 +630,7 @@ const make = Effect.gen(function* () {
         now: yield* nowIso,
       });
       yield* appendEvent(task, "created", task.title, callerThreadId);
+      yield* router.publish(role.projectId);
       return { task };
     }).pipe(orTeamError("Could not create the task."));
 
@@ -485,6 +685,7 @@ const make = Effect.gen(function* () {
             leadThreadId: lead.childThreadId,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
+          yield* router.publish(role.projectId);
           return { task: started, leadThreadId: lead.childThreadId };
         }),
       );
@@ -534,6 +735,7 @@ const make = Effect.gen(function* () {
         yield* sitreps.noteMilestone(role.projectId);
       }
       if (stageChanged) yield* noteIdleMilestone(role.projectId, task.stage);
+      yield* router.publish(role.projectId);
       return { task: updated };
     }).pipe(orTeamError("Could not update the task."));
 
@@ -583,6 +785,7 @@ const make = Effect.gen(function* () {
           askerThreadId: task.leadThreadId,
         });
         yield* appendEvent(task, "note", "Nudge limit reached; raised a blocker.", callerThreadId);
+        yield* router.publish(role.projectId);
         return { status: "escalated", task, attentionItem: item } as const;
       }
       const key = `project-team:nudge:${yield* newId(task.id)}`;
@@ -603,6 +806,7 @@ const make = Effect.gen(function* () {
       });
       const nudged = yield* setTask({ id: task.id, nudgeCount: task.nudgeCount + 1 });
       yield* appendEvent(nudged, "nudge", input.note ?? "Continue.", callerThreadId);
+      yield* router.publish(role.projectId);
       return { status: "sent", task: nudged, attentionItem: null } as const;
     }).pipe(orTeamError("Could not nudge the task."));
 
@@ -664,6 +868,16 @@ const make = Effect.gen(function* () {
         since === null
           ? openAttention
           : yield* repository.listAttentionItemsSince({ projectId, since });
+      const journal = buildJournal({
+        tasks,
+        endings: yield* repository.listRecentTaskEndings({ projectId, limit: JOURNAL_LIMIT }),
+        answered: yield* repository.listRecentlyAnsweredAttentionItems({
+          projectId,
+          limit: JOURNAL_LIMIT,
+        }),
+        sitreps: yield* repository.listRecentPostedSitreps({ projectId, limit: JOURNAL_LIMIT }),
+      });
+      const memoryTopics = (yield* repository.listMemory(projectId)).map((entry) => entry.topic);
       if (input.reason === "user_asked" && role.type === "pm") {
         yield* sitreps.noteUserAsked(projectId);
       }
@@ -698,6 +912,8 @@ const make = Effect.gen(function* () {
             .filter((task) => task.stage === "blocked" && changedSince(task))
             .map(toTaskBrief),
         },
+        journal,
+        memoryTopics,
       } satisfies ProjectTeamStatus;
     }).pipe(orTeamError("Could not read the team status."));
 
@@ -708,15 +924,25 @@ const make = Effect.gen(function* () {
       readonly sitrepIntervalMinutes?: number | undefined;
       readonly sitrepNotify?: boolean | undefined;
       readonly quietHours?: ProjectTeamSettings["quietHours"] | null | undefined;
+      readonly persona?: PersonaPatch | undefined;
+      readonly enabled?: boolean | undefined;
     },
     actorThreadId: ThreadId | null,
   ) =>
     Effect.gen(function* () {
-      if (Object.values(patch).every((value) => value === undefined)) {
+      const { persona: personaPatch, ...plain } = patch;
+      if (
+        Object.values(plain).every((value) => value === undefined) &&
+        !hasPersonaChange(personaPatch)
+      ) {
         return yield* teamError("The settings update has no fields.", projectId);
       }
       const manager = yield* requireManager(projectId);
       const now = yield* nowIso;
+      const previousPersona = resolvePersona(projectId, manager.settings);
+      const persona = hasPersonaChange(personaPatch)
+        ? mergePersona(previousPersona, personaPatch)
+        : previousPersona;
       const { quietHours: _previousQuietHours, ...current } = manager.settings;
       const quietHours =
         patch.quietHours === undefined
@@ -732,12 +958,17 @@ const make = Effect.gen(function* () {
           : { sitrepIntervalMinutes: patch.sitrepIntervalMinutes }),
         ...(patch.sitrepNotify === undefined ? {} : { sitrepNotify: patch.sitrepNotify }),
         ...(quietHours === undefined ? {} : { quietHours }),
+        persona,
+        ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
         // Only setting the interval by hand stops it adapting; other fields keep the pin as is.
         ...(patch.sitrepIntervalMinutes === undefined
           ? {}
           : { pinnedUntil: isoFromMillis(isoMillis(now) + SETTINGS_PIN_MS) }),
       };
       yield* repository.updateManagerSettings({ projectId, settings, now });
+      if (persona.name !== previousPersona.name) {
+        yield* renameManagerThread(manager.threadId, persona.name);
+      }
       if (settings.sitrepIntervalMinutes !== manager.settings.sitrepIntervalMinutes) {
         yield* repository.appendTaskEvent({
           id: ProjectTaskEventId.make(yield* newId("project-event")),
@@ -758,7 +989,28 @@ const make = Effect.gen(function* () {
     input,
   ) =>
     requireRole(callerThreadId, ["pm"], "team_settings_update").pipe(
-      Effect.flatMap((role) => applySettings(role.projectId, input, callerThreadId)),
+      Effect.flatMap((role) =>
+        applySettings(
+          role.projectId,
+          {
+            maxConcurrentTasks: input.maxConcurrentTasks,
+            sitrepIntervalMinutes: input.sitrepIntervalMinutes,
+            sitrepNotify: input.sitrepNotify,
+            quietHours: input.quietHours,
+            // The PM cannot turn itself off; only the user can, through the client.
+            persona: {
+              name: input.name,
+              avatar:
+                input.avatarEmoji === undefined
+                  ? undefined
+                  : { kind: "emoji", emoji: input.avatarEmoji },
+              voice: input.voice,
+              voiceCustom: input.voiceCustom,
+            },
+          },
+          callerThreadId,
+        ),
+      ),
     );
 
   const updateSettings: ProjectTeamService["Service"]["updateSettings"] = ({
@@ -834,6 +1086,55 @@ const make = Effect.gen(function* () {
   const requestSitrep: ProjectTeamService["Service"]["requestSitrep"] = ({ projectId }) =>
     sitreps.request(projectId).pipe(Effect.map((sitrepId) => ({ sitrepId })));
 
+  const lastManagerAction = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
+    Effect.gen(function* () {
+      const event = yield* repository.getLatestEventByActor({
+        projectId: manager.projectId,
+        actorThreadId: manager.threadId,
+      });
+      if (Option.isNone(event)) return null;
+      const task =
+        event.value.taskId === null ? Option.none() : yield* repository.getTask(event.value.taskId);
+      return {
+        text: describeManagerAction(event.value, Option.isSome(task) ? task.value.number : null),
+        at: event.value.createdAt,
+      } satisfies ProjectManagerLastAction;
+    });
+
+  const managerPresence = (
+    manager: ProjectTeamRepository.ProjectManagerRecord,
+    openAttention: ReadonlyArray<ProjectAttentionItem>,
+    latestSitrep: Option.Option<{ readonly createdAt: IsoDateTime }>,
+  ) =>
+    Effect.gen(function* () {
+      const tasks = yield* repository.listTasks({
+        projectId: manager.projectId,
+        stages: PRESENCE_TASK_STAGES,
+      });
+      const isStalled = (task: ProjectTask) =>
+        task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage);
+      const live = tasks.filter((task) => LIVE_TASK_STAGES.has(task.stage));
+      // Mirrors SitrepScheduler: the next interval sitrep is due one interval after the
+      // later of the window start and the latest attempt.
+      const nextSitrepAt = manager.settings.enabled
+        ? isoFromMillis(
+            Math.max(
+              isoMillis(manager.lastSitrepAt ?? manager.createdAt),
+              Option.isSome(latestSitrep) ? isoMillis(latestSitrep.value.createdAt) : 0,
+            ) +
+              manager.settings.sitrepIntervalMinutes * MINUTE_MS,
+          )
+        : null;
+      return {
+        running: live.filter((task) => !isStalled(task)).length,
+        waitingOnUser: new Set(openAttention.map((item) => item.taskId)).size,
+        stalled: live.filter(isStalled).length,
+        inbox: tasks.filter((task) => task.stage === "inbox").length,
+        nextSitrepAt,
+        lastAction: yield* lastManagerAction(manager),
+      } satisfies ProjectManagerPresence;
+    });
+
   const attentionSnapshot: ProjectTeamService["Service"]["attentionSnapshot"] = Effect.gen(
     function* () {
       const managers = yield* repository.listManagers();
@@ -844,6 +1145,7 @@ const make = Effect.gen(function* () {
           const latestItem = yield* repository.getLatestAttentionItem(projectId);
           const latestSitrep = yield* repository.getLatestSitrep(projectId);
           const latestPosted = yield* repository.getLatestPostedSitrep(projectId);
+          const presence = yield* managerPresence(manager, open, latestSitrep);
           return {
             projectId,
             pmThreadId: manager.threadId,
@@ -853,6 +1155,9 @@ const make = Effect.gen(function* () {
             unreadSitrepCount: yield* repository.countUnreadSitreps(projectId),
             sitrepInProgress: Option.isSome(latestSitrep) && latestSitrep.value.body === null,
             settings: manager.settings,
+            persona: resolvePersona(projectId, manager.settings),
+            enabled: manager.settings.enabled,
+            presence,
           } satisfies ProjectTeamAttentionSummary;
         }),
       );
@@ -864,7 +1169,11 @@ const make = Effect.gen(function* () {
     Effect.map(router.subscribe, (subscription) =>
       Stream.concat(
         Stream.fromEffect(attentionSnapshot),
-        Stream.fromSubscription(subscription).pipe(Stream.mapEffect(() => attentionSnapshot)),
+        // One snapshot per burst of changes, not one per change.
+        Stream.fromSubscription(subscription).pipe(
+          Stream.chunks,
+          Stream.mapEffect(() => attentionSnapshot),
+        ),
       ),
     ),
   );
@@ -895,6 +1204,7 @@ const make = Effect.gen(function* () {
         });
         yield* noteIdleMilestone(task.projectId, task.stage);
       }
+      yield* router.publish(task.projectId);
       return { task: updated, event };
     }).pipe(orTeamError("Could not record the task outcome.", input.task.projectId));
 

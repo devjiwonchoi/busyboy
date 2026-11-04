@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import {
   CommandId,
+  DEFAULT_PROJECT_TEAM_SETTINGS,
   MessageId,
   NodeId,
   type OrchestrationV2Command,
@@ -31,6 +32,8 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerSettings from "../serverSettings.ts";
+import { dispatchFailure } from "../mcp/threadAccess.ts";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
 import * as Orchestrator from "./Orchestrator.ts";
@@ -39,6 +42,7 @@ import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter"
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import { DispatchModeLimit, type DispatchModeRefusal } from "./DispatchModeLimit.ts";
+import { userFacingDispatchErrorMessage } from "./UserFacingErrors.ts";
 
 it("stamps authoritative provenance on commands that create threads or messages", () => {
   const command: OrchestrationV2Command = {
@@ -882,3 +886,56 @@ it.effect.each([
     }).pipe(Effect.provide(Layer.merge(layerTest, ThreadCommandExecutor.layer)));
   }),
 );
+
+it.effect("refuses to archive a project's PM thread on every dispatch path", () => {
+  const pmThreadId = ThreadId.make("thread:thread-management:pm");
+  const otherThreadId = ThreadId.make("thread:thread-management:not-pm");
+  const dispatched: Array<string> = [];
+  const projectTeamRepository = Layer.mock(ProjectTeamRepository.ProjectTeamRepository)({
+    getManagerByThreadId: (threadId) =>
+      Effect.succeed(
+        threadId === pmThreadId
+          ? Option.some({
+              projectId: ProjectId.make("project:thread-management:pm"),
+              threadId,
+              settings: DEFAULT_PROJECT_TEAM_SETTINGS,
+              lastUserMessageAt: null,
+              lastSitrepAt: null,
+              unreadSitrepStreak: 0,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            })
+          : Option.none(),
+      ),
+  });
+  const layerTest = layerDispatchChokepointTest(ServerSettings.layerTest())(dispatched).pipe(
+    Layer.provide(projectTeamRepository),
+  );
+
+  return Effect.gen(function* () {
+    const threads = yield* ThreadManagementService.ThreadManagementService;
+    const error = yield* Effect.flip(
+      threads.dispatch({
+        type: "thread.archive",
+        commandId: CommandId.make("command:thread-management:archive-pm"),
+        threadId: pmThreadId,
+      }),
+    );
+    expect(error._tag).toBe("OrchestratorDispatchError");
+    // The client shows this through the dispatch error detail; MCP tools through dispatchFailure.
+    expect(userFacingDispatchErrorMessage(error)).toBe("The project manager can't be archived.");
+    expect(dispatchFailure(error).message).toBe("The project manager can't be archived.");
+
+    yield* threads.dispatch({
+      type: "thread.unarchive",
+      commandId: CommandId.make("command:thread-management:unarchive-pm"),
+      threadId: pmThreadId,
+    });
+    yield* threads.dispatch({
+      type: "thread.archive",
+      commandId: CommandId.make("command:thread-management:archive-other"),
+      threadId: otherThreadId,
+    });
+    expect(dispatched).toEqual(["thread.unarchive", "thread.archive"]);
+  }).pipe(Effect.provide(layerTest));
+});

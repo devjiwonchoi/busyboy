@@ -59,6 +59,16 @@ function summary(
     unreadSitrepCount: 0,
     sitrepInProgress: false,
     settings: DEFAULT_PROJECT_TEAM_SETTINGS,
+    persona: { name: "Remy", avatar: { kind: "emoji", emoji: "🦝" }, voice: "chill" },
+    enabled: true,
+    presence: {
+      running: 0,
+      waitingOnUser: 0,
+      stalled: 0,
+      inbox: 0,
+      nextSitrepAt: null,
+      lastAction: null,
+    },
     ...overrides,
   };
 }

@@ -6,6 +6,7 @@ import * as Ref from "effect/Ref";
 
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import { DefaultManagerReactor } from "./defaultManagerReactor.ts";
+import { defaultPersonaName } from "./persona.ts";
 import { PROJECT_ID, START, withTeam } from "./testkit.ts";
 
 const projectCreated = (projectId: ProjectId): ApplicationStoredEvent =>
@@ -39,7 +40,10 @@ describe("DefaultManagerReactor", () => {
         const titles = (yield* Ref.get(harness.dispatched)).flatMap((command) =>
           command.type === "thread.create" ? [command.title] : [],
         );
-        assert.deepStrictEqual(titles.toSorted(), ["Demo PM", "Second PM"]);
+        assert.deepStrictEqual(
+          titles.toSorted(),
+          [defaultPersonaName(PROJECT_ID), defaultPersonaName(second)].toSorted(),
+        );
       }),
     ),
   );
@@ -57,7 +61,7 @@ describe("DefaultManagerReactor", () => {
         assert.isTrue(Option.isSome(manager));
         assert.strictEqual(
           harness.threads.get(Option.getOrThrow(manager).threadId)?.title,
-          "New PM",
+          defaultPersonaName(created),
         );
       }),
     ),

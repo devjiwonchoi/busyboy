@@ -4,10 +4,12 @@ import * as Schema from "effect/Schema";
 import {
   DEFAULT_PROJECT_TEAM_SETTINGS,
   ProjectAttentionItem,
+  ProjectManagerPresence,
   ProjectTask,
   ProjectTeamAskUserInput,
   ProjectTeamSettings,
   ProjectTeamSettingsUpdateInput,
+  ProjectTeamStatus,
   ProjectTeamStatusInput,
   ProjectTeamTaskUpdateInput,
   ProjectTeamUpdateSettingsInput,
@@ -34,7 +36,67 @@ describe("ProjectTeamSettings", () => {
       sitrepNotify: true,
       quietHours: { start: "22:00", end: "07:30" },
       pinnedUntil: "2026-11-05T00:00:00.000Z",
+      enabled: true,
     });
+  });
+
+  it("decodes settings stored before persona and enabled existed", () => {
+    const settings = Schema.decodeUnknownSync(ProjectTeamSettings)({
+      maxConcurrentTasks: 4,
+      sitrepIntervalMinutes: 60,
+      sitrepNotify: false,
+    });
+    expect(settings.enabled).toBe(true);
+    expect("persona" in settings).toBe(false);
+    expect(Schema.decodeUnknownSync(ProjectTeamSettings)({ enabled: false }).enabled).toBe(false);
+  });
+
+  it("round-trips a persona", () => {
+    const stored = {
+      maxConcurrentTasks: 6,
+      sitrepIntervalMinutes: 60,
+      sitrepNotify: true,
+      enabled: true,
+      persona: {
+        name: "Moss",
+        avatar: { kind: "emoji", emoji: "🌿" },
+        voice: "custom",
+        voiceCustom: "Speak like a calm ship captain.",
+      },
+    };
+    const decoded = Schema.decodeUnknownSync(ProjectTeamSettings)(stored);
+    expect(decoded).toEqual(stored);
+    expect(Schema.encodeSync(ProjectTeamSettings)(decoded)).toEqual(stored);
+    expect(() =>
+      Schema.decodeUnknownSync(ProjectTeamSettings)({
+        persona: { ...stored.persona, name: "x".repeat(41) },
+      }),
+    ).toThrow();
+    expect(() =>
+      Schema.decodeUnknownSync(ProjectTeamSettings)({
+        persona: { ...stored.persona, name: "   " },
+      }),
+    ).toThrow();
+  });
+
+  it("accepts a partial persona and enabled in the client update", () => {
+    const decode = Schema.decodeUnknownSync(ProjectTeamUpdateSettingsInput);
+    expect(
+      decode({
+        projectId: "p",
+        persona: { avatar: { kind: "monogram", text: "PM", color: "blue" } },
+        enabled: false,
+      }),
+    ).toEqual({
+      projectId: "p",
+      persona: { avatar: { kind: "monogram", text: "PM", color: "blue" } },
+      enabled: false,
+    });
+    expect(decode({ projectId: "p", persona: { name: " Moss " } })).toEqual({
+      projectId: "p",
+      persona: { name: "Moss" },
+    });
+    expect(() => decode({ projectId: "p", persona: { voice: "loud" } })).toThrow();
   });
 
   it("rejects intervals outside 5 to 1440 minutes", () => {
@@ -121,6 +183,17 @@ describe("MCP inputs", () => {
     expect(() => decode({ maxConcurrentTasks: 0 })).toThrow();
   });
 
+  it("lets the PM change its name, emoji and voice but not switch itself off", () => {
+    const decode = Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput);
+    expect(decode({ name: "Moss", avatarEmoji: "🌿", voice: "dry" })).toEqual({
+      name: "Moss",
+      avatarEmoji: "🌿",
+      voice: "dry",
+    });
+    expect(() => decode({ avatarEmoji: "x".repeat(17) })).toThrow();
+    expect(() => decode({ enabled: false })).toThrow();
+  });
+
   it("accepts the user_asked reason only", () => {
     const decode = Schema.decodeUnknownSync(ProjectTeamStatusInput);
     expect(decode({ reason: "user_asked" })).toEqual({ reason: "user_asked" });
@@ -135,6 +208,67 @@ describe("MCP inputs", () => {
     });
     expect(() => decode({ kind: "fyi", question: "Hi" })).toThrow();
     expect(() => decode({ kind: "decision", question: "   " })).toThrow();
+  });
+});
+
+describe("ProjectTeamStatus", () => {
+  const emptyTasks = {
+    inbox: [],
+    planning: [],
+    running: [],
+    in_review: [],
+    done: [],
+    blocked: [],
+    cancelled: [],
+  };
+  const base = {
+    projectId: "project-1",
+    tasks: emptyTasks,
+    stalled: [],
+    openAttention: [],
+    settings: {},
+    changes: { since: null, done: [], prOpened: [], newAttention: [], blocked: [] },
+  };
+
+  it("defaults the journal and memory topics for an older status", () => {
+    const status = Schema.decodeUnknownSync(ProjectTeamStatus)(base);
+    expect(status.journal).toEqual([]);
+    expect(status.memoryTopics).toEqual([]);
+  });
+
+  it("keeps journal entries and rejects unknown kinds", () => {
+    const decode = Schema.decodeUnknownSync(ProjectTeamStatus);
+    const entry = { at: "2026-11-04T00:00:00.000Z", kind: "decision", text: "Decided on #1" };
+    expect(decode({ ...base, journal: [entry], memoryTopics: ["decisions"] })).toMatchObject({
+      journal: [entry],
+      memoryTopics: ["decisions"],
+    });
+    expect(() => decode({ ...base, journal: [{ ...entry, kind: "chat" }] })).toThrow();
+  });
+});
+
+describe("ProjectManagerPresence", () => {
+  it("decodes an idle and a busy presence", () => {
+    const decode = Schema.decodeUnknownSync(ProjectManagerPresence);
+    const idle = {
+      running: 0,
+      waitingOnUser: 0,
+      stalled: 0,
+      inbox: 0,
+      nextSitrepAt: null,
+      lastAction: null,
+    };
+    expect(decode(idle)).toEqual(idle);
+    const busy = {
+      running: 2,
+      waitingOnUser: 1,
+      stalled: 0,
+      inbox: 3,
+      nextSitrepAt: "2026-11-04T01:00:00.000Z",
+      lastAction: { text: "Started #4", at: "2026-11-04T00:30:00.000Z" },
+    };
+    expect(decode(busy)).toEqual(busy);
+    expect(() => decode({ ...idle, running: -1 })).toThrow();
   });
 });
 

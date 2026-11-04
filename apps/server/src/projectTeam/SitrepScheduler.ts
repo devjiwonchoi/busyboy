@@ -301,6 +301,8 @@ const make = Effect.gen(function* () {
 
   const checkProject = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
     Effect.gen(function* () {
+      // A turned-off PM keeps its thread but sends no sitreps until it is turned back on.
+      if (!manager.settings.enabled) return;
       const shell = yield* threads.getThreadShell(manager.threadId);
       if (shell === null || shell.deletedAt !== null || shell.archivedAt !== null) return;
       const latest = yield* latestSitrep(manager.projectId, manager.threadId);

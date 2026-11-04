@@ -44,8 +44,8 @@ import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import type * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
-import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import { personaInstructions, resolvePersona } from "../projectTeam/persona.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as EventSink from "./EventSink.ts";
@@ -377,7 +377,13 @@ export const layerWithOptions = (
           if (Option.isNone(projectTeamRepository)) return Option.some(undefined);
           return yield* projectTeamRepository.value.getManagerByThreadId(threadId).pipe(
             Effect.map((manager) =>
-              Option.some(Option.isSome(manager) ? PROJECT_MANAGER_INSTRUCTIONS : undefined),
+              Option.some(
+                Option.isSome(manager)
+                  ? personaInstructions(
+                      resolvePersona(manager.value.projectId, manager.value.settings),
+                    )
+                  : undefined,
+              ),
             ),
             Effect.catch((cause) =>
               Effect.logWarning("Could not read the thread's team role.", {
