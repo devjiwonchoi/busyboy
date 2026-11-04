@@ -230,6 +230,8 @@ function EnvironmentNotifications({
       if (!before) continue;
       const projectTitle =
         projects?.find((project) => project.id === summary.projectId)?.title ?? "Project";
+      // Default persona names repeat across projects, so the title names the project too.
+      const who = `${summary.persona.name} (${projectTitle})`;
       // Distinct tags keep a sitrep from replacing an unseen Needs-you notification.
       const notify = (title: string, kind: "attention" | "sitrep") =>
         showThreadNotification({
@@ -243,20 +245,22 @@ function EnvironmentNotifications({
           navigate,
           onNotification,
         });
+      // Leads keep running while the PM is off, so its blockers still need the user.
       if (summary.latestBatchId !== null && summary.latestBatchId !== before.latestBatchId) {
         if (hasNotificationSound(mode)) {
           void playNotificationSound("input", () =>
             hasNotificationSound(getClientSettings().notificationMode),
           );
         }
-        notify(`Needs you: ${summary.openCount}`, "attention");
+        notify(`${who} · Needs you: ${summary.openCount}`, "attention");
       }
       if (
+        summary.enabled &&
         summary.settings.sitrepNotify &&
         summary.latestSitrepId !== null &&
         summary.latestSitrepId !== before.latestSitrepId
       ) {
-        notify(`${projectTitle} PM · Sitrep`, "sitrep");
+        notify(`${who} · Sitrep`, "sitrep");
       }
     }
   }, [

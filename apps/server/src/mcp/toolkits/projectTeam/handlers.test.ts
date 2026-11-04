@@ -41,16 +41,22 @@ const mcpClient = McpSchema.McpServerClient.of({
 });
 
 /** The toolkit as /mcp registers it, with delegate_task going to the team harness. */
-const registration = (harness: TeamHarness, delegateScopes: Ref.Ref<ReadonlyArray<ThreadId>>) =>
+interface DelegateCall {
+  readonly scope: ThreadId;
+  readonly completionWake: string | undefined;
+}
+
+const registration = (harness: TeamHarness, delegateCalls: Ref.Ref<ReadonlyArray<DelegateCall>>) =>
   McpHttpServer.toolkitRegistration(ProjectTeamToolkit, ProjectTeamHandlers.layer).pipe(
     Layer.provideMerge(McpServer.McpServer.layer),
     Layer.provide(liveThreadsLayer),
     Layer.provide(
       Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({
-        delegateTask: (scope, input) =>
-          Ref.update(delegateScopes, (all) => [...all, scope.thread!.threadId]).pipe(
-            Effect.andThen(harness.delegate(input)),
-          ),
+        delegateTask: (scope, input, options) =>
+          Ref.update(delegateCalls, (all) => [
+            ...all,
+            { scope: scope.thread!.threadId, completionWake: options?.completionWake },
+          ]).pipe(Effect.andThen(harness.delegate(input))),
       }),
     ),
   );
@@ -86,14 +92,16 @@ describe("projectTeam MCP toolkit", () => {
         const pmAsk = yield* call(pm, "ask_user", { kind: "decision", question: "Which?" });
         assert.isTrue(pmAsk.isError);
         assert.include(JSON.stringify(pmAsk.content), "not available to a PM");
-      }).pipe(Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<ThreadId>>([])))),
+      }).pipe(
+        Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
+      ),
     ),
   );
 
   it.effect("runs create, start, ask_user and attention_answer end to end", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
-        const delegateScopes = yield* Ref.make<ReadonlyArray<ThreadId>>([]);
+        const delegateCalls = yield* Ref.make<ReadonlyArray<DelegateCall>>([]);
         return yield* Effect.gen(function* () {
           const pm = yield* setUpManager;
           const created = yield* call(pm, "task_create", {
@@ -106,8 +114,11 @@ describe("projectTeam MCP toolkit", () => {
           assert.isFalse(started.isError);
           assert.strictEqual(content(started).task.stage, "planning");
           const lead = content(started).leadThreadId as ThreadId;
-          // The task lead is delegated from the PM's own MCP scope.
-          assert.deepStrictEqual(yield* Ref.get(delegateScopes), [pm]);
+          // The task lead is delegated from the PM's own MCP scope, and its end
+          // does not wake the PM (the outcome reactor decides that).
+          assert.deepStrictEqual(yield* Ref.get(delegateCalls), [
+            { scope: pm, completionWake: "never" },
+          ]);
 
           const asked = yield* call(lead, "ask_user", {
             kind: "approval",
@@ -134,7 +145,7 @@ describe("projectTeam MCP toolkit", () => {
           const after = yield* call(lead, "task_read", { taskId: content(created).task.id });
           assert.isFalse(after.isError);
           assert.deepStrictEqual(content(after).openAttention, []);
-        }).pipe(Effect.provide(registration(harness, delegateScopes)));
+        }).pipe(Effect.provide(registration(harness, delegateCalls)));
       }),
     ),
   );
@@ -182,7 +193,9 @@ describe("projectTeam MCP toolkit", () => {
           answer: "Approved.",
         });
         assert.isTrue(crossProjectAnswer.isError);
-      }).pipe(Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<ThreadId>>([])))),
+      }).pipe(
+        Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
+      ),
     ),
   );
 });

@@ -250,6 +250,8 @@ const layerThreadManagementProvided = ThreadManagementService.layer.pipe(
       layerOrchestratorProvided,
       layerCommandReceiptStoreProvided,
       layerProviderSessionManagerProvided,
+      // Lets dispatch refuse to archive a project's PM thread.
+      ProjectTeamRepository.layer,
     ),
   ),
 );

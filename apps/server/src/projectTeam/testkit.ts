@@ -3,6 +3,7 @@ import {
   MessageId,
   NodeId,
   type OrchestrationV2ConversationMessage,
+  type OrchestrationV2ProviderTurn,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2Subagent,
   type OrchestrationV2ThreadShell,
@@ -26,6 +27,7 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
+import * as ContextCare from "./ContextCare.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
@@ -38,13 +40,15 @@ export const PROJECT_ID = ProjectId.make("project-1");
 export interface FakeThread {
   readonly id: ThreadId;
   readonly projectId: ProjectId;
-  readonly title: string;
+  title: string;
   activeRunId: string | null;
   deletedAt: string | null;
   archivedAt: string | null;
   messages: Array<OrchestrationV2ConversationMessage>;
   /** Delegated children; only `origin` and `status` matter to the team services. */
   subagents?: Array<Pick<OrchestrationV2Subagent, "origin" | "status">>;
+  /** Provider turns; only `id`, `status` and `tokenUsage` matter to the team services. */
+  providerTurns?: Array<Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage">>;
 }
 
 export interface TeamHarness {
@@ -73,7 +77,8 @@ export type TeamServices =
   | ProjectTeamRepository.ProjectTeamRepository
   | TaskOutcomeReactor.TaskOutcomeReactor
   | StalledTaskSweep.StalledTaskSweep
-  | DefaultManagerReactor.DefaultManagerReactor;
+  | DefaultManagerReactor.DefaultManagerReactor
+  | ContextCare.ContextCare;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -140,6 +145,16 @@ export const withTeam = <A, E>(
               messages: [],
             });
           }
+          const target =
+            "threadId" in command && command.threadId !== undefined
+              ? threads.get(command.threadId)
+              : undefined;
+          if (target === undefined) return;
+          if (command.type === "thread.metadata.update" && command.title !== undefined) {
+            target.title = command.title;
+          }
+          if (command.type === "thread.archive") target.archivedAt = START;
+          if (command.type === "thread.unarchive") target.archivedAt = null;
         }).pipe(
           Effect.andThen(Ref.update(dispatched, (all) => [...all, command])),
           Effect.as({ sequence: 1, storedEvents: [] }),
@@ -184,7 +199,12 @@ export const withTeam = <A, E>(
               filter?.messageRunIds === undefined ||
               (message.runId !== null && filter.messageRunIds.includes(message.runId)),
           );
-          return { thread, messages, subagents: thread?.subagents ?? [] };
+          return {
+            thread,
+            messages,
+            subagents: thread?.subagents ?? [],
+            providerTurns: thread?.providerTurns ?? [],
+          };
         })) as never,
     });
 
@@ -204,6 +224,7 @@ export const withTeam = <A, E>(
       TaskOutcomeReactor.layer,
       StalledTaskSweep.layer,
       DefaultManagerReactor.layer,
+      ContextCare.layer,
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),

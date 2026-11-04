@@ -40,6 +40,7 @@ const make = Effect.gen(function* () {
 
   const sweepProject = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
     Effect.gen(function* () {
+      if (!manager.settings.enabled) return;
       const nowMs = isoMillis(yield* nowIso);
       const tasks = yield* repository.listTasks({
         projectId: manager.projectId,

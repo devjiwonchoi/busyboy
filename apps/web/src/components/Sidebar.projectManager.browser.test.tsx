@@ -50,15 +50,32 @@ vi.mock(import("../state/environments"), async (original) => ({
   ...(await original()),
   useEnvironmentIds: (() => ["env-1"]) as never,
 }));
+vi.mock(import("../state/session"), async (original) => ({
+  ...(await original()),
+  useEnvironmentScope: () => true,
+}));
 vi.mock(import("../threadNotifications"), async (original) => ({
   ...(await original()),
   playNotificationSound: state.sound,
   setNotificationBadge: vi.fn(),
 }));
 
-import { groupSidebarThreadsByProject, orderSidebarProjectSections } from "./Sidebar.logic";
-import { SidebarProjectManagerBadges, SidebarSitrepButton } from "./SidebarProjectManager";
+import { makeProjectManagerSummaryFixture } from "../test-fixtures";
+import {
+  buildMultiSelectThreadContextMenuItems,
+  filterSidebarV2VisibleThreads,
+  isProjectManagerTaskLead,
+  groupSidebarThreadsByProject,
+  orderSidebarProjectSections,
+  selectSidebarProjectManagers,
+} from "./Sidebar.logic";
+import {
+  SidebarProjectManagerBadges,
+  SidebarProjectManagerHeading,
+  SidebarSitrepButton,
+} from "./SidebarProjectManager";
 import { ThreadNotificationCoordinator } from "./ThreadNotificationCoordinator";
+import { buildThreadActionMenuItems } from "./threadActionMenu.logic";
 
 function pmThreadShell() {
   return {
@@ -98,19 +115,8 @@ function pmThreadShell() {
   };
 }
 
-function summary(patch: Partial<ProjectTeamAttentionSummary> = {}): ProjectTeamAttentionSummary {
-  return {
-    projectId: "project-1",
-    pmThreadId: "pm-thread",
-    openCount: 0,
-    latestBatchId: null,
-    latestSitrepId: null,
-    unreadSitrepCount: 0,
-    sitrepInProgress: false,
-    settings: { maxConcurrentTasks: 6, sitrepIntervalMinutes: 60, sitrepNotify: true },
-    ...patch,
-  } as ProjectTeamAttentionSummary;
-}
+const summary = (patch: Parameters<typeof makeProjectManagerSummaryFixture>[0] = {}) =>
+  makeProjectManagerSummaryFixture(patch);
 
 function setTeam(next: ProjectTeamAttentionSummary) {
   state.team = {
@@ -142,52 +148,76 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe("project manager sidebar row", () => {
-  it("pins the PM thread at the top of its project and keeps new threads below it", () => {
-    const threads = [
-      { id: "new-thread", project: "a" },
-      { id: "other-project", project: "b" },
-      { id: "pm-thread", project: "a" },
-      { id: "older-thread", project: "a" },
-    ];
-    const grouped = groupSidebarThreadsByProject(
-      threads,
-      (thread) => thread.project,
-      (thread) => thread.id === "pm-thread",
-    );
-    expect(grouped.get("a")?.map((thread) => thread.id)).toEqual([
-      "pm-thread",
-      "new-thread",
-      "older-thread",
-    ]);
-    expect(grouped.get("b")?.map((thread) => thread.id)).toEqual(["other-project"]);
+const pmThreadRef = scopeThreadRef("env-1" as never, "pm-thread" as never);
+
+async function renderHeading(
+  overrides: Partial<Parameters<typeof SidebarProjectManagerHeading>[0]> = {},
+) {
+  const props = {
+    projectName: "busyboy",
+    summary: summary(),
+    pmThreadRef,
+    pmThreadWorking: false,
+    isActive: false,
+    onOpenThread: vi.fn(),
+    onNewThread: vi.fn(),
+    ...overrides,
+  };
+  await act(() => root.render(<SidebarProjectManagerHeading {...props} />));
+  return props;
+}
+
+const button = (name: string) =>
+  [...container.querySelectorAll("button")].find(
+    (candidate) =>
+      candidate.getAttribute("aria-label") === name || candidate.textContent?.trim() === name,
+  );
+
+describe("project manager sidebar heading", () => {
+  it("shows the PM avatar, project and PM name, and opens the PM thread on click", async () => {
+    const props = await renderHeading({
+      summary: summary({ openCount: 2, unreadSitrepCount: 1, presence: { running: 1 } }),
+    });
+    const heading = container.querySelector('[data-testid="sidebar-project-manager-heading"]')!;
+    expect(heading.querySelector('[role="img"][aria-label="Remy, needs you"]')).not.toBeNull();
+    expect(heading.textContent).toContain("busyboy");
+    expect(heading.textContent).toContain("Remy");
+    expect(heading.querySelector('[aria-label="Needs you: 2"]')?.textContent).toBe("2");
+    expect(heading.querySelector('[aria-label="Unread sitrep"]')).not.toBeNull();
+
+    await act(async () => button("🦝busyboyRemy")!.click());
+    expect(props.onOpenThread).toHaveBeenCalledExactlyOnceWith(pmThreadRef);
+    expect(button("New thread in busyboy")).toBeDefined();
+    // The section is always open, so the heading has no collapse control.
+    expect(heading.querySelector("[aria-expanded]")).toBeNull();
   });
 
-  it("orders projects by their non-PM threads so a busy PM never moves its project", () => {
-    const threads = [
-      { id: "pm-c", project: "c" },
-      { id: "pm-b", project: "b" },
-      { id: "a-thread", project: "a" },
-      { id: "b-thread", project: "b" },
-    ];
-    const isPm = (thread: { id: string }) => thread.id.startsWith("pm-");
-    const grouped = groupSidebarThreadsByProject(threads, (thread) => thread.project, isPm);
-    expect(grouped.get("b")?.map((thread) => thread.id)).toEqual(["pm-b", "b-thread"]);
-    // The PM-only project keeps its fallback position.
-    expect(orderSidebarProjectSections(grouped, isPm, ["c", "d", "a", "b"])).toEqual([
-      "a",
-      "b",
-      "c",
-      "d",
-    ]);
+  it("marks the heading current while the PM thread is open and shows a working avatar", async () => {
+    await renderHeading({ isActive: true, pmThreadWorking: true });
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain("Remy");
+    expect(container.querySelector('[aria-label="Remy, working"]')).not.toBeNull();
   });
 
-  it("shows the PM badge, Needs-you count, and unread sitrep dot", async () => {
+  it("has no tasks fold: task leads are ordinary rows below the heading", async () => {
+    await renderHeading();
+    expect(container.textContent).not.toMatch(/\btasks?\b/);
+    expect(container.querySelector("ul")).toBeNull();
+    expect(container.querySelectorAll("button").length).toBe(3);
+  });
+
+  it("asks for a sitrep and opens the PM thread from the heading's Sitrep button", async () => {
+    const props = await renderHeading();
+    await act(async () => button("Sitrep")!.click());
+    expect(state.requestSitrep).toHaveBeenCalledExactlyOnceWith({
+      environmentId: "env-1",
+      projectId: "project-1",
+    });
+    expect(props.onOpenThread).toHaveBeenCalledExactlyOnceWith(pmThreadRef);
+  });
+
+  it("shows only the open count and unread dot as badges", async () => {
     await act(() => root.render(<SidebarProjectManagerBadges summary={summary()} />));
-    expect(container.textContent).toBe("PM");
-    expect(container.querySelector('[aria-label^="Needs you"]')).toBeNull();
-    expect(container.querySelector('[aria-label="Unread sitrep"]')).toBeNull();
-
+    expect(container.textContent).toBe("");
     await act(() =>
       root.render(
         <SidebarProjectManagerBadges summary={summary({ openCount: 3, unreadSitrepCount: 1 })} />,
@@ -197,30 +227,167 @@ describe("project manager sidebar row", () => {
     expect(container.querySelector('[aria-label="Unread sitrep"]')).not.toBeNull();
   });
 
-  it("asks for a sitrep and opens the PM thread from the row's Sitrep button", async () => {
-    const threadRef = scopeThreadRef("env-1" as never, "pm-thread" as never);
+  it("does not bubble the Sitrep click to the heading", async () => {
     const onThreadActivate = vi.fn();
     const rowClick = vi.fn();
     await act(() =>
       root.render(
         <div onClick={rowClick}>
           <SidebarSitrepButton
-            threadRef={threadRef}
+            threadRef={pmThreadRef}
             summary={summary()}
             onThreadActivate={onThreadActivate}
           />
         </div>,
       ),
     );
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('button[aria-label="Sitrep"]')!.click(),
-    );
-    expect(state.requestSitrep).toHaveBeenCalledExactlyOnceWith({
-      environmentId: "env-1",
-      projectId: "project-1",
-    });
-    expect(onThreadActivate).toHaveBeenCalledExactlyOnceWith(threadRef);
+    await act(async () => button("Sitrep")!.click());
+    expect(onThreadActivate).toHaveBeenCalledExactlyOnceWith(pmThreadRef);
     expect(rowClick).not.toHaveBeenCalled();
+  });
+});
+
+describe("project manager sidebar sections", () => {
+  const shell = (id: string, patch: Record<string, unknown> = {}) => ({
+    id,
+    environmentId: "env-1",
+    projectId: "project-1",
+    archivedAt: null as string | null,
+    createdAt: "2026-09-13T09:00:00.000Z",
+    lineage: {
+      rootThreadId: id,
+      parentThreadId: null as string | null,
+      relationshipToParent: null as string | null,
+    },
+    ...patch,
+  });
+
+  it("keeps a disabled or second manager in a section as an ordinary row", () => {
+    const entries = [
+      { environmentId: "env-1", summary: summary() },
+      // The same repo in another environment, grouped into the same section.
+      {
+        environmentId: "env-2",
+        summary: summary({ pmThreadId: "pm-thread-2" as never }),
+      },
+      {
+        environmentId: "env-1",
+        summary: summary({
+          projectId: "project-2" as never,
+          pmThreadId: "pm-off" as never,
+          enabled: false,
+        }),
+      },
+    ];
+    const managers = selectSidebarProjectManagers(entries, (env, project) =>
+      project === "project-1" ? "repo:project-1" : `${env}:${project}`,
+    );
+    const headingKeys = new Set(
+      [...managers.values()].map((entry) => `${entry.environmentId}:${entry.summary.pmThreadId}`),
+    );
+    const threads = [
+      shell("pm-thread"),
+      shell("pm-thread-2", { environmentId: "env-2" }),
+      shell("pm-off", { projectId: "project-2" }),
+      shell("user-thread"),
+    ];
+    const visible = filterSidebarV2VisibleThreads(
+      threads as never[],
+      null,
+      (thread: { environmentId: string; id: string }) =>
+        headingKeys.has(`${thread.environmentId}:${thread.id}`),
+    ) as { id: string }[];
+    expect([...managers.keys()]).toEqual(["repo:project-1"]);
+    expect(visible.map((thread) => thread.id)).toEqual(["pm-thread-2", "pm-off", "user-thread"]);
+  });
+
+  it("never lists the PM thread as a row", () => {
+    const threads = [shell("pm-thread"), shell("user-thread")];
+    const visible = filterSidebarV2VisibleThreads(
+      threads as never[],
+      null,
+      (thread: { id: string }) => thread.id === "pm-thread",
+    ) as { id: string }[];
+    expect(visible.map((thread) => thread.id)).toEqual(["user-thread"]);
+  });
+
+  it("gives a heading only to enabled managers", () => {
+    const entries = [
+      { environmentId: "env-1", summary: summary() },
+      {
+        environmentId: "env-1",
+        summary: summary({ projectId: "project-2" as never, enabled: false }),
+      },
+    ];
+    const managers = selectSidebarProjectManagers(entries, (env, project) => `${env}:${project}`);
+    expect([...managers.keys()]).toEqual(["env-1:project-1"]);
+  });
+
+  it("lists the PM's unarchived task leads as ordinary rows, but no other subagents", () => {
+    const subagent = (id: string, parentThreadId: string, patch: Record<string, unknown> = {}) =>
+      shell(id, {
+        lineage: { rootThreadId: parentThreadId, parentThreadId, relationshipToParent: "subagent" },
+        ...patch,
+      });
+    const threads = [
+      shell("pm-thread"),
+      subagent("lead", "pm-thread"),
+      subagent("lead-archived", "pm-thread", { archivedAt: "2026-09-13T12:00:00Z" }),
+      subagent("lead-other-env", "pm-thread", { environmentId: "env-2" }),
+      subagent("helper", "user-thread"),
+      subagent("grandchild", "lead"),
+      shell("user-thread"),
+    ];
+    const isPmThread = (environmentId: string, threadId: string) =>
+      environmentId === "env-1" && threadId === "pm-thread";
+    const visible = filterSidebarV2VisibleThreads(
+      threads as never[],
+      null,
+      (thread: { environmentId: string; id: string }) =>
+        isPmThread(thread.environmentId, thread.id),
+      (thread: Parameters<typeof isProjectManagerTaskLead>[0]) =>
+        isProjectManagerTaskLead(thread, isPmThread),
+    ) as { id: string }[];
+    expect(visible.map((thread) => thread.id)).toEqual(["lead", "user-thread"]);
+  });
+
+  it("orders projects by their threads, then the rest in fallback order", () => {
+    const grouped = groupSidebarThreadsByProject(
+      [
+        { id: "a-thread", project: "a" },
+        { id: "b-thread", project: "b" },
+        { id: "a-older", project: "a" },
+      ],
+      (thread) => thread.project,
+    );
+    expect(grouped.get("a")?.map((thread) => thread.id)).toEqual(["a-thread", "a-older"]);
+    expect(orderSidebarProjectSections(grouped, ["c", "b", "a"])).toEqual(["a", "b", "c"]);
+  });
+
+  it("offers no archive or delete for a PM thread", () => {
+    const base = {
+      canOperate: true,
+      branch: null,
+      projectFilter: null,
+      isPinned: false,
+      isRegeneratingTitle: false,
+      isRunning: false,
+      supports: { pinning: true, titleRegeneration: true },
+    };
+    const ids = (items: ReadonlyArray<{ id: string }>) => items.map((item) => item.id);
+    expect(ids(buildThreadActionMenuItems(base))).toEqual(
+      expect.arrayContaining(["archive", "delete"]),
+    );
+    const pmItems = ids(buildThreadActionMenuItems({ ...base, isProjectManager: true }));
+    expect(pmItems).not.toContain("archive");
+    expect(pmItems).not.toContain("delete");
+    const bulk = buildMultiSelectThreadContextMenuItems({
+      count: 2,
+      hasRunningThread: false,
+      hasProjectManagerThread: true,
+    });
+    expect(bulk.find((item) => item.id === "archive")?.disabled).toBe(true);
+    expect(bulk.find((item) => item.id === "delete")?.disabled).toBe(true);
   });
 });
 
@@ -243,7 +410,7 @@ describe("project manager notifications", () => {
     setTeam(summary({ openCount: 2, latestBatchId: "batch-2" as never }));
     await render();
     await render();
-    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Needs you: 2", {
+    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy (Busy) · Needs you: 2", {
       body: "Busy",
       tag: "env-1:pm-thread:attention",
       silent: true,
@@ -260,7 +427,7 @@ describe("project manager notifications", () => {
     await render();
     setTeam(summary({ latestSitrepId: "sitrep-1" as never, unreadSitrepCount: 1 }));
     await render();
-    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Busy PM · Sitrep", {
+    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy (Busy) · Sitrep", {
       body: "Busy",
       tag: "env-1:pm-thread:sitrep",
       silent: true,
@@ -268,8 +435,34 @@ describe("project manager notifications", () => {
     expect(state.sound).not.toHaveBeenCalled();
   });
 
+  it("still alerts Needs-you but skips sitreps while the project manager is off", async () => {
+    setTeam(summary({ enabled: false }));
+    await render();
+    setTeam(summary({ enabled: false, openCount: 1, latestBatchId: "batch-1" as never }));
+    await render();
+    setTeam(
+      summary({
+        enabled: false,
+        openCount: 1,
+        latestBatchId: "batch-1" as never,
+        latestSitrepId: "sitrep-1" as never,
+      }),
+    );
+    await render();
+    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy (Busy) · Needs you: 1", {
+      body: "Busy",
+      tag: "env-1:pm-thread:attention",
+      silent: true,
+    });
+  });
+
   it("skips the sitrep notification when sitrep notifications are off", async () => {
-    const quiet = { maxConcurrentTasks: 6, sitrepIntervalMinutes: 60, sitrepNotify: false };
+    const quiet = {
+      maxConcurrentTasks: 6,
+      sitrepIntervalMinutes: 60,
+      sitrepNotify: false,
+      enabled: true,
+    };
     setTeam(summary({ settings: quiet }));
     await render();
     setTeam(summary({ settings: quiet, latestSitrepId: "sitrep-1" as never }));

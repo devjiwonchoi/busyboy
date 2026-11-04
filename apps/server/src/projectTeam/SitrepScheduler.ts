@@ -14,6 +14,7 @@ import {
   type ProjectTeamSettings,
   type ThreadId,
 } from "@t3tools/contracts";
+import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -115,6 +116,14 @@ export class SitrepScheduler extends Context.Service<
     readonly check: Effect.Effect<void>;
     /** Tracks user messages, visits and finished sitrep turns on PM threads. */
     readonly handle: (event: OrchestrationV2DomainEvent) => Effect.Effect<void>;
+    /**
+     * Runs a read-modify-write of a project's settings JSON alone. Every settings write
+     * goes through it, so re-read the PM inside. Not reentrant.
+     */
+    readonly withSettingsLock: <A, E, R>(
+      projectId: ProjectId,
+      effect: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E, R>;
   }
 >()("t3/projectTeam/SitrepScheduler") {}
 
@@ -135,28 +144,48 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  const settingsLocks = yield* KeyedLock.make<ProjectId>();
+  const withSettingsLock: SitrepScheduler["Service"]["withSettingsLock"] = (projectId, effect) =>
+    settingsLocks.withLock(projectId, effect);
+
+  /**
+   * Adapts the interval from the stored settings, unless the user pinned it meanwhile.
+   * `next` maps the current interval to the new one.
+   */
   const changeInterval = (
-    manager: ProjectTeamRepository.ProjectManagerRecord,
-    minutes: number,
+    projectId: ProjectId,
+    next: (interval: number) => number,
     reason: string,
   ) =>
     Effect.gen(function* () {
-      const now = yield* nowIso;
-      yield* repository.updateManagerSettings({
-        projectId: manager.projectId,
-        settings: { ...manager.settings, sitrepIntervalMinutes: minutes },
-        now,
-      });
-      yield* repository.appendTaskEvent({
-        id: ProjectTaskEventId.make(yield* newId("project-event")),
-        projectId: manager.projectId,
-        taskId: null,
-        kind: "preference_changed",
-        body: preferenceChangedBody(minutes, reason),
-        actorThreadId: null,
-        createdAt: now,
-      });
-      yield* router.publish(manager.projectId);
+      const changed = yield* withSettingsLock(
+        projectId,
+        Effect.gen(function* () {
+          const manager = yield* repository.getManager(projectId);
+          if (Option.isNone(manager)) return false;
+          const now = yield* nowIso;
+          const settings = manager.value.settings;
+          if (isPinned(settings, isoMillis(now))) return false;
+          const minutes = next(settings.sitrepIntervalMinutes);
+          if (minutes === settings.sitrepIntervalMinutes) return false;
+          yield* repository.updateManagerSettings({
+            projectId,
+            settings: { ...settings, sitrepIntervalMinutes: minutes },
+            now,
+          });
+          yield* repository.appendTaskEvent({
+            id: ProjectTaskEventId.make(yield* newId("project-event")),
+            projectId,
+            taskId: null,
+            kind: "preference_changed",
+            body: preferenceChangedBody(minutes, reason),
+            actorThreadId: null,
+            createdAt: now,
+          });
+          return true;
+        }),
+      );
+      if (changed) yield* router.publish(projectId);
     });
 
   const noteMilestone: SitrepScheduler["Service"]["noteMilestone"] = (projectId) =>
@@ -197,12 +226,13 @@ const make = Effect.gen(function* () {
       ) {
         return;
       }
-      const next = Math.max(
-        MIN_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES,
-        Math.floor(interval / 2),
-      );
-      if (next >= interval) return;
-      yield* changeInterval(manager, next, USER_ASKED_REASON);
+      const halve = (current: number) =>
+        Math.min(
+          current,
+          Math.max(MIN_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES, Math.floor(current / 2)),
+        );
+      if (halve(interval) >= interval) return;
+      yield* changeInterval(projectId, halve, USER_ASKED_REASON);
     }).pipe(orTeamError("Could not adjust the sitrep interval.", projectId));
 
   const dispatchSitrep = (
@@ -301,6 +331,8 @@ const make = Effect.gen(function* () {
 
   const checkProject = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
     Effect.gen(function* () {
+      // A turned-off PM keeps its thread but sends no sitreps until it is turned back on.
+      if (!manager.settings.enabled) return;
       const shell = yield* threads.getThreadShell(manager.threadId);
       if (shell === null || shell.deletedAt !== null || shell.archivedAt !== null) return;
       const latest = yield* latestSitrep(manager.projectId, manager.threadId);
@@ -396,20 +428,20 @@ const make = Effect.gen(function* () {
           posted.value.unreadSitrepStreak >= SITREP_UNREAD_STREAK_LIMIT &&
           !isPinned(posted.value.settings, isoMillis(now))
         ) {
-          const interval = posted.value.settings.sitrepIntervalMinutes;
-          const next = Math.min(MAX_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES, interval * 2);
           yield* repository.setUnreadSitrepStreak({
             projectId: manager.projectId,
             streak: 0,
             now,
           });
-          if (next > interval) {
-            yield* changeInterval(
-              posted.value,
-              next,
-              `the last ${SITREP_UNREAD_STREAK_LIMIT} sitreps went unanswered`,
-            );
-          }
+          yield* changeInterval(
+            manager.projectId,
+            (current) =>
+              Math.max(
+                current,
+                Math.min(MAX_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES, current * 2),
+              ),
+            `the last ${SITREP_UNREAD_STREAK_LIMIT} sitreps went unanswered`,
+          );
         }
       }
       yield* router.publish(manager.projectId);
@@ -462,6 +494,7 @@ const make = Effect.gen(function* () {
     abandonPending,
     check,
     handle,
+    withSettingsLock,
   } satisfies SitrepScheduler["Service"];
 });
 

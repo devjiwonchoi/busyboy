@@ -97,4 +97,26 @@ describe("StalledTaskSweep", () => {
       }),
     ),
   );
+
+  it.effect("stays quiet while the PM is turned off and resumes when it is back on", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const sweep = yield* StalledTaskSweep;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Slow", harness.delegate);
+        yield* markStalled(lead.task);
+        yield* team.updateSettings({ projectId: lead.task.projectId, enabled: false });
+
+        yield* TestClock.adjust("11 minutes");
+        yield* sweep.sweep;
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+        assert.isDefined(harness.threads.get(pm));
+
+        yield* team.updateSettings({ projectId: lead.task.projectId, enabled: true });
+        yield* sweep.sweep;
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), [stalledNoticeText([lead.task])]);
+      }),
+    ),
+  );
 });

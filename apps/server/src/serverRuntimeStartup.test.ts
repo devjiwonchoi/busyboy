@@ -1,19 +1,28 @@
 import { assert, it } from "@effect/vitest";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import {
   DEFAULT_SERVER_SETTINGS,
   DEFAULT_MODEL,
   ProjectId,
   ProviderInstanceId,
+  ThreadId,
 } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 
 import * as ServerConfig from "./config.ts";
+import * as ThreadLaunch from "./orchestration-v2/ThreadLaunchService.ts";
+import * as ThreadManagement from "./orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "./project/ProjectService.ts";
+import * as ProjectTeam from "./projectTeam/ProjectTeamService.ts";
+import * as ServerSettings from "./serverSettings.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 
 it("uses the canonical Codex model for auto-bootstrap", () => {
@@ -162,5 +171,73 @@ it.effect("automatic pull only updates enabled, behind, clean default-branch che
       { ...overrides({ "/opted-out": false }), defaultAutoPull: true },
     ).pipe(Effect.provideService(GitVcsDriver.GitVcsDriver, git));
     assert.deepStrictEqual(pulled, ["/inherited"]);
+  }),
+);
+
+const bootstrapWelcomeTargets = (managerEnabled: boolean) =>
+  Effect.gen(function* () {
+    const projectId = ProjectId.make("cwd-project");
+    const managerThreadId = ThreadId.make("project-pm-1");
+    const launchedTitles: string[] = [];
+    let managerCreated = false;
+    const targets = yield* ServerRuntimeStartup.resolveAutoBootstrapWelcomeTargets.pipe(
+      Effect.provideService(ServerConfig.ServerConfig, {
+        cwd: "/tmp/cwd-project",
+        autoBootstrapProjectFromCwd: true,
+      } as never),
+      Effect.provideService(ProjectService.ProjectService, {
+        bootstrap: () => Effect.succeed({ project: { id: projectId } }),
+      } as never),
+      Effect.provideService(ProjectTeam.ProjectTeamService, {
+        ensureManager: () =>
+          Effect.sync(() => {
+            managerCreated = true;
+            return { projectId, threadId: managerThreadId, settings: { enabled: managerEnabled } };
+          }),
+      } as never),
+      Effect.provideService(ThreadManagement.ThreadManagementService, {
+        // A fresh project has no threads until its PM is set up.
+        getShellSnapshot: () =>
+          Effect.sync(() => ({
+            threads: managerCreated ? [{ id: managerThreadId, projectId, lineage: {} }] : [],
+          })),
+      } as never),
+      Effect.provideService(ThreadLaunch.ThreadLaunchService, {
+        launch: (input: { readonly title: string }) =>
+          Effect.sync(() => {
+            launchedTitles.push(input.title);
+            return { threadId: ThreadId.make("starter-thread") };
+          }),
+      } as never),
+      Effect.provideService(ServerSettings.ServerSettingsService, {
+        getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+      } as never),
+      Effect.provide(Layer.merge(Path.layer, NodeCrypto.layer)),
+    );
+    return { targets, launchedTitles, projectId, managerThreadId };
+  });
+
+it.effect("auto-bootstrap opens the project's PM instead of launching a starter thread", () =>
+  Effect.gen(function* () {
+    const { targets, launchedTitles, projectId, managerThreadId } =
+      yield* bootstrapWelcomeTargets(true);
+
+    assert.deepStrictEqual(launchedTitles, []);
+    assert.deepStrictEqual(targets, {
+      bootstrapProjectId: projectId,
+      bootstrapThreadId: managerThreadId,
+    });
+  }),
+);
+
+it.effect("auto-bootstrap still launches a starter thread when the PM is turned off", () =>
+  Effect.gen(function* () {
+    const { targets, launchedTitles, projectId } = yield* bootstrapWelcomeTargets(false);
+
+    assert.deepStrictEqual(launchedTitles, ["New thread"]);
+    assert.deepStrictEqual(targets, {
+      bootstrapProjectId: projectId,
+      bootstrapThreadId: ThreadId.make("starter-thread"),
+    });
   }),
 );

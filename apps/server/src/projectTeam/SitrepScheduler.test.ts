@@ -117,6 +117,26 @@ describe("SitrepScheduler", () => {
       ),
   );
 
+  it.effect("sends no sitreps while the PM is turned off and resumes when it is back on", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const sitreps = yield* SitrepScheduler;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        yield* team.updateSettings({ projectId: PROJECT_ID, enabled: false });
+        yield* TestClock.adjust("1 minute");
+        yield* startLead(pm, "Long job", harness.delegate);
+        yield* TestClock.adjust("60 minutes");
+        yield* sitreps.check;
+        assert.deepStrictEqual(yield* sitrepRequests(harness, pm), []);
+
+        yield* team.updateSettings({ projectId: PROJECT_ID, enabled: true });
+        yield* sitreps.check;
+        assert.strictEqual((yield* sitrepRequests(harness, pm)).length, 1);
+      }),
+    ),
+  );
+
   it.effect("skips interval sitreps without changes but sends a liveness note", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

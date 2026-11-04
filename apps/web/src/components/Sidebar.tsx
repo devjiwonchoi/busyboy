@@ -57,19 +57,14 @@ import {
   ArchiveIcon,
   ArrowRightLeftIcon,
   CircleAlertIcon,
-  CircleCheckIcon,
-  CircleDashedIcon,
-  CircleDotDashedIcon,
   ChevronRightIcon,
   FolderIcon,
   GitBranchIcon,
   ListFilterIcon,
-  MessageCircleQuestionIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
   SettingsIcon,
-  ShieldQuestionIcon,
   SquarePenIcon,
   TerminalIcon,
   XIcon,
@@ -134,6 +129,7 @@ import { useClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
+import { useRemoveProjectMembers } from "../hooks/useRemoveProjectMembers";
 import {
   useEnvironmentIdentities,
   useEnvironmentIds,
@@ -157,9 +153,19 @@ import { useEnvironmentQuery } from "../state/query";
 import { useThreadSearch } from "../state/queries";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
-import { useProjectManagerForThread, useProjectManagerThreadKeys } from "../state/projectTeam";
-import { SidebarProjectManagerBadges, SidebarSitrepButton } from "./SidebarProjectManager";
-import { buildThreadRouteParams, resolveActiveThreadRouteRef } from "../threadRoutes";
+import {
+  readIsProjectManagerThread,
+  useProjectManagerEntries,
+  useProjectManagerForThread,
+  type ProjectManagerEntry,
+} from "../state/projectTeam";
+import { SidebarProjectManagerBadges, SidebarProjectManagerHeading } from "./SidebarProjectManager";
+import { SidebarThreadStatusIcon } from "./SidebarThreadStatusIcon";
+import {
+  buildThreadRouteParams,
+  resolveActiveThreadRouteRef,
+  resolveThreadRouteTarget,
+} from "../threadRoutes";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import type { SidebarThreadSummary } from "../types";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
@@ -178,6 +184,7 @@ import {
   filterSidebarV2VisibleThreads,
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
+  buildProjectHeaderMenuItems,
   deleteSelectedThreadEntries,
   filterSidebarProjectScopeItems,
   formatWorkingDurationLabel,
@@ -206,6 +213,9 @@ import {
   sortThreadsForSidebar,
   groupSidebarThreadsByProject,
   orderSidebarProjectSections,
+  isProjectManagerTaskLead,
+  selectSidebarProjectManagers,
+  resolveSidebarTopStatusDisplay,
   sortWorkingThreadsBySend,
   useThreadJumpHintVisibility,
   useRetainedValue,
@@ -363,7 +373,16 @@ interface SidebarThreadPartitionInput {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly workingShelfEnabled: boolean;
-  readonly projectManagerThreadKeys: ReadonlySet<string>;
+  /** Threads shown as a project section heading instead of a row. */
+  readonly headingThreadKeys: ReadonlySet<string>;
+}
+
+/** The manager a project section's heading stands for, when it is on. */
+export interface SidebarSectionProjectManager {
+  readonly entry: ProjectManagerEntry;
+  readonly threadRef: ScopedThreadRef;
+  readonly threadKey: string;
+  readonly thread: EnvironmentThreadShell | null;
 }
 
 function threadShellKey(thread: Pick<SidebarThreadSummary, "environmentId" | "id">): string {
@@ -428,21 +447,7 @@ function useSidebarThreads(input: {
     NO_COLLAPSED_PROJECTS,
     Schema.Array(Schema.String),
   );
-  const collapsedProjectKeys = new Set(collapsedProjectKeyList);
-  const projectManagerThreadKeys = useProjectManagerThreadKeys(useEnvironmentIds());
-  const partition = partitionSidebarThreads({
-    threads,
-    scopedProjectKeys,
-    serverConfigs,
-    optimisticDrop,
-    workingShelfEnabled,
-    projectManagerThreadKeys,
-  });
-
-  const { pinnedThreads, workingThreads } = partition;
-
-  // Active threads render in per-project sections, most recent project
-  // first. Collapsed projects hide their rows like the project filter does.
+  const projectManagerEntries = useProjectManagerEntries(useEnvironmentIds());
   const projectKeyByProject = new Map<string, string>(
     projectGroups.flatMap((group) =>
       group.memberProjects.map(
@@ -454,16 +459,51 @@ function useSidebarThreads(input: {
     const physicalKey = `${thread.environmentId}:${thread.projectId}`;
     return projectKeyByProject.get(physicalKey) ?? physicalKey;
   };
-  const isProjectManagerThread = (thread: EnvironmentThreadShell) =>
-    projectManagerThreadKeys.has(threadShellKey(thread));
+  // An enabled manager is its project's heading. A disabled one, or a second
+  // manager grouped into the same section, stays an ordinary row.
+  const shellByKey = new Map(threads.map((thread) => [threadShellKey(thread), thread] as const));
+  const projectManagerByProjectKey = new Map<string, SidebarSectionProjectManager>();
+  for (const [projectKey, entry] of selectSidebarProjectManagers(
+    projectManagerEntries,
+    (environmentId, projectId) =>
+      projectKeyByProject.get(`${environmentId}:${projectId}`) ?? `${environmentId}:${projectId}`,
+  )) {
+    const threadRef = scopeThreadRef(entry.environmentId, entry.summary.pmThreadId);
+    const threadKey = scopedThreadKey(threadRef);
+    projectManagerByProjectKey.set(projectKey, {
+      entry,
+      threadRef,
+      threadKey,
+      thread: shellByKey.get(threadKey) ?? null,
+    });
+  }
+  const headingThreadKeys = new Set(
+    [...projectManagerByProjectKey.values()].map((manager) => manager.threadKey),
+  );
+  // A manager's section has no collapse control, so a key stored before it had a
+  // manager must not keep it collapsed.
+  const collapsedProjectKeys = new Set(
+    collapsedProjectKeyList.filter((projectKey) => !projectManagerByProjectKey.has(projectKey)),
+  );
+  const partition = partitionSidebarThreads({
+    threads,
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    workingShelfEnabled,
+    headingThreadKeys,
+  });
+
+  const { pinnedThreads, workingThreads } = partition;
+
+  // Active threads render in per-project sections, most recent project
+  // first. Collapsed projects hide their rows like the project filter does.
   const activeThreadsByProject = groupSidebarThreadsByProject(
     partition.activeThreads,
     projectKeyOf,
-    isProjectManagerThread,
   );
   const projectSectionKeys = orderSidebarProjectSections(
     activeThreadsByProject,
-    isProjectManagerThread,
     projectGroups
       .filter(
         (group) =>
@@ -498,9 +538,13 @@ function useSidebarThreads(input: {
     workingShelfExpanded,
     toggleWorkingShelf: () => setWorkingShelfExpanded((value) => !value),
     activeThreads,
-    activeThreadCount: partition.activeThreads.length,
+    // A project whose only thread is its manager still shows its heading.
+    activeThreadCount:
+      partition.activeThreads.length +
+      projectSectionKeys.filter((projectKey) => projectManagerByProjectKey.has(projectKey)).length,
     projectSectionKeys,
     projectKeyOf,
+    projectManagerByProjectKey,
     collapsedProjectKeys,
     toggleProjectCollapsed: (projectKey: string) =>
       setCollapsedProjectKeyList((keys) =>
@@ -530,9 +574,20 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     serverConfigs,
     optimisticDrop,
     workingShelfEnabled,
-    projectManagerThreadKeys,
+    headingThreadKeys,
   } = input;
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
+  // A manager's task leads are its project's ordinary rows.
+  const visible = filterSidebarV2VisibleThreads(
+    threads,
+    scopedProjectKeys,
+    (thread) => headingThreadKeys.has(threadShellKey(thread)),
+    (thread) =>
+      isProjectManagerTaskLead(thread, (environmentId, threadId) =>
+        headingThreadKeys.has(
+          scopedThreadKey(scopeThreadRef(environmentId as EnvironmentId, threadId as ThreadId)),
+        ),
+      ),
+  );
   inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -544,11 +599,6 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   for (const thread of visible) {
     const capabilities = serverConfigs.get(thread.environmentId)?.environment.capabilities;
     const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-    // A PM thread is fixed to its project, so it neither pins, shelves, nor drags.
-    if (projectManagerThreadKeys.has(threadKey)) {
-      active.push(thread);
-      continue;
-    }
     if (capabilities?.threadActiveReorder === true) activeReorderable.add(threadKey);
     if (capabilities?.threadPinning === true && capabilities.threadPinReorder === true) {
       draggable.add(threadKey);
@@ -1002,6 +1052,7 @@ function SortableSidebarMarker(props: {
   className?: string;
   children?: ReactNode;
   "data-testid"?: string;
+  onContextMenu?: (event: ReactMouseEvent) => void;
 }) {
   const { setNodeRef, transform, transition } = useSortable({
     id: sidebarMarkerId(props.marker),
@@ -1014,6 +1065,7 @@ function SortableSidebarMarker(props: {
       data-thread-selection-safe
       data-testid={props["data-testid"]}
       className={cn("list-none", props.className)}
+      onContextMenu={props.onContextMenu}
       style={{
         transform: CSS.Translate.toString(transform),
         transition: props.marker.endsWith("-placeholder") ? "none" : transition,
@@ -1119,12 +1171,50 @@ function SidebarProjectHeader(props: {
   expanded: boolean;
   onToggle: () => void;
   onNewThread: (() => void) | null;
+  onContextMenu: ((position: { x: number; y: number }) => void) | null;
+  projectManager?: {
+    readonly manager: SidebarSectionProjectManager;
+    readonly isActive: boolean;
+    readonly onOpenThread: (threadRef: ScopedThreadRef) => void;
+  };
 }) {
+  const pm = props.projectManager;
+  const { onContextMenu } = props;
+  const handleContextMenu = onContextMenu
+    ? (event: ReactMouseEvent) => {
+        event.preventDefault();
+        onContextMenu({ x: event.clientX, y: event.clientY });
+      }
+    : undefined;
+  if (pm) {
+    return (
+      <SortableSidebarMarker
+        marker={props.marker}
+        data-testid="sidebar-project-header"
+        className="mx-0.5 mt-2"
+        {...(handleContextMenu ? { onContextMenu: handleContextMenu } : {})}
+      >
+        <SidebarProjectManagerHeading
+          projectName={props.label}
+          summary={pm.manager.entry.summary}
+          pmThreadRef={pm.manager.threadRef}
+          pmThreadWorking={
+            pm.manager.thread !== null &&
+            resolveSidebarThreadStatus(pm.manager.thread) === "working"
+          }
+          isActive={pm.isActive}
+          onOpenThread={pm.onOpenThread}
+          onNewThread={props.onNewThread}
+        />
+      </SortableSidebarMarker>
+    );
+  }
   return (
     <SortableSidebarMarker
       marker={props.marker}
       data-testid="sidebar-project-header"
       className="group/project mx-0.5 mt-2 flex h-7 items-center"
+      {...(handleContextMenu ? { onContextMenu: handleContextMenu } : {})}
     >
       <button
         type="button"
@@ -1375,6 +1465,8 @@ type SidebarThreadRowProps = {
   dropVerb: SidebarDropVerb | null;
   dragOverPinned: boolean;
   isActive: boolean;
+  /** Indents the row under its project manager heading. */
+  nested?: boolean | undefined;
   openPullRequestsInRightPanel: boolean;
   jumpLabel: string | null;
   currentEnvironmentId: string | null;
@@ -1419,8 +1511,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
-  const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
+  // A manager that is off (or shares its section with another) is a plain row.
   const projectManager = useProjectManagerForThread(threadRef);
+  const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
   useEffect(() => {
     if (!canOperateThread && isRenaming) onCancelRename();
   }, [canOperateThread, isRenaming, onCancelRename]);
@@ -1477,50 +1570,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isActive: props.isActive,
     isSelected,
   });
-  const topStatus =
-    status === "working"
-      ? {
-          label: thread.goal?.status === "active" ? "Goal" : "Working",
-          icon: "working" as const,
-          className: "text-info",
-        }
-      : status === "waiting"
-        ? {
-            label: "Waiting",
-            icon: "waiting" as const,
-            className: "text-muted-foreground",
-          }
-        : status === "approval"
-          ? {
-              label: "Approval",
-              icon: "approval" as const,
-              className: "text-warning-foreground",
-            }
-          : status === "input"
-            ? {
-                label: "Input",
-                icon: "input" as const,
-                className: "text-indigo-600 dark:text-indigo-300",
-              }
-            : status === "limited"
-              ? {
-                  label: "Limited",
-                  icon: "failed" as const,
-                  className: "text-warning",
-                }
-              : status === "failed"
-                ? {
-                    label: "Failed",
-                    icon: "failed" as const,
-                    className: "text-error",
-                  }
-                : isUnread
-                  ? {
-                      label: "Done",
-                      icon: "done" as const,
-                      className: "text-success",
-                    }
-                  : null;
+  const topStatus = resolveSidebarTopStatusDisplay({
+    status,
+    isUnread,
+    goalActive: thread.goal?.status === "active",
+  });
 
   const branchMismatch = resolveLocalCheckoutBranchMismatch({
     effectiveEnvMode: thread.worktreePath === null ? "local" : "worktree",
@@ -1629,9 +1683,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       onCommitRename(threadRef, renamingTitle, thread.title);
     }
   };
-  const showPinButton =
-    props.pinningSupported && canOperateThread && !props.isPinned && projectManager === null;
-  const showSitrepButton = canOperateThread && projectManager !== null;
+  const showPinButton = props.pinningSupported && canOperateThread && !props.isPinned;
   const handlePinClick = (event: ReactMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1644,7 +1696,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   };
   // Archive rejects a thread with an attached provider, so the button only shows when it can succeed.
   const showArchiveButton =
-    canOperateThread && threadRuntimeCanArchive(thread.runtime) && projectManager === null;
+    canOperateThread && projectManager === null && threadRuntimeCanArchive(thread.runtime);
   const handleArchiveClick = (event: ReactMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1837,6 +1889,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       {...(fileDropHandlers ?? {})}
       className={cn(
         "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
+        // Lines the row's text up with the heading's project name, past the avatar.
+        props.nested && "pl-6.5",
         sortable?.isDragging && "relative z-20",
       )}
     >
@@ -1878,8 +1932,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               ) : (
                 <span className="flex-1" />
               )}
-              {projectManager ? <SidebarProjectManagerBadges summary={projectManager} /> : null}
               {pinIndicator}
+              {projectManager ? <SidebarProjectManagerBadges summary={projectManager} /> : null}
               {sortable?.isDragging ? (
                 dragDestination
               ) : (
@@ -1888,7 +1942,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     className={cn(
                       "pointer-events-none",
                       // The label gives way to the hover actions, so it stays put when there are none.
-                      (hasUnsentDraft || showPinButton || showArchiveButton || showSitrepButton) &&
+                      (hasUnsentDraft || showPinButton || showArchiveButton) &&
                         "group-has-[:focus-visible]/sidebar-status-slot:absolute group-has-[:focus-visible]/sidebar-status-slot:right-0 group-has-[:focus-visible]/sidebar-status-slot:opacity-0 group-any-hover/sidebar-row:absolute group-any-hover/sidebar-row:right-0 group-any-hover/sidebar-row:opacity-0",
                       "flex items-center self-center justify-self-end tabular-nums text-secondary-label transition-opacity",
                     )}
@@ -1900,19 +1954,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                           topStatus.className,
                         )}
                       >
-                        {topStatus.icon === "working" ? (
-                          <CircleDashedIcon aria-hidden className="size-4 shrink-0" />
-                        ) : topStatus.icon === "waiting" ? (
-                          <CircleDotDashedIcon aria-hidden className="size-4 shrink-0" />
-                        ) : topStatus.icon === "input" ? (
-                          <MessageCircleQuestionIcon aria-hidden className="size-4 shrink-0" />
-                        ) : topStatus.icon === "approval" ? (
-                          <ShieldQuestionIcon aria-hidden className="size-4 shrink-0" />
-                        ) : topStatus.icon === "failed" ? (
-                          <CircleAlertIcon aria-hidden className="size-4 shrink-0" />
-                        ) : topStatus.icon === "done" ? (
-                          <CircleCheckIcon aria-hidden className="size-4 shrink-0" />
-                        ) : null}
+                        <SidebarThreadStatusIcon icon={topStatus.icon} />
                         {/* The label alone is the live region: a role="status"
                             wrapper around the ticking duration would make
                             screen readers announce every second. */}
@@ -1931,7 +1973,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       <RelativeTimeLabel timestamp={threadTimeTimestamp(thread)} />
                     )}
                   </span>
-                  {hasUnsentDraft || showPinButton || showArchiveButton || showSitrepButton ? (
+                  {hasUnsentDraft || showPinButton || showArchiveButton ? (
                     // focus-visible, not focus-within: a mouse click leaves
                     // the clicked button focused, and a plain focus-within
                     // would keep the controls pinned over the status label
@@ -1991,13 +2033,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                           </TooltipTrigger>
                           <TooltipPopup side="top">Archive thread</TooltipPopup>
                         </Tooltip>
-                      ) : null}
-                      {showSitrepButton && projectManager ? (
-                        <SidebarSitrepButton
-                          threadRef={threadRef}
-                          summary={projectManager}
-                          onThreadActivate={onThreadActivate}
-                        />
                       ) : null}
                     </span>
                   ) : null}
@@ -2492,6 +2527,19 @@ export default function Sidebar() {
       });
     },
   );
+  const openProjectManagerSettings = useStableCallback((projectGroup: SidebarProjectSnapshot) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    void router.navigate({
+      to: "/settings/projects",
+      search: {
+        project: getSidebarProjectSettingsKey(projectGroup, projectGroupingSettings, projects),
+      },
+      hash: "project-manager",
+      hashScrollIntoView: false,
+    });
+  });
   const handleProjectSettings = useStableCallback(
     (
       event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLInputElement>,
@@ -2527,6 +2575,7 @@ export default function Sidebar() {
     activeThreadCount,
     projectSectionKeys,
     projectKeyOf,
+    projectManagerByProjectKey,
     collapsedProjectKeys,
     toggleProjectCollapsed,
   } = useSidebarThreads({
@@ -3214,7 +3263,12 @@ export default function Sidebar() {
               id: "delete",
               label: `Delete (${count})`,
               destructive: true,
-              disabled: !canOperateThreads(selectedThreads),
+              // A project manager stays for the life of its project.
+              disabled:
+                !canOperateThreads(selectedThreads) ||
+                selectedThreads.some((thread) =>
+                  readIsProjectManagerThread(scopeThreadRef(thread.environmentId, thread.id)),
+                ),
             },
           ],
           position,
@@ -3313,6 +3367,71 @@ export default function Sidebar() {
           return threadRef !== null && readThreadShell(threadRef) !== null;
         }),
       );
+    },
+  );
+
+  const removeProjectMembers = useRemoveProjectMembers();
+  const handleProjectHeaderContextMenu = useStableCallback(
+    (
+      projectGroup: SidebarProjectSnapshot,
+      hasProjectManager: boolean,
+      position: { x: number; y: number },
+    ) => {
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) return;
+        const clicked = await settlePromise(() =>
+          api.contextMenu.show(
+            buildProjectHeaderMenuItems({
+              hasProjectManager,
+              canRemove: projectGroup.memberProjects.every((member) =>
+                readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
+              ),
+            }),
+            position,
+          ),
+        );
+        if (clicked._tag === "Failure") return;
+        switch (clicked.value) {
+          case "project-settings":
+            openProjectSettings(projectGroup);
+            return;
+          case "project-manager-settings":
+            openProjectManagerSettings(projectGroup);
+            return;
+          case "remove-project": {
+            const removed = await removeProjectMembers({
+              group: projectGroup,
+              members: projectGroup.memberProjects,
+              hasOtherMembers: false,
+            });
+            if (!removed) return;
+            // Read the route after the removal: only leave a thread or draft
+            // that went with the project.
+            const routeParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};
+            const target = resolveThreadRouteTarget(routeParams);
+            const removedProjectKeys = new Set(
+              projectGroup.memberProjects.map((member) => `${member.environmentId}:${member.id}`),
+            );
+            const draftSession =
+              target?.kind === "draft"
+                ? useComposerDraftStore.getState().getDraftSession(target.draftId)
+                : null;
+            const viewingRemovedProject =
+              target?.kind === "server"
+                ? removed.removedThreadRefs.some(
+                    (ref) => scopedThreadKey(ref) === scopedThreadKey(target.threadRef),
+                  )
+                : target?.kind === "draft" &&
+                  (draftSession === null ||
+                    removedProjectKeys.has(
+                      `${draftSession.environmentId}:${draftSession.projectId}`,
+                    ));
+            if (viewingRemovedProject) void router.navigate({ to: "/", replace: true });
+            return;
+          }
+        }
+      })();
     },
   );
 
@@ -3417,6 +3536,7 @@ export default function Sidebar() {
               isPinned,
               isRegeneratingTitle,
               isRunning: !threadRuntimeCanArchive(thread.runtime),
+              isProjectManager: readIsProjectManagerThread(threadRef),
               supports: {
                 pinning: supportsPinning,
                 titleRegeneration: supportsTitleRegeneration,
@@ -3952,6 +4072,10 @@ export default function Sidebar() {
                               dragState?.activeKey === threadKey && dragTargetSection === "pinned"
                             }
                             isActive={routeThreadKey === threadKey}
+                            nested={
+                              section === "active" &&
+                              projectManagerByProjectKey.has(projectKeyOf(thread))
+                            }
                             openPullRequestsInRightPanel={routeThreadRef !== null}
                             jumpLabel={
                               showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null
@@ -4072,6 +4196,7 @@ export default function Sidebar() {
                           default: {
                             const projectKey = item.marker.slice("project:".length);
                             const projectGroup = projectGroupByScopeKey.get(projectKey);
+                            const manager = projectManagerByProjectKey.get(projectKey);
                             items.push(
                               <SidebarProjectHeader
                                 key={item.marker}
@@ -4082,6 +4207,25 @@ export default function Sidebar() {
                                 onNewThread={
                                   projectGroup ? () => handleProjectNewThread(projectGroup) : null
                                 }
+                                onContextMenu={
+                                  projectGroup
+                                    ? (position) =>
+                                        handleProjectHeaderContextMenu(
+                                          projectGroup,
+                                          manager !== undefined,
+                                          position,
+                                        )
+                                    : null
+                                }
+                                {...(manager
+                                  ? {
+                                      projectManager: {
+                                        manager,
+                                        isActive: routeThreadKey === manager.threadKey,
+                                        onOpenThread: navigateToThread,
+                                      },
+                                    }
+                                  : {})}
                               />,
                             );
                           }

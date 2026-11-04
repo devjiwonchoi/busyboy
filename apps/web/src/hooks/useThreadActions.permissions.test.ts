@@ -36,6 +36,7 @@ const state = vi.hoisted(() => ({
   toasts: [] as string[],
   afterRequest: undefined as ((action: string) => void) | undefined,
   sessionLookupFails: false,
+  pmThreadIds: new Set<string>(),
 }));
 
 vi.mock("react", () => ({
@@ -139,6 +140,10 @@ vi.mock("../components/ui/toast", () => ({
     },
   },
 }));
+vi.mock(import("../state/projectTeam"), async (original) => ({
+  ...(await original()),
+  readIsProjectManagerThread: (ref: ScopedThreadRef) => state.pmThreadIds.has(ref.threadId),
+}));
 vi.mock("./useHandleNewThread", () => ({ useNewThreadHandler: () => async () => {} }));
 vi.mock("./useSettings", () => ({
   useClientSettings: (select: (settings: unknown) => unknown) =>
@@ -197,6 +202,7 @@ beforeEach(() => {
   state.toasts = [];
   state.afterRequest = undefined;
   state.sessionLookupFails = false;
+  state.pmThreadIds = new Set();
 });
 
 describe("thread action permissions", () => {
@@ -317,4 +323,20 @@ describe("thread action permissions", () => {
       consoleError.mockRestore();
     }
   });
+
+  it.each(["deleteThread", "confirmAndDeleteThread"] as const)(
+    "%s refuses the project manager thread without asking",
+    async (action) => {
+      state.scopes.get(secondary)!.add(AuthOrchestrationOperateScope);
+      state.pmThreadIds.add(target.threadId);
+      const result = await useThreadActions()[action](target);
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") throw new Error("Expected the delete to be refused");
+      expect(Cause.squash(result.cause as Cause.Cause<unknown>)).toMatchObject({
+        message: "The project manager stays for the life of the project.",
+      });
+      expect(state.confirm).not.toHaveBeenCalled();
+      expect(state.requests).toEqual([]);
+    },
+  );
 });

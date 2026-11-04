@@ -1,12 +1,15 @@
 import { assert, describe, it } from "@effect/vitest";
-import { type ApplicationStoredEvent, ProjectId } from "@t3tools/contracts";
+import { type ApplicationStoredEvent, CommandId, ProjectId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import { projectThreadDeleteCommandId } from "../orchestration-v2/ProjectCommands.ts";
 import { DefaultManagerReactor } from "./defaultManagerReactor.ts";
-import { PROJECT_ID, START, withTeam } from "./testkit.ts";
+import * as ProjectTeamService from "./ProjectTeamService.ts";
+import { defaultPersonaName } from "./persona.ts";
+import { PROJECT_ID, START, setUpManager, withTeam } from "./testkit.ts";
 
 const projectCreated = (projectId: ProjectId): ApplicationStoredEvent =>
   ({
@@ -14,6 +17,13 @@ const projectCreated = (projectId: ProjectId): ApplicationStoredEvent =>
     aggregateId: projectId,
     type: "project.created",
     payload: { projectId, title: "New", workspaceRoot: "/workspace/new", createdAt: START },
+  }) as unknown as ApplicationStoredEvent;
+
+const threadDeleted = (threadId: ThreadId, commandId: string): ApplicationStoredEvent =>
+  ({
+    sequence: 7,
+    commandId: CommandId.make(commandId),
+    event: { type: "thread.deleted", threadId, payload: { id: threadId } },
   }) as unknown as ApplicationStoredEvent;
 
 describe("DefaultManagerReactor", () => {
@@ -39,7 +49,10 @@ describe("DefaultManagerReactor", () => {
         const titles = (yield* Ref.get(harness.dispatched)).flatMap((command) =>
           command.type === "thread.create" ? [command.title] : [],
         );
-        assert.deepStrictEqual(titles.toSorted(), ["Demo PM", "Second PM"]);
+        assert.deepStrictEqual(
+          titles.toSorted(),
+          [defaultPersonaName(PROJECT_ID), defaultPersonaName(second)].toSorted(),
+        );
       }),
     ),
   );
@@ -57,8 +70,58 @@ describe("DefaultManagerReactor", () => {
         assert.isTrue(Option.isSome(manager));
         assert.strictEqual(
           harness.threads.get(Option.getOrThrow(manager).threadId)?.title,
-          "New PM",
+          defaultPersonaName(created),
         );
+      }),
+    ),
+  );
+
+  it.effect("replaces a deleted PM thread and keeps the PM's settings", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* DefaultManagerReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const before = yield* team.updateSettings({
+          projectId: PROJECT_ID,
+          persona: { name: "Ada", voice: "dry" },
+          sitrepIntervalMinutes: 30,
+          enabled: false,
+        });
+
+        harness.threads.get(pm)!.deletedAt = "2026-11-04T00:01:00.000Z";
+        yield* reactor.handle(threadDeleted(pm, "delete-pm"));
+
+        const manager = Option.getOrThrow(yield* repository.getManager(PROJECT_ID));
+        assert.notStrictEqual(manager.threadId, pm);
+        assert.deepStrictEqual(manager.settings, before.settings);
+        assert.strictEqual(harness.threads.get(manager.threadId)?.title, "Ada");
+      }),
+    ),
+  );
+
+  it.effect("does not replace the PM while its project is being deleted", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* DefaultManagerReactor;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const other = ThreadId.make("not-a-pm");
+        harness.addThread(other);
+
+        harness.threads.get(pm)!.deletedAt = "2026-11-04T00:01:00.000Z";
+        yield* reactor.handle(
+          threadDeleted(pm, projectThreadDeleteCommandId("delete-project", pm)),
+        );
+        yield* reactor.handle(threadDeleted(other, "delete-other"));
+
+        const manager = Option.getOrThrow(yield* repository.getManager(PROJECT_ID));
+        assert.strictEqual(manager.threadId, pm);
+        const creates = (yield* Ref.get(harness.dispatched)).filter(
+          (command) => command.type === "thread.create",
+        );
+        assert.strictEqual(creates.length, 1);
       }),
     ),
   );

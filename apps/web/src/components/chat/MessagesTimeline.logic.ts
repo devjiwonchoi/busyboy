@@ -2267,3 +2267,126 @@ export function shouldCollapseUserMessage(text: string): boolean {
     visible.split("\n").length > MAX_COLLAPSED_USER_MESSAGE_LINES
   );
 }
+
+// ── Project manager threads ─────────────────────────────────────────
+
+const PM_SITREP_MESSAGE_PREFIX = "project-team:sitrep:";
+const PM_COMPACT_MESSAGE_PREFIX = "project-team:compact:";
+const PM_EVENT_LINE_MAX_LENGTH = 120;
+const SITREP_DUE_SINCE = /^\[Sitrep due\] since (\S+?)\.?(?:\s|$)/;
+const TRAILING_TEAM_STATUS_HINT = /\.?\s*Check team_status\.?$/;
+const TASK_NUMBER = /#\d+/;
+
+export function isPmSitrepRequestMessage(message: Pick<ChatMessage, "id">): boolean {
+  return message.id.startsWith(PM_SITREP_MESSAGE_PREFIX);
+}
+
+/** The ISO instant a `[Sitrep due] since <ISO>.` request covers, or null when absent. */
+export function pmSitrepSince(text: string): string | null {
+  const since = SITREP_DUE_SINCE.exec(text)?.[1];
+  return since !== undefined && !Number.isNaN(Date.parse(since)) ? since : null;
+}
+
+/** The single muted line a server-sent message collapses to in a PM thread. */
+export function pmEventLineText(message: Pick<ChatMessage, "id" | "text">): string {
+  if (isPmSitrepRequestMessage(message)) {
+    return message.text.includes("The user asked for this sitrep") ? "Sitrep requested" : "Sitrep";
+  }
+  if (message.id.startsWith(PM_COMPACT_MESSAGE_PREFIX) && message.text.trim() === "/compact") {
+    return "Tidying up context · notes kept";
+  }
+  if (/^Delegated tasks? .* reached (?:a )?terminal states?\./.test(message.text)) {
+    const taskNumber = TASK_NUMBER.exec(message.text)?.[0];
+    return taskNumber === undefined ? "Task finished" : `Task ${taskNumber} finished`;
+  }
+  const firstLine = (message.text.trim().split(/\r?\n/, 1)[0] ?? "")
+    .replace(TRAILING_TEAM_STATUS_HINT, "")
+    .trim();
+  return firstLine.length > PM_EVENT_LINE_MAX_LENGTH
+    ? `${firstLine.slice(0, PM_EVENT_LINE_MAX_LENGTH - 1).trimEnd()}…`
+    : firstLine;
+}
+
+export interface PmSitrepReply {
+  /** ISO start of the window the sitrep covers, when the request named one. */
+  readonly since: string | null;
+}
+
+/**
+ * Final assistant message of each run started by a sitrep request, keyed by
+ * message id. Messages link by runId; runless replies fall back to "the last
+ * assistant message before the next user message".
+ */
+export function derivePmSitrepReplies(
+  timelineEntries: ReadonlyArray<TimelineEntry>,
+): ReadonlyMap<MessageId, PmSitrepReply> {
+  const requestByRunId = new Map<RunId, PmSitrepReply>();
+  const lastReplyByRequest = new Map<PmSitrepReply, MessageId>();
+  let precedingRequest: PmSitrepReply | null = null;
+  for (const entry of timelineEntries) {
+    if (entry.kind !== "message") continue;
+    const { message } = entry;
+    if (message.role === "user") {
+      precedingRequest = isPmSitrepRequestMessage(message)
+        ? { since: pmSitrepSince(message.text) }
+        : null;
+      if (precedingRequest !== null && message.runId !== null) {
+        requestByRunId.set(message.runId, precedingRequest);
+      }
+      continue;
+    }
+    if (message.role !== "assistant") continue;
+    const request =
+      message.runId !== null ? (requestByRunId.get(message.runId) ?? null) : precedingRequest;
+    if (request !== null) lastReplyByRequest.set(request, message.id);
+  }
+  const replies = new Map<MessageId, PmSitrepReply>();
+  for (const [request, messageId] of lastReplyByRequest) replies.set(messageId, request);
+  return replies;
+}
+
+/** Visible assistant message rows that open a reply (first assistant row after a user row). */
+export function derivePmAuthorHeaderMessageIds(
+  rows: ReadonlyArray<MessagesTimelineRow>,
+): ReadonlySet<MessageId> {
+  const ids = new Set<MessageId>();
+  let awaitingReply = true;
+  for (const row of rows) {
+    if (row.kind !== "message") continue;
+    if (row.message.role === "user") {
+      awaitingReply = true;
+    } else if (row.message.role === "assistant" && awaitingReply) {
+      ids.add(row.message.id);
+      awaitingReply = false;
+    }
+  }
+  return ids;
+}
+
+export interface PmTimelineValues {
+  /** Persona name and avatar; the author header only changes when this does. */
+  readonly personaKey: string;
+  readonly authorHeaderMessageIds: ReadonlySet<MessageId>;
+  readonly sitrepReplies: ReadonlyMap<MessageId, PmSitrepReply>;
+}
+
+/**
+ * Returns `previous` when `next` holds the same content. The PM timeline
+ * context feeds every row, and stream events rebuild these values each time,
+ * so reusing equal ones keeps rows from re-rendering per event.
+ */
+export function reusePmTimelineValues<T extends PmTimelineValues>(
+  previous: T | null,
+  next: PmTimelineValues,
+): T | null {
+  if (previous === null || previous.personaKey !== next.personaKey) return null;
+  const { authorHeaderMessageIds: ids, sitrepReplies: replies } = previous;
+  if (ids.size !== next.authorHeaderMessageIds.size) return null;
+  for (const id of next.authorHeaderMessageIds) if (!ids.has(id)) return null;
+  if (replies.size !== next.sitrepReplies.size) return null;
+  for (const [id, reply] of next.sitrepReplies) {
+    const prior = replies.get(id);
+    if (prior === undefined || prior.since !== reply.since) return null;
+  }
+  return previous;
+}

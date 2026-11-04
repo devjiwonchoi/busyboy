@@ -73,7 +73,7 @@ vi.mock(import("~/state/environments"), async (original) => ({
 vi.mock(import("~/state/entities"), async (original) => ({
   ...(await original()),
   useProjects: (() => state.projects) as never,
-  useThreadShells: () => [],
+  readThreadShells: () => [],
   waitForProjectRemoval: async () => true,
 }));
 vi.mock(import("~/state/projects"), async (original) => {
@@ -112,6 +112,10 @@ vi.mock(import("./ProjectDefaultsSettings"), async (original) => ({
 vi.mock(import("./ProjectActionsSettings"), async (original) => ({
   ...(await original()),
   ProjectActionsSettings: (() => null) as never,
+}));
+vi.mock(import("./ProjectManagerSettings"), async (original) => ({
+  ...(await original()),
+  ProjectManagerSettings: (() => null) as never,
 }));
 
 import { useComposerDraftStore } from "../../composerDraftStore";

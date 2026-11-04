@@ -172,6 +172,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["name icon emoji image checkout remove delete"],
   },
   {
+    id: "project-manager",
+    title: "Project manager",
+    to: "/settings/projects",
+    searchTerms: ["pm persona name avatar voice tone sitrep team enable disable"],
+  },
+  {
     id: "default-model",
     title: "Default model",
     to: "/settings/general",

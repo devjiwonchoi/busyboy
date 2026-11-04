@@ -5,7 +5,7 @@ import { MarkdownFindContext, findRevealRef } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } from "./WorkLog";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
-import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
+import type { ProjectManagerPersona, WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
@@ -177,6 +177,14 @@ import { McpAppFrame } from "./McpAppFrame";
 import { ChangedFilesCard } from "./ChangedFilesTree";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
+import { useProjectManagerForThread } from "../../state/projectTeam";
+import {
+  PmAuthorHeader,
+  PmEventLine,
+  PmSitrepCard,
+  PmTimelineCtx,
+  type PmTimelineState,
+} from "./PmTimeline";
 import {
   CHAT_TIMELINE_ANCHOR_OFFSET,
   readTimelinePosition,
@@ -228,6 +236,11 @@ import {
   TIMELINE_MINIMAP_MIN_ITEMS,
   type TimelineLatestRun,
   type WorkGroupScrollAnchor,
+  derivePmAuthorHeaderMessageIds,
+  derivePmSitrepReplies,
+  reusePmTimelineValues,
+  type PmTimelineValues,
+  pmEventLineText,
 } from "./MessagesTimeline.logic";
 import { type ThreadFindMatch } from "./threadFind";
 import { useThreadFindNavigation } from "./useThreadFindNavigation";
@@ -641,6 +654,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   }
   const citationThreadRef = parseScopedThreadKey(routeThreadKey);
   const openPullRequest = useOpenPrLink(citationThreadRef ?? undefined);
+  const projectManager = useProjectManagerForThread(citationThreadRef);
   const expandCitedRun = (runId: RunId) => {
     setExpandedRunIds((current) => (current.has(runId) ? current : new Set([...current, runId])));
   };
@@ -849,6 +863,11 @@ const ConversationTimeline = memo(function ConversationTimeline({
     worktreeSetup,
   });
   const rows = useStableRows(rawRows, listIdentityKey);
+  const pmTimelineState = useStablePmTimelineState(
+    projectManager?.persona ?? null,
+    rows,
+    timelineEntries,
+  );
   // Run status/timestamps churn on every stream event; the shared row context
   // must not change with them or every timeline row re-renders per event.
   const runs = useStableHandoffRuns(runsProp);
@@ -1412,83 +1431,85 @@ const ConversationTimeline = memo(function ConversationTimeline({
   return (
     <MarkdownFindContext value={findActive}>
       <TimelineRowCtx value={sharedState}>
-        <TimelineRowActivityCtx value={activityState}>
-          <TooltipScrollDismissArea
-            ref={setTimelineViewportElement}
-            className="relative h-full min-h-0"
-            data-assistant-citation-viewport="true"
-          >
-            {onCiteAssistantText && citationThreadRef ? (
-              <AssistantSelectionToolbar
-                viewport={timelineViewportElement}
-                threadRef={citationThreadRef}
-                onCite={onCiteAssistantText}
+        <PmTimelineCtx value={pmTimelineState}>
+          <TimelineRowActivityCtx value={activityState}>
+            <TooltipScrollDismissArea
+              ref={setTimelineViewportElement}
+              className="relative h-full min-h-0"
+              data-assistant-citation-viewport="true"
+            >
+              {onCiteAssistantText && citationThreadRef ? (
+                <AssistantSelectionToolbar
+                  viewport={timelineViewportElement}
+                  threadRef={citationThreadRef}
+                  onCite={onCiteAssistantText}
+                />
+              ) : null}
+              <LegendList<MessagesTimelineRow>
+                ref={setTimelineList}
+                data={rows}
+                extraData={`${listIdentityKey}:${rows.length}`}
+                keyExtractor={keyExtractor}
+                getItemType={getItemType}
+                renderItem={renderItem}
+                estimatedItemSize={90}
+                initialScrollAtEnd={
+                  !findActive && citationRequest === null && rememberedPosition?.atEnd !== false
+                }
+                // Legend needs a data refresh to mount new pins without a scroll event.
+                dataVersion={readyCitationRequest?.key ?? listIdentityKey}
+                {...(alwaysRender ? { alwaysRender } : {})}
+                onLoad={handleListLoad}
+                {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
+                contentInsetEndAdjustment={anchoredEndSpace ? contentInsetEndAdjustment : 0}
+                maintainScrollAtEnd={
+                  citationPositioning ||
+                  (restoringThreadPosition && rememberedPosition?.atEnd === false) ||
+                  anchoredEndSpace ||
+                  !liveFollowEnabled ||
+                  fullscreenAppRowId !== null ||
+                  disclosureToggleSettling
+                    ? false
+                    : isWorking && !prefersReducedMotion && settlingListIdentity === null
+                      ? TIMELINE_MAINTAIN_SCROLL_AT_END_SMOOTH
+                      : TIMELINE_MAINTAIN_SCROLL_AT_END
+                }
+                maintainVisibleContentPosition={
+                  findActive ||
+                  citationPositioning ||
+                  (restoringThreadPosition && rememberedPosition?.atEnd === false)
+                    ? false
+                    : maintainVisibleContentPosition
+                }
+                maintainScrollAtEndThreshold={1}
+                onScroll={handleScroll}
+                onItemSizeChanged={handleItemSizeChanged}
+                className={cn(
+                  "messages-timeline-scroll scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]",
+                  topFadeEnabled && "topbar-scroll-fade",
+                )}
+                ListHeaderComponent={listHeader}
+                ListFooterComponent={timelineListFooter}
               />
-            ) : null}
-            <LegendList<MessagesTimelineRow>
-              ref={setTimelineList}
-              data={rows}
-              extraData={`${listIdentityKey}:${rows.length}`}
-              keyExtractor={keyExtractor}
-              getItemType={getItemType}
-              renderItem={renderItem}
-              estimatedItemSize={90}
-              initialScrollAtEnd={
-                !findActive && citationRequest === null && rememberedPosition?.atEnd !== false
-              }
-              // Legend needs a data refresh to mount new pins without a scroll event.
-              dataVersion={readyCitationRequest?.key ?? listIdentityKey}
-              {...(alwaysRender ? { alwaysRender } : {})}
-              onLoad={handleListLoad}
-              {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
-              contentInsetEndAdjustment={anchoredEndSpace ? contentInsetEndAdjustment : 0}
-              maintainScrollAtEnd={
-                citationPositioning ||
-                (restoringThreadPosition && rememberedPosition?.atEnd === false) ||
-                anchoredEndSpace ||
-                !liveFollowEnabled ||
-                fullscreenAppRowId !== null ||
-                disclosureToggleSettling
-                  ? false
-                  : isWorking && !prefersReducedMotion && settlingListIdentity === null
-                    ? TIMELINE_MAINTAIN_SCROLL_AT_END_SMOOTH
-                    : TIMELINE_MAINTAIN_SCROLL_AT_END
-              }
-              maintainVisibleContentPosition={
-                findActive ||
-                citationPositioning ||
-                (restoringThreadPosition && rememberedPosition?.atEnd === false)
-                  ? false
-                  : maintainVisibleContentPosition
-              }
-              maintainScrollAtEndThreshold={1}
-              onScroll={handleScroll}
-              onItemSizeChanged={handleItemSizeChanged}
-              className={cn(
-                "messages-timeline-scroll scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]",
-                topFadeEnabled && "topbar-scroll-fade",
-              )}
-              ListHeaderComponent={listHeader}
-              ListFooterComponent={timelineListFooter}
-            />
-            <TimelineMinimap
-              items={minimapItems}
-              hasPersistentGutter={minimapHasPersistentGutter}
-              hitStripWidth={minimapHitStripWidth}
-              currentIndex={minimapCurrentIndex}
-              stripMap={minimapStripMap}
-              onWheel={forwardMinimapWheel}
-              onSelect={(item) => {
-                onManualNavigation();
-                void listRef.current?.scrollToIndex({
-                  index: item.rowIndex,
-                  animated: true,
-                  viewOffset: 24,
-                });
-              }}
-            />
-          </TooltipScrollDismissArea>
-        </TimelineRowActivityCtx>
+              <TimelineMinimap
+                items={minimapItems}
+                hasPersistentGutter={minimapHasPersistentGutter}
+                hitStripWidth={minimapHitStripWidth}
+                currentIndex={minimapCurrentIndex}
+                stripMap={minimapStripMap}
+                onWheel={forwardMinimapWheel}
+                onSelect={(item) => {
+                  onManualNavigation();
+                  void listRef.current?.scrollToIndex({
+                    index: item.rowIndex,
+                    animated: true,
+                    viewOffset: 24,
+                  });
+                }}
+              />
+            </TooltipScrollDismissArea>
+          </TimelineRowActivityCtx>
+        </PmTimelineCtx>
       </TimelineRowCtx>
     </MarkdownFindContext>
   );
@@ -1940,7 +1961,9 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
       {row.kind === "attempt-fold" ? <AttemptFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
-      {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
+      {row.kind === "message" && row.message.role === "user" ? (
+        <UserOrPmEventTimelineRow row={row} />
+      ) : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
       ) : null}
@@ -2059,6 +2082,15 @@ const MESSAGE_HEADING_LEVEL = 3;
 
 function MessageAuthorHeading({ children }: { children: string }) {
   return <h3 className="sr-only select-none">{children}</h3>;
+}
+
+/** In PM threads, server-sent wakes collapse to a muted event line instead of a bubble. */
+function UserOrPmEventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
+  const pm = use(PmTimelineCtx);
+  if (pm !== null && resolveUserMessagePresentation(row.message).attribution === "t3code") {
+    return <PmEventLine text={pmEventLineText(row.message)} />;
+  }
+  return <UserTimelineRow row={row} />;
 }
 
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
@@ -2573,52 +2605,68 @@ function AttemptFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "at
   );
 }
 
-function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
+function AssistantTimelineRow({
+  row,
+  authorHeader,
+}: {
+  row: Extract<TimelineRow, { kind: "message" }>;
+  /** Rendered visibly above the reply, e.g. the project manager's avatar and name. */
+  authorHeader?: ReactNode;
+}) {
   const ctx = use(TimelineRowCtx);
+  const pm = use(PmTimelineCtx);
   const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
+  const header =
+    authorHeader ??
+    (pm !== null && pm.authorHeaderMessageIds.has(row.message.id) ? pm.authorHeader : null);
+  const sitrepReply = pm?.sitrepReplies.get(row.message.id) ?? null;
+  const body = (
+    <div className="relative min-w-0 px-1 py-0.5">
+      <MessageAuthorHeading>BusyBoy</MessageAuthorHeading>
+      <div data-thread-find-text="true">
+        <AssistantCitationSource
+          messageId={row.message.id}
+          {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
+          itemKey={row.id}
+          request={ctx.citationRequest}
+          listRef={ctx.listRef}
+        >
+          <ChatMarkdown
+            text={messageText}
+            cwd={ctx.markdownCwd}
+            threadRef={ctx.threadRef ?? undefined}
+            isStreaming={Boolean(row.message.streaming)}
+            lineBreaks={shouldPreserveAssistantLineBreaks(messageText)}
+            skills={ctx.skills}
+            headingLevelOffset={MESSAGE_HEADING_LEVEL}
+            onUseArtifactTemplate={ctx.onUseArtifactTemplate}
+            onRunShellCommand={ctx.onRunShellCommand}
+            onImageExpand={ctx.onImageExpand}
+          />
+        </AssistantCitationSource>
+      </div>
+      <AssistantChangedFilesSection
+        turnSummary={row.assistantTurnDiffSummary}
+        routeThreadKey={ctx.routeThreadKey}
+        resolvedTheme={ctx.resolvedTheme}
+        onOpenTurnDiff={ctx.onOpenTurnDiff}
+      />
+      {row.showAssistantMeta ? (
+        <AssistantMessageMeta
+          className="mt-1.5"
+          projectedItem={row.projectedItem}
+          message={row.message}
+          showCopyButton={row.showAssistantCopyButton}
+          copyStreaming={row.assistantCopyStreaming}
+        />
+      ) : null}
+    </div>
+  );
 
   return (
     <>
-      <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>BusyBoy</MessageAuthorHeading>
-        <div data-thread-find-text="true">
-          <AssistantCitationSource
-            messageId={row.message.id}
-            {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
-            itemKey={row.id}
-            request={ctx.citationRequest}
-            listRef={ctx.listRef}
-          >
-            <ChatMarkdown
-              text={messageText}
-              cwd={ctx.markdownCwd}
-              threadRef={ctx.threadRef ?? undefined}
-              isStreaming={Boolean(row.message.streaming)}
-              lineBreaks={shouldPreserveAssistantLineBreaks(messageText)}
-              skills={ctx.skills}
-              headingLevelOffset={MESSAGE_HEADING_LEVEL}
-              onUseArtifactTemplate={ctx.onUseArtifactTemplate}
-              onRunShellCommand={ctx.onRunShellCommand}
-              onImageExpand={ctx.onImageExpand}
-            />
-          </AssistantCitationSource>
-        </div>
-        <AssistantChangedFilesSection
-          turnSummary={row.assistantTurnDiffSummary}
-          routeThreadKey={ctx.routeThreadKey}
-          resolvedTheme={ctx.resolvedTheme}
-          onOpenTurnDiff={ctx.onOpenTurnDiff}
-        />
-        {row.showAssistantMeta ? (
-          <AssistantMessageMeta
-            className="mt-1.5"
-            projectedItem={row.projectedItem}
-            message={row.message}
-            showCopyButton={row.showAssistantCopyButton}
-            copyStreaming={row.assistantCopyStreaming}
-          />
-        ) : null}
-      </div>
+      {header}
+      {sitrepReply === null ? body : <PmSitrepCard reply={sitrepReply}>{body}</PmSitrepCard>}
     </>
   );
 }
@@ -4675,6 +4723,50 @@ function useStableHandoffRuns(
           modelSelection: run.modelSelection,
         }));
   setState({ source: runs, signature, value });
+  return value;
+}
+
+type PmTimelineStateWithKey = PmTimelineState & PmTimelineValues;
+
+// The PM context reaches every row, so it keeps its identity until the persona,
+// the reply headers, or the sitrep replies actually change; a streamed token does not.
+function useStablePmTimelineState(
+  persona: Pick<ProjectManagerPersona, "name" | "avatar"> | null,
+  rows: ReadonlyArray<MessagesTimelineRow>,
+  timelineEntries: ReadonlyArray<TimelineEntry>,
+): PmTimelineState | null {
+  const [state, setState] = useState<{
+    readonly persona: Pick<ProjectManagerPersona, "name" | "avatar"> | null;
+    readonly rows: ReadonlyArray<MessagesTimelineRow> | null;
+    readonly timelineEntries: ReadonlyArray<TimelineEntry> | null;
+    readonly value: PmTimelineStateWithKey | null;
+  }>({ persona: null, rows: null, timelineEntries: null, value: null });
+  if (
+    state.persona === persona &&
+    state.rows === rows &&
+    state.timelineEntries === timelineEntries
+  ) {
+    return state.value;
+  }
+  let value: PmTimelineStateWithKey | null = null;
+  if (persona !== null) {
+    const next: PmTimelineValues = {
+      personaKey: JSON.stringify([persona.name, persona.avatar]),
+      authorHeaderMessageIds: derivePmAuthorHeaderMessageIds(rows),
+      sitrepReplies: derivePmSitrepReplies(timelineEntries),
+    };
+    const previous = state.value;
+    value = reusePmTimelineValues(previous, next) ?? {
+      ...next,
+      authorHeader:
+        previous !== null && previous.personaKey === next.personaKey ? (
+          previous.authorHeader
+        ) : (
+          <PmAuthorHeader persona={persona} />
+        ),
+    };
+  }
+  setState({ persona, rows, timelineEntries, value });
   return value;
 }
 

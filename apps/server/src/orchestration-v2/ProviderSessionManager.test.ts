@@ -40,8 +40,12 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
+import {
+  PROJECT_MANAGER_INSTRUCTIONS,
+  projectManagerInstructions,
+} from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import { defaultPersona, personaInstructions } from "../projectTeam/persona.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -1962,7 +1966,15 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
             ? Option.some({
                 projectId: ProjectId.make("project-provider-session-manager-pm"),
                 threadId,
-                settings: DEFAULT_PROJECT_TEAM_SETTINGS,
+                settings: {
+                  ...DEFAULT_PROJECT_TEAM_SETTINGS,
+                  persona: {
+                    name: "Juno",
+                    avatar: { kind: "emoji", emoji: "🦉" },
+                    voice: "custom",
+                    voiceCustom: "Talk like a ship's captain.",
+                  },
+                },
                 lastUserMessageAt: null,
                 lastSitrepAt: null,
                 unreadSitrepStreak: 0,
@@ -1999,7 +2011,16 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
 
     const [pm, other] = yield* Ref.get(mcpConfigs);
     assert.equal(pm?.threadId, pmThreadId);
-    assert.equal(pm?.teamInstructions, PROJECT_MANAGER_INSTRUCTIONS);
+    assert.equal(
+      pm?.teamInstructions,
+      projectManagerInstructions({
+        name: "Juno",
+        voice: "Talk like a ship's captain.",
+        voiceIsUserWords: true,
+      }),
+    );
+    assert.include(pm?.teamInstructions ?? "", PROJECT_MANAGER_INSTRUCTIONS);
+    assert.include(pm?.teamInstructions ?? "", "Your name is Juno.");
     assert.equal(other?.threadId, otherThreadId);
     assert.isUndefined(other?.teamInstructions);
   }),
@@ -2008,6 +2029,7 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
 it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fails", () =>
   Effect.gen(function* () {
     const pmThreadId = ThreadId.make("thread-provider-session-manager-pm-flaky");
+    const flakyProjectId = ProjectId.make("project-provider-session-manager-pm-flaky");
     const state = yield* Ref.make(emptyState);
     const mcpConfigs = yield* Ref.make<
       ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
@@ -2021,7 +2043,7 @@ it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fai
             )
           : Effect.succeed(
               Option.some({
-                projectId: ProjectId.make("project-provider-session-manager-pm-flaky"),
+                projectId: flakyProjectId,
                 threadId,
                 settings: DEFAULT_PROJECT_TEAM_SETTINGS,
                 lastUserMessageAt: null,
@@ -2069,7 +2091,7 @@ it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fai
     const configs = yield* Ref.get(mcpConfigs);
     assert.isAtLeast(configs.length, 2);
     for (const config of configs) {
-      assert.equal(config?.teamInstructions, PROJECT_MANAGER_INSTRUCTIONS);
+      assert.equal(config?.teamInstructions, personaInstructions(defaultPersona(flakyProjectId)));
     }
   }),
 );

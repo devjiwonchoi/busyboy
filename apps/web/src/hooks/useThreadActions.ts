@@ -57,6 +57,10 @@ import { showThreadUndoNotice } from "./showThreadUndoNotice";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import {
+  PROJECT_MANAGER_ARCHIVE_BLOCKED_REASON,
+  readIsProjectManagerThread,
+} from "../state/projectTeam";
 
 export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveBlockedError>()(
   "ThreadArchiveBlockedError",
@@ -68,6 +72,43 @@ export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveB
   override get message(): string {
     return "Cannot archive while the provider is active.";
   }
+}
+
+export class ProjectManagerArchiveBlockedError extends Schema.TaggedError<ProjectManagerArchiveBlockedError>()(
+  "ProjectManagerArchiveBlockedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return PROJECT_MANAGER_ARCHIVE_BLOCKED_REASON;
+  }
+}
+
+export class ProjectManagerDeleteBlockedError extends Schema.TaggedError<ProjectManagerDeleteBlockedError>()(
+  "ProjectManagerDeleteBlockedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return PROJECT_MANAGER_ARCHIVE_BLOCKED_REASON;
+  }
+}
+
+/** A project manager stays for the life of its project, so it cannot be deleted. */
+function projectManagerDeleteFailure(target: ScopedThreadRef) {
+  if (!readIsProjectManagerThread(target)) return null;
+  return AsyncResult.failure(
+    Cause.fail(
+      new ProjectManagerDeleteBlockedError({
+        environmentId: target.environmentId,
+        threadId: target.threadId,
+      }),
+    ),
+  );
 }
 
 function topOfPinnedRunOrderKey(): string | undefined {
@@ -279,6 +320,16 @@ export function useThreadActions() {
     const resolved = resolveThreadTarget(target);
     if (!resolved) return AsyncResult.success(undefined);
     const { thread, threadRef } = resolved;
+    if (readIsProjectManagerThread(threadRef)) {
+      return AsyncResult.failure(
+        Cause.fail(
+          new ProjectManagerArchiveBlockedError({
+            environmentId: threadRef.environmentId,
+            threadId: threadRef.threadId,
+          }),
+        ),
+      );
+    }
     if (!threadRuntimeCanArchive(thread.runtime)) {
       return AsyncResult.failure(
         Cause.fail(
@@ -343,6 +394,8 @@ export function useThreadActions() {
   ) => {
     const permissionFailure = threadOperationFailure(target);
     if (permissionFailure) return permissionFailure;
+    const projectManagerFailure = projectManagerDeleteFailure(target);
+    if (projectManagerFailure) return projectManagerFailure;
     const resolved = resolveThreadTarget(target);
     if (!resolved) {
       const result = await deleteThreadMutation({
@@ -669,6 +722,8 @@ export function useThreadActions() {
   const confirmAndDeleteThread = async (target: ScopedThreadRef) => {
     const permissionFailure = threadOperationFailure(target);
     if (permissionFailure) return permissionFailure;
+    const projectManagerFailure = projectManagerDeleteFailure(target);
+    if (projectManagerFailure) return projectManagerFailure;
     const localApi = readLocalApi();
     const resolved = resolveThreadTarget(target);
 

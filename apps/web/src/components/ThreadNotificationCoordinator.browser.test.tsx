@@ -111,7 +111,10 @@ vi.mock(import("@effect/atom-react"), async (original) => ({
   ...(await original()),
   useAtomValue: (() => ({
     status: state.live ? "live" : "disconnected",
-    snapshot: Option.some({ threads: mockThreads() }),
+    snapshot: Option.some({
+      threads: mockThreads(),
+      projects: [{ id: "project-1", title: "Busyboy" }],
+    }),
   })) as never,
 }));
 vi.mock(import("@tanstack/react-router"), async (original) => ({
@@ -139,6 +142,7 @@ vi.mock(import("../threadNotifications"), async (original) => ({
   setNotificationBadge: vi.fn(),
 }));
 
+import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import { ThreadNotificationCoordinator } from "./ThreadNotificationCoordinator";
 
 let root: Root;
@@ -190,17 +194,17 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function setProjectTeam(latestBatchId: string | null, latestSitrepId: string | null) {
-  const summary = {
-    projectId: "project-1",
-    pmThreadId: "pm-thread",
+function setProjectTeam(
+  latestBatchId: string | null,
+  latestSitrepId: string | null,
+  enabled = true,
+) {
+  const summary = makeProjectManagerSummaryFixture({
+    enabled,
     openCount: 2,
-    latestBatchId,
-    latestSitrepId,
-    unreadSitrepCount: 0,
-    sitrepInProgress: false,
-    settings: { maxConcurrentTasks: 6, sitrepIntervalMinutes: 60, sitrepNotify: true },
-  };
+    latestBatchId: latestBatchId as never,
+    latestSitrepId: latestSitrepId as never,
+  });
   state.team = {
     byProjectId: new Map([["project-1", summary]]),
     byPmThreadId: new Map([["pm-thread", summary]]),
@@ -217,17 +221,33 @@ describe("thread notifications", () => {
     setProjectTeam("batch-1", "sitrep-1");
     await render();
     expect(state.notification).toHaveBeenCalledTimes(2);
-    expect(state.notification).toHaveBeenNthCalledWith(1, "Needs you: 2", {
-      body: "Project",
+    expect(state.notification).toHaveBeenNthCalledWith(1, "Remy (Busyboy) · Needs you: 2", {
+      body: "Busyboy",
       tag: "env-1:pm-thread:attention",
       silent: true,
     });
-    expect(state.notification).toHaveBeenNthCalledWith(2, "Project PM · Sitrep", {
-      body: "Project",
+    expect(state.notification).toHaveBeenNthCalledWith(2, "Remy (Busyboy) · Sitrep", {
+      body: "Busyboy",
       tag: "env-1:pm-thread:sitrep",
       silent: true,
     });
     expect(state.sent[0]!.close).not.toHaveBeenCalled();
+  });
+
+  it("still alerts Needs-you but not sitreps while the project manager is off", async () => {
+    state.focused = false;
+    setProjectTeam(null, null, false);
+    await render();
+    setProjectTeam("batch-1", null, false);
+    await render();
+    setProjectTeam("batch-1", "sitrep-1", false);
+    await render();
+    expect(state.notification).toHaveBeenCalledTimes(1);
+    expect(state.notification).toHaveBeenCalledWith("Remy (Busyboy) · Needs you: 2", {
+      body: "Busyboy",
+      tag: "env-1:pm-thread:attention",
+      silent: true,
+    });
   });
 
   it.each([true, false])("keeps subagents silent with focus=%s", async (focused) => {

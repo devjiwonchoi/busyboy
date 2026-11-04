@@ -1763,7 +1763,7 @@ const layerWsRpc = (
         return result;
       });
 
-      // A PM thread keeps its "<project> PM" title; the first message must not rename it.
+      // A PM thread keeps its persona name as its title; the first message must not rename it.
       const keepProjectManagerTitle = <C extends OrchestrationV2Command>(command: C) =>
         command.type !== "message.dispatch" || command.titleSeed === undefined
           ? Effect.succeed(command)

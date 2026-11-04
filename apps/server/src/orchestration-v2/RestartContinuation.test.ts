@@ -356,10 +356,14 @@ it.effect.each([
     }),
 );
 
-it.effect("lets a cut blocking delegate_task wake its parent like an async task", () =>
+it.effect("lets a cut blocking delegate_task wake its parent, but never a silent task", () =>
   Effect.gen(function* () {
     const base = makeProjection();
-    const task = (id: string, completionWake: "settled_only" | "always", status: string) => ({
+    const task = (
+      id: string,
+      completionWake: "settled_only" | "always" | "never",
+      status: string,
+    ) => ({
       id: NodeId.make(id),
       threadId,
       runId,
@@ -375,6 +379,7 @@ it.effect("lets a cut blocking delegate_task wake its parent like an async task"
       subagents: [
         task("task:waited", "settled_only", "running"),
         task("task:async", "always", "running"),
+        task("task:silent", "never", "running"),
         task("task:finished", "settled_only", "completed"),
       ],
     } as unknown as OrchestrationV2ThreadProjection;

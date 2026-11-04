@@ -8,8 +8,10 @@ import {
   ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
+  TrimmedString,
 } from "./baseSchemas.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
+import { ProjectIconOverride } from "./project.ts";
 
 export const ProjectTaskId = TrimmedNonEmptyString.pipe(Schema.brand("ProjectTaskId"));
 export type ProjectTaskId = typeof ProjectTaskId.Type;
@@ -178,6 +180,28 @@ export const ProjectTeamSitrepIntervalMinutes = Schema.Int.check(
   }),
 ).annotate({ description: "Minutes between interval sitreps, 5 to 1440." });
 
+/** Same shape as a project icon, so the icon picker and renderer can be reused. */
+export const ProjectManagerAvatar = ProjectIconOverride;
+export type ProjectManagerAvatar = typeof ProjectManagerAvatar.Type;
+
+export const ProjectManagerVoice = Schema.Literals(["chill", "dry", "chatty", "custom"]);
+export type ProjectManagerVoice = typeof ProjectManagerVoice.Type;
+
+const ProjectManagerName = TrimmedNonEmptyString.check(Schema.isMaxLength(40)).annotate({
+  description: "Your display name, up to 40 characters.",
+});
+const ProjectManagerVoiceCustom = TrimmedString.check(Schema.isMaxLength(500)).annotate({
+  description: "How you sound when voice is custom, up to 500 characters.",
+});
+
+export const ProjectManagerPersona = Schema.Struct({
+  name: ProjectManagerName,
+  avatar: ProjectManagerAvatar,
+  voice: ProjectManagerVoice,
+  voiceCustom: Schema.optionalKey(ProjectManagerVoiceCustom),
+});
+export type ProjectManagerPersona = typeof ProjectManagerPersona.Type;
+
 export const ProjectTeamSettings = Schema.Struct({
   maxConcurrentTasks: ProjectTeamMaxConcurrentTasks.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS)),
@@ -189,6 +213,9 @@ export const ProjectTeamSettings = Schema.Struct({
   quietHours: Schema.optionalKey(ProjectTeamQuietHours),
   /** Set when the user picks values directly; no automatic adjustment until then. */
   pinnedUntil: Schema.optionalKey(IsoDateTime),
+  /** Absent until the user or PM picks one; the server resolves a per-project default. */
+  persona: Schema.optionalKey(ProjectManagerPersona),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -196,6 +223,7 @@ export const DEFAULT_PROJECT_TEAM_SETTINGS: ProjectTeamSettings = {
   maxConcurrentTasks: DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS,
   sitrepIntervalMinutes: DEFAULT_PROJECT_TEAM_SITREP_INTERVAL_MINUTES,
   sitrepNotify: true,
+  enabled: true,
 };
 
 export const ProjectSitrepReason = Schema.Literals([
@@ -230,6 +258,17 @@ export const ProjectTeamTasksByStage = Schema.Struct({
 });
 export type ProjectTeamTasksByStage = typeof ProjectTeamTasksByStage.Type;
 
+export const ProjectTeamJournalKind = Schema.Literals(["done", "failed", "decision", "sitrep"]);
+export type ProjectTeamJournalKind = typeof ProjectTeamJournalKind.Type;
+
+/** One line of the team's recent history, so a PM can catch up after its context is tidied. */
+export const ProjectTeamJournalEntry = Schema.Struct({
+  at: IsoDateTime,
+  kind: ProjectTeamJournalKind,
+  text: Schema.String,
+});
+export type ProjectTeamJournalEntry = typeof ProjectTeamJournalEntry.Type;
+
 export const ProjectTeamStatus = Schema.Struct({
   projectId: ProjectId,
   tasks: ProjectTeamTasksByStage,
@@ -244,6 +283,12 @@ export const ProjectTeamStatus = Schema.Struct({
     newAttention: Schema.Array(ProjectAttentionItem),
     blocked: Schema.Array(ProjectTaskBrief),
   }),
+  /** Latest done/failed tasks, decisions, and sitreps, newest first. */
+  journal: Schema.Array(ProjectTeamJournalEntry).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  /** Topics of the PM's memory entries. */
+  memoryTopics: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type ProjectTeamStatus = typeof ProjectTeamStatus.Type;
 
@@ -393,12 +438,27 @@ export const ProjectTeamSettingsUpdateInput = Schema.Struct({
   quietHours: Schema.optional(Schema.NullOr(ProjectTeamQuietHours)).annotate({
     description: "Hours with no sitreps. Null clears them.",
   }),
+  name: Schema.optional(ProjectManagerName),
+  avatarEmoji: Schema.optional(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(16)).annotate({
+      description: "A single emoji to use as your avatar.",
+    }),
+  ),
+  // Only the user can write a custom voice, through the client; it goes into the PM's
+  // system prompt.
+  voice: Schema.optional(Schema.Literals(["chill", "dry", "chatty"])).annotate({
+    description:
+      "chill: relaxed and brief. dry: terse and matter-of-fact. chatty: warm and talkative.",
+  }),
 }).check(
   Schema.makeFilter((input) =>
     input.maxConcurrentTasks !== undefined ||
     input.sitrepIntervalMinutes !== undefined ||
     input.sitrepNotify !== undefined ||
-    input.quietHours !== undefined
+    input.quietHours !== undefined ||
+    input.name !== undefined ||
+    input.avatarEmoji !== undefined ||
+    input.voice !== undefined
       ? true
       : "team_settings_update needs at least one setting.",
   ),
@@ -476,6 +536,23 @@ export type ProjectTeamMemoryDeleteResult = typeof ProjectTeamMemoryDeleteResult
 
 // Client RPCs.
 
+export const ProjectManagerLastAction = Schema.Struct({
+  text: Schema.String,
+  at: IsoDateTime,
+});
+export type ProjectManagerLastAction = typeof ProjectManagerLastAction.Type;
+
+/** At-a-glance status of the PM and its team. */
+export const ProjectManagerPresence = Schema.Struct({
+  running: NonNegativeInt,
+  waitingOnUser: NonNegativeInt,
+  stalled: NonNegativeInt,
+  inbox: NonNegativeInt,
+  nextSitrepAt: Schema.NullOr(IsoDateTime),
+  lastAction: Schema.NullOr(ProjectManagerLastAction),
+});
+export type ProjectManagerPresence = typeof ProjectManagerPresence.Type;
+
 export const ProjectTeamAttentionSummary = Schema.Struct({
   projectId: ProjectId,
   pmThreadId: ThreadId,
@@ -486,6 +563,10 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   /** True while a requested sitrep has no body yet. */
   sitrepInProgress: Schema.Boolean,
   settings: ProjectTeamSettings,
+  /** Resolved persona, including the per-project default when none is stored. */
+  persona: ProjectManagerPersona,
+  enabled: Schema.Boolean,
+  presence: ProjectManagerPresence,
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
@@ -511,6 +592,15 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   projectId: ProjectId,
   sitrepIntervalMinutes: Schema.optional(ProjectTeamSitrepIntervalMinutes),
   sitrepNotify: Schema.optional(Schema.Boolean),
+  persona: Schema.optional(
+    Schema.Struct({
+      name: Schema.optional(ProjectManagerName),
+      avatar: Schema.optional(ProjectManagerAvatar),
+      voice: Schema.optional(ProjectManagerVoice),
+      voiceCustom: Schema.optional(ProjectManagerVoiceCustom),
+    }),
+  ),
+  enabled: Schema.optional(Schema.Boolean),
 });
 export type ProjectTeamUpdateSettingsInput = typeof ProjectTeamUpdateSettingsInput.Type;
 

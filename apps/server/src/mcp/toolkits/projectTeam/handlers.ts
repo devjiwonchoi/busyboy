@@ -38,7 +38,7 @@ const handlers = {
       const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* withTeam((team, caller, scope) =>
         team.startTask(caller, input, (delegateInput) =>
-          orchestrator.delegateTask(scope, delegateInput),
+          orchestrator.delegateTask(scope, delegateInput, { completionWake: "never" }),
         ),
       );
     }),

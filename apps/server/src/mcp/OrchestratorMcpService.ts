@@ -123,6 +123,15 @@ type TerminalTaskStatus = Extract<
   "completed" | "failed" | "cancelled" | "interrupted"
 >;
 
+/**
+ * Server-internal delegate options. Never part of the agent-facing delegate_task
+ * schema: agents must not be able to silence their own children's completions.
+ */
+export interface OrchestratorMcpDelegateTaskOptions {
+  /** "never": the child's terminal state does not wake the parent; its completion is disposed. */
+  readonly completionWake?: "never";
+}
+
 export interface OrchestratorMcpServiceShape {
   readonly capabilities: (
     scope: McpInvocationScope,
@@ -130,6 +139,7 @@ export interface OrchestratorMcpServiceShape {
   readonly delegateTask: (
     scope: McpInvocationScope,
     input: OrchestratorMcpDelegateTaskInput,
+    options?: OrchestratorMcpDelegateTaskOptions,
   ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
   readonly taskStatus: (
     scope: McpInvocationScope,
@@ -1903,7 +1913,7 @@ const make = Effect.gen(function* () {
           },
         };
       }),
-    delegateTask: (callerScope, input) =>
+    delegateTask: (callerScope, input, options) =>
       Effect.gen(function* () {
         const { scope, parent } = yield* loadThreadCaller(callerScope, "delegate_task");
         const parentRun = parent.runs
@@ -1978,7 +1988,8 @@ const make = Effect.gen(function* () {
             // Async delegations wake the parent on every child terminal; wait
             // delegations deliver through the blocking tool call, so a wake is
             // only needed if the parent settled first (timeout, disconnect).
-            completionWake: input.mode === "wait" ? "settled_only" : "always",
+            completionWake:
+              options?.completionWake ?? (input.mode === "wait" ? "settled_only" : "always"),
           })
           .pipe(
             Effect.mapError((error) =>
@@ -2030,7 +2041,10 @@ const make = Effect.gen(function* () {
           return waited.value;
         }
         // An incomplete wait gives up delivery: upgrade so a later terminal
-        // wakes the parent even mid-turn.
+        // wakes the parent even mid-turn. A "never" task stays silent.
+        if (options?.completionWake === "never") {
+          return yield* readTask(scope, taskId, Option.isNone(waited), true);
+        }
         yield* threadManagement
           .dispatch({
             type: "delegated_task.wake-policy",
