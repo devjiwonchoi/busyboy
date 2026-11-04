@@ -11,6 +11,7 @@ import {
   type OrchestrationV2ProviderSession,
   type OrchestrationV2ProviderThread,
   type Project,
+  DEFAULT_PROJECT_TEAM_SETTINGS,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -33,11 +34,14 @@ import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 import { HttpServer } from "effect/http";
 
+import { PersistenceSqlError } from "../persistence/Errors.ts";
 import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -486,6 +490,7 @@ function layerTest(input: {
   readonly scopeCloseReached?: Deferred.Deferred<void>;
   readonly serverSettingsLayer?: ReturnType<typeof ServerSettings.layerTest>;
   readonly projectServiceLayer?: Layer.Layer<ProjectService.ProjectService>;
+  readonly projectTeamRepositoryLayer?: Layer.Layer<ProjectTeamRepository.ProjectTeamRepository>;
 }) {
   const layerConfiguredEventSink =
     input.flakyReleaseWrites !== undefined
@@ -563,6 +568,9 @@ function layerTest(input: {
           layerTestStores,
           ...(input.serverSettingsLayer === undefined ? [] : [input.serverSettingsLayer]),
           ...(input.projectServiceLayer === undefined ? [] : [input.projectServiceLayer]),
+          ...(input.projectTeamRepositoryLayer === undefined
+            ? []
+            : [input.projectTeamRepositoryLayer]),
         ),
       ),
     ),
@@ -1937,6 +1945,133 @@ it.effect(
         ),
       );
     }),
+);
+
+it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project's PM thread", () =>
+  Effect.gen(function* () {
+    const pmThreadId = ThreadId.make("thread-provider-session-manager-pm");
+    const otherThreadId = ThreadId.make("thread-provider-session-manager-not-pm");
+    const state = yield* Ref.make(emptyState);
+    const mcpConfigs = yield* Ref.make<
+      ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
+    >([]);
+    const projectTeamRepositoryLayer = Layer.mock(ProjectTeamRepository.ProjectTeamRepository)({
+      getManagerByThreadId: (threadId) =>
+        Effect.succeed(
+          threadId === pmThreadId
+            ? Option.some({
+                projectId: ProjectId.make("project-provider-session-manager-pm"),
+                threadId,
+                settings: DEFAULT_PROJECT_TEAM_SETTINGS,
+                lastUserMessageAt: null,
+                lastSitrepAt: null,
+                unreadSitrepStreak: 0,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              })
+            : Option.none(),
+        ),
+    });
+    const openFor = Effect.fnUntraced(function* (threadId: ThreadId) {
+      const eventSink = yield* EventSink.EventSinkV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const now = yield* DateTime.now;
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      yield* eventSink.write({
+        events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+      });
+      yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+      yield* manager.close(providerSessionId);
+    });
+
+    yield* Effect.gen(function* () {
+      yield* openFor(pmThreadId);
+      yield* openFor(otherThreadId);
+    }).pipe(
+      Effect.provide(
+        layerTest({ state, idleTimeoutMs: 1_000, mcpConfigs, projectTeamRepositoryLayer }),
+      ),
+    );
+
+    const [pm, other] = yield* Ref.get(mcpConfigs);
+    assert.equal(pm?.threadId, pmThreadId);
+    assert.equal(pm?.teamInstructions, PROJECT_MANAGER_INSTRUCTIONS);
+    assert.equal(other?.threadId, otherThreadId);
+    assert.isUndefined(other?.teamInstructions);
+  }),
+);
+
+it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fails", () =>
+  Effect.gen(function* () {
+    const pmThreadId = ThreadId.make("thread-provider-session-manager-pm-flaky");
+    const state = yield* Ref.make(emptyState);
+    const mcpConfigs = yield* Ref.make<
+      ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
+    >([]);
+    let failRead = false;
+    const projectTeamRepositoryLayer = Layer.mock(ProjectTeamRepository.ProjectTeamRepository)({
+      getManagerByThreadId: (threadId) =>
+        failRead
+          ? Effect.fail(
+              new PersistenceSqlError({ operation: "getManagerByThreadId", detail: "busy" }),
+            )
+          : Effect.succeed(
+              Option.some({
+                projectId: ProjectId.make("project-provider-session-manager-pm-flaky"),
+                threadId,
+                settings: DEFAULT_PROJECT_TEAM_SETTINGS,
+                lastUserMessageAt: null,
+                lastSitrepAt: null,
+                unreadSitrepStreak: 0,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              }),
+            ),
+    });
+
+    yield* Effect.gen(function* () {
+      const eventSink = yield* EventSink.EventSinkV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const now = yield* DateTime.now;
+      yield* eventSink.write({
+        events: [yield* makeThreadCreatedEvent({ idAllocator, threadId: pmThreadId, now })],
+      });
+      const open = Effect.gen(function* () {
+        const providerSessionId = yield* idAllocator.allocate.providerSession({
+          providerInstanceId: modelSelection.instanceId,
+          threadId: pmThreadId,
+        });
+        yield* manager.open({
+          threadId: pmThreadId,
+          providerSessionId,
+          modelSelection,
+          runtimePolicy,
+        });
+        return providerSessionId;
+      });
+      // Re-attach while the first session still holds its credential.
+      const first = yield* open;
+      failRead = true;
+      const second = yield* open;
+      yield* manager.close(second);
+      yield* manager.close(first);
+    }).pipe(
+      Effect.provide(
+        layerTest({ state, idleTimeoutMs: 1_000, mcpConfigs, projectTeamRepositoryLayer }),
+      ),
+    );
+
+    const configs = yield* Ref.get(mcpConfigs);
+    assert.isAtLeast(configs.length, 2);
+    for (const config of configs) {
+      assert.equal(config?.teamInstructions, PROJECT_MANAGER_INSTRUCTIONS);
+    }
+  }),
 );
 
 it.effect("ProviderSessionManagerV2 honors a project browser-access opt-out", () =>

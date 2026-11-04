@@ -58,6 +58,7 @@ import type * as EffectAcpSchema from "effect-acp/compat";
 
 import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import {
   ACP_EMPTY_OPTION_VALUE,
@@ -876,6 +877,91 @@ describe("AcpAdapterV2", () => {
         "session/set_config_option",
         "Build should restore the native mode that T3 temporarily replaced for Plan",
       );
+    }).pipe(Effect.provide(layerTest), Effect.scoped),
+  );
+
+  it.live("adds the PM instructions to the prompt only for a project's PM thread", () =>
+    Effect.gen(function* () {
+      const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const path = yield* Path.Path;
+      const selfInvocation = yield* resolveSelfInvocation();
+      const mockAgentPath = yield* path.fromFileUrl(
+        new URL("../../../scripts/acp-mock-agent.ts", import.meta.url),
+      );
+      const firstPrompt = Effect.fnUntraced(function* (
+        name: string,
+        teamInstructions: string | undefined,
+      ) {
+        const protocolEvents = yield* Queue.unbounded<EffectAcpProtocol.AcpProtocolLogEvent>();
+        const instanceId = ProviderInstanceId.make(`acp-test-${name}`);
+        const threadId = ThreadId.make(`thread-acp-${name}`);
+        yield* (yield* McpProviderSessions.McpProviderSessions).set({
+          environmentId: EnvironmentId.make(`environment-acp-${name}`),
+          threadId,
+          providerSessionId: `mcp-session-acp-${name}`,
+          providerInstanceId: instanceId,
+          endpoint: "http://127.0.0.1:43123/mcp",
+          authorizationHeader: `Bearer ${name}-token`,
+          browserToolsAvailable: false,
+          ...(teamInstructions === undefined ? {} : { teamInstructions }),
+        });
+        const adapter = yield* makeAcpAdapterV2({
+          instanceId,
+          flavor: {
+            driver: ACP_TEST_DRIVER,
+            capabilities: AcpProviderCapabilitiesV2,
+            makeRuntime: makeMockRuntime({ childProcessSpawner, mockAgentPath, protocolEvents }),
+          },
+          selfInvocation,
+        });
+        const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          cwd: process.cwd(),
+        });
+        const modelSelection = { instanceId, model: "default" } as const;
+        const runtime = yield* adapter.openSession({
+          threadId,
+          providerSessionId: ProviderSessionId.make(`provider-session-acp-${name}`),
+          modelSelection,
+          runtimePolicy,
+        });
+        const providerThread = yield* runtime.ensureThread({
+          threadId,
+          modelSelection,
+          runtimePolicy,
+        });
+        yield* runtime.startTurn(
+          makeTurnInput({
+            threadId,
+            providerThread,
+            instanceId,
+            runtimePolicy,
+            now: yield* DateTime.now,
+            ordinal: 1,
+            messageText: "Ship the login fix.",
+          }),
+        );
+        yield* runtime.events.pipe(
+          Stream.takeUntil((event) => event.type === "turn.terminal"),
+          Stream.runDrain,
+        );
+        while (true) {
+          const event = yield* Queue.take(protocolEvents);
+          if (event.direction === "outgoing" && rawProtocolMethod(event) === "session/prompt") {
+            return rawProtocolPromptText(event);
+          }
+        }
+      });
+
+      const pmPrompt = yield* firstPrompt("pm-instructions", PROJECT_MANAGER_INSTRUCTIONS);
+      assert.include(pmPrompt, "BusyBoy orchestration");
+      assert.include(pmPrompt, "BusyBoy project manager");
+      assert.include(pmPrompt, "[Sitrep due]");
+
+      const otherPrompt = yield* firstPrompt("non-pm-instructions", undefined);
+      assert.include(otherPrompt, "BusyBoy orchestration");
+      assert.notInclude(otherPrompt, "BusyBoy project manager");
     }).pipe(Effect.provide(layerTest), Effect.scoped),
   );
 

@@ -63,7 +63,18 @@ export type T3McpToolSummaryAction =
   | "read-pr-guide"
   | "browser"
   | "html-preview"
-  | "html-render";
+  | "html-render"
+  | "team-task-create"
+  | "team-task-start"
+  | "team-task-update"
+  | "team-task-nudge"
+  | "team-task-read"
+  | "team-status"
+  | "team-settings"
+  | "team-ask-user"
+  | "team-answer"
+  | "team-memory-read"
+  | "team-memory-write";
 
 export interface T3McpToolDefinition {
   readonly displayName: string;
@@ -318,6 +329,20 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_thread_send_attachments: tool(["Send", "Sending", "Sent", "attachments"], "attachment-send"),
   html_preview: tool(["Preview", "Previewing", "Previewed", "an HTML page"], "html-preview"),
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
+  task_create: tool(["Create", "Creating", "Created", "a team task"], "team-task-create"),
+  task_start: tool(["Start", "Starting", "Started", "a team task"], "team-task-start"),
+  task_update: tool(["Update", "Updating", "Updated", "a team task"], "team-task-update"),
+  task_nudge: tool(["Nudge", "Nudging", "Nudged", "a team task"], "team-task-nudge"),
+  task_list: tool(["List", "Listing", "Listed", "team tasks"], "team-task-read"),
+  task_read: tool(["Read", "Reading", "Read", "a team task"], "team-task-read"),
+  task_search: tool(["Search", "Searching", "Searched", "team tasks"], "team-task-read"),
+  team_status: tool(["Check", "Checking", "Checked", "team status"], "team-status"),
+  team_settings_update: tool(["Update", "Updating", "Updated", "team settings"], "team-settings"),
+  ask_user: tool(["Ask", "Asking", "Asked", "the user"], "team-ask-user"),
+  attention_answer: tool(["Relay", "Relaying", "Relayed", "the user's answer"], "team-answer"),
+  memory_list: tool(["List", "Listing", "Listed", "team memory"], "team-memory-read"),
+  memory_write: tool(["Save", "Saving", "Saved", "team memory"], "team-memory-write"),
+  memory_delete: tool(["Delete", "Deleting", "Deleted", "team memory"], "team-memory-write"),
 };
 
 export const T3_MCP_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(T3_MCP_TOOLS));

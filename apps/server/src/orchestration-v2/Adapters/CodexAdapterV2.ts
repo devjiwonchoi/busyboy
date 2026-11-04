@@ -738,6 +738,8 @@ export function buildCodexTurnStartParams(input: {
   readonly modelSelection: ModelSelection;
   readonly hasT3Mcp?: boolean;
   readonly browserToolsAvailable?: boolean;
+  /** Role instructions from the thread's MCP session, such as the PM's. */
+  readonly teamInstructions?: string;
   /** ChatGPT token sharing does not accept service tiers. */
   readonly omitServiceTier?: boolean;
   readonly appContext?: ProviderAdapter.ProviderAdapterV2TurnInput["appContext"];
@@ -780,6 +782,7 @@ export function buildCodexTurnStartParams(input: {
         ? buildCodexAdditionalContext(
             { model: input.modelSelection.model, reasoningEffort: effort ?? "medium" },
             { browser: input.browserToolsAvailable ?? true },
+            input.teamInstructions,
           )
         : undefined;
     const additionalContext =
@@ -6307,6 +6310,9 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               modelSelection: turnInput.modelSelection,
               hasT3Mcp: mcpSession !== undefined,
               browserToolsAvailable: mcpSession?.browserToolsAvailable ?? true,
+              ...(mcpSession?.teamInstructions === undefined
+                ? {}
+                : { teamInstructions: mcpSession.teamInstructions }),
               omitServiceTier: adapterOptions.resolveRuntime !== undefined,
               ...(turnInput.appContext === undefined ? {} : { appContext: turnInput.appContext }),
             });

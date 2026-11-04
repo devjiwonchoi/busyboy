@@ -136,6 +136,7 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
 import {
   useEnvironmentIdentities,
+  useEnvironmentIds,
   useConnectedEnvironmentIds,
   useEnvironmentMachines,
   usePrimaryEnvironmentId,
@@ -156,6 +157,8 @@ import { useEnvironmentQuery } from "../state/query";
 import { useThreadSearch } from "../state/queries";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
+import { useProjectManagerForThread, useProjectManagerThreadKeys } from "../state/projectTeam";
+import { SidebarProjectManagerBadges, SidebarSitrepButton } from "./SidebarProjectManager";
 import { buildThreadRouteParams, resolveActiveThreadRouteRef } from "../threadRoutes";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import type { SidebarThreadSummary } from "../types";
@@ -201,6 +204,8 @@ import {
   sortInboxThreadsByReturn,
   sortPinnedThreadsForSidebar,
   sortThreadsForSidebar,
+  groupSidebarThreadsByProject,
+  orderSidebarProjectSections,
   sortWorkingThreadsBySend,
   useThreadJumpHintVisibility,
   useRetainedValue,
@@ -358,6 +363,7 @@ interface SidebarThreadPartitionInput {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly workingShelfEnabled: boolean;
+  readonly projectManagerThreadKeys: ReadonlySet<string>;
 }
 
 function threadShellKey(thread: Pick<SidebarThreadSummary, "environmentId" | "id">): string {
@@ -423,12 +429,14 @@ function useSidebarThreads(input: {
     Schema.Array(Schema.String),
   );
   const collapsedProjectKeys = new Set(collapsedProjectKeyList);
+  const projectManagerThreadKeys = useProjectManagerThreadKeys(useEnvironmentIds());
   const partition = partitionSidebarThreads({
     threads,
     scopedProjectKeys,
     serverConfigs,
     optimisticDrop,
     workingShelfEnabled,
+    projectManagerThreadKeys,
   });
 
   const { pinnedThreads, workingThreads } = partition;
@@ -446,29 +454,26 @@ function useSidebarThreads(input: {
     const physicalKey = `${thread.environmentId}:${thread.projectId}`;
     return projectKeyByProject.get(physicalKey) ?? physicalKey;
   };
-  const activeThreadsByProject = new Map<string, EnvironmentThreadShell[]>();
-  for (const thread of partition.activeThreads) {
-    const projectKey = projectKeyOf(thread);
-    const projectThreads = activeThreadsByProject.get(projectKey);
-    if (projectThreads) {
-      projectThreads.push(thread);
-    } else {
-      activeThreadsByProject.set(projectKey, [thread]);
-    }
-  }
-  const projectSectionKeys = [
-    ...activeThreadsByProject.keys(),
-    ...projectGroups
+  const isProjectManagerThread = (thread: EnvironmentThreadShell) =>
+    projectManagerThreadKeys.has(threadShellKey(thread));
+  const activeThreadsByProject = groupSidebarThreadsByProject(
+    partition.activeThreads,
+    projectKeyOf,
+    isProjectManagerThread,
+  );
+  const projectSectionKeys = orderSidebarProjectSections(
+    activeThreadsByProject,
+    isProjectManagerThread,
+    projectGroups
       .filter(
         (group) =>
-          !activeThreadsByProject.has(group.projectKey) &&
-          (scopedProjectKeys === null ||
-            group.memberProjectRefs.some((ref) =>
-              scopedProjectKeys.has(`${ref.environmentId}:${ref.projectId}`),
-            )),
+          scopedProjectKeys === null ||
+          group.memberProjectRefs.some((ref) =>
+            scopedProjectKeys.has(`${ref.environmentId}:${ref.projectId}`),
+          ),
       )
       .map((group) => group.projectKey),
-  ];
+  );
   const activeThreads = projectSectionKeys.flatMap((projectKey) =>
     collapsedProjectKeys.has(projectKey) ? [] : (activeThreadsByProject.get(projectKey) ?? []),
   );
@@ -519,7 +524,14 @@ function useSidebarThreads(input: {
 }
 
 function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
-  const { threads, scopedProjectKeys, serverConfigs, optimisticDrop, workingShelfEnabled } = input;
+  const {
+    threads,
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    workingShelfEnabled,
+    projectManagerThreadKeys,
+  } = input;
   const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
   inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
@@ -532,6 +544,11 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   for (const thread of visible) {
     const capabilities = serverConfigs.get(thread.environmentId)?.environment.capabilities;
     const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    // A PM thread is fixed to its project, so it neither pins, shelves, nor drags.
+    if (projectManagerThreadKeys.has(threadKey)) {
+      active.push(thread);
+      continue;
+    }
     if (capabilities?.threadActiveReorder === true) activeReorderable.add(threadKey);
     if (capabilities?.threadPinning === true && capabilities.threadPinReorder === true) {
       draggable.add(threadKey);
@@ -1403,6 +1420,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
+  const projectManager = useProjectManagerForThread(threadRef);
   useEffect(() => {
     if (!canOperateThread && isRenaming) onCancelRename();
   }, [canOperateThread, isRenaming, onCancelRename]);
@@ -1611,7 +1629,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       onCommitRename(threadRef, renamingTitle, thread.title);
     }
   };
-  const showPinButton = props.pinningSupported && canOperateThread && !props.isPinned;
+  const showPinButton =
+    props.pinningSupported && canOperateThread && !props.isPinned && projectManager === null;
+  const showSitrepButton = canOperateThread && projectManager !== null;
   const handlePinClick = (event: ReactMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1623,7 +1643,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     onUnpin(threadRef);
   };
   // Archive rejects a thread with an attached provider, so the button only shows when it can succeed.
-  const showArchiveButton = canOperateThread && threadRuntimeCanArchive(thread.runtime);
+  const showArchiveButton =
+    canOperateThread && threadRuntimeCanArchive(thread.runtime) && projectManager === null;
   const handleArchiveClick = (event: ReactMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1857,6 +1878,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               ) : (
                 <span className="flex-1" />
               )}
+              {projectManager ? <SidebarProjectManagerBadges summary={projectManager} /> : null}
               {pinIndicator}
               {sortable?.isDragging ? (
                 dragDestination
@@ -1866,7 +1888,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     className={cn(
                       "pointer-events-none",
                       // The label gives way to the hover actions, so it stays put when there are none.
-                      (hasUnsentDraft || showPinButton || showArchiveButton) &&
+                      (hasUnsentDraft || showPinButton || showArchiveButton || showSitrepButton) &&
                         "group-has-[:focus-visible]/sidebar-status-slot:absolute group-has-[:focus-visible]/sidebar-status-slot:right-0 group-has-[:focus-visible]/sidebar-status-slot:opacity-0 group-any-hover/sidebar-row:absolute group-any-hover/sidebar-row:right-0 group-any-hover/sidebar-row:opacity-0",
                       "flex items-center self-center justify-self-end tabular-nums text-secondary-label transition-opacity",
                     )}
@@ -1909,7 +1931,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       <RelativeTimeLabel timestamp={threadTimeTimestamp(thread)} />
                     )}
                   </span>
-                  {hasUnsentDraft || showPinButton || showArchiveButton ? (
+                  {hasUnsentDraft || showPinButton || showArchiveButton || showSitrepButton ? (
                     // focus-visible, not focus-within: a mouse click leaves
                     // the clicked button focused, and a plain focus-within
                     // would keep the controls pinned over the status label
@@ -1969,6 +1991,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                           </TooltipTrigger>
                           <TooltipPopup side="top">Archive thread</TooltipPopup>
                         </Tooltip>
+                      ) : null}
+                      {showSitrepButton && projectManager ? (
+                        <SidebarSitrepButton
+                          threadRef={threadRef}
+                          summary={projectManager}
+                          onThreadActivate={onThreadActivate}
+                        />
                       ) : null}
                     </span>
                   ) : null}

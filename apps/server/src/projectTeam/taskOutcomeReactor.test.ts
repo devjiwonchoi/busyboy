@@ -1,0 +1,331 @@
+import { assert, describe, it } from "@effect/vitest";
+import {
+  EventId,
+  MessageId,
+  type OrchestrationV2DomainEvent,
+  type OrchestrationV2Run,
+  ProviderInstanceId,
+  RunId,
+  ThreadId,
+} from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import * as ProjectTeamService from "./ProjectTeamService.ts";
+import { classifyTaskOutcome, TaskOutcomeReactor } from "./taskOutcomeReactor.ts";
+import { PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
+
+function leadTurnEnded(input: {
+  readonly lead: ThreadId;
+  readonly status: OrchestrationV2Run["status"];
+  readonly completedAt: string;
+  readonly ordinal?: number;
+  readonly started?: boolean;
+}): OrchestrationV2DomainEvent {
+  const at = DateTime.makeUnsafe(input.completedAt);
+  const ordinal = input.ordinal ?? 1;
+  return {
+    id: EventId.make(`event-${input.lead}-${ordinal}-${input.status}`),
+    threadId: input.lead,
+    occurredAt: at,
+    type: "run.updated",
+    payload: {
+      id: RunId.make(`run-${input.lead}-${ordinal}`),
+      threadId: input.lead,
+      ordinal,
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+      providerThreadId: null,
+      userMessageId: MessageId.make(`message-${input.lead}-${ordinal}`),
+      rootNodeId: null,
+      activeAttemptId: null,
+      status: input.status,
+      requestedAt: at,
+      startedAt: input.started === false ? null : at,
+      completedAt: at,
+      checkpointId: null,
+      contextHandoffId: null,
+    },
+  } as OrchestrationV2DomainEvent;
+}
+
+describe("classifyTaskOutcome", () => {
+  it("orders waiting_user, in_review, done, failed, then stalled", () => {
+    const base = { stage: "running" as const, prUrl: null };
+    assert.strictEqual(
+      classifyTaskOutcome({
+        task: { ...base, prUrl: "https://pr" },
+        openAttentionCount: 1,
+        status: "failed",
+      }),
+      "waiting_user",
+    );
+    assert.strictEqual(
+      classifyTaskOutcome({
+        task: { stage: "in_review", prUrl: "https://pr" },
+        openAttentionCount: 0,
+        status: "failed",
+      }),
+      "in_review",
+    );
+    assert.strictEqual(
+      classifyTaskOutcome({
+        task: { stage: "done", prUrl: "https://pr" },
+        openAttentionCount: 0,
+        status: "completed",
+      }),
+      "done",
+    );
+    assert.strictEqual(
+      classifyTaskOutcome({ task: base, openAttentionCount: 0, status: "failed" }),
+      "failed",
+    );
+    // A restart or shutdown ends in-flight runs as cancelled and then continues them.
+    assert.strictEqual(
+      classifyTaskOutcome({ task: base, openAttentionCount: 0, status: "cancelled" }),
+      "stalled",
+    );
+    assert.strictEqual(
+      classifyTaskOutcome({ task: base, openAttentionCount: 0, status: "completed" }),
+      "stalled",
+    );
+    assert.strictEqual(
+      classifyTaskOutcome({ task: base, openAttentionCount: 0, status: "interrupted" }),
+      "stalled",
+    );
+  });
+});
+
+describe("TaskOutcomeReactor", () => {
+  it.effect("marks a quiet turn stalled and a turn with an open question waiting_user", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const quiet = yield* startLead(pm, "Quiet", harness.delegate);
+        const asking = yield* startLead(pm, "Asking", harness.delegate);
+        yield* team.askUser(asking.leadThreadId, { kind: "approval", question: "Plan?" });
+
+        const at = "2026-11-04T00:05:00.000Z";
+        yield* reactor.handle(
+          leadTurnEnded({ lead: quiet.leadThreadId, status: "completed", completedAt: at }),
+        );
+        yield* reactor.handle(
+          leadTurnEnded({ lead: asking.leadThreadId, status: "completed", completedAt: at }),
+        );
+
+        const quietTask = yield* team.readTask(pm, { taskId: quiet.task.id });
+        assert.strictEqual(quietTask.task.lastOutcome, "stalled");
+        assert.deepStrictEqual(
+          quietTask.events.filter((event) => event.kind === "outcome").map((event) => event.body),
+          ["stalled"],
+        );
+        const askingTask = yield* team.readTask(pm, { taskId: asking.task.id });
+        assert.strictEqual(askingTask.task.lastOutcome, "waiting_user");
+        const status = yield* team.teamStatus(pm, {});
+        assert.deepStrictEqual(
+          status.stalled.map((task) => task.title),
+          ["Quiet"],
+        );
+
+        yield* reactor.handle(
+          leadTurnEnded({ lead: quiet.leadThreadId, status: "completed", completedAt: at }),
+        );
+        const repeated = yield* team.readTask(pm, { taskId: quiet.task.id });
+        assert.strictEqual(repeated.events.filter((event) => event.kind === "outcome").length, 1);
+      }),
+    ),
+  );
+
+  it.effect("blocks a failed task and raises a blocker for the user", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Fragile", harness.delegate);
+
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "failed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        const { task } = yield* team.readTask(pm, { taskId: lead.task.id });
+        assert.strictEqual(task.stage, "blocked");
+        assert.strictEqual(task.lastOutcome, "failed");
+        const [blocker] = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+        assert.strictEqual(blocker?.kind, "blocker");
+        assert.strictEqual(blocker?.askerThreadId, lead.leadThreadId);
+        assert.include(blocker?.question, "#1 Fragile");
+      }),
+    ),
+  );
+
+  it.effect("reclassifies the lead's follow-up turn after the user answers", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Notes", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "approval",
+          question: "Plan?",
+        });
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        assert.strictEqual(
+          (yield* team.readTask(pm, { taskId: lead.task.id })).task.lastOutcome,
+          "waiting_user",
+        );
+
+        yield* team.answerAttention(pm, { attentionItemId: item.id, answer: "Approved" });
+        // The relayed answer starts a second run that ends without progress.
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:06:00.000Z",
+            ordinal: 2,
+          }),
+        );
+        const { task, events } = yield* team.readTask(pm, { taskId: lead.task.id });
+        assert.strictEqual(task.lastOutcome, "stalled");
+        assert.deepStrictEqual(
+          events.filter((event) => event.kind === "outcome").map((event) => event.body),
+          ["waiting_user", "stalled"],
+        );
+      }),
+    ),
+  );
+
+  it.effect("does not mark a lead stalled while it is still working", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const fanOut = yield* startLead(pm, "Fan out", harness.delegate);
+        const queued = yield* startLead(pm, "Queued next", harness.delegate);
+        harness.addThread(fanOut.leadThreadId).subagents = [
+          { origin: "app_owned", status: "completed" },
+          { origin: "app_owned", status: "running" },
+        ];
+        harness.addThread(queued.leadThreadId).activeRunId = "run-next";
+
+        const at = "2026-11-04T00:05:00.000Z";
+        yield* reactor.handle(
+          leadTurnEnded({ lead: fanOut.leadThreadId, status: "completed", completedAt: at }),
+        );
+        yield* reactor.handle(
+          leadTurnEnded({ lead: queued.leadThreadId, status: "completed", completedAt: at }),
+        );
+        assert.strictEqual(
+          (yield* team.readTask(pm, { taskId: fanOut.task.id })).task.lastOutcome,
+          null,
+        );
+        assert.strictEqual(
+          (yield* team.readTask(pm, { taskId: queued.task.id })).task.lastOutcome,
+          null,
+        );
+
+        // The children settle and wake the lead; that turn's quiet end is a stall.
+        harness.threads.get(fanOut.leadThreadId)!.subagents = [
+          { origin: "app_owned", status: "completed" },
+          { origin: "app_owned", status: "failed" },
+        ];
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: fanOut.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:09:00.000Z",
+            ordinal: 2,
+          }),
+        );
+        assert.strictEqual(
+          (yield* team.readTask(pm, { taskId: fanOut.task.id })).task.lastOutcome,
+          "stalled",
+        );
+      }),
+    ),
+  );
+
+  it.effect("treats a lead run cancelled by a restart as stalled, not failed", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Restarted", harness.delegate);
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "cancelled",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        const { task } = yield* team.readTask(pm, { taskId: lead.task.id });
+        assert.strictEqual(task.lastOutcome, "stalled");
+        assert.notStrictEqual(task.stage, "blocked");
+        assert.strictEqual(
+          (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID })).length,
+          0,
+        );
+      }),
+    ),
+  );
+
+  it.effect("ignores a queued lead run cancelled before it started", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Queued", harness.delegate);
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "cancelled",
+            completedAt: "2026-11-04T00:05:00.000Z",
+            started: false,
+          }),
+        );
+        const { task } = yield* team.readTask(pm, { taskId: lead.task.id });
+        assert.strictEqual(task.lastOutcome, null);
+        assert.notStrictEqual(task.stage, "blocked");
+      }),
+    ),
+  );
+
+  it.effect("ignores delegated tasks that are not task leads", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        yield* setUpManager;
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: ThreadId.make("helper"),
+            status: "failed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        assert.strictEqual(
+          (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID })).length,
+          0,
+        );
+      }),
+    ),
+  );
+});

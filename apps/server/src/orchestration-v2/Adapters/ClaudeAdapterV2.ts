@@ -1066,6 +1066,8 @@ export function makeClaudeQueryOptions(input: {
   readonly sdkSettings?: string | ClaudeSdkSettings;
   readonly environment?: NodeJS.ProcessEnv;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+  /** Role instructions appended after the orchestration instructions. */
+  readonly teamInstructions?: string;
   readonly tools?: ClaudeAgentSdkQueryTools;
   readonly allowedTools?: ReadonlyArray<string>;
   readonly disallowedTools?: ReadonlyArray<string>;
@@ -1161,7 +1163,9 @@ export function makeClaudeQueryOptions(input: {
       preset: "claude_code" as const,
       append:
         buildRuntimeInstructions({ harness: "Claude Code" }) +
-        (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
+        (input.mcpServers === undefined
+          ? ""
+          : T3_CODE_ORCHESTRATION_INSTRUCTIONS + (input.teamInstructions ?? "")),
     },
     ...(Object.keys(extraArgs).length === 0 ? {} : { extraArgs }),
   };
@@ -1198,6 +1202,11 @@ export const CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS: ReadonlyArray<string> = [
   "mcp__t3-code__t3_queue_read",
   "mcp__t3-code__html_preview",
   "mcp__t3-code__html_render",
+  "mcp__t3-code__task_list",
+  "mcp__t3-code__task_read",
+  "mcp__t3-code__task_search",
+  "mcp__t3-code__team_status",
+  "mcp__t3-code__memory_list",
 ];
 
 // Claude Code aborts an HTTP MCP call after 60 s ("The operation timed out.")
@@ -1220,6 +1229,7 @@ export function claudeMcpQueryOverrides(input: {
 }): {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+  readonly teamInstructions?: string;
 } {
   const session = input.mcpSession;
   if (session === undefined) {
@@ -1240,6 +1250,9 @@ export function claudeMcpQueryOverrides(input: {
         timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
       },
     },
+    ...(session.teamInstructions === undefined
+      ? {}
+      : { teamInstructions: session.teamInstructions }),
   };
 }
 
@@ -1877,6 +1890,7 @@ export function claudeEffectiveQueryPolicyKey(
   mcpOverrides: {
     readonly allowedTools?: ReadonlyArray<string>;
     readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+    readonly teamInstructions?: string;
   },
 ): string {
   return JSON.stringify({
@@ -1887,6 +1901,8 @@ export function claudeEffectiveQueryPolicyKey(
         : { allowedTools: mcpOverrides.allowedTools }),
     }),
     mcpServers: mcpOverrides.mcpServers,
+    // A thread that becomes a PM needs a new process to pick up its system prompt.
+    teamInstructions: mcpOverrides.teamInstructions,
   });
 }
 
@@ -8174,6 +8190,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ...(mcpOverrides.mcpServers === undefined
               ? {}
               : { mcpServers: mcpOverrides.mcpServers }),
+            ...(mcpOverrides.teamInstructions === undefined
+              ? {}
+              : { teamInstructions: mcpOverrides.teamInstructions }),
             permissionMode: queryPolicy.permissionMode,
             ...(queryPolicy.allowDangerouslySkipPermissions === undefined
               ? {}

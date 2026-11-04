@@ -1,0 +1,127 @@
+import { assert, describe, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import * as TestClock from "effect/testing/TestClock";
+
+import { relayedAnswerText } from "./AttentionRouter.ts";
+import * as ProjectTeamService from "./ProjectTeamService.ts";
+import { setUpManager, startLead, withTeam } from "./testkit.ts";
+
+describe("AttentionRouter", () => {
+  it.effect("batches questions raised within two minutes into one notification", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const a = yield* startLead(pm, "Hello", harness.delegate);
+        const b = yield* startLead(pm, "Goodbye", harness.delegate);
+
+        const first = yield* team.askUser(a.leadThreadId, {
+          kind: "approval",
+          question: "Plan A?",
+        });
+        yield* TestClock.adjust("1 minute");
+        const second = yield* team.askUser(b.leadThreadId, {
+          kind: "approval",
+          question: "Plan B?",
+        });
+        yield* TestClock.adjust("90 seconds");
+        const third = yield* team.askUser(a.leadThreadId, {
+          kind: "decision",
+          question: "Tabs or spaces?",
+          options: ["tabs", "spaces"],
+        });
+
+        const snapshot = yield* team.attentionSnapshot;
+        assert.strictEqual(snapshot.projects[0]?.openCount, 3);
+        assert.deepStrictEqual(
+          new Set([first.item.batchId, second.item.batchId, third.item.batchId]).size,
+          1,
+        );
+        assert.strictEqual(snapshot.projects[0]?.latestBatchId, first.item.batchId);
+
+        yield* TestClock.adjust("3 minutes");
+        const later = yield* team.askUser(b.leadThreadId, {
+          kind: "blocker",
+          question: "Need a token.",
+        });
+        assert.notStrictEqual(later.item.batchId, first.item.batchId);
+      }),
+    ),
+  );
+
+  it.effect("relays the user's answer to the task lead that asked", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "approval",
+          question: "Approve the plan?",
+        });
+
+        const answered = yield* team.answerAttention(pm, {
+          attentionItemId: item.id,
+          answer: "Yes, go ahead.",
+        });
+        assert.strictEqual(answered.item.answer, "Yes, go ahead.");
+        const [relay] = yield* Ref.get(harness.sent);
+        assert.strictEqual(relay?.threadId, lead.leadThreadId);
+        assert.strictEqual(relay?.senderThreadId, pm);
+        assert.strictEqual(relay?.mode, "auto");
+        assert.strictEqual(
+          relay?.text,
+          "[User answer via BusyBoy PM] Approve the plan? → Yes, go ahead.",
+        );
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
+
+        const again = yield* team
+          .answerAttention(pm, { attentionItemId: item.id, answer: "No." })
+          .pipe(Effect.flip);
+        assert.include(again.message, "already answered");
+        const leadAnswers = yield* team
+          .answerAttention(lead.leadThreadId, { attentionItemId: item.id, answer: "Sure." })
+          .pipe(Effect.flip);
+        assert.include(leadAnswers.message, "not available to a task lead");
+      }),
+    ),
+  );
+
+  it.effect("keeps the question open when relaying the answer fails", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "approval",
+          question: "Approve the plan?",
+        });
+
+        harness.sendFailures.remaining = 1;
+        yield* team
+          .answerAttention(pm, { attentionItemId: item.id, answer: "Yes." })
+          .pipe(Effect.flip);
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 1);
+
+        const retried = yield* team.answerAttention(pm, {
+          attentionItemId: item.id,
+          answer: "Yes.",
+        });
+        assert.strictEqual(retried.item.answer, "Yes.");
+        const relays = yield* Ref.get(harness.sent);
+        assert.deepStrictEqual(
+          relays.map((relay) => relay.threadId),
+          [lead.leadThreadId],
+        );
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
+      }),
+    ),
+  );
+
+  it("shortens long questions in the relayed answer", () => {
+    const text = relayedAnswerText("q".repeat(600), "ok");
+    assert.strictEqual(text, `[User answer via BusyBoy PM] ${"q".repeat(500)}… → ok`);
+  });
+});

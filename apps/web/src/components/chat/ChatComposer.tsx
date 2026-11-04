@@ -281,6 +281,7 @@ import {
 } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
+import { SitrepIntervalPicker, SitrepSettingsContent } from "./SitrepIntervalPicker";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
@@ -1101,6 +1102,8 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { usePanelAnimationSettings } from "../../panelAnimations";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { readEnvironmentScope } from "../../state/session";
+import { useProjectManagerForThread, useRequestSitrep } from "../../state/projectTeam";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { serverEnvironment } from "../../state/server";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
 
@@ -1374,6 +1377,8 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   compactBeforeSendTokens: number | null;
   keepFullHistory: boolean;
   onToggleKeepFullHistory: () => void;
+  onSitrep?: (() => void) | undefined;
+  sitrepInProgress?: boolean;
 }) {
   return (
     <>
@@ -1421,6 +1426,8 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         compactBeforeSendTokens={props.compactBeforeSendTokens}
         keepFullHistory={props.keepFullHistory}
         onToggleKeepFullHistory={props.onToggleKeepFullHistory}
+        onSitrep={props.onSitrep}
+        sitrepInProgress={props.sitrepInProgress ?? false}
       />
     </>
   );
@@ -2025,6 +2032,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const activeTasksProgress = shownSyncPhase === null ? props.activeTasksProgress : null;
   const activeTaskSteps = shownSyncPhase === null ? props.activeTaskSteps : null;
   const isEditingQueuedMessage = editingQueuedAttachments !== null;
+  const projectManager = useProjectManagerForThread(routeKind === "server" ? routeThreadRef : null);
+  const projectManagerRef = projectManager
+    ? scopeProjectRef(environmentId, projectManager.projectId)
+    : null;
+  const requestSitrep = useRequestSitrep();
+  const requestSitrepNow = useStableCallback(() => {
+    if (
+      projectManagerRef === null ||
+      projectManager?.sitrepInProgress ||
+      !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)
+    ) {
+      return;
+    }
+    void requestSitrep(projectManagerRef);
+  });
   const composerDraft = useComposerThreadDraft(composerDraftTarget);
   const composerDraftTargetKeyRef = useRef("");
   useLayoutEffect(() => {
@@ -3965,6 +3987,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       event?.preventDefault();
       return;
     }
+    // An empty idle PM composer asks for a sitrep instead of sending; Stop wins while running.
+    if (
+      projectManager !== null &&
+      phase !== "running" &&
+      !canInterrupt &&
+      !showResumeAction &&
+      !composerSendState.hasSendableContent &&
+      !activePendingProgress &&
+      !showPlanFollowUpPrompt &&
+      !isEditingQueuedMessage
+    ) {
+      event?.preventDefault();
+      requestSitrepNow();
+      return;
+    }
     // A send while a pasted image is still compressing would strand that image:
     // the turn snapshot wouldn't include it, and it would surface in the *next*
     // draft instead.
@@ -5047,10 +5084,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const iconOnlyBlockCount = composerControlsCollapsed
     ? restingControlsIconOnlyBlockCount
     : expandedControlsIconOnlyBlockCount;
+  // Blocks hide from the end: mode first, then the sitrep picker, then traits.
+  const hiddenSitrepPicker = restingHiddenBlockCount > 1;
   const restingProviderTraitsPicker = renderProviderTraitsPicker({
     ...providerTraitsPickerInput,
     size: composerControlsCollapsed ? "xs" : "sm",
-    hidden: composerControlsHidden || restingHiddenBlockCount > 1,
+    hidden: composerControlsHidden || restingHiddenBlockCount > (projectManager ? 2 : 1),
   });
   const restingBlockDefs = [
     ...(providerTraitsPicker
@@ -5062,6 +5101,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 <ComposerControlSeparator size={composerControlsCollapsed ? "xs" : "sm"} />
                 {restingProviderTraitsPicker}
               </>
+            ),
+          },
+        ]
+      : []),
+    ...(projectManager && projectManagerRef
+      ? [
+          {
+            id: "sitrep",
+            content: (
+              <SitrepIntervalPicker
+                projectRef={projectManagerRef}
+                summary={projectManager}
+                size={composerControlsCollapsed ? "xs" : "sm"}
+                hidden={composerControlsHidden || hiddenSitrepPicker}
+              />
             ),
           },
         ]
@@ -5242,6 +5296,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             showInteractionModeToggle={planModeUiEnabled && hiddenRestingBlockIds.includes("mode")}
             traitsMenuContent={
               hiddenRestingBlockIds.includes("traits") ? providerTraitsMenuContent : undefined
+            }
+            sitrepMenuContent={
+              projectManager && projectManagerRef && hiddenRestingBlockIds.includes("sitrep") ? (
+                <SitrepSettingsContent projectRef={projectManagerRef} summary={projectManager} />
+              ) : undefined
             }
             onToggleInteractionMode={toggleInteractionMode}
             onRuntimeModeChange={handleRuntimeModeChange}
@@ -7364,6 +7423,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     compactBeforeSendTokens={props.resumeCompactionTokens}
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
+                    {...(projectManager
+                      ? {
+                          onSitrep: requestSitrepNow,
+                          sitrepInProgress: projectManager.sitrepInProgress,
+                        }
+                      : {})}
                     compactDisabled={
                       compactDisabled || noProviderAvailable || isSendBusy || isConnecting
                     }

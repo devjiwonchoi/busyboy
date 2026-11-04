@@ -43,11 +43,13 @@ export function resolveUserMessagePresentation(message: {
   return {
     text: message.text,
     attribution:
-      message.createdBy !== "agent"
+      message.createdBy === "user" || message.createdBy === undefined
         ? null
         : message.creationSource === "server"
           ? "t3code"
-          : "agent",
+          : message.createdBy === "agent"
+            ? "agent"
+            : null,
     scheduledTaskId: undefined,
   };
 }

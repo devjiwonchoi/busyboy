@@ -1,0 +1,84 @@
+import { OrchestratorMcpFailure, type ProjectTeamError, type ThreadId } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+
+import * as ProjectTeamService from "../../../projectTeam/ProjectTeamService.ts";
+import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
+import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
+import { ProjectTeamToolkit } from "./tools.ts";
+
+const toMcpFailure = (error: ProjectTeamError) =>
+  new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
+
+/**
+ * Runs `use` with the calling thread and the team service. The service checks
+ * the caller's team role itself; `actsAsCaller`/`readsAsCaller` guarantee a
+ * thread caller.
+ */
+const withTeam = <A>(
+  use: (
+    team: ProjectTeamService.ProjectTeamService["Service"],
+    callerThreadId: ThreadId,
+    scope: McpInvocationContext.McpInvocationScope,
+  ) => Effect.Effect<A, ProjectTeamError>,
+) =>
+  Effect.gen(function* () {
+    const scope = yield* McpInvocationContext.McpInvocationContext;
+    const thread = yield* McpInvocationContext.requireThreadScope(scope, "This tool");
+    const team = yield* ProjectTeamService.ProjectTeamService;
+    return yield* use(team, thread.thread.threadId, scope).pipe(Effect.mapError(toMcpFailure));
+  });
+
+const handlers = {
+  task_create: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.createTask(caller, input)),
+  ),
+  task_start: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
+      return yield* withTeam((team, caller, scope) =>
+        team.startTask(caller, input, (delegateInput) =>
+          orchestrator.delegateTask(scope, delegateInput),
+        ),
+      );
+    }),
+  ),
+  task_update: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.updateTask(caller, input)),
+  ),
+  task_nudge: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.nudgeTask(caller, input)),
+  ),
+  task_list: McpToolAccess.readsAsCaller((input) =>
+    withTeam((team, caller) => team.listTasks(caller, input)),
+  ),
+  task_read: McpToolAccess.readsAsCaller((input) =>
+    withTeam((team, caller) => team.readTask(caller, input)),
+  ),
+  task_search: McpToolAccess.readsAsCaller((input) =>
+    withTeam((team, caller) => team.searchTasks(caller, input)),
+  ),
+  team_status: McpToolAccess.readsAsCaller((input) =>
+    withTeam((team, caller) => team.teamStatus(caller, input)),
+  ),
+  team_settings_update: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.updateSettingsAsManager(caller, input)),
+  ),
+  ask_user: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.askUser(caller, input)),
+  ),
+  attention_answer: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.answerAttention(caller, input)),
+  ),
+  memory_list: McpToolAccess.readsAsCaller(() =>
+    withTeam((team, caller) => team.listMemory(caller)),
+  ),
+  memory_write: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.writeMemory(caller, input)),
+  ),
+  memory_delete: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.deleteMemory(caller, input)),
+  ),
+} satisfies McpToolAccess.Handlers<typeof ProjectTeamToolkit.tools>;
+
+export const layer = McpToolAccess.toLayer(ProjectTeamToolkit, handlers);
