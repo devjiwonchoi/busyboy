@@ -436,6 +436,57 @@ export function filterSidebarV2VisibleThreads<
   );
 }
 
+/**
+ * Groups threads by project in order, with each project's manager first. Only
+ * non-manager threads order the projects, so a busy PM never moves its project.
+ */
+export function groupSidebarThreadsByProject<T>(
+  threads: readonly T[],
+  projectKeyOf: (thread: T) => string,
+  isProjectManager: (thread: T) => boolean,
+): Map<string, T[]> {
+  const byProject = new Map<string, T[]>();
+  const managers: T[] = [];
+  for (const thread of threads) {
+    if (isProjectManager(thread)) {
+      managers.push(thread);
+      continue;
+    }
+    const projectKey = projectKeyOf(thread);
+    const projectThreads = byProject.get(projectKey);
+    if (projectThreads) projectThreads.push(thread);
+    else byProject.set(projectKey, [thread]);
+  }
+  for (const manager of managers) {
+    const projectKey = projectKeyOf(manager);
+    const projectThreads = byProject.get(projectKey);
+    if (projectThreads) projectThreads.unshift(manager);
+    else byProject.set(projectKey, [manager]);
+  }
+  return byProject;
+}
+
+/**
+ * Orders project sections: projects with non-manager threads by recency, then
+ * the rest (including manager-only projects) in their fallback order.
+ */
+export function orderSidebarProjectSections<T>(
+  threadsByProject: ReadonlyMap<string, readonly T[]>,
+  isProjectManager: (thread: T) => boolean,
+  fallbackProjectKeys: readonly string[],
+): string[] {
+  const keys = [...threadsByProject]
+    .filter(([, threads]) => threads.some((thread) => !isProjectManager(thread)))
+    .map(([projectKey]) => projectKey);
+  const seen = new Set(keys);
+  for (const projectKey of [...fallbackProjectKeys, ...threadsByProject.keys()]) {
+    if (seen.has(projectKey)) continue;
+    seen.add(projectKey);
+    keys.push(projectKey);
+  }
+  return keys;
+}
+
 export function getSidebarForkParentThreadId(
   thread: Pick<SidebarThreadSummary, "forkedFrom" | "lineage">,
 ) {

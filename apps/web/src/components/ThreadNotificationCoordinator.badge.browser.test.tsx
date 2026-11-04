@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   badge: vi.fn(),
   environmentIds: ["one", "two"],
 }));
+const NO_PROJECT_TEAM = vi.hoisted(() => ({ byProjectId: new Map(), byPmThreadId: new Map() }));
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
   useNavigate: (() => state.navigate) as never,
@@ -39,6 +40,10 @@ vi.mock(import("../hooks/useSettings"), async (original) => ({
   useClientSettings: ((select: (settings: { notificationMode: string }) => unknown) =>
     select({ notificationMode: state.mode })) as never,
   getClientSettings: (() => ({ notificationMode: state.mode })) as never,
+}));
+vi.mock(import("../state/projectTeam"), async (original) => ({
+  ...(await original()),
+  useEnvironmentProjectTeamAttention: (() => NO_PROJECT_TEAM) as never,
 }));
 vi.mock(import("../threadNotifications"), async (original) => ({
   ...(await original()),

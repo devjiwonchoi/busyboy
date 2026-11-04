@@ -72,6 +72,17 @@ describe("resolveUserMessagePresentation", () => {
     }
   });
 
+  it("attributes system-created server prompts, such as sitrep requests, to BusyBoy", () => {
+    expect(
+      resolveUserMessagePresentation({
+        role: "user",
+        createdBy: "system",
+        creationSource: "server",
+        text: "[Sitrep due]",
+      }),
+    ).toMatchObject({ attribution: "t3code" });
+  });
+
   it("recovers the triggering automation from older scheduler message ids", () => {
     for (const trigger of ["scheduled", "manual"]) {
       expect(
