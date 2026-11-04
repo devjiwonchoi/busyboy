@@ -267,11 +267,27 @@ pub fn run_first_stage() -> FirstStage {
         }
     };
 
-    spawn_signal_thread(signals, move |signal| {
-        // SAFETY: sending a signal to our own child.
-        unsafe { libc::kill(child, signal) };
-    });
+    spawn_signal_thread(signals, move |signal| terminate_child(child, signal));
+    // If the app that launched us goes away without stopping us (crash, force quit),
+    // stop the helper too so no orphan keeps the socket.
+    if let Some(launcher) = launcher {
+        watch_process_exit(launcher.pid, move || terminate_child(child, libc::SIGTERM));
+    }
     FirstStage::Exit(wait_for(child))
+}
+
+/// How long the second stage gets to shut down before it is killed.
+const TERMINATE_GRACE: std::time::Duration = std::time::Duration::from_millis(1_500);
+
+/// Forwards `signal` to the second stage, then kills it if it is still alive after the grace period.
+fn terminate_child(child: i32, signal: c_int) {
+    // SAFETY: signalling our own child.
+    unsafe { libc::kill(child, signal) };
+    std::thread::spawn(move || {
+        std::thread::sleep(TERMINATE_GRACE);
+        // SAFETY: as above; the zombie stays reserved until we reap it, so the pid is still ours.
+        unsafe { libc::kill(child, libc::SIGKILL) };
+    });
 }
 
 #[cfg(test)]

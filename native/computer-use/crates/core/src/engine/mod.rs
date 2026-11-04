@@ -150,6 +150,7 @@ impl<P: Platform> Engine<P> {
         ];
         capabilities.extend(self.platform.capabilities());
         to_value(HelloResult {
+            pid: std::process::id(),
             protocol_version: PROTOCOL_VERSION,
             helper_version: self.helper_version.clone(),
             platform: self.platform.name().to_owned(),

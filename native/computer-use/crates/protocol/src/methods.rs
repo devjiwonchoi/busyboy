@@ -40,6 +40,9 @@ pub struct HelloParams {
 #[serde(rename_all = "camelCase")]
 pub struct HelloResult {
     pub protocol_version: u32,
+    /// The serving process, so a client that did not start it can still stop it.
+    #[serde(default)]
+    pub pid: u32,
     pub helper_version: String,
     pub platform: String,
     pub capabilities: Vec<String>,
