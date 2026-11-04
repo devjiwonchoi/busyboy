@@ -1,0 +1,37 @@
+[package]
+name = "helper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "cu_helper"
+
+# The helper itself. Release and dev bundles ship only this binary.
+[[bin]]
+name = "busyboy-computer-use"
+path = "src/main.rs"
+
+# Minimal protocol client used by the caller-verification test. Never bundled.
+[[bin]]
+name = "busyboy-cu-test-client"
+path = "src/bin/test_client.rs"
+
+[features]
+# Dev builds only: also accept the process that launched the helper. The release build
+# script must refuse this feature (SPEC §2.6).
+dev-callers = ["macos/dev-callers"]
+
+[dependencies]
+protocol.workspace = true
+core.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+macos.workspace = true
+libc = "0.2"
+objc2-core-foundation = "0.3"
+
+[dev-dependencies]
+core = { workspace = true, features = ["fake"] }
