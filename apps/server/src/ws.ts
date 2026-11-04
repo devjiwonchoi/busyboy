@@ -121,6 +121,7 @@ import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts"
 import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
+import * as ProjectTeam from "./projectTeam/ProjectTeamService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import {
   archivedShellStreamItemFromThreadShell,
@@ -1183,6 +1184,7 @@ const layerWsRpc = (
       const commandOutputHub = yield* CommandOutputHub.CommandOutputHub;
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
+      const projectTeam = yield* ProjectTeam.ProjectTeamService;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
@@ -1761,6 +1763,19 @@ const layerWsRpc = (
         return result;
       });
 
+      // A PM thread keeps its persona name as its title; the first message must not rename it.
+      const keepProjectManagerTitle = <C extends OrchestrationV2Command>(command: C) =>
+        command.type !== "message.dispatch" || command.titleSeed === undefined
+          ? Effect.succeed(command)
+          : projectTeam.roleOf(command.threadId).pipe(
+              Effect.map((role) => {
+                if (role.type !== "pm") return command;
+                const { titleSeed: _titleSeed, ...rest } = command;
+                return rest as C;
+              }),
+              Effect.orElseSucceed(() => command),
+            );
+
       const handlers = ServerWsRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
@@ -1785,12 +1800,16 @@ const layerWsRpc = (
                 .enqueueCommand(
                   (command.type === "prepared-run.retry"
                     ? threadLaunch.retryPreparation(command)
-                    : ThreadMessageIntake.dispatchCommand(
-                        ThreadManagementService.withCreationProvenance(command, {
-                          createdBy: "user",
-                          creationSource:
-                            "creationSource" in command ? command.creationSource : "web",
-                        }),
+                    : keepProjectManagerTitle(command).pipe(
+                        Effect.flatMap((kept) =>
+                          ThreadMessageIntake.dispatchCommand(
+                            ThreadManagementService.withCreationProvenance(kept, {
+                              createdBy: "user",
+                              creationSource:
+                                "creationSource" in kept ? kept.creationSource : "web",
+                            }),
+                          ),
+                        ),
                       )
                   ).pipe(Effect.provide(intakeContext)),
                 )
@@ -2020,6 +2039,15 @@ const layerWsRpc = (
         [WS_METHODS.scheduledTasksRotateWebhookToken]: (input) =>
           Effect.annotateCurrentSpan({ "scheduled_task.id": input.id }).pipe(
             Effect.andThen(scheduledTasks.rotateWebhookToken(input)),
+          ),
+        [WS_METHODS.projectTeamSubscribeAttention]: (_input) => projectTeam.streamAttention,
+        [WS_METHODS.projectTeamRequestSitrep]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.requestSitrep(input)),
+          ),
+        [WS_METHODS.projectTeamUpdateSettings]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.updateSettings(input)),
           ),
         [WS_METHODS.secretsAnswerRequest]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(

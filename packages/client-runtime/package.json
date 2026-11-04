@@ -239,6 +239,10 @@
       "types": "./src/state/sharedSettings.ts",
       "default": "./src/state/sharedSettings.ts"
     },
+    "./state/project-team": {
+      "types": "./src/state/projectTeam.ts",
+      "default": "./src/state/projectTeam.ts"
+    },
     "./state/shell": {
       "types": "./src/state/shell.ts",
       "default": "./src/state/shell.ts"

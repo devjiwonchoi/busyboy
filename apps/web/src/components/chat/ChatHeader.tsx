@@ -18,7 +18,10 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { isTrailingDoubleClick } from "../Sidebar.logic";
+import { isTrailingDoubleClick, resolveSidebarThreadStatus } from "../Sidebar.logic";
+import { useThreadShell } from "../../state/entities";
+import { useProjectManagerForThread } from "../../state/projectTeam";
+import { ProjectManagerHeaderIdentity } from "./ProjectManagerHeaderIdentity";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
@@ -48,6 +51,8 @@ interface ChatHeaderProps {
   rightPanelOpen: boolean;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
+  /** Opens the project's settings at its Project manager section. */
+  onOpenProjectManagerSettings?: (() => void) | undefined;
 }
 
 export function resolveRenameCommit(input: {
@@ -76,6 +81,7 @@ export const ChatHeader = memo(function ChatHeader({
   rightPanelOpen,
   onNewThreadInProject,
   onOpenProjectSettings,
+  onOpenProjectManagerSettings,
 }: ChatHeaderProps) {
   const activeProjectName = activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
@@ -83,6 +89,8 @@ export const ChatHeader = memo(function ChatHeader({
   const breadcrumbContainerRef = useRef<HTMLDivElement>(null);
   const [collapseParentTitle, setCollapseParentTitle] = useState(false);
   const activeThreadRef = scopeThreadRef(activeThreadEnvironmentId, activeThreadId);
+  const projectManager = useProjectManagerForThread(isServerThread ? activeThreadRef : null);
+  const projectManagerThread = useThreadShell(projectManager ? activeThreadRef : null);
   const canOperateThread = useEnvironmentScope(
     activeThreadEnvironmentId,
     AuthOrchestrationOperateScope,
@@ -358,6 +366,16 @@ export const ChatHeader = memo(function ChatHeader({
               }}
               onFocus={(event) => event.currentTarget.select()}
               onKeyDown={handleRenameKeyDown}
+            />
+          ) : projectManager ? (
+            <ProjectManagerHeaderIdentity
+              summary={projectManager}
+              projectName={activeProjectName ?? null}
+              pmThreadWorking={
+                projectManagerThread !== null &&
+                resolveSidebarThreadStatus(projectManagerThread) === "working"
+              }
+              onOpenSettings={onOpenProjectManagerSettings ?? null}
             />
           ) : isServerThread ? (
             <Tooltip>

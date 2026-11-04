@@ -4,6 +4,14 @@ import * as StorageCleanup from "./storageCleanup.ts";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
 import * as PullRequestWatchReactor from "./orchestration-v2/PullRequestWatchReactor.ts";
 import * as DelegatedTaskQuestionReactor from "./orchestration-v2/DelegatedTaskQuestionReactor.ts";
+import * as ProjectTeamRepository from "./persistence/ProjectTeamRepository.ts";
+import * as ContextCare from "./projectTeam/ContextCare.ts";
+import * as DefaultManagerReactor from "./projectTeam/defaultManagerReactor.ts";
+import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
+import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
+import * as StalledTaskSweep from "./projectTeam/StalledTaskSweep.ts";
+import * as TaskOutcomeReactor from "./projectTeam/taskOutcomeReactor.ts";
+import * as Scheduler from "./scheduling/Scheduler.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeHttp from "node:http";
 
@@ -440,6 +448,18 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
   }),
 );
 
+const layerProjectTeam = Layer.mergeAll(
+  SitrepScheduler.layerWorker,
+  TaskOutcomeReactor.layerWorker,
+  StalledTaskSweep.layerWorker,
+  DefaultManagerReactor.layerWorker,
+  ContextCare.layerWorker,
+).pipe(
+  Layer.provide(Scheduler.layer),
+  Layer.provideMerge(ProjectTeamService.layerWithDependencies),
+  Layer.provideMerge(ProjectTeamRepository.layer),
+);
+
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   StorageCleanup.layer.pipe(Layer.provide(ProjectionStoreV2.layer)),
   DatabaseStorage.layer.pipe(
@@ -475,6 +495,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
       yield* service.start();
     }),
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
+  layerProjectTeam,
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),

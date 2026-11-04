@@ -1,5 +1,12 @@
 import { memo, type MouseEventHandler, type PointerEventHandler } from "react";
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon, PlayIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  Minimize2Icon,
+  PlayIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
@@ -53,6 +60,9 @@ interface ComposerPrimaryActionsProps {
   compactBeforeSendTokens?: number | null;
   keepFullHistory?: boolean;
   onToggleKeepFullHistory?: () => void;
+  /** Set on a PM thread: an empty composer asks for a sitrep instead of sending. */
+  onSitrep?: (() => void) | undefined;
+  sitrepInProgress?: boolean;
 }
 
 const formatPendingPrimaryActionLabel = (input: {
@@ -108,6 +118,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   compactBeforeSendTokens = null,
   keepFullHistory = false,
   onToggleKeepFullHistory,
+  onSitrep,
+  sitrepInProgress = false,
 }: ComposerPrimaryActionsProps) {
   const pointerFocusProps = preserveComposerFocusOnPointerDown
     ? { onPointerDown: preventPointerFocus }
@@ -263,6 +275,28 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
 
   if (canInterrupt && !hasSendableContent && !isEditingQueuedMessage) {
     return renderStopGenerationButton(false);
+  }
+
+  // Resume wins over the sitrep pill.
+  if (onSitrep && !canResume && !hasSendableContent && !isEditingQueuedMessage) {
+    return (
+      <Tooltip key="sitrep">
+        <TooltipTrigger render={<span className="inline-flex" />}>
+          <button
+            type="button"
+            className={cn(messageActionPillClassName, "h-9 px-3 sm:h-8")}
+            {...pointerFocusProps}
+            disabled={!canOperateThread || isEnvironmentUnavailable || sitrepInProgress}
+            onClick={onSitrep}
+            aria-label="Sitrep now"
+          >
+            <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+            Sitrep
+          </button>
+        </TooltipTrigger>
+        <TooltipPopup>{sitrepInProgress ? "Sitrep in progress" : "Sitrep now"}</TooltipPopup>
+      </Tooltip>
+    );
   }
 
   const showResume = canResume && !hasSendableContent && !isEditingQueuedMessage;

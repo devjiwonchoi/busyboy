@@ -25,6 +25,7 @@ import {
   encodeProjectCommandRejection,
   planProjectCommand,
   type ProjectCommand,
+  projectThreadDeleteCommandId,
 } from "../orchestration-v2/ProjectCommands.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
@@ -406,7 +407,7 @@ export const make = Effect.gen(function* () {
     }
     const command = {
       type: "thread.delete" as const,
-      commandId: CommandId.make(`${input.commandId}:delete-thread:${threadId}`),
+      commandId: CommandId.make(projectThreadDeleteCommandId(input.commandId, threadId)),
       threadId,
     };
     const now = yield* DateTime.now;

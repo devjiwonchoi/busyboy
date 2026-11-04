@@ -43,6 +43,9 @@ import {
 import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import type * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import { personaInstructions, resolvePersona } from "../projectTeam/persona.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as EventSink from "./EventSink.ts";
@@ -326,6 +329,9 @@ export const layerWithOptions = (
        */
       const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
       const projectService = yield* Effect.serviceOption(ProjectService.ProjectService);
+      const projectTeamRepository = yield* Effect.serviceOption(
+        ProjectTeamRepository.ProjectTeamRepository,
+      );
       const eventSink = yield* EventSink.EventSinkV2;
       const commandOutput = yield* CommandOutputHub.CommandOutputHub;
       const idAllocator = yield* IdAllocator.IdAllocatorV2;
@@ -356,6 +362,34 @@ export const layerWithOptions = (
                 threadId,
                 cause,
               }).pipe(Effect.as(false)),
+            ),
+          );
+        },
+      );
+      /**
+       * Reads the repository directly rather than through ProjectTeamService:
+       * that service depends on thread management, which depends on this one.
+       * An unreadable role must not stop the session from opening, so it
+       * resolves to None and callers keep what the session already had.
+       */
+      const teamInstructionsFor = Effect.fn("ProviderSessionManagerV2.teamInstructionsFor")(
+        function* (threadId: ThreadId) {
+          if (Option.isNone(projectTeamRepository)) return Option.some(undefined);
+          return yield* projectTeamRepository.value.getManagerByThreadId(threadId).pipe(
+            Effect.map((manager) =>
+              Option.some(
+                Option.isSome(manager)
+                  ? personaInstructions(
+                      resolvePersona(manager.value.projectId, manager.value.settings),
+                    )
+                  : undefined,
+              ),
+            ),
+            Effect.catch((cause) =>
+              Effect.logWarning("Could not read the thread's team role.", {
+                threadId,
+                cause,
+              }).pipe(Effect.as(Option.none<string | undefined>())),
             ),
           );
         },
@@ -448,6 +482,17 @@ export const layerWithOptions = (
                 >(["orchestration", "worktree", "pull-requests"]);
                 if (browserToolsAvailable) capabilities.add("preview");
                 const existing = yield* mcpSessions.read(threadId);
+                // A failed role read keeps the live session's instructions rather than stripping them.
+                const teamInstructions = Option.getOrElse(
+                  yield* teamInstructionsFor(threadId),
+                  () => existing?.teamInstructions,
+                );
+                const withTeamInstructions = (
+                  config: McpProviderSession.McpProviderSessionConfig,
+                ): McpProviderSession.McpProviderSessionConfig => {
+                  const { teamInstructions: _previous, ...rest } = config;
+                  return teamInstructions === undefined ? rest : { ...rest, teamInstructions };
+                };
                 if (existing !== undefined) {
                   // Reserve before the async resolve so a release cannot
                   // revoke the credential between validation and reservation.
@@ -470,6 +515,10 @@ export const layerWithOptions = (
                     resolved.thread.providerInstanceId === providerInstanceId &&
                     resolved.capabilities.has("preview") === browserToolsAvailable
                   ) {
+                    // A thread can become a PM while it keeps its credential.
+                    if (existing.teamInstructions !== teamInstructions) {
+                      yield* mcpSessions.set(withTeamInstructions(existing));
+                    }
                     return { mcpCredentialId: existing.providerSessionId, issued: false };
                   }
                   dropMcpCredentialReservation(threadId, existing.providerSessionId);
@@ -481,7 +530,7 @@ export const layerWithOptions = (
                   browserToolsAvailable,
                   capabilities,
                 });
-                yield* mcpSessions.set(credential.config);
+                yield* mcpSessions.set(withTeamInstructions(credential.config));
                 reserveMcpCredential(threadId, credential.config.providerSessionId);
                 return { mcpCredentialId: credential.config.providerSessionId, issued: true };
               }),

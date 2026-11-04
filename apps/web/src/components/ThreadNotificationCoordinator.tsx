@@ -5,12 +5,15 @@ import {
 import { pendingSubagentRequestsByThread } from "@t3tools/client-runtime/state/threads";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import type { ProjectTeamAttentionIndex } from "@t3tools/client-runtime/state/project-team";
 import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
+import type { ClientSettings } from "@t3tools/contracts/settings";
 import * as Option from "effect/Option";
 import { useEffect, useRef } from "react";
 
 import { getClientSettings, useClientSettings } from "../hooks/useSettings";
 import { useEnvironmentIds } from "../state/environments";
+import { useEnvironmentProjectTeamAttention } from "../state/projectTeam";
 import { environmentShell } from "../state/shell";
 import {
   hasDesktopNotifications,
@@ -121,8 +124,11 @@ function EnvironmentNotifications({
   onNotification: (environmentId: EnvironmentId, notification: Notification) => void;
 }) {
   const shell = useAtomValue(environmentShell.stateValueAtom(environmentId));
-  const threads =
-    shell.status === "live" && Option.isSome(shell.snapshot) ? shell.snapshot.value.threads : null;
+  const snapshot =
+    shell.status === "live" && Option.isSome(shell.snapshot) ? shell.snapshot.value : null;
+  const threads = snapshot?.threads ?? null;
+  const projects = snapshot?.projects;
+  const projectTeam = useEnvironmentProjectTeamAttention(environmentId);
   const mode = useClientSettings((settings) => settings.notificationMode);
   const navigate = useNavigate();
   const { environmentId: activeEnvironmentId, threadId: activeThreadId } = useParams({
@@ -178,55 +184,144 @@ function EnvironmentNotifications({
               : status === "failed"
                 ? "Thread failed"
                 : "Input needed";
+      // A PM's finished turns and child questions surface as its Needs-you alert instead.
+      if (
+        projectTeam.byPmThreadId.has(thread.id) &&
+        (title === "Thread completed" || title === "Input needed")
+      ) {
+        continue;
+      }
       if (hasNotificationSound(mode)) {
         void playNotificationSound(kind, () =>
           hasNotificationSound(getClientSettings().notificationMode),
         );
       }
-      const appFocused = document.visibilityState === "visible" && document.hasFocus();
-      const viewingThread =
-        appFocused && activeEnvironmentId === environmentId && activeThreadId === thread.id;
-      if (
-        !hasDesktopNotifications(mode) ||
-        viewingThread ||
-        typeof Notification === "undefined" ||
-        Notification.permission !== "granted"
-      ) {
-        continue;
-      }
-
-      try {
-        const notification = new Notification(title, {
-          body: thread.title,
-          tag: `${environmentId}:${thread.id}`,
-          silent: true,
-        });
-        // The badge clears on window focus, so only count notifications sent while away.
-        if (!appFocused) {
-          onNotification(environmentId, notification);
-        }
-        notification.addEventListener("click", () => {
-          notification.close();
-          window.focus();
-          void navigate({
-            to: "/$environmentId/$threadId",
-            params: { environmentId, threadId: thread.id },
-          });
-        });
-      } catch {
-        // Mobile browsers reject the constructor and only show notifications
-        // through the service worker, which routes taps back through OPEN_URL_MESSAGE.
-        void navigator.serviceWorker?.ready.then((registration) =>
-          registration.showNotification(title, {
-            body: thread.title,
-            tag: `${environmentId}:${thread.id}`,
-            data: { url: `/${environmentId}/${thread.id}` },
-          }),
-        );
-      }
+      showThreadNotification({
+        environmentId,
+        threadId: thread.id,
+        title,
+        body: thread.title,
+        mode,
+        viewing: activeEnvironmentId === environmentId && activeThreadId === thread.id,
+        navigate,
+        onNotification,
+      });
     }
     previous.current = next;
-  }, [activeEnvironmentId, activeThreadId, environmentId, mode, navigate, onNotification, threads]);
+  }, [
+    activeEnvironmentId,
+    activeThreadId,
+    environmentId,
+    mode,
+    navigate,
+    onNotification,
+    projectTeam,
+    threads,
+  ]);
+
+  // PM threads alert through their attention summary, never on the first snapshot.
+  const previousTeam = useRef<ProjectTeamAttentionIndex | null>(null);
+  useEffect(() => {
+    const prior = previousTeam.current;
+    previousTeam.current = projectTeam;
+    if (prior === null || prior.byProjectId.size === 0) return;
+    for (const summary of projectTeam.byProjectId.values()) {
+      const before = prior.byProjectId.get(summary.projectId);
+      if (!before) continue;
+      const projectTitle =
+        projects?.find((project) => project.id === summary.projectId)?.title ?? "Project";
+      // Default persona names repeat across projects, so the title names the project too.
+      const who = `${summary.persona.name} (${projectTitle})`;
+      // Distinct tags keep a sitrep from replacing an unseen Needs-you notification.
+      const notify = (title: string, kind: "attention" | "sitrep") =>
+        showThreadNotification({
+          environmentId,
+          threadId: summary.pmThreadId,
+          tagSuffix: kind,
+          title,
+          body: projectTitle,
+          mode,
+          viewing: activeEnvironmentId === environmentId && activeThreadId === summary.pmThreadId,
+          navigate,
+          onNotification,
+        });
+      // Leads keep running while the PM is off, so its blockers still need the user.
+      if (summary.latestBatchId !== null && summary.latestBatchId !== before.latestBatchId) {
+        if (hasNotificationSound(mode)) {
+          void playNotificationSound("input", () =>
+            hasNotificationSound(getClientSettings().notificationMode),
+          );
+        }
+        notify(`${who} · Needs you: ${summary.openCount}`, "attention");
+      }
+      if (
+        summary.enabled &&
+        summary.settings.sitrepNotify &&
+        summary.latestSitrepId !== null &&
+        summary.latestSitrepId !== before.latestSitrepId
+      ) {
+        notify(`${who} · Sitrep`, "sitrep");
+      }
+    }
+  }, [
+    activeEnvironmentId,
+    activeThreadId,
+    environmentId,
+    mode,
+    navigate,
+    onNotification,
+    projectTeam,
+    projects,
+  ]);
 
   return null;
+}
+
+function showThreadNotification(input: {
+  environmentId: EnvironmentId;
+  threadId: ThreadId;
+  tagSuffix?: string;
+  title: string;
+  body: string;
+  mode: ClientSettings["notificationMode"];
+  viewing: boolean;
+  navigate: ReturnType<typeof useNavigate>;
+  onNotification: (environmentId: EnvironmentId, notification: Notification) => void;
+}) {
+  const { environmentId, threadId, title, body, navigate } = input;
+  const appFocused = document.visibilityState === "visible" && document.hasFocus();
+  if (
+    !hasDesktopNotifications(input.mode) ||
+    (appFocused && input.viewing) ||
+    typeof Notification === "undefined" ||
+    Notification.permission !== "granted"
+  ) {
+    return;
+  }
+  const tag = `${environmentId}:${threadId}${input.tagSuffix ? `:${input.tagSuffix}` : ""}`;
+  try {
+    const notification = new Notification(title, { body, tag, silent: true });
+    // The badge clears on window focus, so only count notifications sent while away.
+    if (!appFocused) {
+      input.onNotification(environmentId, notification);
+    }
+    notification.addEventListener("click", () => {
+      notification.close();
+      window.focus();
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId, threadId },
+      });
+    });
+  } catch {
+    // Mobile browsers reject the constructor and only show notifications
+    // through the service worker, which routes taps back through OPEN_URL_MESSAGE.
+    void navigator.serviceWorker?.ready.then((registration) =>
+      registration.showNotification(title, {
+        body,
+        tag,
+        data: { url: `/${environmentId}/${threadId}` },
+      }),
+    );
+  }
 }

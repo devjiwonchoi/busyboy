@@ -1,0 +1,88 @@
+import {
+  type IsoDateTime,
+  isOrchestrationV2WorkActive,
+  type ProjectId,
+  ProjectTeamError,
+  type ThreadId,
+} from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
+import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+
+import type * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+
+export const MINUTE_MS = 60_000;
+
+export const nowIso: Effect.Effect<IsoDateTime> = Effect.map(DateTime.now, DateTime.formatIso);
+
+export const isoMillis = (iso: IsoDateTime): number => Date.parse(iso);
+
+export const isoFromMillis = (millis: number): IsoDateTime =>
+  DateTime.formatIso(DateTime.makeUnsafe(millis));
+
+const isProjectTeamError = Schema.is(ProjectTeamError);
+
+export const teamError = (message: string, projectId?: ProjectId) =>
+  new ProjectTeamError({ message, ...(projectId === undefined ? {} : { projectId }) });
+
+/** Wraps any failure in a ProjectTeamError that keeps the cause. */
+export const orTeamError =
+  (message: string, projectId?: ProjectId) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ProjectTeamError, R> =>
+    Effect.mapError(effect, (cause) =>
+      isProjectTeamError(cause)
+        ? cause
+        : new ProjectTeamError({
+            message,
+            ...(projectId === undefined ? {} : { projectId }),
+            cause,
+          }),
+    );
+
+export const makeIdGenerator = Effect.gen(function* () {
+  const crypto = yield* Crypto.Crypto;
+  return (prefix: string): Effect.Effect<string, ProjectTeamError> =>
+    crypto.randomUUIDv4().pipe(
+      Effect.map((uuid) => `${prefix}:${uuid}`),
+      orTeamError("Could not generate an id."),
+    );
+});
+
+/** Runs `effect` at most once per `periodMs`; the Scheduler ticks more often than that. */
+export const makePeriodicGate = (periodMs: number) =>
+  Effect.gen(function* () {
+    const lastRun = yield* Ref.make<number | null>(null);
+    return <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<void, E, R> =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const last = yield* Ref.get(lastRun);
+        if (last !== null && now - last < periodMs) return;
+        yield* Ref.set(lastRun, now);
+        yield* effect;
+      });
+  });
+
+/**
+ * Whether a task lead is still working even though a turn just ended: it has another
+ * run in flight, or delegated children of its own that have not settled.
+ * `endedRunId` is the run that just ended, which the shell may still report as active.
+ * A failed read counts as idle so the caller falls back to its normal handling.
+ */
+export const isLeadBusy = (
+  threads: ThreadManagement.ThreadManagementService["Service"],
+  leadThreadId: ThreadId,
+  endedRunId?: string,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const shell = yield* threads.getThreadShell(leadThreadId);
+    if (shell !== null && shell.activeRunId !== null && shell.activeRunId !== endedRunId) {
+      return true;
+    }
+    const { subagents } = yield* threads.getThreadRecords(leadThreadId, ["subagents"]);
+    return subagents.some(
+      (child) => child.origin === "app_owned" && isOrchestrationV2WorkActive(child.status),
+    );
+  }).pipe(Effect.orElseSucceed(() => false));

@@ -674,7 +674,9 @@ export const OrchestrationV2Subagent = Schema.Struct({
   title: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   modelSelection: Schema.optional(ModelSelection),
-  completionWake: Schema.optional(Schema.Literals(["always", "settled_only"])),
+  // "never": the parent is never woken by this task's terminal state; the
+  // completion delivery is disposed (results are reported another way).
+  completionWake: Schema.optional(Schema.Literals(["always", "settled_only", "never"])),
   completionDelivery: Schema.optional(OrchestrationV2DelegatedCompletionTaskDelivery),
   status: Schema.Literals([
     "idle",
@@ -2844,8 +2846,9 @@ export const OrchestrationV2Command = Schema.Union([
     interactionMode: ProviderInteractionMode,
     workspaceStrategy: Schema.optional(OrchestrationV2ThreadLaunchWorkspaceStrategy),
     // Omitted behaves as "settled_only" (no wake while the parent has a live
-    // run); producers that want fire-and-forget wakes must set "always".
-    completionWake: Schema.optional(Schema.Literals(["always", "settled_only"])),
+    // run); producers that want fire-and-forget wakes must set "always", and
+    // producers whose results arrive through another channel set "never".
+    completionWake: Schema.optional(Schema.Literals(["always", "settled_only", "never"])),
     createdAt: Schema.optional(Schema.DateTimeUtc),
   }),
   Schema.Struct({

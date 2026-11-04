@@ -405,15 +405,22 @@ export async function archiveSelectedThreadEntries<
 export function buildMultiSelectThreadContextMenuItems(input: {
   count: number;
   hasRunningThread: boolean;
+  /** A project manager stays for the life of its project, so the batch cannot archive or delete. */
+  hasProjectManagerThread?: boolean;
 }): readonly ContextMenuItem<"mark-unread" | "archive" | "delete">[] {
   return [
     { id: "mark-unread", label: `Mark unread (${input.count})` },
     {
       id: "archive",
       label: `Archive (${input.count})`,
-      disabled: input.hasRunningThread,
+      disabled: input.hasRunningThread || input.hasProjectManagerThread === true,
     },
-    { id: "delete", label: `Delete (${input.count})`, destructive: true },
+    {
+      id: "delete",
+      label: `Delete (${input.count})`,
+      destructive: true,
+      disabled: input.hasProjectManagerThread === true,
+    },
   ];
 }
 
@@ -426,13 +433,91 @@ export function filterSidebarV2VisibleThreads<
     environmentId: string;
     projectId: string;
   },
->(threads: readonly T[], scopedProjectKeys: ReadonlySet<string> | null): T[] {
+>(
+  threads: readonly T[],
+  scopedProjectKeys: ReadonlySet<string> | null,
+  /** Threads shown as a project section heading instead of a row. */
+  isSectionHeading: (thread: T) => boolean = () => false,
+  /** Subagent threads listed as rows anyway, such as a PM's task leads. */
+  isListedSubagent: (thread: T) => boolean = () => false,
+): T[] {
   return threads.filter(
     (thread) =>
       thread.archivedAt === null &&
-      !isSidebarSubagentThread(thread) &&
+      (!isSidebarSubagentThread(thread) || isListedSubagent(thread)) &&
+      !isSectionHeading(thread) &&
       (scopedProjectKeys === null ||
         scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+  );
+}
+
+/**
+ * The enabled project manager behind each project section, keyed by section.
+ * A disabled manager, or a second one grouped into the same section, gets no
+ * heading and stays an ordinary sidebar row.
+ */
+export function selectSidebarProjectManagers<
+  E extends {
+    readonly environmentId: string;
+    readonly summary: { readonly projectId: string; readonly enabled: boolean };
+  },
+>(entries: readonly E[], sectionKeyOf: (environmentId: string, projectId: string) => string) {
+  const bySection = new Map<string, E>();
+  for (const entry of entries) {
+    if (!entry.summary.enabled) continue;
+    const sectionKey = sectionKeyOf(entry.environmentId, entry.summary.projectId);
+    if (!bySection.has(sectionKey)) bySection.set(sectionKey, entry);
+  }
+  return bySection;
+}
+
+/** Groups threads by project, keeping their order within each project. */
+export function groupSidebarThreadsByProject<T>(
+  threads: readonly T[],
+  projectKeyOf: (thread: T) => string,
+): Map<string, T[]> {
+  const byProject = new Map<string, T[]>();
+  for (const thread of threads) {
+    const projectKey = projectKeyOf(thread);
+    const projectThreads = byProject.get(projectKey);
+    if (projectThreads) projectThreads.push(thread);
+    else byProject.set(projectKey, [thread]);
+  }
+  return byProject;
+}
+
+/**
+ * Orders project sections: projects with threads by recency, then the rest in
+ * their fallback order. A project's manager is its heading, not a thread, so a
+ * busy PM never moves its project.
+ */
+export function orderSidebarProjectSections<T>(
+  threadsByProject: ReadonlyMap<string, readonly T[]>,
+  fallbackProjectKeys: readonly string[],
+): string[] {
+  const keys = [...threadsByProject.keys()];
+  const seen = new Set(keys);
+  for (const projectKey of fallbackProjectKeys) {
+    if (seen.has(projectKey)) continue;
+    seen.add(projectKey);
+    keys.push(projectKey);
+  }
+  return keys;
+}
+
+/**
+ * A project manager's task lead: a subagent thread whose parent is the PM
+ * thread. Unlike other subagent threads it lists as an ordinary sidebar row.
+ */
+export function isProjectManagerTaskLead(
+  thread: Pick<SidebarThreadSummary, "lineage"> & { readonly environmentId: string },
+  isProjectManagerThread: (environmentId: string, threadId: string) => boolean,
+): boolean {
+  const parentId = thread.lineage.parentThreadId;
+  return (
+    isSidebarSubagentThread(thread) &&
+    parentId != null &&
+    isProjectManagerThread(thread.environmentId, parentId)
   );
 }
 
@@ -470,6 +555,38 @@ export function buildBulkUnpinContextMenuItem(input: {
 }): ContextMenuItem<"unpin"> | null {
   if (input.pinnedCount === 0) return null;
   return { id: "unpin", label: `Unpin (${input.pinnedCount})` };
+}
+
+export type ProjectHeaderMenuId =
+  | "project-settings"
+  | "project-manager-settings"
+  | "remove-project";
+
+/** Settings stay reachable read-only; removal needs operate access on every checkout. */
+export function buildProjectHeaderMenuItems(input: {
+  readonly hasProjectManager: boolean;
+  readonly canRemove: boolean;
+}): ReadonlyArray<ContextMenuItem<ProjectHeaderMenuId>> {
+  return [
+    { id: "project-settings", label: "Project settings", icon: "settings" },
+    ...(input.hasProjectManager
+      ? [
+          {
+            id: "project-manager-settings" as const,
+            label: "Project manager settings",
+            icon: "settings",
+          },
+        ]
+      : []),
+    {
+      id: "remove-project",
+      label: "Remove project…",
+      icon: "trash",
+      destructive: true,
+      disabled: !input.canRemove,
+      separatorBefore: true,
+    },
+  ];
 }
 
 export interface ThreadStatusPill {
@@ -854,6 +971,46 @@ export function resolveSidebarV2TopStatus(input: {
     return input.status;
   }
   return input.isUnread ? "done" : null;
+}
+
+export type SidebarTopStatusIcon = "working" | "waiting" | "approval" | "input" | "failed" | "done";
+
+export interface SidebarTopStatusDisplay {
+  readonly label: string;
+  readonly icon: SidebarTopStatusIcon;
+  readonly className: string;
+}
+
+/** The label, icon and color a sidebar row shows for its status, or null for none. */
+export function resolveSidebarTopStatusDisplay(input: {
+  readonly status: SidebarThreadStatus;
+  readonly isUnread: boolean;
+  readonly goalActive: boolean;
+}): SidebarTopStatusDisplay | null {
+  switch (input.status) {
+    case "working":
+      return {
+        label: input.goalActive ? "Goal" : "Working",
+        icon: "working",
+        className: "text-info",
+      };
+    case "waiting":
+      return { label: "Waiting", icon: "waiting", className: "text-muted-foreground" };
+    case "approval":
+      return { label: "Approval", icon: "approval", className: "text-warning-foreground" };
+    case "input":
+      return {
+        label: "Input",
+        icon: "input",
+        className: "text-indigo-600 dark:text-indigo-300",
+      };
+    case "limited":
+      return { label: "Limited", icon: "failed", className: "text-warning" };
+    case "failed":
+      return { label: "Failed", icon: "failed", className: "text-error" };
+    case "ready":
+      return input.isUnread ? { label: "Done", icon: "done", className: "text-success" } : null;
+  }
 }
 
 export function shouldShowSidebarV2Duration(status: SidebarThreadStatus): boolean {

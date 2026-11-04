@@ -433,6 +433,39 @@ export function summarizeT3ToolCalls(
     case "capabilities":
       label = phrase("Checked", "check", `orchestration capabilities ${times}`);
       break;
+    case "team-task-create":
+      label = phrase("Created", "create", quantity(selected.length, "team task"));
+      break;
+    case "team-task-start":
+      label = phrase("Started", "start", quantity(selected.length, "team task"));
+      break;
+    case "team-task-update":
+      label = phrase("Updated", "update", `team tasks ${times}`);
+      break;
+    case "team-task-nudge":
+      label = phrase("Nudged", "nudge", `team tasks ${times}`);
+      break;
+    case "team-task-read":
+      label = phrase("Read", "read", `team tasks ${times}`);
+      break;
+    case "team-status":
+      label = phrase("Checked", "check", `team status ${times}`);
+      break;
+    case "team-settings":
+      label = phrase("Updated", "update", "team settings");
+      break;
+    case "team-ask-user":
+      label = phrase("Asked", "ask", `the user ${quantity(selected.length, "question")}`);
+      break;
+    case "team-answer":
+      label = phrase("Relayed", "relay", quantity(selected.length, "answer"));
+      break;
+    case "team-memory-read":
+      label = phrase("Read", "read", "team memory");
+      break;
+    case "team-memory-write":
+      label = phrase("Updated", "update", `team memory ${times}`);
+      break;
   }
   return { label, failedCount };
 }

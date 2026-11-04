@@ -10,6 +10,8 @@ import {
   ProviderInstanceId,
   ThreadId,
   type OrchestrationV2ThreadProjection,
+  type ProjectManagerPresence,
+  type ProjectTeamAttentionSummary,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
@@ -213,4 +215,40 @@ export function makeStreamingTimelineFixture(text = "") {
     item,
   }));
   return { threadId, runId, historyRunId, visibleTurnItems, time };
+}
+
+/** A project manager summary for project-1 led by "Remy", idle unless overridden. */
+export function makeProjectManagerSummaryFixture(
+  overrides: Partial<Omit<ProjectTeamAttentionSummary, "presence">> & {
+    readonly presence?: Partial<ProjectManagerPresence>;
+  } = {},
+): ProjectTeamAttentionSummary {
+  const { presence, ...rest } = overrides;
+  return {
+    projectId: ProjectId.make("project-1"),
+    pmThreadId: ThreadId.make("pm-thread"),
+    openCount: 0,
+    latestBatchId: null,
+    latestSitrepId: null,
+    unreadSitrepCount: 0,
+    sitrepInProgress: false,
+    settings: {
+      maxConcurrentTasks: 6,
+      sitrepIntervalMinutes: 60,
+      sitrepNotify: true,
+      enabled: true,
+    },
+    persona: { name: "Remy", avatar: { kind: "emoji", emoji: "🦝" }, voice: "chill" },
+    enabled: true,
+    ...rest,
+    presence: {
+      running: 0,
+      waitingOnUser: 0,
+      stalled: 0,
+      inbox: 0,
+      nextSitrepAt: null,
+      lastAction: null,
+      ...presence,
+    },
+  };
 }

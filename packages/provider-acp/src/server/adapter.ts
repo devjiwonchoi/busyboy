@@ -535,6 +535,7 @@ interface AcpMcpContext {
   readonly processEnvironment?: NodeJS.ProcessEnv;
   readonly endpoint?: string;
   readonly authorization?: string;
+  readonly teamInstructions?: string;
 }
 
 function acpMcpContext(
@@ -570,6 +571,9 @@ function acpMcpContext(
       T3_ACP_MCP_NODE: self.command,
       ...(self.entrypoint === undefined ? {} : { T3_ACP_MCP_ENTRYPOINT: self.entrypoint }),
     },
+    ...(session.teamInstructions === undefined
+      ? {}
+      : { teamInstructions: session.teamInstructions }),
   };
 }
 
@@ -6306,9 +6310,13 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           sessionId: string,
         ) {
           const prompt: Array<EffectAcpSchema.ContentBlock> = [];
+          const mcpContext = yield* readMcpContext(turnInput.threadId);
           const instructionState = {
             interactionMode: turnInput.runtimePolicy.interactionMode,
-            hasT3Mcp: (yield* readMcpContext(turnInput.threadId)).servers.length > 0,
+            hasT3Mcp: mcpContext.servers.length > 0,
+            ...(mcpContext.teamInstructions === undefined
+              ? {}
+              : { teamInstructions: mcpContext.teamInstructions }),
           } satisfies T3AcpInstructionState;
           const previousInstructionState = (yield* Ref.get(promptInstructionStates)).get(sessionId);
           const messageText = providerMessageTextWithAttachmentPaths({
