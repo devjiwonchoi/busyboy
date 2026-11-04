@@ -646,6 +646,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["address bar autocomplete search engine suggestions privacy network"],
   },
   {
+    id: "browser-passwords",
+    title: "Passwords",
+    to: "/settings/integrations",
+    searchTerms: ["saved logins sign in username vault never saved delete all passwords"],
+    desktopOnly: true,
+  },
+  {
     id: "browser-default-viewport",
     title: "Default browser viewport",
     to: "/settings/integrations",

@@ -103,6 +103,11 @@ import { useSettingsScope } from "./SettingsScopeContext";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import { BrowserHistorySetting } from "./BrowserHistorySettings";
 import { BrowserAddressBarSettings } from "./BrowserAddressBarSettings";
+import { BrowserPasswordsSetting } from "./BrowserPasswordsSettings";
+import {
+  deleteBrowserProfilePasswords,
+  readBrowserPasswordsBridge,
+} from "~/browser/browserPasswords";
 import { clearAllBrowserHistory, readBrowserHistoryBridge } from "~/browser/browserHistory";
 import type { ImportOutcome } from "./browserImportWizard.logic";
 
@@ -843,6 +848,15 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
     setProfileRemovalError(null);
     setProfileRemovalInFlight(true);
     try {
+      // First, because it asks the user to confirm: declining keeps the whole profile.
+      const passwords = await deleteBrowserProfilePasswords(readBrowserPasswordsBridge(), id);
+      if (passwords === "cancelled") {
+        setProfileRemovalError(
+          "The profile wasn't removed because its saved passwords weren't deleted.",
+        );
+        setProfileRemovalInFlight(false);
+        return;
+      }
       await Promise.all([
         clearBrowserProfileData(
           previewBridge,
@@ -1103,8 +1117,9 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove “{profilePendingRemoval?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              Its cookies, logins and browsing history are deleted. Desktop tabs already open in
-              this profile stay open until you close them; server browser tabs close now.
+              Its cookies, logins, saved passwords and browsing history are deleted. Desktop tabs
+              already open in this profile stay open until you close them; server browser tabs close
+              now.
             </AlertDialogDescription>
             {profileRemovalError ? (
               <p aria-live="polite" className="text-sm text-destructive">
@@ -1207,6 +1222,7 @@ export function IntegrationsSettingsPanel() {
     <>
       <BrowserProfilesSetting disabled={previewDefaultsDisabled} />
       <BrowserHistorySetting />
+      <BrowserPasswordsSetting />
       <BrowserAddressBarSettings disabled={previewDefaultsDisabled} />
       <BrowserViewportSetting disabled={previewDefaultsDisabled} />
       <BrowserZoomSetting disabled={previewDefaultsDisabled} />
