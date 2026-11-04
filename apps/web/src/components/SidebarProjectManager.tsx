@@ -4,7 +4,7 @@ import {
   type ProjectTeamAttentionSummary,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { ChevronRightIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { cn } from "~/lib/utils";
@@ -16,8 +16,6 @@ import {
 } from "../state/projectTeam.logic";
 import { useEnvironmentScope } from "../state/session";
 import { PmAvatar } from "./PmAvatar";
-import type { SidebarTopStatusDisplay } from "./Sidebar.logic";
-import { SidebarThreadStatusIcon } from "./SidebarThreadStatusIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export function SidebarProjectManagerBadges(props: { summary: ProjectTeamAttentionSummary }) {
@@ -74,14 +72,6 @@ export function SidebarSitrepButton(props: {
   );
 }
 
-export interface SidebarProjectManagerTask {
-  readonly threadRef: ScopedThreadRef;
-  readonly key: string;
-  readonly title: string;
-  readonly status: SidebarTopStatusDisplay | null;
-  readonly isActive: boolean;
-}
-
 const hoverOnlyClassName =
   "opacity-0 transition-opacity focus-visible:opacity-100 group-hover/project:opacity-100 group-focus-within/project:opacity-100";
 
@@ -97,16 +87,12 @@ export function SidebarProjectManagerHeading(props: {
   isActive: boolean;
   onOpenThread: (threadRef: ScopedThreadRef) => void;
   onNewThread: (() => void) | null;
-  tasks: readonly SidebarProjectManagerTask[];
-  tasksOpen: boolean;
-  onToggleTasks: () => void;
 }) {
   const { summary, pmThreadRef, projectName } = props;
   const canOperate = useEnvironmentScope(pmThreadRef.environmentId, AuthOrchestrationOperateScope);
   const nowMinute = useNowMinute();
   const presence = formatProjectManagerPresence(summary, Date.parse(`${nowMinute}:00.000Z`));
   const status = resolveProjectManagerStatus({ summary, pmThreadWorking: props.pmThreadWorking });
-  const taskCount = props.tasks.length;
   return (
     <div className="group/project">
       <div
@@ -164,52 +150,6 @@ export function SidebarProjectManagerHeading(props: {
           ) : null}
         </span>
       </div>
-      {taskCount > 0 ? (
-        <div className="pl-2">
-          <button
-            type="button"
-            aria-expanded={props.tasksOpen}
-            onClick={props.onToggleTasks}
-            className="flex h-6 cursor-pointer items-center gap-1 rounded-md pr-2 text-xs text-sidebar-muted-foreground hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
-          >
-            <ChevronRightIcon
-              aria-hidden
-              className={cn("size-3 transition-transform", props.tasksOpen && "rotate-90")}
-            />
-            {taskCount} {taskCount === 1 ? "task" : "tasks"}
-          </button>
-          {props.tasksOpen ? (
-            <ul aria-label={`${summary.persona.name}'s tasks`}>
-              {props.tasks.map((task) => (
-                <li key={task.key}>
-                  <button
-                    type="button"
-                    aria-current={task.isActive ? "page" : undefined}
-                    onClick={() => props.onOpenThread(task.threadRef)}
-                    className={cn(
-                      "flex h-6 w-full cursor-pointer items-center gap-2 rounded-md pr-1 pl-4 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
-                      task.isActive
-                        ? "bg-sidebar-row-active text-sidebar-foreground"
-                        : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{task.title}</span>
-                    {task.status ? (
-                      <span
-                        role="img"
-                        aria-label={task.status.label}
-                        className={cn("inline-flex shrink-0", task.status.className)}
-                      >
-                        <SidebarThreadStatusIcon icon={task.status.icon} className="size-3.5" />
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

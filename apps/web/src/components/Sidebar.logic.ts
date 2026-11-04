@@ -438,11 +438,13 @@ export function filterSidebarV2VisibleThreads<
   scopedProjectKeys: ReadonlySet<string> | null,
   /** Threads shown as a project section heading instead of a row. */
   isSectionHeading: (thread: T) => boolean = () => false,
+  /** Subagent threads listed as rows anyway, such as a PM's task leads. */
+  isListedSubagent: (thread: T) => boolean = () => false,
 ): T[] {
   return threads.filter(
     (thread) =>
       thread.archivedAt === null &&
-      !isSidebarSubagentThread(thread) &&
+      (!isSidebarSubagentThread(thread) || isListedSubagent(thread)) &&
       !isSectionHeading(thread) &&
       (scopedProjectKeys === null ||
         scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
@@ -504,32 +506,19 @@ export function orderSidebarProjectSections<T>(
 }
 
 /**
- * A project manager's task leads: unarchived subagent threads whose parent is
- * the PM thread, newest first, keyed by the PM's scoped thread key.
+ * A project manager's task lead: a subagent thread whose parent is the PM
+ * thread. Unlike other subagent threads it lists as an ordinary sidebar row.
  */
-export function collectProjectManagerTaskLeads<
-  T extends Pick<SidebarThreadSummary, "archivedAt" | "lineage" | "createdAt"> & {
-    readonly environmentId: string;
-  },
->(
-  threads: readonly T[],
-  pmThreadKeyOf: (environmentId: string, threadId: string) => string | null,
-) {
-  const byPm = new Map<string, T[]>();
-  for (const thread of threads) {
-    if (thread.archivedAt !== null || !isSidebarSubagentThread(thread)) continue;
-    const parentId = thread.lineage.parentThreadId;
-    if (parentId == null) continue;
-    const pmKey = pmThreadKeyOf(thread.environmentId, parentId);
-    if (pmKey === null) continue;
-    const leads = byPm.get(pmKey);
-    if (leads) leads.push(thread);
-    else byPm.set(pmKey, [thread]);
-  }
-  for (const leads of byPm.values()) {
-    leads.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  }
-  return byPm;
+export function isProjectManagerTaskLead(
+  thread: Pick<SidebarThreadSummary, "lineage"> & { readonly environmentId: string },
+  isProjectManagerThread: (environmentId: string, threadId: string) => boolean,
+): boolean {
+  const parentId = thread.lineage.parentThreadId;
+  return (
+    isSidebarSubagentThread(thread) &&
+    parentId != null &&
+    isProjectManagerThread(thread.environmentId, parentId)
+  );
 }
 
 export function getSidebarForkParentThreadId(

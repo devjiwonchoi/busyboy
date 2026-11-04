@@ -158,11 +158,7 @@ import {
   useProjectManagerForThread,
   type ProjectManagerEntry,
 } from "../state/projectTeam";
-import {
-  SidebarProjectManagerBadges,
-  SidebarProjectManagerHeading,
-  type SidebarProjectManagerTask,
-} from "./SidebarProjectManager";
+import { SidebarProjectManagerBadges, SidebarProjectManagerHeading } from "./SidebarProjectManager";
 import { SidebarThreadStatusIcon } from "./SidebarThreadStatusIcon";
 import { buildThreadRouteParams, resolveActiveThreadRouteRef } from "../threadRoutes";
 import { formatRelativeTimeLabel } from "../timestampFormat";
@@ -211,7 +207,7 @@ import {
   sortThreadsForSidebar,
   groupSidebarThreadsByProject,
   orderSidebarProjectSections,
-  collectProjectManagerTaskLeads,
+  isProjectManagerTaskLead,
   selectSidebarProjectManagers,
   resolveSidebarTopStatusDisplay,
   sortWorkingThreadsBySend,
@@ -352,7 +348,6 @@ const EMPTY_THREADS: readonly EnvironmentThreadShell[] = [];
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
 const COLLAPSED_PROJECTS_KEY = "busyboy:sidebar:collapsed-projects";
 const NO_COLLAPSED_PROJECTS: readonly string[] = [];
-const OPEN_PM_TASKS_KEY = "busyboy:sidebar:open-pm-tasks";
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -382,7 +377,6 @@ export interface SidebarSectionProjectManager {
   readonly threadRef: ScopedThreadRef;
   readonly threadKey: string;
   readonly thread: EnvironmentThreadShell | null;
-  readonly taskLeads: readonly EnvironmentThreadShell[];
 }
 
 function threadShellKey(thread: Pick<SidebarThreadSummary, "environmentId" | "id">): string {
@@ -447,17 +441,7 @@ function useSidebarThreads(input: {
     NO_COLLAPSED_PROJECTS,
     Schema.Array(Schema.String),
   );
-  const [openPmTaskProjectKeyList, setOpenPmTaskProjectKeyList] = useLocalStorage(
-    OPEN_PM_TASKS_KEY,
-    NO_COLLAPSED_PROJECTS,
-    Schema.Array(Schema.String),
-  );
   const projectManagerEntries = useProjectManagerEntries(useEnvironmentIds());
-  const projectManagerThreadKeys = new Set(
-    projectManagerEntries.map(({ environmentId, summary }) =>
-      scopedThreadKey(scopeThreadRef(environmentId, summary.pmThreadId)),
-    ),
-  );
   const projectKeyByProject = new Map<string, string>(
     projectGroups.flatMap((group) =>
       group.memberProjects.map(
@@ -471,12 +455,6 @@ function useSidebarThreads(input: {
   };
   // An enabled manager is its project's heading. A disabled one, or a second
   // manager grouped into the same section, stays an ordinary row.
-  const taskLeadsByPmKey = collectProjectManagerTaskLeads(threads, (environmentId, threadId) => {
-    const key = scopedThreadKey(
-      scopeThreadRef(environmentId as EnvironmentId, threadId as ThreadId),
-    );
-    return projectManagerThreadKeys.has(key) ? key : null;
-  });
   const shellByKey = new Map(threads.map((thread) => [threadShellKey(thread), thread] as const));
   const projectManagerByProjectKey = new Map<string, SidebarSectionProjectManager>();
   for (const [projectKey, entry] of selectSidebarProjectManagers(
@@ -491,7 +469,6 @@ function useSidebarThreads(input: {
       threadRef,
       threadKey,
       thread: shellByKey.get(threadKey) ?? null,
-      taskLeads: taskLeadsByPmKey.get(threadKey) ?? EMPTY_THREADS,
     });
   }
   const headingThreadKeys = new Set(
@@ -519,7 +496,6 @@ function useSidebarThreads(input: {
     partition.activeThreads,
     projectKeyOf,
   );
-  const openPmTaskProjectKeys = new Set(openPmTaskProjectKeyList);
   const projectSectionKeys = orderSidebarProjectSections(
     activeThreadsByProject,
     projectGroups
@@ -563,13 +539,6 @@ function useSidebarThreads(input: {
     projectSectionKeys,
     projectKeyOf,
     projectManagerByProjectKey,
-    openPmTaskProjectKeys,
-    togglePmTasksOpen: (projectKey: string) =>
-      setOpenPmTaskProjectKeyList((keys) =>
-        keys.includes(projectKey)
-          ? keys.filter((key) => key !== projectKey)
-          : [...keys, projectKey],
-      ),
     collapsedProjectKeys,
     toggleProjectCollapsed: (projectKey: string) =>
       setCollapsedProjectKeyList((keys) =>
@@ -601,8 +570,17 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     workingShelfEnabled,
     headingThreadKeys,
   } = input;
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, (thread) =>
-    headingThreadKeys.has(threadShellKey(thread)),
+  // A manager's task leads are its project's ordinary rows.
+  const visible = filterSidebarV2VisibleThreads(
+    threads,
+    scopedProjectKeys,
+    (thread) => headingThreadKeys.has(threadShellKey(thread)),
+    (thread) =>
+      isProjectManagerTaskLead(thread, (environmentId, threadId) =>
+        headingThreadKeys.has(
+          scopedThreadKey(scopeThreadRef(environmentId as EnvironmentId, threadId as ThreadId)),
+        ),
+      ),
   );
   inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
@@ -1188,9 +1166,6 @@ function SidebarProjectHeader(props: {
   projectManager?: {
     readonly manager: SidebarSectionProjectManager;
     readonly isActive: boolean;
-    readonly tasks: readonly SidebarProjectManagerTask[];
-    readonly tasksOpen: boolean;
-    readonly onToggleTasks: () => void;
     readonly onOpenThread: (threadRef: ScopedThreadRef) => void;
   };
 }) {
@@ -1213,9 +1188,6 @@ function SidebarProjectHeader(props: {
           isActive={pm.isActive}
           onOpenThread={pm.onOpenThread}
           onNewThread={props.onNewThread}
-          tasks={pm.tasks}
-          tasksOpen={pm.tasksOpen}
-          onToggleTasks={pm.onToggleTasks}
         />
       </SortableSidebarMarker>
     );
@@ -1475,6 +1447,8 @@ type SidebarThreadRowProps = {
   dropVerb: SidebarDropVerb | null;
   dragOverPinned: boolean;
   isActive: boolean;
+  /** Indents the row under its project manager heading. */
+  nested?: boolean | undefined;
   openPullRequestsInRightPanel: boolean;
   jumpLabel: string | null;
   currentEnvironmentId: string | null;
@@ -1897,6 +1871,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       {...(fileDropHandlers ?? {})}
       className={cn(
         "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
+        // Lines the row's text up with the heading's project name, past the avatar.
+        props.nested && "pl-6.5",
         sortable?.isDragging && "relative z-20",
       )}
     >
@@ -2569,8 +2545,6 @@ export default function Sidebar() {
     projectSectionKeys,
     projectKeyOf,
     projectManagerByProjectKey,
-    openPmTaskProjectKeys,
-    togglePmTasksOpen,
     collapsedProjectKeys,
     toggleProjectCollapsed,
   } = useSidebarThreads({
@@ -4002,6 +3976,10 @@ export default function Sidebar() {
                               dragState?.activeKey === threadKey && dragTargetSection === "pinned"
                             }
                             isActive={routeThreadKey === threadKey}
+                            nested={
+                              section === "active" &&
+                              projectManagerByProjectKey.has(projectKeyOf(thread))
+                            }
                             openPullRequestsInRightPanel={routeThreadRef !== null}
                             jumpLabel={
                               showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null
@@ -4138,27 +4116,6 @@ export default function Sidebar() {
                                       projectManager: {
                                         manager,
                                         isActive: routeThreadKey === manager.threadKey,
-                                        tasks: manager.taskLeads.map(
-                                          (lead): SidebarProjectManagerTask => {
-                                            const key = threadShellKey(lead);
-                                            return {
-                                              threadRef: scopeThreadRef(
-                                                lead.environmentId,
-                                                lead.id,
-                                              ),
-                                              key,
-                                              title: lead.title,
-                                              status: resolveSidebarTopStatusDisplay({
-                                                status: resolveSidebarThreadStatus(lead),
-                                                isUnread: hasUnseenCompletion(lead),
-                                                goalActive: lead.goal?.status === "active",
-                                              }),
-                                              isActive: routeThreadKey === key,
-                                            };
-                                          },
-                                        ),
-                                        tasksOpen: openPmTaskProjectKeys.has(projectKey),
-                                        onToggleTasks: () => togglePmTasksOpen(projectKey),
                                         onOpenThread: navigateToThread,
                                       },
                                     }

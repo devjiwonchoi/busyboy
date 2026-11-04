@@ -63,8 +63,8 @@ vi.mock(import("../threadNotifications"), async (original) => ({
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import {
   buildMultiSelectThreadContextMenuItems,
-  collectProjectManagerTaskLeads,
   filterSidebarV2VisibleThreads,
+  isProjectManagerTaskLead,
   groupSidebarThreadsByProject,
   orderSidebarProjectSections,
   selectSidebarProjectManagers,
@@ -73,7 +73,6 @@ import {
   SidebarProjectManagerBadges,
   SidebarProjectManagerHeading,
   SidebarSitrepButton,
-  type SidebarProjectManagerTask,
 } from "./SidebarProjectManager";
 import { ThreadNotificationCoordinator } from "./ThreadNotificationCoordinator";
 import { buildThreadActionMenuItems } from "./threadActionMenu.logic";
@@ -151,16 +150,6 @@ afterEach(async () => {
 
 const pmThreadRef = scopeThreadRef("env-1" as never, "pm-thread" as never);
 
-function task(id: string, title: string, status: SidebarProjectManagerTask["status"] = null) {
-  return {
-    threadRef: scopeThreadRef("env-1" as never, id as never),
-    key: `env-1:${id}`,
-    title,
-    status,
-    isActive: false,
-  } satisfies SidebarProjectManagerTask;
-}
-
 async function renderHeading(
   overrides: Partial<Parameters<typeof SidebarProjectManagerHeading>[0]> = {},
 ) {
@@ -172,9 +161,6 @@ async function renderHeading(
     isActive: false,
     onOpenThread: vi.fn(),
     onNewThread: vi.fn(),
-    tasks: [] as SidebarProjectManagerTask[],
-    tasksOpen: false,
-    onToggleTasks: vi.fn(),
     ...overrides,
   };
   await act(() => root.render(<SidebarProjectManagerHeading {...props} />));
@@ -212,32 +198,11 @@ describe("project manager sidebar heading", () => {
     expect(container.querySelector('[aria-label="Remy, working"]')).not.toBeNull();
   });
 
-  it("folds the PM's tasks behind a count and opens a task lead from its row", async () => {
-    const tasks = [
-      task("lead-1", "Fix login", { label: "Working", icon: "working", className: "text-info" }),
-      task("lead-2", "Write docs"),
-    ];
-    const props = await renderHeading({ tasks });
-    const toggle = button("2 tasks")!;
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).not.toContain("Fix login");
-    await act(async () => toggle.click());
-    expect(props.onToggleTasks).toHaveBeenCalledOnce();
-
-    await renderHeading({ ...props, tasks, tasksOpen: true });
-    const list = container.querySelector('[aria-label="Remy\'s tasks"]')!;
-    expect([...list.querySelectorAll("li")].map((row) => row.textContent)).toEqual([
-      "Fix login",
-      "Write docs",
-    ]);
-    expect(list.querySelector('[aria-label="Working"]')).not.toBeNull();
-    await act(async () => button("Write docs")!.click());
-    expect(props.onOpenThread).toHaveBeenLastCalledWith(tasks[1]!.threadRef);
-  });
-
-  it("hides the tasks line when there are no tasks", async () => {
+  it("has no tasks fold: task leads are ordinary rows below the heading", async () => {
     await renderHeading();
-    expect(container.textContent).not.toMatch(/tasks?$/);
+    expect(container.textContent).not.toMatch(/\btasks?\b/);
+    expect(container.querySelector("ul")).toBeNull();
+    expect(container.querySelectorAll("button").length).toBe(3);
   });
 
   it("asks for a sitrep and opens the PM thread from the heading's Sitrep button", async () => {
@@ -358,30 +323,32 @@ describe("project manager sidebar sections", () => {
     expect([...managers.keys()]).toEqual(["env-1:project-1"]);
   });
 
-  it("collects the PM's unarchived task leads, newest first", () => {
-    const lead = (id: string, createdAt: string, patch: Record<string, unknown> = {}) =>
+  it("lists the PM's unarchived task leads as ordinary rows, but no other subagents", () => {
+    const subagent = (id: string, parentThreadId: string, patch: Record<string, unknown> = {}) =>
       shell(id, {
-        createdAt,
-        lineage: {
-          rootThreadId: "pm-thread",
-          parentThreadId: "pm-thread",
-          relationshipToParent: "subagent",
-        },
+        lineage: { rootThreadId: parentThreadId, parentThreadId, relationshipToParent: "subagent" },
         ...patch,
       });
     const threads = [
-      lead("lead-old", "2026-09-13T09:00:00.000Z"),
-      lead("lead-new", "2026-09-13T10:00:00.000Z"),
-      lead("lead-archived", "2026-09-13T11:00:00.000Z", { archivedAt: "2026-09-13T12:00:00Z" }),
+      shell("pm-thread"),
+      subagent("lead", "pm-thread"),
+      subagent("lead-archived", "pm-thread", { archivedAt: "2026-09-13T12:00:00Z" }),
+      subagent("lead-other-env", "pm-thread", { environmentId: "env-2" }),
+      subagent("helper", "user-thread"),
+      subagent("grandchild", "lead"),
       shell("user-thread"),
     ];
-    const leads = collectProjectManagerTaskLeads(threads as never[], (env, threadId) =>
-      threadId === "pm-thread" ? `${env}:${threadId}` : null,
-    ) as Map<string, { id: string }[]>;
-    expect(leads.get("env-1:pm-thread")?.map((thread) => thread.id)).toEqual([
-      "lead-new",
-      "lead-old",
-    ]);
+    const isPmThread = (environmentId: string, threadId: string) =>
+      environmentId === "env-1" && threadId === "pm-thread";
+    const visible = filterSidebarV2VisibleThreads(
+      threads as never[],
+      null,
+      (thread: { environmentId: string; id: string }) =>
+        isPmThread(thread.environmentId, thread.id),
+      (thread: Parameters<typeof isProjectManagerTaskLead>[0]) =>
+        isProjectManagerTaskLead(thread, isPmThread),
+    ) as { id: string }[];
+    expect(visible.map((thread) => thread.id)).toEqual(["lead", "user-thread"]);
   });
 
   it("orders projects by their threads, then the rest in fallback order", () => {
