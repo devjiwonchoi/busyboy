@@ -1,5 +1,9 @@
 import {
+  type BrowserHistoryChangedEvent,
+  type BrowserHistoryRemoveInput,
+  type BrowserHistorySuggestInput,
   BUILT_IN_BROWSER_PROFILES,
+  type DesktopBrowserHistoryBridge,
   DEFAULT_BROWSER_PROFILE_ID,
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
@@ -7,6 +11,7 @@ import {
   FILL_PREVIEW_VIEWPORT,
   ThreadId,
 } from "@t3tools/contracts";
+import { stripForCompletion } from "@t3tools/shared/addressBarCompletion";
 import { act, Profiler, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -438,5 +443,126 @@ describe("PreviewView", () => {
     await vi.waitFor(() => expect(onSendAnnotation).toHaveBeenCalledWith(sent, null));
     expect(mocks.addPreviewAnnotation).toHaveBeenCalledWith(TEST_THREAD_REF, sent);
     expect(mocks.addImage).not.toHaveBeenCalled();
+  });
+  describe("address bar suggestions", () => {
+    const BUSYBOY = { url: "https://github.com/t3tools/busyboy", title: "BusyBoy" };
+    const GITHUB = { url: "https://github.com/", title: "GitHub" };
+    const DOCS = { url: "https://docs.example.com/guide", title: "Guide" };
+
+    function installHistoryBridge() {
+      let entries = [BUSYBOY, GITHUB, DOCS];
+      const listeners = new Set<(event: BrowserHistoryChangedEvent) => void>();
+      const bridge = {
+        suggest: vi.fn(async (input: BrowserHistorySuggestInput) => {
+          const matches = entries.filter((entry) =>
+            stripForCompletion(entry.url).startsWith(input.input),
+          );
+          const top = matches[0];
+          return {
+            matches,
+            topOrigin: top ? { url: new URL(top.url).origin + "/", visitCount: 3 } : null,
+          };
+        }),
+        frequent: vi.fn(async () => entries),
+        remoteSuggestions: vi.fn(async () => ({ suggestions: ["github copilot"] })),
+        search: vi.fn(async () => ({ visits: [], nextCursor: null })),
+        recent: vi.fn(async () => []),
+        remove: vi.fn(async (input: BrowserHistoryRemoveInput) => {
+          entries = entries.filter((entry) => !input.urls?.includes(entry.url));
+          for (const listener of listeners) listener({ profileId: input.profileId });
+        }),
+        clear: vi.fn(async () => undefined),
+        importLegacy: vi.fn(async () => ({ imported: 0 })),
+        status: vi.fn(async () => ({ available: true, deletionLocked: false })),
+        onChanged: (listener: (event: BrowserHistoryChangedEvent) => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      } satisfies DesktopBrowserHistoryBridge;
+      (window as { desktopBridge?: unknown }).desktopBridge = { browserHistory: bridge };
+      return bridge;
+    }
+
+    afterEach(() => {
+      delete (window as { desktopBridge?: unknown }).desktopBridge;
+    });
+
+    function addressInput() {
+      return document.querySelector<HTMLInputElement>("[data-preview-url-input]")!;
+    }
+
+    it("suggests frequent sites, completes inline, and navigates to a picked page", async () => {
+      const bridge = installHistoryBridge();
+      await render(view());
+      const input = page.getByPlaceholder("Search or enter URL");
+      await userEvent.click(input);
+
+      await expect.element(page.getByRole("option", { name: /Guide/ })).toBeVisible();
+      expect(bridge.frequent).toHaveBeenCalledWith({
+        profileId: DEFAULT_BROWSER_PROFILE_ID,
+        limit: 6,
+      });
+      await expect.element(input).toHaveAttribute("aria-expanded", "true");
+
+      await userEvent.keyboard("gi");
+      await vi.waitFor(() => expect(addressInput().value).toBe("github.com/"));
+      expect(addressInput().selectionStart).toBe(2);
+      expect(addressInput().selectionEnd).toBe("github.com/".length);
+      await expect
+        .element(page.getByRole("option", { name: /Go to https:\/\/github\.com\// }))
+        .toHaveAttribute("aria-selected", "true");
+
+      await userEvent.keyboard("{ArrowDown}");
+      await vi.waitFor(() => expect(addressInput().value).toBe(BUSYBOY.url));
+      const selected = page.getByRole("option", { name: /BusyBoy/ });
+      await expect.element(selected).toHaveAttribute("aria-selected", "true");
+      expect(addressInput().getAttribute("aria-activedescendant")).toBe(
+        selected.element().getAttribute("id"),
+      );
+
+      await userEvent.keyboard("{Enter}");
+      await vi.waitFor(() =>
+        expect(mocks.navigate).toHaveBeenCalledWith(TEST_RUNTIME_TAB_ID, BUSYBOY.url, "suggestion"),
+      );
+      expect(bridge.remoteSuggestions).not.toHaveBeenCalled();
+    });
+
+    it("removes a highlighted history row with Shift+Delete", async () => {
+      const bridge = installHistoryBridge();
+      await render(view());
+      await userEvent.click(page.getByPlaceholder("Search or enter URL"));
+      await userEvent.keyboard("gi");
+      await vi.waitFor(() => expect(addressInput().value).toBe("github.com/"));
+
+      await userEvent.keyboard("{ArrowDown}");
+      await expect
+        .element(page.getByRole("option", { name: /BusyBoy/ }))
+        .toHaveAttribute("aria-selected", "true");
+      await userEvent.keyboard("{Shift>}{Delete}{/Shift}");
+
+      await vi.waitFor(() =>
+        expect(bridge.remove).toHaveBeenCalledWith({
+          profileId: DEFAULT_BROWSER_PROFILE_ID,
+          urls: [BUSYBOY.url],
+        }),
+      );
+      await expect.element(page.getByRole("option", { name: /BusyBoy/ })).not.toBeInTheDocument();
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      expect(bridge.remoteSuggestions).not.toHaveBeenCalled();
+    });
+
+    it("searches typed text with the default engine", async () => {
+      const bridge = installHistoryBridge();
+      await render(view());
+      await submitAddress("cat videos");
+      await vi.waitFor(() =>
+        expect(mocks.navigate).toHaveBeenCalledWith(
+          TEST_RUNTIME_TAB_ID,
+          "https://duckduckgo.com/?q=cat%20videos",
+          "typed",
+        ),
+      );
+      expect(bridge.remoteSuggestions).not.toHaveBeenCalled();
+    });
   });
 });

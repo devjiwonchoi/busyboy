@@ -628,6 +628,24 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
+    id: "browser-search-engine",
+    title: "Search engine",
+    to: "/settings/integrations",
+    searchTerms: ["address bar duckduckgo google bing brave custom search url default engine"],
+  },
+  {
+    id: "browser-zero-state-suggestions",
+    title: "Suggest frequent sites",
+    to: "/settings/integrations",
+    searchTerms: ["address bar most visited top sites suggestions focus"],
+  },
+  {
+    id: "browser-remote-search-suggestions",
+    title: "Search suggestions",
+    to: "/settings/integrations",
+    searchTerms: ["address bar autocomplete search engine suggestions privacy network"],
+  },
+  {
     id: "browser-default-viewport",
     title: "Default browser viewport",
     to: "/settings/integrations",

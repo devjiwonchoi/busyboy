@@ -25,6 +25,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { type ComposerImageAttachment, useComposerDraftStore } from "~/composerDraftStore";
 import { capturePreviewAnnotationScreenshot } from "~/lib/previewAnnotation";
+import { getClientSettings } from "~/hooks/useSettings";
 import { ensureLocalApi } from "~/localApi";
 import {
   rememberPreviewUrl,
@@ -260,7 +261,23 @@ export function PreviewView({
 
   const handleSubmitUrl = async (next: string) => {
     try {
-      await navigateToResolvedUrl(resolveAddressBarInput(next), "typed");
+      const { browserSearchEngine, browserCustomSearchUrl } = getClientSettings();
+      await navigateToResolvedUrl(
+        resolveAddressBarInput(next, {
+          engine: browserSearchEngine,
+          customSearchUrl: browserCustomSearchUrl,
+        }),
+        "typed",
+      );
+    } catch {}
+  };
+
+  const handleNavigateSuggestion = async (
+    next: string,
+    transition: BrowserHistoryNavigationHint,
+  ) => {
+    try {
+      await navigateToResolvedUrl(next, transition);
     } catch {}
   };
 
@@ -894,6 +911,11 @@ export function PreviewView({
         onForward={handleForward}
         onRefresh={handleRefresh}
         onSubmit={(next) => void handleSubmitUrl(next)}
+        onNavigate={(next, transition) => void handleNavigateSuggestion(next, transition)}
+        // Server tabs keep no desktop history; incognito keeps none at all.
+        suggestionsProfileId={
+          isServerTab || activeProfileIsIncognito || !previewBridge ? null : activeProfileId
+        }
         onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
         onCapture={previewBridge && tabId && !isServerTab ? handleCapture : undefined}
         captureDisabled={!desktopOverlay || isUnreachable}
