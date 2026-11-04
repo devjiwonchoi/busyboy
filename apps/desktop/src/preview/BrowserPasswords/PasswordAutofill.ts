@@ -24,10 +24,16 @@ import {
   PASSWORD_FORMS_CHANNEL,
   PASSWORD_FRAME_TOKEN_CHANNEL,
   PASSWORD_SUBMIT_CHANNEL,
+  PASSWORD_SUBMIT_FORM_CHANNEL,
 } from "../GuestProtocol.ts";
 import * as BrowserPasswords from "./BrowserPasswords.ts";
 import { makeClientSettingsCache } from "./ClientSettingsCache.ts";
-import { GuestAutofill, type AutofillFrame } from "./GuestAutofill.ts";
+import {
+  GuestAutofill,
+  type AutofillFrame,
+  type SignInChoice,
+  type SignInOutcome,
+} from "./GuestAutofill.ts";
 import {
   GuestChildFrame,
   GuestFieldFocus,
@@ -58,6 +64,18 @@ export interface PasswordAutofillShape {
   readonly peek: (tabId: string, promptId: string) => Effect.Effect<string | null>;
   readonly reopenPrompt: (tabId: string) => Effect.Effect<void>;
   readonly subscribe: (listener: (event: BrowserPasswordAutofillEvent) => void) => () => void;
+  readonly signInOptions: (
+    tabId: string,
+    origin: string,
+  ) => Effect.Effect<{
+    readonly available: boolean;
+    readonly logins: ReadonlyArray<{ readonly loginId: number; readonly username: string }>;
+  }>;
+  readonly signIn: (
+    tabId: string,
+    origin: string,
+    choice: SignInChoice,
+  ) => Effect.Effect<SignInOutcome>;
   /** Ends every unlock window, e.g. when the screen locks. */
   readonly lock: () => void;
 }
@@ -85,6 +103,7 @@ export const make = Effect.gen(function* () {
   const runFork = Effect.runForkWith(context);
 
   const sessions = new Map<string, GuestAutofill>();
+  const sessionProfiles = new Map<string, string>();
   const listeners = new Set<(event: BrowserPasswordAutofillEvent) => void>();
   const unlockedUntil = new Map<string, number>();
   const typedUsernames = new Map<string, { username: string; at: number }>();
@@ -122,7 +141,11 @@ export const make = Effect.gen(function* () {
     const { profileId } = profile;
     const autofill = new GuestAutofill({
       tabId,
-      channels: { fill: PASSWORD_FILL_CHANNEL, dropdownState: PASSWORD_DROPDOWN_STATE_CHANNEL },
+      channels: {
+        fill: PASSWORD_FILL_CHANNEL,
+        dropdownState: PASSWORD_DROPDOWN_STATE_CHANNEL,
+        submitForm: PASSWORD_SUBMIT_FORM_CHANNEL,
+      },
       now: Date.now,
       setTimeout: (callback, ms) => setTimeout(callback, ms),
       clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
@@ -151,6 +174,7 @@ export const make = Effect.gen(function* () {
     });
     sessions.get(tabId)?.dispose();
     sessions.set(tabId, autofill);
+    sessionProfiles.set(tabId, profileId);
 
     const frames = new WeakMap<Electron.WebFrameMain, AutofillFrame>();
     const budgets = new Map<string, { windowStart: number; count: number }>();
@@ -245,7 +269,10 @@ export const make = Effect.gen(function* () {
         wc.off("did-frame-navigate", didFrameNavigate);
       }
       autofill.dispose();
-      if (sessions.get(tabId) === autofill) sessions.delete(tabId);
+      if (sessions.get(tabId) === autofill) {
+        sessions.delete(tabId);
+        sessionProfiles.delete(tabId);
+      }
     };
   };
 
@@ -267,6 +294,23 @@ export const make = Effect.gen(function* () {
       };
     },
     lock,
+    signInOptions: (tabId, origin) =>
+      Effect.sync(() => {
+        const profileId = sessionProfiles.get(tabId);
+        const vault = profileId === undefined ? null : passwords.vault(profileId);
+        if (vault === null) return { available: false, logins: [] };
+        return {
+          available: true,
+          logins: vault
+            .forRealm(origin)
+            .map((login) => ({ loginId: login.id, username: login.username })),
+        };
+      }),
+    signIn: (tabId, origin, choice) =>
+      Effect.promise(
+        () =>
+          sessions.get(tabId)?.signIn(origin, choice) ?? Promise.resolve("unavailable" as const),
+      ),
   });
 });
 

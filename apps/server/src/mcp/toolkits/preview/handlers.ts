@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import {
@@ -17,6 +18,10 @@ import {
   type PreviewAutomationSetColorSchemeResult,
   type PreviewAutomationSnapshot,
   type PreviewAutomationStatus,
+  type PreviewAutomationSignInInput,
+  type PreviewAutomationHistoryInput,
+  OrchestratorMcpFailure,
+  DEFAULT_BROWSER_AGENT_HISTORY_ACCESS,
   type PreviewTabId,
 } from "@t3tools/contracts";
 
@@ -31,6 +36,8 @@ import * as ServerConfig from "../../../config.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
+import { requestBrowserAction } from "../../BrowserRequestCards.ts";
+import * as ServerSettings from "../../../serverSettings.ts";
 import { PreviewSnapshotToolkit, PreviewStandardToolkit, PreviewToolkit } from "./tools.ts";
 
 /** Whether a preview the agent
@@ -184,6 +191,114 @@ export const claimPreviewRecording = Effect.fn("PreviewToolkit.claimRecording")(
   return { ...recording, id: finalId, path: finalPath };
 });
 
+/** Origins of the page's frames, read in the page so agents can sign in to an embedded login. */
+const FRAME_ORIGINS_EXPRESSION = `[...document.querySelectorAll("iframe[src]")].flatMap((frame) => { try { return [new URL(frame.src, location.href).origin]; } catch { return []; } })`;
+
+export function normalizeSignInOrigin(raw: string): string | null {
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+const DEFAULT_HISTORY_LIMIT = 20;
+/** With "allow" there is no card to answer; don't wait long for a desktop app that isn't there. */
+const AUTO_APPROVED_HISTORY_TIMEOUT_MS = 30_000;
+
+export const signIn = Effect.fn("PreviewToolkit.signIn")(function* (
+  input: PreviewAutomationSignInInput,
+) {
+  const scope = yield* McpInvocationContext.requireThreadMcpCapability("preview");
+  const target = normalizeSignInOrigin(input.origin);
+  if (target === null) return { status: "origin_mismatch" as const };
+  const { result: status } = yield* invoke<PreviewAutomationStatus>(
+    "status",
+    input.tabId === undefined ? {} : { tabId: input.tabId },
+    undefined,
+    input.tabId,
+  );
+  if (status.tabId === null || status.url === null) return { status: "unavailable" as const };
+  if (normalizeSignInOrigin(status.url) !== target) {
+    const { result: frames } = yield* invoke<unknown>(
+      "evaluate",
+      { expression: FRAME_ORIGINS_EXPRESSION },
+      undefined,
+      status.tabId,
+    );
+    if (!Array.isArray(frames) || !frames.includes(target)) {
+      return { status: "origin_mismatch" as const };
+    }
+  }
+  const answer = yield* requestBrowserAction(scope, {
+    kind: "sign_in",
+    origin: target,
+    tabId: status.tabId,
+    reason: input.reason ?? "",
+    timeoutMs: input.timeoutMs,
+    clientRequestId: input.clientRequestId,
+  });
+  switch (answer.status) {
+    case "submitted":
+    case "submitted_unconfirmed":
+    case "filled":
+    case "declined":
+    case "page_left_origin":
+    case "no_login_form":
+    case "unavailable":
+    case "timed_out":
+      return { status: answer.status };
+    // A withdrawn card (the turn was interrupted) reads as declined.
+    case "cancelled":
+    case "pending":
+    case "allowed":
+      return { status: "declined" as const };
+  }
+});
+
+export const history = Effect.fn("PreviewToolkit.history")(function* (
+  input: PreviewAutomationHistoryInput,
+) {
+  const scope = yield* McpInvocationContext.requireThreadMcpCapability("preview");
+  // Hosts without server settings (narrow test hosts) use the default: ask.
+  const settingsService = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
+  const mode = Option.isSome(settingsService)
+    ? (yield* settingsService.value.getSettings.pipe(
+        Effect.mapError(
+          () =>
+            new OrchestratorMcpFailure({
+              code: "orchestration_error",
+              message: "Unable to read server settings.",
+            }),
+        ),
+      )).browserAgentHistoryAccess
+    : DEFAULT_BROWSER_AGENT_HISTORY_ACCESS;
+  if (mode === "off") return { status: "history_access_disabled" as const };
+  const autoApprove = mode === "allow";
+  const answer = yield* requestBrowserAction(scope, {
+    kind: "history",
+    reason: input.reason ?? "",
+    tabId: input.tabId,
+    query: input.query,
+    since: input.since,
+    limit: input.limit ?? DEFAULT_HISTORY_LIMIT,
+    autoApprove,
+    timeoutMs: input.timeoutMs ?? (autoApprove ? AUTO_APPROVED_HISTORY_TIMEOUT_MS : undefined),
+    clientRequestId: input.clientRequestId,
+  });
+  switch (answer.status) {
+    case "allowed":
+      return { status: "allowed" as const, visits: answer.visits ?? [] };
+    case "timed_out":
+      return { status: autoApprove ? ("unavailable" as const) : ("timed_out" as const) };
+    case "unavailable":
+      return { status: "unavailable" as const };
+    default:
+      return { status: "declined" as const };
+  }
+});
+
 const handlers = {
   preview_dialog: McpToolAccess.actsAsCaller((input) =>
     invokeTargeted<PreviewAutomationStatus>("dialog", input),
@@ -238,6 +353,8 @@ const handlers = {
   preview_wait_for: McpToolAccess.readsAsCaller((input) =>
     invokeTargeted<object>("waitFor", input, input.timeoutMs),
   ),
+  preview_sign_in: McpToolAccess.actsAsCaller((input) => signIn(input)),
+  preview_history: McpToolAccess.readsAsCaller((input) => history(input)),
   preview_recording_start: McpToolAccess.actsAsCaller((input) =>
     invokeTargeted<PreviewAutomationRecordingStatus>("recordingStart", input ?? {}),
   ),

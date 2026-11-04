@@ -491,6 +491,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
         ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_PEEK_CHANNEL, input),
       reopenPrompt: (input) =>
         ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_REOPEN_CHANNEL, input),
+      signInOptions: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_SIGN_IN_OPTIONS_CHANNEL, input),
+      signIn: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_SIGN_IN_CHANNEL, input),
     },
   },
 } satisfies DesktopBridge);

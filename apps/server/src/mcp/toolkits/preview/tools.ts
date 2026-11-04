@@ -25,6 +25,10 @@ import {
   PreviewAutomationTypeInput,
   PreviewAutomationUploadInput,
   PreviewAutomationWaitForInput,
+  PreviewAutomationSignInInput,
+  PreviewAutomationSignInResult,
+  PreviewAutomationHistoryInput,
+  PreviewAutomationHistoryResult,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as FileSystem from "effect/FileSystem";
@@ -308,6 +312,28 @@ const PreviewRecordingStopTool = safeBrowserTool(
   }).annotate(Tool.Title, "Stop browser recording"),
 );
 
+const PreviewSignInTool = safeBrowserTool(
+  Tool.make("preview_sign_in", {
+    description:
+      "Ask the user to sign in to a site in a desktop browser tab. A card in this thread lets them pick a saved login (after Touch ID) or enter one in BusyBoy; the desktop app fills the page's login form and submits it. You never see the username or password, only a status: submitted (signed in), submitted_unconfirmed (submitted, success not seen within 10 s), filled (no submit control), declined, origin_mismatch (origin isn't the tab's site or a frame on it), page_left_origin, no_login_form, unavailable, or timed_out. Navigate to the login page first. Use this instead of typing into password or one-time-code fields, which preview_type refuses.",
+    parameters: PreviewAutomationSignInInput,
+    success: PreviewAutomationSignInResult,
+    failure: PreviewToolFailure,
+    dependencies,
+  }).annotate(Tool.Title, "Sign in to a site"),
+);
+
+const PreviewHistoryTool = readonlyBrowserTool(
+  Tool.make("preview_history", {
+    description:
+      "Read the in-app browser's history for the profile of the tab given by tabId, or the default profile: url, title, visitedAt and source (user or agent), newest first, at most 50. Depending on the user's setting, a card asks them first (allow once or deny), it is shared without asking, or it is turned off and this returns history_access_disabled. Never includes incognito browsing or saved passwords.",
+    parameters: PreviewAutomationHistoryInput,
+    success: PreviewAutomationHistoryResult,
+    failure: PreviewToolFailure,
+    dependencies,
+  }).annotate(Tool.Title, "Read browsing history"),
+);
+
 export const PreviewToolkit = Toolkit.make(
   PreviewDialogTool,
   PreviewStatusTool,
@@ -328,6 +354,8 @@ export const PreviewToolkit = Toolkit.make(
   PreviewWaitForTool,
   PreviewRecordingStartTool,
   PreviewRecordingStopTool,
+  PreviewSignInTool,
+  PreviewHistoryTool,
 );
 
 export const PreviewStandardToolkit = Toolkit.make(
@@ -349,6 +377,8 @@ export const PreviewStandardToolkit = Toolkit.make(
   PreviewWaitForTool,
   PreviewRecordingStartTool,
   PreviewRecordingStopTool,
+  PreviewSignInTool,
+  PreviewHistoryTool,
 );
 
 export const PreviewSnapshotToolkit = Toolkit.make(PreviewSnapshotTool);

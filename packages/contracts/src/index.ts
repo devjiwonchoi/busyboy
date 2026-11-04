@@ -55,6 +55,7 @@ export * from "./browserHistory.ts";
 export * from "./browserPasswords.ts";
 export * from "./browserImport.ts";
 export * from "./browserProfile.ts";
+export * from "./browserRequest.ts";
 export * from "./preview.ts";
 export * from "./previewAutomation.ts";
 export * from "./resourceTelemetry.ts";

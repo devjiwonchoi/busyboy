@@ -151,3 +151,6 @@ export const BROWSER_PASSWORDS_AUTOFILL_RESPOND_CHANNEL =
 export const BROWSER_PASSWORDS_AUTOFILL_PEEK_CHANNEL = "desktop:browser-passwords-autofill-peek";
 export const BROWSER_PASSWORDS_AUTOFILL_REOPEN_CHANNEL =
   "desktop:browser-passwords-autofill-reopen";
+export const BROWSER_PASSWORDS_SIGN_IN_OPTIONS_CHANNEL =
+  "desktop:browser-passwords-sign-in-options";
+export const BROWSER_PASSWORDS_SIGN_IN_CHANNEL = "desktop:browser-passwords-sign-in";

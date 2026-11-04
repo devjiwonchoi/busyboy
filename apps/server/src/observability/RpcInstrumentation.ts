@@ -103,6 +103,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.projectTeamAnswerDecision]: "projectTeam",
   [WS_METHODS.projectTeamUpdateSettings]: "projectTeam",
   [WS_METHODS.secretsAnswerRequest]: "secrets",
+  [WS_METHODS.browserRequestsAnswer]: "browser",
 
   [WS_METHODS.pullRequestsList]: "pull-requests",
   [WS_METHODS.pullRequestsListStats]: "pull-requests",

@@ -830,6 +830,10 @@ function turnItemText(item: OrchestrationV2TurnItem): string | null {
       return `Asked the user for ${item.label}: ${item.secretStatus}.`;
     case "computer_use_app_request":
       return `Asked the user to let the agent use ${item.appName} (${item.bundleId}): ${item.appRequestStatus}.`;
+    case "browser_request":
+      return item.requestKind === "sign_in"
+        ? `Asked the user to sign in to ${item.origin ?? "a site"}: ${item.browserStatus}.`
+        : `Asked to read browsing history: ${item.browserStatus}.`;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":

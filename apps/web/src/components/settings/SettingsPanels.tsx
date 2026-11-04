@@ -637,6 +637,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
       ? ["Agent browser access"]
       : []),
+    ...(settings.browserAgentHistoryAccess !== DEFAULT_UNIFIED_SETTINGS.browserAgentHistoryAccess
+      ? ["Agent access to browsing history"]
+      : []),
   ];
 
   const restoreDefaults = async () => {
@@ -760,6 +763,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       browserPasswordsRequireDeviceAuth: DEFAULT_UNIFIED_SETTINGS.browserPasswordsRequireDeviceAuth,
       pullRequestLinksOpenInApp: DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp,
       enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
+      browserAgentHistoryAccess: DEFAULT_UNIFIED_SETTINGS.browserAgentHistoryAccess,
     });
     onRestored?.();
   };

@@ -213,6 +213,8 @@ function createFakePasswordsBridge(options: {
       respondToPrompt: vi.fn(async () => {}),
       peek: vi.fn(async () => ({ password: null })),
       reopenPrompt: vi.fn(async () => {}),
+      signInOptions: vi.fn(async () => ({ available: false, logins: [] })),
+      signIn: vi.fn(async () => ({ outcome: "unavailable" as const })),
     },
   } satisfies DesktopBrowserPasswordsBridge;
   return bridge;

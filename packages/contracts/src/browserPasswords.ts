@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { BrowserProfileId } from "./browserProfile.ts";
+import { BrowserSignInOutcome } from "./browserRequest.ts";
 
 export const BROWSER_PASSWORD_MAX_LENGTH = 4096;
 export const BROWSER_PASSWORD_USERNAME_MAX_LENGTH = 1024;
@@ -234,7 +235,46 @@ export const BrowserPasswordPeekResult = Schema.Struct({
 });
 export type BrowserPasswordPeekResult = typeof BrowserPasswordPeekResult.Type;
 
+export const BrowserSignInOptionsInput = Schema.Struct({
+  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  origin: Schema.String.check(Schema.isMaxLength(BROWSER_PASSWORD_URL_MAX_LENGTH)),
+});
+export type BrowserSignInOptionsInput = typeof BrowserSignInOptionsInput.Type;
+
+export const BrowserSignInOptions = Schema.Struct({
+  /** False for incognito tabs, a closed tab, or when the vault is unavailable. */
+  available: Schema.Boolean,
+  /** Saved logins for exactly this site; usernames only. */
+  logins: Schema.Array(BrowserPasswordFillRow),
+});
+export type BrowserSignInOptions = typeof BrowserSignInOptions.Type;
+
+export const BrowserSignInInput = Schema.Struct({
+  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  origin: Schema.String.check(Schema.isMaxLength(BROWSER_PASSWORD_URL_MAX_LENGTH)),
+  choice: Schema.Union([
+    Schema.Struct({ kind: Schema.Literal("saved"), loginId: Id }),
+    Schema.Struct({
+      kind: Schema.Literal("entered"),
+      username: Username,
+      password: Password.check(Schema.isMinLength(1)),
+      save: Schema.Boolean,
+    }),
+  ]),
+});
+export type BrowserSignInInput = typeof BrowserSignInInput.Type;
+
+export const BrowserSignInResult = Schema.Struct({ outcome: BrowserSignInOutcome });
+export type BrowserSignInResult = typeof BrowserSignInResult.Type;
+
 export interface DesktopBrowserPasswordAutofillBridge {
+  /** For an agent's sign-in card: saved logins for the site in that tab. */
+  signInOptions: (input: BrowserSignInOptionsInput) => Promise<BrowserSignInOptions>;
+  /**
+   * The person approved an agent's sign-in on the card. Main fills and submits
+   * the page's form and returns only the outcome.
+   */
+  signIn: (input: BrowserSignInInput) => Promise<BrowserSignInResult>;
   onEvent: (listener: (event: BrowserPasswordAutofillEvent) => void) => () => void;
   /** The person picked a row in BusyBoy's fill list. Main runs the device check, then fills. */
   choose: (input: BrowserPasswordFillChooseInput) => Promise<void>;
