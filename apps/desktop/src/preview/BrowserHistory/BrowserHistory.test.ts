@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as NodeFs from "node:fs";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
+import { ADDRESS_BAR_SEARCH_ENGINES } from "@t3tools/shared/preview";
 
 import { makeBrowserHistory, profileDirectoryName } from "./BrowserHistory.ts";
 
@@ -192,6 +193,38 @@ describe("BrowserHistory", () => {
     t.history.close();
     t.setNow(NOW);
     expect(t.urls("default")).toEqual([]);
+  });
+
+  it("suggests from the profile's history, and nothing for incognito or with remote off", async () => {
+    const t = setup();
+    const session = {};
+    t.history.registerSession(session, { profileId: "default", persistent: true });
+    t.visitWith(session, "http://127.0.0.1:4000/welcome");
+
+    const suggested = Effect.runSync(
+      t.history.suggest({ profileId: "default", text: "127.0.0.1:4000/we", limit: 8 }),
+    );
+    expect(suggested.matches.map((match) => match.url)).toEqual(["http://127.0.0.1:4000/welcome"]);
+    expect(Effect.runSync(t.history.frequent({ profileId: "default", limit: 6 }))).toHaveLength(1);
+
+    expect(
+      Effect.runSync(t.history.suggest({ profileId: "incognito", text: "127", limit: 8 })),
+    ).toEqual({ matches: [], topOrigin: null });
+    expect(Effect.runSync(t.history.frequent({ profileId: "incognito", limit: 6 }))).toEqual([]);
+    expect(
+      NodeFs.existsSync(NodePath.join(t.rootDirectory, profileDirectoryName("incognito"))),
+    ).toBe(false);
+
+    // No fetcher was injected, so any attempt to send would reject; off must not try.
+    const remote = await Effect.runPromise(
+      t.history.remoteSuggestions({
+        enabled: false,
+        profileId: "default",
+        engine: ADDRESS_BAR_SEARCH_ENGINES.duckduckgo,
+        text: "weather",
+      }),
+    );
+    expect(remote).toEqual([]);
   });
 
   it("keeps browsing when the database cannot be opened, and reports it once", () => {

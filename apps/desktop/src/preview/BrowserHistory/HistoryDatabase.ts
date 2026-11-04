@@ -10,9 +10,10 @@ import type {
 import { BROWSER_HISTORY_RETENTION_DAYS } from "@t3tools/contracts";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
+import { FRECENCY_MAX_VISITS, type FrecencyVisit } from "./Frecency.ts";
 import { normalizeHistoryTitle, normalizeHistoryUrl } from "./HistoryUrl.ts";
 
-export const HISTORY_SCHEMA_VERSION = 1;
+export const HISTORY_SCHEMA_VERSION = 2;
 export const HISTORY_RETENTION_MS = BROWSER_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 export interface NewVisit {
@@ -34,6 +35,15 @@ export interface SearchOptions {
 export interface SearchPage {
   readonly visits: ReadonlyArray<BrowserHistoryVisit>;
   readonly nextCursor: BrowserHistoryCursor | null;
+}
+
+export interface SuggestionCandidate {
+  readonly url: string;
+  readonly title: string | null;
+  readonly visitCount: number;
+  readonly typedCount: number;
+  /** The latest visits, at most FRECENCY_MAX_VISITS. */
+  readonly visits: ReadonlyArray<FrecencyVisit>;
 }
 
 export interface UrlAggregate {
@@ -68,6 +78,11 @@ const MIGRATIONS: ReadonlyArray<string> = [
   CREATE INDEX visits_visited_at ON visits(visited_at);
   CREATE INDEX visits_url_id ON visits(url_id);
   CREATE INDEX urls_last_visited_at ON urls(last_visited_at);
+  `,
+  // Address bar ranking reads each URL's latest visits.
+  `
+  CREATE INDEX visits_url_id_visited_at ON visits(url_id, visited_at);
+  DROP INDEX visits_url_id;
   `,
 ];
 
@@ -282,6 +297,72 @@ export class HistoryDatabase {
           lastVisitedAt: row.last_visited_at,
           hidden: row.hidden === 1,
         };
+  }
+
+  /**
+   * URLs worth suggesting: not hidden, visited within retention, and (for each
+   * whitespace-separated term) containing it in the URL or title. Bounded by
+   * recency so the work per keystroke stays small however large history gets.
+   */
+  suggestionCandidates(options: {
+    readonly terms: ReadonlyArray<string>;
+    readonly now: number;
+    readonly limit: number;
+    /** Leave out URLs only an agent ever visited. */
+    readonly userVisitedOnly?: boolean;
+  }): ReadonlyArray<SuggestionCandidate> {
+    const where = ["u.hidden = 0", "u.last_visited_at >= ?"];
+    const params: SQLInputValue[] = [options.now - HISTORY_RETENTION_MS];
+    for (const term of options.terms) {
+      const pattern = `%${escapeLike(term)}%`;
+      where.push("(u.url LIKE ? ESCAPE '\\' OR IFNULL(u.title, '') LIKE ? ESCAPE '\\')");
+      params.push(pattern, pattern);
+    }
+    if (options.userVisitedOnly) {
+      where.push("EXISTS (SELECT 1 FROM visits uv WHERE uv.url_id = u.id AND uv.source = 'user')");
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT u.id, u.url, u.title, u.visit_count, u.typed_count FROM urls u
+         WHERE ${where.join(" AND ")}
+         ORDER BY ${options.terms.length === 0 ? "u.visit_count DESC, " : ""}u.last_visited_at DESC
+         LIMIT ?`,
+      )
+      .all(...params, options.limit) as unknown as Array<{
+      id: number;
+      url: string;
+      title: string | null;
+      visit_count: number;
+      typed_count: number;
+    }>;
+    if (rows.length === 0) return [];
+    const visitRows = this.db
+      .prepare(
+        `SELECT url_id, visited_at, transition, source FROM (
+           SELECT url_id, visited_at, transition, source,
+             ROW_NUMBER() OVER (PARTITION BY url_id ORDER BY visited_at DESC) AS rank
+           FROM visits WHERE url_id IN (${rows.map(() => "?").join(",")})
+         ) WHERE rank <= ?`,
+      )
+      .all(...rows.map((row) => row.id), FRECENCY_MAX_VISITS) as unknown as Array<{
+      url_id: number;
+      visited_at: number;
+      transition: BrowserHistoryTransition;
+      source: BrowserHistorySource;
+    }>;
+    const visitsByUrl = new Map<number, FrecencyVisit[]>();
+    for (const row of visitRows) {
+      const list = visitsByUrl.get(row.url_id) ?? [];
+      list.push({ visitedAt: row.visited_at, transition: row.transition, source: row.source });
+      visitsByUrl.set(row.url_id, list);
+    }
+    return rows.map((row) => ({
+      url: row.url,
+      title: row.title,
+      visitCount: row.visit_count,
+      typedCount: row.typed_count,
+      visits: visitsByUrl.get(row.id) ?? [],
+    }));
   }
 
   visitCount(): number {

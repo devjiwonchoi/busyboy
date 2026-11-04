@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  classifyAddressBarInput,
   isLoopbackHost,
   newPreviewTabId,
   normalizePreviewUrl,
   PreviewUrlNormalizationError,
   resolveAddressBarInput,
+  resolveSearchEngine,
 } from "./preview.ts";
 
 describe("resolveAddressBarInput", () => {
@@ -53,6 +55,43 @@ describe("resolveAddressBarInput", () => {
       expect(() => resolveAddressBarInput(input)).toThrow(PreviewUrlNormalizationError);
     }
     expect(resolveAddressBarInput("devbox:8080")).toBe("https://devbox:8080/");
+  });
+});
+
+describe("address bar search engines", () => {
+  it("searches with the chosen engine, defaulting to DuckDuckGo", () => {
+    expect(resolveAddressBarInput("a b", { engine: "google" })).toBe(
+      "https://www.google.com/search?q=a%20b",
+    );
+    expect(resolveAddressBarInput("a b", { engine: "bing" })).toBe(
+      "https://www.bing.com/search?q=a%20b",
+    );
+    expect(resolveAddressBarInput("a b", { engine: "brave" })).toBe(
+      "https://search.brave.com/search?q=a%20b",
+    );
+    expect(resolveAddressBarInput("a b")).toBe("https://duckduckgo.com/?q=a%20b");
+    // URLs are never sent to the engine.
+    expect(resolveAddressBarInput("cnn.com", { engine: "google" })).toBe("https://cnn.com/");
+  });
+
+  it("uses a custom %s template and falls back when it is unusable", () => {
+    const custom = {
+      engine: "custom",
+      customSearchUrl: "https://search.example/find?q=%s",
+    } as const;
+    expect(resolveAddressBarInput("zzzz", custom)).toBe("https://search.example/find?q=zzzz");
+    expect(resolveSearchEngine(custom)).toMatchObject({ name: "search.example", suggestUrl: null });
+    for (const customSearchUrl of ["", "https://search.example/", "javascript:%s"]) {
+      expect(resolveSearchEngine({ engine: "custom", customSearchUrl }).id).toBe("duckduckgo");
+    }
+  });
+
+  it("classifies input as a URL to visit or text to search", () => {
+    expect(classifyAddressBarInput("127.0.0.1:4000/we")).toEqual({
+      kind: "url",
+      url: "http://127.0.0.1:4000/we",
+    });
+    expect(classifyAddressBarInput(" zzzz ")).toEqual({ kind: "search", text: "zzzz" });
   });
 });
 

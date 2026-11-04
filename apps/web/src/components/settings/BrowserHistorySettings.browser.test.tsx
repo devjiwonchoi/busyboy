@@ -114,6 +114,9 @@ function createFakeHistoryBridge(initial: ReadonlyArray<BrowserHistoryVisit>) {
       emit(input.profileId);
     }),
     importLegacy: vi.fn(async () => ({ imported: 0 })),
+    suggest: vi.fn(async () => ({ matches: [], topOrigin: null })),
+    frequent: vi.fn(async () => []),
+    remoteSuggestions: vi.fn(async () => ({ suggestions: [] })),
     status: vi.fn(async () => ({ available: true, deletionLocked: false })),
     onChanged: (listener: (event: BrowserHistoryChangedEvent) => void) => {
       listeners.add(listener);

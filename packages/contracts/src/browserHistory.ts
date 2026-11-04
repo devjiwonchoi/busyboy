@@ -160,7 +160,59 @@ export const BrowserHistoryChangedEvent = Schema.Struct({
 });
 export type BrowserHistoryChangedEvent = typeof BrowserHistoryChangedEvent.Type;
 
+export const BROWSER_HISTORY_SUGGEST_MAX_LIMIT = 20;
+export const ADDRESS_BAR_REMOTE_SUGGESTIONS_MAX = 4;
+
+export const BrowserHistorySuggestion = Schema.Struct({
+  url: Schema.String,
+  title: Schema.NullOr(Schema.String),
+});
+export type BrowserHistorySuggestion = typeof BrowserHistorySuggestion.Type;
+
+export const BrowserHistorySuggestInput = Schema.Struct({
+  profileId: BrowserProfileId,
+  input: Schema.String.check(Schema.isMaxLength(BROWSER_HISTORY_MAX_URL_LENGTH)),
+  limit: Limit(BROWSER_HISTORY_SUGGEST_MAX_LIMIT),
+});
+export type BrowserHistorySuggestInput = typeof BrowserHistorySuggestInput.Type;
+
+export const BrowserHistorySuggestResult = Schema.Struct({
+  /** History matches, best first. Empty for incognito. */
+  matches: Schema.Array(BrowserHistorySuggestion),
+  /** The top match's origin root and how often it was visited, for inline completion. */
+  topOrigin: Schema.NullOr(Schema.Struct({ url: Schema.String, visitCount: Schema.Int })),
+});
+export type BrowserHistorySuggestResult = typeof BrowserHistorySuggestResult.Type;
+
+export const BrowserHistoryFrequentInput = Schema.Struct({
+  profileId: BrowserProfileId,
+  limit: Limit(BROWSER_HISTORY_SUGGEST_MAX_LIMIT),
+});
+export type BrowserHistoryFrequentInput = typeof BrowserHistoryFrequentInput.Type;
+
+export const AddressBarRemoteSuggestInput = Schema.Struct({
+  profileId: BrowserProfileId,
+  input: Schema.String.check(Schema.isMaxLength(512)),
+});
+export type AddressBarRemoteSuggestInput = typeof AddressBarRemoteSuggestInput.Type;
+
+export const AddressBarRemoteSuggestResult = Schema.Struct({
+  suggestions: Schema.Array(Schema.String),
+});
+export type AddressBarRemoteSuggestResult = typeof AddressBarRemoteSuggestResult.Type;
+
 export interface DesktopBrowserHistoryBridge {
+  suggest: (input: BrowserHistorySuggestInput) => Promise<BrowserHistorySuggestResult>;
+  frequent: (
+    input: BrowserHistoryFrequentInput,
+  ) => Promise<ReadonlyArray<BrowserHistorySuggestion>>;
+  /**
+   * Search suggestions from the engine. Main checks the setting itself and
+   * sends nothing while it is off or for incognito.
+   */
+  remoteSuggestions: (
+    input: AddressBarRemoteSuggestInput,
+  ) => Promise<AddressBarRemoteSuggestResult>;
   search: (input: BrowserHistorySearchInput) => Promise<BrowserHistorySearchResult>;
   recent: (input: BrowserHistoryRecentInput) => Promise<ReadonlyArray<BrowserHistoryRecentEntry>>;
   remove: (input: BrowserHistoryRemoveInput) => Promise<void>;

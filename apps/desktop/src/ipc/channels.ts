@@ -123,3 +123,6 @@ export const BROWSER_HISTORY_CLEAR_CHANNEL = "desktop:browser-history-clear";
 export const BROWSER_HISTORY_IMPORT_LEGACY_CHANNEL = "desktop:browser-history-import-legacy";
 export const BROWSER_HISTORY_STATUS_CHANNEL = "desktop:browser-history-status";
 export const BROWSER_HISTORY_CHANGED_CHANNEL = "desktop:browser-history-changed";
+export const BROWSER_HISTORY_SUGGEST_CHANNEL = "desktop:browser-history-suggest";
+export const BROWSER_HISTORY_FREQUENT_CHANNEL = "desktop:browser-history-frequent";
+export const ADDRESS_BAR_REMOTE_SUGGESTIONS_CHANNEL = "desktop:address-bar-remote-suggestions";

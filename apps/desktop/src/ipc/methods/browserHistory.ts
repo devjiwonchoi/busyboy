@@ -1,4 +1,10 @@
 import {
+  AddressBarRemoteSuggestInput,
+  AddressBarRemoteSuggestResult,
+  BrowserHistoryFrequentInput,
+  BrowserHistorySuggestInput,
+  BrowserHistorySuggestResult,
+  BrowserHistorySuggestion,
   BrowserHistoryClearInput,
   BrowserHistoryImportLegacyInput,
   BrowserHistoryImportLegacyResult,
@@ -10,12 +16,15 @@ import {
   BrowserHistoryStatus,
   BrowserHistoryStatusInput,
 } from "@t3tools/contracts";
+import { resolveSearchEngine } from "@t3tools/shared/preview";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserHistory from "../../preview/BrowserHistory/BrowserHistory.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
+import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import { requireAppSender } from "../appSender.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
@@ -124,4 +133,66 @@ export const status = DesktopIpc.makeIpcMethod({
   }),
 });
 
-export const methods = [search, recent, remove, clear, importLegacy, status] as const;
+export const suggest = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.BROWSER_HISTORY_SUGGEST_CHANNEL,
+  payload: BrowserHistorySuggestInput,
+  result: BrowserHistorySuggestResult,
+  handler: Effect.fn("desktop.ipc.browserHistory.suggest")(function* (input, event) {
+    yield* requireAppSender(IpcChannels.BROWSER_HISTORY_SUGGEST_CHANNEL, event);
+    const history = yield* BrowserHistory.BrowserHistory;
+    return yield* history.suggest({
+      profileId: input.profileId,
+      text: input.input,
+      limit: input.limit,
+    });
+  }),
+});
+
+export const frequent = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.BROWSER_HISTORY_FREQUENT_CHANNEL,
+  payload: BrowserHistoryFrequentInput,
+  result: Schema.Array(BrowserHistorySuggestion),
+  handler: Effect.fn("desktop.ipc.browserHistory.frequent")(function* (input, event) {
+    yield* requireAppSender(IpcChannels.BROWSER_HISTORY_FREQUENT_CHANNEL, event);
+    const history = yield* BrowserHistory.BrowserHistory;
+    return yield* history.frequent(input);
+  }),
+});
+
+export const remoteSuggestions = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.ADDRESS_BAR_REMOTE_SUGGESTIONS_CHANNEL,
+  payload: AddressBarRemoteSuggestInput,
+  result: AddressBarRemoteSuggestResult,
+  handler: Effect.fn("desktop.ipc.browserHistory.remoteSuggestions")(function* (input, event) {
+    yield* requireAppSender(IpcChannels.ADDRESS_BAR_REMOTE_SUGGESTIONS_CHANNEL, event);
+    const history = yield* BrowserHistory.BrowserHistory;
+    // Main reads the opt-in itself rather than trusting the renderer.
+    const clientSettings = yield* DesktopClientSettings.DesktopClientSettings;
+    // Unreadable settings count as "off".
+    const readSettings = clientSettings.get.pipe(Effect.orElseSucceed(() => Option.none()));
+    const settings = Option.getOrNull(yield* readSettings);
+    const suggestions = yield* history.remoteSuggestions({
+      enabled: settings?.browserRemoteSearchSuggestions === true,
+      profileId: input.profileId,
+      engine: resolveSearchEngine({
+        engine: settings?.browserSearchEngine,
+        customSearchUrl: settings?.browserCustomSearchUrl,
+      }),
+      text: input.input,
+      stillEnabled: () =>
+        Option.getOrNull(Effect.runSync(readSettings))?.browserRemoteSearchSuggestions === true,
+    });
+    return { suggestions };
+  }),
+});
+
+export const methods = [
+  search,
+  recent,
+  remove,
+  clear,
+  importLegacy,
+  status,
+  suggest,
+  frequent,
+] as const;

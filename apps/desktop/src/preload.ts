@@ -425,6 +425,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     importLegacy: (input) =>
       ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_IMPORT_LEGACY_CHANNEL, input),
     status: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_STATUS_CHANNEL, input),
+    suggest: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_SUGGEST_CHANNEL, input),
+    frequent: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_HISTORY_FREQUENT_CHANNEL, input),
+    remoteSuggestions: (input) =>
+      ipcRenderer.invoke(IpcChannels.ADDRESS_BAR_REMOTE_SUGGESTIONS_CHANNEL, input),
     onChanged: (listener) => {
       const wrappedListener = (_event: Electron.IpcRendererEvent, changed: unknown) => {
         if (typeof changed !== "object" || changed === null) return;

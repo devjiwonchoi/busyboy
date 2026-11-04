@@ -259,6 +259,10 @@
       "types": "./src/browserHistoryLegacy.ts",
       "import": "./src/browserHistoryLegacy.ts"
     },
+    "./addressBarCompletion": {
+      "types": "./src/addressBarCompletion.ts",
+      "import": "./src/addressBarCompletion.ts"
+    },
     "./previewViewport": {
       "types": "./src/previewViewport.ts",
       "import": "./src/previewViewport.ts"
