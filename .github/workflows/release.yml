@@ -49,8 +49,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build DMG and ZIP
-        run: node scripts/build-desktop-release.ts --version "${{ steps.version.outputs.version }}" --out release
+      # electron-builder signs with the Developer ID .p12 (CSC_LINK) and
+      # notarizes with an App Store Connect API key, which it reads from a file.
+      - name: Build, sign, and notarize DMG and ZIP
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          # Fail before packaging if any required GitHub Actions secret is missing.
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required Actions secret: $name"
+              exit 1
+            fi
+          done
+
+          umask 077
+          key="$(mktemp "$RUNNER_TEMP/AuthKey.XXXXXX")"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$APPLE_API_KEY_P8" > "$key"
+          unset APPLE_API_KEY_P8
+
+          APPLE_API_KEY="$key" node scripts/build-desktop-release.ts --version "${{ steps.version.outputs.version }}" --out release
 
       # The release stays a draft until every asset is uploaded, so the in-app
       # updater never sees a release without its ZIP.

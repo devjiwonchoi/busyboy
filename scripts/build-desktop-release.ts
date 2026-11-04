@@ -7,7 +7,10 @@
 //
 // The build stages the bundled desktop and server output into a temporary
 // directory, installs only their runtime-external packages there, and runs
-// electron-builder against it. The app is ad-hoc signed, not notarized.
+// electron-builder against it. The app is signed with a Developer ID and
+// notarized, so the build fails without signing and notarization credentials:
+//   signing:      a Developer ID Application identity in the keychain, or CSC_LINK + CSC_KEY_PASSWORD
+//   notarization: APPLE_API_KEY + APPLE_API_KEY_ID + APPLE_API_ISSUER, or APPLE_KEYCHAIN_PROFILE
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
@@ -187,14 +190,12 @@ function createBuilderConfig(version: string) {
     ],
     // Writes resources/app-update.yml, which turns the in-app updater on.
     publish: [{ provider: "github", ...UPDATE_REPOSITORY, releaseType: "release" }],
+    // Fail instead of shipping an unsigned app when no Developer ID is found.
+    forceCodeSigning: true,
     mac: {
       target: ["dmg", "zip"],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
-      // Ad-hoc signature: Apple Silicon needs one to run, and there is no Developer ID.
-      identity: "-",
-      hardenedRuntime: false,
-      notarize: false,
       extendInfo: {
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSScreenCaptureUsageDescription:
@@ -224,6 +225,14 @@ export function buildDesktopRelease(options: {
 }) {
   const { version, arch } = options;
   if (!VERSION_PATTERN.test(version)) throw new Error(`Version '${version}' is not x.y.z.`);
+
+  // electron-builder only warns and skips notarization without credentials,
+  // so check before the long build instead of shipping an app Gatekeeper blocks.
+  if (!process.env.APPLE_API_KEY && !process.env.APPLE_KEYCHAIN_PROFILE) {
+    throw new Error(
+      "Notarization needs APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER, or APPLE_KEYCHAIN_PROFILE.",
+    );
+  }
 
   if (!options.skipBuild) {
     withReleaseVersions(version, () =>
@@ -321,9 +330,6 @@ export function buildDesktopRelease(options: {
 
     run("pnpm", ["install", "--prod"], { cwd: stageApp });
 
-    const env: NodeJS.ProcessEnv = { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: "false" };
-    for (const key of ["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_ID", "APPLE_API_KEY"])
-      delete env[key];
     run(
       "pnpm",
       [
@@ -336,12 +342,22 @@ export function buildDesktopRelease(options: {
         "--publish",
         "never",
       ],
-      { cwd: NodePath.join(repoRoot, "apps/desktop"), env },
+      { cwd: NodePath.join(repoRoot, "apps/desktop") },
     );
+
+    // Gatekeeper's own check that the packaged app is signed and notarized.
+    const distDir = NodePath.join(stageApp, "dist");
+    run("spctl", [
+      "--assess",
+      "--type",
+      "execute",
+      "-vv",
+      // electron-builder puts x64 apps in mac/ and other arches in mac-<arch>/.
+      NodePath.join(distDir, arch === "x64" ? "mac" : `mac-${arch}`, `${PRODUCT_NAME}.app`),
+    ]);
 
     NodeFS.mkdirSync(options.outputDir, { recursive: true });
     const artifacts: Array<string> = [];
-    const distDir = NodePath.join(stageApp, "dist");
     for (const entry of NodeFS.readdirSync(distDir)) {
       if (!/\.(dmg|zip|yml|blockmap)$/.test(entry)) continue;
       const to = NodePath.join(options.outputDir, entry);
