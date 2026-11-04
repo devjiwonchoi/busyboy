@@ -756,6 +756,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       browserCustomSearchUrl: DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl,
       browserZeroStateSuggestions: DEFAULT_UNIFIED_SETTINGS.browserZeroStateSuggestions,
       browserRemoteSearchSuggestions: DEFAULT_UNIFIED_SETTINGS.browserRemoteSearchSuggestions,
+      browserOfferToSavePasswords: DEFAULT_UNIFIED_SETTINGS.browserOfferToSavePasswords,
+      browserPasswordsRequireDeviceAuth: DEFAULT_UNIFIED_SETTINGS.browserPasswordsRequireDeviceAuth,
       pullRequestLinksOpenInApp: DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp,
       enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
     });

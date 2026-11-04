@@ -243,6 +243,8 @@ describe("getChangedBrowserSettingLabels", () => {
         browserSearchEngine: "google",
         browserZeroStateSuggestions: false,
         browserRemoteSearchSuggestions: true,
+        browserOfferToSavePasswords: false,
+        browserPasswordsRequireDeviceAuth: false,
         pullRequestLinksOpenInApp: false,
       }),
     ).toEqual([
@@ -257,6 +259,8 @@ describe("getChangedBrowserSettingLabels", () => {
       "Search engine",
       "Suggest frequent sites",
       "Search suggestions",
+      "Offer to save passwords",
+      "Ask before filling passwords",
       "Open pull requests in BusyBoy",
     ]);
   });
