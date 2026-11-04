@@ -25,6 +25,8 @@ pub(crate) struct CaptureOptions<'a> {
     pub budget: TreeBudget,
     pub include_screenshot: bool,
     pub turn_id: &'a str,
+    /// Experimental pointer on: append window-local bounds to each line.
+    pub pointer: bool,
 }
 
 /// Chooses the window to read: the requested one, else the focused, main, or first
@@ -93,6 +95,7 @@ impl<P: Platform> Engine<P> {
             budget: TreeBudget::with_overrides(params.max_nodes, params.max_depth),
             include_screenshot: params.include_screenshot,
             turn_id: &params.context.turn_id,
+            pointer: params.context.experimental_pointer,
         };
         let mut state = self.capture_state(&app, &mut slot, &windows, &window, &options, deadline, cancel)?;
         state.launched = launched;
@@ -128,7 +131,7 @@ impl<P: Platform> Engine<P> {
         let numbers = slot.refs.commit(app.process, &window.id, new_refs, |a, b| self.platform.same_element(a, b));
         slot.snapshots += 1;
 
-        let rendered = render_lines(&tree, &lines, &numbers, None, options.budget.max_output);
+        let rendered = render_lines(&tree, &lines, &numbers, options.pointer.then_some(window.bounds), options.budget.max_output);
         let focused_ref = lines
             .iter()
             .zip(&numbers)

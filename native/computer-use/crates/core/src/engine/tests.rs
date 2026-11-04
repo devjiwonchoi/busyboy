@@ -1,12 +1,12 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use cu_protocol::{ErrorCode, Notification, RequestId, method};
+use cu_protocol::{ErrorCode, MouseButton, Notification, RequestId, ScrollDirection, method};
 use serde_json::{Value, json};
 
 use super::Engine;
-use crate::fake::{FakeApp, FakeNode, FakePlatform};
-use crate::platform::{PlatformEvent, ProcessRef};
+use crate::fake::{FakeApp, FakeNode, FakePlatform, PointerCall};
+use crate::platform::{PlatformEvent, PointerRoute, ProcessRef};
 use crate::tree::{ElementAction, NodeStates, roles};
 
 struct Harness {
@@ -588,4 +588,140 @@ fn cancel_only_reaches_the_calling_clients_requests() {
     let own = harness.engine.handle(7, &RequestId::Number(6), method::CANCEL, json!({"requestId": 5})).unwrap();
     assert_eq!(own["cancelled"], 1);
     assert_eq!(worker.join().unwrap().unwrap_err().code, ErrorCode::Stopped);
+}
+
+// -- experimental pointer ------------------------------------------------------
+
+fn pointer_act(harness: &Harness, action: Value) -> Result<Value, cu_protocol::ErrorObject> {
+    harness.call(
+        method::APP_ACT,
+        json!({"threadId": "t1", "turnId": "u1", "app": "TextEdit", "experimentalPointer": true, "action": action}),
+    )
+}
+
+/// TextEdit plus a custom-drawn canvas with no accessibility actions at window-local
+/// (100, 60)–(300, 160). Returns the canvas tree ref and the node id.
+fn editor_with_canvas(harness: &Harness) -> (String, u64) {
+    harness.platform.with_text_editor();
+    let root = harness.platform.with_world(|world| world.apps[0].roots["w1"]);
+    let canvas = harness.platform.add_node(
+        Some(root),
+        "w1",
+        FakeNode {
+            role: "group".into(),
+            name: Some("Canvas".into()),
+            bounds: Some(crate::tree::Rect { x: 200.0, y: 160.0, width: 200.0, height: 100.0 }),
+            ..FakeNode::default()
+        },
+    );
+    harness.begin("u1");
+    let tree = harness.state("u1", "TextEdit").unwrap()["tree"].as_str().unwrap().to_owned();
+    (Harness::find_ref(&tree, "Canvas"), canvas)
+}
+
+fn pointer_calls(harness: &Harness) -> Vec<PointerCall> {
+    harness.platform.with_world(|world| world.pointer_calls.clone())
+}
+
+#[test]
+fn pointer_off_never_posts_pointer_events() {
+    let harness = Harness::new();
+    let (canvas_ref, _) = editor_with_canvas(&harness);
+    let tree = harness.state("u1", "TextEdit").unwrap()["tree"].as_str().unwrap().to_owned();
+    assert!(!tree.contains('@'), "no bounds while the pointer is off: {tree}");
+    let bold_ref = Harness::find_ref(&tree, "Bold");
+
+    for action in [
+        json!({"kind": "click", "ref": canvas_ref}),
+        json!({"kind": "click", "x": 150.0, "y": 100.0}),
+        json!({"kind": "click", "ref": bold_ref, "button": "right"}),
+        json!({"kind": "click", "ref": bold_ref, "count": 2}),
+        json!({"kind": "scroll", "direction": "down"}),
+    ] {
+        assert_eq!(code(harness.act("u1", action.clone())), ErrorCode::ActionUnsupported, "{action}");
+    }
+    assert!(pointer_calls(&harness).is_empty());
+}
+
+#[test]
+fn pointer_on_shows_window_local_bounds() {
+    let harness = Harness::new();
+    editor_with_canvas(&harness);
+    let state = harness
+        .call(method::APP_STATE, json!({"threadId": "t1", "turnId": "u1", "app": "TextEdit", "experimentalPointer": true}))
+        .unwrap();
+    let tree = state["tree"].as_str().unwrap();
+    assert!(tree.contains("button \"Bold\" @10,10,30,20"), "{tree}");
+    assert!(tree.contains("group \"Canvas\" @100,60,200,100"), "{tree}");
+
+    // Action results carry the same bounds in their returned state.
+    let result = pointer_act(&harness, json!({"kind": "click", "ref": Harness::find_ref(tree, "Bold")})).unwrap();
+    assert!(result["state"]["tree"].as_str().unwrap().contains("@10,10,30,20"));
+}
+
+#[test]
+fn pointer_on_runs_after_accessibility_steps_fail() {
+    let harness = Harness::new();
+    let (canvas_ref, canvas) = editor_with_canvas(&harness);
+    let tree = harness.state("u1", "TextEdit").unwrap()["tree"].as_str().unwrap().to_owned();
+    let bold_ref = Harness::find_ref(&tree, "Bold");
+
+    // A pressable element still uses AXPress.
+    let pressed = pointer_act(&harness, json!({"kind": "click", "ref": bold_ref})).unwrap();
+    assert_eq!(pressed["method"], "ax_press");
+    assert!(pointer_calls(&harness).is_empty());
+
+    // No AX action: background click at the element centre, window-local.
+    let clicked = pointer_act(&harness, json!({"kind": "click", "ref": canvas_ref})).unwrap();
+    assert_eq!(clicked["method"], "pointer");
+    assert_eq!(clicked["verified"], true, "the fake reacts, so the fingerprint changed");
+    assert_eq!(harness.platform.with_world(|world| world.nodes[&canvas].presses), 1);
+
+    // Coordinates with nothing pressable: the point itself.
+    pointer_act(&harness, json!({"kind": "click", "x": 120.0, "y": 70.0})).unwrap();
+    // Right and double clicks without menu/open actions.
+    pointer_act(&harness, json!({"kind": "click", "ref": bold_ref, "button": "right"})).unwrap();
+    pointer_act(&harness, json!({"kind": "click", "ref": bold_ref, "count": 2})).unwrap();
+    // Scroll with no scroll area: wheel at the window centre.
+    let scrolled = pointer_act(&harness, json!({"kind": "scroll", "direction": "down", "times": 3})).unwrap();
+    assert_eq!(scrolled["method"], "pointer");
+
+    let click = |x: f64, y: f64, button: MouseButton, count: u32| PointerCall::Click { window: "w1".into(), x, y, button, count };
+    assert_eq!(
+        pointer_calls(&harness),
+        vec![
+            click(200.0, 110.0, MouseButton::Left, 1),
+            click(120.0, 70.0, MouseButton::Left, 1),
+            click(25.0, 20.0, MouseButton::Right, 1),
+            click(25.0, 20.0, MouseButton::Left, 2),
+            PointerCall::Scroll { window: "w1".into(), x: 300.0, y: 200.0, direction: ScrollDirection::Down, times: 3 },
+        ]
+    );
+}
+
+#[test]
+fn pointer_results_are_verified_only_by_an_observed_change() {
+    let harness = Harness::new();
+    editor_with_canvas(&harness);
+    harness.platform.with_world(|world| world.pointer_route = Some(PointerRoute::Public));
+
+    // Nothing under (590, 30), so nothing changes: posted but not verified, not an error.
+    let result = pointer_act(&harness, json!({"kind": "click", "x": 590.0, "y": 30.0})).unwrap();
+    assert_eq!(result["method"], "pointer_public");
+    assert_eq!(result["verified"], false);
+
+    // A backend without a pointer reports action_unsupported.
+    harness.platform.with_world(|world| world.pointer_route = None);
+    let error = pointer_act(&harness, json!({"kind": "click", "x": 590.0, "y": 30.0})).unwrap_err();
+    assert_eq!(error.code, ErrorCode::ActionUnsupported);
+    assert_eq!(error.details.unwrap()["reason"], "pointer_unavailable");
+}
+
+#[test]
+fn pointer_stops_when_the_turn_is_locked_out() {
+    let harness = Harness::new();
+    let (canvas_ref, _) = editor_with_canvas(&harness);
+    harness.platform.with_world(|world| world.locked = true);
+    assert_eq!(code(pointer_act(&harness, json!({"kind": "click", "ref": canvas_ref}))), ErrorCode::ScreenLocked);
+    assert!(pointer_calls(&harness).is_empty());
 }

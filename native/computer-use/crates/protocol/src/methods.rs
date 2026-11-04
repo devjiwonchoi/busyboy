@@ -184,6 +184,10 @@ pub struct RequestContext {
     pub turn_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deadline_ms: Option<u64>,
+    /// The experimental background pointer is on (setting `computerUseExperimentalPointer`).
+    /// Off by default: no pointer event is ever posted and bounds stay out of the outline.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub experimental_pointer: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -502,6 +506,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(params.context.turn_id, "u");
+        assert!(!params.context.experimental_pointer, "old clients leave the pointer off");
         assert!(params.return_state);
         assert_eq!(
             params.action,
@@ -519,6 +524,17 @@ mod tests {
         })
         .unwrap();
         assert_eq!(scroll, json!({"kind": "scroll", "direction": "down", "amount": "page", "times": 2}));
+    }
+
+    #[test]
+    fn experimental_pointer_is_optional_and_omitted_when_off() {
+        let on: RequestContext =
+            serde_json::from_value(json!({"threadId": "t", "turnId": "u", "experimentalPointer": true})).unwrap();
+        assert!(on.experimental_pointer);
+        assert_eq!(serde_json::to_value(&on).unwrap()["experimentalPointer"], true);
+
+        let off = RequestContext { experimental_pointer: false, ..on };
+        assert_eq!(serde_json::to_value(off).unwrap(), json!({"threadId": "t", "turnId": "u"}));
     }
 
     #[test]

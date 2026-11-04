@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use cu_protocol::{
-    AppEntry, ErrorCode, ErrorObject, FillValue, PermissionKind, PermissionsStatus, Screenshot,
+    AppEntry, ErrorCode, ErrorObject, FillValue, MouseButton, PermissionKind, PermissionsStatus, Screenshot,
     ScreenshotOmitted, ScrollAmount, ScrollDirection, TextRange,
 };
 
@@ -104,6 +104,30 @@ pub enum PlatformEvent {
 }
 
 pub type EventSink = Arc<dyn Fn(PlatformEvent) + Send + Sync>;
+
+/// Lock and cancellation check the engine hands to multi-event deliveries. Backends
+/// call it before each event; an error stops the sequence (after any paired mouse-up).
+pub type StepGuard<'a> = &'a dyn Fn() -> CuResult<()>;
+
+/// How the experimental background pointer delivered its events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PointerRoute {
+    /// The private window-server post path (reported as `pointer`).
+    WindowServer,
+    /// Public pid-targeted events, used when the private path is missing
+    /// (reported as `pointer_public`).
+    Public,
+}
+
+impl PointerRoute {
+    /// The `method` reported in `app.act` results.
+    pub fn method(self) -> &'static str {
+        match self {
+            PointerRoute::WindowServer => "pointer",
+            PointerRoute::Public => "pointer_public",
+        }
+    }
+}
 
 pub fn unsupported(reason: &str, message: impl Into<String>) -> ErrorObject {
     ErrorObject::with_reason(ErrorCode::ActionUnsupported, reason, message)
@@ -261,8 +285,22 @@ pub trait Platform: Send + Sync + 'static {
     fn restore_web_accessibility(&self, app: &RunningApp);
 
     // -- experimental pointer (off unless the backend supports it) ----------
+    //
+    // Risk note for the settings description: this uses an undocumented (private)
+    // macOS API, may stop working after a macOS update, and some apps (games, 3D
+    // views, canvas engines) ignore background clicks entirely.
+    //
+    // The engine calls these only when the request has `experimentalPointer` on. They
+    // never move the cursor, activate the app, raise windows, or post global events.
 
-    /// Background click at a screen point without moving the cursor.
+    /// Screen frame of an element in points, used to aim the pointer at its centre.
+    fn element_frame(&self, _element: &Self::Element, _deadline: Deadline) -> Option<Rect> {
+        None
+    }
+
+    /// Background click at a window-local point (points, top-left origin).
+    /// `count` is 1 or 2. Stops with `action_unsupported` (reason `window_changed`)
+    /// when the window moves or changes owner between events.
     #[allow(clippy::too_many_arguments)]
     fn pointer_click(
         &self,
@@ -270,10 +308,27 @@ pub trait Platform: Send + Sync + 'static {
         _window: &WindowInfo,
         _x: f64,
         _y: f64,
-        _right: bool,
+        _button: MouseButton,
         _count: u32,
-        _cancel: &CancelToken,
-    ) -> CuResult<()> {
+        _guard: StepGuard<'_>,
+    ) -> CuResult<PointerRoute> {
         Err(unsupported("pointer_unavailable", "background pointer clicks are not available"))
+    }
+
+    /// Background scroll-wheel events at a window-local point, `times` notches (or
+    /// pages) in `direction`. Same rules as [`Platform::pointer_click`].
+    #[allow(clippy::too_many_arguments)]
+    fn pointer_scroll(
+        &self,
+        _app: &RunningApp,
+        _window: &WindowInfo,
+        _x: f64,
+        _y: f64,
+        _direction: ScrollDirection,
+        _amount: ScrollAmount,
+        _times: u32,
+        _guard: StepGuard<'_>,
+    ) -> CuResult<PointerRoute> {
+        Err(unsupported("pointer_unavailable", "background pointer scrolling is not available"))
     }
 }

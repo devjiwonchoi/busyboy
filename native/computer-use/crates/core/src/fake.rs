@@ -6,7 +6,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use cu_protocol::{
-    AppEntry, ErrorCode, ErrorObject, FillValue, GrantStatus, PermissionKind, PermissionsStatus, Screenshot,
+    AppEntry, ErrorCode, ErrorObject, FillValue, GrantStatus, MouseButton, PermissionKind, PermissionsStatus, Screenshot,
     ScreenshotOmitted, ScrollAmount, ScrollDirection, StopMonitorStatus, TextRange,
 };
 
@@ -48,6 +48,13 @@ pub struct FakeApp {
     pub needs_web_accessibility: bool,
 }
 
+/// One experimental pointer delivery, in window-local points.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PointerCall {
+    Click { window: String, x: f64, y: f64, button: MouseButton, count: u32 },
+    Scroll { window: String, x: f64, y: f64, direction: ScrollDirection, times: u32 },
+}
+
 #[derive(Default)]
 pub struct FakeWorld {
     pub apps: Vec<FakeApp>,
@@ -68,6 +75,10 @@ pub struct FakeWorld {
     pub snapshots: usize,
     /// Each snapshot sleeps this long, so tests can cancel mid-request.
     pub snapshot_delay_ms: u64,
+    /// Route the fake pointer reports; `None` makes it unavailable.
+    pub pointer_route: Option<PointerRoute>,
+    /// Every pointer delivery the engine asked for.
+    pub pointer_calls: Vec<PointerCall>,
 }
 
 #[derive(Default)]
@@ -87,6 +98,7 @@ impl FakePlatform {
             let mut world = platform.world.lock().unwrap();
             world.accessibility = true;
             world.next_id = 1;
+            world.pointer_route = Some(PointerRoute::WindowServer);
         }
         platform
     }
@@ -628,6 +640,53 @@ impl Platform for FakePlatform {
     fn enable_web_accessibility(&self, app: &RunningApp) -> CuResult<bool> {
         self.with_world(|world| world.web_accessibility_enabled.insert(app.bundle_id.clone(), true));
         Ok(true)
+    }
+
+    fn element_frame(&self, element: &u64, _deadline: Deadline) -> Option<Rect> {
+        self.with_world(|world| world.nodes.get(element)?.bounds)
+    }
+
+    /// Records the call and models an effect: the smallest node under the point
+    /// counts a press, so the fingerprint changes.
+    fn pointer_click(
+        &self,
+        app: &RunningApp,
+        window: &WindowInfo,
+        x: f64,
+        y: f64,
+        button: MouseButton,
+        count: u32,
+        guard: StepGuard<'_>,
+    ) -> CuResult<PointerRoute> {
+        guard()?;
+        let route = self.with_world(|world| {
+            world.pointer_calls.push(PointerCall::Click { window: window.id.clone(), x, y, button, count });
+            world.pointer_route
+        });
+        let route = route.ok_or_else(|| unsupported("pointer_unavailable", "no pointer"))?;
+        if let Some(hit) = self.element_at(app, window.bounds.x + x, window.bounds.y + y, Deadline::from_ms(None)) {
+            self.with_world(|world| world.nodes.get_mut(&hit).unwrap().presses += count);
+        }
+        Ok(route)
+    }
+
+    fn pointer_scroll(
+        &self,
+        _app: &RunningApp,
+        window: &WindowInfo,
+        x: f64,
+        y: f64,
+        direction: ScrollDirection,
+        _amount: ScrollAmount,
+        times: u32,
+        guard: StepGuard<'_>,
+    ) -> CuResult<PointerRoute> {
+        guard()?;
+        self.with_world(|world| {
+            world.pointer_calls.push(PointerCall::Scroll { window: window.id.clone(), x, y, direction, times });
+            world.pointer_route
+        })
+        .ok_or_else(|| unsupported("pointer_unavailable", "no pointer"))
     }
 
     fn restore_web_accessibility(&self, app: &RunningApp) {

@@ -2,6 +2,8 @@
 //!
 //! Every path stays in the background: element actions and value writes first, then
 //! keys posted to the target process only. Nothing moves the pointer or activates an app.
+//! Pointer events are posted only when the request turns the experimental pointer on,
+//! and only after the accessibility steps found no way to act.
 
 use std::time::Duration;
 
@@ -20,7 +22,7 @@ use crate::keys::{Key, KeyChord, Modifiers, NamedKey, check_refused, parse_key_s
 use crate::platform::{ElementProbe, ElementStatus, MonitorTarget, Platform, RunningApp, unsupported};
 use crate::refs::Lookup;
 use crate::text::{menu_title_matches, utf16_chunks, utf16_find, utf16_len};
-use crate::tree::{ElementAction, TreeBudget, WindowInfo, roles};
+use crate::tree::{ElementAction, Rect, TreeBudget, WindowInfo, roles};
 use crate::CuResult;
 
 const MAX_TYPE_CHARS: usize = 10_000;
@@ -99,6 +101,19 @@ fn fill_matches(value: &FillValue, current: Option<&str>) -> bool {
     }
 }
 
+/// Window-local centre of the part of `frame` (screen points) inside the window.
+fn window_point(window: &WindowInfo, frame: Rect) -> CuResult<(f64, f64)> {
+    let bounds = window.bounds;
+    let left = frame.x.max(bounds.x);
+    let top = frame.y.max(bounds.y);
+    let right = (frame.x + frame.width).min(bounds.x + bounds.width);
+    let bottom = (frame.y + frame.height).min(bounds.y + bounds.height);
+    if right <= left || bottom <= top {
+        return Err(unsupported("point_outside_window", "the element is outside its window"));
+    }
+    Ok(((left + right) / 2.0 - bounds.x, (top + bottom) / 2.0 - bounds.y))
+}
+
 impl<P: Platform> Engine<P> {
     pub(crate) fn app_act(&self, params: AppActParams, cancel: &CancelToken) -> CuResult<ActResult> {
         let deadline = Deadline::from_ms(params.context.deadline_ms);
@@ -128,7 +143,9 @@ impl<P: Platform> Engine<P> {
         let initial_target = self.initial_target(&params.action, &slot, &app, deadline)?;
         let before = self.platform.fingerprint(&app, target_window.as_ref(), initial_target.as_ref(), deadline);
 
-        let delivery = self.deliver(&app, &slot, &windows, target_window.as_ref(), &params.action, deadline, cancel)?;
+        let pointer = params.context.experimental_pointer;
+        let delivery =
+            self.deliver(&app, &slot, &windows, target_window.as_ref(), &params.action, pointer, deadline, cancel)?;
         self.guard(cancel)?;
 
         let watched = delivery.target.as_ref().or(initial_target.as_ref());
@@ -150,6 +167,7 @@ impl<P: Platform> Engine<P> {
                 budget: TreeBudget::default(),
                 include_screenshot: false,
                 turn_id: &params.context.turn_id,
+                pointer,
             };
             let mut state = self.capture_state(&app, &mut slot, &windows, &window, &options, deadline, cancel)?;
             state.launched = launched;
@@ -281,6 +299,7 @@ impl<P: Platform> Engine<P> {
         windows: &[WindowInfo],
         window: Option<&WindowInfo>,
         action: &Action,
+        pointer: bool,
         deadline: Deadline,
         cancel: &CancelToken,
     ) -> CuResult<Delivery<P::Element>> {
@@ -289,15 +308,38 @@ impl<P: Platform> Engine<P> {
                 if !(1..=2).contains(count) {
                     return Err(invalid("count must be 1 or 2"));
                 }
-                let element = match (element, x, y) {
-                    (Some(reference), None, None) => self.resolve_ref(slot, app, reference, deadline)?,
+                match (element, x, y) {
+                    (Some(reference), None, None) => {
+                        let element = self.resolve_ref(slot, app, reference, deadline)?;
+                        match self.click(&element, *button, *count, deadline, cancel) {
+                            Err(error) if pointer && error.code == ErrorCode::ActionUnsupported => {
+                                // 4. Background pointer click at the element centre.
+                                let window = window.ok_or(error.clone())?;
+                                let Some(frame) = self.platform.element_frame(&element, deadline) else {
+                                    return Err(error);
+                                };
+                                let (x, y) = window_point(window, frame)?;
+                                self.pointer_click(app, window, x, y, *button, *count, Some(element), cancel)
+                            }
+                            other => other,
+                        }
+                    }
                     (None, Some(x), Some(y)) => {
                         let window = window.ok_or_else(|| ErrorObject::new(ErrorCode::WindowNotFound, "the app has no windows"))?;
-                        self.hit_test(app, window, *x, *y, deadline)?
+                        let (result, hit) = match self.hit_test(app, window, *x, *y, deadline) {
+                            Ok(element) => (self.click(&element, *button, *count, deadline, cancel), Some(element)),
+                            Err(error) => (Err(error), None),
+                        };
+                        match result {
+                            // Nothing pressable at the point: background pointer click there.
+                            Err(error) if pointer && error.code == ErrorCode::ActionUnsupported => {
+                                self.pointer_click(app, window, *x, *y, *button, *count, hit, cancel)
+                            }
+                            other => other,
+                        }
                     }
-                    _ => return Err(invalid("pass exactly one of ref or both x and y")),
-                };
-                self.click(&element, *button, *count, deadline, cancel)
+                    _ => Err(invalid("pass exactly one of ref or both x and y")),
+                }
             }
             Action::Type { text, element, replace } => {
                 let target = match element {
@@ -321,7 +363,7 @@ impl<P: Platform> Engine<P> {
                     Some(reference) => Some(self.resolve_ref(slot, app, reference, deadline)?),
                     None => None,
                 };
-                self.scroll(app, window, target, *direction, *amount, *times, deadline, cancel)
+                self.scroll(app, window, target, *direction, *amount, *times, pointer, deadline, cancel)
             }
             Action::Fill { element, value } => {
                 let target = self.resolve_ref(slot, app, element, deadline)?;
@@ -360,6 +402,26 @@ impl<P: Platform> Engine<P> {
             return Err(unsupported("point_outside_window", "the element at that point belongs to another window"));
         }
         Ok(element)
+    }
+
+    /// Experimental pointer click at a window-local point. Verification comes only from
+    /// the fingerprint; the engine never assumes a pointer click landed.
+    #[allow(clippy::too_many_arguments)]
+    fn pointer_click(
+        &self,
+        app: &RunningApp,
+        window: &WindowInfo,
+        x: f64,
+        y: f64,
+        button: MouseButton,
+        count: u32,
+        watched: Option<P::Element>,
+        cancel: &CancelToken,
+    ) -> CuResult<Delivery<P::Element>> {
+        self.guard(cancel)?;
+        let guard = || self.guard(cancel);
+        let route = self.platform.pointer_click(app, window, x, y, button, count, &guard)?;
+        Ok(Delivery::new(route.method(), watched))
     }
 
     fn click(
@@ -575,36 +637,63 @@ impl<P: Platform> Engine<P> {
         direction: ScrollDirection,
         amount: ScrollAmount,
         times: u32,
+        pointer: bool,
         deadline: Deadline,
         cancel: &CancelToken,
     ) -> CuResult<Delivery<P::Element>> {
-        let area = match target {
+        let area = match &target {
             Some(target) => {
-                let probe = self.platform.probe(&target, deadline)?;
+                let probe = self.platform.probe(target, deadline)?;
                 if probe.role == roles::SCROLL_AREA {
-                    target
+                    Ok(target.clone())
                 } else if probe.actions.contains(&ElementAction::ScrollToVisible) {
-                    self.platform.perform(&target, ElementAction::ScrollToVisible, deadline)?;
-                    return Ok(Delivery::new("ax_scroll_to_visible", Some(target)));
+                    self.platform.perform(target, ElementAction::ScrollToVisible, deadline)?;
+                    return Ok(Delivery::new("ax_scroll_to_visible", Some(target.clone())));
                 } else {
-                    self.nearest_scroll_area(&target, deadline).ok_or_else(|| {
+                    self.nearest_scroll_area(target, deadline).ok_or_else(|| {
                         tried_unsupported("no_scroll_area", &["scroll_to_visible", "scroll_area"], "nothing to scroll here")
-                    })?
+                    })
                 }
             }
             None => {
                 let window = window.ok_or_else(|| ErrorObject::new(ErrorCode::WindowNotFound, "the app has no windows"))?;
                 self.platform
                     .main_scroll_area(app, window, deadline)
-                    .ok_or_else(|| tried_unsupported("no_scroll_area", &["scroll_area"], "the window has no scroll area"))?
+                    .ok_or_else(|| tried_unsupported("no_scroll_area", &["scroll_area"], "the window has no scroll area"))
             }
         };
 
-        for _ in 0..times {
+        // The first step decides the path; later failures are real errors, so the
+        // pointer never scrolls on top of a partial accessibility scroll.
+        let first = area.clone().and_then(|area| {
             self.guard(cancel)?;
-            self.platform.scroll_area(&area, direction, amount, deadline)?;
+            self.platform.scroll_area(&area, direction, amount, deadline)
+        });
+        match first {
+            Ok(()) => {
+                let area = area?;
+                for _ in 1..times {
+                    self.guard(cancel)?;
+                    self.platform.scroll_area(&area, direction, amount, deadline)?;
+                }
+                Ok(Delivery::new("ax_scroll", Some(area)))
+            }
+            Err(error) if pointer && error.code == ErrorCode::ActionUnsupported => {
+                // 3. Wheel events at the centre of the area (or the target, or the window).
+                let window = window.ok_or(error.clone())?;
+                let aim = area.ok().or(target);
+                let frame = aim.as_ref().and_then(|element| self.platform.element_frame(element, deadline));
+                let (x, y) = match frame {
+                    Some(frame) => window_point(window, frame)?,
+                    None => (window.bounds.width / 2.0, window.bounds.height / 2.0),
+                };
+                self.guard(cancel)?;
+                let guard = || self.guard(cancel);
+                let route = self.platform.pointer_scroll(app, window, x, y, direction, amount, times, &guard)?;
+                Ok(Delivery::new(route.method(), aim))
+            }
+            Err(error) => Err(error),
         }
-        Ok(Delivery::new("ax_scroll", Some(area)))
     }
 
     fn nearest_scroll_area(&self, element: &P::Element, deadline: Deadline) -> Option<P::Element> {

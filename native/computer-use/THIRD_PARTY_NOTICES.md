@@ -233,6 +233,7 @@ None of these projects is a build dependency.
   - `crates/helper/src/stage.rs` — self re-exec with responsibility disclaim (from `cua-driver/src/responsibility.rs`)
   - `crates/macos/src/session.rs` — screen-lock key in the session dictionary (from `platform-macos/src/session.rs`)
   - Technique only, no code: the "fall back to `AXEnhancedUserInterface` only when unsupported" rule in `crates/macos/src/web.rs` (from `platform-macos/src/ax/enablement.rs`)
+  - `crates/macos/src/pointer.rs` — runtime lookup of the private window-server post and window-location functions (`dlopen` + `dlsym`, cached), the off-screen Chromium primer press/release, the tracking move before a click or wheel, and the pid/window routing fields stamped on each event (from `platform-macos/src/input/skylight.rs` and `platform-macos/src/input/mouse.rs`). The focus-without-raise, key-focus and Space code is not ported.
 
 ```text
 MIT License
@@ -265,6 +266,7 @@ SOFTWARE.
 - License: MIT (full text below)
 - BusyBoy files with adapted code:
   - `crates/macos/src/caller.rs` — socket peer audit token and live + static code-signature check with cdhash binding (from `PeekabooBridgeSocketIO.swift` and `PeekabooBridgeCodeSignatureIdentity.swift`). Peekaboo admits any same-user caller when its permit list is empty; BusyBoy does not port that.
+  - `crates/macos/src/pointer.rs` — re-checking the window owner and bounds before every pointer event, always sending the paired mouse-up after a stopped mouse-down (not to a replaced process), window-local location stamping, and line-based wheel events (from `Core/PeekabooAutomationKit/Sources/PeekabooAutomationKit/Services/UI/WindowRoutedPointerDriver.swift`)
 
 ```text
 MIT License
