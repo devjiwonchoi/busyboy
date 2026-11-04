@@ -5,14 +5,32 @@
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import type { ServerSettings as ServerSettingsValue } from "@t3tools/contracts";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as PubSub from "effect/PubSub";
+import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../../config.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as DesktopComputerUseChannel from "../DesktopComputerUseChannel.ts";
+
+/** Test settings that also publish their changes, as the real service does. */
+const settingsWithChanges = Layer.effect(
+  ServerSettings.ServerSettingsService,
+  Effect.gen(function* () {
+    const settings = yield* ServerSettings.ServerSettingsService;
+    const changes = yield* PubSub.unbounded<ServerSettingsValue>();
+    return {
+      ...settings,
+      updateSettings: (patch) =>
+        settings.updateSettings(patch).pipe(Effect.tap((next) => PubSub.publish(changes, next))),
+      subscribeChanges: Effect.succeed(Stream.fromPubSub(changes)),
+    } satisfies ServerSettings.ServerSettingsService["Service"];
+  }),
+).pipe(Layer.provide(ServerSettings.layerTest({ enableAgentComputerUse: true })));
 
 Effect.gen(function* () {
   const base = yield* ServerConfig.ServerConfig.pipe(
@@ -20,7 +38,7 @@ Effect.gen(function* () {
   );
   const context = yield* Layer.build(
     DesktopComputerUseChannel.layer.pipe(
-      Layer.provide(ServerSettings.layerTest({ enableAgentComputerUse: true })),
+      Layer.provideMerge(settingsWithChanges),
       Layer.provide(
         Layer.succeed(ServerConfig.ServerConfig, {
           ...base,
@@ -50,6 +68,11 @@ Effect.gen(function* () {
   yield* print("apps", apps);
   yield* print("permissions", permissions);
   yield* print("status", yield* channel.status);
+
+  // Turning the setting off tells the desktop, which stops the helper.
+  yield* Context.get(context, ServerSettings.ServerSettingsService).updateSettings({
+    enableAgentComputerUse: false,
+  });
 
   yield* print("slow", yield* outcome(channel.request("slow", {}, { timeoutMs: 200 })));
   // The parent closes the desktop end instead of answering.

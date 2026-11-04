@@ -4,6 +4,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type * as Electron from "electron";
 import { beforeEach, vi } from "vite-plus/test";
 
@@ -55,6 +56,7 @@ vi.mock("electron", () => ({
   }),
 }));
 
+import { markAuxiliaryWindow } from "./AuxiliaryWindows.ts";
 import * as ElectronWindow from "./ElectronWindow.ts";
 
 const layerTestFor = (platform: NodeJS.Platform) =>
@@ -188,6 +190,25 @@ describe("ElectronWindow", () => {
 
       assert.deepEqual(syncedWindows, [liveWindow]);
     }).pipe(Effect.provide(layerTest)),
+  );
+
+  it.effect(
+    "leaves feature windows such as the computer-use overlay out of the app's windows",
+    () =>
+      Effect.gen(function* () {
+        const overlay = makeBrowserWindow({ id: 7, destroyed: false });
+        markAuxiliaryWindow(overlay);
+        getAllWindowsMock.mockReturnValue([overlay]);
+        const electronWindow = yield* ElectronWindow.ElectronWindow;
+
+        // With only the overlay alive, Dock activate finds no window and creates the main one.
+        assert.isTrue(Option.isNone(yield* electronWindow.currentMainOrFirst));
+
+        // A theme change must not paint the transparent overlay.
+        const synced: Electron.BrowserWindow[] = [];
+        yield* electronWindow.syncAllAppearance((window) => Effect.sync(() => synced.push(window)));
+        assert.deepEqual(synced, []);
+      }).pipe(Effect.provide(layerTest)),
   );
 
   it.effect("preserves window enumeration failures as structured defects", () =>

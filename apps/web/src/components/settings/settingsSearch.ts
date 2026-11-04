@@ -599,6 +599,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["allow disable enable open drive preview tools sessions project override"],
   },
   {
+    id: "computer-use",
+    title: "Computer Use",
+    to: "/settings/integrations",
+    searchTerms: [
+      "mac apps accessibility screen recording input monitoring esc stop helper always allowed screenshots pointer",
+    ],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
     id: "browser-profiles",
     title: "Browser profiles",
     to: "/settings/integrations",

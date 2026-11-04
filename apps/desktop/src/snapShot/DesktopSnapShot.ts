@@ -34,6 +34,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Electron from "electron";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
+import { isAuxiliaryWindow } from "../electron/AuxiliaryWindows.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import { startGlobalShiftShortcutProcess } from "./GlobalShiftShortcutProcess.ts";
@@ -350,7 +351,9 @@ async function captureSource({
   let active: ActiveWindow | undefined;
   const destinationWindowBounds = (
     Electron.BrowserWindow.getFocusedWindow() ??
-    Electron.BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+    Electron.BrowserWindow.getAllWindows().find(
+      (window) => !window.isDestroyed() && !isAuxiliaryWindow(window),
+    )
   )?.getBounds();
   {
     const revealPreparation =

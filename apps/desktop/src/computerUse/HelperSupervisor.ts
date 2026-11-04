@@ -218,6 +218,11 @@ class StartFailure extends Error {
   }
 }
 
+const UNSUPPORTED_STATUS: ComputerUseHelperStatus = {
+  state: "stopped",
+  reason: "unsupported_platform",
+};
+
 export interface HelperSupervisorOptions {
   readonly installer: Pick<
     HelperInstaller,
@@ -270,6 +275,8 @@ export class HelperSupervisor {
     this.timers = options.timers ?? systemTimers;
     this.log = options.log ?? (() => {});
     this.spawn = options.spawn ?? spawnHelperProcess(this.log);
+    // Lets settings tell "not macOS 14+" apart from "not started yet".
+    if (!options.supported) this.currentStatus = UNSUPPORTED_STATUS;
   }
 
   /** Turning computer use off holds starts first, so a pending restart cannot slip in. */
@@ -329,7 +336,9 @@ export class HelperSupervisor {
       attempt.client?.close();
       await this.terminateAttempt(attempt);
     }
-    if (!this.terminal) this.setStatus({ state: "stopped" });
+    if (!this.terminal) {
+      this.setStatus(this.options.supported ? { state: "stopped" } : UNSUPPORTED_STATUS);
+    }
   }
 
   /**

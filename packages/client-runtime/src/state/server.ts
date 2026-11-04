@@ -1053,6 +1053,25 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:provider:install-remove",
       tag: WS_METHODS.providerInstallRemove,
     }),
+    // Computer Use settings read this; `start: true` starts the helper lazily while enabled.
+    computerUseStatus: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:computer-use:status",
+      tag: WS_METHODS.computerUseStatus,
+      // A start must not join a passive poll in flight, or the start is lost.
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => `${environmentId}:${input.start === true}`,
+      },
+    }),
+    computerUseRequestPermission: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:computer-use:request-permission",
+      tag: WS_METHODS.computerUseRequestPermission,
+    }),
+    computerUseRestartHelper: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:computer-use:restart-helper",
+      tag: WS_METHODS.computerUseRestartHelper,
+      concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
+    }),
     traceDiagnostics: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:trace-diagnostics",
       tag: WS_METHODS.serverGetTraceDiagnostics,
