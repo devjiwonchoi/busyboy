@@ -124,7 +124,7 @@ describe("server browser element refs", () => {
     expect(await page.getByRole("textbox", { name: "parent" }).inputValue()).toBe("");
   });
 
-  it("shows dotted fields as dots wherever their value appears, keeping text values and refs", async () => {
+  it("shows dotted and sign-in fields as dots wherever their value appears, keeping refs", async () => {
     await page.setContent(`
       <table><tr><td>password:</td><td><input id="pw" type="password" aria-label="Password"></td></tr></table>
       <input aria-label="Username" value="maria">
@@ -142,7 +142,8 @@ describe("server browser element refs", () => {
         Object.defineProperty(HTMLInputElement.prototype, "value", { get: () => "" });
       </script>`);
     await page.frameLocator("iframe[srcdoc]").getByRole("textbox").waitFor();
-    await ServerBrowserPage.type(page, { locator: "#pw", text: "typed-pass" });
+    // The person typed this; agents can't type into password fields.
+    await page.locator("#pw").fill("typed-pass");
     const result = await takeSnapshot();
     const tree = String(result.accessibilityTree);
     expect(tree).toContain('textbox "blank"');
@@ -153,11 +154,99 @@ describe("server browser element refs", () => {
     // Page text masks the same values, so it can't be compared against the tree.
     expect(result.visibleText).toContain("Order ••••••••-2");
     expect(tree).toMatch(/row "password: •+"/);
-    expect(tree).toMatch(/textbox "Username" [^\n]*: maria$/m);
+    // A username is a sign-in detail too.
+    expect(tree).toMatch(/textbox "Username" [^\n]*: •+$/m);
+    expect(tree).not.toContain("maria");
     const line = tree.split("\n").find((line) => line.includes('textbox "Password"'));
     expect(line).toMatch(/: •+$/);
-    await ServerBrowserPage.type(page, { locator: locators(line)[0]!, text: "next", clear: true });
-    expect(await page.locator("#pw").inputValue()).toBe("next");
+    // Its ref still resolves, but typing a password is refused in favor of preview_sign_in.
+    await expect(
+      ServerBrowserPage.type(page, { locator: locators(line)[0]!, text: "next", clear: true }),
+    ).rejects.toMatchObject({
+      tag: "PreviewAutomationTargetNotEditableError",
+      message: expect.stringContaining("preview_sign_in"),
+    });
+    expect(await page.locator("#pw").inputValue()).toBe("typed-pass");
+  });
+
+  const PROFILE_PAGE = `
+    <label>Email <input type="email" value="sentinel-email@example.com"></label>
+    <label>Phone <input type="tel" value="+1-555-0100-sentinel"></label>
+    <label>Verification code <input inputmode="numeric" maxlength="6" value="472913"></label>
+    <input type="hidden" name="csrf" value="sentinel-hidden-token">
+    <label>Account <input name="user_name" value="sentinel-username"></label>
+    <label>Card number <input autocomplete="cc-number" value="4111111111111111"></label>
+    <label>Search <input type="search" name="q" value="sentinel-search-query"></label>
+    <p>Signed in as sentinel-email@example.com</p>`;
+
+  it("masks email, phone, one-time code, hidden, username and card values in snapshots", async () => {
+    await page.setContent(PROFILE_PAGE);
+    const result = await takeSnapshot();
+    const everything = `${String(result.accessibilityTree)}\n${result.visibleText}`;
+    for (const sentinel of [
+      "sentinel-email@example.com",
+      "+1-555-0100-sentinel",
+      "472913",
+      "sentinel-hidden-token",
+      "sentinel-username",
+      "4111111111111111",
+    ]) {
+      expect(everything).not.toContain(sentinel);
+    }
+    expect(everything).toContain("••••••••");
+    // Labels stay readable, and an ordinary search field is not a sign-in detail.
+    expect(everything).toContain("Email");
+    expect(everything).toContain("sentinel-search-query");
+  });
+
+  it("masks protected values that an evaluation returns", async () => {
+    await page.setContent(PROFILE_PAGE);
+    expect(
+      await ServerBrowserPage.evaluate(
+        page,
+        cdp,
+        { expression: "document.querySelector('input[type=email]').value" },
+        2_000,
+      ),
+    ).toBe("••••••••");
+    expect(
+      await ServerBrowserPage.evaluate(
+        page,
+        cdp,
+        {
+          expression:
+            "({ hidden: document.querySelector('input[type=hidden]').value, list: [...document.querySelectorAll('input')].map((input) => input.value), title: 'ok' })",
+        },
+        2_000,
+      ),
+    ).toEqual({
+      hidden: "••••••••",
+      list: [
+        "••••••••",
+        "••••••••",
+        "••••••••",
+        "••••••••",
+        "••••••••",
+        "••••••••",
+        "sentinel-search-query",
+      ],
+      title: "ok",
+    });
+  });
+
+  it("lets agents type a username but refuses one-time codes", async () => {
+    await page.setContent(`
+      <input aria-label="Username" autocomplete="username">
+      <input aria-label="Code" autocomplete="one-time-code">`);
+    await ServerBrowserPage.type(page, { locator: "input[autocomplete=username]", text: "ada" });
+    expect(await page.locator("input[autocomplete=username]").inputValue()).toBe("ada");
+    await expect(
+      ServerBrowserPage.type(page, {
+        locator: "input[autocomplete=one-time-code]",
+        text: "123456",
+      }),
+    ).rejects.toMatchObject({ tag: "PreviewAutomationTargetNotEditableError" });
+    expect(await page.locator("input[autocomplete=one-time-code]").inputValue()).toBe("");
   });
 
   it("masks dotted values in page text next to punctuation, with odd spaces, and at the cut", async () => {
@@ -325,9 +414,9 @@ describe("server browser element refs", () => {
 
   it("stops an evaluation at its deadline so the page answers the next one", async () => {
     await expect(
-      ServerBrowserPage.evaluate(cdp, { expression: "for (;;) {}" }, 200),
+      ServerBrowserPage.evaluate(page, cdp, { expression: "for (;;) {}" }, 200),
     ).rejects.toMatchObject({ tag: "PreviewAutomationTimeoutError" });
-    expect(await ServerBrowserPage.evaluate(cdp, { expression: "1 + 1" }, 2_000)).toBe(2);
+    expect(await ServerBrowserPage.evaluate(page, cdp, { expression: "1 + 1" }, 2_000)).toBe(2);
   });
 });
 

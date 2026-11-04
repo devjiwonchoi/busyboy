@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vite-plus/test";
 import { recordingKeyLabel, recordingKeysAreSensitive } from "./RecordingInput.ts";
 
@@ -36,16 +37,28 @@ describe("recording key labels", () => {
 });
 
 describe("recording key privacy", () => {
-  const field = (type: string) => ({ tagName: "INPUT", getAttribute: () => type });
-  const sensitive = (activeElement: unknown) =>
-    recordingKeysAreSensitive({ activeElement } as Document);
-  it("excludes password fields and their shadow-root focus", () => {
-    expect(sensitive(field("password"))).toBe(true);
-    expect(sensitive({ shadowRoot: { activeElement: field("password") } })).toBe(true);
-    expect(sensitive(field("text"))).toBe(false);
+  const sensitive = (html: string, focusSelector: string) => {
+    document.body.innerHTML = html;
+    (document.querySelector(focusSelector) as HTMLElement).focus();
+    return recordingKeysAreSensitive(document);
+  };
+  it("masks keys typed into sign-in and contact fields", () => {
+    expect(sensitive(`<input type="password">`, "input")).toBe(true);
+    expect(sensitive(`<input type="email">`, "input")).toBe(true);
+    expect(sensitive(`<input type="tel">`, "input")).toBe(true);
+    expect(sensitive(`<input autocomplete="username">`, "input")).toBe(true);
+    expect(sensitive(`<input autocomplete="one-time-code">`, "input")).toBe(true);
+    expect(sensitive(`<label>Verification code <input></label>`, "input")).toBe(true);
+    expect(sensitive(`<input name="phoneNumber">`, "input")).toBe(true);
   });
-  it("excludes iframe focus whose field cannot be inspected", () => {
-    expect(sensitive({ tagName: "IFRAME" })).toBe(true);
-    expect(sensitive({ tagName: "SECRET-FIELD" })).toBe(true);
+  it("shows keys typed into ordinary fields", () => {
+    expect(sensitive(`<input type="search" name="q">`, "input")).toBe(false);
+    expect(sensitive(`<textarea aria-label="Message"></textarea>`, "textarea")).toBe(false);
+  });
+  it("masks focus it cannot inspect", () => {
+    const fake = (activeElement: unknown) =>
+      recordingKeysAreSensitive({ activeElement } as Document);
+    expect(fake({ tagName: "IFRAME", getAttribute: () => null })).toBe(true);
+    expect(fake({ tagName: "SECRET-FIELD", getAttribute: () => null })).toBe(true);
   });
 });
