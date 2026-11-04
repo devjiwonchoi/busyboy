@@ -646,6 +646,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["address bar autocomplete search engine suggestions privacy network"],
   },
   {
+    id: "browser-offer-to-save-passwords",
+    title: "Offer to save passwords",
+    to: "/settings/integrations",
+    searchTerms: ["save password prompt sign in logins never autofill"],
+    desktopOnly: true,
+  },
+  {
+    id: "browser-passwords-require-device-auth",
+    title: "Ask before filling passwords",
+    to: "/settings/integrations",
+    searchTerms: ["touch id autofill fill passwords unlock confirm"],
+    desktopOnly: true,
+  },
+  {
     id: "browser-passwords",
     title: "Passwords",
     to: "/settings/integrations",

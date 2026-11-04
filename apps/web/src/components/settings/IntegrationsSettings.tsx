@@ -104,6 +104,7 @@ import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import { BrowserHistorySetting } from "./BrowserHistorySettings";
 import { BrowserAddressBarSettings } from "./BrowserAddressBarSettings";
 import { BrowserPasswordsSetting } from "./BrowserPasswordsSettings";
+import { BrowserPasswordFillSettings } from "./BrowserPasswordFillSettings";
 import {
   deleteBrowserProfilePasswords,
   readBrowserPasswordsBridge,
@@ -1223,6 +1224,7 @@ export function IntegrationsSettingsPanel() {
       <BrowserProfilesSetting disabled={previewDefaultsDisabled} />
       <BrowserHistorySetting />
       <BrowserPasswordsSetting />
+      <BrowserPasswordFillSettings />
       <BrowserAddressBarSettings disabled={previewDefaultsDisabled} />
       <BrowserViewportSetting disabled={previewDefaultsDisabled} />
       <BrowserZoomSetting disabled={previewDefaultsDisabled} />
