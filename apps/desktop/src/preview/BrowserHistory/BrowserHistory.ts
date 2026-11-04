@@ -90,6 +90,10 @@ export interface BrowserHistoryShape {
     profile: { readonly profileId: string; readonly persistent: boolean },
   ) => void;
   /** A recorder for one guest, or null when its session must not be recorded. */
+  /** The profile a guest session was registered for, or null when unknown. */
+  readonly profileOf: (
+    session: object,
+  ) => { readonly profileId: string; readonly persistent: boolean } | null;
   readonly recorderFor: (
     session: object,
     options: BrowserHistoryGuestOptions,
@@ -175,6 +179,14 @@ export function makeBrowserHistory(options: MakeBrowserHistoryOptions): BrowserH
   // identity, which only matters for telling them apart from unknown ones.
   const sessionsByPath = new Map<string, SessionProfile>();
   const sessionsByObject = new WeakMap<object, SessionProfile>();
+  const profileOf = (session: object): SessionProfile | null => {
+    const storagePath = storagePathOf(session);
+    return (
+      (storagePath === null ? undefined : sessionsByPath.get(storagePath)) ??
+      sessionsByObject.get(session) ??
+      null
+    );
+  };
   const storagePathOf = (session: object): string | null => {
     const value = (session as { readonly storagePath?: unknown }).storagePath;
     return typeof value === "string" && value.length > 0 ? value : null;
@@ -298,12 +310,10 @@ export function makeBrowserHistory(options: MakeBrowserHistoryOptions): BrowserH
       if (storagePath !== null) sessionsByPath.set(storagePath, entry);
       sessionsByObject.set(session, entry);
     },
+    profileOf: (session) => profileOf(session),
     recorderFor: (session, guestOptions) => {
-      const storagePath = storagePathOf(session);
-      const profile =
-        (storagePath === null ? undefined : sessionsByPath.get(storagePath)) ??
-        sessionsByObject.get(session);
-      if (profile === undefined || !profile.persistent) return null;
+      const profile = profileOf(session);
+      if (profile === null || !profile.persistent) return null;
       const { profileId } = profile;
       return new HistoryRecorder({
         now,

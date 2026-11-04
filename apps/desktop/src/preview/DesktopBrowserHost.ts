@@ -68,6 +68,8 @@ export class DesktopBrowserHost extends Context.Service<
     readonly attach: (key: DesktopBrowserTabKey, debuggee: DesktopBrowserTabDebugger) => void;
     readonly detach: (key: DesktopBrowserTabKey) => void;
     readonly humanStartedDownload: (source: Electron.WebContents) => boolean;
+    /** True when an agent sent input or script to this guest within `ms`. */
+    readonly agentInputWithin: (source: Electron.WebContents, ms: number) => boolean;
     /** The agent thread that drove this guest within the attribution window, if any. */
     readonly agentAttribution: (
       source: Electron.WebContents,
@@ -235,6 +237,13 @@ export const make = Effect.gen(function* () {
     detach,
     placeDownload,
     humanStartedDownload,
+    agentInputWithin: (source, ms) => {
+      const at = performance.now();
+      return [...tabs.values()].some(
+        (candidate) =>
+          candidate.debuggee.webContents === source && at - candidate.agentInputAt <= ms,
+      );
+    },
     agentAttribution,
   });
 });

@@ -141,3 +141,13 @@ export const BROWSER_PASSWORDS_NEVER_SAVE_LIST_CHANNEL =
 export const BROWSER_PASSWORDS_NEVER_SAVE_REMOVE_CHANNEL =
   "desktop:browser-passwords-never-save-remove";
 export const BROWSER_PASSWORDS_CHANGED_CHANNEL = "desktop:browser-passwords-changed";
+export const BROWSER_PASSWORDS_AUTOFILL_EVENT_CHANNEL = "desktop:browser-passwords-autofill-event";
+export const BROWSER_PASSWORDS_AUTOFILL_CHOOSE_CHANNEL =
+  "desktop:browser-passwords-autofill-choose";
+export const BROWSER_PASSWORDS_AUTOFILL_DISMISS_CHANNEL =
+  "desktop:browser-passwords-autofill-dismiss";
+export const BROWSER_PASSWORDS_AUTOFILL_RESPOND_CHANNEL =
+  "desktop:browser-passwords-autofill-respond";
+export const BROWSER_PASSWORDS_AUTOFILL_PEEK_CHANNEL = "desktop:browser-passwords-autofill-peek";
+export const BROWSER_PASSWORDS_AUTOFILL_REOPEN_CHANNEL =
+  "desktop:browser-passwords-autofill-reopen";

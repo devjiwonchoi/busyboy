@@ -2,6 +2,7 @@ import type {
   DesktopBridge,
   DesktopPreviewOpenLinkEvent,
   DesktopPreviewPointerEvent,
+  BrowserPasswordAutofillEvent,
   DesktopPreviewRecordingInputEvent,
   DesktopPreviewRecordingFrame,
   DesktopPreviewTabState,
@@ -466,6 +467,30 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.on(IpcChannels.BROWSER_PASSWORDS_CHANGED_CHANNEL, wrappedListener);
       return () =>
         ipcRenderer.removeListener(IpcChannels.BROWSER_PASSWORDS_CHANGED_CHANNEL, wrappedListener);
+    },
+    autofill: {
+      onEvent: (listener) => {
+        const wrappedListener = (_event: Electron.IpcRendererEvent, autofillEvent: unknown) => {
+          if (typeof autofillEvent !== "object" || autofillEvent === null) return;
+          listener(autofillEvent as BrowserPasswordAutofillEvent);
+        };
+        ipcRenderer.on(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_EVENT_CHANNEL, wrappedListener);
+        return () =>
+          ipcRenderer.removeListener(
+            IpcChannels.BROWSER_PASSWORDS_AUTOFILL_EVENT_CHANNEL,
+            wrappedListener,
+          );
+      },
+      choose: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_CHOOSE_CHANNEL, input),
+      dismissFillList: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_DISMISS_CHANNEL, input),
+      respondToPrompt: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_RESPOND_CHANNEL, input),
+      peek: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_PEEK_CHANNEL, input),
+      reopenPrompt: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_REOPEN_CHANNEL, input),
     },
   },
 } satisfies DesktopBridge);

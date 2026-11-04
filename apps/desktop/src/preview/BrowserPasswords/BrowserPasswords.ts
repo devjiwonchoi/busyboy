@@ -106,6 +106,11 @@ export interface BrowserPasswordsShape {
     readonly ids: ReadonlyArray<number>;
   }) => Effect.Effect<void, BrowserPasswordsError>;
   readonly subscribeChanges: (listener: (profileId: string) => void) => () => void;
+  /** Main-process only: the open vault for save and fill, or null when unavailable. */
+  readonly vault: (profileId: string) => PasswordDatabase | null;
+  readonly notifyChanged: (profileId: string) => void;
+  /** The device check (Touch ID or the fallback confirm). Resolves false on cancel. */
+  readonly authorize: DeviceAuthGate["authorize"];
 }
 
 export class BrowserPasswords extends Context.Service<BrowserPasswords, BrowserPasswordsShape>()(
@@ -133,8 +138,6 @@ export interface MakeBrowserPasswordsOptions {
 export function makeBrowserPasswords(
   options: MakeBrowserPasswordsOptions,
 ): BrowserPasswordsShape & {
-  /** For B4's fill and save paths, and for tests. */
-  readonly vault: (profileId: string) => PasswordDatabase | null;
   readonly close: () => void;
 } {
   const now = options.now ?? Date.now;
@@ -219,6 +222,8 @@ export function makeBrowserPasswords(
 
   return {
     vault,
+    notifyChanged: emit,
+    authorize: (request) => options.gate.authorize(request),
     status: (profileId) =>
       Effect.sync(() => {
         if (profileId !== INCOGNITO_BROWSER_PROFILE_ID) vault(profileId);

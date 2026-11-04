@@ -75,6 +75,7 @@ import * as LinuxBrowserSecret from "./preview/BrowserImport/LinuxBrowserSecret.
 import * as BrowserSession from "./preview/BrowserSession.ts";
 import * as BrowserHistory from "./preview/BrowserHistory/BrowserHistory.ts";
 import * as BrowserPasswords from "./preview/BrowserPasswords/BrowserPasswords.ts";
+import * as PasswordAutofill from "./preview/BrowserPasswords/PasswordAutofill.ts";
 import * as DesktopBrowserHost from "./preview/DesktopBrowserHost.ts";
 import * as ComputerUseChannelHost from "./computerUse/ComputerUseChannelHost.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -182,6 +183,7 @@ const layerDesktopServerExposure = DesktopServerExposure.layer.pipe(
 );
 
 const layerDesktopPreview = PreviewManager.layer.pipe(
+  Layer.provideMerge(PasswordAutofill.layer),
   Layer.provideMerge(BrowserHistory.layer),
   Layer.provideMerge(BrowserPasswords.layer),
   Layer.provideMerge(DesktopBrowserHost.layer),
