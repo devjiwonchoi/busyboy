@@ -34,6 +34,8 @@ import * as McpHttpServer from "../../McpHttpServer.ts";
 import * as McpSessionRegistry from "../../McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import * as PreviewBrowser from "../../../preview/PreviewBrowser.ts";
+import * as ComputerUseTurns from "../../../computerUse/ComputerUseTurns.ts";
+import * as DesktopComputerUseChannel from "../../../computerUse/DesktopComputerUseChannel.ts";
 
 const layerStubServices = Layer.mergeAll(
   Layer.mock(Orchestrator.OrchestratorV2)({}),
@@ -57,6 +59,8 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(SourceControlRepositoryService.SourceControlRepositoryService)({}),
   Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
   Layer.mock(ThreadSearch.ThreadSearch)({}),
+  Layer.mock(DesktopComputerUseChannel.DesktopComputerUseChannel)({ available: true }),
+  Layer.mock(ComputerUseTurns.ComputerUseTurns)({}),
 );
 
 const ToolsListPayload = Schema.fromJsonString(
@@ -141,6 +145,8 @@ it.effect("production mcp layer lists worktree tools over http", () =>
       expect(toolNames).toContain("t3_worktree_status");
       expect(toolNames).toContain("preview_status");
       expect(toolNames).toContain("delegate_task");
+      // Without the computer-use capability, no computer_* tool is listed.
+      expect(toolNames.filter((name) => name.startsWith("computer_"))).toEqual([]);
 
       const handoff = tools.find((tool) => tool.name === "t3_worktree_handoff");
       expect(handoff?.annotations?.readOnlyHint).toBe(false);

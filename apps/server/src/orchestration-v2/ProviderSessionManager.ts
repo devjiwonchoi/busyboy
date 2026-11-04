@@ -46,6 +46,8 @@ import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderS
 import type * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import { personaInstructions, resolvePersona } from "../projectTeam/persona.ts";
+import { computerUseCapabilityAvailable } from "../computerUse/ComputerUseCapability.ts";
+import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as EventSink from "./EventSink.ts";
@@ -329,6 +331,30 @@ export const layerWithOptions = (
        */
       const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
       const projectService = yield* Effect.serviceOption(ProjectService.ProjectService);
+      const serverConfig = yield* Effect.serviceOption(ServerConfig.ServerConfig);
+      // This checks only that the desktop passed the channel fds. The channel
+      // itself (and its live status) is built above this layer, so a desktop
+      // that later disconnects still gets the capability; its calls then fail
+      // with computer_use_unavailable (desktop_disconnected).
+      const computerUseChannelAvailable =
+        Option.isSome(serverConfig) &&
+        serverConfig.value.desktopComputerUseFd !== undefined &&
+        serverConfig.value.desktopComputerUseControlFd !== undefined;
+      /** Off unless the setting is readable and on. */
+      const computerUseAvailable = Effect.fn("ProviderSessionManagerV2.computerUseAvailable")(
+        function* () {
+          if (Option.isNone(serverSettings) || !computerUseChannelAvailable) return false;
+          return yield* serverSettings.value.getSettings.pipe(
+            Effect.map((settings) =>
+              computerUseCapabilityAvailable({
+                enabled: settings.enableAgentComputerUse,
+                channelAvailable: computerUseChannelAvailable,
+              }),
+            ),
+            Effect.orElseSucceed(() => false),
+          );
+        },
+      );
       const projectTeamRepository = yield* Effect.serviceOption(
         ProjectTeamRepository.ProjectTeamRepository,
       );
@@ -481,6 +507,8 @@ export const layerWithOptions = (
                   import("../mcp/McpInvocationContext.ts").McpCapability
                 >(["orchestration", "worktree", "pull-requests"]);
                 if (browserToolsAvailable) capabilities.add("preview");
+                const computerUseGranted = yield* computerUseAvailable();
+                if (computerUseGranted) capabilities.add("computer-use");
                 const existing = yield* mcpSessions.read(threadId);
                 // A failed role read keeps the live session's instructions rather than stripping them.
                 const teamInstructions = Option.getOrElse(
@@ -513,7 +541,8 @@ export const layerWithOptions = (
                     resolved !== undefined &&
                     resolved.thread.threadId === threadId &&
                     resolved.thread.providerInstanceId === providerInstanceId &&
-                    resolved.capabilities.has("preview") === browserToolsAvailable
+                    resolved.capabilities.has("preview") === browserToolsAvailable &&
+                    resolved.capabilities.has("computer-use") === computerUseGranted
                   ) {
                     // A thread can become a PM while it keeps its credential.
                     if (existing.teamInstructions !== teamInstructions) {

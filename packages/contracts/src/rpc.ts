@@ -27,6 +27,8 @@ import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
+  ComputerUseAppRequestAnswerInput,
+  ComputerUseAppRequestError,
   ComputerUseError,
   ComputerUsePermissionKind,
   ComputerUseSettingsStatus,
@@ -466,6 +468,7 @@ export const WS_METHODS = {
   computerUseStatus: "computerUse.status",
   computerUseRequestPermission: "computerUse.requestPermission",
   computerUseRestartHelper: "computerUse.restartHelper",
+  computerUseAnswerAppRequest: "computerUse.answerAppRequest",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
   serverPrepareAcpRegistryAgent: "server.prepareAcpRegistryAgent",
@@ -770,6 +773,11 @@ const WsComputerUseRestartHelperRpc = Rpc.make(WS_METHODS.computerUseRestartHelp
   payload: Schema.Struct({}),
   success: ComputerUseSettingsStatus,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+const WsComputerUseAnswerAppRequestRpc = Rpc.make(WS_METHODS.computerUseAnswerAppRequest, {
+  payload: ComputerUseAppRequestAnswerInput,
+  error: Schema.Union([ComputerUseAppRequestError, EnvironmentAuthorizationError]),
 });
 
 const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
@@ -1855,6 +1863,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsComputerUseStatusRpc,
   WsComputerUseRequestPermissionRpc,
   WsComputerUseRestartHelperRpc,
+  WsComputerUseAnswerAppRequestRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerSearchAcpRegistryRpc,
   WsServerPrepareAcpRegistryAgentRpc,

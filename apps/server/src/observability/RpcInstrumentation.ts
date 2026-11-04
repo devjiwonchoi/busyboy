@@ -63,6 +63,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.computerUseStatus]: "server",
   [WS_METHODS.computerUseRequestPermission]: "server",
   [WS_METHODS.computerUseRestartHelper]: "server",
+  [WS_METHODS.computerUseAnswerAppRequest]: "server",
   [WS_METHODS.serverSearchAcpRegistry]: "server",
   [WS_METHODS.serverPrepareAcpRegistryAgent]: "server",
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: "server",

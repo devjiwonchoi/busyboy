@@ -4150,6 +4150,61 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
     }),
   );
 
+  it.effect("shows a waiting app approval card on a live run as the pending request", () =>
+    Effect.gen(function* () {
+      const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+      const sql = yield* SqlClient.SqlClient;
+      const suffix = "shell-pending-app-request";
+      const threadId = yield* addRolledBackRecoveryCandidate(suffix);
+      const runId = RunId.make(`run:${suffix}:rolled-back`);
+      const nodeId = NodeId.make(`node:${suffix}:rolled-back`);
+      const now = yield* DateTime.now;
+      yield* projectionStore.apply({
+        id: EventId.make("event:app-request:a"),
+        type: "turn-item.updated",
+        threadId,
+        runId,
+        nodeId,
+        driver,
+        occurredAt: now,
+        payload: {
+          id: TurnItemId.make("app-request:a"),
+          threadId,
+          runId,
+          nodeId,
+          providerThreadId: null,
+          providerTurnId: null,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: 2,
+          status: "waiting",
+          title: "TextEdit",
+          startedAt: now,
+          completedAt: null,
+          updatedAt: now,
+          type: "computer_use_app_request",
+          appName: "TextEdit",
+          bundleId: "com.apple.TextEdit",
+          allowAlways: true,
+          appRequestStatus: "pending",
+        },
+      });
+      for (const status of ["running", "completed"]) {
+        yield* sql`
+          UPDATE orchestration_v2_projection_runs
+          SET status = ${status}, payload_json = json_set(payload_json, '$.status', ${status})
+          WHERE run_id = ${runId}
+        `;
+        const shell = yield* projectionStore.getShellSnapshot();
+        const thread = shell.threads.find((candidate) => candidate.id === threadId);
+        assert.equal(
+          thread?.pendingRuntimeRequest?.id ?? null,
+          status === "running" ? "app-request:a" : null,
+        );
+      }
+    }),
+  );
+
   it.effect("builds shell snapshots without decoding full turn item payloads", () =>
     Effect.gen(function* () {
       const projectionStore = yield* ProjectionStore.ProjectionStoreV2;

@@ -1224,6 +1224,29 @@ it.effect("does not continue a run waiting on a secret the restart closed", () =
   }),
 );
 
+it.effect("does not continue a run waiting on an app approval card the restart closed", () =>
+  Effect.gen(function* () {
+    const completedAt = DateTime.makeUnsafe("2026-10-03T10:05:00.000Z");
+    const card = (appRequestStatus: string, at: DateTime.Utc | null) =>
+      ({ type: "computer_use_app_request", runId, appRequestStatus, completedAt: at }) as never;
+    assert.isUndefined(
+      restartContinuationRun({ ...makeProjection(), turnItems: [card("pending", null)] }),
+    );
+    const cut = cutMidTurn({ completedAt });
+    assert.deepEqual(
+      yield* continuationTexts({ ...cut, turnItems: [card("cancelled", completedAt)] }),
+      [],
+    );
+    assert.lengthOf(
+      yield* continuationTexts({
+        ...cut,
+        turnItems: [card("cancelled", DateTime.subtract(completedAt, { seconds: 1 }))],
+      }),
+      1,
+    );
+  }),
+);
+
 it.effect.each(["completed", "failed", "interrupted"] as const)(
   "does not continue when the provider turn %s before the app run settled",
   (status) =>

@@ -61,16 +61,24 @@ function restartContinuationBlocked(
           turn.id === request.providerTurnId)),
   );
   if (waitingRequest) return true;
-  return projection.turnItems.some(
-    (item) =>
-      item.type === "secret_request" &&
-      item.runId === source.id &&
-      (item.secretStatus === "pending" ||
-        (item.secretStatus === "cancelled" &&
-          item.completedAt !== null &&
-          source.completedAt !== null &&
-          DateTime.Equivalence(item.completedAt, source.completedAt))),
-  );
+  // A secret or app-approval card the user had not answered when the restart
+  // closed it: wait for the user rather than continuing without the answer.
+  return projection.turnItems.some((item) => {
+    if (item.runId !== source.id) return false;
+    const status =
+      item.type === "secret_request"
+        ? item.secretStatus
+        : item.type === "computer_use_app_request"
+          ? item.appRequestStatus
+          : undefined;
+    return (
+      status === "pending" ||
+      (status === "cancelled" &&
+        item.completedAt !== null &&
+        source.completedAt !== null &&
+        DateTime.Equivalence(item.completedAt, source.completedAt))
+    );
+  });
 }
 
 /**

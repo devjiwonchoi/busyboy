@@ -11,7 +11,13 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-const ALL_MCP_CAPABILITIES = ["preview", "orchestration", "worktree", "pull-requests"] as const;
+const ALL_MCP_CAPABILITIES = [
+  "preview",
+  "orchestration",
+  "worktree",
+  "pull-requests",
+  "computer-use",
+] as const;
 export type McpCapability = (typeof ALL_MCP_CAPABILITIES)[number];
 
 export interface McpThreadCaller {
