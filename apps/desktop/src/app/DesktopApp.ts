@@ -33,6 +33,7 @@ import * as DesktopRemoteUpdates from "../updates/DesktopRemoteUpdates.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
+import * as ComputerUseChannelHost from "../computerUse/ComputerUseChannelHost.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3873;
@@ -323,13 +324,15 @@ const scopedProgram = Effect.scoped(
 
     const shutdown = yield* DesktopShutdown.DesktopShutdown;
     const rendererHistory = yield* DesktopRendererHistory.DesktopRendererHistory;
+    const computerUse = yield* ComputerUseChannelHost.ComputerUseChannelHost;
 
     yield* Effect.addFinalizer(() =>
       // Stop the backend here: the electronApp.quit() path can race ahead
       // of the layer-scope cascade, so leaving it for its parent scope
       // finalizer means it gets hard-killed by the OS instead of receiving
-      // SIGTERM + grace.
+      // SIGTERM + grace. The computer-use helper likewise.
       stopBackend().pipe(
+        Effect.ensuring(computerUse.shutdown),
         Effect.ensuring(rendererHistory.shutdown),
         Effect.ensuring(shutdown.markComplete),
       ),

@@ -1,0 +1,362 @@
+// @effect-diagnostics nodeBuiltinImport:off - Launches a fake helper process on a Unix socket.
+// @effect-diagnostics globalTimers:off - Drives a fake clock and flushes Node's event loop.
+import { afterEach, describe, expect, it } from "@effect/vitest";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeNet from "node:net";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
+
+import type { ComputerUseHelperStatus } from "@t3tools/contracts";
+
+import { encodeHelperFrame, HelperFrameDecoder } from "./HelperFraming.ts";
+import {
+  HelperSupervisor,
+  resolveHelperSocketPath,
+  type HelperChild,
+  type HelperExit,
+  type HelperSupervisorOptions,
+  type SpawnHelper,
+  type SupervisorTimers,
+} from "./HelperSupervisor.ts";
+
+const FAKE_HELPER = NodeURL.fileURLToPath(new URL("./testing/FakeHelper.ts", import.meta.url));
+const dirs: Array<string> = [];
+const supervisors: Array<HelperSupervisor> = [];
+const servers: Array<NodeNet.Server> = [];
+
+afterEach(async () => {
+  await Promise.all(supervisors.splice(0).map((supervisor) => supervisor.stop()));
+  for (const server of servers.splice(0)) server.close();
+  for (const dir of dirs.splice(0)) NodeFS.rmSync(dir, { recursive: true, force: true });
+});
+
+const tempDir = () => {
+  const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "cu-sup-"));
+  dirs.push(dir);
+  return dir;
+};
+
+const installer = () => {
+  const calls = { ensure: 0, verify: 0 };
+  return {
+    calls,
+    installer: {
+      executablePath: "/unused/busyboy-computer-use",
+      ensureInstalled: async () => {
+        calls.ensure += 1;
+        return { path: "/unused", version: "1", executableSha256: "x", copied: false };
+      },
+      verifyInstalled: async () => {
+        calls.verify += 1;
+      },
+    },
+  };
+};
+
+/** Runs FakeHelper.ts with `extraEnv`; records every child so tests can check it is gone. */
+const processSpawner = (extraEnv: Record<string, string> = {}) => {
+  const children: Array<NodeChildProcess.ChildProcess> = [];
+  const spawn: SpawnHelper = (_executable, env) => {
+    const child = NodeChildProcess.spawn(process.execPath, [FAKE_HELPER], {
+      env: { ...process.env, ...env, ...extraEnv },
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+    children.push(child);
+    const exited = new Promise<HelperExit>((resolve) => {
+      child.once("exit", (code, signal) => resolve({ code, signal }));
+    });
+    return { pid: child.pid, kill: (signal) => void child.kill(signal), exited };
+  };
+  return { spawn, children };
+};
+
+const isAlive = (pid: number | undefined) => {
+  if (pid === undefined) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const make = (options: Partial<HelperSupervisorOptions> & { readonly socketDir: string }) => {
+  const statuses: Array<ComputerUseHelperStatus> = [];
+  const supervisor = new HelperSupervisor({
+    installer: installer().installer,
+    socketPath: NodePath.join(options.socketDir, "helper.sock"),
+    clientVersion: "test",
+    supported: true,
+    env: { BUSYBOY_CU_SOCKET_DIR: options.socketDir },
+    onStatus: (status) => statuses.push(status),
+    ...options,
+  });
+  supervisors.push(supervisor);
+  return { supervisor, statuses };
+};
+
+describe("HelperSupervisor with a helper process", () => {
+  it("starts only when first needed and stops the process within two seconds", async () => {
+    const socketDir = tempDir();
+    const { spawn, children } = processSpawner();
+    const { supervisor, statuses } = make({ socketDir, spawn });
+
+    expect(children).toHaveLength(0);
+    expect(supervisor.status).toEqual({ state: "stopped" });
+
+    const client = await supervisor.client();
+    expect(children).toHaveLength(1);
+    expect(await client.request("permissions.status", {})).toMatchObject({
+      accessibility: "not_granted",
+    });
+    expect(await supervisor.client()).toBe(client);
+    expect(children).toHaveLength(1);
+    expect(statuses.map((status) => status.state)).toEqual(["starting", "running"]);
+
+    const pid = children[0]!.pid;
+    const started = performance.now();
+    await supervisor.stop();
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(isAlive(pid)).toBe(false);
+    expect(supervisor.status).toEqual({ state: "stopped" });
+  });
+
+  it("kills a helper that ignores SIGTERM", async () => {
+    const socketDir = tempDir();
+    const { spawn, children } = processSpawner({ FAKE_HELPER_IGNORE_SIGTERM: "1" });
+    const { supervisor } = make({ socketDir, spawn });
+    await supervisor.client();
+    const started = performance.now();
+    await supervisor.stop();
+    expect(performance.now() - started).toBeLessThan(2_500);
+    expect(isAlive(children[0]!.pid)).toBe(false);
+  });
+
+  it("connects to the helper that is already running after exit 66", async () => {
+    const socketDir = tempDir();
+    const socketPath = NodePath.join(socketDir, "helper.sock");
+    const seen: Array<string> = [];
+    const server = NodeNet.createServer((socket) => {
+      const decoder = new HelperFrameDecoder();
+      socket.on("data", (chunk: Buffer) => {
+        for (const raw of decoder.push(chunk)) {
+          const message = raw as { id: number; method: string };
+          seen.push(message.method);
+          const result =
+            message.method === "hello"
+              ? {
+                  protocolVersion: 1,
+                  helperVersion: "existing",
+                  platform: "macos",
+                  capabilities: [],
+                }
+              : { ok: true };
+          socket.write(encodeHelperFrame({ jsonrpc: "2.0", id: message.id, result }));
+        }
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    const { spawn, children } = processSpawner({ FAKE_HELPER_EXIT: "66" });
+    const { supervisor } = make({ socketDir, spawn });
+    const client = await supervisor.client();
+    expect(supervisor.hello?.helperVersion).toBe("existing");
+    expect(await client.request("apps.list", {})).toEqual({ ok: true });
+    const exiting = children[0]!;
+    if (exiting.exitCode === null) await new Promise((resolve) => exiting.once("exit", resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(supervisor.status.state).toBe("running");
+    expect(seen).toEqual(["hello", "apps.list"]);
+  });
+
+  it("reports an unsafe socket directory without retrying", async () => {
+    const socketDir = tempDir();
+    const { spawn, children } = processSpawner({ FAKE_HELPER_EXIT: "64" });
+    const { supervisor } = make({ socketDir, spawn });
+    const failure = { error: { details: { reason: "unsafe_socket_dir" } } };
+    await expect(supervisor.client()).rejects.toMatchObject(failure);
+    await expect(supervisor.client()).rejects.toMatchObject(failure);
+    expect(children).toHaveLength(1);
+    expect(supervisor.status).toMatchObject({ state: "error", reason: "unsafe_socket_dir" });
+  });
+
+  it("re-runs the install check once on a version mismatch, then gives up", async () => {
+    const socketDir = tempDir();
+    const { spawn, children } = processSpawner({ FAKE_HELPER_PROTOCOL: "2" });
+    const fake = installer();
+    const { supervisor } = make({ socketDir, spawn, installer: fake.installer });
+    await expect(supervisor.client()).rejects.toMatchObject({
+      error: { details: { reason: "version_mismatch" } },
+    });
+    expect(fake.calls.ensure).toBe(2);
+    expect(fake.calls.verify).toBe(2);
+    expect(children).toHaveLength(2);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(children.every((child) => !isAlive(child.pid))).toBe(true);
+  });
+
+  it("restarts a helper that crashes while running", async () => {
+    const socketDir = tempDir();
+    const { spawn, children } = processSpawner();
+    const statuses: Array<ComputerUseHelperStatus> = [];
+    const restarted = new Promise<void>((resolve) => {
+      const { supervisor } = make({
+        socketDir,
+        spawn,
+        onStatus: (status) => {
+          statuses.push(status);
+          if (status.state === "running" && children.length === 2) resolve();
+        },
+      });
+      void supervisor.client().then((client) => client.request("test.crash", {}).catch(() => {}));
+    });
+    await restarted;
+    expect(statuses.map((status) => status.state)).toEqual([
+      "starting",
+      "running",
+      "error",
+      "starting",
+      "running",
+    ]);
+    expect(statuses[2]).toMatchObject({ reason: "helper_crashed" });
+  });
+
+  it("does not start on an unsupported platform", async () => {
+    const { spawn, children } = processSpawner();
+    const { supervisor } = make({ socketDir: tempDir(), spawn, supported: false });
+    await expect(supervisor.client()).rejects.toMatchObject({
+      error: { code: "computer_use_unavailable", details: { reason: "unsupported_platform" } },
+    });
+    expect(children).toHaveLength(0);
+  });
+});
+
+class FakeTimers implements SupervisorTimers {
+  private time = 0;
+  private nextId = 0;
+  private readonly queue: Array<{ id: number; at: number; callback: () => void }> = [];
+  now = () => this.time;
+  setTimeout = (callback: () => void, ms: number) => {
+    const id = ++this.nextId;
+    this.queue.push({ id, at: this.time + ms, callback });
+    return id;
+  };
+  clearTimeout = (handle: unknown) => {
+    const index = this.queue.findIndex((entry) => entry.id === handle);
+    if (index >= 0) this.queue.splice(index, 1);
+  };
+  async advance(ms: number) {
+    const end = this.time + ms;
+    for (;;) {
+      await flush();
+      this.queue.sort((a, b) => a.at - b.at || a.id - b.id);
+      const next = this.queue[0];
+      if (!next || next.at > end) break;
+      this.queue.shift();
+      this.time = next.at;
+      next.callback();
+    }
+    this.time = end;
+    await flush();
+  }
+}
+
+const flush = async () => {
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
+};
+
+/** Children that never open a socket: each exits on its own or when killed. */
+const fakeSpawner = (timers: FakeTimers, exitImmediately: boolean) => {
+  const spawnedAt: Array<number> = [];
+  const spawn: SpawnHelper = (): HelperChild => {
+    spawnedAt.push(timers.now());
+    let resolveExit: (exit: HelperExit) => void = () => {};
+    const exited = new Promise<HelperExit>((resolve) => {
+      resolveExit = resolve;
+    });
+    if (exitImmediately) resolveExit({ code: 1, signal: null });
+    return { pid: undefined, kill: (signal) => resolveExit({ code: null, signal }), exited };
+  };
+  return { spawn, spawnedAt };
+};
+
+describe("HelperSupervisor restart policy", () => {
+  const makeFake = (timers: FakeTimers, spawn: SpawnHelper, socketTimeoutMs?: number) =>
+    make({
+      socketDir: "/nonexistent",
+      timers,
+      spawn,
+      checkSocket: async () => "missing",
+      ...(socketTimeoutMs === undefined ? {} : { socketTimeoutMs }),
+    });
+
+  it("backs off 1, 2, 4, 8 s and stops after 5 failures in 2 minutes", async () => {
+    const timers = new FakeTimers();
+    const { spawn, spawnedAt } = fakeSpawner(timers, true);
+    const { supervisor } = makeFake(timers, spawn);
+
+    const first = supervisor.client();
+    first.catch(() => {});
+    await timers.advance(10 * 60_000);
+    await expect(first).rejects.toMatchObject({
+      error: { details: { reason: "helper_start_failed" } },
+    });
+
+    // Each attempt fails at its first 50 ms socket poll, then waits out the backoff.
+    const gaps = spawnedAt.slice(1).map((at, index) => at - spawnedAt[index]! - 50);
+    expect(gaps).toEqual([1_000, 2_000, 4_000, 8_000]);
+    expect(supervisor.status).toMatchObject({ state: "error", reason: "helper_crashed" });
+    await expect(supervisor.client()).rejects.toMatchObject({
+      error: { details: { reason: "helper_crashed" } },
+    });
+    expect(spawnedAt).toHaveLength(5);
+
+    // "Restart helper" clears the cutoff.
+    void supervisor.restart().catch(() => {});
+    await timers.advance(100);
+    expect(spawnedAt).toHaveLength(6);
+  });
+
+  it("waits 30 s once failures are spread out", async () => {
+    const timers = new FakeTimers();
+    const { spawn, spawnedAt } = fakeSpawner(timers, false);
+    // Each attempt gives up after 40 s without a socket, so the window never fills.
+    const { supervisor } = makeFake(timers, spawn, 40_000);
+
+    void supervisor.client().catch(() => {});
+    await timers.advance(6 * 40_000 + 60_000);
+
+    const gaps = spawnedAt.slice(1, 6).map((at, index) => at - spawnedAt[index]!);
+    expect(gaps).toEqual([41_000, 42_000, 44_000, 48_000, 70_000]);
+    expect(supervisor.status.state).not.toBe("stopped");
+    await supervisor.stop();
+  });
+
+  it("does not restart after an intentional stop", async () => {
+    const timers = new FakeTimers();
+    const { spawn, spawnedAt } = fakeSpawner(timers, true);
+    const { supervisor } = makeFake(timers, spawn);
+    const first = supervisor.client().catch(() => {});
+    await timers.advance(100);
+    await first;
+    await supervisor.stop();
+    await timers.advance(60_000);
+    expect(spawnedAt).toHaveLength(1);
+    expect(supervisor.status).toEqual({ state: "stopped" });
+  });
+});
+
+describe("resolveHelperSocketPath", () => {
+  it("falls back to TMPDIR when the default path is too long for a socket", () => {
+    expect(resolveHelperSocketPath({ homeDirectory: "/Users/a", tmpDir: "/tmp", euid: 501 })).toBe(
+      "/Users/a/Library/Application Support/BusyBoy/ComputerUse/run/helper.sock",
+    );
+    const home = `/Users/${"x".repeat(60)}`;
+    expect(resolveHelperSocketPath({ homeDirectory: home, tmpDir: "/tmp/T", euid: 501 })).toBe(
+      "/tmp/T/busyboy-cu-501/helper.sock",
+    );
+  });
+});

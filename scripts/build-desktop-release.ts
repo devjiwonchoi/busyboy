@@ -47,11 +47,26 @@ const FILE_EXCLUSIONS = [
   "!apps/desktop/resources/browser-secret/**/*",
   "!apps/desktop/prod-resources/browser-secret",
   "!apps/desktop/prod-resources/browser-secret/**/*",
+  // Shipped through extraResources only, with its own signature.
+  "!apps/desktop/resources/computer-use",
+  "!apps/desktop/resources/computer-use/**/*",
+  "!apps/desktop/prod-resources/computer-use",
+  "!apps/desktop/prod-resources/computer-use/**/*",
   "!**/node_modules/node-pty/prebuilds/win32-*/**/*",
   "!**/node_modules/node-pty/third_party/conpty/**/*",
 ];
 
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+// Same values as apps/desktop/scripts/build-computer-use.mjs.
+export const COMPUTER_USE_BUNDLE_NAME = "BusyBoy Computer Use.app";
+const COMPUTER_USE_EXECUTABLE = "busyboy-computer-use";
+export const COMPUTER_USE_REQUIREMENT =
+  'anchor apple generic and identifier "dev.jiwon.busyboy.computer-use" and certificate leaf[subject.OU] = "5PA4R2B5FF"';
+const COMPUTER_USE_DEV_CALLERS_MARKER = "BUSYBOY_CU_DEV_CALLERS_ENABLED";
+// electron-builder signs the outer app ad hoc; re-signing the helper that way
+// would drop its Developer ID signature and every TCC grant tied to it.
+export const COMPUTER_USE_SIGN_IGNORE = "computer-use/BusyBoy Computer Use\\.app";
 
 const repoRoot = NodePath.resolve(import.meta.dirname, "..");
 
@@ -177,7 +192,43 @@ function stageResourceMonitor(resourcesDir: string) {
   NodeFS.chmodSync(target, 0o755);
 }
 
-function createBuilderConfig(version: string) {
+function stageComputerUse(resourcesDir: string) {
+  run(process.execPath, [
+    NodePath.join(repoRoot, "apps/desktop/scripts/build-computer-use.mjs"),
+    "--release",
+    "--output",
+    NodePath.join(resourcesDir, "computer-use"),
+  ]);
+  checkComputerUseHelper(NodePath.join(resourcesDir, "computer-use", COMPUTER_USE_BUNDLE_NAME));
+}
+
+/**
+ * Release gate for a staged or packaged helper: a Developer ID signature that
+ * meets BusyBoy's requirement, and no dev-callers path compiled in.
+ */
+export function checkComputerUseHelper(
+  bundle: string,
+  verify: (bundle: string) => void = (path) =>
+    run("codesign", ["--verify", "--strict", "--deep", `-R=${COMPUTER_USE_REQUIREMENT}`, path]),
+) {
+  const executable = NodePath.join(bundle, "Contents/MacOS", COMPUTER_USE_EXECUTABLE);
+  if (!NodeFS.existsSync(executable)) throw new Error(`Missing computer-use helper at ${bundle}.`);
+  if (NodeFS.readFileSync(executable).includes(COMPUTER_USE_DEV_CALLERS_MARKER)) {
+    throw new Error(`The computer-use helper at ${bundle} was built with dev-callers.`);
+  }
+  verify(bundle);
+}
+
+/** electron-builder's `.app` output: `dist/mac-arm64/BusyBoy.app`, or `dist/mac` for x64. */
+function findPackagedApp(distDir: string): string {
+  for (const entry of NodeFS.readdirSync(distDir)) {
+    const app = NodePath.join(distDir, entry, `${PRODUCT_NAME}.app`);
+    if (entry.startsWith("mac") && NodeFS.existsSync(app)) return app;
+  }
+  throw new Error(`electron-builder produced no ${PRODUCT_NAME}.app in ${distDir}.`);
+}
+
+export function createBuilderConfig(version: string) {
   return {
     appId: APP_ID,
     productName: PRODUCT_NAME,
@@ -187,6 +238,7 @@ function createBuilderConfig(version: string) {
     directories: { buildResources: "apps/desktop/resources" },
     extraResources: [
       { from: "apps/desktop/prod-resources/resource-monitor", to: "resource-monitor" },
+      { from: "apps/desktop/prod-resources/computer-use", to: "computer-use" },
     ],
     // Writes resources/app-update.yml, which turns the in-app updater on.
     publish: [{ provider: "github", ...UPDATE_REPOSITORY, releaseType: "release" }],
@@ -196,6 +248,8 @@ function createBuilderConfig(version: string) {
       target: ["dmg", "zip"],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      // The helper is signed by its own build; keep electron-builder from re-signing it.
+      signIgnore: [COMPUTER_USE_SIGN_IGNORE],
       extendInfo: {
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSScreenCaptureUsageDescription:
@@ -278,6 +332,7 @@ export function buildDesktopRelease(options: {
     const resourcesDir = NodePath.join(stageApp, "apps/desktop/resources");
     stageIcons(resourcesDir);
     stageResourceMonitor(resourcesDir);
+    stageComputerUse(resourcesDir);
     // electron-builder drops buildResources from the packaged app; extraResources read this copy.
     NodeFS.cpSync(resourcesDir, NodePath.join(stageApp, "apps/desktop/prod-resources"), {
       recursive: true,
@@ -355,6 +410,14 @@ export function buildDesktopRelease(options: {
       // electron-builder puts x64 apps in mac/ and other arches in mac-<arch>/.
       NodePath.join(distDir, arch === "x64" ? "mac" : `mac-${arch}`, `${PRODUCT_NAME}.app`),
     ]);
+    // The DMG and ZIP are made from this app, so its helper is the one users get.
+    checkComputerUseHelper(
+      NodePath.join(
+        findPackagedApp(distDir),
+        "Contents/Resources/computer-use",
+        COMPUTER_USE_BUNDLE_NAME,
+      ),
+    );
 
     NodeFS.mkdirSync(options.outputDir, { recursive: true });
     const artifacts: Array<string> = [];

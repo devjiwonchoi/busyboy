@@ -364,6 +364,8 @@ export const resolveServerConfig = (
     const desktopTelemetryControlFd = bootstrap?.desktopTelemetryControlFd;
     const desktopBrowserFd = bootstrap?.desktopBrowserFd;
     const desktopBrowserControlFd = bootstrap?.desktopBrowserControlFd;
+    const desktopComputerUseFd = bootstrap?.desktopComputerUseFd;
+    const desktopComputerUseControlFd = bootstrap?.desktopComputerUseControlFd;
     const resourceMonitorPath = bootstrap?.resourceMonitorPath;
     const autoBootstrapProjectFromCwd = Option.getOrElse(
       resolveOptionPrecedence(
@@ -471,6 +473,8 @@ export const resolveServerConfig = (
       desktopTelemetryControlFd,
       desktopBrowserFd,
       desktopBrowserControlFd,
+      desktopComputerUseFd,
+      desktopComputerUseControlFd,
       resourceMonitorPath,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
