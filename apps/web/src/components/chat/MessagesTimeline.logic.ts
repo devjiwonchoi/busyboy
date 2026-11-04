@@ -2362,3 +2362,31 @@ export function derivePmAuthorHeaderMessageIds(
   }
   return ids;
 }
+
+export interface PmTimelineValues {
+  /** Persona name and avatar; the author header only changes when this does. */
+  readonly personaKey: string;
+  readonly authorHeaderMessageIds: ReadonlySet<MessageId>;
+  readonly sitrepReplies: ReadonlyMap<MessageId, PmSitrepReply>;
+}
+
+/**
+ * Returns `previous` when `next` holds the same content. The PM timeline
+ * context feeds every row, and stream events rebuild these values each time,
+ * so reusing equal ones keeps rows from re-rendering per event.
+ */
+export function reusePmTimelineValues<T extends PmTimelineValues>(
+  previous: T | null,
+  next: PmTimelineValues,
+): T | null {
+  if (previous === null || previous.personaKey !== next.personaKey) return null;
+  const { authorHeaderMessageIds: ids, sitrepReplies: replies } = previous;
+  if (ids.size !== next.authorHeaderMessageIds.size) return null;
+  for (const id of next.authorHeaderMessageIds) if (!ids.has(id)) return null;
+  if (replies.size !== next.sitrepReplies.size) return null;
+  for (const [id, reply] of next.sitrepReplies) {
+    const prior = replies.get(id);
+    if (prior === undefined || prior.since !== reply.since) return null;
+  }
+  return previous;
+}

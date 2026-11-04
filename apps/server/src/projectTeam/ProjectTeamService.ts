@@ -90,7 +90,7 @@ import {
   orTeamError,
   teamError,
 } from "./common.ts";
-import { resolvePersona } from "./persona.ts";
+import { isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
@@ -310,6 +310,35 @@ function mergePersona(base: ProjectManagerPersona, patch: PersonaPatch): Project
   };
 }
 
+/**
+ * The "[Persona] …" line telling a live PM what the user changed, or null when the name,
+ * avatar and voice are unchanged.
+ */
+export function personaChangeText(
+  before: ProjectManagerPersona,
+  after: ProjectManagerPersona,
+): string | null {
+  const parts: Array<string> = [];
+  if (after.name !== before.name) parts.push(`Your name is now ${after.name}.`);
+  if (JSON.stringify(after.avatar) !== JSON.stringify(before.avatar)) {
+    parts.push(
+      after.avatar.kind === "emoji"
+        ? `Your avatar is now ${after.avatar.emoji}.`
+        : "Your avatar changed.",
+    );
+  }
+  const voiceBefore = voiceText(before.voice, before.voiceCustom);
+  const voiceAfter = voiceText(after.voice, after.voiceCustom);
+  if (after.voice !== before.voice || voiceAfter !== voiceBefore) {
+    parts.push(
+      isUserWordsVoice(after.voice, after.voiceCustom)
+        ? `Voice (the user's words): "${voiceAfter}".`
+        : `Voice: ${voiceAfter}`,
+    );
+  }
+  return parts.length === 0 ? null : `[Persona] ${parts.join(" ")} Use this from now on.`;
+}
+
 export class ProjectTeamService extends Context.Service<
   ProjectTeamService,
   {
@@ -506,19 +535,28 @@ const make = Effect.gen(function* () {
 
   /** Stores the resolved persona so a default name stays put even if the defaults change. */
   const persistPersona = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
-    Effect.gen(function* () {
-      if (manager.settings.persona !== undefined) return manager;
-      const settings = {
-        ...manager.settings,
-        persona: resolvePersona(manager.projectId, manager.settings),
-      };
-      const updated = yield* repository.updateManagerSettings({
-        projectId: manager.projectId,
-        settings,
-        now: yield* nowIso,
-      });
-      return Option.getOrElse(updated, () => ({ ...manager, settings }));
-    });
+    manager.settings.persona !== undefined
+      ? Effect.succeed(manager)
+      : sitreps.withSettingsLock(
+          manager.projectId,
+          Effect.gen(function* () {
+            const current = Option.getOrElse(
+              yield* repository.getManager(manager.projectId),
+              () => manager,
+            );
+            if (current.settings.persona !== undefined) return current;
+            const settings = {
+              ...current.settings,
+              persona: resolvePersona(current.projectId, current.settings),
+            };
+            const updated = yield* repository.updateManagerSettings({
+              projectId: current.projectId,
+              settings,
+              now: yield* nowIso,
+            });
+            return Option.getOrElse(updated, () => ({ ...current, settings }));
+          }),
+        );
 
   const renameManagerThread = (threadId: ThreadId, title: string) =>
     Effect.gen(function* () {
@@ -600,12 +638,22 @@ const make = Effect.gen(function* () {
           createdBy: "system",
           creationSource: "server",
         });
-        const upserted = yield* repository.upsertManager({
+        // A replaced PM keeps the stored settings: persona, on/off, interval and the rest.
+        const upserted = yield* sitreps.withSettingsLock(
           projectId,
-          threadId,
-          settings: { ...DEFAULT_PROJECT_TEAM_SETTINGS, persona },
-          now: yield* nowIso,
-        });
+          Effect.gen(function* () {
+            const stored = yield* repository.getManager(projectId);
+            const kept = Option.isSome(stored)
+              ? stored.value.settings
+              : DEFAULT_PROJECT_TEAM_SETTINGS;
+            return yield* repository.upsertManager({
+              projectId,
+              threadId,
+              settings: { ...kept, persona: resolvePersona(projectId, kept) },
+              now: yield* nowIso,
+            });
+          }),
+        );
         const manager = yield* persistPersona(upserted);
         // A sitrep the old PM thread was writing will never be posted.
         if (Option.isSome(existing)) yield* sitreps.abandonPending(projectId);
@@ -937,37 +985,61 @@ const make = Effect.gen(function* () {
       ) {
         return yield* teamError("The settings update has no fields.", projectId);
       }
-      const manager = yield* requireManager(projectId);
-      const now = yield* nowIso;
-      const previousPersona = resolvePersona(projectId, manager.settings);
-      const persona = hasPersonaChange(personaPatch)
-        ? mergePersona(previousPersona, personaPatch)
-        : previousPersona;
-      const { quietHours: _previousQuietHours, ...current } = manager.settings;
-      const quietHours =
-        patch.quietHours === undefined
-          ? manager.settings.quietHours
-          : (patch.quietHours ?? undefined);
-      const settings: ProjectTeamSettings = {
-        ...current,
-        ...(patch.maxConcurrentTasks === undefined
-          ? {}
-          : { maxConcurrentTasks: patch.maxConcurrentTasks }),
-        ...(patch.sitrepIntervalMinutes === undefined
-          ? {}
-          : { sitrepIntervalMinutes: patch.sitrepIntervalMinutes }),
-        ...(patch.sitrepNotify === undefined ? {} : { sitrepNotify: patch.sitrepNotify }),
-        ...(quietHours === undefined ? {} : { quietHours }),
-        persona,
-        ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
-        // Only setting the interval by hand stops it adapting; other fields keep the pin as is.
-        ...(patch.sitrepIntervalMinutes === undefined
-          ? {}
-          : { pinnedUntil: isoFromMillis(isoMillis(now) + SETTINGS_PIN_MS) }),
-      };
-      yield* repository.updateManagerSettings({ projectId, settings, now });
+      const { manager, settings, now, previousPersona, persona } = yield* sitreps.withSettingsLock(
+        projectId,
+        Effect.gen(function* () {
+          const manager = yield* requireManager(projectId);
+          const now = yield* nowIso;
+          const previousPersona = resolvePersona(projectId, manager.settings);
+          const persona = hasPersonaChange(personaPatch)
+            ? mergePersona(previousPersona, personaPatch)
+            : previousPersona;
+          const { quietHours: _previousQuietHours, ...current } = manager.settings;
+          const quietHours =
+            patch.quietHours === undefined
+              ? manager.settings.quietHours
+              : (patch.quietHours ?? undefined);
+          const settings: ProjectTeamSettings = {
+            ...current,
+            ...(patch.maxConcurrentTasks === undefined
+              ? {}
+              : { maxConcurrentTasks: patch.maxConcurrentTasks }),
+            ...(patch.sitrepIntervalMinutes === undefined
+              ? {}
+              : { sitrepIntervalMinutes: patch.sitrepIntervalMinutes }),
+            ...(patch.sitrepNotify === undefined ? {} : { sitrepNotify: patch.sitrepNotify }),
+            ...(quietHours === undefined ? {} : { quietHours }),
+            persona,
+            ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
+            // Only setting the interval by hand stops it adapting; other fields keep the pin as is.
+            ...(patch.sitrepIntervalMinutes === undefined
+              ? {}
+              : { pinnedUntil: isoFromMillis(isoMillis(now) + SETTINGS_PIN_MS) }),
+          };
+          yield* repository.updateManagerSettings({ projectId, settings, now });
+          return { manager, settings, now, previousPersona, persona };
+        }),
+      );
       if (persona.name !== previousPersona.name) {
         yield* renameManagerThread(manager.threadId, persona.name);
+      }
+      // The system prompt only refreshes when the PM's session reopens, so a user's change
+      // reaches the live PM as a message. A PM that changed itself already knows.
+      const personaNews =
+        actorThreadId === null ? personaChangeText(previousPersona, persona) : null;
+      if (personaNews !== null && settings.enabled) {
+        const key = `project-team:persona:${projectId}:${now}`;
+        yield* threads.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make(key),
+          threadId: manager.threadId,
+          messageId: MessageId.make(key),
+          text: personaNews,
+          attachments: [],
+          dispatchMode: { type: "queue_after_active" },
+          createdBy: "system",
+          creationSource: "server",
+        });
       }
       if (settings.sitrepIntervalMinutes !== manager.settings.sitrepIntervalMinutes) {
         yield* repository.appendTaskEvent({
@@ -1005,7 +1077,6 @@ const make = Effect.gen(function* () {
                   ? undefined
                   : { kind: "emoji", emoji: input.avatarEmoji },
               voice: input.voice,
-              voiceCustom: input.voiceCustom,
             },
           },
           callerThreadId,
@@ -1114,6 +1185,14 @@ const make = Effect.gen(function* () {
       const isStalled = (task: ProjectTask) =>
         task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage);
       const live = tasks.filter((task) => LIVE_TASK_STAGES.has(task.stage));
+      const askingTaskIds = new Set(openAttention.map((item) => item.taskId));
+      // Running means a lead is working: not in review, not stalled, not waiting on the user.
+      const running = tasks.filter(
+        (task) =>
+          (SitrepScheduler.ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage) &&
+          !isStalled(task) &&
+          !askingTaskIds.has(task.id),
+      );
       // Mirrors SitrepScheduler: the next interval sitrep is due one interval after the
       // later of the window start and the latest attempt.
       const nextSitrepAt = manager.settings.enabled
@@ -1126,8 +1205,9 @@ const make = Effect.gen(function* () {
           )
         : null;
       return {
-        running: live.filter((task) => !isStalled(task)).length,
-        waitingOnUser: new Set(openAttention.map((item) => item.taskId)).size,
+        running: running.length,
+        // Same unit as the summary's openCount: open questions, not tasks.
+        waitingOnUser: openAttention.length,
         stalled: live.filter(isStalled).length,
         inbox: tasks.filter((task) => task.stage === "inbox").length,
         nextSitrepAt,

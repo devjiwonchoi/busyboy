@@ -111,7 +111,10 @@ vi.mock(import("@effect/atom-react"), async (original) => ({
   ...(await original()),
   useAtomValue: (() => ({
     status: state.live ? "live" : "disconnected",
-    snapshot: Option.some({ threads: mockThreads() }),
+    snapshot: Option.some({
+      threads: mockThreads(),
+      projects: [{ id: "project-1", title: "Busyboy" }],
+    }),
   })) as never,
 }));
 vi.mock(import("@tanstack/react-router"), async (original) => ({
@@ -191,8 +194,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function setProjectTeam(latestBatchId: string | null, latestSitrepId: string | null) {
+function setProjectTeam(
+  latestBatchId: string | null,
+  latestSitrepId: string | null,
+  enabled = true,
+) {
   const summary = makeProjectManagerSummaryFixture({
+    enabled,
     openCount: 2,
     latestBatchId: latestBatchId as never,
     latestSitrepId: latestSitrepId as never,
@@ -213,17 +221,33 @@ describe("thread notifications", () => {
     setProjectTeam("batch-1", "sitrep-1");
     await render();
     expect(state.notification).toHaveBeenCalledTimes(2);
-    expect(state.notification).toHaveBeenNthCalledWith(1, "Remy · Needs you: 2", {
-      body: "Project",
+    expect(state.notification).toHaveBeenNthCalledWith(1, "Remy (Busyboy) · Needs you: 2", {
+      body: "Busyboy",
       tag: "env-1:pm-thread:attention",
       silent: true,
     });
-    expect(state.notification).toHaveBeenNthCalledWith(2, "Remy · Sitrep", {
-      body: "Project",
+    expect(state.notification).toHaveBeenNthCalledWith(2, "Remy (Busyboy) · Sitrep", {
+      body: "Busyboy",
       tag: "env-1:pm-thread:sitrep",
       silent: true,
     });
     expect(state.sent[0]!.close).not.toHaveBeenCalled();
+  });
+
+  it("still alerts Needs-you but not sitreps while the project manager is off", async () => {
+    state.focused = false;
+    setProjectTeam(null, null, false);
+    await render();
+    setProjectTeam("batch-1", null, false);
+    await render();
+    setProjectTeam("batch-1", "sitrep-1", false);
+    await render();
+    expect(state.notification).toHaveBeenCalledTimes(1);
+    expect(state.notification).toHaveBeenCalledWith("Remy (Busyboy) · Needs you: 2", {
+      body: "Busyboy",
+      tag: "env-1:pm-thread:attention",
+      silent: true,
+    });
   });
 
   it.each([true, false])("keeps subagents silent with focus=%s", async (focused) => {

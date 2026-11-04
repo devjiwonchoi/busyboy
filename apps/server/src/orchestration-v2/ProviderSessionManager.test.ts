@@ -2013,7 +2013,11 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
     assert.equal(pm?.threadId, pmThreadId);
     assert.equal(
       pm?.teamInstructions,
-      projectManagerInstructions({ name: "Juno", voice: "Talk like a ship's captain." }),
+      projectManagerInstructions({
+        name: "Juno",
+        voice: "Talk like a ship's captain.",
+        voiceIsUserWords: true,
+      }),
     );
     assert.include(pm?.teamInstructions ?? "", PROJECT_MANAGER_INSTRUCTIONS);
     assert.include(pm?.teamInstructions ?? "", "Your name is Juno.");

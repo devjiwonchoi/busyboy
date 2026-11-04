@@ -304,6 +304,45 @@ describe("project manager sidebar sections", () => {
     ...patch,
   });
 
+  it("keeps a disabled or second manager in a section as an ordinary row", () => {
+    const entries = [
+      { environmentId: "env-1", summary: summary() },
+      // The same repo in another environment, grouped into the same section.
+      {
+        environmentId: "env-2",
+        summary: summary({ pmThreadId: "pm-thread-2" as never }),
+      },
+      {
+        environmentId: "env-1",
+        summary: summary({
+          projectId: "project-2" as never,
+          pmThreadId: "pm-off" as never,
+          enabled: false,
+        }),
+      },
+    ];
+    const managers = selectSidebarProjectManagers(entries, (env, project) =>
+      project === "project-1" ? "repo:project-1" : `${env}:${project}`,
+    );
+    const headingKeys = new Set(
+      [...managers.values()].map((entry) => `${entry.environmentId}:${entry.summary.pmThreadId}`),
+    );
+    const threads = [
+      shell("pm-thread"),
+      shell("pm-thread-2", { environmentId: "env-2" }),
+      shell("pm-off", { projectId: "project-2" }),
+      shell("user-thread"),
+    ];
+    const visible = filterSidebarV2VisibleThreads(
+      threads as never[],
+      null,
+      (thread: { environmentId: string; id: string }) =>
+        headingKeys.has(`${thread.environmentId}:${thread.id}`),
+    ) as { id: string }[];
+    expect([...managers.keys()]).toEqual(["repo:project-1"]);
+    expect(visible.map((thread) => thread.id)).toEqual(["pm-thread-2", "pm-off", "user-thread"]);
+  });
+
   it("never lists the PM thread as a row", () => {
     const threads = [shell("pm-thread"), shell("user-thread")];
     const visible = filterSidebarV2VisibleThreads(
@@ -365,7 +404,7 @@ describe("project manager sidebar sections", () => {
     expect(orderSidebarProjectSections(grouped, ["c", "b", "a"])).toEqual(["a", "b", "c"]);
   });
 
-  it("offers no archive for a PM thread", () => {
+  it("offers no archive or delete for a PM thread", () => {
     const base = {
       canOperate: true,
       branch: null,
@@ -376,16 +415,19 @@ describe("project manager sidebar sections", () => {
       supports: { pinning: true, titleRegeneration: true },
     };
     const ids = (items: ReadonlyArray<{ id: string }>) => items.map((item) => item.id);
-    expect(ids(buildThreadActionMenuItems(base))).toContain("archive");
-    expect(ids(buildThreadActionMenuItems({ ...base, isProjectManager: true }))).not.toContain(
-      "archive",
+    expect(ids(buildThreadActionMenuItems(base))).toEqual(
+      expect.arrayContaining(["archive", "delete"]),
     );
+    const pmItems = ids(buildThreadActionMenuItems({ ...base, isProjectManager: true }));
+    expect(pmItems).not.toContain("archive");
+    expect(pmItems).not.toContain("delete");
     const bulk = buildMultiSelectThreadContextMenuItems({
       count: 2,
       hasRunningThread: false,
       hasProjectManagerThread: true,
     });
     expect(bulk.find((item) => item.id === "archive")?.disabled).toBe(true);
+    expect(bulk.find((item) => item.id === "delete")?.disabled).toBe(true);
   });
 });
 
@@ -408,7 +450,7 @@ describe("project manager notifications", () => {
     setTeam(summary({ openCount: 2, latestBatchId: "batch-2" as never }));
     await render();
     await render();
-    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy · Needs you: 2", {
+    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy (Busy) · Needs you: 2", {
       body: "Busy",
       tag: "env-1:pm-thread:attention",
       silent: true,
@@ -425,7 +467,7 @@ describe("project manager notifications", () => {
     await render();
     setTeam(summary({ latestSitrepId: "sitrep-1" as never, unreadSitrepCount: 1 }));
     await render();
-    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy · Sitrep", {
+    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy (Busy) · Sitrep", {
       body: "Busy",
       tag: "env-1:pm-thread:sitrep",
       silent: true,
@@ -433,12 +475,25 @@ describe("project manager notifications", () => {
     expect(state.sound).not.toHaveBeenCalled();
   });
 
-  it("stays silent while the project manager is off", async () => {
+  it("still alerts Needs-you but skips sitreps while the project manager is off", async () => {
     setTeam(summary({ enabled: false }));
     await render();
     setTeam(summary({ enabled: false, openCount: 1, latestBatchId: "batch-1" as never }));
     await render();
-    expect(state.notification).not.toHaveBeenCalled();
+    setTeam(
+      summary({
+        enabled: false,
+        openCount: 1,
+        latestBatchId: "batch-1" as never,
+        latestSitrepId: "sitrep-1" as never,
+      }),
+    );
+    await render();
+    expect(state.notification).toHaveBeenCalledExactlyOnceWith("Remy (Busy) · Needs you: 1", {
+      body: "Busy",
+      tag: "env-1:pm-thread:attention",
+      silent: true,
+    });
   });
 
   it("skips the sitrep notification when sitrep notifications are off", async () => {

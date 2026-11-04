@@ -49,7 +49,11 @@ describe("turnNeedingCompaction", () => {
   });
 });
 
-function runCompleted(threadId: ThreadId, ordinal = 1): OrchestrationV2DomainEvent {
+function runCompleted(
+  threadId: ThreadId,
+  ordinal = 1,
+  ended: { readonly status?: "completed" | "failed"; readonly userMessageId?: string } = {},
+): OrchestrationV2DomainEvent {
   const at = DateTime.makeUnsafe("2026-11-04T00:05:00.000Z");
   return {
     id: EventId.make(`event-${threadId}-${ordinal}`),
@@ -63,10 +67,10 @@ function runCompleted(threadId: ThreadId, ordinal = 1): OrchestrationV2DomainEve
       providerInstanceId: ProviderInstanceId.make("codex"),
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
       providerThreadId: null,
-      userMessageId: MessageId.make(`message-${threadId}-${ordinal}`),
+      userMessageId: MessageId.make(ended.userMessageId ?? `message-${threadId}-${ordinal}`),
       rootNodeId: null,
       activeAttemptId: null,
-      status: "completed",
+      status: ended.status ?? "completed",
       requestedAt: at,
       startedAt: at,
       completedAt: at,
@@ -143,6 +147,45 @@ describe("ContextCare", () => {
         yield* team.updateSettings({ projectId: PROJECT_ID, enabled: false });
         yield* care.handle(runCompleted(pm));
         assert.strictEqual((yield* compactions(harness)).length, 0);
+      }),
+    ),
+  );
+
+  it.effect("stops compacting a PM after a compaction run fails", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const care = yield* ContextCare;
+        const pm = yield* setUpManager;
+        const thread = harness.threads.get(pm)!;
+        thread.providerTurns = [turn("turn-1", 160_000)];
+        yield* care.handle(runCompleted(pm));
+        const [compact] = yield* compactions(harness);
+        assert.strictEqual(compact?.type, "message.dispatch");
+        if (compact?.type !== "message.dispatch") return;
+
+        // The provider cannot compact, so the "/compact" run fails.
+        yield* care.handle(
+          runCompleted(pm, 2, { status: "failed", userMessageId: compact.messageId }),
+        );
+        // Later full turns do not queue another compaction.
+        thread.providerTurns = [turn("turn-1", 160_000), turn("turn-3", 170_000)];
+        yield* care.handle(runCompleted(pm, 3));
+        thread.providerTurns = [...thread.providerTurns, turn("turn-4", 180_000)];
+        yield* care.handle(runCompleted(pm, 4));
+        assert.strictEqual((yield* compactions(harness)).length, 1);
+      }),
+    ),
+  );
+
+  it.effect("keeps compacting after an ordinary PM run fails", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const care = yield* ContextCare;
+        const pm = yield* setUpManager;
+        harness.threads.get(pm)!.providerTurns = [turn("turn-1", 160_000)];
+        yield* care.handle(runCompleted(pm, 1, { status: "failed" }));
+        yield* care.handle(runCompleted(pm, 2));
+        assert.strictEqual((yield* compactions(harness)).length, 1);
       }),
     ),
   );

@@ -6,8 +6,10 @@ import {
   type ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -15,6 +17,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { defaultPersona, defaultPersonaName } from "./persona.ts";
+import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
@@ -425,14 +428,12 @@ describe("ProjectTeamService", () => {
         const fromPm = yield* team.updateSettingsAsManager(pm, {
           name: "Otto",
           avatarEmoji: "🐙",
-          voice: "custom",
-          voiceCustom: "Pirate talk.",
+          voice: "chatty",
         });
         assert.deepStrictEqual(fromPm.settings.persona, {
           name: "Otto",
           avatar: { kind: "emoji", emoji: "🐙" },
-          voice: "custom",
-          voiceCustom: "Pirate talk.",
+          voice: "chatty",
         });
         assert.isFalse(fromPm.settings.enabled);
         assert.strictEqual(fromPm.settings.pinnedUntil, undefined);
@@ -442,6 +443,96 @@ describe("ProjectTeamService", () => {
         assert.strictEqual(snapshot.projects[0]?.persona.name, "Otto");
         assert.isFalse(snapshot.projects[0]?.enabled);
         assert.isNull(snapshot.projects[0]?.presence.nextSitrepAt);
+      }),
+    ),
+  );
+
+  it.effect(
+    "tells a live PM once when the user changes its persona, not when it changes itself",
+    () =>
+      withTeam((harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const pm = yield* setUpManager;
+          const personaMessages = Effect.map(harness.messagesTo(pm), (texts) =>
+            texts.filter((text) => text.startsWith("[Persona]")),
+          );
+
+          yield* team.updateSettingsAsManager(pm, { name: "Moss", voice: "chatty" });
+          assert.deepStrictEqual(yield* personaMessages, []);
+
+          yield* team.updateSettings({ projectId: PROJECT_ID, persona: { name: "Ada" } });
+          assert.deepStrictEqual(yield* personaMessages, [
+            "[Persona] Your name is now Ada. Use this from now on.",
+          ]);
+          const [command] = (yield* Ref.get(harness.dispatched)).filter(
+            (entry) => entry.type === "message.dispatch",
+          );
+          assert.isTrue(command?.commandId.startsWith("project-team:persona:"));
+          if (command?.type === "message.dispatch") {
+            assert.deepStrictEqual(command.dispatchMode, { type: "queue_after_active" });
+            assert.strictEqual(command.createdBy, "system");
+            assert.strictEqual(command.creationSource, "server");
+          }
+
+          yield* TestClock.adjust("1 minute");
+          yield* team.updateSettings({
+            projectId: PROJECT_ID,
+            persona: { voice: "custom", voiceCustom: "Like a\nship's captain." },
+          });
+          assert.strictEqual(
+            (yield* personaMessages)[1],
+            `[Persona] Voice (the user's words): "Like a ship's captain.". Use this from now on.`,
+          );
+
+          // Other settings, an unchanged persona, and a turned-off PM send nothing.
+          yield* TestClock.adjust("1 minute");
+          yield* team.updateSettings({ projectId: PROJECT_ID, sitrepNotify: false });
+          yield* team.updateSettings({ projectId: PROJECT_ID, persona: { name: "Ada" } });
+          yield* team.updateSettings({ projectId: PROJECT_ID, enabled: false });
+          yield* team.updateSettings({ projectId: PROJECT_ID, persona: { name: "Bo" } });
+          assert.strictEqual((yield* personaMessages).length, 2);
+        }),
+      ),
+  );
+
+  it.effect("waits for another settings write before reading the settings", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const sitreps = yield* SitrepScheduler.SitrepScheduler;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        yield* setUpManager;
+        const holding = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        // Another writer, e.g. the adaptive sitrep interval, holds the lock mid-write.
+        const other = yield* sitreps
+          .withSettingsLock(
+            PROJECT_ID,
+            Effect.gen(function* () {
+              const manager = Option.getOrThrow(yield* repository.getManager(PROJECT_ID));
+              yield* Deferred.succeed(holding, undefined);
+              yield* Deferred.await(release);
+              yield* repository.updateManagerSettings({
+                projectId: PROJECT_ID,
+                settings: { ...manager.settings, sitrepNotify: false },
+                now: "2026-11-04T00:00:00.000Z",
+              });
+            }),
+          )
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(holding);
+        const write = yield* team
+          .updateSettings({ projectId: PROJECT_ID, sitrepIntervalMinutes: 30 })
+          .pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        assert.isUndefined(write.pollUnsafe());
+
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(other);
+        const { settings } = yield* Fiber.join(write);
+        assert.isFalse(settings.sitrepNotify);
+        assert.strictEqual(settings.sitrepIntervalMinutes, 30);
       }),
     ),
   );
@@ -463,28 +554,40 @@ describe("ProjectTeamService", () => {
 
         const first = yield* startLead(pm, "First", harness.delegate);
         const second = yield* startLead(pm, "Second", harness.delegate);
-        yield* startLead(pm, "Third", harness.delegate);
+        const third = yield* startLead(pm, "Third", harness.delegate);
+        const reviewed = yield* startLead(pm, "Reviewed", harness.delegate);
+        yield* team.updateTask(reviewed.leadThreadId, {
+          stage: "in_review",
+          prUrl: "https://github.com/acme/repo/pull/1",
+        });
         yield* team.createTask(pm, { title: "Later", request: "Later." });
         yield* team.recordOutcome({ task: second.task, outcome: "stalled" });
         yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which way?" });
+        yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which color?" });
         yield* TestClock.adjust("1 minute");
         yield* team.nudgeTask(pm, { taskId: second.task.id });
 
         const presence = (yield* team.attentionSnapshot).projects[0]!.presence;
-        assert.strictEqual(presence.running, 2);
+        // Only #3 is running: #1 waits on the user, #2 stalled, #4 is in review.
+        assert.strictEqual(presence.running, 1);
         assert.strictEqual(presence.stalled, 1);
         assert.strictEqual(presence.inbox, 1);
-        assert.strictEqual(presence.waitingOnUser, 1);
+        // Counts open questions, like openCount.
+        assert.strictEqual(presence.waitingOnUser, 2);
+        assert.strictEqual(
+          presence.waitingOnUser,
+          (yield* team.attentionSnapshot).projects[0]!.openCount,
+        );
         assert.deepStrictEqual(presence.lastAction, {
           text: `nudged #${second.task.number}`,
           at: "2026-11-04T00:01:00.000Z",
         });
 
         yield* TestClock.adjust("1 minute");
-        yield* team.updateTask(pm, { taskId: first.task.id, stage: "cancelled" });
+        yield* team.updateTask(pm, { taskId: third.task.id, stage: "cancelled" });
         const after = (yield* team.attentionSnapshot).projects[0]!.presence;
-        assert.strictEqual(after.lastAction?.text, `cancelled #${first.task.number}`);
-        assert.strictEqual(after.running, 1);
+        assert.strictEqual(after.lastAction?.text, `cancelled #${third.task.number}`);
+        assert.strictEqual(after.running, 0);
       }),
     ),
   );

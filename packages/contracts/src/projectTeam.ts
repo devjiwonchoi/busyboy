@@ -444,11 +444,12 @@ export const ProjectTeamSettingsUpdateInput = Schema.Struct({
       description: "A single emoji to use as your avatar.",
     }),
   ),
-  voice: Schema.optional(ProjectManagerVoice).annotate({
+  // Only the user can write a custom voice, through the client; it goes into the PM's
+  // system prompt.
+  voice: Schema.optional(Schema.Literals(["chill", "dry", "chatty"])).annotate({
     description:
-      "chill: relaxed and brief. dry: terse and matter-of-fact. chatty: warm and talkative. custom: follow voiceCustom.",
+      "chill: relaxed and brief. dry: terse and matter-of-fact. chatty: warm and talkative.",
   }),
-  voiceCustom: Schema.optional(ProjectManagerVoiceCustom),
 }).check(
   Schema.makeFilter((input) =>
     input.maxConcurrentTasks !== undefined ||
@@ -457,8 +458,7 @@ export const ProjectTeamSettingsUpdateInput = Schema.Struct({
     input.quietHours !== undefined ||
     input.name !== undefined ||
     input.avatarEmoji !== undefined ||
-    input.voice !== undefined ||
-    input.voiceCustom !== undefined
+    input.voice !== undefined
       ? true
       : "team_settings_update needs at least one setting.",
   ),

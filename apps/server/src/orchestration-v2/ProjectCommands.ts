@@ -16,6 +16,14 @@ import * as Schema from "effect/Schema";
 import type { UnsequencedProjectEvent } from "../persistence/OrchestrationEventStore.ts";
 import type { ProjectRow } from "./ProjectStore.ts";
 
+/** The command id that deletes one of a project's threads while deleting the project. */
+export const projectThreadDeleteCommandId = (projectCommandId: string, threadId: string): string =>
+  `${projectCommandId}:delete-thread:${threadId}`;
+
+/** True when a thread deletion is part of deleting its project. */
+export const isProjectThreadDeleteCommandId = (commandId: string, threadId: string): boolean =>
+  commandId.endsWith(`:delete-thread:${threadId}`);
+
 export interface ProjectCreateCommand {
   readonly type: "project.create";
   readonly commandId: CommandId;

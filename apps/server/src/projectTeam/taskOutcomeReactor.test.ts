@@ -386,6 +386,36 @@ describe("TaskOutcomeReactor", () => {
     ),
   );
 
+  it.effect("wakes the PM once when a task goes into review, not on every later lead turn", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const reviewed = yield* startLead(pm, "Reviewed", harness.delegate);
+        yield* team.createTask(pm, { title: "Next", request: "Next." });
+        yield* team.updateTask(reviewed.leadThreadId, {
+          stage: "in_review",
+          prUrl: "https://github.com/acme/repo/pull/1",
+        });
+
+        for (const ordinal of [1, 2, 3]) {
+          yield* reactor.handle(
+            leadTurnEnded({
+              lead: reviewed.leadThreadId,
+              status: "completed",
+              completedAt: `2026-11-04T00:0${ordinal}:00.000Z`,
+              ordinal,
+            }),
+          );
+        }
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), [
+          "#1 in review · #2 is next in the inbox",
+        ]);
+      }),
+    ),
+  );
+
   it.effect("stays quiet for a done task with an empty inbox, waiting_user, and stalled", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

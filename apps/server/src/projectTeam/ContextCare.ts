@@ -44,11 +44,23 @@ const make = Effect.gen(function* () {
   const threads = yield* ThreadManagement.ThreadManagementService;
   // One compaction per provider turn, even if the run is reported again.
   const compactedTurns = yield* Ref.make<ReadonlySet<string>>(new Set());
+  // Threads whose "/compact" failed, e.g. because the provider cannot compact. Retrying
+  // after every turn would fail the same way, so they are left alone until restart.
+  const cannotCompact = yield* Ref.make<ReadonlySet<string>>(new Set());
 
   const handle: ContextCare["Service"]["handle"] = (event) =>
     Effect.gen(function* () {
-      if (event.type !== "run.updated" || event.payload.status !== "completed") return;
+      if (event.type !== "run.updated") return;
       const run = event.payload;
+      if (run.status === "failed" && run.userMessageId.startsWith(CONTEXT_CARE_MESSAGE_PREFIX)) {
+        yield* Ref.update(cannotCompact, (current) => new Set(current).add(run.threadId));
+        yield* Effect.logWarning("project team context care stopped after a failed compaction", {
+          threadId: run.threadId,
+        });
+        return;
+      }
+      if (run.status !== "completed") return;
+      if ((yield* Ref.get(cannotCompact)).has(run.threadId)) return;
       const manager = yield* repository.getManagerByThreadId(run.threadId);
       if (Option.isNone(manager) || !manager.value.settings.enabled) return;
 

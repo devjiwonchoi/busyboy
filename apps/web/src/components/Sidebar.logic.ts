@@ -405,7 +405,7 @@ export async function archiveSelectedThreadEntries<
 export function buildMultiSelectThreadContextMenuItems(input: {
   count: number;
   hasRunningThread: boolean;
-  /** A project manager stays for the life of its project, so the batch cannot archive. */
+  /** A project manager stays for the life of its project, so the batch cannot archive or delete. */
   hasProjectManagerThread?: boolean;
 }): readonly ContextMenuItem<"mark-unread" | "archive" | "delete">[] {
   return [
@@ -415,7 +415,12 @@ export function buildMultiSelectThreadContextMenuItems(input: {
       label: `Archive (${input.count})`,
       disabled: input.hasRunningThread || input.hasProjectManagerThread === true,
     },
-    { id: "delete", label: `Delete (${input.count})`, destructive: true },
+    {
+      id: "delete",
+      label: `Delete (${input.count})`,
+      destructive: true,
+      disabled: input.hasProjectManagerThread === true,
+    },
   ];
 }
 
@@ -431,14 +436,14 @@ export function filterSidebarV2VisibleThreads<
 >(
   threads: readonly T[],
   scopedProjectKeys: ReadonlySet<string> | null,
-  /** Project managers are section headings (or hidden when off), never rows. */
-  isProjectManager: (thread: T) => boolean = () => false,
+  /** Threads shown as a project section heading instead of a row. */
+  isSectionHeading: (thread: T) => boolean = () => false,
 ): T[] {
   return threads.filter(
     (thread) =>
       thread.archivedAt === null &&
       !isSidebarSubagentThread(thread) &&
-      !isProjectManager(thread) &&
+      !isSectionHeading(thread) &&
       (scopedProjectKeys === null ||
         scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
   );
@@ -446,7 +451,8 @@ export function filterSidebarV2VisibleThreads<
 
 /**
  * The enabled project manager behind each project section, keyed by section.
- * A disabled manager gets no heading, so its section looks like any other.
+ * A disabled manager, or a second one grouped into the same section, gets no
+ * heading and stays an ordinary sidebar row.
  */
 export function selectSidebarProjectManagers<
   E extends {

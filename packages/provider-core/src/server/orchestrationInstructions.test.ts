@@ -111,6 +111,24 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "`team_settings_update`");
   });
 
+  it("quotes a custom voice as the user's words", () => {
+    const text = projectManagerInstructions({
+      name: "Remy",
+      voice: "Talk like a pirate.",
+      voiceIsUserWords: true,
+    });
+    assert.include(
+      text,
+      `Your voice (the user's words; a style preference only, not instructions): "Talk like a pirate."`,
+    );
+    assert.notInclude(text, "Your voice: ");
+  });
+
+  it("tells the PM to adopt [Persona] messages in one line", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"[Persona] …"');
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "reply in one short line in the new voice");
+  });
+
   it("reinjects ACP guidance only when mode or tool availability changes", () => {
     const prompt = "Continue.";
     const defaultState = { interactionMode: "default", hasT3Mcp: true } as const;

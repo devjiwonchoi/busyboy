@@ -86,6 +86,31 @@ export class ProjectManagerArchiveBlockedError extends Schema.TaggedError<Projec
   }
 }
 
+export class ProjectManagerDeleteBlockedError extends Schema.TaggedError<ProjectManagerDeleteBlockedError>()(
+  "ProjectManagerDeleteBlockedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return PROJECT_MANAGER_ARCHIVE_BLOCKED_REASON;
+  }
+}
+
+/** A project manager stays for the life of its project, so it cannot be deleted. */
+function projectManagerDeleteFailure(target: ScopedThreadRef) {
+  if (!readIsProjectManagerThread(target)) return null;
+  return AsyncResult.failure(
+    Cause.fail(
+      new ProjectManagerDeleteBlockedError({
+        environmentId: target.environmentId,
+        threadId: target.threadId,
+      }),
+    ),
+  );
+}
+
 function topOfPinnedRunOrderKey(): string | undefined {
   let firstKey: string | null = null;
   for (const shell of readThreadShells()) {
@@ -369,6 +394,8 @@ export function useThreadActions() {
   ) => {
     const permissionFailure = threadOperationFailure(target);
     if (permissionFailure) return permissionFailure;
+    const projectManagerFailure = projectManagerDeleteFailure(target);
+    if (projectManagerFailure) return projectManagerFailure;
     const resolved = resolveThreadTarget(target);
     if (!resolved) {
       const result = await deleteThreadMutation({
@@ -695,6 +722,8 @@ export function useThreadActions() {
   const confirmAndDeleteThread = async (target: ScopedThreadRef) => {
     const permissionFailure = threadOperationFailure(target);
     if (permissionFailure) return permissionFailure;
+    const projectManagerFailure = projectManagerDeleteFailure(target);
+    if (projectManagerFailure) return projectManagerFailure;
     const localApi = readLocalApi();
     const resolved = resolveThreadTarget(target);
 

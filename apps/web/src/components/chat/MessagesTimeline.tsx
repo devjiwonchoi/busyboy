@@ -5,7 +5,7 @@ import { MarkdownFindContext, findRevealRef } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } from "./WorkLog";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
-import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
+import type { ProjectManagerPersona, WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
@@ -178,7 +178,13 @@ import { ChangedFilesCard } from "./ChangedFilesTree";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
 import { useProjectManagerForThread } from "../../state/projectTeam";
-import { PmAuthorHeader, PmEventLine, PmSitrepCard, PmTimelineCtx } from "./PmTimeline";
+import {
+  PmAuthorHeader,
+  PmEventLine,
+  PmSitrepCard,
+  PmTimelineCtx,
+  type PmTimelineState,
+} from "./PmTimeline";
 import {
   CHAT_TIMELINE_ANCHOR_OFFSET,
   readTimelinePosition,
@@ -232,6 +238,8 @@ import {
   type WorkGroupScrollAnchor,
   derivePmAuthorHeaderMessageIds,
   derivePmSitrepReplies,
+  reusePmTimelineValues,
+  type PmTimelineValues,
   pmEventLineText,
 } from "./MessagesTimeline.logic";
 import { type ThreadFindMatch } from "./threadFind";
@@ -855,14 +863,11 @@ const ConversationTimeline = memo(function ConversationTimeline({
     worktreeSetup,
   });
   const rows = useStableRows(rawRows, listIdentityKey);
-  const pmTimelineState =
-    projectManager === null
-      ? null
-      : {
-          authorHeader: <PmAuthorHeader persona={projectManager.persona} />,
-          authorHeaderMessageIds: derivePmAuthorHeaderMessageIds(rows),
-          sitrepReplies: derivePmSitrepReplies(timelineEntries),
-        };
+  const pmTimelineState = useStablePmTimelineState(
+    projectManager?.persona ?? null,
+    rows,
+    timelineEntries,
+  );
   // Run status/timestamps churn on every stream event; the shared row context
   // must not change with them or every timeline row re-renders per event.
   const runs = useStableHandoffRuns(runsProp);
@@ -4718,6 +4723,50 @@ function useStableHandoffRuns(
           modelSelection: run.modelSelection,
         }));
   setState({ source: runs, signature, value });
+  return value;
+}
+
+type PmTimelineStateWithKey = PmTimelineState & PmTimelineValues;
+
+// The PM context reaches every row, so it keeps its identity until the persona,
+// the reply headers, or the sitrep replies actually change; a streamed token does not.
+function useStablePmTimelineState(
+  persona: Pick<ProjectManagerPersona, "name" | "avatar"> | null,
+  rows: ReadonlyArray<MessagesTimelineRow>,
+  timelineEntries: ReadonlyArray<TimelineEntry>,
+): PmTimelineState | null {
+  const [state, setState] = useState<{
+    readonly persona: Pick<ProjectManagerPersona, "name" | "avatar"> | null;
+    readonly rows: ReadonlyArray<MessagesTimelineRow> | null;
+    readonly timelineEntries: ReadonlyArray<TimelineEntry> | null;
+    readonly value: PmTimelineStateWithKey | null;
+  }>({ persona: null, rows: null, timelineEntries: null, value: null });
+  if (
+    state.persona === persona &&
+    state.rows === rows &&
+    state.timelineEntries === timelineEntries
+  ) {
+    return state.value;
+  }
+  let value: PmTimelineStateWithKey | null = null;
+  if (persona !== null) {
+    const next: PmTimelineValues = {
+      personaKey: JSON.stringify([persona.name, persona.avatar]),
+      authorHeaderMessageIds: derivePmAuthorHeaderMessageIds(rows),
+      sitrepReplies: derivePmSitrepReplies(timelineEntries),
+    };
+    const previous = state.value;
+    value = reusePmTimelineValues(previous, next) ?? {
+      ...next,
+      authorHeader:
+        previous !== null && previous.personaKey === next.personaKey ? (
+          previous.authorHeader
+        ) : (
+          <PmAuthorHeader persona={persona} />
+        ),
+    };
+  }
+  setState({ persona, rows, timelineEntries, value });
   return value;
 }
 

@@ -65,7 +65,7 @@ export interface ThreadActionMenuState {
   readonly isRegeneratingTitle: boolean;
   /** Archive rejects a thread with an attached provider, so disable it here rather than let the action fail. */
   readonly isRunning: boolean;
-  /** A project manager stays for the life of its project, so it has no archive action. */
+  /** A project manager stays for the life of its project, so it has no archive or delete action. */
   readonly isProjectManager?: boolean;
   readonly supports: {
     readonly pinning: boolean;
@@ -153,14 +153,8 @@ export function buildThreadActionMenuItems(
             disabled: state.isRunning,
             separatorBefore: true,
           },
+          { id: "delete" as const, label: "Delete", destructive: true, icon: "trash" },
         ]),
-    {
-      id: "delete",
-      label: "Delete",
-      destructive: true,
-      icon: "trash",
-      ...(state.isProjectManager ? { separatorBefore: true } : {}),
-    },
   ];
   return state.canOperate
     ? items

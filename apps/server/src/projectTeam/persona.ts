@@ -59,14 +59,25 @@ export const defaultPersonaName = (projectId: string): string =>
 export const defaultPersonaEmoji = (projectId: string): string =>
   DEFAULT_EMOJI[hash(`${projectId}:avatar`) % DEFAULT_EMOJI.length]!;
 
+/** The user's custom voice on one line, so it reads as quoted data, not instructions. */
+const cleanCustomVoice = (custom: string | undefined): string =>
+  (custom ?? "")
+    .replace(/\s*[\r\n]+\s*/g, " ")
+    .replaceAll('"', "'")
+    .trim();
+
 /** The voice text the PM instructions use. Custom text falls back to chill when empty. */
 export const voiceText = (voice: ProjectManagerVoiceName, custom?: string): string => {
   if (voice === "custom") {
-    const trimmed = custom?.trim() ?? "";
-    return trimmed.length > 0 ? trimmed : VOICE_PRESETS.chill;
+    const cleaned = cleanCustomVoice(custom);
+    return cleaned.length > 0 ? cleaned : VOICE_PRESETS.chill;
   }
   return VOICE_PRESETS[voice];
 };
+
+/** True when the voice is the user's own words rather than a preset. */
+export const isUserWordsVoice = (voice: ProjectManagerVoiceName, custom?: string): boolean =>
+  voice === "custom" && cleanCustomVoice(custom).length > 0;
 
 export const defaultPersona = (projectId: string): ProjectManagerPersona => ({
   name: defaultPersonaName(projectId),
@@ -85,4 +96,5 @@ export const personaInstructions = (persona: ProjectManagerPersona): string =>
   projectManagerInstructions({
     name: persona.name,
     voice: voiceText(persona.voice, persona.voiceCustom),
+    voiceIsUserWords: isUserWordsVoice(persona.voice, persona.voiceCustom),
   });

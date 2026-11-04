@@ -8,6 +8,7 @@ import {
   derivePmSitrepReplies,
   pmEventLineText,
   pmSitrepSince,
+  reusePmTimelineValues,
   type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
 
@@ -140,5 +141,27 @@ describe("derivePmAuthorHeaderMessageIds", () => {
       row(chat("a-3", "assistant", "three")),
     ] as unknown as MessagesTimelineRow[];
     expect([...derivePmAuthorHeaderMessageIds(rows)]).toEqual(["a-0", "a-1", "a-3"]);
+  });
+});
+
+describe("reusePmTimelineValues", () => {
+  const values = (ids: string[], replies: Array<[string, string | null]>, name = "Remy") => ({
+    personaKey: JSON.stringify([name, { kind: "emoji", emoji: "🦝" }]),
+    authorHeaderMessageIds: new Set(ids.map((id) => MessageId.make(id))),
+    sitrepReplies: new Map(replies.map(([id, since]) => [MessageId.make(id), { since }] as const)),
+  });
+
+  it("keeps the previous value while a stream event leaves the content unchanged", () => {
+    const previous = values(["a-1"], [["a-2", AT]]);
+    expect(reusePmTimelineValues(previous, values(["a-1"], [["a-2", AT]]))).toBe(previous);
+  });
+
+  it("drops the previous value when a header, sitrep, or persona changes", () => {
+    const previous = values(["a-1"], [["a-2", AT]]);
+    expect(reusePmTimelineValues(null, previous)).toBeNull();
+    expect(reusePmTimelineValues(previous, values(["a-1", "a-3"], [["a-2", AT]]))).toBeNull();
+    expect(reusePmTimelineValues(previous, values(["a-1"], [["a-2", null]]))).toBeNull();
+    expect(reusePmTimelineValues(previous, values(["a-1"], [["a-3", AT]]))).toBeNull();
+    expect(reusePmTimelineValues(previous, values(["a-1"], [["a-2", AT]], "Juno"))).toBeNull();
   });
 });

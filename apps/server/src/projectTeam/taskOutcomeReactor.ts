@@ -72,12 +72,15 @@ export function nextInboxTask(
 
 /**
  * The one line that wakes the PM after a task lead's turn, or null to stay quiet.
- * Only a failure, or a finished task that frees room for a ready inbox task, wakes it;
- * stalls are left to StalledTaskSweep.
+ * Only a failure, or a task that just became done or in review and frees room for a
+ * ready inbox task, wakes it; later turns with the same outcome stay quiet.
+ * Stalls are left to StalledTaskSweep.
  */
 export function outcomeWakeText(input: {
   readonly task: Pick<ProjectTask, "number" | "title">;
   readonly outcome: ProjectTaskOutcome;
+  /** The task's outcome before this turn. */
+  readonly previousOutcome: ProjectTaskOutcome | null;
   readonly projectTasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>;
   readonly maxConcurrentTasks: number;
 }): string | null {
@@ -85,13 +88,15 @@ export function outcomeWakeText(input: {
     return `#${input.task.number} failed: ${input.task.title} (the lead's turn failed; a blocker is open)`;
   }
   if (input.outcome !== "done" && input.outcome !== "in_review") return null;
+  if (input.previousOutcome === input.outcome) return null;
   const active = input.projectTasks.filter((task) =>
     (ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage),
   ).length;
   if (active >= input.maxConcurrentTasks) return null;
   const next = nextInboxTask(input.projectTasks);
   if (next === null) return null;
-  return `#${input.task.number} done · #${next.number} is next in the inbox`;
+  const status = input.outcome === "done" ? "done" : "in review";
+  return `#${input.task.number} ${status} · #${next.number} is next in the inbox`;
 }
 
 export class TaskOutcomeReactor extends Context.Service<
@@ -112,6 +117,7 @@ const make = Effect.gen(function* () {
   const wakeManager = (input: {
     readonly task: ProjectTask;
     readonly outcome: ProjectTaskOutcome;
+    readonly previousOutcome: ProjectTaskOutcome | null;
     readonly runId: string;
   }) =>
     Effect.gen(function* () {
@@ -120,6 +126,7 @@ const make = Effect.gen(function* () {
       const text = outcomeWakeText({
         task: input.task,
         outcome: input.outcome,
+        previousOutcome: input.previousOutcome,
         projectTasks: yield* repository.listTasks({ projectId: input.task.projectId }),
         maxConcurrentTasks: manager.value.settings.maxConcurrentTasks,
       });
@@ -177,6 +184,7 @@ const make = Effect.gen(function* () {
       yield* wakeManager({
         task: recorded.task,
         outcome,
+        previousOutcome: task.value.lastOutcome,
         runId: run.id,
       });
     }).pipe(

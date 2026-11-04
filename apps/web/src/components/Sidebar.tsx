@@ -155,9 +155,11 @@ import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import {
   readIsProjectManagerThread,
   useProjectManagerEntries,
+  useProjectManagerForThread,
   type ProjectManagerEntry,
 } from "../state/projectTeam";
 import {
+  SidebarProjectManagerBadges,
   SidebarProjectManagerHeading,
   type SidebarProjectManagerTask,
 } from "./SidebarProjectManager";
@@ -370,7 +372,8 @@ interface SidebarThreadPartitionInput {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly workingShelfEnabled: boolean;
-  readonly projectManagerThreadKeys: ReadonlySet<string>;
+  /** Threads shown as a project section heading instead of a row. */
+  readonly headingThreadKeys: ReadonlySet<string>;
 }
 
 /** The manager a project section's heading stands for, when it is on. */
@@ -456,19 +459,6 @@ function useSidebarThreads(input: {
       scopedThreadKey(scopeThreadRef(environmentId, summary.pmThreadId)),
     ),
   );
-  const partition = partitionSidebarThreads({
-    threads,
-    scopedProjectKeys,
-    serverConfigs,
-    optimisticDrop,
-    workingShelfEnabled,
-    projectManagerThreadKeys,
-  });
-
-  const { pinnedThreads, workingThreads } = partition;
-
-  // Active threads render in per-project sections, most recent project
-  // first. Collapsed projects hide their rows like the project filter does.
   const projectKeyByProject = new Map<string, string>(
     projectGroups.flatMap((group) =>
       group.memberProjects.map(
@@ -480,11 +470,8 @@ function useSidebarThreads(input: {
     const physicalKey = `${thread.environmentId}:${thread.projectId}`;
     return projectKeyByProject.get(physicalKey) ?? physicalKey;
   };
-  const activeThreadsByProject = groupSidebarThreadsByProject(
-    partition.activeThreads,
-    projectKeyOf,
-  );
-  // An enabled manager is its project's heading; a disabled one is not shown.
+  // An enabled manager is its project's heading. A disabled one, or a second
+  // manager grouped into the same section, stays an ordinary row.
   const taskLeadsByPmKey = collectProjectManagerTaskLeads(threads, (environmentId, threadId) => {
     const key = scopedThreadKey(
       scopeThreadRef(environmentId as EnvironmentId, threadId as ThreadId),
@@ -508,6 +495,26 @@ function useSidebarThreads(input: {
       taskLeads: taskLeadsByPmKey.get(threadKey) ?? EMPTY_THREADS,
     });
   }
+  const headingThreadKeys = new Set(
+    [...projectManagerByProjectKey.values()].map((manager) => manager.threadKey),
+  );
+  const partition = partitionSidebarThreads({
+    threads,
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    workingShelfEnabled,
+    headingThreadKeys,
+  });
+
+  const { pinnedThreads, workingThreads } = partition;
+
+  // Active threads render in per-project sections, most recent project
+  // first. Collapsed projects hide their rows like the project filter does.
+  const activeThreadsByProject = groupSidebarThreadsByProject(
+    partition.activeThreads,
+    projectKeyOf,
+  );
   const openPmTaskProjectKeys = new Set(openPmTaskProjectKeyList);
   const projectSectionKeys = orderSidebarProjectSections(
     activeThreadsByProject,
@@ -588,10 +595,10 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     serverConfigs,
     optimisticDrop,
     workingShelfEnabled,
-    projectManagerThreadKeys,
+    headingThreadKeys,
   } = input;
   const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, (thread) =>
-    projectManagerThreadKeys.has(threadShellKey(thread)),
+    headingThreadKeys.has(threadShellKey(thread)),
   );
   inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
@@ -1510,6 +1517,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
+  // A manager that is off (or shares its section with another) is a plain row.
+  const projectManager = useProjectManagerForThread(threadRef);
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
   useEffect(() => {
     if (!canOperateThread && isRenaming) onCancelRename();
@@ -1692,7 +1701,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     onUnpin(threadRef);
   };
   // Archive rejects a thread with an attached provider, so the button only shows when it can succeed.
-  const showArchiveButton = canOperateThread && threadRuntimeCanArchive(thread.runtime);
+  const showArchiveButton =
+    canOperateThread && projectManager === null && threadRuntimeCanArchive(thread.runtime);
   const handleArchiveClick = (event: ReactMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1927,6 +1937,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 <span className="flex-1" />
               )}
               {pinIndicator}
+              {projectManager ? <SidebarProjectManagerBadges summary={projectManager} /> : null}
               {sortable?.isDragging ? (
                 dragDestination
               ) : (
@@ -3245,7 +3256,12 @@ export default function Sidebar() {
               id: "delete",
               label: `Delete (${count})`,
               destructive: true,
-              disabled: !canOperateThreads(selectedThreads),
+              // A project manager stays for the life of its project.
+              disabled:
+                !canOperateThreads(selectedThreads) ||
+                selectedThreads.some((thread) =>
+                  readIsProjectManagerThread(scopeThreadRef(thread.environmentId, thread.id)),
+                ),
             },
           ],
           position,
