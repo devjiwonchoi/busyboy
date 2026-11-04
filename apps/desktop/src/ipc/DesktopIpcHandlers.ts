@@ -68,6 +68,7 @@ import {
 } from "./methods/snapShot.ts";
 import * as PreviewIpc from "./methods/preview.ts";
 import * as BrowserHistoryIpc from "./methods/browserHistory.ts";
+import * as BrowserPasswordsIpc from "./methods/browserPasswords.ts";
 import * as AppActivationIpc from "./methods/appActivation.ts";
 import * as WebLinksIpc from "./methods/webLinks.ts";
 import {
@@ -81,6 +82,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* installNotificationBadge();
   yield* PreviewIpc.installPreviewEventForwarding();
   yield* BrowserHistoryIpc.installBrowserHistoryEventForwarding();
+  yield* BrowserPasswordsIpc.installBrowserPasswordsEventForwarding();
 
   yield* ipc.handle(AppActivationIpc.setReady);
   yield* ipc.handle(AppActivationIpc.complete);
@@ -152,6 +154,9 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
     yield* ipc.handle(historyMethod);
   }
   yield* ipc.handle(BrowserHistoryIpc.remoteSuggestions);
+  for (const passwordsMethod of BrowserPasswordsIpc.methods) {
+    yield* ipc.handle(passwordsMethod);
+  }
   yield* ipc.handle(PreviewIpc.listBrowserImportSources);
   yield* ipc.handle(PreviewIpc.importBrowserCookies);
 });

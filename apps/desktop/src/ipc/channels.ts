@@ -126,3 +126,18 @@ export const BROWSER_HISTORY_CHANGED_CHANNEL = "desktop:browser-history-changed"
 export const BROWSER_HISTORY_SUGGEST_CHANNEL = "desktop:browser-history-suggest";
 export const BROWSER_HISTORY_FREQUENT_CHANNEL = "desktop:browser-history-frequent";
 export const ADDRESS_BAR_REMOTE_SUGGESTIONS_CHANNEL = "desktop:address-bar-remote-suggestions";
+
+export const BROWSER_PASSWORDS_STATUS_CHANNEL = "desktop:browser-passwords-status";
+export const BROWSER_PASSWORDS_LIST_CHANNEL = "desktop:browser-passwords-list";
+export const BROWSER_PASSWORDS_ADD_CHANNEL = "desktop:browser-passwords-add";
+export const BROWSER_PASSWORDS_UPDATE_CHANNEL = "desktop:browser-passwords-update";
+export const BROWSER_PASSWORDS_REMOVE_CHANNEL = "desktop:browser-passwords-remove";
+export const BROWSER_PASSWORDS_NOTE_CHANNEL = "desktop:browser-passwords-note";
+export const BROWSER_PASSWORDS_REVEAL_CHANNEL = "desktop:browser-passwords-reveal";
+export const BROWSER_PASSWORDS_COPY_CHANNEL = "desktop:browser-passwords-copy";
+export const BROWSER_PASSWORDS_DELETE_ALL_CHANNEL = "desktop:browser-passwords-delete-all";
+export const BROWSER_PASSWORDS_NEVER_SAVE_LIST_CHANNEL =
+  "desktop:browser-passwords-never-save-list";
+export const BROWSER_PASSWORDS_NEVER_SAVE_REMOVE_CHANNEL =
+  "desktop:browser-passwords-never-save-remove";
+export const BROWSER_PASSWORDS_CHANGED_CHANNEL = "desktop:browser-passwords-changed";
