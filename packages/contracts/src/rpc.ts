@@ -329,6 +329,15 @@ import {
   ScheduledTaskUpsertInput,
   ScheduledTaskMutationResult,
 } from "./scheduledTask.ts";
+import {
+  ProjectTeamAttentionSnapshot,
+  ProjectTeamError,
+  ProjectTeamRequestSitrepInput,
+  ProjectTeamRequestSitrepResult,
+  ProjectTeamSettingsResult,
+  ProjectTeamSubscribeAttentionInput,
+  ProjectTeamUpdateSettingsInput,
+} from "./projectTeam.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import {
   ProjectCloneActionInput,
@@ -483,6 +492,10 @@ export const WS_METHODS = {
   secretsAnswerRequest: "secrets.answerRequest",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
+
+  projectTeamSubscribeAttention: "projectTeam.subscribeAttention",
+  projectTeamRequestSitrep: "projectTeam.requestSitrep",
+  projectTeamUpdateSettings: "projectTeam.updateSettings",
 
   pullRequestsList: "pullRequests.list",
   pullRequestsListStats: "pullRequests.listStats",
@@ -1727,6 +1740,25 @@ const WsScheduledTasksGetWebhookDeliveryRpc = Rpc.make(
   },
 );
 
+const WsProjectTeamSubscribeAttentionRpc = Rpc.make(WS_METHODS.projectTeamSubscribeAttention, {
+  payload: ProjectTeamSubscribeAttentionInput,
+  success: ProjectTeamAttentionSnapshot,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
+const WsProjectTeamRequestSitrepRpc = Rpc.make(WS_METHODS.projectTeamRequestSitrep, {
+  payload: ProjectTeamRequestSitrepInput,
+  success: ProjectTeamRequestSitrepResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamUpdateSettingsRpc = Rpc.make(WS_METHODS.projectTeamUpdateSettings, {
+  payload: ProjectTeamUpdateSettingsInput,
+  success: ProjectTeamSettingsResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
 const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
@@ -1815,6 +1847,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsSecretsAnswerRequestRpc,
   WsScheduledTasksListWebhookDeliveriesRpc,
   WsScheduledTasksGetWebhookDeliveryRpc,
+  WsProjectTeamSubscribeAttentionRpc,
+  WsProjectTeamRequestSitrepRpc,
+  WsProjectTeamUpdateSettingsRpc,
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,
   WsServerGetBackgroundPolicyRpc,
