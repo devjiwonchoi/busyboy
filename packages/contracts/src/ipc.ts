@@ -837,12 +837,15 @@ export const DesktopPreviewCreateTabInputSchema = Schema.Struct({
   serverTab: Schema.optional(
     Schema.Struct({ threadId: TrimmedNonEmptyString, tabId: TrimmedNonEmptyString }),
   ),
+  /** An agent opened this server tab, so its first page load is the agent's visit. */
+  openedByAgent: Schema.optional(Schema.Boolean),
 });
 
 export interface DesktopPreviewTabDefaults {
   readonly zoomFactor?: number | undefined;
   readonly colorScheme?: DesktopPreviewColorScheme | undefined;
   readonly serverTab?: { readonly threadId: string; readonly tabId: string } | undefined;
+  readonly openedByAgent?: boolean | undefined;
 }
 
 export const DesktopPreviewRegisterWebviewInputSchema = Schema.Struct({

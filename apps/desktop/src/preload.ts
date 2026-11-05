@@ -301,6 +301,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
         tabId,
         zoomFactor: defaults?.zoomFactor,
         serverTab: defaults?.serverTab,
+        openedByAgent: defaults?.openedByAgent,
         colorScheme: defaults?.colorScheme,
       }),
     closeTab: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_CLOSE_TAB_CHANNEL, { tabId }),

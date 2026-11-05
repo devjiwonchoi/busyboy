@@ -125,6 +125,7 @@ export function ElectronBrowserHost() {
             profileId={snapshot.profileId}
             zoomFactor={zoomFactor}
             serverDriven={snapshot.runtime === "server"}
+            openedByAgent={snapshot.automationOwner !== undefined}
             {...(snapshot.runtime === "server"
               ? {
                   serverRendering: {

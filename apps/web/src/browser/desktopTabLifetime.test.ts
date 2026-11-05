@@ -180,4 +180,20 @@ describe("desktopTabLifetime", () => {
     await reacquired.ready;
     expect(createTab).toHaveBeenCalledTimes(2);
   });
+
+  it("tells the desktop when an agent opened a server tab", async () => {
+    createTab.mockResolvedValue(undefined);
+    const lease = acquireDesktopTab("tab_agent_opened", {
+      threadId: "thread-1",
+      tabId: "tab-1",
+      openedByAgent: true,
+    });
+    await lease.ready;
+    expect(createTab).toHaveBeenCalledWith("tab_agent_opened", {
+      ...DEFAULT_TAB_STATE,
+      serverTab: { threadId: "thread-1", tabId: "tab-1" },
+      openedByAgent: true,
+    });
+    lease.release();
+  });
 });

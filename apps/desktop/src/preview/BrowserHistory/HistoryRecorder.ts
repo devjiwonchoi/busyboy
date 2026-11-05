@@ -46,6 +46,7 @@ interface PendingVisit extends Attribution {
 export class HistoryRecorder {
   private readonly port: HistoryRecorderPort;
   private hint: { readonly transition: NavigationHint; readonly at: number } | null = null;
+  private opener: AgentAttribution | null = null;
   private started: Attribution | null = null;
   private failedUrl: string | null = null;
   private pending: PendingVisit | null = null;
@@ -61,13 +62,23 @@ export class HistoryRecorder {
     this.hint = { transition, at: this.port.now() };
   }
 
+  /**
+   * The guest belongs to a tab an agent opened, so the next navigation (its
+   * first page load, which the guest starts on its own) is the agent's.
+   */
+  openedByAgent(threadId: string): void {
+    this.opener = { threadId };
+  }
+
   private takeAttribution(): Attribution {
     const hint = this.hint;
     this.hint = null;
+    const opener = this.opener;
+    this.opener = null;
     if (hint !== null && this.port.now() - hint.at <= NAVIGATION_HINT_TTL_MS) {
       return { transition: hint.transition, source: "user", threadId: null };
     }
-    const agent = this.port.agentAttribution();
+    const agent = opener ?? this.port.agentAttribution();
     if (agent !== null) return { transition: "agent", source: "agent", threadId: agent.threadId };
     return { transition: "link", source: "user", threadId: null };
   }

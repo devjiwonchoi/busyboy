@@ -159,6 +159,19 @@ describe("HistoryRecorder", () => {
     expect(h.visits[0]).toMatchObject({ source: "user", transition: "typed" });
   });
 
+  it("tags only the first load of a tab an agent opened, even when it started before the recorder", () => {
+    const h = harness();
+    h.recorder.openedByAgent("thread-9");
+    // The guest began loading on its own, so the recorder sees only the commit.
+    h.recorder.commit({ url: "http://127.0.0.1:4000/login", httpResponseCode: 200 });
+    h.recorder.stopLoading();
+    h.load("http://127.0.0.1:4000/next");
+    expect(h.visits.map((visit) => [visit.source, visit.transition, visit.threadId])).toEqual([
+      ["agent", "agent", "thread-9"],
+      ["user", "link", null],
+    ]);
+  });
+
   it("records the pending visit when the next navigation starts or the guest goes away", () => {
     const h = harness();
     h.recorder.startNavigation({

@@ -551,6 +551,8 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   const historyRecorders = new WeakMap<Electron.WebContents, HistoryRecorder>();
   // Navigations requested before the tab has a guest; applied when it loads.
   const pendingHistoryHints = new Map<string, NavigationHint>();
+  // Tabs an agent opened, by thread: their first load is the agent's visit.
+  const agentOpenedTabs = new Map<string, string>();
   const hintHistory = (wc: Electron.WebContents, hint: NavigationHint) =>
     historyRecorders.get(wc)?.setHint(hint);
   const context = yield* Effect.context<never>();
@@ -1302,7 +1304,12 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       browserHistory?.recorderFor(wc.session, {
         agentAttribution: () => browserHost.agentAttribution(wc),
       }) ?? null;
-    if (historyRecorder) historyRecorders.set(wc, historyRecorder);
+    if (historyRecorder) {
+      historyRecorders.set(wc, historyRecorder);
+      const openerThreadId = agentOpenedTabs.get(tabId);
+      agentOpenedTabs.delete(tabId);
+      if (openerThreadId !== undefined) historyRecorder.openedByAgent(openerThreadId);
+    }
     const sync = () => runFork(syncState(true));
     const syncNavigation = (_event: unknown, url: string, httpResponseCode: number) => {
       historyRecorder?.commit({ url, httpResponseCode });
@@ -1726,6 +1733,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     );
     if (result.created) {
       tabLifecycleGenerations.set(tabId, (tabLifecycleGenerations.get(tabId) ?? 0) + 1);
+      if (defaults?.openedByAgent === true && defaults.serverTab !== undefined) {
+        agentOpenedTabs.set(tabId, defaults.serverTab.threadId);
+      }
     }
     yield* emit(tabId, result.state);
     return result.state;
@@ -1794,6 +1804,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
 
   const closeTab = Effect.fn("PreviewManager.closeTab")(function* (tabId: string) {
     pendingHistoryHints.delete(tabId);
+    agentOpenedTabs.delete(tabId);
     const claimed = yield* Ref.modify(closingTabIdsRef, (closingTabIds) => {
       if (closingTabIds.has(tabId)) return [false, closingTabIds] as const;
       return [true, new Set([...closingTabIds, tabId])] as const;
