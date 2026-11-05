@@ -782,6 +782,10 @@ export const BackgroundActivitySettings = Schema.Struct({
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type BackgroundActivitySettings = typeof BackgroundActivitySettings.Type;
 
+export const BrowserAgentHistoryAccess = Schema.Literals(["ask", "allow", "off"]);
+export type BrowserAgentHistoryAccess = typeof BrowserAgentHistoryAccess.Type;
+export const DEFAULT_BROWSER_AGENT_HISTORY_ACCESS: BrowserAgentHistoryAccess = "ask";
+
 export const ResponseStreamingMode = Schema.Literals(["turn", "paragraph"]);
 export type ResponseStreamingMode = typeof ResponseStreamingMode.Type;
 
@@ -1001,6 +1005,10 @@ export const ServerSettings = Schema.Struct({
   computerUseScreenshots: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   computerUseExperimentalPointer: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  // Whether agents may read the in-app browser's history: ask each time by default.
+  browserAgentHistoryAccess: BrowserAgentHistoryAccess.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_AGENT_HISTORY_ACCESS)),
   ),
   defaultAutoPull: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   defaultProjectScripts: Schema.Array(ProjectScript).pipe(
@@ -1285,6 +1293,7 @@ export const ServerSettingsPatch = Schema.Struct({
   computerUseAlwaysAllowedApps: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
   computerUseScreenshots: Schema.optionalKey(Schema.Boolean),
   computerUseExperimentalPointer: Schema.optionalKey(Schema.Boolean),
+  browserAgentHistoryAccess: Schema.optionalKey(BrowserAgentHistoryAccess),
   defaultAutoPull: Schema.optionalKey(Schema.Boolean),
   defaultProjectScripts: Schema.optionalKey(Schema.Array(ProjectScript)),
   defaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),

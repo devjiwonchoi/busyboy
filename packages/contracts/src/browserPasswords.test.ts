@@ -6,6 +6,8 @@ import {
   BrowserPasswordPromptInput,
   BrowserPasswordPromptResponse,
   BrowserPasswordTabInput,
+  BrowserSignInInput,
+  BrowserSignInOptionsInput,
 } from "./browserPasswords.ts";
 
 // The shape the desktop app gives a browser tab: [environment, thread, project, tab].
@@ -38,6 +40,19 @@ describe("browser password autofill inputs", () => {
       }),
     ];
     for (const decoded of decodes) expect(decoded.tabId).toBe(RUNTIME_TAB_ID);
+    expect(
+      Schema.decodeUnknownSync(BrowserSignInOptionsInput)({
+        tabId: RUNTIME_TAB_ID,
+        origin: "http://127.0.0.1:4700",
+      }).tabId,
+    ).toBe(RUNTIME_TAB_ID);
+    expect(
+      Schema.decodeUnknownSync(BrowserSignInInput)({
+        tabId: RUNTIME_TAB_ID,
+        origin: "http://127.0.0.1:4700",
+        choice: { kind: "saved", loginId: 1 },
+      }).tabId,
+    ).toBe(RUNTIME_TAB_ID);
   });
 
   it("still bound the tab id", () => {

@@ -1,5 +1,9 @@
 // @effect-diagnostics globalTimers:off - Plain timers; tests inject their own.
-import type { BrowserPasswordAutofillEvent, BrowserPasswordFillRow } from "@t3tools/contracts";
+import type {
+  BrowserPasswordAutofillEvent,
+  BrowserPasswordFillRow,
+  BrowserSignInOutcome,
+} from "@t3tools/contracts";
 
 import { siteLabel } from "./LoginOrigin.ts";
 import type { PasswordDatabase } from "./PasswordDatabase.ts";
@@ -41,7 +45,22 @@ export interface AutofillFrame {
 export interface AutofillChannels {
   readonly fill: string;
   readonly dropdownState: string;
+  readonly submitForm: string;
 }
+
+/** How long after asking the form to submit we wait to see the submission. */
+export const SIGN_IN_SUBMIT_SEEN_MS = 1_500;
+
+export type SignInChoice =
+  | { readonly kind: "saved"; readonly loginId: number }
+  | {
+      readonly kind: "entered";
+      readonly username: string;
+      readonly password: string;
+      readonly save: boolean;
+    };
+
+export type SignInOutcome = BrowserSignInOutcome;
 
 export interface GuestAutofillPort {
   readonly tabId: string;
@@ -112,6 +131,9 @@ const pathOf = (url: string): string => {
   }
 };
 
+const frameOnOriginNow = (frames: Map<number, FrameState>, origin: string) =>
+  [...frames.values()].some((state) => state.frame.isAlive() && state.frame.origin() === origin);
+
 /**
  * Logins only belong to real web origins. Opaque origins (sandboxed frames,
  * `data:`, `blob:`, `about:`) never save or fill.
@@ -140,6 +162,13 @@ export class GuestAutofill {
   private blurTimer: unknown = null;
   private prompt: SavePrompt | null = null;
   private lastFocus: { frame: AutofillFrame; focus: GuestFieldFocus } | null = null;
+  /** An agent sign-in the person approved, waiting for its submission and result. */
+  private signInPending: {
+    readonly frameKey: number;
+    readonly formToken: string;
+    submitSeen: boolean;
+    readonly onSuccess: () => void;
+  } | null = null;
   private disposed = false;
 
   constructor(port: GuestAutofillPort) {
@@ -232,6 +261,21 @@ export class GuestAutofill {
 
   submitted(frame: AutofillFrame, submit: GuestSubmit): void {
     if (this.disposed) return;
+    const signIn = this.signInPending;
+    if (signIn !== null && signIn.frameKey === frame.key && signIn.formToken === submit.formToken) {
+      // The approved sign-in's own submission: track it, never prompt for it.
+      signIn.submitSeen = true;
+      this.tracker.submit({
+        frameKey: frame.key,
+        isMainFrame: frame.isMainFrame,
+        frameOrigin: frame.origin(),
+        formToken: submit.formToken,
+        login: { kind: submit.kind, username: "", password: "" },
+        topLevelPath: pathOf(this.port.topLevelUrl()),
+        submittedAt: this.port.now(),
+      });
+      return;
+    }
     if (!this.port.settings().offerToSave) return;
     // Agent typing never produces a save prompt (spec 5.7).
     if (this.port.agentActiveWithin(AGENT_SUBMIT_WINDOW_MS)) return;
@@ -313,6 +357,97 @@ export class GuestAutofill {
     list.frame.send(this.port.channels.fill, command);
     vault.recordFill(loginId, this.port.now());
     this.port.notifyChanged();
+  }
+
+  /**
+   * Fills and submits the page's login form for an agent's preview_sign_in,
+   * after the person approved it on the card. Returns only an outcome.
+   */
+  async signIn(origin: string, choice: SignInChoice): Promise<SignInOutcome> {
+    if (this.disposed) return "unavailable";
+    const vault = this.port.vault();
+    if (vault === null) return "unavailable";
+    const findForm = () => {
+      for (const state of this.frames.values()) {
+        if (!state.frame.isAlive() || state.frame.origin() !== origin) continue;
+        const form = state.forms.find((candidate) =>
+          candidate.fields.some((field) => field.role !== "username"),
+        );
+        if (form !== undefined) return { frame: state.frame, form };
+      }
+      return null;
+    };
+    const frameOnOrigin = [...this.frames.values()].some(
+      (state) => state.frame.isAlive() && state.frame.origin() === origin,
+    );
+    if (!frameOnOrigin) return "page_left_origin";
+    if (findForm() === null) return "no_login_form";
+
+    let username: string;
+    let password: string;
+    let loginId: number | null = null;
+    if (choice.kind === "saved") {
+      const login = vault.get(choice.loginId);
+      if (login === null || login.signonRealm !== origin) return "unavailable";
+      if (!(await this.port.authorizeFill(siteLabel(origin)))) return "unavailable";
+      const revealed = vault.revealPassword(login.id);
+      if (revealed === null) return "unavailable";
+      username = login.username;
+      password = revealed;
+      loginId = login.id;
+    } else {
+      username = choice.username;
+      password = choice.password;
+    }
+    // The page may have moved on while the device check was up.
+    const target = this.disposed ? null : findForm();
+    if (target === null)
+      return frameOnOriginNow(this.frames, origin) ? "no_login_form" : "page_left_origin";
+
+    const command: PasswordFillCommand = { formToken: target.form.token, username, password };
+    target.frame.send(this.port.channels.fill, command);
+    if (loginId !== null) vault.recordFill(loginId, this.port.now());
+
+    const outcome = await new Promise<SignInOutcome>((resolve) => {
+      const pending = {
+        frameKey: target.frame.key,
+        formToken: target.form.token,
+        submitSeen: false,
+        onSuccess: () => {
+          this.port.clearTimeout(noSubmit);
+          this.port.clearTimeout(noSuccess);
+          resolve("submitted");
+        },
+      };
+      this.signInPending = pending;
+      const noSubmit = this.port.setTimeout(() => {
+        if (!pending.submitSeen) {
+          this.port.clearTimeout(noSuccess);
+          resolve("filled");
+        }
+      }, SIGN_IN_SUBMIT_SEEN_MS);
+      const noSuccess = this.port.setTimeout(
+        () => resolve("submitted_unconfirmed"),
+        SIGN_IN_SUBMIT_SEEN_MS + 10_000,
+      );
+      target.frame.send(this.port.channels.submitForm, { formToken: target.form.token });
+    });
+    this.signInPending = null;
+
+    if (outcome === "submitted") {
+      const at = this.port.now();
+      if (loginId !== null) {
+        vault.recordUse(loginId, at);
+      } else if (choice.kind === "entered" && choice.save) {
+        // The person ticked "Save this login" on the card; no second prompt.
+        const existing = vault.find(origin, username);
+        if (existing !== null) vault.update(existing.id, { password }, at);
+        else
+          vault.add({ origin, username, password, source: "saved", createdAt: at, lastUsedAt: at });
+      }
+      this.port.notifyChanged();
+    }
+    return outcome;
   }
 
   dismissFillList(): void {
@@ -470,6 +605,11 @@ export class GuestAutofill {
 
   private submissionSucceeded(submission: PendingSubmission): void {
     if (this.disposed) return;
+    const signIn = this.signInPending;
+    if (signIn !== null && signIn.frameKey === submission.frameKey) {
+      signIn.onSuccess();
+      return;
+    }
     const vault = this.port.vault();
     if (vault === null) return;
     const decision = decidePrompt({

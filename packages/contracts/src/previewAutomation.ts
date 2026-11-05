@@ -1033,9 +1033,14 @@ export class PreviewAutomationTargetNotEditableError extends Schema.TaggedError<
     ...PreviewAutomationRemoteDiagnosticFields,
     selectorKind: Schema.optional(Schema.Literals(["focused-element", "locator", "selector"])),
     selectorLength: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+    /** Why the server browser refused, such as a password field the person must fill. */
+    reason: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
+    if (this.reason !== undefined) {
+      return `Preview automation ${this.operation} refused: ${this.reason}`;
+    }
     if (this.selectorKind === "focused-element") {
       return `Preview automation ${this.operation} requires an editable focused element.`;
     }
@@ -1170,3 +1175,87 @@ export const PreviewUrlResolution = Schema.Struct({
   environmentId: EnvironmentId,
 });
 export type PreviewUrlResolution = typeof PreviewUrlResolution.Type;
+
+// ── Sign-in and browsing history requests ────────────────────────────────
+
+export const PreviewAutomationSignInInput = Schema.Struct({
+  ...PreviewAutomationTabTargetFields,
+  origin: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048)).annotate({
+    description:
+      "The site to sign in to, e.g. 'https://app.example.com'. Must be the tab's current site or a frame on it.",
+  }),
+  reason: Schema.optional(Schema.String.check(Schema.isMaxLength(500))).annotate({
+    description: "One sentence on why you need to sign in, shown to the user.",
+  }),
+  timeoutMs: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1_000, maximum: 60 * 60 * 1_000 })),
+  ).annotate({ description: "How long to wait for the user. Default 5 minutes." }),
+  clientRequestId: Schema.optional(Schema.String.check(Schema.isMaxLength(128))).annotate({
+    description: "Reuse when retrying a call that lost its result, so the user sees one card.",
+  }),
+});
+export type PreviewAutomationSignInInput = typeof PreviewAutomationSignInInput.Type;
+
+export const PreviewAutomationSignInStatus = Schema.Literals([
+  "submitted",
+  "submitted_unconfirmed",
+  "filled",
+  "declined",
+  "origin_mismatch",
+  "page_left_origin",
+  "no_login_form",
+  "unavailable",
+  "timed_out",
+]);
+export type PreviewAutomationSignInStatus = typeof PreviewAutomationSignInStatus.Type;
+
+/** Only a status: the login itself never reaches the agent. */
+export const PreviewAutomationSignInResult = Schema.Struct({
+  status: PreviewAutomationSignInStatus,
+});
+export type PreviewAutomationSignInResult = typeof PreviewAutomationSignInResult.Type;
+
+export const PREVIEW_AUTOMATION_HISTORY_MAX_LIMIT = 50;
+
+export const PreviewAutomationHistoryInput = Schema.Struct({
+  ...PreviewAutomationTabTargetFields,
+  query: Schema.optional(Schema.String.check(Schema.isMaxLength(200))).annotate({
+    description: "Text to find in visited URLs and titles. Omit for recent visits.",
+  }),
+  since: Schema.optional(Schema.Number.check(Schema.isFinite())).annotate({
+    description: "Only visits at or after this time, in epoch milliseconds.",
+  }),
+  limit: Schema.optional(
+    Schema.Int.check(
+      Schema.isBetween({ minimum: 1, maximum: PREVIEW_AUTOMATION_HISTORY_MAX_LIMIT }),
+    ),
+  ).annotate({ description: "At most this many visits, newest first. Default 20, max 50." }),
+  reason: Schema.optional(Schema.String.check(Schema.isMaxLength(500))).annotate({
+    description: "One sentence on why you need the history, shown to the user.",
+  }),
+  timeoutMs: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1_000, maximum: 60 * 60 * 1_000 })),
+  ).annotate({ description: "How long to wait for the user to answer. Default 5 minutes." }),
+  clientRequestId: Schema.optional(Schema.String.check(Schema.isMaxLength(128))).annotate({
+    description: "Reuse when retrying a call that lost its result, so the user sees one card.",
+  }),
+});
+export type PreviewAutomationHistoryInput = typeof PreviewAutomationHistoryInput.Type;
+
+export const PreviewAutomationHistoryVisit = Schema.Struct({
+  url: Schema.String,
+  title: Schema.NullOr(Schema.String),
+  visitedAt: Schema.Number,
+  source: Schema.Literals(["user", "agent"]),
+});
+
+export const PreviewAutomationHistoryResult = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("allowed"),
+    visits: Schema.Array(PreviewAutomationHistoryVisit),
+  }),
+  Schema.Struct({
+    status: Schema.Literals(["declined", "timed_out", "unavailable", "history_access_disabled"]),
+  }),
+]);
+export type PreviewAutomationHistoryResult = typeof PreviewAutomationHistoryResult.Type;

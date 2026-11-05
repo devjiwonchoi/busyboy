@@ -1322,6 +1322,49 @@ const OrchestrationV2ComputerUseAppRequestFields = {
   appRequestStatus: ComputerUseAppRequestStatus,
 } as const;
 
+/**
+ * A browser action an agent asked the person to approve. Only the outcome is
+ * recorded: credentials stay in the desktop app and history results are
+ * handed to the waiting tool call, never stored on the turn item.
+ */
+export const OrchestrationV2BrowserRequestKind = Schema.Literals(["sign_in", "history"]);
+export type OrchestrationV2BrowserRequestKind = typeof OrchestrationV2BrowserRequestKind.Type;
+
+export const OrchestrationV2BrowserRequestStatus = Schema.Literals([
+  "pending",
+  // sign_in outcomes
+  "submitted",
+  "submitted_unconfirmed",
+  "filled",
+  "page_left_origin",
+  "no_login_form",
+  "unavailable",
+  // history outcome
+  "allowed",
+  // either
+  "declined",
+  "cancelled",
+]);
+export type OrchestrationV2BrowserRequestStatus = typeof OrchestrationV2BrowserRequestStatus.Type;
+
+const OrchestrationV2BrowserRequestFields = {
+  type: Schema.Literal("browser_request"),
+  requestKind: OrchestrationV2BrowserRequestKind,
+  /** The agent's stated reason, shown on the card. */
+  reason: Schema.String,
+  /** sign_in: the site to sign in to. */
+  origin: Schema.optional(Schema.String),
+  /** sign_in: the preview tab the page is in. */
+  tabId: Schema.optional(Schema.String),
+  /** history: what the agent searched for, and its time and size limits. */
+  query: Schema.optional(Schema.String),
+  historySince: Schema.optional(Schema.Number),
+  historyLimit: Schema.optional(Schema.Int),
+  /** history: when set, the desktop app shares without asking (setting is "allow"). */
+  autoApprove: Schema.optional(Schema.Boolean),
+  browserStatus: OrchestrationV2BrowserRequestStatus,
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1503,6 +1546,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2ComputerUseAppRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2BrowserRequestFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2243,6 +2290,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
     ...OrchestrationV2ComputerUseAppRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2BrowserRequestFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
@@ -2992,6 +3043,24 @@ const OrchestrationV2InternalCommand = Schema.Union([
     bundleId: TrimmedNonEmptyString,
     allowAlways: Schema.Boolean,
     appRequestStatus: ComputerUseAppRequestStatus,
+  }),
+  /** Internal: only the waiting tool call and the answer service change a browser request. */
+  Schema.Struct({
+    type: Schema.Literal("browser_request.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    nodeId: NodeId,
+    turnItemId: TurnItemId,
+    requestKind: OrchestrationV2BrowserRequestKind,
+    reason: Schema.String,
+    origin: Schema.optional(Schema.String),
+    tabId: Schema.optional(Schema.String),
+    query: Schema.optional(Schema.String),
+    historySince: Schema.optional(Schema.Number),
+    historyLimit: Schema.optional(Schema.Int),
+    autoApprove: Schema.optional(Schema.Boolean),
+    browserStatus: OrchestrationV2BrowserRequestStatus,
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

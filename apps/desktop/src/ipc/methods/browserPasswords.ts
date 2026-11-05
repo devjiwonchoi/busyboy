@@ -1,4 +1,8 @@
 import {
+  BrowserSignInInput,
+  BrowserSignInOptions,
+  BrowserSignInOptionsInput,
+  BrowserSignInResult,
   BrowserPasswordFillChooseInput,
   BrowserPasswordPeekResult,
   BrowserPasswordPromptInput,
@@ -185,6 +189,21 @@ export const autofillMethods = [
     BrowserPasswordPeekResult,
     (autofill, input) =>
       autofill.peek(input.tabId, input.promptId).pipe(Effect.map((password) => ({ password }))),
+  ),
+  autofillMethod(
+    IpcChannels.BROWSER_PASSWORDS_SIGN_IN_OPTIONS_CHANNEL,
+    BrowserSignInOptionsInput,
+    BrowserSignInOptions,
+    (autofill, input) => autofill.signInOptions(input.tabId, input.origin),
+  ),
+  autofillMethod(
+    IpcChannels.BROWSER_PASSWORDS_SIGN_IN_CHANNEL,
+    BrowserSignInInput,
+    BrowserSignInResult,
+    (autofill, input) =>
+      autofill
+        .signIn(input.tabId, input.origin, input.choice)
+        .pipe(Effect.map((outcome) => ({ outcome }))),
   ),
   autofillMethod(
     IpcChannels.BROWSER_PASSWORDS_AUTOFILL_REOPEN_CHANNEL,

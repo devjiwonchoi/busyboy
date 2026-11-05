@@ -1334,6 +1334,16 @@ export function createServerEnvironmentAtoms<R, E>(
           JSON.stringify([environmentId, input.threadId, input.turnItemId]),
       },
     }),
+    // A browser sign-in or history card's answer; one per card at a time.
+    answerBrowserRequest: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:browser-requests:answer",
+      tag: WS_METHODS.browserRequestsAnswer,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.threadId, input.turnItemId]),
+      },
+    }),
     refreshUsageRates: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-usage-rates",
       tag: WS_METHODS.serverRefreshUsageRates,

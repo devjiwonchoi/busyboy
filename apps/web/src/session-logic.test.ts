@@ -510,6 +510,58 @@ describe("V2 session presentation", () => {
     },
   );
 
+  it("shows sign-in and history requests as their own cards, not in the work log", () => {
+    const now = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
+    const threadId = ThreadId.make("thread-browser-request");
+    const base = (id: string, ordinal: number) => ({
+      id: TurnItemId.make(id),
+      threadId,
+      runId: RunId.make("run-browser-request"),
+      nodeId: null,
+      providerThreadId: null,
+      providerTurnId: null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal,
+      status: "waiting" as const,
+      title: "Sign-in request",
+      startedAt: now,
+      completedAt: null,
+      updatedAt: now,
+    });
+    const signIn = {
+      ...base("item-sign-in", 0),
+      type: "browser_request" as const,
+      requestKind: "sign_in" as const,
+      reason: "Check the welcome page",
+      origin: "http://127.0.0.1:4700",
+      tabId: "tab-1",
+      browserStatus: "pending" as const,
+    } satisfies OrchestrationV2TurnItem;
+    const history = {
+      ...base("item-history", 1),
+      type: "browser_request" as const,
+      requestKind: "history" as const,
+      reason: "Find the docs page",
+      query: "docs",
+      browserStatus: "pending" as const,
+    } satisfies OrchestrationV2TurnItem;
+    const entries = deriveTimelineEntriesFromVisibleTurnItems({
+      visibleTurnItems: [signIn, history].map((item, position) => ({
+        position,
+        visibility: "local" as const,
+        sourceThreadId: threadId,
+        sourceItemId: item.id,
+        item,
+      })),
+      optimisticMessages: [],
+    });
+    expect(entries.map((entry) => [entry.kind, entry.id])).toEqual([
+      ["event", signIn.id],
+      ["event", history.id],
+    ]);
+  });
+
   it("preserves independently derived durations for repeated plan-step labels", () => {
     const projection = makeThreadProjectionFixture();
     const runId = RunId.make("run-timed-tasks");

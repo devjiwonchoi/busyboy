@@ -259,6 +259,10 @@
       "types": "./src/browserHistoryLegacy.ts",
       "import": "./src/browserHistoryLegacy.ts"
     },
+    "./protectedFields": {
+      "types": "./src/protectedFields.ts",
+      "import": "./src/protectedFields.ts"
+    },
     "./addressBarCompletion": {
       "types": "./src/addressBarCompletion.ts",
       "import": "./src/addressBarCompletion.ts"

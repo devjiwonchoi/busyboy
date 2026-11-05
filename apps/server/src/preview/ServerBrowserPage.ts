@@ -21,6 +21,14 @@ import { constVoid } from "effect/Function";
 import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import * as NodeCrypto from "node:crypto";
 import { BrowserControlInterrupted } from "./SessionControl.ts";
+import {
+  describeFieldInPage,
+  isSecretEntryField,
+  PROTECTED_VALUES_SCRIPT,
+  SECRET_FIELD_REFUSAL,
+  scrubProtectedValues,
+  type FieldDescriptor,
+} from "./ProtectedFields.ts";
 
 const MAX_EVALUATION_BYTES = 64_000;
 const MAX_VISIBLE_TEXT_LENGTH = 20_000;
@@ -154,25 +162,10 @@ const SNAPSHOT_TIMEOUT_MS = 10_000;
 // How long a frame in another process gets to answer; one that crashed never does.
 const FRAME_ANSWER_MS = 1_000;
 
-// Values the page draws as dots (password fields, and text fields whose CSS
-// draws dots), normalized like accessible text. Open shadow roots included.
-const DOTTED_SCRIPT = `(() => {
-  const values = [];
-  const visit = (root) => {
-    for (const element of root.querySelectorAll("*")) {
-      if (element.shadowRoot) visit(element.shadowRoot);
-      const field = element.localName === "input" || element.localName === "textarea";
-      if (!field && !element.isContentEditable) continue;
-      const dots = getComputedStyle(element).getPropertyValue("-webkit-text-security");
-      if (element.type !== "password" && (dots === "none" || dots === "")) continue;
-      // Raw as page text shows it, and normalized as the tree does.
-      for (const value of field ? [element.value, element.defaultValue] : [element.textContent ?? ""])
-        values.push(value, value.replace(/[\\u200b\\u00ad]/g, "").trim().replace(/\\s+/g, " "));
-    }
-  };
-  visit(document);
-  return [...new Set(values.filter((value) => value.trim()))];
-})()`;
+// Values held by protected fields (passwords, usernames, email, phone, one-time
+// codes, hidden inputs, card fields, and anything drawn as dots), normalized like
+// accessible text. Open shadow roots included.
+const DOTTED_SCRIPT = PROTECTED_VALUES_SCRIPT;
 
 const pageChanged = () =>
   new ServerBrowserOperationError(
@@ -186,7 +179,8 @@ const tooBusy = () =>
     "The page was too busy to capture a snapshot in time. Wait for it to settle and take another snapshot.",
   );
 
-const VALUE_TOO_LONG = "A password field holds a value too long to hide, so no snapshot was taken.";
+const VALUE_TOO_LONG =
+  "A sign-in or contact field holds a value too long to hide, so no snapshot was taken.";
 
 /** A frame in another process keeps one CDP session, so none pile up across snapshots. */
 const frameSessions = new WeakMap<Frame, Promise<CDPSession>>();
@@ -544,6 +538,20 @@ export const click = async (
 export const type = async (page: Page, input: PreviewAutomationTypeInput) => {
   const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const locator = targetLocator(page, input);
+  // Passwords and one-time codes are entered by the person, never typed by an agent.
+  const field = locator ?? page.locator("*:focus").last();
+  if (locator !== null || (await field.count()) > 0) {
+    const descriptor = (await field.evaluate(describeFieldInPage, undefined, {
+      timeout,
+    })) as FieldDescriptor;
+    if (isSecretEntryField(descriptor)) {
+      throw new ServerBrowserOperationError(
+        "PreviewAutomationTargetNotEditableError",
+        SECRET_FIELD_REFUSAL,
+        { secretField: true },
+      );
+    }
+  }
   if (locator !== null && input.clear) {
     await locator.fill(input.text, { timeout });
     return;
@@ -702,10 +710,23 @@ export const scroll = async (page: Page, input: PreviewAutomationScrollInput) =>
  * frees for the next request instead of waiting on the script.
  */
 export const evaluate = async (
+  page: Page,
   cdp: CDPSession,
   input: PreviewAutomationEvaluateInput,
   timeoutMs: number,
 ) => {
+  // Sign-in and contact field values never reach the agent: read them first,
+  // then mask any that the expression returns. If they can't be read, the
+  // expression doesn't run.
+  const secrets = await openReaders(page, cdp)
+    .then(({ read }) => read())
+    .then((perReader) => perReader.flatMap((values) => values ?? []))
+    .catch(() => {
+      throw new ServerBrowserOperationError(
+        "PreviewAutomationExecutionError",
+        "Could not check the page's sign-in fields before evaluating. Try again.",
+      );
+    });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -732,8 +753,8 @@ export const evaluate = async (
       result.exceptionDetails.exception?.description ?? result.exceptionDetails.text,
     );
   }
-  const value =
-    "value" in result.result ? result.result.value : (result.result.description ?? null);
+  const raw = "value" in result.result ? result.result.value : (result.result.description ?? null);
+  const value = scrubProtectedValues(raw, secrets, MASKED_VALUE);
   const actualBytes = Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
   if (actualBytes > MAX_EVALUATION_BYTES) {
     throw new ServerBrowserOperationError(

@@ -592,6 +592,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     providerSettingsOnly: true,
   },
   {
+    id: "agent-browser-history-access",
+    title: "Agent access to browsing history",
+    to: "/settings/integrations",
+    searchTerms: ["agent history browsing visited pages ask allow off privacy"],
+  },
+  {
     id: "agent-browser-access",
     title: "Agent browser access",
     to: "/settings/integrations",

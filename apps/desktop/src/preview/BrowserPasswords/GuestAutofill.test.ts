@@ -61,20 +61,23 @@ function setup(options: { approve?: boolean; offerToSave?: boolean } = {}) {
     NodeFs.rmSync(directory, { recursive: true, force: true });
   });
   const events: BrowserPasswordAutofillEvent[] = [];
-  const timers: Array<() => void> = [];
+  const timers: Array<{ callback: () => void; ms: number; cleared: boolean }> = [];
   let topLevelUrl = `${SITE}/login`;
   let agentActive = false;
   let nextId = 0;
   const authorizations: string[] = [];
   const autofill = new GuestAutofill({
     tabId: "tab-1",
-    channels: { fill: "fill", dropdownState: "dropdown" },
+    channels: { fill: "fill", dropdownState: "dropdown", submitForm: "submitForm" },
     now: () => 1_000,
-    setTimeout: (callback) => {
-      timers.push(callback);
-      return timers.length;
+    setTimeout: (callback, ms) => {
+      timers.push({ callback, ms, cleared: false });
+      return timers.length - 1;
     },
-    clearTimeout: () => {},
+    clearTimeout: (handle) => {
+      const timer = timers[handle as number];
+      if (timer) timer.cleared = true;
+    },
     randomId: () => `id-${++nextId}`,
     topLevelUrl: () => topLevelUrl,
     agentActiveWithin: () => agentActive,
@@ -92,6 +95,15 @@ function setup(options: { approve?: boolean; offerToSave?: boolean } = {}) {
   return {
     autofill,
     vault,
+    /** Runs every pending timer set for exactly `ms`. */
+    fire: (ms: number) => {
+      for (const timer of timers) {
+        if (timer.ms === ms && !timer.cleared) {
+          timer.cleared = true;
+          timer.callback();
+        }
+      }
+    },
     events,
     authorizations,
     setTopLevel: (url: string) => {
@@ -338,5 +350,115 @@ describe("GuestAutofill save", () => {
     expect(t.lastOf("savePrompt")?.collapsed).toBe(false);
     t.autofill.dispose();
     expect(t.lastOf("savePromptClosed")).toBeDefined();
+  });
+});
+
+describe("GuestAutofill agent sign-in", () => {
+  const ready = () => {
+    const t = setup();
+    const main = makeFrame(1, SITE, true);
+    t.autofill.formsReported(main.frame, { forms: [loginForm("f")] });
+    return { t, main };
+  };
+  const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+  it("fills a saved login after the check, submits, and reports success without a prompt", async () => {
+    const { t, main } = ready();
+    const id = t.addAlice();
+    const pending = t.autofill.signIn(SITE, { kind: "saved", loginId: id });
+    await tick();
+    expect(main.sent.map((message) => message.channel)).toEqual(["fill", "submitForm"]);
+    expect(t.authorizations).toEqual(["127.0.0.1:4000"]);
+    t.autofill.submitted(main.frame, {
+      formToken: "f",
+      kind: "signIn",
+      username: "alice",
+      password: "correct-horse",
+    });
+    t.autofill.topLevelCommitted(`${SITE}/welcome`);
+    expect(await pending).toBe("submitted");
+    expect(t.lastOf("savePrompt")).toBeUndefined();
+    expect(t.vault.get(id)?.timesUsed).toBe(1);
+  });
+
+  it("reports filled when no submission follows, and unconfirmed when nothing changes", async () => {
+    const filled = ready();
+    const id = filled.t.addAlice();
+    const first = filled.t.autofill.signIn(SITE, { kind: "saved", loginId: id });
+    await tick();
+    filled.t.fire(1_500);
+    expect(await first).toBe("filled");
+
+    const unconfirmed = ready();
+    const second = unconfirmed.t.autofill.signIn(SITE, {
+      kind: "entered",
+      username: "bob",
+      password: "bob-pass",
+      save: true,
+    });
+    await tick();
+    unconfirmed.t.autofill.submitted(unconfirmed.main.frame, {
+      formToken: "f",
+      kind: "signIn",
+      username: "bob",
+      password: "bob-pass",
+    });
+    unconfirmed.t.fire(1_500);
+    unconfirmed.t.fire(11_500);
+    expect(await second).toBe("submitted_unconfirmed");
+    // Saved only after a confirmed sign-in.
+    expect(unconfirmed.t.vault.list()).toEqual([]);
+  });
+
+  it("saves entered details the person asked to keep once the sign-in succeeds", async () => {
+    const { t, main } = ready();
+    const pending = t.autofill.signIn(SITE, {
+      kind: "entered",
+      username: "carol",
+      password: "carol-pass",
+      save: true,
+    });
+    await tick();
+    expect(t.authorizations).toEqual([]);
+    t.autofill.submitted(main.frame, {
+      formToken: "f",
+      kind: "signIn",
+      username: "carol",
+      password: "carol-pass",
+    });
+    t.autofill.formsReported(main.frame, { forms: [] });
+    expect(await pending).toBe("submitted");
+    const [saved] = t.vault.list();
+    expect(saved).toMatchObject({ origin: SITE, username: "carol" });
+    expect(t.vault.revealPassword(saved!.id)).toBe("carol-pass");
+  });
+
+  it("refuses when the page left the site, has no login form, or the check is declined", async () => {
+    const left = ready();
+    left.main.navigateTo("https://elsewhere.example");
+    expect(
+      await left.t.autofill.signIn(SITE, {
+        kind: "entered",
+        username: "a",
+        password: "b",
+        save: false,
+      }),
+    ).toBe("page_left_origin");
+
+    const t = setup();
+    const main = makeFrame(1, SITE, true);
+    t.autofill.formsReported(main.frame, { forms: [] });
+    expect(
+      await t.autofill.signIn(SITE, { kind: "entered", username: "a", password: "b", save: false }),
+    ).toBe("no_login_form");
+
+    const declined = setup({ approve: false });
+    const frame = makeFrame(1, SITE, true);
+    declined.autofill.formsReported(frame.frame, { forms: [loginForm("f")] });
+    const id = declined.addAlice();
+    expect(await declined.autofill.signIn(SITE, { kind: "saved", loginId: id })).toBe(
+      "unavailable",
+    );
+    expect(frame.sent.some((message) => message.channel === "fill")).toBe(false);
   });
 });

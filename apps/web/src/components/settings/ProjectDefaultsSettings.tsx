@@ -47,6 +47,11 @@ function isWorktreeSubmodules(value: string | null): value is WorktreeSubmodules
   return value !== null && (WORKTREE_SUBMODULES_OPTIONS as readonly string[]).includes(value);
 }
 
+const HISTORY_ACCESS_LABELS = {
+  ask: "Ask each time",
+  allow: "Always allow",
+  off: "Off",
+} as const;
 export function ProjectDefaultsSettings({ category }: { category: ProjectSettingsCategory }) {
   const { scope, target, targets, connectedEnvironments } = useSettingsScope();
   const settings = useScopedSettings();
@@ -505,6 +510,54 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               />
             }
           />
+          {isProjectScope ? null : (
+            <SettingsRow
+              serverScoped
+              settingKeys={["browserAgentHistoryAccess"]}
+              id={searchableSetting("agent-browser-history-access").id}
+              title="Agent access to browsing history"
+              description="Whether agents may read the in-app browser's history. Ask shows a card each time; history never includes incognito browsing or saved passwords."
+              resetAction={
+                settings.browserAgentHistoryAccess !==
+                DEFAULT_SERVER_SETTINGS.browserAgentHistoryAccess ? (
+                  <SettingResetButton
+                    label="default history access"
+                    onClick={() =>
+                      updateSettings({
+                        browserAgentHistoryAccess:
+                          DEFAULT_SERVER_SETTINGS.browserAgentHistoryAccess,
+                      })
+                    }
+                  />
+                ) : null
+              }
+              control={
+                <Select
+                  value={settings.browserAgentHistoryAccess}
+                  onValueChange={(value) => {
+                    if (value === "ask" || value === "allow" || value === "off") {
+                      updateSettings({ browserAgentHistoryAccess: value });
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="w-full sm:w-40"
+                    aria-label="Agent access to browsing history"
+                  >
+                    <SelectValue>
+                      {HISTORY_ACCESS_LABELS[settings.browserAgentHistoryAccess]}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup align="end" alignItemWithTrigger={false}>
+                    <SelectItem value="ask">{HISTORY_ACCESS_LABELS.ask}</SelectItem>
+                    <SelectItem value="allow">{HISTORY_ACCESS_LABELS.allow}</SelectItem>
+                    <SelectItem value="off">{HISTORY_ACCESS_LABELS.off}</SelectItem>
+                  </SelectPopup>
+                </Select>
+              }
+            />
+          )}
         </>
       )}
     </SettingsSection>
