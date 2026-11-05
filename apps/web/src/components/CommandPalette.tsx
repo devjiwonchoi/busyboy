@@ -2197,11 +2197,10 @@ function OpenCommandPaletteDialog(props: {
       );
       return;
     }
-    const projectId = newProjectId();
     const createResult = await createProject({
       environmentId: input.environmentId,
       input: {
-        projectId,
+        projectId: newProjectId(),
         title: inferProjectTitleFromPath(cwd),
         workspaceRoot: cwd,
         createWorkspaceRootIfMissing: true,
@@ -2222,6 +2221,8 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
+    // A removed project's folder comes back as that project, under its old id.
+    const projectId = createResult.value.id;
     const navigationResult = await settlePromise(() =>
       handleNewThread(scopeProjectRef(input.environmentId, projectId)),
     );

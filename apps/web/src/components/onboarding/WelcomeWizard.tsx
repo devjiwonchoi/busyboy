@@ -1228,6 +1228,8 @@ function ImportStep({
           }
           continue;
         }
+        // A removed project's folder comes back as that project, under its old id.
+        projectId = result.value.id;
       }
 
       if (!hasAccess()) {
