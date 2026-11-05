@@ -73,7 +73,7 @@ import {
   ProviderInstanceId,
   type ServerProvider,
   type ScopedThreadRef,
-  type ThreadId,
+  ThreadId,
   type RunId,
   type RuntimeRequestId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -228,6 +228,7 @@ import {
   useRightPanelStore,
 } from "../rightPanelStore";
 import { useSideChatStore } from "../sideChatStore";
+import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -380,6 +381,7 @@ import {
   useThreadVisibleTurnItems,
   useThreadCheckpointSummaries,
   waitForThreadShell,
+  readThreadShell,
 } from "../state/entities";
 import { useEnvironmentShellHasSnapshot } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
@@ -841,6 +843,13 @@ function formatOutgoingPrompt(params: {
 }
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
+
+/** The side chat shown in the panel, else the newest one. */
+function findSideChatSurface(panel: ReturnType<typeof selectThreadRightPanelState>) {
+  const selected = panel.surfaces.find((surface) => surface.id === panel.activeSurfaceId);
+  if (selected?.kind === "side-chat") return selected;
+  return panel.surfaces.findLast((surface) => surface.kind === "side-chat");
+}
 
 // The side chat panel takes focus on click, so its events carry it as their target.
 function isInSideChat(target: EventTarget | null): boolean {
@@ -5345,8 +5354,10 @@ export default function ChatView(props: ChatViewProps) {
     }) satisfies ChatShortcutHandler;
   const sideChatPendingRef = useRef(false);
   // Starts a fresh session in the same workspace; it shares no context with this thread.
-  const startSideChat = async () => {
-    if (!activeThread || !activeThreadRef || !activeProject || sideChatPendingRef.current) return;
+  const startSideChat = async (): Promise<ScopedThreadRef | null> => {
+    if (!activeThread || !activeThreadRef || !activeProject || sideChatPendingRef.current) {
+      return null;
+    }
 
     sideChatPendingRef.current = true;
     const sourceThreadRef = activeThreadRef;
@@ -5380,7 +5391,7 @@ export default function ChatView(props: ChatViewProps) {
           }),
         );
       }
-      return;
+      return null;
     }
     if (!ready) {
       toastManager.add(
@@ -5390,10 +5401,11 @@ export default function ChatView(props: ChatViewProps) {
           description: "The side chat was created but has not reached this client yet.",
         }),
       );
-      return;
+      return null;
     }
 
     useRightPanelStore.getState().openSideChat(sourceThreadRef, targetThreadRef.threadId);
+    return targetThreadRef;
   };
   const startSideChatStable = useStableCallback(startSideChat);
   const toggleSideChat = () => {
@@ -5420,17 +5432,38 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
 
-    // Brings back the side chat last shown, else the newest one, else starts one.
-    const target =
-      selected?.kind === "side-chat"
-        ? selected
-        : panel.surfaces.findLast((surface) => surface.kind === "side-chat");
+    const target = findSideChatSurface(panel);
     if (!target) {
       void startSideChatStable();
       return;
     }
     useRightPanelStore.getState().activateSurface(activeThreadRef, target.id);
   };
+  // Opens a side chat the way the shortcut does, then quotes the selection in its composer.
+  const askInSideChat = (
+    citation: AssistantCitation,
+    sourceAnchor: AssistantCitationSourceAnchor,
+  ): boolean => {
+    if (!isServerThread || !activeProject || !activeThreadRef) return false;
+    const pending = { citation, sourceAnchor };
+    const target = findSideChatSurface(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, activeThreadRef),
+    );
+    const targetRef = target ? scopeThreadRef(environmentId, ThreadId.make(target.threadId)) : null;
+    const targetShell = targetRef ? readThreadShell(targetRef) : null;
+    if (target && targetRef && targetShell && targetShell.deletedAt == null) {
+      useSideChatStore.getState().queueCitation(targetRef, pending);
+      useRightPanelStore.getState().activateSurface(activeThreadRef, target.id);
+      return true;
+    }
+    void startSideChatStable().then((ref) => {
+      if (ref) useSideChatStore.getState().queueCitation(ref, pending);
+    });
+    return true;
+  };
+  const askInSideChatStable = useStableCallback(askInSideChat);
+  // A side chat adds the quotes sent to it once its composer can take them.
+  useSideChatCitationInbox(sideChat ? activeThreadRef : null, composerRef);
   useChatShortcuts({
     enabled: activeThreadId !== null,
     // A side chat takes only its own composer's commands; the page's chat leaves those to it.
@@ -7886,6 +7919,9 @@ export default function ChatView(props: ChatViewProps) {
                 {...(!paintOnlyDisplayedTimeline
                   ? {
                       onCiteAssistantText: citeAssistantTextStable,
+                      ...(!sideChat && isServerThread && activeProject
+                        ? { onAskInSideChat: askInSideChatStable }
+                        : {}),
                       ...(activeProject ? { onRunShellCommand: runShellCommandStable } : {}),
                     }
                   : {})}

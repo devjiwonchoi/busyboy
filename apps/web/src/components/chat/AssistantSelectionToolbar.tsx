@@ -4,7 +4,6 @@ import {
   type AssistantCitation,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { QuoteIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -22,17 +21,23 @@ export function AssistantSelectionToolbar({
   viewport,
   threadRef,
   onCite,
+  onAskInSideChat,
 }: {
   viewport: HTMLElement | null;
   threadRef: ScopedThreadRef;
+  /** "Add to chat": quotes the selection in this thread's composer. */
   onCite: (citation: AssistantCitation, sourceAnchor: AssistantCitationSourceAnchor) => boolean;
+  /** "Ask in side chat": omitted where a side chat cannot open. */
+  onAskInSideChat?:
+    | ((citation: AssistantCitation, sourceAnchor: AssistantCitationSourceAnchor) => boolean)
+    | undefined;
 }) {
   const [selection, setSelection] = useState<{
     citation: AssistantCitation;
     position: SelectionActionPoint;
     sourceAnchor: AssistantCitationSourceAnchor;
   } | null>(null);
-  const toolbarRef = useRef<HTMLButtonElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<ReturnType<typeof observeSelectionActions> | null>(null);
 
   useLayoutEffect(() => {
@@ -108,10 +113,11 @@ export function AssistantSelectionToolbar({
       ) {
         return;
       }
-      if (toolbar.disabled) return;
+      const firstAction = toolbar.querySelector<HTMLButtonElement>("button:not(:disabled)");
+      if (!firstAction) return;
       event.preventDefault();
       event.stopPropagation();
-      toolbar.focus({ preventScroll: true });
+      firstAction.focus({ preventScroll: true });
     };
     document.addEventListener("keydown", focusActions, true);
     document.addEventListener("selectionchange", actions.selectionChanged);
@@ -129,24 +135,22 @@ export function AssistantSelectionToolbar({
     actionsRef.current?.cancel();
     setSelection(null);
   };
-  const cite = () => {
-    if (tooLong || !onCite(selection.citation, selection.sourceAnchor)) return false;
+  const act = (
+    handler: (citation: AssistantCitation, sourceAnchor: AssistantCitationSourceAnchor) => boolean,
+  ) => {
+    if (tooLong || !handler(selection.citation, selection.sourceAnchor)) return false;
     window.getSelection()?.removeAllRanges();
     dismiss();
     return true;
   };
   return createPortal(
-    <Button
+    <div
       ref={toolbarRef}
-      type="button"
-      size="xs"
-      variant="glass"
-      disabled={tooLong}
-      aria-label={tooLong ? "Selection is too long to cite" : "Cite selection in composer"}
-      className="fixed z-50 max-w-[calc(100vw-1rem)]"
+      role="toolbar"
+      aria-label="Selection actions"
+      className="surface-glass fixed z-50 flex max-w-[calc(100vw-1rem)] items-center rounded-lg border border-border/60 p-0.5 text-foreground shadow-sm"
       style={{ left: selection.position.x, top: selection.position.y }}
       onPointerDown={(event) => event.preventDefault()}
-      onClick={cite}
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Escape" && !event.nativeEvent.isComposing) {
@@ -155,9 +159,26 @@ export function AssistantSelectionToolbar({
         }
       }}
     >
-      <QuoteIcon aria-hidden="true" className="size-3.5" />
-      {tooLong ? "Shorten selection" : "Cite"}
-    </Button>,
+      {tooLong ? (
+        <Button type="button" size="xs" variant="ghost" disabled>
+          Shorten selection
+        </Button>
+      ) : (
+        <>
+          <Button type="button" size="xs" variant="ghost" onClick={() => act(onCite)}>
+            Add to chat
+          </Button>
+          {onAskInSideChat ? (
+            <>
+              <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-border" />
+              <Button type="button" size="xs" variant="ghost" onClick={() => act(onAskInSideChat)}>
+                Ask in side chat
+              </Button>
+            </>
+          ) : null}
+        </>
+      )}
+    </div>,
     document.body,
   );
 }
