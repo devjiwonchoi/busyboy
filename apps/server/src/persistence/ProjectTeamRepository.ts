@@ -119,6 +119,8 @@ export class ProjectTeamRepository extends Context.Service<
     ) => Result<Option.Option<ProjectManagerRecord>>;
     readonly listManagers: () => Result<ReadonlyArray<ProjectManagerRecord>>;
     readonly upsertManager: (input: UpsertProjectManagerInput) => Result<ProjectManagerRecord>;
+    /** Forgets the project's PM; its thread is left to the caller. */
+    readonly deleteManager: (projectId: ProjectId) => Result<void>;
     readonly updateManagerSettings: (input: {
       readonly projectId: ProjectId;
       readonly settings: ProjectTeamSettings;
@@ -420,6 +422,10 @@ export const make = Effect.gen(function* () {
       WHERE project_id = ${projectId}
       RETURNING ${managerColumns}
     `,
+  });
+  const deleteManagerRow = SqlSchema.void({
+    Request: ProjectIdRequest,
+    execute: ({ projectId }) => sql`DELETE FROM project_managers WHERE project_id = ${projectId}`,
   });
   const setUnreadSitrepStreakRow = SqlSchema.void({
     Request: Schema.Struct({ projectId: ProjectId, streak: NonNegativeInt, now: IsoDateTime }),
@@ -823,6 +829,8 @@ export const make = Effect.gen(function* () {
     listManagers: () => findManagers({}).pipe(Effect.mapError(toRepositoryError("listManagers"))),
     upsertManager: (input) =>
       upsertManagerRow(input).pipe(Effect.mapError(toRepositoryError("upsertManager"))),
+    deleteManager: (projectId) =>
+      deleteManagerRow({ projectId }).pipe(Effect.mapError(toRepositoryError("deleteManager"))),
     updateManagerSettings: (input) =>
       updateManagerSettingsRow(input).pipe(
         Effect.mapError(toRepositoryError("updateManagerSettings")),
