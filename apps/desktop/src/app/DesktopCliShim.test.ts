@@ -159,6 +159,18 @@ describe("renderCliShim", () => {
     expect(lines).toContain('set "BUSYBOY_CLI_PATH=C:\\Users\\José\\.t3\\bin\\t3.cmd"');
   });
 
+  it("runs the server entry on the bundled Node on Windows", () => {
+    const node = "C:\\BusyBoy\\resources\\server\\bin\\busyboy-node.exe";
+    const entry = "C:\\BusyBoy\\resources\\server\\apps\\server\\dist\\bin.mjs";
+    const lines = renderCliShim({
+      target: { kind: "windows", executable: node, entry },
+      shimPath: "C:\\Users\\me\\.t3\\bin\\busyboy.cmd",
+      t3Home: "C:\\Users\\me\\.t3",
+    }).split("\r\n");
+    expect(lines).toContain(`if exist "${node}" goto run`);
+    expect(lines).toContain(`"${node}" "${entry}" %*`);
+  });
+
   it("switches the Windows console to UTF-8 only when a path needs it", () => {
     const ascii = renderCliShim({
       target: { kind: "windows", executable: "C:\\T3\\BusyBoy.exe", entry: "C:\\T3\\bin.mjs" },

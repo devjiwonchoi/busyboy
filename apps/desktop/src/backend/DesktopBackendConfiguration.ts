@@ -219,7 +219,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       ...buildObservabilityFragment(input.observabilitySettings),
     };
 
-    // Packaged macOS builds run the backend on their bundled Node: their Electron ignores
+    // Packaged macOS and Windows builds run the backend on their bundled Node: their Electron ignores
     // ELECTRON_RUN_AS_NODE, so no other program can run code as BusyBoy.
     const serverNode = environment.serverNodePath;
     return {

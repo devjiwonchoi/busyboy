@@ -56,9 +56,9 @@ export class DesktopEnvironment extends Context.Service<
     readonly serverRoot: string;
     readonly backendEntryPath: string;
     /**
-     * The Node binary that runs the backend and the CLI. Packaged macOS builds ship their
-     * own, because their Electron has ELECTRON_RUN_AS_NODE turned off. None elsewhere: the
-     * backend runs on Electron in Node mode.
+     * The Node binary that runs the backend and the CLI. Packaged macOS and Windows builds
+     * ship their own, because their Electron has ELECTRON_RUN_AS_NODE turned off. None
+     * elsewhere: the backend runs on Electron in Node mode.
      */
     readonly serverNodePath: Option.Option<string>;
     readonly clientAssetsDir: string;
@@ -180,15 +180,12 @@ const make = Effect.fn("desktop.environment.make")(function* (
   });
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
-  // Packaged macOS builds keep the server outside app.asar, in Resources/server, with its
-  // own Node binary: Electron's Node mode is fused off there, and plain Node can't read asar.
-  const separateServer = input.isPackaged && input.platform === "darwin";
-  const serverRoot =
-    input.isPackaged && input.platform === "win32"
-      ? path.join(input.resourcesPath, "server.asar")
-      : separateServer
-        ? path.join(input.resourcesPath, "server")
-        : appRoot;
+  // Packaged macOS and Windows builds keep the server outside app.asar, in resources/server,
+  // with its own Node binary: Electron's Node mode is fused off there, and plain Node can't
+  // read asar.
+  const separateServer =
+    input.isPackaged && (input.platform === "darwin" || input.platform === "win32");
+  const serverRoot = separateServer ? path.join(input.resourcesPath, "server") : appRoot;
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion,
@@ -230,7 +227,13 @@ const make = Effect.fn("desktop.environment.make")(function* (
     serverRoot,
     backendEntryPath: path.join(serverRoot, "apps/server/dist/bin.mjs"),
     serverNodePath: separateServer
-      ? Option.some(path.join(serverRoot, "bin", "busyboy-node"))
+      ? Option.some(
+          path.join(
+            serverRoot,
+            "bin",
+            input.platform === "win32" ? "busyboy-node.exe" : "busyboy-node",
+          ),
+        )
       : Option.none(),
     // The app window's UI is served from app.asar, where the integrity check covers it.
     clientAssetsDir: path.join(separateServer ? appRoot : serverRoot, "apps/server/dist/client"),

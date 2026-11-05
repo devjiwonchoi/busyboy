@@ -115,7 +115,7 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
-  it.effect("uses the packaged Windows server sidecar as the backend root", () =>
+  it.effect("runs the packaged Windows server from resources/server on its bundled Node", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment({
         platform: "win32",
@@ -125,14 +125,19 @@ describe("DesktopEnvironment", () => {
       });
 
       assert.equal(environment.appRoot, "/install/resources/app.asar");
-      assert.equal(environment.serverRoot, "/install/resources/server.asar");
+      assert.equal(environment.serverRoot, "/install/resources/server");
       assert.equal(
         environment.backendEntryPath,
-        "/install/resources/server.asar/apps/server/dist/bin.mjs",
+        "/install/resources/server/apps/server/dist/bin.mjs",
       );
+      assert.deepEqual(
+        environment.serverNodePath,
+        Option.some("/install/resources/server/bin/busyboy-node.exe"),
+      );
+      assert.equal(environment.compileCachePath, "/install/resources/server/compileCache.cjs");
       assert.equal(
         environment.clientAssetsDir,
-        "/install/resources/server.asar/apps/server/dist/client",
+        "/install/resources/app.asar/apps/server/dist/client",
       );
     }),
   );
