@@ -150,6 +150,7 @@ import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import {
   readIsProjectManagerThread,
   useProjectManagerEntries,
+  useLeadThreadTask,
   useProjectManagerForThread,
   type ProjectManagerEntry,
 } from "../state/projectTeam";
@@ -256,9 +257,10 @@ import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
-import { Tooltip, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import {
   resolveSidebarRowStatus,
+  resolveSidebarTaskRowStatus,
   SidebarRowActionButton,
   SidebarRowLine,
 } from "./sidebar/SidebarRowLine";
@@ -1444,11 +1446,21 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isActive: props.isActive,
     isSelected,
   });
-  const topStatus = resolveSidebarRowStatus({
+  const threadStatus = resolveSidebarRowStatus({
     status,
     isUnread,
     goalActive: thread.goal?.status === "active",
   });
+  // A task lead's row also shows its task's stage, so it never looks idle.
+  const leadTask = useLeadThreadTask(threadRef, thread.projectId);
+  const topStatus =
+    leadTask === null
+      ? threadStatus
+      : resolveSidebarTaskRowStatus({
+          threadStatus,
+          task: leadTask.task,
+          waitingOnUser: leadTask.waitingOnUser,
+        });
 
   const handleClick = (event: ReactMouseEvent) => {
     onThreadClick(event, threadRef);
@@ -1589,6 +1601,26 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isActive: props.isActive,
   });
 
+  const titleText = (
+    <span
+      aria-hidden
+      className={cn(
+        "min-w-0 flex-1 text-sm transition-opacity motion-reduce:transition-none",
+        shouldRecede ? "font-normal" : "font-medium",
+        "truncate",
+        shouldRecede
+          ? "text-secondary-label"
+          : isUnread || status === "input"
+            ? "text-foreground"
+            : status === "failed"
+              ? "text-foreground/95"
+              : "text-foreground/90",
+        isRegeneratingTitle && "opacity-55",
+      )}
+    >
+      {thread.title}
+    </span>
+  );
   const title =
     isRenaming && canOperateThread ? (
       <input
@@ -1603,25 +1635,16 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         onDoubleClick={(event) => event.stopPropagation()}
         className="min-w-0 flex-1 rounded-sm border border-input bg-card px-1 text-sm font-medium text-card-foreground outline-none focus:border-foreground"
       />
+    ) : leadTask === null ? (
+      titleText
     ) : (
-      <span
-        aria-hidden
-        className={cn(
-          "min-w-0 flex-1 text-sm transition-opacity motion-reduce:transition-none",
-          shouldRecede ? "font-normal" : "font-medium",
-          "truncate",
-          shouldRecede
-            ? "text-secondary-label"
-            : isUnread || status === "input"
-              ? "text-foreground"
-              : status === "failed"
-                ? "text-foreground/95"
-                : "text-foreground/90",
-          isRegeneratingTitle && "opacity-55",
-        )}
-      >
-        {thread.title}
-      </span>
+      // The status icon gives way to row actions on hover, so the task's status shows here.
+      <Tooltip>
+        <TooltipTrigger render={titleText} />
+        <TooltipPopup side="right" data-testid="sidebar-task-status-tooltip">
+          {topStatus?.label}
+        </TooltipPopup>
+      </Tooltip>
     );
   const accessibleTitle = isRenaming ? null : <span className="sr-only">{thread.title}</span>;
 

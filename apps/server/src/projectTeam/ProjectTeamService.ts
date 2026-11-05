@@ -1401,6 +1401,8 @@ const make = Effect.gen(function* () {
               title: task.title,
               stage: task.stage,
               leadThreadId: task.leadThreadId,
+              prUrl: task.prUrl,
+              lastOutcome: task.lastOutcome,
             })),
           } satisfies ProjectTeamAttentionSummary;
         }),

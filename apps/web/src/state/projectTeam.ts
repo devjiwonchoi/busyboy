@@ -14,6 +14,7 @@ import {
 } from "@t3tools/client-runtime/state/project-team";
 import type {
   EnvironmentId,
+  ProjectId,
   ProjectTeamAnswerDecisionInput,
   ProjectTaskReference,
   ProjectTeamAttentionSummary,
@@ -26,7 +27,11 @@ import { AsyncResult, Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useThreadShell } from "./entities";
-import { taskReferencesForThread } from "./projectTeam.logic";
+import {
+  type LeadThreadTask,
+  taskForLeadThread,
+  taskReferencesForThread,
+} from "./projectTeam.logic";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useAtomCommand } from "./use-atom-command";
 
@@ -184,4 +189,15 @@ export function useThreadTaskReferences(
     ref === null || projectId === null ? null : scopeProjectRef(ref.environmentId, projectId),
   );
   return taskReferencesForThread(summary, ref?.threadId ?? null);
+}
+
+/** The task this thread leads, with whether it waits on the user; null for other threads. */
+export function useLeadThreadTask(
+  ref: ScopedThreadRef,
+  projectId: ProjectId | null,
+): LeadThreadTask | null {
+  const summary = useProjectManager(
+    projectId === null ? null : scopeProjectRef(ref.environmentId, projectId),
+  );
+  return taskForLeadThread(summary, ref.threadId);
 }
