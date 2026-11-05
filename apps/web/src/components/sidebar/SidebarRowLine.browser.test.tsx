@@ -3,6 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
+import "~/index.css";
+
 import { resolveSidebarRowStatus, SidebarRowActionButton, SidebarRowLine } from "./SidebarRowLine";
 
 let root: Root;
@@ -69,11 +71,12 @@ describe("SidebarRowLine", () => {
     // The label is screen-reader only; the visible status is the icon.
     expect(slot.querySelector("[role='status']")!.className).toContain("sr-only");
 
-    // Title, the hover actions, then the status icon at the far right.
+    // Title first; the status icon and the hover actions share the trailing slot.
     const title = row.querySelector("span.truncate")!;
-    const actions = row.querySelector("[data-testid='sidebar-row-actions']")!;
-    expect(title.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(actions.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const trailing = row.querySelector("[data-testid='sidebar-row-trailing']")!;
+    expect(title.compareDocumentPosition(trailing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trailing.contains(slot)).toBe(true);
+    expect(trailing.contains(row.querySelector("[data-testid='sidebar-row-actions']"))).toBe(true);
 
     // No relative time, duration, branch, or model text — only title, actions, status.
     const visibleText = (row.textContent ?? "").replace("Working", "");
@@ -106,5 +109,80 @@ describe("SidebarRowLine", () => {
     expect(onPin).toHaveBeenCalledOnce();
     expect(onArchive).toHaveBeenCalledOnce();
     await expect.element(page.getByRole("status")).toHaveTextContent("Input");
+  });
+
+  it("keeps the action buttons in the same place on hover, with or without a status", async () => {
+    const statuses = {
+      "Busy thread": resolveSidebarRowStatus({
+        status: "working",
+        isUnread: false,
+        goalActive: false,
+      }),
+      "Idle thread": resolveSidebarRowStatus({
+        status: "ready",
+        isUnread: false,
+        goalActive: false,
+      }),
+    };
+    await act(() =>
+      root.render(
+        <ul className="w-60">
+          {Object.entries(statuses).map(([name, status]) => (
+            <li key={name}>
+              <div role="button" tabIndex={0} aria-label={name} className="group/sidebar-row">
+                <SidebarRowLine
+                  title={<span className="min-w-0 flex-1 truncate">{name}</span>}
+                  status={status}
+                  actions={
+                    <>
+                      <SidebarRowActionButton label={`Pin ${name}`} onClick={() => {}}>
+                        <svg className="size-3.5" />
+                      </SidebarRowActionButton>
+                      <SidebarRowActionButton label={`Archive ${name}`} onClick={() => {}}>
+                        <svg className="size-3.5" />
+                      </SidebarRowActionButton>
+                    </>
+                  }
+                />
+              </div>
+            </li>
+          ))}
+        </ul>,
+      ),
+    );
+
+    const measure = async (name: string) => {
+      const row = page.getByRole("button", { name, exact: true });
+      const title = row.element().querySelector("span.truncate")!;
+      const restingTitleWidth = title.getBoundingClientRect().width;
+      await userEvent.hover(row);
+      const actions = row.element().querySelector("[data-testid='sidebar-row-actions']")!;
+      await vi.waitFor(() => expect(getComputedStyle(actions).opacity).toBe("1"));
+      const box = (label: string) => {
+        const rect = page.getByRole("button", { name: label }).element().getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      };
+      return {
+        pin: box(`Pin ${name}`),
+        archive: box(`Archive ${name}`),
+        restingTitleWidth,
+        hoveredTitleWidth: title.getBoundingClientRect().width,
+      };
+    };
+
+    const busy = await measure("Busy thread");
+    const idle = await measure("Idle thread");
+
+    expect(busy.pin).toEqual(idle.pin);
+    expect(busy.archive).toEqual(idle.archive);
+    // The actions take the status icon's place at the row's right edge.
+    const rowRight = page.getByRole("button", { name: "Busy thread", exact: true }).element();
+    const statusRight = rowRight
+      .querySelector("[data-testid='sidebar-row-status']")!
+      .getBoundingClientRect().right;
+    expect(busy.archive.right).toBe(statusRight);
+    // Hovering swaps layers in a fixed slot, so the title never reflows.
+    expect(busy.hoveredTitleWidth).toBe(busy.restingTitleWidth);
+    expect(idle.hoveredTitleWidth).toBe(idle.restingTitleWidth);
   });
 });
