@@ -417,7 +417,7 @@ export function makeBrowserHistory(options: MakeBrowserHistoryOptions): BrowserH
  * A private in-memory session with no cookies, so suggestion requests carry
  * nothing that identifies the person beyond the text itself.
  */
-const SUGGESTIONS_PARTITION = "t3code-search-suggestions";
+const SUGGESTIONS_PARTITION = "busyboy-search-suggestions";
 
 const fetchSuggestionsWithoutCookies: SuggestionFetch = async (url, signal) => {
   const response = await electronSession.fromPartition(SUGGESTIONS_PARTITION).fetch(url, {
