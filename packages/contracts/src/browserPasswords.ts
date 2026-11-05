@@ -192,26 +192,35 @@ export type BrowserPasswordAutofillEvent =
     }
   | { readonly type: "savePromptClosed"; readonly tabId: string };
 
+/**
+ * A browser tab's runtime id: a JSON tuple of environment, thread, project and
+ * tab ids, so well over 128 characters.
+ */
+export const BrowserPasswordTabId = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(1024),
+);
+
 export const BrowserPasswordFillChooseInput = Schema.Struct({
-  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  tabId: BrowserPasswordTabId,
   requestId: Schema.String.check(Schema.isMaxLength(64)),
   loginId: Id,
 });
 export type BrowserPasswordFillChooseInput = typeof BrowserPasswordFillChooseInput.Type;
 
 export const BrowserPasswordTabInput = Schema.Struct({
-  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  tabId: BrowserPasswordTabId,
 });
 export type BrowserPasswordTabInput = typeof BrowserPasswordTabInput.Type;
 
 export const BrowserPasswordPromptInput = Schema.Struct({
-  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  tabId: BrowserPasswordTabId,
   promptId: Schema.String.check(Schema.isMaxLength(64)),
 });
 export type BrowserPasswordPromptInput = typeof BrowserPasswordPromptInput.Type;
 
 export const BrowserPasswordPromptResponse = Schema.Struct({
-  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  tabId: BrowserPasswordTabId,
   promptId: Schema.String.check(Schema.isMaxLength(64)),
   action: Schema.Literals(["save", "notNow", "never"]),
   /** The username as edited in the prompt. */
