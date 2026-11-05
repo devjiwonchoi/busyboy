@@ -108,6 +108,8 @@ export class SitrepScheduler extends Context.Service<
   {
     /** A task finished, a PR opened, or nothing is running any more. */
     readonly noteMilestone: (projectId: ProjectId) => Effect.Effect<void>;
+    /** The PM read the team status, so the sitrep it is writing starts after this. */
+    readonly noteStatusRead: (projectId: ProjectId) => Effect.Effect<void>;
     /** Sends a sitrep request now, or returns the one the PM is still writing. */
     readonly request: (projectId: ProjectId) => Effect.Effect<ProjectSitrepId, ProjectTeamError>;
     /** Closes the sitrep still being written, e.g. because the PM thread was replaced. */
@@ -133,6 +135,7 @@ const make = Effect.gen(function* () {
   const router = yield* AttentionRouter.AttentionRouter;
   const newId = yield* makeIdGenerator;
   const milestoneDueAt = yield* Ref.make<ReadonlyMap<ProjectId, number>>(new Map());
+  const statusReadAt = yield* Ref.make<ReadonlyMap<ProjectId, number>>(new Map());
 
   const requireManager = (projectId: ProjectId) =>
     repository.getManager(projectId).pipe(
@@ -198,6 +201,14 @@ const make = Effect.gen(function* () {
               projectId,
               DateTime.toEpochMillis(now) + SITREP_MILESTONE_DEBOUNCE_MS,
             ),
+      );
+    });
+
+  const noteStatusRead: SitrepScheduler["Service"]["noteStatusRead"] = (projectId) =>
+    Effect.gen(function* () {
+      const now = yield* DateTime.now;
+      yield* Ref.update(statusReadAt, (current) =>
+        new Map(current).set(projectId, DateTime.toEpochMillis(now)),
       );
     });
 
@@ -408,14 +419,19 @@ const make = Effect.gen(function* () {
         messageRoles: ["assistant"],
         messageRunIds: [runId],
       });
-      const body =
-        messages
-          .filter((message) => message.text.trim().length > 0)
-          .toSorted(
-            (a, b) => DateTime.toEpochMillis(a.createdAt) - DateTime.toEpochMillis(b.createdAt),
-          )
-          .at(-1)
-          ?.text.trim() ?? "";
+      const written = messages
+        .filter((message) => message.text.trim().length > 0)
+        .toSorted(
+          (a, b) => DateTime.toEpochMillis(a.createdAt) - DateTime.toEpochMillis(b.createdAt),
+        );
+      // The sitrep is the first message after the PM read the team status; anything later
+      // in the turn (a follow-up question, an approval relay) is not the sitrep.
+      const readAt = (yield* Ref.get(statusReadAt)).get(manager.projectId);
+      const afterRead =
+        readAt !== undefined && readAt >= isoMillis(latest.value.createdAt)
+          ? written.find((message) => DateTime.toEpochMillis(message.createdAt) >= readAt)
+          : undefined;
+      const body = (afterRead ?? written.at(-1))?.text.trim() ?? "";
       yield* repository.setSitrepBody({ id: sitrepId, body: body || ABANDONED_SITREP_BODY });
       // Only a posted sitrep moves the window and counts toward the unread streak.
       if (body.length > 0) {
@@ -492,6 +508,7 @@ const make = Effect.gen(function* () {
 
   return {
     noteMilestone,
+    noteStatusRead,
     request,
     abandonPending,
     check,

@@ -925,6 +925,7 @@ const make = Effect.gen(function* () {
         sitreps: yield* repository.listRecentPostedSitreps({ projectId, limit: JOURNAL_LIMIT }),
       });
       const memoryTopics = (yield* repository.listMemory(projectId)).map((entry) => entry.topic);
+      if (role.type === "pm") yield* sitreps.noteStatusRead(projectId);
       return {
         projectId,
         tasks: {

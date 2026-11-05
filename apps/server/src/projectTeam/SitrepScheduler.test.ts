@@ -410,6 +410,28 @@ describe("SitrepScheduler", () => {
     ),
   );
 
+  it.effect("records the sitrep, not a follow-up the PM wrote after it", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        yield* team.requestSitrep({ projectId: PROJECT_ID });
+        yield* TestClock.adjust("1 second");
+        yield* writeInSitrepTurn(harness, pm, "Checking the board.");
+        yield* TestClock.adjust("1 second");
+        yield* team.teamStatus(pm, {});
+        yield* TestClock.adjust("1 second");
+        yield* writeInSitrepTurn(harness, pm, "Cache is done; Search is in review.");
+        yield* TestClock.adjust("1 second");
+        yield* writeInSitrepTurn(harness, pm, "Approval relayed. Start on Search next?");
+        yield* finishSitrepTurn(harness, pm);
+        const latest = Option.getOrThrow(yield* repository.getLatestSitrep(PROJECT_ID));
+        assert.strictEqual(latest.body, "Cache is done; Search is in review.");
+      }),
+    ),
+  );
+
   it.effect("sends a requested sitrep at once and never two at a time", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
