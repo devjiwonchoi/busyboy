@@ -2278,3 +2278,53 @@ describe("OrchestratorMcpService provider resolution", () => {
     );
   });
 });
+
+describe("originDefaultWorktreeStrategy", () => {
+  const git = (input: {
+    readonly origin: boolean;
+    readonly defaultBranch: string | null;
+    readonly remoteBranches: ReadonlyArray<string>;
+  }) => ({
+    remoteExists: () => Effect.succeed(input.origin),
+    resolveDefaultBranchName: () => Effect.succeed(input.defaultBranch),
+    remoteBranchExists: ({ refName }: { readonly refName: string }) =>
+      Effect.succeed(input.remoteBranches.includes(refName)),
+  });
+
+  it.effect("starts a task worktree from origin's default branch", () =>
+    Effect.gen(function* () {
+      assert.deepStrictEqual(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: true, defaultBranch: "trunk", remoteBranches: ["trunk"] }),
+          "/repo",
+        ),
+        { type: "worktree", baseRef: "trunk", startFromOrigin: true },
+      );
+      // No origin/HEAD recorded: origin/main is the default.
+      assert.deepStrictEqual(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: true, defaultBranch: null, remoteBranches: ["main"] }),
+          "/repo",
+        ),
+        { type: "worktree", baseRef: "main", startFromOrigin: true },
+      );
+    }),
+  );
+
+  it.effect("falls back to the parent commit without an origin branch", () =>
+    Effect.gen(function* () {
+      assert.isUndefined(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: false, defaultBranch: null, remoteBranches: [] }),
+          "/repo",
+        ),
+      );
+      assert.isUndefined(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: true, defaultBranch: null, remoteBranches: ["master"] }),
+          "/repo",
+        ),
+      );
+    }),
+  );
+});

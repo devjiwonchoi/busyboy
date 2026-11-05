@@ -130,7 +130,32 @@ type TerminalTaskStatus = Extract<
 export interface OrchestratorMcpDelegateTaskOptions {
   /** "never": the child's terminal state does not wake the parent; its completion is disposed. */
   readonly completionWake?: "never";
+  /**
+   * "origin-default": an isolated worktree fetches and starts from origin's default
+   * branch instead of the parent's local commit, so it never inherits a stale checkout.
+   */
+  readonly worktreeBase?: "origin-default";
 }
+
+/**
+ * The worktree strategy for a child that should start from origin's default branch,
+ * or undefined when the checkout has no origin branch to start from.
+ */
+export const originDefaultWorktreeStrategy = (
+  git: Pick<
+    GitVcsDriver.GitVcsDriver["Service"],
+    "remoteExists" | "resolveDefaultBranchName" | "remoteBranchExists"
+  >,
+  cwd: string,
+) =>
+  Effect.gen(function* () {
+    if (!(yield* git.remoteExists({ cwd, remoteName: "origin" }))) return undefined;
+    const branch = (yield* git.resolveDefaultBranchName(cwd, "origin")) ?? "main";
+    if (!(yield* git.remoteBranchExists({ cwd, refName: branch, remoteName: "origin" }))) {
+      return undefined;
+    }
+    return { type: "worktree", baseRef: branch, startFromOrigin: true } as const;
+  }).pipe(Effect.orElseSucceed(() => undefined));
 
 export interface OrchestratorMcpServiceShape {
   readonly capabilities: (
@@ -1961,17 +1986,29 @@ const make = Effect.gen(function* () {
         let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
         if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
           const project = yield* requireProject(parent.thread.projectId);
-          const base = yield* gitDriver
-            .resolveCommit({
-              cwd: parent.thread.worktreePath ?? project.workspaceRoot,
-              revision: "HEAD",
-            })
-            .pipe(
-              Effect.mapError(() =>
-                failure("invalid_request", "Unable to resolve the parent checkout commit."),
-              ),
+          if (options?.worktreeBase === "origin-default") {
+            workspaceStrategy = yield* originDefaultWorktreeStrategy(
+              gitDriver,
+              project.workspaceRoot,
             );
-          workspaceStrategy = { type: "worktree", baseRef: base.commitSha, startFromOrigin: false };
+          }
+          if (workspaceStrategy === undefined) {
+            const base = yield* gitDriver
+              .resolveCommit({
+                cwd: parent.thread.worktreePath ?? project.workspaceRoot,
+                revision: "HEAD",
+              })
+              .pipe(
+                Effect.mapError(() =>
+                  failure("invalid_request", "Unable to resolve the parent checkout commit."),
+                ),
+              );
+            workspaceStrategy = {
+              type: "worktree",
+              baseRef: base.commitSha,
+              startFromOrigin: false,
+            };
+          }
         }
         // ThreadManagementService.dispatch is the chokepoint for this command
         // type's own enablement check, using the same command id and its

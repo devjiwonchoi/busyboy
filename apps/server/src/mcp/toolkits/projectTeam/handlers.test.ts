@@ -44,6 +44,7 @@ const mcpClient = McpSchema.McpServerClient.of({
 interface DelegateCall {
   readonly scope: ThreadId;
   readonly completionWake: string | undefined;
+  readonly worktreeBase: string | undefined;
 }
 
 const registration = (harness: TeamHarness, delegateCalls: Ref.Ref<ReadonlyArray<DelegateCall>>) =>
@@ -55,7 +56,11 @@ const registration = (harness: TeamHarness, delegateCalls: Ref.Ref<ReadonlyArray
         delegateTask: (scope, input, options) =>
           Ref.update(delegateCalls, (all) => [
             ...all,
-            { scope: scope.thread!.threadId, completionWake: options?.completionWake },
+            {
+              scope: scope.thread!.threadId,
+              completionWake: options?.completionWake,
+              worktreeBase: options?.worktreeBase,
+            },
           ]).pipe(Effect.andThen(harness.delegate(input))),
       }),
     ),
@@ -114,10 +119,11 @@ describe("projectTeam MCP toolkit", () => {
           assert.isFalse(started.isError);
           assert.strictEqual(content(started).task.stage, "planning");
           const lead = content(started).leadThreadId as ThreadId;
-          // The task lead is delegated from the PM's own MCP scope, and its end
-          // does not wake the PM (the outcome reactor decides that).
+          // The task lead is delegated from the PM's own MCP scope, its end does
+          // not wake the PM (the outcome reactor decides that), and its worktree
+          // starts from origin's default branch rather than the PM's local HEAD.
           assert.deepStrictEqual(yield* Ref.get(delegateCalls), [
-            { scope: pm, completionWake: "never" },
+            { scope: pm, completionWake: "never", worktreeBase: "origin-default" },
           ]);
 
           const asked = yield* call(lead, "ask_user", {
