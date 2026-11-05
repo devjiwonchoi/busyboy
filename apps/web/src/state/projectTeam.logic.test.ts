@@ -79,8 +79,17 @@ describe("taskReferencesForThread", () => {
         title: "Sidebar",
         stage: "done" as const,
         leadThreadId: ThreadId.make("lead-1"),
+        prUrl: null,
+        lastOutcome: null,
       },
-      { number: 2, title: "Docs", stage: "inbox" as const, leadThreadId: null },
+      {
+        number: 2,
+        title: "Docs",
+        stage: "inbox" as const,
+        leadThreadId: null,
+        prUrl: null,
+        lastOutcome: null,
+      },
     ],
   };
 

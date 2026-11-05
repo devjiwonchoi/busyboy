@@ -1,18 +1,40 @@
+import type { ProjectTaskReference } from "@t3tools/contracts";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
   CircleDotDashedIcon,
+  CircleEllipsisIcon,
+  CircleIcon,
+  CirclePauseIcon,
+  CircleSlashIcon,
+  CircleXIcon,
+  GitPullRequestArrowIcon,
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
 } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
+import { TASK_STAGE_LABELS } from "../chat/taskReferences.logic";
 import type { SidebarThreadStatus } from "../Sidebar.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-export type SidebarRowStatusIcon = "working" | "waiting" | "input" | "approval" | "failed" | "done";
+export type SidebarRowStatusIcon =
+  | "working"
+  | "waiting"
+  | "input"
+  | "approval"
+  | "failed"
+  | "done"
+  // Task stages, for a project manager's task-lead rows.
+  | "inbox"
+  | "planning"
+  | "running"
+  | "review"
+  | "stalled"
+  | "blocked"
+  | "cancelled";
 
 export interface SidebarRowStatus {
   readonly label: string;
@@ -51,9 +73,76 @@ export function resolveSidebarRowStatus(input: {
   }
 }
 
+const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskReference["stage"]> = new Set([
+  "planning",
+  "running",
+  "in_review",
+]);
+
+/** "PR #81" for a GitHub-style pull request URL, otherwise "PR". */
+export function formatTaskPullRequestLabel(prUrl: string): string {
+  const number = /\/pull\/(\d+)(?:[/?#]|$)/u.exec(prUrl)?.[1];
+  return number === undefined ? "PR" : `PR #${number}`;
+}
+
+/**
+ * The status of a task stage alone, e.g. "In review · PR #81". Every stage has an
+ * icon, so a task never looks idle or stuck.
+ */
+export function resolveTaskStageStatus(
+  task: Pick<ProjectTaskReference, "stage" | "prUrl" | "lastOutcome">,
+): SidebarRowStatus {
+  if (task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage)) {
+    return {
+      label: `Stalled · ${TASK_STAGE_LABELS[task.stage]}`,
+      icon: "stalled",
+      className: "text-warning",
+    };
+  }
+  const label = TASK_STAGE_LABELS[task.stage];
+  switch (task.stage) {
+    case "inbox":
+      return { label, icon: "inbox", className: "text-muted-foreground" };
+    case "planning":
+      return { label, icon: "planning", className: "text-info" };
+    case "running":
+      return { label, icon: "running", className: "text-info" };
+    case "in_review":
+      return {
+        label: task.prUrl === null ? label : `${label} · ${formatTaskPullRequestLabel(task.prUrl)}`,
+        icon: "review",
+        className: "text-violet-600 dark:text-violet-300",
+      };
+    case "done":
+      return { label, icon: "done", className: "text-success" };
+    case "blocked":
+      return { label, icon: "blocked", className: "text-warning" };
+    case "cancelled":
+      return { label, icon: "cancelled", className: "text-muted-foreground/70" };
+  }
+}
+
+/**
+ * A task lead's row: what asks something of the user first, then live thread
+ * activity, then the task's stage. Never null.
+ */
+export function resolveSidebarTaskRowStatus(input: {
+  readonly threadStatus: SidebarRowStatus | null;
+  readonly task: Pick<ProjectTaskReference, "stage" | "prUrl" | "lastOutcome">;
+  readonly waitingOnUser: boolean;
+}): SidebarRowStatus {
+  const { threadStatus } = input;
+  if (threadStatus?.icon === "approval" || threadStatus?.icon === "input") return threadStatus;
+  if (input.waitingOnUser) {
+    return { label: "Needs you", icon: "input", className: "text-indigo-600 dark:text-indigo-300" };
+  }
+  if (threadStatus?.icon === "working" || threadStatus?.icon === "failed") return threadStatus;
+  return resolveTaskStageStatus(input.task);
+}
+
 const statusIconClassName = "size-4 shrink-0";
 
-function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
+export function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
   switch (props.icon) {
     case "working":
       return (
@@ -75,6 +164,20 @@ function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
       return <CircleAlertIcon aria-hidden className={statusIconClassName} />;
     case "done":
       return <CircleCheckIcon aria-hidden className={statusIconClassName} />;
+    case "inbox":
+      return <CircleIcon aria-hidden className={statusIconClassName} />;
+    case "planning":
+      return <CircleEllipsisIcon aria-hidden className={statusIconClassName} />;
+    case "running":
+      return <CircleDashedIcon aria-hidden className={statusIconClassName} />;
+    case "review":
+      return <GitPullRequestArrowIcon aria-hidden className={statusIconClassName} />;
+    case "stalled":
+      return <CirclePauseIcon aria-hidden className={statusIconClassName} />;
+    case "blocked":
+      return <CircleSlashIcon aria-hidden className={statusIconClassName} />;
+    case "cancelled":
+      return <CircleXIcon aria-hidden className={statusIconClassName} />;
   }
 }
 

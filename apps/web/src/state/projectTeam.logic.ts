@@ -83,3 +83,25 @@ const taskMapBySummary = new WeakMap<
   ProjectTeamAttentionSummary["tasks"],
   ReadonlyMap<number, ProjectTaskReference>
 >();
+
+export interface LeadThreadTask {
+  readonly task: ProjectTaskReference;
+  /** The task has an open decision card: the lead is waiting on the user. */
+  readonly waitingOnUser: boolean;
+}
+
+/** The task this thread leads, or null when it leads none. */
+export function taskForLeadThread(
+  summary: Pick<ProjectTeamAttentionSummary, "tasks" | "decisionCards"> | null,
+  threadId: ThreadId,
+): LeadThreadTask | null {
+  const task = summary?.tasks.find((candidate) => candidate.leadThreadId === threadId);
+  if (summary == null || task === undefined) return null;
+  const waitingOnUser = summary.decisionCards.some(
+    (card) =>
+      card.taskNumber === task.number &&
+      card.item.answeredAt === null &&
+      card.item.supersededAt === null,
+  );
+  return { task, waitingOnUser };
+}

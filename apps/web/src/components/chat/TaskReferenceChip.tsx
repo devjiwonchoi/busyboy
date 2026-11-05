@@ -2,7 +2,8 @@ import type { EnvironmentId, ProjectTaskReference } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { TASK_STAGE_LABELS } from "./taskReferences.logic";
+import { cn } from "~/lib/utils";
+import { resolveTaskStageStatus, StatusGlyph } from "../sidebar/SidebarRowLine";
 
 const CHIP_CLASS_NAME =
   "inline-flex max-w-[18em] items-baseline gap-[0.3em] rounded-sm bg-muted px-[0.35em] align-baseline text-foreground no-underline hover:bg-accent";
@@ -20,6 +21,7 @@ export function TaskReferenceChip(props: {
     </>
   );
   const label = `#${task.number} ${task.title}`;
+  const status = resolveTaskStageStatus(task);
   return (
     <Tooltip>
       <TooltipTrigger
@@ -47,7 +49,12 @@ export function TaskReferenceChip(props: {
       <TooltipPopup>
         <div className="max-w-80 space-y-0.5">
           <div className="font-medium">{label}</div>
-          <div className="text-muted-foreground">{TASK_STAGE_LABELS[task.stage]}</div>
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <span className={cn("inline-flex", status.className)}>
+              <StatusGlyph icon={status.icon} />
+            </span>
+            {status.label}
+          </div>
         </div>
       </TooltipPopup>
     </Tooltip>

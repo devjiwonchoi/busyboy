@@ -606,6 +606,12 @@ export const ProjectTaskReference = Schema.Struct({
   title: Schema.String,
   stage: ProjectTaskStage,
   leadThreadId: Schema.NullOr(ThreadId),
+  /** The task's pull request, shown on its sidebar row while in review. */
+  prUrl: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** How the lead's last turn ended; "stalled" marks a live task that stopped making progress. */
+  lastOutcome: Schema.NullOr(ProjectTaskOutcome).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 

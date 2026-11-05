@@ -21,12 +21,16 @@ const PROJECT_TASKS = {
       title: "Cmd+number shortcuts count the PM row first",
       stage: "running" as const,
       leadThreadId: ThreadId.make("lead-6"),
+      prUrl: null,
+      lastOutcome: null,
     },
     {
       number: 7,
       title: "PM status covers every thread",
       stage: "planning" as const,
       leadThreadId: null,
+      prUrl: null,
+      lastOutcome: null,
     },
   ],
 };
