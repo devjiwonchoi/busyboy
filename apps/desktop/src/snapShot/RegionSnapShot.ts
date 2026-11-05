@@ -1,7 +1,4 @@
 // @effect-diagnostics globalTimers:off -- Child-process deadlines run outside Effect fibers.
-// @effect-diagnostics nodeBuiltinImport:off -- This desktop-only helper owns a Node child process.
-import * as NodeChildProcess from "node:child_process";
-
 import * as Electron from "electron";
 
 import type { ActiveWindow } from "./ActiveWindow.ts";
@@ -31,13 +28,13 @@ export type RegionSnapShotChild = {
 };
 
 function forkRegionSnapShotChild(workerPath: string): RegionSnapShotChild {
-  const child = NodeChildProcess.fork(workerPath, [], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-    execArgv: [],
-    stdio: ["ignore", "ignore", "inherit", "ipc"],
+  // A utility process, not `child_process.fork`: release builds turn off ELECTRON_RUN_AS_NODE.
+  const child = Electron.utilityProcess.fork(workerPath, [], {
+    serviceName: "BusyBoy Window Capture",
+    stdio: ["ignore", "ignore", "inherit"],
   });
   return {
-    send: (request) => child.send(request),
+    send: (request) => child.postMessage(request),
     onMessage: (listener) => child.on("message", listener),
     onExit: (listener) => {
       child.once("exit", listener);

@@ -1,4 +1,4 @@
-// @effect-diagnostics globalTimers:off -- A plain Node child; the poll runs outside any Effect fiber.
+// @effect-diagnostics globalTimers:off -- An Electron utility process; the poll runs outside any Effect fiber.
 import { SNAP_SHOT_MODIFIERS, type SnapShotModifier } from "@t3tools/contracts";
 
 import { loadWindowsForegroundApi } from "../electron/WindowsForeground.ts";
@@ -6,8 +6,14 @@ import { WINDOWS_MODIFIER_PAIR_VIRTUAL_KEYS } from "./snapShot.ts";
 
 const POLL_INTERVAL_MS = 50;
 
-const requested = process.argv[2];
-if (!(SNAP_SHOT_MODIFIERS as readonly string[]).includes(requested ?? "")) {
+// Runs as an Electron utility process; `process.parentPort` is its channel to the app.
+const parentPort = (process as { readonly parentPort?: { postMessage(message: unknown): void } })
+  .parentPort;
+
+const requested = process.argv.find((arg) =>
+  (SNAP_SHOT_MODIFIERS as readonly string[]).includes(arg),
+);
+if (requested === undefined) {
   process.exit(1);
 }
 const [left, right] = WINDOWS_MODIFIER_PAIR_VIRTUAL_KEYS[requested as SnapShotModifier];
@@ -15,12 +21,12 @@ const [left, right] = WINDOWS_MODIFIER_PAIR_VIRTUAL_KEYS[requested as SnapShotMo
 async function poll() {
   const api = await loadWindowsForegroundApi();
   let active = false;
-  process.send?.("ready");
+  parentPort?.postMessage("ready");
   const timer = setInterval(() => {
     const pressed = api.isKeyDown(left) && api.isKeyDown(right);
     if (pressed && !active) {
       try {
-        process.send?.("trigger");
+        parentPort?.postMessage("trigger");
       } catch {}
     }
     active = pressed;
@@ -29,7 +35,6 @@ async function poll() {
     clearInterval(timer);
     process.exit(0);
   };
-  process.once("disconnect", shutdown);
   process.once("SIGTERM", shutdown);
 }
 
