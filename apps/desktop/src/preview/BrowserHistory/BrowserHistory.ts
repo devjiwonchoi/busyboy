@@ -22,9 +22,10 @@ import * as NodePath from "node:path";
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
 import { HISTORY_RETENTION_MS, HistoryDatabase, type NewVisit } from "./HistoryDatabase.ts";
 import { HistoryRecorder, type AgentAttribution } from "./HistoryRecorder.ts";
+import { importLegacyOriginHistoryOnce } from "./LegacyOriginHistory.ts";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
-export const DELETION_LOCKED_ENV = "T3CODE_BROWSER_HISTORY_DELETION_LOCKED";
+export const DELETION_LOCKED_ENV = "BUSYBOY_BROWSER_HISTORY_DELETION_LOCKED";
 
 const RANGE_MS: Readonly<Record<Exclude<BrowserHistoryClearRange, "all">, number>> = {
   hour: 60 * 60 * 1000,
@@ -348,8 +349,9 @@ export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
   const reported = new Set<string>();
+  const rootDirectory = environment.path.join(environment.stateDir, "BrowserProfiles");
   const history = makeBrowserHistory({
-    rootDirectory: environment.path.join(environment.stateDir, "BrowserProfiles"),
+    rootDirectory,
     deletionLocked: process.env[DELETION_LOCKED_ENV] === "1",
     onError: (message, cause) => {
       // Log each kind of failure once; a broken disk would otherwise log per navigation.
@@ -359,6 +361,18 @@ export const make = Effect.gen(function* () {
     },
   });
   yield* Effect.addFinalizer(() => Effect.sync(history.close));
+  // History an older build kept under the renderer's previous origin.
+  yield* Effect.promise(() =>
+    importLegacyOriginHistoryOnce({
+      rootDirectory,
+      isDevelopment: environment.isDevelopment,
+      importLegacy: async (entries) => {
+        await Effect.runPromise(history.importLegacy(entries));
+      },
+      onError: (cause) =>
+        runFork(Effect.logWarning("legacy browsing history import failed", { cause })),
+    }),
+  ).pipe(Effect.forkScoped);
   // Each database is pruned when it opens; this covers long-running sessions.
   yield* Effect.sync(history.prune).pipe(
     Effect.delay(Duration.millis(PRUNE_INTERVAL_MS)),

@@ -81,11 +81,11 @@ describe("BrowserHistory", () => {
   it("recognises a guest's session by its storage path, not object identity", () => {
     const t = setup();
     t.history.registerSession(
-      { storagePath: "/tmp/Partitions/t3code-preview-a" },
+      { storagePath: "/tmp/Partitions/busyboy-preview-a" },
       { profileId: "default", persistent: true },
     );
     expect(
-      t.visitWith({ storagePath: "/tmp/Partitions/t3code-preview-a" }, "https://a.test/"),
+      t.visitWith({ storagePath: "/tmp/Partitions/busyboy-preview-a" }, "https://a.test/"),
     ).toBe(true);
     expect(t.visitWith({ storagePath: "/tmp/Partitions/other" }, "https://b.test/")).toBe(false);
     expect(t.urls("default")).toEqual(["https://a.test/"]);

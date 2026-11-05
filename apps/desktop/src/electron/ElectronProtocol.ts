@@ -12,6 +12,8 @@ import * as Scope from "effect/Scope";
 
 import * as Electron from "electron";
 
+import { legacyRendererSchemePrivileges } from "../preview/BrowserHistory/LegacyOriginHistory.ts";
+
 export const DESKTOP_HOST = "app";
 const DESKTOP_PRODUCTION_SCHEME = "busyboy";
 const DESKTOP_DEVELOPMENT_SCHEME = "busyboy-dev";
@@ -126,6 +128,8 @@ function registerDesktopSchemePrivilegesSync(): void {
         stream: true,
       },
     },
+    // Lets main read browsing history an older build left under the old origin.
+    ...legacyRendererSchemePrivileges(),
   ]);
 }
 
