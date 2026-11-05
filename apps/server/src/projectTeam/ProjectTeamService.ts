@@ -295,12 +295,13 @@ export function toTaskBrief(task: ProjectTask): ProjectTaskBrief {
 /** The title a PM thread had before PMs had names; such threads take the persona's name. */
 export const legacyManagerTitle = (projectTitle: string): string => `${projectTitle} PM`;
 
-/** Short text for the PM's latest logged action, such as "started #7". */
+/** Short text for the PM's latest logged action, such as "started #7 Sidebar cleanup". */
 export function describeManagerAction(
   event: Pick<ProjectTaskEvent, "kind" | "body">,
-  taskNumber: number | null,
+  taskRef: Pick<ProjectTask, "number" | "title"> | null,
 ): string {
-  const task = taskNumber === null ? "a task" : `#${taskNumber}`;
+  // A bare "#7" means nothing to someone who hasn't followed the threads.
+  const task = taskRef === null ? "a task" : `#${taskRef.number} ${taskRef.title}`;
   switch (event.kind) {
     case "created":
       return `created ${task}`;
@@ -1280,7 +1281,7 @@ const make = Effect.gen(function* () {
       const task =
         event.value.taskId === null ? Option.none() : yield* repository.getTask(event.value.taskId);
       return {
-        text: describeManagerAction(event.value, Option.isSome(task) ? task.value.number : null),
+        text: describeManagerAction(event.value, Option.isSome(task) ? task.value : null),
         at: event.value.createdAt,
       } satisfies ProjectManagerLastAction;
     });
@@ -1381,6 +1382,7 @@ const make = Effect.gen(function* () {
             otherThreadsWaiting,
           );
           const decisionCards = yield* listDecisionCards(projectId, open);
+          const tasks = yield* repository.listTasks({ projectId });
           return {
             projectId,
             pmThreadId: manager.threadId,
@@ -1394,6 +1396,12 @@ const make = Effect.gen(function* () {
             enabled: manager.settings.enabled,
             presence,
             decisionCards,
+            tasks: tasks.map((task) => ({
+              number: task.number,
+              title: task.title,
+              stage: task.stage,
+              leadThreadId: task.leadThreadId,
+            })),
           } satisfies ProjectTeamAttentionSummary;
         }),
       );

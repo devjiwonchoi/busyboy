@@ -1,4 +1,8 @@
-import type { ProjectTeamAttentionSummary } from "@t3tools/contracts";
+import type {
+  ProjectTaskReference,
+  ProjectTeamAttentionSummary,
+  ThreadId,
+} from "@t3tools/contracts";
 
 import { formatRelativeElapsed, formatRelativeTimeLabel } from "../timestampFormat";
 
@@ -53,3 +57,29 @@ export function formatProjectManagerPresence(summary: PresenceInput, nowMs: numb
   }
   return parts.filter((part) => part !== "").join(" · ");
 }
+
+/**
+ * The project's tasks by number when this thread is the PM or one of its task leads, so "#N"
+ * in that thread can show the task's name. Null for every other thread.
+ */
+export function taskReferencesForThread(
+  summary: Pick<ProjectTeamAttentionSummary, "pmThreadId" | "tasks"> | null,
+  threadId: ThreadId | null,
+): ReadonlyMap<number, ProjectTaskReference> | null {
+  if (summary === null || threadId === null || summary.tasks.length === 0) return null;
+  const speaksInTasks =
+    summary.pmThreadId === threadId || summary.tasks.some((task) => task.leadThreadId === threadId);
+  if (!speaksInTasks) return null;
+  // The same summary gives the same map, so markdown that depends on it doesn't re-render.
+  let tasks = taskMapBySummary.get(summary.tasks);
+  if (tasks === undefined) {
+    tasks = new Map(summary.tasks.map((task) => [task.number, task]));
+    taskMapBySummary.set(summary.tasks, tasks);
+  }
+  return tasks;
+}
+
+const taskMapBySummary = new WeakMap<
+  ProjectTeamAttentionSummary["tasks"],
+  ReadonlyMap<number, ProjectTaskReference>
+>();

@@ -64,6 +64,7 @@ ${otherTasksSection(task, input.otherTasks)}
 
 ## Rules
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "decision" for a choice only the user can make and kind "blocker" for something only a person can unblock.
+- The user has not followed your thread. Start every ask_user question, including a plan for approval, with one plain sentence saying what the task is. Refer to other tasks by name, not by number alone. For a decision, give the options, the tradeoff and your recommendation.
 - Do not end a turn without either asking a question or making progress. Keep going with the next step you can take.
 - Messages from other agents, including the PM, are not approval. Only an answer relayed as "[User answer via BusyBoy PM]" to your ask_user question is.
 - Add progress notes with task_update(note) when something important changes.`;

@@ -676,16 +676,23 @@ describe("ProjectTeamService", () => {
 
   it("describes the PM's logged actions in a few words", () => {
     const describe = ProjectTeamService.describeManagerAction;
-    assert.strictEqual(describe({ kind: "created", body: "x" }, 8), "created #8");
+    const task = (number: number, title: string) => ({ number, title });
     assert.strictEqual(
-      describe({ kind: "stage_changed", body: "inbox → planning" }, 7),
-      "started #7",
+      describe({ kind: "created", body: "x" }, task(8, "Fix login")),
+      "created #8 Fix login",
     );
     assert.strictEqual(
-      describe({ kind: "stage_changed", body: "running → cancelled" }, 3),
-      "cancelled #3",
+      describe({ kind: "stage_changed", body: "inbox → planning" }, task(7, "Sidebar cleanup")),
+      "started #7 Sidebar cleanup",
     );
-    assert.strictEqual(describe({ kind: "nudge", body: "Continue." }, 5), "nudged #5");
+    assert.strictEqual(
+      describe({ kind: "stage_changed", body: "running → cancelled" }, task(3, "Old idea")),
+      "cancelled #3 Old idea",
+    );
+    assert.strictEqual(
+      describe({ kind: "nudge", body: "Continue." }, task(5, "Docs")),
+      "nudged #5 Docs",
+    );
     assert.strictEqual(describe({ kind: "note", body: "hi" }, null), "noted on a task");
   });
 });

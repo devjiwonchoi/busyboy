@@ -1,21 +1,63 @@
-import { EnvironmentId, MessageId, RunId } from "@t3tools/contracts";
+import { EnvironmentId, MessageId, RunId, ThreadId } from "@t3tools/contracts";
 import type { LegendListRef } from "@legendapp/list/react";
-import { act, createRef, type ComponentProps } from "react";
+import { act, createRef, type ComponentProps, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
+import { taskReferencesForThread } from "../../state/projectTeam.logic";
 import { MessagesTimeline } from "./MessagesTimeline";
 
 const PM_THREAD_ID = "pm-thread";
 
+// Task numbers are per project: this project's #6 is the shortcut task.
+const PROJECT_TASKS = {
+  pmThreadId: ThreadId.make(PM_THREAD_ID),
+  tasks: [
+    {
+      number: 6,
+      title: "Cmd+number shortcuts count the PM row first",
+      stage: "running" as const,
+      leadThreadId: ThreadId.make("lead-6"),
+    },
+    {
+      number: 7,
+      title: "PM status covers every thread",
+      stage: "planning" as const,
+      leadThreadId: null,
+    },
+  ],
+};
+
+// One object for every render, like the real atom-backed summary.
+const PROJECT_MANAGER = {
+  persona: { name: "Juniper", avatar: { kind: "emoji", emoji: "🦊" } },
+  decisionCards: [],
+};
+
 vi.mock(import("../../state/projectTeam"), async (original) => ({
   ...(await original()),
   useProjectManagerForThread: ((ref: { threadId: string } | null) =>
-    ref?.threadId === PM_THREAD_ID
-      ? { persona: { name: "Juniper", avatar: { kind: "emoji", emoji: "🦊" } } }
-      : null) as never,
+    ref?.threadId === PM_THREAD_ID ? PROJECT_MANAGER : null) as never,
+  useThreadTaskReferences: ((ref: { threadId: ThreadId } | null) =>
+    taskReferencesForThread(PROJECT_TASKS, ref?.threadId ?? null)) as never,
+}));
+
+vi.mock(import("@tanstack/react-router"), async (original) => ({
+  ...(await original()),
+  Link: (({
+    to: _to,
+    params,
+    ref,
+    ...props
+  }: {
+    to: string;
+    params: { environmentId: string; threadId: string };
+    ref?: Ref<HTMLAnchorElement>;
+    children?: ReactNode;
+  }) => <a ref={ref} href={`/${params.environmentId}/${params.threadId}`} {...props} />) as never,
 }));
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
@@ -105,13 +147,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function renderTimeline(threadId: string) {
+async function renderTimeline(threadId: string, timelineEntries: Entry[] = entries) {
   container = document.body.appendChild(document.createElement("div"));
   container.style.cssText = "height: 1200px; width: 900px; display: flex; flex-direction: column;";
   const root = createRoot(container);
   roots.push(root);
   await act(async () =>
-    root.render(<MessagesTimeline {...baseProps(threadId)} timelineEntries={entries} />),
+    root.render(<MessagesTimeline {...baseProps(threadId)} timelineEntries={timelineEntries} />),
   );
   await vi.waitFor(() => expect(container.textContent).toContain("Two tasks running"));
 }
@@ -152,5 +194,46 @@ describe("MessagesTimeline in a normal thread", () => {
     expect(container.querySelector("[data-pm-event-line]")).toBeNull();
     expect(container.querySelector("[data-pm-sitrep-card]")).toBeNull();
     expect(container.querySelector("[data-pm-author]")).toBeNull();
+  });
+});
+
+describe("Task references in a project manager thread", () => {
+  const withTaskReferences: Entry[] = [
+    message("ask", "How is it going?"),
+    message(
+      "reply",
+      "#6 is running and #7 is still planning. #99 is not a task, and `#6` stays code.",
+      { role: "assistant" },
+    ),
+    message("sitrep-anchor", "Two tasks running.", { role: "assistant" }),
+  ];
+
+  it("shows each #N as a chip with the task's name, and its details on hover", async () => {
+    await renderTimeline(PM_THREAD_ID, withTaskReferences);
+
+    const chips = [...container.querySelectorAll<HTMLElement>("[data-task-reference-chip]")];
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      "#6Cmd+number shortcuts count the PM row first",
+      "#7PM status covers every thread",
+    ]);
+    // A started task opens its lead's thread; an unstarted one has nowhere to go yet.
+    expect(chips[0]?.getAttribute("href")).toBe("/environment-local/lead-6");
+    expect(chips[1]?.tagName).toBe("SPAN");
+    expect(container.textContent).toContain("#99 is not a task");
+    expect(container.querySelector("code")?.textContent).toBe("#6");
+
+    await userEvent.hover(chips[0]!);
+    await vi.waitFor(() => {
+      const tooltip = document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]');
+      expect(tooltip?.textContent).toContain("#6 Cmd+number shortcuts count the PM row first");
+      expect(tooltip?.textContent).toContain("Running");
+    });
+  });
+
+  it("leaves #N alone in threads outside the PM's team", async () => {
+    await renderTimeline("normal-thread", withTaskReferences);
+
+    expect(container.querySelector("[data-task-reference-chip]")).toBeNull();
+    expect(container.textContent).toContain("#6 is running and #7 is still planning.");
   });
 });

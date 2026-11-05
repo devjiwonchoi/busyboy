@@ -1,7 +1,11 @@
-import type { ProjectManagerPresence } from "@t3tools/contracts";
+import { ThreadId, type ProjectManagerPresence } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { formatProjectManagerPresence, resolveProjectManagerStatus } from "./projectTeam.logic";
+import {
+  formatProjectManagerPresence,
+  resolveProjectManagerStatus,
+  taskReferencesForThread,
+} from "./projectTeam.logic";
 
 const NOW = Date.parse("2026-11-04T12:00:00.000Z");
 
@@ -63,5 +67,32 @@ describe("resolveProjectManagerStatus", () => {
       resolveProjectManagerStatus({ summary: input({ running: 1 }), pmThreadWorking: false }),
     ).toBe("working");
     expect(resolveProjectManagerStatus({ summary: input(), pmThreadWorking: false })).toBe("idle");
+  });
+});
+
+describe("taskReferencesForThread", () => {
+  const summary = {
+    pmThreadId: ThreadId.make("pm"),
+    tasks: [
+      {
+        number: 1,
+        title: "Sidebar",
+        stage: "done" as const,
+        leadThreadId: ThreadId.make("lead-1"),
+      },
+      { number: 2, title: "Docs", stage: "inbox" as const, leadThreadId: null },
+    ],
+  };
+
+  it("resolves numbers for the PM and its task leads", () => {
+    expect(taskReferencesForThread(summary, ThreadId.make("pm"))?.get(2)?.title).toBe("Docs");
+    expect(taskReferencesForThread(summary, ThreadId.make("lead-1"))?.get(1)?.title).toBe(
+      "Sidebar",
+    );
+  });
+
+  it("resolves nothing for other threads or projects without a PM", () => {
+    expect(taskReferencesForThread(summary, ThreadId.make("other"))).toBeNull();
+    expect(taskReferencesForThread(null, ThreadId.make("pm"))).toBeNull();
   });
 });
