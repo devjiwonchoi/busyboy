@@ -1949,8 +1949,6 @@ const make = Effect.gen(function* () {
           uploadFiles(tab, input as PreviewAutomationUploadInput),
         );
       case "type":
-        // Text the agent typed is its own, so a password field holding it stays usable.
-        credentials.typed(tab.page, (input as PreviewAutomationTypeInput).text);
         return recordAction(tab, "type", () =>
           ServerBrowserPage.type(tab.page, input as PreviewAutomationTypeInput),
         );

@@ -98,7 +98,7 @@ describe("filled passwords stay out of agent tools", () => {
       evaluate: async (expression: string, siblings: ReadonlyArray<typeof tab> = []) => {
         try {
           await guard.assertMayEvaluate(tab, siblings);
-          return guard.mask(await ServerBrowserPage.evaluate(cdp, { expression }, 5_000));
+          return guard.mask(await ServerBrowserPage.evaluate(page, cdp, { expression }, 5_000));
         } catch (cause) {
           throw new Error(guard.maskText((cause as Error).message));
         }
@@ -118,10 +118,8 @@ describe("filled passwords stay out of agent tools", () => {
           ),
         ),
       status: () => guard.mask({ url: page.url(), title: "" }),
-      type: async (selector: string, text: string) => {
-        guard.typed(page, text);
-        await ServerBrowserPage.type(page, { selector, text, clear: true });
-      },
+      type: (selector: string, text: string) =>
+        ServerBrowserPage.type(page, { selector, text, clear: true }),
     };
     return agent;
   };
@@ -219,11 +217,10 @@ describe("filled passwords stay out of agent tools", () => {
     expect(received.filter((line) => line.startsWith("/steal"))).toEqual([]);
   });
 
-  it("leaves scripts on for a test password the agent typed itself", async () => {
+  it("leaves typing a password to the person", async () => {
     const agent = await openTab(`${origin}/login`);
-    await agent.type("#pw", "agent-test-pass");
-    expect(await agent.evaluate(`document.querySelector("#pw").value`)).toBe("agent-test-pass");
-    expect(await agent.evaluate(`document.title`)).toBe("Sign in");
+    await expect(agent.type("#pw", "agent-guess")).rejects.toThrow(/preview_sign_in/);
+    await expect(agent.evaluate(`document.title`)).rejects.toThrow(/password field/);
   });
 
   it("runs scripts as before on pages without passwords", async () => {

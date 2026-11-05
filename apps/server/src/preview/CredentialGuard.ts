@@ -10,7 +10,8 @@
  * remembers filled values so every agent-facing text masks them.
  *
  * Fields are read from isolated worlds, where page script can't change what
- * `value` returns. A value the agent typed itself doesn't count as a password.
+ * `value` returns. Agents can't type into password fields (preview_type refuses
+ * them), so any value there is someone's.
  */
 
 import type { PreviewAutomationSnapshot } from "@t3tools/contracts";
@@ -125,8 +126,6 @@ const uncheckable = () =>
   );
 
 interface ContextState {
-  /** Text the agent typed itself; a field holding exactly that isn't a password. */
-  readonly typed: Set<string>;
   /** Origins where a password was filled; agent scripts stay off there. */
   readonly origins: Set<string>;
 }
@@ -146,19 +145,15 @@ export const makeCredentialGuard = () => {
   const stateOf = (context: BrowserContext) => {
     let state = contexts.get(context);
     if (!state) {
-      state = { typed: new Set(), origins: new Set() };
+      state = { origins: new Set() };
       contexts.set(context, state);
     }
     return state;
   };
 
-  /** Records a filled value unless the agent typed it. Returns whether it counts. */
   const remember = (context: BrowserContext, origin: string, value: string) => {
-    const state = stateOf(context);
-    if (state.typed.has(value)) return false;
-    state.origins.add(origin);
+    stateOf(context).origins.add(origin);
     values.add(value);
-    return true;
   };
 
   const read = async (tab: GuardedTab): Promise<ReadonlyArray<FrameCredentials> | undefined> => {
@@ -179,10 +174,8 @@ export const makeCredentialGuard = () => {
   };
 
   const learn = (context: BrowserContext, frames: ReadonlyArray<FrameCredentials>) => {
-    let filled = false;
     for (const frame of frames)
-      for (const value of frame.values) if (remember(context, frame.origin, value)) filled = true;
-    return filled;
+      for (const value of frame.values) remember(context, frame.origin, value);
   };
 
   const maskPattern = () => {
@@ -257,26 +250,18 @@ export const makeCredentialGuard = () => {
       }
     },
 
-    /** The agent typed this text; a field holding exactly it isn't someone's password. */
-    typed: (page: Page, text: string) => {
-      if (text) stateOf(page.context()).typed.add(text);
-    },
-
     /**
-     * Throws unless an agent script may run in this tab. Any password field that's
-     * empty or holds a value the agent didn't type turns it off, as does an origin
+     * Throws unless an agent script may run in this tab. Any password field, empty
+     * or filled, turns it off, as does an origin
      * where a password was filled. Other tabs that share storage are read too.
      */
     assertMayEvaluate: async (tab: GuardedTab, siblings: ReadonlyArray<GuardedTab>) => {
       const context = tab.page.context();
       const frames = await read(tab);
       if (!frames) throw uncheckable();
-      const typed = stateOf(context).typed;
       learn(context, frames);
-      const blocked = frames.some(
-        (frame) => frame.empty > 0 || frame.values.some((value) => !typed.has(value)),
-      );
-      if (blocked) throw blockedOnPasswordPage();
+      if (frames.some((frame) => frame.empty > 0 || frame.values.length > 0))
+        throw blockedOnPasswordPage();
       await Promise.all(
         siblings.map(async (sibling) => {
           const found = await read(sibling);
