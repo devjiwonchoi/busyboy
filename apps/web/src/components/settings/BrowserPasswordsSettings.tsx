@@ -48,6 +48,7 @@ import {
   passwordsUnavailableMessage,
 } from "./BrowserPasswordsSettings.logic";
 import { SettingsRow } from "./settingsLayout";
+import { ChromePasswordImportDialog } from "./ChromePasswordImportDialog";
 import { searchableSetting } from "./settingsSearch";
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -90,6 +91,7 @@ function BrowserPasswordsPane({ bridge }: { readonly bridge: DesktopBrowserPassw
       ? (logins?.find((login) => login.id === selected.login.id) ?? selected.login)
       : null;
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
 
@@ -237,8 +239,10 @@ function BrowserPasswordsPane({ bridge }: { readonly bridge: DesktopBrowserPassw
                 </div>
               )}
             </section>
-            {/* Import from Chrome (B6) goes here. */}
             <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+                Import from Chrome…
+              </Button>
               <Button
                 size="sm"
                 variant="destructive-outline"
@@ -261,6 +265,15 @@ function BrowserPasswordsPane({ bridge }: { readonly bridge: DesktopBrowserPassw
           profileId={profileId}
           login={selectedLogin}
           onClose={() => setSelected(null)}
+        />
+      ) : null}
+      {available && importOpen ? (
+        <ChromePasswordImportDialog
+          key={profileId}
+          bridge={bridge}
+          profileId={profileId}
+          profileName={profileName}
+          onClose={() => setImportOpen(false)}
         />
       ) : null}
       {available && addOpen ? (

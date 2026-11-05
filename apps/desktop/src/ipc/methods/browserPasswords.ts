@@ -1,4 +1,7 @@
 import {
+  BrowserPasswordImportInput,
+  BrowserPasswordImportResult,
+  BrowserPasswordImportSourceProfile,
   BrowserSignInInput,
   BrowserSignInOptions,
   BrowserSignInOptionsInput,
@@ -25,12 +28,15 @@ import {
   BrowserPasswordsUpdateInput,
   BrowserPasswordsUpdateResult,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserPasswords from "../../preview/BrowserPasswords/BrowserPasswords.ts";
 import * as PasswordAutofill from "../../preview/BrowserPasswords/PasswordAutofill.ts";
+import { importIntoVault } from "../../preview/BrowserPasswords/ImportIntoVault.ts";
+import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
 import { requireAppSender } from "../appSender.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
@@ -212,3 +218,51 @@ export const autofillMethods = [
     (autofill, input) => autofill.reopenPrompt(input.tabId),
   ),
 ] as const;
+
+/**
+ * Import from Chrome: main reads and decrypts Chrome's logins (macOS asks the
+ * person to allow "Chrome Safe Storage"), then adds them to the vault in one
+ * transaction. Only counts come back.
+ */
+export const importFromChrome = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.BROWSER_PASSWORDS_IMPORT_CHROME_CHANNEL,
+  payload: BrowserPasswordImportInput,
+  result: BrowserPasswordImportResult,
+  handler: Effect.fn("desktop.ipc.browserPasswords.importFromChrome")(function* (input, event) {
+    yield* requireAppSender(IpcChannels.BROWSER_PASSWORDS_IMPORT_CHROME_CHANNEL, event);
+    const passwords = yield* BrowserPasswords.BrowserPasswords;
+    const browserImport = yield* BrowserImport.BrowserImport;
+    // Never into incognito, and never without OS encryption.
+    const vault = passwords.vault(input.profileId);
+    if (vault === null) return { kind: "failed" as const, reason: "unavailable" as const };
+    const plan = yield* browserImport
+      .readChromiumLogins({
+        sourceId: input.sourceId,
+        sourceProfileDirectory: input.sourceProfileDirectory,
+      })
+      .pipe(
+        Effect.map((value) => ({ ok: true as const, value })),
+        Effect.catchTag("ChromiumPasswordReadError", (error) =>
+          Effect.succeed({ ok: false as const, reason: error.reason }),
+        ),
+      );
+    if (!plan.ok) return { kind: "failed" as const, reason: plan.reason };
+    const now = yield* Clock.currentTimeMillis;
+    const summary = yield* Effect.try(() => importIntoVault(vault, plan.value, now)).pipe(
+      Effect.orElseSucceed(() => null),
+    );
+    if (summary === null) return { kind: "failed" as const, reason: "readFailed" as const };
+    passwords.notifyChanged(input.profileId);
+    return { kind: "imported" as const, summary };
+  }),
+});
+
+export const importSources = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.BROWSER_PASSWORDS_IMPORT_SOURCES_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Array(BrowserPasswordImportSourceProfile),
+  handler: Effect.fn("desktop.ipc.browserPasswords.importSources")(function* (_input, event) {
+    yield* requireAppSender(IpcChannels.BROWSER_PASSWORDS_IMPORT_SOURCES_CHANNEL, event);
+    return yield* (yield* BrowserImport.BrowserImport).listPasswordSources;
+  }),
+});

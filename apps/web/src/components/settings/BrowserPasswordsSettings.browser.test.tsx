@@ -206,6 +206,14 @@ function createFakePasswordsBridge(options: {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    importSources: vi.fn(async () => [
+      { sourceId: "chrome", sourceName: "Google Chrome", directory: "Default", name: "Personal" },
+      { sourceId: "brave", sourceName: "Brave", directory: "Default", name: "Brave default" },
+    ]),
+    importFromChrome: vi.fn(async () => ({
+      kind: "imported" as const,
+      summary: { imported: 3, updated: 1, skipped: 2, failed: 1, neverSave: 1 },
+    })),
     autofill: {
       onEvent: () => () => {},
       choose: vi.fn(async () => {}),
@@ -427,5 +435,41 @@ describe("Settings → Passwords", () => {
     expect(page.getByRole("button", { name: "Add password…" }).elements()).toHaveLength(0);
     expect(page.getByRole("searchbox", { name: "Search passwords" }).elements()).toHaveLength(0);
     expect(bridge.list).not.toHaveBeenCalled();
+  });
+
+  it("imports from Chrome after a declined keychain prompt and a retry", async () => {
+    const bridge = createFakePasswordsBridge({ logins: [], passwords: {} });
+    (
+      bridge.importFromChrome as unknown as {
+        mockResolvedValueOnce: (value: unknown) => void;
+      }
+    ).mockResolvedValueOnce({ kind: "failed", reason: "needsKeychainApproval" });
+    (window as { desktopBridge?: unknown }).desktopBridge = { browserPasswords: bridge };
+    await openSettings();
+
+    await userEvent.click(page.getByRole("button", { name: "Import from Chrome…" }));
+    const dialog = page.getByRole("dialog", { name: "Import passwords from Chrome" });
+    await expect.element(dialog.getByText(/Chrome Safe Storage/).first()).toBeVisible();
+    // Only Google Chrome profiles are offered.
+    await expect
+      .element(dialog.getByRole("combobox", { name: "Chrome profile" }))
+      .toHaveTextContent("Personal");
+    await userEvent.click(dialog.getByRole("button", { name: "Import" }));
+    // toHaveTextContent mismatches text with apostrophes here, so read it directly.
+    await vi.waitFor(() =>
+      expect(dialog.getByRole("alert").element().textContent).toContain("Choose Allow"),
+    );
+    await userEvent.click(dialog.getByRole("button", { name: "Retry" }));
+    await vi.waitFor(() =>
+      expect(dialog.getByRole("list", { name: "Import summary" }).element().textContent).toContain(
+        "Imported 3 passwords",
+      ),
+    );
+    expect(bridge.importFromChrome).toHaveBeenLastCalledWith({
+      profileId: "default",
+      sourceId: "chrome",
+      sourceProfileDirectory: "Default",
+    });
+    await expect.element(dialog.getByText(/couldn.t be decrypted/)).toBeVisible();
   });
 });

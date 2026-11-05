@@ -19,6 +19,12 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as BrowserSession from "../BrowserSession.ts";
 import { ChromiumCookieReadError, readChromiumCookies } from "./ChromiumCookies.ts";
+import { readWindowsKey, resolveChromiumKeys, type ChromiumKeyError } from "./ChromiumKeys.ts";
+import {
+  planChromiumPasswordImport,
+  readChromiumLoginRows,
+  type ChromiumPasswordPlan,
+} from "./ChromiumPasswords.ts";
 import type { CookieReadResult } from "./CookieDatabase.ts";
 import { FirefoxCookieReadError, readFirefoxCookies } from "./FirefoxCookies.ts";
 import { readSafariCookies, safariAccessDenied, SafariCookieReadError } from "./SafariCookies.ts";
@@ -32,6 +38,25 @@ import {
   type BrowserImportPathContext,
   type BrowserImportSourceDefinition,
 } from "./Sources.ts";
+
+export class ChromiumPasswordReadError extends Schema.TaggedError<ChromiumPasswordReadError>()(
+  "ChromiumPasswordReadError",
+  {
+    reason: Schema.Literals([
+      "needsKeychainApproval",
+      "keychainItemMissing",
+      "keychainUnavailable",
+      "unsupportedPlatform",
+      "unknownSourceProfile",
+      "readFailed",
+    ]),
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  override get message(): string {
+    return `Could not read saved passwords: ${this.reason}.`;
+  }
+}
 
 export class BrowserImportFailedError extends Schema.TaggedError<BrowserImportFailedError>()(
   "BrowserImportFailedError",
@@ -65,6 +90,23 @@ export class BrowserImport extends Context.Service<
   BrowserImport,
   {
     readonly listSources: Effect.Effect<ReadonlyArray<BrowserImportSource>>;
+    /**
+     * Chromium profiles passwords can be imported from. Unlike cookies, a
+     * running browser is fine: its Login Data is copied before reading.
+     */
+    readonly listPasswordSources: Effect.Effect<
+      ReadonlyArray<{
+        readonly sourceId: string;
+        readonly sourceName: string;
+        readonly directory: string;
+        readonly name: string;
+      }>
+    >;
+    /** Decrypted logins from one Chromium profile, in memory only. Prompts for the keychain on macOS. */
+    readonly readChromiumLogins: (input: {
+      readonly sourceId: string;
+      readonly sourceProfileDirectory: string;
+    }) => Effect.Effect<ChromiumPasswordPlan, ChromiumPasswordReadError>;
     readonly importCookies: (input: {
       readonly input: BrowserImportInput;
       readonly scope: string;
@@ -301,7 +343,91 @@ export const make = Effect.gen(function* BrowserImportMake() {
     return yield* writeCookies(session, result);
   });
 
-  return BrowserImport.of({ listSources, importCookies });
+  const chromiumSources = BROWSER_IMPORT_SOURCES.filter(
+    (definition) => definition.engine === "chromium" && definition.platforms.includes(platform),
+  );
+
+  const listPasswordSources = Effect.forEach(chromiumSources, (definition) =>
+    Effect.gen(function* () {
+      if (!(yield* isSourceInstalled(definition, pathContext))) return [];
+      const profiles = yield* listSourceProfiles(definition, pathContext);
+      return profiles.map((profile) => ({
+        sourceId: definition.id,
+        sourceName: definition.name,
+        directory: profile.directory,
+        name: profile.name,
+      }));
+    }).pipe(Effect.orElseSucceed(() => [])),
+  ).pipe(
+    Effect.map((lists) => lists.flat()),
+    Effect.provide(platformServices),
+  );
+
+  const readChromiumLogins = Effect.fn("BrowserImport.readChromiumLogins")(function* (input: {
+    readonly sourceId: string;
+    readonly sourceProfileDirectory: string;
+  }) {
+    const definition = chromiumSources.find((candidate) => candidate.id === input.sourceId);
+    if (!definition) {
+      return yield* new ChromiumPasswordReadError({ reason: "unknownSourceProfile" });
+    }
+    // The directory arrives over IPC; only one the source itself lists is used.
+    const profiles = yield* listSourceProfiles(definition, pathContext).pipe(
+      Effect.provide(platformServices),
+      Effect.orElseSucceed(() => []),
+    );
+    if (!profiles.some((profile) => profile.directory === input.sourceProfileDirectory)) {
+      return yield* new ChromiumPasswordReadError({ reason: "unknownSourceProfile" });
+    }
+    const userDataDirectory = definition.userDataDirectory(pathContext);
+    if (userDataDirectory === undefined) {
+      return yield* new ChromiumPasswordReadError({ reason: "unsupportedPlatform" });
+    }
+    const loginData = pathContext.path.join(
+      userDataDirectory,
+      input.sourceProfileDirectory,
+      "Login Data",
+    );
+    const keys = yield* (
+      platform === "win32"
+        ? readWindowsKey(pathContext.path.join(userDataDirectory, "Local State")).pipe(
+            Effect.map((gcmV10) => ({ gcmV10 })),
+          )
+        : resolveChromiumKeys({
+            platform,
+            keychainService: definition.keychainService,
+            keychainAccount: definition.keychainAccount,
+            linuxSecretApplication: definition.linuxSecretApplication,
+          })
+    ).pipe(
+      Effect.provide(platformServices),
+      Effect.mapError(
+        (cause: ChromiumKeyError) => new ChromiumPasswordReadError({ reason: cause.reason, cause }),
+      ),
+    );
+    return yield* Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      // Chrome may hold the file open; read a private copy, WAL included.
+      const directory = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "busyboy-login-data-",
+      });
+      const copy = pathContext.path.join(directory, "Login Data");
+      yield* fileSystem.copyFile(loginData, copy);
+      for (const suffix of ["-wal", "-shm"]) {
+        if (yield* fileSystem.exists(`${loginData}${suffix}`)) {
+          yield* fileSystem.copyFile(`${loginData}${suffix}`, `${copy}${suffix}`);
+        }
+      }
+      const rows = yield* Effect.try(() => readChromiumLoginRows(copy));
+      return planChromiumPasswordImport(rows, keys, platform);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(platformServices),
+      Effect.mapError((cause) => new ChromiumPasswordReadError({ reason: "readFailed", cause })),
+    );
+  });
+
+  return BrowserImport.of({ listSources, importCookies, listPasswordSources, readChromiumLogins });
 });
 
 export const layer = Layer.effect(BrowserImport, make);
