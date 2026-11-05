@@ -75,7 +75,9 @@ describe("taskReferencesForThread", () => {
     pmThreadId: ThreadId.make("pm"),
     tasks: [
       {
+        id: "task-1" as never,
         number: 1,
+        parentTaskId: null,
         title: "Sidebar",
         stage: "done" as const,
         leadThreadId: ThreadId.make("lead-1"),
@@ -83,7 +85,9 @@ describe("taskReferencesForThread", () => {
         lastOutcome: null,
       },
       {
+        id: "task-2" as never,
         number: 2,
+        parentTaskId: null,
         title: "Docs",
         stage: "inbox" as const,
         leadThreadId: null,

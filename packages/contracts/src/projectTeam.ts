@@ -731,7 +731,10 @@ export type ProjectManagerPresence = typeof ProjectManagerPresence.Type;
 
 /** Enough of a task for the app to show "#N" as a named chip. */
 export const ProjectTaskReference = Schema.Struct({
+  id: ProjectTaskId,
   number: PositiveInt,
+  /** Set for a task split from another; the sidebar nests it under its parent. */
+  parentTaskId: Schema.NullOr(ProjectTaskId).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   title: Schema.String,
   stage: ProjectTaskStage,
   leadThreadId: Schema.NullOr(ThreadId),

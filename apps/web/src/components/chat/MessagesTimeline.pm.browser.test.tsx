@@ -17,7 +17,9 @@ const PROJECT_TASKS = {
   pmThreadId: ThreadId.make(PM_THREAD_ID),
   tasks: [
     {
+      id: "task-6" as never,
       number: 6,
+      parentTaskId: null,
       title: "Cmd+number shortcuts count the PM row first",
       stage: "running" as const,
       leadThreadId: ThreadId.make("lead-6"),
@@ -25,7 +27,9 @@ const PROJECT_TASKS = {
       lastOutcome: null,
     },
     {
+      id: "task-7" as never,
       number: 7,
+      parentTaskId: null,
       title: "PM status covers every thread",
       stage: "planning" as const,
       leadThreadId: null,

@@ -12,6 +12,7 @@ import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
   createAtomCommandScheduler,
   createEnvironmentRpcCommand,
+  createEnvironmentRpcQueryAtomFamily,
   createEnvironmentRpcSubscriptionAtomFamily,
 } from "./runtime.ts";
 
@@ -42,13 +43,44 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {
   const commandScheduler = createAtomCommandScheduler();
+  /** Live attention for every project with a PM, refreshed after each change on the server. */
+  const attention = createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    label: "environment-data:project-team:attention",
+    tag: WS_METHODS.projectTeamSubscribeAttention,
+    transform: Stream.map(indexProjectTeamAttention),
+  });
+  // Every task write ends with a fresh attention snapshot, which refetches open task details.
+  const taskCommand = <
+    Tag extends
+      | typeof WS_METHODS.projectTeamCreateTask
+      | typeof WS_METHODS.projectTeamUpdateTaskSpec
+      | typeof WS_METHODS.projectTeamRestoreTaskSpec
+      | typeof WS_METHODS.projectTeamSplitTaskTodo,
+  >(
+    label: string,
+    tag: Tag,
+  ) =>
+    createEnvironmentRpcCommand(runtime, {
+      label: `environment-data:project-team:${label}`,
+      tag,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.projectId]),
+      },
+    });
   return {
-    /** Live attention for every project with a PM, refreshed after each change on the server. */
-    attention: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
-      label: "environment-data:project-team:attention",
-      tag: WS_METHODS.projectTeamSubscribeAttention,
-      transform: Stream.map(indexProjectTeamAttention),
+    attention,
+    /** One task's spec versions, sessions, subtasks and open questions. */
+    taskDetail: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:project-team:task-detail",
+      tag: WS_METHODS.projectTeamGetTask,
+      refreshTrigger: ({ environmentId }) => attention({ environmentId, input: {} }),
     }),
+    createTask: taskCommand("create-task", WS_METHODS.projectTeamCreateTask),
+    updateTaskSpec: taskCommand("update-task-spec", WS_METHODS.projectTeamUpdateTaskSpec),
+    restoreTaskSpec: taskCommand("restore-task-spec", WS_METHODS.projectTeamRestoreTaskSpec),
+    splitTaskTodo: taskCommand("split-task-todo", WS_METHODS.projectTeamSplitTaskTodo),
     // The attention stream carries the result, so no command updates state itself.
     requestSitrep: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:request-sitrep",

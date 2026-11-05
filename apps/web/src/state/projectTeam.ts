@@ -16,6 +16,11 @@ import type {
   EnvironmentId,
   ProjectId,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamCreateTaskInput,
+  ProjectTeamRestoreTaskSpecInput,
+  ProjectTeamSplitTaskTodoInput,
+  ProjectTeamTaskRefInput,
+  ProjectTeamUpdateTaskSpecInput,
   ProjectTaskReference,
   ProjectTeamAttentionSummary,
   ProjectTeamUpdateSettingsInput,
@@ -33,6 +38,7 @@ import {
   taskReferencesForThread,
 } from "./projectTeam.logic";
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { useEnvironmentQuery } from "./query";
 import { useAtomCommand } from "./use-atom-command";
 
 export const projectTeamEnvironment = createProjectTeamEnvironmentAtoms(connectionAtomRuntime);
@@ -178,6 +184,36 @@ export function useUpdateTeamSettings() {
       environmentId: ref.environmentId,
       input: { ...patch, projectId: ref.projectId },
     });
+}
+
+/** Adds a task from the composer; resolves to its detail so the caller can open its page. */
+export function useCreateTask() {
+  const createTask = useAtomCommand(projectTeamEnvironment.createTask);
+  return (environmentId: EnvironmentId, input: ProjectTeamCreateTaskInput) =>
+    createTask({ environmentId, input });
+}
+
+export function useUpdateTaskSpec() {
+  const updateTaskSpec = useAtomCommand(projectTeamEnvironment.updateTaskSpec);
+  return (environmentId: EnvironmentId, input: ProjectTeamUpdateTaskSpecInput) =>
+    updateTaskSpec({ environmentId, input });
+}
+
+export function useRestoreTaskSpec() {
+  const restoreTaskSpec = useAtomCommand(projectTeamEnvironment.restoreTaskSpec);
+  return (environmentId: EnvironmentId, input: ProjectTeamRestoreTaskSpecInput) =>
+    restoreTaskSpec({ environmentId, input });
+}
+
+export function useSplitTaskTodo() {
+  const splitTaskTodo = useAtomCommand(projectTeamEnvironment.splitTaskTodo);
+  return (environmentId: EnvironmentId, input: ProjectTeamSplitTaskTodoInput) =>
+    splitTaskTodo({ environmentId, input });
+}
+
+/** One task's detail, refetched whenever the team's attention changes. */
+export function useTaskDetail(environmentId: EnvironmentId, input: ProjectTeamTaskRefInput) {
+  return useEnvironmentQuery(projectTeamEnvironment.taskDetail({ environmentId, input }));
 }
 
 /** The project's tasks by number in a PM or task-lead thread; see taskReferencesForThread. */
