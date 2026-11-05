@@ -48,6 +48,10 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.projectTeamRequestSitrep]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamAnswerDecision]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamUpdateSettings]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamCreateTask]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamUpdateTaskSpec]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamRestoreTaskSpec]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamSplitTaskTodo]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;

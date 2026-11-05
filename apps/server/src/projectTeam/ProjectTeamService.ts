@@ -1753,7 +1753,9 @@ const make = Effect.gen(function* () {
             decisionCards,
             taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
             tasks: tasks.map((task) => ({
+              id: task.id,
               number: task.number,
+              parentTaskId: task.parentTaskId,
               title: task.title,
               stage: task.stage,
               leadThreadId: task.leadThreadId,

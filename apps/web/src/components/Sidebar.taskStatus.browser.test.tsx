@@ -184,7 +184,9 @@ beforeEach(() => {
         projectId: "busyboy" as never,
         pmThreadId: "pm-thread" as never,
         tasks: TASKS.map((task) => ({
+          id: `task-${task.number}` as never,
           number: task.number,
+          parentTaskId: null,
           title: `Task ${task.number}`,
           stage: task.stage,
           leadThreadId: `lead-${task.number}` as never,
