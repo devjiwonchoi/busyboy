@@ -148,6 +148,11 @@ contextBridge.exposeInMainWorld("journey", { invoke: (channel) => ipcRenderer.in
         assert.strictEqual(results["click"], "Count: 1");
         // The element picker still names the React component.
         assert.deepEqual(results["picked"], { tagName: "button", componentName: "Counter" });
+        // A page's passkey request reaches BusyBoy with its bytes, and the answer reaches the page.
+        assert.deepEqual(results["passkey"], {
+          request: { challenge: [1, 2, 3] },
+          pageSees: "NotAllowedError",
+        });
         // Privileged IPC answers the app window and refuses a window showing a web page.
         assert.deepEqual(results["appWindowInvoke"], { value: "bearer-token" });
         assert.include(

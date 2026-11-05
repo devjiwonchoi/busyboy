@@ -13,6 +13,7 @@ import * as Scope from "effect/Scope";
 import * as DesktopIpc from "../../ipc/DesktopIpc.ts";
 import {
   ELEMENT_PICKED_CHANNEL,
+  PASSKEY_GET_CHANNEL,
   PREVIEW_ELEMENT_CONTEXT_KEY,
   START_PICK_CHANNEL,
 } from "../GuestProtocol.ts";
@@ -209,7 +210,26 @@ async function run() {
     componentName: element?.componentName ?? null,
   };
 
-  // 5. Privileged IPC answers the app window only.
+  // 5. A page's passkey request still crosses the bridge, binary challenge intact.
+  let passkeyRequest: unknown = null;
+  guest.ipc.handle(PASSKEY_GET_CHANNEL, (_event, publicKey: { challenge?: unknown }) => {
+    const challenge = publicKey?.challenge;
+    passkeyRequest = {
+      challenge: ArrayBuffer.isView(challenge)
+        ? [...new Uint8Array(challenge.buffer, challenge.byteOffset, challenge.byteLength)]
+        : challenge instanceof ArrayBuffer
+          ? [...new Uint8Array(challenge)]
+          : null,
+    };
+    return { success: false, error: "NotAllowedError" };
+  });
+  const passkeyError = await guest.executeJavaScript(
+    `navigator.credentials.get({ publicKey: { challenge: new Uint8Array([1, 2, 3]) } })
+      .then(() => "resolved", (error) => error.name)`,
+  );
+  results["passkey"] = { request: passkeyRequest, pageSees: passkeyError };
+
+  // 6. Privileged IPC answers the app window only.
   results["appWindowInvoke"] = await host.webContents.executeJavaScript(invokeSecret);
   const webWindow = new BrowserWindow({
     show: false,
