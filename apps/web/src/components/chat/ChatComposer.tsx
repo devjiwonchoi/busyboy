@@ -1038,7 +1038,6 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
   );
 }
 import { Button } from "../ui/button";
-import { Kbd } from "../ui/kbd";
 import { Select, SelectItem, SelectPopup, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
@@ -1352,6 +1351,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   } | null;
   isRunning: boolean;
   canInterrupt: boolean;
+  stopPending: boolean;
   showEscapeToStopHint: boolean;
   followUpBehavior: "queue" | "steer";
   canSteer: boolean;
@@ -1393,17 +1393,14 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
       ) : props.reserveContextWindowMeter ? (
         <ContextWindowMeterPlaceholder />
       ) : null}
-      {props.showEscapeToStopHint ? (
-        <Kbd role="status" aria-label="Press Escape again to stop">
-          Esc
-        </Kbd>
-      ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
         canOperateThread={props.canOperateThread}
         pendingAction={props.pendingAction}
         isRunning={props.isRunning}
         canInterrupt={props.canInterrupt}
+        stopPending={props.stopPending}
+        escapeArmed={props.showEscapeToStopHint}
         followUpBehavior={props.followUpBehavior}
         canSteer={props.canSteer}
         alternateShortcutLabel={props.alternateShortcutLabel}
@@ -1522,6 +1519,8 @@ export interface ChatComposerProps {
 
   phase: SessionPhase;
   canInterrupt: boolean;
+  /** A stop was asked for during startup and waits for the run to appear. */
+  stopPending: boolean;
   /** A first Escape is waiting for a second to stop the running turn. */
   showEscapeToStopHint: boolean;
   isConnecting: boolean;
@@ -1921,6 +1920,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     projectSelectionRequired,
     phase,
     canInterrupt,
+    stopPending,
     showEscapeToStopHint,
     isConnecting,
     isSendBusy,
@@ -7384,6 +7384,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     pendingAction={pendingPrimaryAction}
                     isRunning={phase === "running"}
                     canInterrupt={canInterrupt}
+                    stopPending={stopPending}
                     showEscapeToStopHint={showEscapeToStopHint}
                     followUpBehavior={settings.followUpBehavior}
                     canSteer={!isCompacting}

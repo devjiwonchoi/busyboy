@@ -43,6 +43,7 @@ import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts, type ChatShortcutHandler } from "./chat/useChatShortcuts";
 import { useEscapeToStop } from "./chat/useEscapeToStop";
+import { useRunStop } from "./chat/useRunStop";
 import {
   eventPathContainsSelector,
   pasteTextToFocusComposer,
@@ -3328,6 +3329,18 @@ export default function ChatView(props: ChatViewProps) {
     }
   };
   const onInterruptStable = useStableCallback(onInterrupt);
+  // Stop works from the moment a turn is requested, not only once the server
+  // reports a run: a stop made during startup waits for the run to appear.
+  const runStop = useRunStop({
+    threadKey: activeThreadKey,
+    canInterrupt: canInterruptRunningThread,
+    isStarting:
+      canOperateThread &&
+      activeThread !== undefined &&
+      (isSendBusy || isConnecting || phase === "connecting"),
+    interrupt: () => void onInterruptStable(),
+  });
+  const requestRunStopStable = useStableCallback(runStop.requestStop);
   useEffect(() => subscribeSnapShotComposerFocus(focusComposerStable), [focusComposerStable]);
   const scheduleComposerFocus = () => {
     window.requestAnimationFrame(() => {
@@ -5544,8 +5557,8 @@ export default function ChatView(props: ChatViewProps) {
         composerRef.current?.isCaretAtStart() === true &&
         queuedRunsControlRef.current?.editLatest(event.repeat) === true,
       "thread.stop": ({ event }) => {
-        if (!canInterruptRunningThread) return false;
-        if (!event.repeat) void onInterruptStable();
+        if (!runStop.canStop) return false;
+        if (!event.repeat) requestRunStopStable();
       },
     },
     fallback: (command) => {
@@ -5556,7 +5569,7 @@ export default function ChatView(props: ChatViewProps) {
     },
   });
   const showEscapeToStopHint = useEscapeToStop({
-    canStop: canInterruptRunningThread,
+    canStop: runStop.canStop && !runStop.stopPending,
     threadKey: activeThreadKey,
     ignoreEscape: (event) => {
       const context = getShortcutContextStable(event.target);
@@ -5569,7 +5582,7 @@ export default function ChatView(props: ChatViewProps) {
         context.modelPickerOpen
       );
     },
-    onStop: () => void onInterruptStable(),
+    onStop: requestRunStopStable,
   });
 
   // A focused desktop browser page forwards these chords as menu actions.
@@ -8122,7 +8135,8 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               phase={phase}
                               isCompacting={isCompacting}
-                              canInterrupt={canInterruptRunningThread}
+                              canInterrupt={runStop.canStop}
+                              stopPending={runStop.stopPending}
                               showEscapeToStopHint={showEscapeToStopHint}
                               isConnecting={isConnecting}
                               isSendBusy={
@@ -8226,7 +8240,7 @@ export default function ChatView(props: ChatViewProps) {
                               onCompactContext={onComposerCompactContextStable}
                               onSend={onComposerSendStable}
                               onResume={onComposerResumeStable}
-                              onInterrupt={onInterruptStable}
+                              onInterrupt={requestRunStopStable}
                               onImplementPlanInNewThread={onImplementPlanInNewThreadStable}
                               onRespondToApproval={onRespondToApprovalStable}
                               onSelectActivePendingUserInputOption={
