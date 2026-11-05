@@ -27,8 +27,9 @@ export type CliShimTarget =
   | { readonly kind: "windows"; readonly executable: string; readonly entry: string };
 
 /**
- * Electron runs the server as plain Node with `ELECTRON_RUN_AS_NODE`, which
- * reads the entry from inside the asar archive. The launcher's own path and the
+ * Runs the server entry on the app's bundled Node where it ships one (packaged
+ * macOS and Windows), else on Electron as plain Node with `ELECTRON_RUN_AS_NODE`,
+ * which reads the entry from inside the asar archive. The launcher's own path and the
  * app's T3 home are written in, so the command the server shows is absolute and
  * `sudo`, which clears the environment, still runs against this install's home.
  */
@@ -59,8 +60,10 @@ export const renderCliShim = (input: {
         : []),
       `set "BUSYBOY_CLI_PATH=${cmdText(input.shimPath)}"`,
       `if not defined BUSYBOY_HOME set "BUSYBOY_HOME=${cmdText(input.t3Home)}"`,
+      // Only needed when the executable is Electron; the bundled Node ignores it.
       'set "ELECTRON_RUN_AS_NODE=1"',
-      // Electron's Windows executable starts without stdin; this tells the CLI to reopen the console.
+      // Electron's Windows executable starts without stdin; this tells the CLI to reopen the
+      // console. The bundled Node has stdin, so the CLI leaves it alone there.
       'set "BUSYBOY_DESKTOP_CLI_LAUNCHER=1"',
       // A goto, not a parenthesized block: "Program Files (x86)" would close the block early.
       `if exist ${cmdWord(target.executable)} goto run`,
@@ -139,20 +142,18 @@ export const install = Effect.gen(function* () {
   const windows = environment.platform === "win32";
   const shimPath = launcherPath(environment);
   const entry = path.join(environment.serverRoot, SERVER_ENTRY);
+  // Packaged macOS and Windows builds ship their own Node; their Electron ignores
+  // ELECTRON_RUN_AS_NODE.
+  const executable = Option.getOrElse(environment.serverNodePath, () => process.execPath);
   const target: CliShimTarget = windows
-    ? { kind: "windows", executable: process.execPath, entry }
+    ? { kind: "windows", executable, entry }
     : Option.match(environment.appImagePath, {
         onSome: (appImage) => ({
           kind: "appimage" as const,
           appImage,
           executableName: path.basename(process.execPath),
         }),
-        onNone: () => ({
-          kind: "direct" as const,
-          // Packaged macOS builds ship their own Node; their Electron ignores ELECTRON_RUN_AS_NODE.
-          executable: Option.getOrElse(environment.serverNodePath, () => process.execPath),
-          entry,
-        }),
+        onNone: () => ({ kind: "direct" as const, executable, entry }),
       });
   const content = renderCliShim({ target, shimPath, t3Home: environment.baseDir });
 

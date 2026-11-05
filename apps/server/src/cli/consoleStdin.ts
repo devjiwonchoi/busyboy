@@ -6,8 +6,9 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 /**
  * Whether this process is the desktop app's `t3.cmd` running the CLI in a
- * terminal with no stdin. The launcher runs the app's executable with
- * `ELECTRON_RUN_AS_NODE`, and Electron's Windows executable is a GUI program:
+ * terminal with no stdin. That happens when the launcher runs the app's
+ * executable with `ELECTRON_RUN_AS_NODE` (builds without a bundled Node), since
+ * Electron's Windows executable is a GUI program:
  * on start it points stdout and stderr at the parent's console but leaves
  * stdin unset, so prompts see no terminal and child processes inherit
  * nothing to read from. Input the user piped or
