@@ -155,3 +155,40 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
     );
   }).pipe(Effect.provide(NodeServices.layer)),
 );
+
+it.effect("marks browser session cookies Secure only for HTTPS requests", () =>
+  Effect.gen(function* () {
+    const crypto = yield* Crypto.Crypto;
+    const requestContext = Context.make(Crypto.Crypto, crypto);
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
+      (environment) =>
+        Effect.tryPromise(async () => {
+          const sessionCookies = async (url: string, headers?: Record<string, string>) => {
+            const response = await environment.handler(
+              new Request(url, {
+                method: "POST",
+                headers: { "content-type": "application/json", ...headers },
+                body: encodeJson({ credential: DEV_TOKEN }),
+              }),
+              requestContext,
+            );
+            expect(response.status).toBe(200);
+            const cookies = response.headers.getSetCookie();
+            expect(cookies).toHaveLength(2);
+            return cookies;
+          };
+
+          for (const cookie of await sessionCookies("http://127.0.0.1/api/auth/browser-session")) {
+            expect(cookie).not.toContain("Secure");
+          }
+          for (const cookie of await sessionCookies("http://127.0.0.1/api/auth/browser-session", {
+            "x-forwarded-proto": "https",
+          })) {
+            expect(cookie).toContain("Secure");
+          }
+        }),
+      (environment) => Effect.promise(() => environment.dispose()),
+    );
+  }).pipe(Effect.provide(NodeServices.layer)),
+);

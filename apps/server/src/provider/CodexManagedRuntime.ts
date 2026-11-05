@@ -12,7 +12,6 @@ import { materializeCodexShadowHome } from "./Drivers/CodexHomeLayout.ts";
 export interface CodexEffectiveRuntime {
   readonly config: CodexSettings;
   readonly environment: NodeJS.ProcessEnv;
-  readonly revision: string;
 }
 const decodeSettings = Schema.decodeSync(CodexSettings);
 const managedCodexLaunchArgs = [
@@ -27,6 +26,9 @@ const managedCodexLaunchArgs = [
   'model_providers.openai_token_sharing.wire_api="responses"',
   "model_providers.openai_token_sharing.requires_openai_auth=false",
   "model_providers.openai_token_sharing.supports_websockets=false",
+  // Agent shells inherit the app-server environment, so blank the owned token there.
+  // `set` merges with the user's shared config.toml; `exclude` would replace their list.
+  'shell_environment_policy.set.ACCESS_TOKEN=""',
 ]
   .map((value) => `-c '${value}'`)
   .join(" ");
@@ -106,7 +108,6 @@ export const makeCodexManagedRuntime = Effect.fn("makeCodexManagedRuntime")(func
         launchArgs: managedCodexLaunchArgs,
       }),
       environment,
-      revision: credentials.accessToken,
     } satisfies CodexEffectiveRuntime;
   });
   return { auth, resolve, installation, homePath, homeLayout };

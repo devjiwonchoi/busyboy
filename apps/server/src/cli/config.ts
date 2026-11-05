@@ -165,6 +165,21 @@ const EnvServerConfig = Config.all({
   ),
 });
 
+const SECRET_STORE_KEY_BYTES = 32;
+const SECRET_STORE_KEY_PATTERN = /^[A-Za-z0-9+/]{43}=?$/;
+
+/** Decodes the desktop's base64 secret store key; undefined unless it is exactly 32 bytes. */
+export const decodeSecretStoreKey = (
+  encoded: string,
+): Redacted.Redacted<Uint8Array> | undefined => {
+  const trimmed = encoded.trim();
+  if (!SECRET_STORE_KEY_PATTERN.test(trimmed)) {
+    return undefined;
+  }
+  const bytes = Uint8Array.from(Buffer.from(trimmed, "base64"));
+  return bytes.length === SECRET_STORE_KEY_BYTES ? Redacted.make(bytes) : undefined;
+};
+
 const DevAuthTokenConfig = Config.Redacted("BUSYBOY_DEV_AUTH_TOKEN").pipe(
   Config.map((token) => Redacted.make(Redacted.value(token).trim())),
   Config.mapEffect((token) =>
@@ -359,6 +374,15 @@ export const resolveServerConfig = (
     );
     const desktopBootstrapToken = bootstrap?.desktopBootstrapToken;
     const desktopBootstrapSecret = bootstrap?.desktopBootstrapSecret;
+    const secretStoreKey =
+      bootstrap?.secretStoreKey === undefined
+        ? undefined
+        : decodeSecretStoreKey(bootstrap.secretStoreKey);
+    if (bootstrap?.secretStoreKey !== undefined && secretStoreKey === undefined) {
+      yield* Effect.logWarning(
+        "Ignoring the desktop secret store key: it is not base64 of 32 bytes. Secrets stay unencrypted at rest.",
+      );
+    }
     const shellEnvironmentPrepared = bootstrap?.shellEnvironmentPrepared;
     const desktopTelemetryFd = bootstrap?.desktopTelemetryFd;
     const desktopTelemetryControlFd = bootstrap?.desktopTelemetryControlFd;
@@ -468,6 +492,7 @@ export const resolveServerConfig = (
       startupPresentation,
       desktopBootstrapToken,
       ...(desktopBootstrapSecret === undefined ? {} : { desktopBootstrapSecret }),
+      ...(secretStoreKey === undefined ? {} : { secretStoreKey }),
       ...(shellEnvironmentPrepared === undefined ? {} : { shellEnvironmentPrepared }),
       desktopTelemetryFd,
       desktopTelemetryControlFd,

@@ -169,6 +169,7 @@ it.effect.each(
           assert.notInclude(effective.config.launchArgs, "x-openai-chatpass-test");
           assert.include(args, "model_providers.openai_token_sharing.supports_websockets=false");
           assert.include(args, "model_providers.openai_token_sharing.requires_openai_auth=false");
+          assert.include(args, 'shell_environment_policy.set.ACCESS_TOKEN=""');
           assert.notInclude(effective.config.launchArgs, "dummy-owned-access");
           assert.strictEqual(ambient.CODEX_HOME, "/user/.codex");
         }).pipe(Effect.scoped);

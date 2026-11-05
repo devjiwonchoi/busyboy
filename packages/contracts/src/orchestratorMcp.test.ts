@@ -5,11 +5,13 @@ import {
   OrchestratorMcpCreateThreadsInput,
   OrchestratorMcpDelegateTaskInput,
   OrchestratorMcpDelegateTaskResult,
+  OrchestratorMcpScheduleTaskInput,
   OrchestratorMcpThreadInterruptInput,
   OrchestratorMcpThreadListInput,
   OrchestratorMcpThreadReadInput,
   OrchestratorMcpThreadSendInput,
   OrchestratorMcpThreadWaitInput,
+  OrchestratorMcpUpdateScheduledTaskInput,
 } from "./orchestratorMcp.ts";
 
 const decodeCreateThreadsInput = Schema.decodeUnknownSync(OrchestratorMcpCreateThreadsInput);
@@ -20,8 +22,34 @@ const decodeThreadListInput = Schema.decodeUnknownSync(OrchestratorMcpThreadList
 const decodeThreadReadInput = Schema.decodeUnknownSync(OrchestratorMcpThreadReadInput);
 const decodeThreadSendInput = Schema.decodeUnknownSync(OrchestratorMcpThreadSendInput);
 const decodeThreadWaitInput = Schema.decodeUnknownSync(OrchestratorMcpThreadWaitInput);
+// The MCP server decodes Tool.Strict tools with onExcessProperty "error".
+const strict = { onExcessProperty: "error" } as const;
+const decodeScheduleTaskInput = (input: unknown) =>
+  Schema.decodeUnknownSync(OrchestratorMcpScheduleTaskInput)(input, strict);
+const decodeUpdateScheduledTaskInput = (input: unknown) =>
+  Schema.decodeUnknownSync(OrchestratorMcpUpdateScheduledTaskInput)(input, strict);
 
 describe("orchestrator MCP contracts", () => {
+  it("accepts webhook signing secrets only as a request_secret reference", () => {
+    const signature = { header: "x-hub-signature-256", encoding: "hex", prefix: "sha256=" };
+    const withRef = { type: "webhook", signature: { ...signature, secretRef: "secret-ref-1" } };
+    const withRawSecret = { type: "webhook", signature: { ...signature, secret: "raw-secret" } };
+
+    expect(decodeScheduleTaskInput({ prompt: "Triage", schedule: withRef }).schedule).toEqual(
+      withRef,
+    );
+    expect(
+      decodeUpdateScheduledTaskInput({ scheduledTaskId: "task-1", schedule: withRef }).schedule,
+    ).toEqual(withRef);
+    expect(() => decodeScheduleTaskInput({ prompt: "Triage", schedule: withRawSecret })).toThrow();
+    expect(() =>
+      decodeScheduleTaskInput({ prompt: "Triage", schedule: JSON.stringify(withRawSecret) }),
+    ).toThrow();
+    expect(() =>
+      decodeUpdateScheduledTaskInput({ scheduledTaskId: "task-1", schedule: withRawSecret }),
+    ).toThrow();
+  });
+
   it("accepts explicit worktree isolation and keeps shared delegation as the default", () => {
     expect(decodeDelegateTaskInput({ task: "Review changes" }).isolation).toBeUndefined();
     expect(
