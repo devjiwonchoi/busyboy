@@ -7,6 +7,7 @@ import {
   BrowserHistoryNavigationHint,
   type DesktopBrowserHistoryBridge,
 } from "./browserHistory.ts";
+import type { DesktopBrowserPasswordsBridge } from "./browserPasswords.ts";
 import type {
   BrowserImportResult,
   BrowserImportSource,
@@ -1023,6 +1024,7 @@ export interface DesktopBridge {
   };
   preview?: DesktopPreviewBridge;
   browserHistory?: DesktopBrowserHistoryBridge;
+  browserPasswords?: DesktopBrowserPasswordsBridge;
 }
 
 /** Renderer callback invoked by Electron with a fresh user gesture before display-media capture. */

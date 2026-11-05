@@ -440,4 +440,32 @@ contextBridge.exposeInMainWorld("desktopBridge", {
         ipcRenderer.removeListener(IpcChannels.BROWSER_HISTORY_CHANGED_CHANNEL, wrappedListener);
     },
   },
+  browserPasswords: {
+    status: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_STATUS_CHANNEL, input),
+    list: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_LIST_CHANNEL, input),
+    add: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_ADD_CHANNEL, input),
+    update: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_UPDATE_CHANNEL, input),
+    remove: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_REMOVE_CHANNEL, input),
+    note: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_NOTE_CHANNEL, input),
+    reveal: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_REVEAL_CHANNEL, input),
+    copy: (input) => ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_COPY_CHANNEL, input),
+    deleteAll: (input) =>
+      ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_DELETE_ALL_CHANNEL, input),
+    neverSave: {
+      list: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_NEVER_SAVE_LIST_CHANNEL, input),
+      remove: (input) =>
+        ipcRenderer.invoke(IpcChannels.BROWSER_PASSWORDS_NEVER_SAVE_REMOVE_CHANNEL, input),
+    },
+    onChanged: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, changed: unknown) => {
+        if (typeof changed !== "object" || changed === null) return;
+        const { profileId } = changed as { profileId?: unknown };
+        if (typeof profileId === "string") listener({ profileId });
+      };
+      ipcRenderer.on(IpcChannels.BROWSER_PASSWORDS_CHANGED_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(IpcChannels.BROWSER_PASSWORDS_CHANGED_CHANNEL, wrappedListener);
+    },
+  },
 } satisfies DesktopBridge);
