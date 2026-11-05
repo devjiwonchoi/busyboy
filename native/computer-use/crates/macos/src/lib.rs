@@ -174,7 +174,7 @@ impl Platform for MacPlatform {
         window: Option<&WindowInfo>,
         target: Option<&AxElement>,
         deadline: Deadline,
-    ) -> Fingerprint {
+    ) -> Option<Fingerprint> {
         tree::fingerprint(app, window, target, deadline)
     }
 

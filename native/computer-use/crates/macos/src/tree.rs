@@ -560,19 +560,21 @@ pub fn element_at(app: &RunningApp, x: f64, y: f64, deadline: Deadline) -> Optio
 
 // -- fingerprint --------------------------------------------------------------
 
-/// Cheap observable state, polled every 50 ms while an action settles.
+/// Cheap observable state, polled every 50 ms while an action settles. `None` when
+/// the app did not answer: a busy or slow app can time out right after it gets a
+/// key, and an empty reading would look like every window closed.
 pub fn fingerprint(
     app: &RunningApp,
     window: Option<&WindowInfo>,
     target: Option<&AxElement>,
     deadline: Deadline,
-) -> Fingerprint {
+) -> Option<Fingerprint> {
     let application = AxElement::application(app.process.pid);
-    let Ok(values) = application.attrs(&["AXWindows", "AXFocusedUIElement", "AXChildren", "AXFocusedWindow"], deadline)
-    else {
-        return Fingerprint::default();
-    };
-    let windows = values[0].as_deref().map(as_elements).unwrap_or_default();
+    let values =
+        application.attrs(&["AXWindows", "AXFocusedUIElement", "AXChildren", "AXFocusedWindow"], deadline).ok()?;
+    // A timeout can also come back as a per-attribute error. An app with no
+    // windows still answers with an empty list, so a missing list means no answer.
+    let windows = as_elements(values[0].as_deref()?);
     let focused = values[1].as_deref().and_then(as_element);
     let app_children = values[2].as_deref().map(as_elements).unwrap_or_default();
 
@@ -603,14 +605,14 @@ pub fn fingerprint(
     let target_probe = target.and_then(|target| probe_element(target, deadline, false).ok());
     let parent_child_count = target.and_then(|target| parent(target, deadline)).map(|parent| child_count(&parent, deadline));
 
-    Fingerprint {
+    Some(Fingerprint {
         window_ids: windows.iter().map(|window| format!("{:x}", element_hash(window))).collect(),
         focused_element: focused.as_ref().map(element_hash),
         target: target_probe,
         parent_child_count,
         menu_open,
         window_hash: hasher.finish(),
-    }
+    })
 }
 
 #[cfg(test)]

@@ -308,6 +308,72 @@ fn posts_keys_to_the_process_and_needs_a_focused_element() {
     assert!(error.hint.unwrap().contains("computer_invoke_menu"));
 }
 
+/// TextEdit with focus on the Bold button, so the text area is in the background.
+fn editor_focused_elsewhere(harness: &Harness) -> (String, u64) {
+    let (bold, text) = harness.platform.with_text_editor();
+    harness.platform.with_world(|world| world.apps[0].focused = Some(bold));
+    harness.begin("u1");
+    let tree = harness.state("u1", "TextEdit").unwrap()["tree"].as_str().unwrap().to_owned();
+    (Harness::find_ref(&tree, "text area"), text)
+}
+
+#[test]
+fn select_all_on_a_text_ref_is_verified_by_the_selection() {
+    let harness = Harness::new();
+    let (area, text) = editor_focused_elsewhere(&harness);
+
+    let result = harness.act("u1", json!({"kind": "key", "keys": "cmd+a", "ref": area})).unwrap();
+    assert_eq!(result["verified"], true);
+    assert_eq!(result["effect"]["selectionChanged"], true);
+    // Focusing the target before the keys is our own step, not an effect.
+    assert!(result["effect"].get("focusChanged").is_none_or(|changed| changed == false));
+    let range = harness.platform.with_world(|world| world.nodes[&text].selected_range);
+    assert_eq!(range, Some(cu_protocol::TextRange { start: 0, length: 5 }));
+}
+
+#[test]
+fn ignored_select_all_is_not_verified_by_focus_or_redraws() {
+    let harness = Harness::new();
+    let (area, text) = editor_focused_elsewhere(&harness);
+    // The app ignores the key (no select-all) but redraws something on each key.
+    let bold = harness.platform.with_world(|world| {
+        world.nodes.get_mut(&text).unwrap().accepts_selected_text = false;
+        world.apps[0].focused
+    });
+    harness.platform.with_world(|world| world.key_side_effect = bold);
+
+    let result = harness.act("u1", json!({"kind": "key", "keys": "cmd+a", "ref": area})).unwrap();
+    assert_eq!(result["effect"]["treeChanged"], true);
+    assert_eq!(result["verified"], false);
+}
+
+#[test]
+fn an_app_that_stops_answering_after_a_key_reports_no_closed_window() {
+    let harness = Harness::new();
+    let (area, text) = editor_focused_elsewhere(&harness);
+    harness.platform.with_world(|world| world.nodes.get_mut(&text).unwrap().accepts_selected_text = false);
+    // The "before" reading works; every reading after the key times out.
+    harness.platform.with_world(|world| world.fingerprint_reads_left = Some(1));
+
+    let result = harness.act("u1", json!({"kind": "key", "keys": "cmd+a", "ref": area})).unwrap();
+    assert_eq!(result["verified"], false);
+    assert_eq!(result["effect"], json!({}));
+    assert!(result["notes"].as_array().unwrap().iter().any(|note| note.as_str().unwrap().contains("did not answer")));
+    assert_eq!(result["state"]["window"], "w1", "the window is still there");
+}
+
+#[test]
+fn keys_that_are_not_text_edits_still_count_any_change() {
+    let harness = Harness::new();
+    let (area, _text) = editor_focused_elsewhere(&harness);
+    let bold = harness.platform.with_world(|world| world.apps[0].focused);
+    harness.platform.with_world(|world| world.key_side_effect = bold);
+
+    // cmd+b has no fixed text meaning; a visible change counts.
+    let result = harness.act("u1", json!({"kind": "key", "keys": "cmd+b", "ref": area})).unwrap();
+    assert_eq!(result["verified"], true);
+}
+
 #[test]
 fn invokes_menus_and_reports_disabled_items() {
     let harness = Harness::new();
