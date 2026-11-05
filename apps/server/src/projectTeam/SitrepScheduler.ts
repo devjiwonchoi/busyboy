@@ -6,6 +6,7 @@ import {
   MIN_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES,
   type OrchestrationV2DomainEvent,
   type ProjectId,
+  type ProjectOtherThread,
   ProjectSitrepId,
   type ProjectSitrepReason,
   ProjectTaskEventId,
@@ -28,6 +29,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
+import { readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
   isoMillis,
@@ -50,6 +52,32 @@ const SITREP_MESSAGE_PREFIX = "project-team:sitrep:";
 /** Task events that count as a change worth reporting. */
 const REPORTABLE_EVENT_KINDS = new Set(["created", "stage_changed", "summary"]);
 export const ACTIVE_TASK_STAGES = ["planning", "running"] as const;
+
+export const THREAD_WAITING_PREFIX = "project-team:thread-waiting:";
+/** Waits older than this when first seen (e.g. right after an upgrade) do not wake the PM. */
+export const THREAD_WAITING_LOOKBACK_MS = 24 * 60 * MINUTE_MS;
+/**
+ * A finished turn wakes the PM only if the user still has not looked after this long,
+ * so the PM is not woken for every turn of a thread the user is watching.
+ */
+export const THREAD_REPLY_GRACE_MS = 2 * MINUTE_MS;
+
+const WAITING_KIND_LABEL = {
+  question: "a question",
+  approval: "an approval",
+  plan: "plan approval",
+  reply: "a reply",
+} as const;
+
+/** The PM's wake for a thread outside the task board that waits on the user. */
+export function threadWaitingText(
+  thread: Pick<ProjectOtherThread, "title"> & {
+    readonly pendingRequest: NonNullable<ProjectOtherThread["pendingRequest"]>;
+  },
+): string {
+  const request = thread.pendingRequest;
+  return `[Thread waiting] "${thread.title}" is waiting on you for ${WAITING_KIND_LABEL[request.kind]}: ${request.text}`;
+}
 
 export function preferenceChangedBody(minutes: number, reason: string): string {
   return `interval changed to ${minutes} min because ${reason}`;
@@ -86,9 +114,6 @@ export function sitrepDueText(input: {
   const lines = [
     `[Sitrep due] since ${input.since}. Call team_status(since) and post a 3–6 line sitrep.`,
   ];
-  if (input.reason === "liveness") {
-    lines.push("Nothing changed; one line on what is still running is enough.");
-  }
   if (input.reason === "requested") {
     lines.push("The user asked for this sitrep; post it even if nothing changed.");
   }
@@ -335,13 +360,74 @@ const make = Effect.gen(function* () {
       return yield* dispatchSitrep(yield* requireManager(projectId), "requested");
     }).pipe(orTeamError("Could not request a sitrep.", projectId));
 
-  const hasChangesSince = (projectId: ProjectId, since: IsoDateTime) =>
+  /** Task changes, new questions, or threads outside the board that moved. */
+  const hasChangesSince = (manager: ProjectTeamRepository.ProjectManagerRecord, since: IsoDateTime) =>
     Effect.gen(function* () {
+      const projectId = manager.projectId;
       const events = yield* repository.listProjectEventsSince({ projectId, since });
       if (events.some((event) => REPORTABLE_EVENT_KINDS.has(event.kind))) return true;
       const items = yield* repository.listAttentionItemsSince({ projectId, since });
-      return items.length > 0;
+      if (items.length > 0) return true;
+      const others = yield* readOtherThreads({
+        threads,
+        repository,
+        projectId,
+        managerThreadId: manager.threadId,
+        withRequestText: false,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("could not read the project's other threads", { projectId, cause }).pipe(
+            Effect.as([]),
+          ),
+        ),
+      );
+      return others.some((thread) => isoMillis(thread.lastUpdateAt) > isoMillis(since));
     });
+
+  /**
+   * Wakes the PM once for each new wait in a thread outside the task board, so it can
+   * tell the user right away. The command id names the thread and when the wait began,
+   * so each wait wakes the PM once.
+   */
+  const wakeForWaitingThreads = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
+    Effect.gen(function* () {
+      const nowMs = isoMillis(yield* nowIso);
+      const others = yield* readOtherThreads({
+        threads,
+        repository,
+        projectId: manager.projectId,
+        managerThreadId: manager.threadId,
+        withRequestText: true,
+      });
+      for (const thread of others) {
+        const request = thread.pendingRequest;
+        if (request === null) continue;
+        const sinceMs = isoMillis(request.since);
+        if (sinceMs < isoMillis(manager.createdAt)) continue;
+        if (nowMs - sinceMs > THREAD_WAITING_LOOKBACK_MS) continue;
+        if (request.kind === "reply" && nowMs - sinceMs < THREAD_REPLY_GRACE_MS) continue;
+        const key = `${THREAD_WAITING_PREFIX}${thread.threadId}:${sinceMs}`;
+        if (yield* threads.hasReceipt(CommandId.make(key))) continue;
+        yield* threads.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make(key),
+          threadId: manager.threadId,
+          messageId: MessageId.make(key),
+          text: threadWaitingText({ title: thread.title, pendingRequest: request }),
+          attachments: [],
+          dispatchMode: { type: "queue_after_active" },
+          createdBy: "system",
+          creationSource: "server",
+        });
+      }
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("project team thread-waiting wake failed", {
+          projectId: manager.projectId,
+          cause,
+        }),
+      ),
+    );
 
   const checkProject = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
     Effect.gen(function* () {
@@ -349,6 +435,7 @@ const make = Effect.gen(function* () {
       if (!manager.settings.enabled) return;
       const shell = yield* threads.getThreadShell(manager.threadId);
       if (shell === null || shell.deletedAt !== null || shell.archivedAt !== null) return;
+      yield* wakeForWaitingThreads(manager);
       const latest = yield* latestSitrep(manager.projectId, manager.threadId);
       if (Option.isSome(latest) && latest.value.body === null) return;
 
@@ -371,14 +458,8 @@ const make = Effect.gen(function* () {
       let reason: ProjectSitrepReason | null = null;
       if (dueAt !== undefined && nowMs >= dueAt) {
         reason = "milestone";
-      } else if (yield* hasChangesSince(manager.projectId, windowStart)) {
+      } else if (yield* hasChangesSince(manager, windowStart)) {
         reason = "interval";
-      } else if (elapsed >= 2 * intervalMs) {
-        const active = yield* repository.listTasks({
-          projectId: manager.projectId,
-          stages: ACTIVE_TASK_STAGES,
-        });
-        if (active.length > 0) reason = "liveness";
       }
       if (reason === null) return;
 
@@ -466,6 +547,19 @@ const make = Effect.gen(function* () {
       yield* router.publish(manager.projectId);
     });
 
+  /**
+   * A thread outside the task board may have started or stopped waiting on the user,
+   * which changes the PM's "Needs you" count.
+   */
+  const publishForOtherThread = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const shell = yield* threads.getThreadShell(threadId);
+      if (shell === null) return;
+      const manager = yield* repository.getManager(shell.projectId);
+      if (Option.isNone(manager) || manager.value.threadId === threadId) return;
+      yield* router.publish(shell.projectId);
+    });
+
   const handle: SitrepScheduler["Service"]["handle"] = (event) =>
     Effect.gen(function* () {
       const isUserMessage =
@@ -477,6 +571,10 @@ const make = Effect.gen(function* () {
         event.type === "run.updated" &&
         ThreadManagement.isTerminalRunStatus(event.payload.status) &&
         event.payload.userMessageId.startsWith(SITREP_MESSAGE_PREFIX);
+      if (!isSettledRun && (event.type === "runtime-request.updated" || event.type === "run.updated")) {
+        yield* publishForOtherThread(event.threadId);
+        return;
+      }
       if (!isUserMessage && !isSettledRun && event.type !== "thread.visited") return;
       const manager = yield* repository.getManagerByThreadId(event.threadId);
       if (Option.isNone(manager)) return;

@@ -161,7 +161,7 @@ describe("SitrepScheduler", () => {
     ),
   );
 
-  it.effect("skips interval sitreps without changes but sends a liveness note", () =>
+  it.effect("sends interval sitreps only when something changed", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const sitreps = yield* SitrepScheduler;
@@ -179,14 +179,10 @@ describe("SitrepScheduler", () => {
         yield* sitreps.check;
         assert.strictEqual((yield* sitrepRequests(harness, pm)).length, 1);
 
+        // A task still running with nothing new is not worth a sitrep.
         yield* TestClock.adjust("60 minutes");
         yield* sitreps.check;
-        const requests = yield* sitrepRequests(harness, pm);
-        assert.strictEqual(requests.length, 2);
-        assert.include(
-          requests[1],
-          "Nothing changed; one line on what is still running is enough.",
-        );
+        assert.strictEqual((yield* sitrepRequests(harness, pm)).length, 1);
       }),
     ),
   );

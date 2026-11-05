@@ -279,6 +279,40 @@ export const ProjectTeamJournalEntry = Schema.Struct({
 });
 export type ProjectTeamJournalEntry = typeof ProjectTeamJournalEntry.Type;
 
+export const ProjectOtherThreadStatus = Schema.Literals([
+  "running",
+  "waiting_on_user",
+  "idle",
+  "failed",
+]);
+export type ProjectOtherThreadStatus = typeof ProjectOtherThreadStatus.Type;
+
+/** What a thread outside the task board is waiting on the user for. */
+export const ProjectOtherThreadRequest = Schema.Struct({
+  /** `reply`: the thread's turn ended and the user has not looked at it yet. */
+  kind: Schema.Literals(["question", "approval", "plan", "reply"]),
+  text: Schema.String,
+  since: IsoDateTime,
+});
+export type ProjectOtherThreadRequest = typeof ProjectOtherThreadRequest.Type;
+
+/**
+ * A thread in the project that is neither the PM nor a task lead, such as one the
+ * user started. Derived from the thread's state when read; never stored.
+ */
+export const ProjectOtherThread = Schema.Struct({
+  threadId: ThreadId,
+  title: Schema.String,
+  status: ProjectOtherThreadStatus,
+  /** Latest of: created, run started or finished, request raised, PR linked. */
+  lastUpdateAt: IsoDateTime,
+  latestMessage: Schema.NullOr(Schema.String),
+  branch: Schema.NullOr(Schema.String),
+  pullRequestUrl: Schema.NullOr(Schema.String),
+  pendingRequest: Schema.NullOr(ProjectOtherThreadRequest),
+});
+export type ProjectOtherThread = typeof ProjectOtherThread.Type;
+
 export const ProjectTeamStatus = Schema.Struct({
   projectId: ProjectId,
   tasks: ProjectTeamTasksByStage,
@@ -292,7 +326,15 @@ export const ProjectTeamStatus = Schema.Struct({
     prOpened: Schema.Array(ProjectTaskBrief),
     newAttention: Schema.Array(ProjectAttentionItem),
     blocked: Schema.Array(ProjectTaskBrief),
+    /** Other threads whose lastUpdateAt is after `since`. */
+    otherThreads: Schema.Array(ProjectOtherThread).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+    ),
   }),
+  /** Threads outside the task board, the ones waiting on the user first. */
+  otherThreads: Schema.Array(ProjectOtherThread).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   /** Latest done/failed tasks, decisions, and sitreps, newest first. */
   journal: Schema.Array(ProjectTeamJournalEntry).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
