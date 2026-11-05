@@ -409,7 +409,7 @@ export const make = Effect.gen(function* BrowserImportMake() {
       const fileSystem = yield* FileSystem.FileSystem;
       // Chrome may hold the file open; read a private copy, WAL included.
       const directory = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3code-login-data-",
+        prefix: "busyboy-login-data-",
       });
       const copy = pathContext.path.join(directory, "Login Data");
       yield* fileSystem.copyFile(loginData, copy);
