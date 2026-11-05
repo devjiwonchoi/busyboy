@@ -1,3 +1,4 @@
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { MessageId, ThreadId, OrchestratorMcpFailure, ProjectId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -9,7 +10,9 @@ import * as Project from "../../../project/ProjectService.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
 import * as Repositories from "../../../sourceControl/SourceControlRepositoryService.ts";
 import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
+import * as ServerSettings from "../../../serverSettings.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
+import { narrowerRuntimeMode } from "../../OrchestratorMcpService.ts";
 import { newCommandId, readCaller, resolveProjectId, unavailable } from "../../threadAccess.ts";
 import { ProjectToolkit } from "./tools.ts";
 
@@ -51,7 +54,7 @@ const access = Effect.gen(function* () {
 export const layer = McpToolAccess.toLayer(ProjectToolkit, {
   t3_thread_launch: McpToolAccess.startsThreads(
     (input) => input,
-    (input, { runtimeMode, interactionMode }) =>
+    (input, { runtimeMode: startedRuntimeMode, interactionMode }) =>
       Effect.gen(function* () {
         const context = yield* readCaller();
         const { caller } = context;
@@ -86,6 +89,21 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
                 ),
               )).projectId
             : yield* resolveProjectId(context, input.projectId);
+        // With no runtimeMode asked for, start in the project's default mode, never above the caller's.
+        const runtimeMode =
+          input.runtimeMode === undefined
+            ? narrowerRuntimeMode(
+                startedRuntimeMode,
+                yield* ServerSettings.ServerSettingsService.pipe(
+                  Effect.flatMap((settings) => settings.getSettings),
+                  Effect.map(
+                    (settings) =>
+                      resolveProjectSettings(settings, projectId).settings.defaultRuntimeMode,
+                  ),
+                  Effect.mapError(unavailable),
+                ),
+              )
+            : startedRuntimeMode;
         const readProject = Project.ProjectService.pipe(
           Effect.flatMap((projects) => projects.getById(projectId)),
           Effect.mapError(unavailable),

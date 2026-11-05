@@ -2276,5 +2276,29 @@ describe("OrchestratorMcpService provider resolution", () => {
         );
       }),
     );
+
+    it.effect("starts an unspecified child at the settings default, never above its parent", () =>
+      Effect.gen(function* () {
+        const resolve = OrchestratorMcpService.resolveRuntimeMode;
+        // A full-access parent's child starts in auto unless asked otherwise.
+        assert.equal(yield* resolve("full-access", undefined, undefined, "auto"), "auto");
+        // The user's own full-access default is kept.
+        assert.equal(
+          yield* resolve("full-access", undefined, undefined, "full-access"),
+          "full-access",
+        );
+        // The default never lifts a child above a narrower parent.
+        assert.equal(
+          yield* resolve("approval-required", undefined, undefined, "auto"),
+          "approval-required",
+        );
+        // An explicit inherit or mode still wins over the default.
+        assert.equal(yield* resolve("full-access", "inherit", undefined, "auto"), "full-access");
+        assert.equal(
+          yield* resolve("full-access", "full-access", undefined, "auto"),
+          "full-access",
+        );
+      }),
+    );
   });
 });
