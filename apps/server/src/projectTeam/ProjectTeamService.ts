@@ -134,15 +134,8 @@ const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
 
 export const JOURNAL_LIMIT = 20;
 const JOURNAL_TEXT_MAX_CHARS = 200;
-/** Answered or replaced cards kept in the PM thread after they close. */
+/** Answered or replaced cards kept in "Waiting on you" after they close. */
 const CLOSED_DECISION_CARD_LIMIT = 30;
-const CARD_WAKE_QUESTION_MAX_CHARS = 600;
-
-const ATTENTION_KIND_LABEL: Record<ProjectAttentionItem["kind"], string> = {
-  approval: "plan approval",
-  decision: "a decision",
-  blocker: "help with a blocker",
-};
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -157,27 +150,6 @@ export function planRequestedWakeText(
     `[Task added by the user] ${key} ${task.title}`,
     `The user wants a plan for it. Start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user if it has to wait.`,
   ].join("\n");
-}
-
-/** Wakes the PM when a card appears, so it can add a recommendation beside it. */
-export function decisionCardWakeText(
-  task: Pick<ProjectTask, "title">,
-  item: Pick<ProjectAttentionItem, "kind" | "question">,
-): string {
-  return [
-    `[Decision card] The task "${task.title}" asks the user for ${ATTENTION_KIND_LABEL[item.kind]}:`,
-    clip(item.question, CARD_WAKE_QUESTION_MAX_CHARS),
-    "The card with its buttons is already in front of the user, and their click goes straight to the task lead.",
-    'If it helps the user decide, reply with one or two plain-language lines: what this is, the tradeoff, and your recommendation. Otherwise reply "No action."',
-  ].join("\n");
-}
-
-/** Tells the PM what the user chose on a card; the answer already reached the lead. */
-export function decisionAnsweredWakeText(
-  task: Pick<ProjectTask, "title">,
-  item: Pick<ProjectAttentionItem, "answer">,
-): string {
-  return `[Decision answered] The user answered the card from "${task.title}": ${clip(item.answer ?? "", CARD_WAKE_QUESTION_MAX_CHARS)}\nIt already reached the task lead; do not relay it with attention_answer. Reply in one short line, such as "Noted."`;
 }
 
 const trimJournalText = (text: string): string =>
@@ -1350,12 +1322,8 @@ const make = Effect.gen(function* () {
           (input.kind === "approval" ? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY] : []),
         askerThreadId: callerThreadId,
       });
+      // The question shows on the task's page and in "Waiting on you"; the PM is not woken.
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
-      yield* wakeManagerWith(
-        task.projectId,
-        `project-team:card:${item.id}`,
-        decisionCardWakeText(task, item),
-      );
       return { item };
     }).pipe(orTeamError("Could not ask the user."));
 
@@ -1566,11 +1534,6 @@ const make = Effect.gen(function* () {
       });
       const task = yield* requireTask(answered.taskId, answered.projectId);
       yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
-      yield* wakeManagerWith(
-        answered.projectId,
-        `project-team:card-answered:${answered.id}`,
-        decisionAnsweredWakeText(task, answered),
-      );
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
 
@@ -1594,9 +1557,7 @@ const make = Effect.gen(function* () {
       });
     }).pipe(
       // The card is already on screen; a missed wake only costs the PM's recommendation.
-      Effect.catchCause((cause) =>
-        Effect.logWarning("waking the PM about a decision card failed", { projectId, cause }),
-      ),
+      Effect.catchCause((cause) => Effect.logWarning("waking the PM failed", { projectId, cause })),
     );
 
   const listMemory: ProjectTeamService["Service"]["listMemory"] = (callerThreadId) =>
