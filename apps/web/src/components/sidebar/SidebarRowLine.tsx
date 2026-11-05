@@ -101,49 +101,57 @@ export function SidebarRowStatusSlot(props: { status: SidebarRowStatus | null })
 }
 
 // One sidebar row line: the title owns every pixel on the left, everything else
-// clusters at the right. Hover/keyboard focus swaps the passive indicators for
-// the row actions, which sit just left of the status icon.
+// sits in one trailing slot at the right. The slot stacks two layers in the same
+// grid cell, both right-aligned: at rest, the passive indicators and the status
+// icon; on hover or keyboard focus, the row actions. The slot is always as wide
+// as the wider layer, so swapping layers never moves the actions or reflows the
+// title.
 export function SidebarRowLine(props: {
   title: ReactNode;
   status: SidebarRowStatus | null;
   indicators?: ReactNode;
   actions?: ReactNode;
-  // Replaces the whole right cluster, e.g. the drop destination while dragging.
+  // Replaces the whole trailing slot, e.g. the drop destination while dragging.
   trailingOverride?: ReactNode;
 }) {
   const hasActions = props.actions != null && props.actions !== false;
+  // focus-visible, not focus-within: a mouse click leaves the clicked button
+  // focused, and focus-within would keep the actions shown after the pointer leaves.
+  const showActions =
+    "group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:opacity-100 group-has-[:focus-visible]/sidebar-row-trailing:pointer-events-auto group-has-[:focus-visible]/sidebar-row-trailing:opacity-100";
+  const hideResting =
+    "group-any-hover/sidebar-row:opacity-0 group-has-[:focus-visible]/sidebar-row-trailing:opacity-0";
   return (
     <div className="relative z-10 flex h-8 min-w-0 items-center gap-1.5 px-(--sidebar-row-content-inset)">
       <div className="flex min-w-0 flex-1 items-center">{props.title}</div>
       {props.trailingOverride != null ? (
         props.trailingOverride
       ) : (
-        <span className="flex shrink-0 items-center gap-1.5">
-          <span className="group/sidebar-row-actions relative flex h-5 shrink-0 items-stretch justify-end">
-            {props.indicators != null ? (
-              <span
-                className={cn(
-                  "pointer-events-none flex items-center gap-1.5 transition-opacity",
-                  hasActions &&
-                    "group-has-[:focus-visible]/sidebar-row-actions:absolute group-has-[:focus-visible]/sidebar-row-actions:right-0 group-has-[:focus-visible]/sidebar-row-actions:opacity-0 group-any-hover/sidebar-row:absolute group-any-hover/sidebar-row:right-0 group-any-hover/sidebar-row:opacity-0",
-                )}
-              >
-                {props.indicators}
-              </span>
-            ) : null}
-            {hasActions ? (
-              // focus-visible, not focus-within: a mouse click leaves the clicked
-              // button focused, and focus-within would keep the actions shown
-              // after the pointer leaves.
-              <span
-                data-testid="sidebar-row-actions"
-                className="pointer-events-none absolute inset-y-0 right-0 flex items-stretch opacity-0 transition-opacity has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:static has-[:focus-visible]:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:static group-any-hover/sidebar-row:opacity-100"
-              >
-                {props.actions}
-              </span>
-            ) : null}
+        <span
+          data-testid="sidebar-row-trailing"
+          className="group/sidebar-row-trailing grid h-5 shrink-0 items-center justify-items-end"
+        >
+          {/* Opacity, not visibility, so the status label stays announced on hover. */}
+          <span
+            className={cn(
+              "pointer-events-none col-start-1 row-start-1 flex items-center gap-1.5 transition-opacity motion-reduce:transition-none",
+              hasActions && hideResting,
+            )}
+          >
+            {props.indicators}
+            <SidebarRowStatusSlot status={props.status} />
           </span>
-          <SidebarRowStatusSlot status={props.status} />
+          {hasActions ? (
+            <span
+              data-testid="sidebar-row-actions"
+              className={cn(
+                "pointer-events-none col-start-1 row-start-1 flex h-full items-stretch opacity-0 transition-opacity motion-reduce:transition-none",
+                showActions,
+              )}
+            >
+              {props.actions}
+            </span>
+          ) : null}
         </span>
       )}
     </div>
