@@ -50,7 +50,7 @@ describe("ComputerUseAppRequestPrompt", () => {
     expect(container.textContent).toContain(COMPUTER_USE_APP_REQUEST_NOTE);
     expect(buttons().map((entry) => entry.textContent?.trim())).toEqual([
       "Deny",
-      "Always allow",
+      "Always allow in this project",
       "Allow for this thread",
       "Allow once",
     ]);
@@ -58,7 +58,7 @@ describe("ComputerUseAppRequestPrompt", () => {
     const expected: Array<[string, ComputerUseAppRequestChoice]> = [
       ["Allow once", "allow_once"],
       ["Allow for this thread", "allow_thread"],
-      ["Always allow", "always"],
+      ["Always allow in this project", "always"],
       ["Deny", "deny"],
     ];
     for (const [label, choice] of expected) {
@@ -84,6 +84,28 @@ describe("ComputerUseAppRequestPrompt", () => {
       bundleId: "com.apple.Settings",
       allowAlways: false,
     });
-    expect(buttons().map((entry) => entry.textContent?.trim())).not.toContain("Always allow");
+    expect(buttons().map((entry) => entry.textContent?.trim())).not.toContain(
+      "Always allow in this project",
+    );
+  });
+
+  it("never offers Always allow for browsers, even if the server says so", async () => {
+    for (const bundleId of ["com.apple.Safari", "com.google.Chrome.canary"]) {
+      await render({ appName: "Browser", bundleId, allowAlways: true });
+      expect(buttons().map((entry) => entry.textContent?.trim())).toEqual([
+        "Deny",
+        "Allow for this thread",
+        "Allow once",
+      ]);
+    }
+  });
+
+  it("hides Always allow when the server doesn't offer it (scratch chats)", async () => {
+    await render({ appName: "TextEdit", bundleId: "com.apple.TextEdit", allowAlways: false });
+    expect(buttons().map((entry) => entry.textContent?.trim())).toEqual([
+      "Deny",
+      "Allow for this thread",
+      "Allow once",
+    ]);
   });
 });

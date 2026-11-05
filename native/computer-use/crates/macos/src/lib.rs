@@ -16,6 +16,7 @@ pub mod monitor;
 pub mod permissions;
 pub mod pointer;
 pub mod session;
+pub mod settings_panes;
 pub mod tree;
 pub mod web;
 
@@ -119,6 +120,10 @@ impl Platform for MacPlatform {
 
     fn windows(&self, app: &RunningApp, deadline: Deadline) -> CuResult<Vec<WindowInfo>> {
         tree::windows(app, deadline)
+    }
+
+    fn security_pane_names(&self) -> &[String] {
+        settings_panes::security_pane_names()
     }
 
     fn snapshot(

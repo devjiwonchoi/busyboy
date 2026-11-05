@@ -107,6 +107,8 @@ pub(crate) fn forbidden_error(reason: ForbiddenReason) -> ErrorObject {
         ForbiddenReason::PrivateWindow => "private browsing windows are off limits for computer use",
         ForbiddenReason::UnidentifiedApp => "this app has no bundle identifier, so it cannot be approved",
         ForbiddenReason::ElevatedWindow => "elevated windows are off limits for computer use",
+        ForbiddenReason::Automation => "script and automation apps are off limits for computer use",
+        ForbiddenReason::FileManager => "file managers like Finder are off limits for computer use",
     };
     ErrorObject::with_reason(ErrorCode::AppForbidden, reason.as_str(), message)
 }

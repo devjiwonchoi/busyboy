@@ -170,7 +170,7 @@ impl<P: Platform> Engine<P> {
             if window.private {
                 return Err(forbidden_error(ForbiddenReason::PrivateWindow));
             }
-            if is_security_pane(&app.bundle_id, &window.title) {
+            if is_security_pane(&app.bundle_id, &window.title, self.platform.security_pane_names()) {
                 return Err(forbidden_error(ForbiddenReason::SystemSecurity));
             }
             self.mark_target(&params.context.turn_id, MonitorTarget { pid: app.process.pid, frames: vec![window.bounds] });

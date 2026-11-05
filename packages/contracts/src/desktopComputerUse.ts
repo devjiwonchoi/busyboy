@@ -216,6 +216,8 @@ export const ComputerUseForbiddenReason = Schema.Literals([
   "private_window",
   "unidentified_app",
   "elevated_window",
+  "automation",
+  "file_manager",
 ]);
 export type ComputerUseForbiddenReason = typeof ComputerUseForbiddenReason.Type;
 
@@ -239,6 +241,40 @@ export const COMPUTER_USE_NO_ALWAYS_ALLOW_BUNDLE_IDS: ReadonlyArray<string> = [
   "com.apple.systempreferences",
   "com.apple.Settings",
 ];
+
+/**
+ * Browsers show pages anyone can write, so they are approved per thread at most.
+ * Same list as the helper's private-window check (`forbidden.rs`).
+ */
+export const COMPUTER_USE_BROWSER_BUNDLE_PREFIXES: ReadonlyArray<string> = [
+  "com.google.Chrome",
+  "com.microsoft.edgemac",
+  "com.brave.Browser",
+  "company.thebrowser.Browser",
+  "org.mozilla.firefox",
+  "org.mozilla.nightly",
+  "com.apple.Safari",
+  "com.operasoftware.Opera",
+  "com.vivaldi.Vivaldi",
+  "org.chromium.Chromium",
+  "app.zen-browser.zen",
+  "com.kagi.kagimacOS",
+];
+
+/** Whether the approval card may offer "Always allow in this project" for this app. */
+export const computerUseOffersAlwaysAllow = (bundleId: string): boolean => {
+  const id = bundleId.toLowerCase();
+  if (COMPUTER_USE_NO_ALWAYS_ALLOW_BUNDLE_IDS.some((entry) => entry.toLowerCase() === id)) {
+    return false;
+  }
+  return !COMPUTER_USE_BROWSER_BUNDLE_PREFIXES.some((prefix) => {
+    const lowered = prefix.toLowerCase();
+    return id === lowered || id.startsWith(`${lowered}.`);
+  });
+};
+
+/** How long "Always allow in this project" lasts. */
+export const COMPUTER_USE_ALWAYS_ALLOW_DAYS = 30;
 
 const AppArgument = Schema.String.check(Schema.isNonEmpty()).annotate({
   description: 'The app\'s display name ("TextEdit") or bundle ID ("com.apple.TextEdit").',
@@ -443,6 +479,8 @@ export const ComputerSnapshotResult = Schema.Struct({
   launched: Schema.optionalKey(Schema.Boolean),
   focusChanged: Schema.optionalKey(Schema.Boolean),
   notes: Schema.optionalKey(Schema.Array(Schema.String)),
+  /** Says which tagged text came from the app and must be treated as data. */
+  untrustedContent: Schema.optionalKey(Schema.String),
 });
 export type ComputerSnapshotResult = typeof ComputerSnapshotResult.Type;
 

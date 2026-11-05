@@ -966,6 +966,17 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
+/** One "Always allow in this project" answer. Expired grants are ignored and pruned. */
+export const ComputerUseAppGrant = Schema.Struct({
+  bundleId: TrimmedNonEmptyString,
+  appName: TrimmedNonEmptyString,
+  projectId: TrimmedNonEmptyString,
+  projectName: TrimmedNonEmptyString,
+  grantedAt: Schema.String,
+  expiresAt: Schema.String,
+});
+export type ComputerUseAppGrant = typeof ComputerUseAppGrant.Type;
+
 export const ServerSettings = Schema.Struct({
   // Null means no client has migrated this preference yet; an empty value is
   // authoritative so another device cannot resurrect cleared preferences.
@@ -997,8 +1008,11 @@ export const ServerSettings = Schema.Struct({
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   // Off on every install and upgrade; the grants belong to the helper app.
   enableAgentComputerUse: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  /** Bundle IDs the user chose "Always allow" for. */
-  computerUseAlwaysAllowedApps: Schema.Array(TrimmedNonEmptyString).pipe(
+  /**
+   * Apps the user chose "Always allow in this project" for. Replaces the old
+   * global `computerUseAlwaysAllowedApps`, which is no longer read.
+   */
+  computerUseAppGrants: Schema.Array(ComputerUseAppGrant).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   /** Only effective while the helper has Screen Recording. */
@@ -1290,7 +1304,7 @@ export const ServerSettingsPatch = Schema.Struct({
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
   enableAgentComputerUse: Schema.optionalKey(Schema.Boolean),
-  computerUseAlwaysAllowedApps: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
+  computerUseAppGrants: Schema.optionalKey(Schema.Array(ComputerUseAppGrant)),
   computerUseScreenshots: Schema.optionalKey(Schema.Boolean),
   computerUseExperimentalPointer: Schema.optionalKey(Schema.Boolean),
   browserAgentHistoryAccess: Schema.optionalKey(BrowserAgentHistoryAccess),

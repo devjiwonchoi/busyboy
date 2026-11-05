@@ -174,6 +174,12 @@ pub trait Platform: Send + Sync + 'static {
 
     fn windows(&self, app: &RunningApp, deadline: Deadline) -> CuResult<Vec<WindowInfo>>;
 
+    /// Localized names, in every language, of the System Settings panes where
+    /// actions are refused. The English names always apply on top of these.
+    fn security_pane_names(&self) -> &[String] {
+        &[]
+    }
+
     /// Walks one window within the budget. Stops at the deadline or cancellation and
     /// marks the tree truncated. Never activates the app or moves the pointer.
     fn snapshot(

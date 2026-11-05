@@ -737,6 +737,12 @@ impl Platform for FakePlatform {
             world.web_accessibility_restored.push(app.bundle_id.clone());
         });
     }
+
+    fn security_pane_names(&self) -> &[String] {
+        // A few localized names, as a scan of the pane bundles would find them.
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| ["공유", "개인정보 보호 및 보안", "共有", "プライバシーとセキュリティ"].map(String::from).to_vec())
+    }
 }
 
 fn is_ancestor(world: &FakeWorld, ancestor: u64, mut node: u64) -> bool {

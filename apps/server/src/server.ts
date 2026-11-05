@@ -68,6 +68,7 @@ import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import * as DesktopBrowserChannel from "./preview/DesktopBrowserChannel.ts";
+import * as ComputerUseProjectScope from "./computerUse/ComputerUseProjectScope.ts";
 import * as ComputerUseTurns from "./computerUse/ComputerUseTurns.ts";
 import * as DesktopComputerUseChannel from "./computerUse/DesktopComputerUseChannel.ts";
 import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
@@ -600,6 +601,7 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(ServerBrowser.layer.pipe(Layer.provide(DesktopBrowserChannel.layer))),
   // One instance for the MCP tools and the card's answer RPC.
   Layer.provide(ComputerUseTurns.layer),
+  Layer.provide(ComputerUseProjectScope.layer),
   // Built once here; the MCP tools reach the helper through the same channel.
   Layer.provide(DesktopComputerUseChannel.layer),
   Layer.provide(PreviewBrowser.layer),

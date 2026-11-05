@@ -1,8 +1,10 @@
 import type {
+  ComputerUseAppGrant,
   ComputerUsePermissionKind,
   ComputerUseSettingsStatus,
   ServerSettingsPatch,
 } from "@t3tools/contracts";
+import { COMPUTER_USE_ALWAYS_ALLOW_DAYS } from "@t3tools/contracts";
 import { AppWindowIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -22,12 +24,15 @@ import { searchableSetting } from "./settingsSearch";
 /** How often the section re-reads the helper's grants while it is open. */
 export const COMPUTER_USE_STATUS_POLL_MS = 2_000;
 
+const formatGrantDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+
 export const COMPUTER_USE_UNSUPPORTED_MESSAGE =
   "Computer Use is available on macOS 14 or later in the BusyBoy desktop app for now.";
 
 export interface ComputerUseSettingValues {
   readonly enableAgentComputerUse: boolean;
-  readonly computerUseAlwaysAllowedApps: ReadonlyArray<string>;
+  readonly computerUseAppGrants: ReadonlyArray<ComputerUseAppGrant>;
   readonly computerUseScreenshots: boolean;
   readonly computerUseExperimentalPointer: boolean;
 }
@@ -42,6 +47,8 @@ export interface ComputerUseSettingsViewProps {
   readonly onOpenSystemSettings: (url: string) => void;
   readonly onRestartHelper: () => void;
   readonly restarting?: boolean;
+  /** For tests; defaults to the current time. */
+  readonly now?: number;
 }
 
 /**
@@ -125,6 +132,7 @@ export function ComputerUseSettingsView({
   onOpenSystemSettings,
   onRestartHelper,
   restarting = false,
+  now: nowProp,
 }: ComputerUseSettingsViewProps) {
   if (supported === null) {
     // Neutral until we know, so older macOS never flashes the full section.
@@ -149,7 +157,9 @@ export function ComputerUseSettingsView({
   const screenRecording = permissions === null ? null : permissions.screenRecording === "granted";
   const urls = status?.settingsUrls;
   const helper = status?.helper ?? null;
-  const allowed = settings.computerUseAlwaysAllowedApps;
+  const now = nowProp ?? Date.now();
+  // Expired grants no longer count, so they are not listed.
+  const grants = settings.computerUseAppGrants.filter((grant) => Date.parse(grant.expiresAt) > now);
 
   return (
     <SettingsSection id="computer-use" title="Computer Use">
@@ -202,34 +212,49 @@ export function ComputerUseSettingsView({
           />
           <SettingsRow
             title="Always allowed apps"
-            description="Agents use these apps without asking each turn."
+            description={`Agents use these apps without asking, only in the project shown, for ${COMPUTER_USE_ALWAYS_ALLOW_DAYS} days.`}
           >
-            {allowed.length === 0 ? (
+            {grants.length === 0 ? (
               <p className="pb-1 text-xs text-muted-foreground">
-                Apps you always allow will appear here.
+                Apps you always allow in a project will appear here.
               </p>
             ) : (
               <ul className="space-y-1 pb-1" aria-label="Always allowed apps">
-                {allowed.map((bundleId) => (
-                  <li key={bundleId} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <AppWindowIcon className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate font-mono">{bundleId}</span>
-                    </span>
-                    <Button
-                      size="xs"
-                      variant="ghost-destructive"
-                      aria-label={`Remove ${bundleId}`}
-                      onClick={() =>
-                        onUpdate({
-                          computerUseAlwaysAllowedApps: allowed.filter((id) => id !== bundleId),
-                        })
-                      }
+                {grants.map((grant) => {
+                  const label = `${grant.appName} in ${grant.projectName}`;
+                  return (
+                    <li
+                      key={`${grant.projectId}:${grant.bundleId}`}
+                      className="flex items-center justify-between gap-2 text-xs"
                     >
-                      Remove
-                    </Button>
-                  </li>
-                ))}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <AppWindowIcon className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">{label}</span>
+                          <span className="truncate text-muted-foreground">
+                            {`${grant.bundleId} · until ${formatGrantDate(grant.expiresAt)}`}
+                          </span>
+                        </span>
+                      </span>
+                      <Button
+                        size="xs"
+                        variant="ghost-destructive"
+                        aria-label={`Remove ${label}`}
+                        onClick={() =>
+                          onUpdate({
+                            computerUseAppGrants: grants.filter(
+                              (other) =>
+                                other.bundleId !== grant.bundleId ||
+                                other.projectId !== grant.projectId,
+                            ),
+                          })
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </SettingsRow>
