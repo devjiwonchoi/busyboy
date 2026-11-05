@@ -1,5 +1,4 @@
 import {
-  EnvironmentId,
   ProjectAttentionBatchId,
   ProjectAttentionItemId,
   type ProjectDecisionCard,
@@ -9,9 +8,16 @@ import {
   ProjectTaskId,
   ThreadId,
 } from "@t3tools/contracts";
-import type { LegendListRef } from "@legendapp/list/react";
 import { AsyncResult } from "effect/reactivity";
-import { act, createRef, useSyncExternalStore, type ComponentProps } from "react";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { act, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
@@ -19,9 +25,8 @@ import { userEvent } from "vite-plus/test/browser";
 import "~/index.css";
 
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
-import { MessagesTimeline } from "./MessagesTimeline";
+import { WaitingOnYouPage } from "../inbox/WaitingOnYouPage";
 
-const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
 const PM_THREAD_ID = ThreadId.make("pm-thread");
 const LEAD_THREAD_ID = ThreadId.make("lead-thread");
@@ -58,19 +63,24 @@ async function answerDecision(input: ProjectTeamAnswerDecisionInput) {
   return AsyncResult.success({ item: card.item });
 }
 
+vi.mock(import("../../state/environments"), async (original) => ({
+  ...(await original()),
+  useEnvironmentIds: (() => ["environment-local"]) as never,
+}));
 vi.mock(import("../../state/projectTeam"), async (original) => ({
   ...(await original()),
-  useProjectManagerForThread: (() =>
-    useSyncExternalStore(
+  useProjectManagerEntries: (() => {
+    const summary = useSyncExternalStore(
       (listener) => {
         server.listeners.add(listener);
         return () => server.listeners.delete(listener);
       },
       () => server.summary,
-    )) as never,
-  useAnswerDecision: (() =>
-    (_environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
-      answerDecision(input)) as never,
+    );
+    return summary === null ? [] : [{ environmentId: "environment-local", summary }];
+  }) as never,
+  useAnswerDecision: (() => (_environmentId: unknown, input: ProjectTeamAnswerDecisionInput) =>
+    answerDecision(input)) as never,
 }));
 
 function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDecisionCard {
@@ -95,39 +105,22 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
   };
 }
 
-type TimelineProps = ComponentProps<typeof MessagesTimeline>;
-
-function timelineProps(): TimelineProps {
-  return {
-    timelineEntries: [],
-    isWorking: false,
-    activeTurnInProgress: false,
-    listRef: createRef<LegendListRef | null>(),
-    latestRun: null,
-    turnDiffSummaries: [],
-    runs: [],
-    routeThreadKey: `${ENVIRONMENT_ID}:${PM_THREAD_ID}`,
-    onOpenTurnDiff: () => {},
-    onOpenThread: () => {},
-    onForkFromRun: async () => {},
-    onRollbackCheckpoint: () => {},
-    supportsConversationRollback: false,
-    onRevertToTurnCount: () => {},
-    isRevertingCheckpoint: false,
-    onImageExpand: () => {},
-    activeThreadEnvironmentId: ENVIRONMENT_ID,
-    markdownCwd: undefined,
-    resolvedTheme: "light",
-    timestampFormat: "locale",
-    workspaceRoot: undefined,
-    anchorMessageId: null,
-    onAnchorReady: () => {},
-    onAnchorSizeChanged: () => {},
-    contentInsetEndAdjustment: 0,
-    liveFollowEnabled: true,
-    onIsAtEndChange: () => {},
-    onManualNavigation: () => {},
-  };
+/** The inbox page inside a router, since its task links need one. */
+function renderInbox() {
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const routes = [
+    createRoute({ getParentRoute: () => rootRoute, path: "/inbox", component: WaitingOnYouPage }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/tasks/$environmentId/$projectId/$taskId",
+      component: () => null,
+    }),
+  ];
+  const router = createRouter({
+    routeTree: rootRoute.addChildren(routes),
+    history: createMemoryHistory({ initialEntries: ["/inbox"] }),
+  });
+  return act(async () => root.render(<RouterProvider router={router} />));
 }
 
 let root: Root;
@@ -159,8 +152,11 @@ function buttonIn(element: HTMLElement, text: string) {
   return button!;
 }
 
-it("shows a task lead's approval as a card in the PM thread, and Approve goes straight to the lead", async () => {
-  await act(async () => root.render(<MessagesTimeline {...timelineProps()} />));
+it("shows a task lead's approval in Waiting on you, and Approve goes straight to the lead", async () => {
+  await renderInbox();
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="waiting-on-you-empty"]')).not.toBeNull(),
+  );
   expect(cardElement("open")).toBeNull();
 
   // A task lead asks for plan approval: the card appears without the PM saying anything.
@@ -173,6 +169,13 @@ it("shows a task lead's approval as a card in the PM thread, and Approve goes st
   expect(open.textContent).toContain("Plan approval · Fix the login redirect");
   expect(open.textContent).toContain("move the redirect into the auth guard");
   expect(open.textContent).not.toContain("#3");
+  // Grouped under its task's key, with a link to the task page.
+  const group = open.closest<HTMLElement>("[data-task-group]")!;
+  expect(group.dataset.taskGroup).toBe("T-3");
+  expect(group.textContent).toContain("T-3Fix the login redirect");
+  expect(group.querySelector("a")?.getAttribute("href")).toBe(
+    "/tasks/environment-local/project-1/task-3",
+  );
   buttonIn(open, "Request changes");
   // Number keys stay with the composer, not every card on screen.
   expect(open.querySelector("kbd")).toBeNull();
@@ -188,13 +191,23 @@ it("shows a task lead's approval as a card in the PM thread, and Approve goes st
     "[User answer via BusyBoy PM] Plan: move the redirect into the auth guard and add a regression test. → Approve",
   ]);
 
-  // The card stays in the thread as the answered question with the pick checked.
+  // Nothing is left waiting; the card moves to "Recently answered" with the pick checked.
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="waiting-on-you-empty"]')).not.toBeNull(),
+  );
+  const closed = container.querySelector<HTMLDetailsElement>(
+    '[data-testid="waiting-on-you-closed"]',
+  )!;
+  expect(closed.open).toBe(false);
+  await act(async () => closed.querySelector("summary")!.click());
+  expect(closed.open).toBe(true);
   const answered = await vi.waitFor(() => {
     const element = cardElement("answered");
     expect(element).not.toBeNull();
     return element!;
   });
   expect(cardElement("open")).toBeNull();
+  expect(closed.contains(answered)).toBe(true);
   expect(answered.textContent).toContain("Plan approval · Fix the login redirect");
   expect(answered.textContent).toContain("move the redirect into the auth guard");
   const picked = [...answered.querySelectorAll("[data-selected=true]")].map(
@@ -211,7 +224,7 @@ it("sends a note with the choice and shows a replaced plan as one quiet line", a
     supersededAt: ASKED_AT,
   });
   server.summary = { ...server.summary!, openCount: 1, decisionCards: [stale, card()] };
-  await act(async () => root.render(<MessagesTimeline {...timelineProps()} />));
+  await renderInbox();
 
   const replaced = await vi.waitFor(() => {
     const element = cardElement("superseded");
@@ -256,7 +269,7 @@ it("opens a long plan full screen, and a pick with a note made there reaches the
     openCount: 1,
     decisionCards: [card({ question: longPlan })],
   };
-  await act(async () => root.render(<MessagesTimeline {...timelineProps()} />));
+  await renderInbox();
   const open = await vi.waitFor(() => {
     const element = cardElement("open");
     expect(element).not.toBeNull();
