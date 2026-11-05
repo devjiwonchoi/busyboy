@@ -72,6 +72,27 @@ describe("ElectronShell", () => {
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
+  it.effect("opens only the computer-use helper's privacy panes among System Settings links", () =>
+    Effect.gen(function* () {
+      openExternalMock.mockResolvedValue(undefined);
+
+      const electronShell = yield* ElectronShell.ElectronShell;
+      const results = yield* Effect.all([
+        electronShell.openExternal(
+          "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+        ),
+        electronShell.openExternal(
+          "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
+        ),
+      ]);
+
+      assert.deepEqual(results, [true, false]);
+      assert.deepEqual(openExternalMock.mock.calls, [
+        ["x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"],
+      ]);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
   it.effect("opens remote SSH editor URLs", () =>
     Effect.gen(function* () {
       openExternalMock.mockResolvedValue(undefined);

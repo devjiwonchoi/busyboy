@@ -101,6 +101,10 @@ describe("DesktopComputerUseChannel over the desktop fds", () => {
         error: { code: "permission_required", details: { missing: ["accessibility"] } },
       });
       expect(results.get("status")).toEqual({ state: "running" });
+      expect(commands.filter((command) => command.type === "configure")).toEqual([
+        { type: "configure", enabled: true },
+        { type: "configure", enabled: false },
+      ]);
 
       expect(results.get("slow")).toMatchObject({ error: { code: "timeout" } });
       const slow = commands.find((command) => command.method === "slow")!;

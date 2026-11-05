@@ -1,5 +1,6 @@
 import { MAC_PERMISSION_SETTINGS_URLS } from "../permissions/MacPermission.ts";
 import {
+  COMPUTER_USE_SETTINGS_URLS,
   REMOTE_CAPABLE_EDITOR_IDS,
   remoteSchemeForEditor,
   type SystemSettingsPane,
@@ -39,10 +40,14 @@ const isRemoteEditorUrl = (url: URL) =>
         url.pathname.startsWith("/ssh-remote+") &&
         url.pathname.length > "/ssh-remote+".length);
 
+// The Computer Use settings links to the helper's privacy panes, exactly.
+const SYSTEM_SETTINGS_URLS = new Set<string>(Object.values(COMPUTER_USE_SETTINGS_URLS));
+
 export function parseSafeExternalUrl(rawUrl: unknown): Option.Option<string> {
   if (typeof rawUrl !== "string") {
     return Option.none();
   }
+  if (SYSTEM_SETTINGS_URLS.has(rawUrl)) return Option.some(rawUrl);
 
   try {
     const url = new URL(rawUrl);

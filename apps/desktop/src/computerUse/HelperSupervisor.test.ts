@@ -332,6 +332,8 @@ describe("HelperSupervisor with a helper process", () => {
   it("does not start on an unsupported platform", async () => {
     const { spawn, children } = processSpawner();
     const { supervisor } = make({ socketDir: tempDir(), spawn, supported: false });
+    // Settings read this before anything starts.
+    expect(supervisor.status).toEqual({ state: "stopped", reason: "unsupported_platform" });
     await expect(supervisor.client()).rejects.toMatchObject({
       error: { code: "computer_use_unavailable", details: { reason: "unsupported_platform" } },
     });

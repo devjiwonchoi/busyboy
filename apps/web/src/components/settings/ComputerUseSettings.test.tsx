@@ -1,0 +1,243 @@
+import {
+  COMPUTER_USE_SETTINGS_URLS,
+  DEFAULT_UNIFIED_SETTINGS,
+  type ComputerUseSettingsStatus,
+  type ServerSettingsPatch,
+} from "@t3tools/contracts";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
+import { describe, expect, it } from "vite-plus/test";
+
+import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
+import {
+  COMPUTER_USE_UNSUPPORTED_MESSAGE,
+  ComputerUseSettingsView,
+  isComputerUseSupported,
+  type ComputerUseSettingValues,
+} from "./ComputerUseSettings";
+
+// The browser runner could not start Chromium in this sandbox, so this walks the
+// rendered element tree instead. Hook-free local parts are expanded in place;
+// SettingsRow is kept and its title, description, status, control, and
+// children are walked.
+const EXPANDED = new Set(["PermissionRow", "GrantStatus"]);
+const WALKED_PROPS = ["title", "description", "status", "control", "children"] as const;
+
+type AnyElement = ReactElement<Record<string, unknown>>;
+
+function walk(node: ReactNode, visit: (element: AnyElement) => void, texts: Array<string>): void {
+  if (node === null || node === undefined || typeof node === "boolean") return;
+  if (typeof node === "string" || typeof node === "number") {
+    texts.push(String(node));
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) walk(child, visit, texts);
+    return;
+  }
+  if (!isValidElement(node)) return;
+  const element = node as AnyElement;
+  const type = element.type as { name?: string } | string;
+  if (typeof type === "function" && EXPANDED.has((type as { name: string }).name)) {
+    walk((type as (props: unknown) => ReactNode)(element.props), visit, texts);
+    return;
+  }
+  visit(element);
+  for (const key of WALKED_PROPS) walk(element.props[key] as ReactNode, visit, texts);
+}
+
+const SETTINGS: ComputerUseSettingValues = {
+  enableAgentComputerUse: DEFAULT_UNIFIED_SETTINGS.enableAgentComputerUse,
+  computerUseAlwaysAllowedApps: DEFAULT_UNIFIED_SETTINGS.computerUseAlwaysAllowedApps,
+  computerUseScreenshots: DEFAULT_UNIFIED_SETTINGS.computerUseScreenshots,
+  computerUseExperimentalPointer: DEFAULT_UNIFIED_SETTINGS.computerUseExperimentalPointer,
+};
+
+const status = (
+  permissions: ComputerUseSettingsStatus["permissions"],
+  helper: ComputerUseSettingsStatus["helper"] = { state: "running" },
+): ComputerUseSettingsStatus => ({
+  enabled: true,
+  available: true,
+  helper,
+  ...(permissions ? { permissions } : {}),
+  settingsUrls: COMPUTER_USE_SETTINGS_URLS,
+});
+
+const GRANTED = status({
+  accessibility: "granted",
+  screenRecording: "granted",
+  stopMonitor: "available",
+});
+const NOT_GRANTED = status(
+  { accessibility: "not_granted", screenRecording: "not_granted", stopMonitor: "unavailable" },
+  { state: "error", reason: "helper_crashed", detail: "the helper keeps crashing" },
+);
+
+function render(input: {
+  supported?: boolean | null;
+  settings?: Partial<ComputerUseSettingValues>;
+  status?: ComputerUseSettingsStatus | null;
+}) {
+  const calls = {
+    update: [] as Array<ServerSettingsPatch>,
+    request: [] as Array<string>,
+    open: [] as Array<string>,
+    restart: 0,
+  };
+  const tree = ComputerUseSettingsView({
+    supported: input.supported === undefined ? true : input.supported,
+    settings: { ...SETTINGS, ...input.settings },
+    status: input.status ?? null,
+    onUpdate: (patch) => calls.update.push(patch),
+    onRequestPermission: (kind) => calls.request.push(kind),
+    onOpenSystemSettings: (url) => calls.open.push(url),
+    onRestartHelper: () => {
+      calls.restart += 1;
+    },
+  });
+  const elements: Array<AnyElement> = [];
+  const texts: Array<string> = [];
+  walk(tree, (element) => elements.push(element), texts);
+  const text = texts.join(" ");
+  const buttons = (label: string) =>
+    elements.filter(
+      (element) =>
+        element.type === Button &&
+        (element.props.children === label || element.props["aria-label"] === label),
+    ) as Array<ReactElement<{ onClick: () => void; disabled?: boolean }>>;
+  const switchNamed = (label: string) =>
+    elements.find((element) => element.type === Switch && element.props["aria-label"] === label) as
+      | ReactElement<{
+          checked: boolean;
+          disabled?: boolean;
+          onCheckedChange: (on: boolean) => void;
+        }>
+      | undefined;
+  return { calls, text, buttons, switchNamed, elements };
+}
+
+describe("Computer Use settings section", () => {
+  it("shows only the toggle while off, and turns it on", () => {
+    const view = render({});
+    const toggle = view.switchNamed("Let agents use Mac apps")!;
+    expect(toggle.props.checked).toBe(false);
+    expect(view.text).not.toContain("Accessibility");
+    expect(view.buttons("Restart helper")).toHaveLength(0);
+
+    toggle.props.onCheckedChange(true);
+    expect(view.calls.update).toEqual([{ enableAgentComputerUse: true }]);
+  });
+
+  it("shows granted permissions and a running helper without access buttons", () => {
+    const view = render({ settings: { enableAgentComputerUse: true }, status: GRANTED });
+    expect(view.text).toContain("BusyBoy Computer Use");
+    expect(view.text).toContain("Accessibility");
+    expect(view.text).toContain("Granted");
+    expect(view.text).toContain("Available");
+    expect(view.text).toContain("Running");
+    expect(view.buttons("Request access")).toHaveLength(0);
+    const screenshots = view.switchNamed("Include screenshots")!;
+    expect(screenshots.props.disabled).toBe(false);
+    expect(screenshots.props.checked).toBe(true);
+    expect(view.text).toContain("may stop working after macOS updates");
+  });
+
+  it("offers access requests and System Settings links when not granted", () => {
+    const view = render({ settings: { enableAgentComputerUse: true }, status: NOT_GRANTED });
+    expect(view.text).toContain("Not granted");
+    expect(view.text).toContain("Unavailable");
+    expect(view.text).toContain("Error · the helper keeps crashing");
+
+    const requests = view.buttons("Request access");
+    expect(requests).toHaveLength(3);
+    for (const button of requests) button.props.onClick();
+    expect(view.calls.request).toEqual(["accessibility", "screen_recording", "input_monitoring"]);
+
+    for (const button of view.buttons("Open System Settings")) button.props.onClick();
+    expect(view.calls.open).toEqual([
+      COMPUTER_USE_SETTINGS_URLS.accessibility,
+      COMPUTER_USE_SETTINGS_URLS.screenRecording,
+      COMPUTER_USE_SETTINGS_URLS.inputMonitoring,
+    ]);
+
+    // Screenshots need Screen Recording.
+    const screenshots = view.switchNamed("Include screenshots")!;
+    expect(screenshots.props.disabled).toBe(true);
+    expect(screenshots.props.checked).toBe(false);
+    expect(view.text).toContain("Needs Screen Recording");
+
+    view.buttons("Restart helper")[0]!.props.onClick();
+    expect(view.calls.restart).toBe(1);
+  });
+
+  it("shows the empty always-allowed list", () => {
+    const view = render({ settings: { enableAgentComputerUse: true }, status: GRANTED });
+    expect(view.text).toContain("Apps you always allow will appear here.");
+  });
+
+  it("removes an always-allowed app", () => {
+    const view = render({
+      settings: {
+        enableAgentComputerUse: true,
+        computerUseAlwaysAllowedApps: ["com.apple.TextEdit", "com.apple.Notes"],
+      },
+      status: GRANTED,
+    });
+    expect(view.text).not.toContain("Apps you always allow will appear here.");
+    expect(view.text).toContain("com.apple.Notes");
+    view.buttons("Remove com.apple.TextEdit")[0]!.props.onClick();
+    expect(view.calls.update).toEqual([{ computerUseAlwaysAllowedApps: ["com.apple.Notes"] }]);
+  });
+
+  it("explains the platform limit and shows no controls when unsupported", () => {
+    const view = render({ supported: false, settings: { enableAgentComputerUse: true } });
+    expect(view.text).toContain(COMPUTER_USE_UNSUPPORTED_MESSAGE);
+    expect(
+      view.elements.filter((element) => element.type === Button || element.type === Switch),
+    ).toEqual([]);
+  });
+});
+
+describe("ComputerUseSettingsView before the first status", () => {
+  it("shows a neutral loading state, not the full section", () => {
+    const view = render({ supported: null, settings: { enableAgentComputerUse: true } });
+    expect(view.text).toContain("Checking…");
+    expect(view.text).not.toContain(COMPUTER_USE_UNSUPPORTED_MESSAGE);
+    expect(
+      view.elements.filter((element) => element.type === Button || element.type === Switch),
+    ).toEqual([]);
+  });
+});
+
+describe("isComputerUseSupported", () => {
+  it("needs the Mac desktop app and a backend on macOS 14 or later", () => {
+    // Unknown until the first status arrives.
+    expect(isComputerUseSupported({ isElectron: true, platform: "MacIntel", status: null })).toBe(
+      null,
+    );
+    expect(
+      isComputerUseSupported({ isElectron: true, platform: "MacIntel", status: GRANTED }),
+    ).toBe(true);
+    expect(isComputerUseSupported({ isElectron: false, platform: "MacIntel", status: null })).toBe(
+      false,
+    );
+    expect(isComputerUseSupported({ isElectron: true, platform: "Win32", status: null })).toBe(
+      false,
+    );
+    expect(
+      isComputerUseSupported({
+        isElectron: true,
+        platform: "MacIntel",
+        status: status(undefined, { state: "stopped", reason: "unsupported_platform" }),
+      }),
+    ).toBe(false);
+    expect(
+      isComputerUseSupported({
+        isElectron: true,
+        platform: "MacIntel",
+        status: { ...GRANTED, available: false },
+      }),
+    ).toBe(false);
+  });
+});

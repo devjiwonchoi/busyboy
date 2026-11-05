@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
 
 import * as Electron from "electron";
 
+import { isAuxiliaryWindow } from "./AuxiliaryWindows.ts";
 import {
   activateWindowsForeground,
   isWindowsShellHostedForeground,
@@ -143,7 +144,7 @@ export const make = Effect.gen(function* () {
   yield* Effect.addFinalizer(() => Effect.sync(() => windowsForegroundFocus?.close()));
   const mainWindowRef = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
 
-  const listWindows = Effect.try({
+  const allWindows = Effect.try({
     try: () => Electron.BrowserWindow.getAllWindows(),
     catch: (cause) =>
       new ElectronWindowOperationError({
@@ -154,6 +155,10 @@ export const make = Effect.gen(function* () {
         cause,
       }),
   }).pipe(Effect.orDie);
+  // The app's own windows; feature windows such as the computer-use overlay are left out.
+  const listWindows = allWindows.pipe(
+    Effect.map((windows) => windows.filter((window) => !isAuxiliaryWindow(window))),
+  );
 
   const isWindowDestroyed = (window: Electron.BrowserWindow) =>
     Effect.try({
@@ -345,7 +350,7 @@ export const make = Effect.gen(function* () {
       }),
     destroyAll: Effect.gen(function* () {
       let firstFailure: Cause.Cause<never> | undefined;
-      for (const window of yield* listWindows) {
+      for (const window of yield* allWindows) {
         const exit = yield* Effect.exit(
           Effect.try({
             try: () => window.destroy(),

@@ -29,6 +29,7 @@ import * as NodeOS from "node:os";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
+import { makeElectronOverlay, type ComputerUseTrafficObserver } from "./ComputerUseOverlay.ts";
 import { HelperRequestError } from "./HelperClient.ts";
 import { HELPER_BUNDLE_NAME, HelperInstaller } from "./HelperInstall.ts";
 import {
@@ -134,16 +135,23 @@ export class ComputerUseRouter {
 
   private readonly supervisor: Supervisor;
   private readonly emit: (event: DesktopComputerUseEventType) => void;
+  private readonly observer: ComputerUseTrafficObserver | null;
 
   constructor(
     supervisor: Supervisor,
     emit: (event: DesktopComputerUseEventType) => void,
-    options: { readonly timers?: SupervisorTimers; readonly idleStopMs?: number } = {},
+    options: {
+      readonly timers?: SupervisorTimers;
+      readonly idleStopMs?: number;
+      /** Sees requests, responses, and settings changes; the overlay uses it. */
+      readonly observer?: ComputerUseTrafficObserver;
+    } = {},
   ) {
     this.supervisor = supervisor;
     this.emit = emit;
     this.timers = options.timers ?? systemTimers;
     this.idleStopMs = options.idleStopMs ?? IDLE_STOP_MS;
+    this.observer = options.observer ?? null;
     // Starts disabled: nothing may start the helper until configure(true).
     supervisor.setStartAllowed(false);
   }
@@ -179,9 +187,12 @@ export class ComputerUseRouter {
     const { id, method, params } = command;
     try {
       const result = await this.route(id, method, params, command.passive === true);
+      this.observe((observer) => observer.response(id, method, params, { result }));
       this.emit({ type: "response", id, result });
     } catch (error) {
-      this.emit({ type: "response", id, error: toErrorObject(error) });
+      const errorObject = toErrorObject(error);
+      this.observe((observer) => observer.response(id, method, params, { error: errorObject }));
+      this.emit({ type: "response", id, error: errorObject });
     } finally {
       this.inFlight.delete(id);
       this.awaitingSend.delete(id);
@@ -192,6 +203,7 @@ export class ComputerUseRouter {
   async configure(enabled: boolean): Promise<void> {
     if (enabled === this.enabled) return;
     this.enabled = enabled;
+    this.observe((observer) => observer.configured(enabled));
     this.clearIdle();
     if (enabled) {
       this.supervisor.setStartAllowed(true);
@@ -214,6 +226,7 @@ export class ComputerUseRouter {
 
   async shutdown(): Promise<void> {
     this.enabled = false;
+    this.observe((observer) => observer.configured(false));
     this.clearIdle();
     this.supervisor.setStartAllowed(false);
     await this.withDeadline(DISABLE_DEADLINE_MS, async (remaining) => {
@@ -237,6 +250,16 @@ export class ComputerUseRouter {
     this.timers.clearTimeout(timer);
   }
 
+  /** The overlay is cosmetic: its failures never affect routing. */
+  private observe(use: (observer: ComputerUseTrafficObserver) => void): void {
+    if (this.observer === null) return;
+    try {
+      use(this.observer);
+    } catch {
+      // Ignored on purpose.
+    }
+  }
+
   private info(): DesktopComputerUseHelperInfo {
     const install = this.supervisor.install;
     const version = install?.version ?? undefined;
@@ -257,6 +280,8 @@ export class ComputerUseRouter {
   ): Promise<unknown> {
     if (method === DESKTOP_COMPUTER_USE_METHODS.helperStatus) return this.info();
     if (!this.enabled) throw new HelperRequestError(disabledError);
+    // Only now is the request accepted, so a rejected one never flashes the overlay.
+    this.observe((observer) => observer.request(id, method, params));
     if (passive) {
       // Polling: answer from a running helper only, and leave its idle clock alone.
       const client = this.supervisor.connected;
@@ -419,12 +444,21 @@ export const make = Effect.gen(function* () {
       }
       emit(router.helperStatusChanged(status));
     },
-    onNotification: (notification) =>
-      emit({ type: "notification", method: notification.method, params: notification.params }),
+    onNotification: (notification) => {
+      try {
+        overlay?.notification(notification.method, notification.params);
+      } catch {
+        // The overlay is cosmetic; the notification still reaches the server.
+      }
+      emit({ type: "notification", method: notification.method, params: notification.params });
+    },
   });
-  const router = new ComputerUseRouter(supervisor, emit);
+  const overlay = supported ? makeElectronOverlay() : null;
+  const router = new ComputerUseRouter(supervisor, emit, overlay ? { observer: overlay } : {});
 
-  const shutdown = Effect.promise(() => router.shutdown());
+  const shutdown = Effect.promise(() => router.shutdown()).pipe(
+    Effect.ensuring(Effect.sync(() => overlay?.dispose())),
+  );
   yield* Effect.addFinalizer(() => shutdown);
 
   return ComputerUseChannelHost.of({

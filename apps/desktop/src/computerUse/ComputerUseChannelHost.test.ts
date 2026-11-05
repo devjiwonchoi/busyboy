@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Launches a fake helper process on a Unix socket.
 import { afterEach, describe, expect, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 import {
   COMPUTER_USE_SETTINGS_URLS,
   type ComputerUseHelperStatus,
@@ -15,6 +16,9 @@ import { MAC_PERMISSION_SETTINGS_URLS } from "../permissions/MacPermission.ts";
 import { ComputerUseRouter, toErrorObject } from "./ComputerUseChannelHost.ts";
 import { HelperRequestError, type HelperClient } from "./HelperClient.ts";
 import { HelperSupervisor, type HelperExit, type SpawnHelper } from "./HelperSupervisor.ts";
+
+// The overlay's Electron window is never created here.
+vi.mock("electron", () => ({}));
 
 const FAKE_HELPER = NodeURL.fileURLToPath(new URL("./testing/FakeHelper.ts", import.meta.url));
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -175,7 +179,7 @@ const fakeSupervisor = (
       const id = nextId++;
       sent.push({ id, method, params });
       const response = new Promise<unknown>((resolve) => {
-        if (method === "app.state") resolvers.set(id, resolve);
+        if (method === "app.state" || method === "app.act") resolvers.set(id, resolve);
         else if (!options.hang?.includes(method)) resolve({});
       });
       return { id, response };
@@ -266,6 +270,55 @@ describe("ComputerUseRouter routing", () => {
       method: "session.end",
       params: { threadId: "t", turnId: "u" },
     });
+  });
+
+  it("shows each request and its outcome to the observer without changing the reply", async () => {
+    const fake = fakeSupervisor();
+    const seen: Array<unknown> = [];
+    const events: Array<DesktopComputerUseEvent> = [];
+    const router = new ComputerUseRouter(fake.supervisor, (event) => events.push(event), {
+      observer: {
+        request: (id, method) => seen.push(["request", id, method]),
+        response: (id, method, _params, outcome) => seen.push(["response", id, method, outcome]),
+        notification: () => {},
+        configured: (enabled) => seen.push(["configured", enabled]),
+      },
+    });
+    await router.configure(true);
+    const params = { threadId: "t", turnId: "u", app: "TextEdit", action: { kind: "menu" } };
+    const pending = router.handle({ type: "request", id: 4, method: "app.act", params });
+    await Promise.resolve();
+    fake.resolvers.get(fake.sent.at(-1)!.id)!({ verified: true });
+    await pending;
+    await router.configure(false);
+    expect(seen).toEqual([
+      ["configured", true],
+      ["request", 4, "app.act"],
+      ["response", 4, "app.act", { result: { verified: true } }],
+      ["configured", false],
+    ]);
+    expect(events).toContainEqual({ type: "response", id: 4, result: { verified: true } });
+  });
+
+  it("does not show a request that routing rejects to the observer", async () => {
+    const fake = fakeSupervisor();
+    const requests: Array<unknown> = [];
+    const router = new ComputerUseRouter(fake.supervisor, () => {}, {
+      observer: {
+        request: (id, method) => requests.push([id, method]),
+        response: () => {},
+        notification: () => {},
+        configured: () => {},
+      },
+    });
+    // Computer use is off, so this app.act is refused and must not flash the overlay.
+    await router.handle({
+      type: "request",
+      id: 1,
+      method: "app.act",
+      params: { threadId: "t", turnId: "u", app: "TextEdit", action: { kind: "menu" } },
+    });
+    expect(requests).toEqual([]);
   });
 
   it("does not start the helper just to cancel or end a session", async () => {
