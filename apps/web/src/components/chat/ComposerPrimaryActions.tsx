@@ -15,6 +15,7 @@ import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
+import { Kbd } from "../ui/kbd";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -38,6 +39,10 @@ interface ComposerPrimaryActionsProps {
   pendingAction: PendingActionState | null;
   isRunning: boolean;
   canInterrupt: boolean;
+  /** A stop was asked for during startup and waits for the run to appear. */
+  stopPending?: boolean;
+  /** A first Escape is waiting for a second to stop the run. */
+  escapeArmed?: boolean;
   followUpBehavior?: "queue" | "steer";
   canSteer?: boolean;
   alternateShortcutLabel?: string | null;
@@ -96,6 +101,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   pendingAction,
   isRunning,
   canInterrupt,
+  stopPending = false,
+  escapeArmed = false,
   followUpBehavior = "steer",
   canSteer = true,
   alternateShortcutLabel = null,
@@ -140,32 +147,59 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     environmentIdentificationMode === "artwork",
   );
 
+  const stopLabel = stopPending
+    ? "Stopping"
+    : escapeArmed
+      ? "Press Esc again to stop"
+      : "Stop generation";
+  // While a run is active the round button reads "Esc": one press arms it,
+  // a second press (or a click) stops.
   const renderStopGenerationButton = (insidePendingAction: boolean) => (
     <Tooltip key="interrupt">
+      {escapeArmed ? (
+        <span role="status" className="sr-only">
+          Press Esc again to stop
+        </span>
+      ) : null}
       <TooltipTrigger
         render={
           <button
             type="button"
             className={cn(
-              "flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white shadow-xs shadow-destructive/24 inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:inset-shadow-control-pressed active:shadow-none [&_svg]:pointer-events-none",
+              "flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-destructive/90 font-semibold text-[10px] text-white leading-none tracking-tight shadow-xs shadow-destructive/24 inset-shadow-control-highlight transition-[background-color,box-shadow] duration-150 hover:bg-destructive active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:opacity-64 [&_svg]:pointer-events-none",
               insidePendingAction ? "size-8 sm:size-7" : "size-8 sm:h-8 sm:w-8",
+              escapeArmed &&
+                "bg-destructive ring-2 ring-destructive/40 ring-offset-1 ring-offset-background motion-safe:animate-pulse",
             )}
             {...pointerFocusProps}
-            disabled={!canOperateThread}
+            disabled={!canOperateThread || stopPending}
             onClick={() => {
               if (canOperateThread) onInterrupt();
             }}
-            aria-label="Stop generation"
+            aria-label={stopLabel}
+            aria-keyshortcuts="Escape"
+            data-escape-armed={escapeArmed ? "true" : undefined}
+            data-stop-pending={stopPending ? "true" : undefined}
           />
         }
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-          <rect x="2" y="2" width="8" height="8" rx="1.5" />
-        </svg>
+        {stopPending ? (
+          <Spinner size="sm" aria-hidden="true" />
+        ) : (
+          <span aria-hidden="true">Esc</span>
+        )}
       </TooltipTrigger>
-      <TooltipPopup>Interrupt</TooltipPopup>
+      <TooltipPopup>
+        {stopPending || escapeArmed ? stopLabel : "Stop generation · Esc twice"}
+      </TooltipPopup>
     </Tooltip>
   );
+  // When a send or steer button holds the slot, the armed hint sits beside it.
+  const escapeHint = escapeArmed ? (
+    <Kbd role="status" aria-label="Press Esc again to stop">
+      Esc
+    </Kbd>
+  ) : null;
 
   if (pendingAction) {
     return (
@@ -220,19 +254,23 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   if (showPlanFollowUpPrompt && (promptHasText || !canResume)) {
     if (promptHasText) {
       return (
-        <button
-          type="submit"
-          className={cn(messageActionPillClassName, "h-9 sm:h-8", compact ? "px-3" : "px-4")}
-          {...pointerFocusProps}
-          disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
-        >
-          {isConnecting || isSendBusy ? "Sending..." : "Refine"}
-        </button>
+        <>
+          {escapeHint}
+          <button
+            type="submit"
+            className={cn(messageActionPillClassName, "h-9 sm:h-8", compact ? "px-3" : "px-4")}
+            {...pointerFocusProps}
+            disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
+          >
+            {isConnecting || isSendBusy ? "Sending..." : "Refine"}
+          </button>
+        </>
       );
     }
 
     return (
       <div data-chat-composer-implement-actions="true" className="flex items-center justify-end">
+        {escapeHint}
         <button
           type="submit"
           className={cn(messageActionPillClassName, "h-9 rounded-r-none px-4 sm:h-8")}
@@ -391,10 +429,20 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       <TooltipPopup>{submitTooltip}</TooltipPopup>
     </Tooltip>
   );
-  if (compactTokens === null) return submit;
+  if (compactTokens === null) {
+    return escapeHint ? (
+      <>
+        {escapeHint}
+        {submit}
+      </>
+    ) : (
+      submit
+    );
+  }
 
   return (
     <div data-chat-composer-compact-send="true" className="flex items-center gap-2">
+      {escapeHint}
       <Tooltip>
         <TooltipTrigger
           render={

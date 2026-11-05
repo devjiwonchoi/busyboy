@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 
 /** How long the first Escape waits for the second before it lapses. */
-export const ESCAPE_TO_STOP_WINDOW_MS = 1500;
+export const ESCAPE_TO_STOP_WINDOW_MS = 3000;
 
 // Escape inside an open overlay closes that overlay, never the turn.
 const OVERLAY_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
