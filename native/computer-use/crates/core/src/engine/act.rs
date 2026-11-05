@@ -164,7 +164,7 @@ impl<P: Platform> Engine<P> {
         let mut slot = super::lock(&slot);
         self.guard(cancel)?;
 
-        let windows = self.platform.windows(&app, deadline)?;
+        let windows = self.read_windows(&app, deadline)?;
         let target_window = self.action_window(&params.action, &slot, &windows)?;
         if let Some(window) = &target_window {
             if window.private {
@@ -204,7 +204,7 @@ impl<P: Platform> Engine<P> {
         self.touch_web_accessibility(&app, &params.context.turn_id);
 
         let state = if params.return_state {
-            let windows = self.platform.windows(&app, deadline)?;
+            let windows = self.read_windows(&app, deadline)?;
             let window = target_window
                 .as_ref()
                 .and_then(|window| windows.iter().find(|candidate| candidate.id == window.id && !candidate.private))

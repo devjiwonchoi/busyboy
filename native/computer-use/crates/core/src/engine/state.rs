@@ -89,7 +89,7 @@ impl<P: Platform> Engine<P> {
         let mut slot = super::lock(&slot);
         self.guard(cancel)?;
 
-        let windows = self.platform.windows(&app, deadline)?;
+        let windows = self.read_windows(&app, deadline)?;
         let window = pick_window(&windows, params.window.as_deref())?.clone();
         let options = CaptureOptions {
             budget: TreeBudget::with_overrides(params.max_nodes, params.max_depth),

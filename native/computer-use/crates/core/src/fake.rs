@@ -85,6 +85,13 @@ pub struct FakeWorld {
     /// When set, every posted key also counts a press on this node, like an app
     /// that redraws something unrelated on each key.
     pub key_side_effect: Option<u64>,
+    /// Window reads time out while the per-call limit is below this, like a
+    /// napping app that answers slowly.
+    pub window_read_needs: std::time::Duration,
+    /// The next this-many window reads time out, like a brief stall.
+    pub window_read_timeouts: usize,
+    /// Window reads so far, including failed ones.
+    pub window_reads: usize,
 }
 
 #[derive(Default)]
@@ -292,8 +299,15 @@ impl Platform for FakePlatform {
         })
     }
 
-    fn windows(&self, app: &RunningApp, _deadline: Deadline) -> CuResult<Vec<WindowInfo>> {
+    fn windows(&self, app: &RunningApp, deadline: Deadline) -> CuResult<Vec<WindowInfo>> {
         self.with_world(|world| {
+            world.window_reads += 1;
+            let stalled = world.window_read_timeouts > 0;
+            world.window_read_timeouts = world.window_read_timeouts.saturating_sub(1);
+            if stalled || deadline.call_timeout() < world.window_read_needs {
+                return Err(ErrorObject::new(ErrorCode::Timeout, "the app did not respond during reading windows")
+                    .with_details(serde_json::json!({ "phase": "reading windows" })));
+            }
             let index = Self::app_index(world, app).ok_or_else(|| not_found("app is not running"))?;
             Ok(world.apps[index].windows.clone())
         })

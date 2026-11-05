@@ -375,6 +375,42 @@ fn keys_that_are_not_text_edits_still_count_any_change() {
 }
 
 #[test]
+fn reads_windows_of_a_slow_background_app_by_waiting_longer() {
+    let harness = Harness::new();
+    harness.platform.with_text_editor();
+    harness.begin("u1");
+    // The first answer takes longer than the usual 250 ms per call.
+    harness.platform.with_world(|world| world.window_read_needs = Duration::from_millis(800));
+
+    let state = harness.state("u1", "TextEdit").unwrap();
+    assert_eq!(state["window"], "w1");
+    assert_eq!(harness.platform.with_world(|world| world.window_reads), 2);
+}
+
+#[test]
+fn retries_a_brief_window_read_stall() {
+    let harness = Harness::new();
+    harness.platform.with_text_editor();
+    harness.begin("u1");
+    harness.platform.with_world(|world| world.window_read_timeouts = 2);
+    assert_eq!(harness.state("u1", "TextEdit").unwrap()["window"], "w1");
+    harness.platform.with_world(|world| world.window_read_timeouts = 1);
+    assert_eq!(harness.act("u1", json!({"kind": "key", "keys": "a"})).unwrap()["verified"], true);
+}
+
+#[test]
+fn an_app_that_never_answers_is_a_timeout_not_a_missing_window() {
+    let harness = Harness::new();
+    harness.platform.with_text_editor();
+    harness.begin("u1");
+    harness.platform.with_world(|world| world.window_read_timeouts = usize::MAX);
+    let error = harness.state("u1", "TextEdit").unwrap_err();
+    assert_eq!(error.code, ErrorCode::Timeout);
+    assert!(error.retryable);
+    assert_eq!(harness.platform.with_world(|world| world.window_reads), 3);
+}
+
+#[test]
 fn invokes_menus_and_reports_disabled_items() {
     let harness = Harness::new();
     harness.platform.with_text_editor();

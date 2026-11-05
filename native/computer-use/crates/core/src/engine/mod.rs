@@ -27,6 +27,13 @@ use crate::CuResult;
 /// Web-content accessibility left on for this long without use is restored.
 pub const WEB_ACCESSIBILITY_IDLE: Duration = Duration::from_secs(60);
 
+/// Per-call limits for each try at reading an app's windows. A background app
+/// that macOS has slowed down (App Nap, a hidden app) can need more than the
+/// usual 250 ms to answer the first call, so later tries wait longer. Every try
+/// stays within the request deadline.
+const WINDOW_READ_CAPS: [Duration; 3] =
+    [crate::deadline::MAX_CALL_TIMEOUT, Duration::from_millis(1_000), Duration::from_millis(2_500)];
+
 pub type Notifier = Arc<dyn Fn(Notification) + Send + Sync>;
 
 /// Per-app state, locked for the whole of a request so actions on one app run serially.
@@ -309,6 +316,22 @@ impl<P: Platform> Engine<P> {
             return Err(screen_locked_error());
         }
         Ok(())
+    }
+
+    /// The app's windows. Reads that time out are tried again with a longer
+    /// per-call limit, so a slow first answer is not reported as a failure.
+    pub(crate) fn read_windows(&self, app: &RunningApp, deadline: Deadline) -> CuResult<Vec<crate::tree::WindowInfo>> {
+        let mut last_timeout = None;
+        for cap in WINDOW_READ_CAPS {
+            if deadline.expired() {
+                break;
+            }
+            match self.platform.windows(app, deadline.with_call_cap(cap)) {
+                Err(error) if error.code == ErrorCode::Timeout => last_timeout = Some(error),
+                other => return other,
+            }
+        }
+        Err(last_timeout.unwrap_or_else(|| crate::deadline::timeout_error("reading windows")))
     }
 
     pub(crate) fn require_accessibility(&self) -> CuResult<()> {
