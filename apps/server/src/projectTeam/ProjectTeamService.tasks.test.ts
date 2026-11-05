@@ -1,5 +1,11 @@
 import { assert, describe, it } from "@effect/vitest";
-import { ProjectTaskId, ThreadId } from "@t3tools/contracts";
+import {
+  PLAN_APPROVAL_ONLY,
+  PLAN_APPROVAL_START,
+  ProjectTaskId,
+  ThreadId,
+} from "@t3tools/contracts";
+import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
@@ -149,6 +155,108 @@ describe("ProjectTeamService tasks as specs", () => {
           .getTaskDetail({ projectId: PROJECT_ID, taskId: ProjectTaskId.make("task:nope") })
           .pipe(Effect.flip);
         assert.include(missing.message, "was not found");
+      }),
+    ),
+  );
+  it.effect("has the lead write the plan into the spec, park it, and resume it approved", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const created = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          title: "Fix drag scroll",
+          context: "The list jumps to the top.",
+          startPlanning: true,
+        });
+        const { leadThreadId: planner } = yield* team.startTask(
+          pm,
+          { taskId: created.task.id },
+          harness.delegate,
+        );
+        const [first] = yield* Ref.get(harness.delegated);
+        assert.strictEqual(first?.title, "DE-1 Fix drag scroll");
+        assert.include(first?.task, "### Background\nThe list jumps to the top.");
+
+        // The planner reads the spec and writes the plan as v2.
+        const read = yield* team.readSpec(planner, {});
+        assert.strictEqual(read.key, "DE-1");
+        const plan = {
+          ...read.current.spec,
+          goal: "Dragging keeps the scroll position.",
+          todos: [todo("t1", "Add a journey test"), todo("t2", "Keep scrollTop")],
+        };
+        const written = yield* team.writeSpec(planner, {
+          baseVersion: read.current.version,
+          spec: plan,
+          note: "Plan",
+        });
+        assert.strictEqual(written.current.version, 2);
+        assert.strictEqual(written.current.author, "agent");
+
+        // The user edits the spec meanwhile, so the planner's stale write is refused.
+        yield* team.updateTaskSpec({
+          projectId: PROJECT_ID,
+          taskId: created.task.id,
+          baseVersion: 2,
+          spec: { ...plan, nonGoals: "No redesign." },
+        });
+        const stale = yield* team
+          .writeSpec(planner, { baseVersion: 2, spec: plan, note: "Again" })
+          .pipe(Effect.flip);
+        assert.include(stale.message, "Read it again with task_spec_read");
+
+        // Another task's spec is off limits to this lead.
+        const other = yield* team.createTask(pm, { title: "Other", request: "Other." });
+        const foreign = yield* team.readSpec(planner, { taskId: other.task.id }).pipe(Effect.flip);
+        assert.include(foreign.message, "only use its own task's spec");
+
+        // A plan approval offers both answers by default.
+        const { item } = yield* team.askUser(planner, {
+          kind: "approval",
+          question: "Fix drag scroll: approve the plan in the spec?",
+        });
+        assert.deepStrictEqual(item.options, [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY]);
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: item.id,
+          answer: PLAN_APPROVAL_ONLY,
+        });
+
+        // "Approve only": the lead parks the task with the plan recorded.
+        yield* team.updateTask(planner, { stage: "inbox", planSummary: "Keep scrollTop." });
+
+        // Starting it again opens an implementer that skips planning.
+        const resumed = yield* team.startTask(pm, { taskId: created.task.id }, harness.delegate);
+        assert.notStrictEqual(resumed.leadThreadId, planner);
+        const second = (yield* Ref.get(harness.delegated))[1];
+        assert.strictEqual(second?.clientRequestId, `task-start:${created.task.id}:2`);
+        assert.include(second?.task, "The plan above is already approved");
+        assert.include(second?.task, "- [ ] t1: Add a journey test");
+
+        // The implementer checks todos off as it works; a repeat check adds no version.
+        const checked = yield* team.setTodo(resumed.leadThreadId, { todoId: "t1", done: true });
+        assert.strictEqual(checked.current.version, 4);
+        const again = yield* team.setTodo(resumed.leadThreadId, { todoId: "t1", done: true });
+        assert.strictEqual(again.current.version, 4);
+
+        const detail = yield* team.getTaskDetail({
+          projectId: PROJECT_ID,
+          taskId: created.task.id,
+        });
+        assert.deepStrictEqual(
+          detail.sessions.map((session) => session.role),
+          ["lead", "implementer"],
+        );
+        assert.deepStrictEqual(
+          detail.versions.map((version) => `${version.author}: ${version.note}`),
+          [
+            "user: Created",
+            "agent: Plan",
+            "user: Edited by the user",
+            'agent: Checked "Add a journey test"',
+          ],
+        );
       }),
     ),
   );

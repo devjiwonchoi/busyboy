@@ -401,6 +401,8 @@ export type ProjectOtherThread = typeof ProjectOtherThread.Type;
 
 export const ProjectTeamStatus = Schema.Struct({
   projectId: ProjectId,
+  /** Tasks are written as <prefix>-<number>, such as BB-7. */
+  taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
   tasks: ProjectTeamTasksByStage,
   stalled: Schema.Array(ProjectTaskBrief),
   openAttention: Schema.Array(ProjectAttentionItem),
@@ -468,8 +470,9 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
     description: "Task to update. A task lead may omit it to update its own task.",
   }),
   stage: Schema.optional(
-    Schema.Literals(["running", "in_review", "done", "blocked", "cancelled"]).annotate({
-      description: "New stage.",
+    Schema.Literals(["inbox", "running", "in_review", "done", "blocked", "cancelled"]).annotate({
+      description:
+        'New stage. "inbox" parks a task whose plan was approved without starting the work.',
     }),
   ),
   planSummary: Schema.optional(ProjectTaskSummaryText).annotate({
@@ -619,6 +622,46 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   ).annotate({ description: "Suggested answers, if any." }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
+
+/** Answers a plan approval offers when the task lead gives none. */
+export const PLAN_APPROVAL_START = "Approve and start";
+export const PLAN_APPROVAL_ONLY = "Approve only";
+
+const ProjectTeamOwnTaskId = Schema.optional(ProjectTaskId).annotate({
+  description: "Task to use. A task lead may omit it for its own task; the PM passes it.",
+});
+
+export const ProjectTeamTaskSpecReadInput = Schema.Struct({ taskId: ProjectTeamOwnTaskId });
+export type ProjectTeamTaskSpecReadInput = typeof ProjectTeamTaskSpecReadInput.Type;
+
+export const ProjectTeamTaskSpecResult = Schema.Struct({
+  /** Such as BB-7. */
+  key: Schema.String,
+  current: ProjectTaskSpecVersion,
+});
+export type ProjectTeamTaskSpecResult = typeof ProjectTeamTaskSpecResult.Type;
+
+export const ProjectTeamTaskSpecWriteInput = Schema.Struct({
+  taskId: ProjectTeamOwnTaskId,
+  baseVersion: PositiveInt.annotate({
+    description: "The version you read. A newer version makes the write fail; read it again.",
+  }),
+  spec: ProjectTaskSpec.annotate({
+    description:
+      "The whole spec. Keep todo ids that already exist; give new todos a new short id such as t4.",
+  }),
+  note: TrimmedNonEmptyString.check(Schema.isMaxLength(500)).annotate({
+    description: 'Why it changed, in a few words, such as "Plan from the code review".',
+  }),
+});
+export type ProjectTeamTaskSpecWriteInput = typeof ProjectTeamTaskSpecWriteInput.Type;
+
+export const ProjectTeamTaskTodoSetInput = Schema.Struct({
+  taskId: ProjectTeamOwnTaskId,
+  todoId: ProjectTaskTodoId,
+  done: Schema.Boolean,
+});
+export type ProjectTeamTaskTodoSetInput = typeof ProjectTeamTaskTodoSetInput.Type;
 
 export const ProjectTeamAttentionItemResult = Schema.Struct({
   item: ProjectAttentionItem,

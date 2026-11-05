@@ -1205,6 +1205,7 @@ export const CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS: ReadonlyArray<string> = [
   "mcp__t3-code__task_list",
   "mcp__t3-code__task_read",
   "mcp__t3-code__task_search",
+  "mcp__t3-code__task_spec_read",
   "mcp__t3-code__team_status",
   "mcp__t3-code__memory_list",
 ];

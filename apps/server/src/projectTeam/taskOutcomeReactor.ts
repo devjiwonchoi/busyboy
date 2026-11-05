@@ -180,7 +180,10 @@ const make = Effect.gen(function* () {
       if (previous === runKey) return;
 
       const task = yield* repository.findTaskByLeadThreadId(run.threadId);
-      if (Option.isNone(task) || task.value.stage === "cancelled") return;
+      // A lead that parked its task after "Approve only" has nothing left to report.
+      if (Option.isNone(task) || task.value.stage === "cancelled" || task.value.stage === "inbox") {
+        return;
+      }
       yield* Ref.update(lastSeen, (current) => new Map(current).set(run.threadId, runKey));
       const open = yield* repository.listOpenAttentionItems({
         projectId: task.value.projectId,
