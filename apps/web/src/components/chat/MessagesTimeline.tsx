@@ -8,6 +8,7 @@ import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import type { ProjectManagerPersona, WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
+import { DecisionCard } from "./DecisionCard";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
   getQuestionAnswerPreview,
@@ -231,6 +232,7 @@ import {
   toolGroupAction,
   workEntryDisplayLabel,
   workEntryIsAnsweredQuestion,
+  mergeDecisionCardRows,
   workEntryReadOutput,
   workEntryIsVisibleInGroup,
   worktreeSetupAgentStarted,
@@ -865,7 +867,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
     supportsConversationRollback,
     worktreeSetup,
   });
-  const rows = useStableRows(rawRows, listIdentityKey);
+  const stableRows = useStableRows(rawRows, listIdentityKey);
+  // A PM thread shows its team's questions as cards, placed by when they were asked.
+  const rows = mergeDecisionCardRows(stableRows, projectManager?.decisionCards);
   const pmTimelineState = useStablePmTimelineState(
     projectManager?.persona ?? null,
     rows,
@@ -1929,6 +1933,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                 row.kind === "event" ||
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
+                row.kind === "decision-card" ||
                 row.kind === "mcp-app"
               ? "pb-2"
               : "pb-4",
@@ -1981,6 +1986,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "assistant-meta" ? <AssistantMetaTimelineRow row={row} /> : null}
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
       {row.kind === "html-render" ? <HtmlRenderTimelineRow row={row} /> : null}
+      {row.kind === "decision-card" ? <DecisionCardTimelineRow row={row} /> : null}
       {row.kind === "mcp-app" ? <McpAppTimelineRow row={row} /> : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
       {row.kind === "worktree-setup" ? <WorktreeSetupTimelineRow row={row} /> : null}
@@ -5674,6 +5680,23 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         </WorkLogDetails>
       ) : null}
     </WorkLogRow>
+  );
+}
+
+function DecisionCardTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "decision-card" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  if (ctx.threadRef === null) return null;
+  return (
+    <DecisionCard
+      card={row.card}
+      environmentId={ctx.activeThreadEnvironmentId}
+      threadRef={ctx.threadRef}
+      cwd={ctx.markdownCwd}
+    />
   );
 }
 

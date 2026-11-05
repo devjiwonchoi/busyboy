@@ -5,12 +5,14 @@ import Migration0001 from "./Migrations/001_Baseline.ts";
 import Migration0002 from "./Migrations/002_RewriteThreadSettlementEvents.ts";
 import Migration0003 from "./Migrations/003_RewriteThreadSnoozeEvents.ts";
 import Migration0004 from "./Migrations/004_ProjectTeam.ts";
+import Migration0005 from "./Migrations/005_ProjectAttentionSuperseded.ts";
 
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
   [2, "RewriteThreadSettlementEvents", Migration0002],
   [3, "RewriteThreadSnoozeEvents", Migration0003],
   [4, "ProjectTeam", Migration0004],
+  [5, "ProjectAttentionSuperseded", Migration0005],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

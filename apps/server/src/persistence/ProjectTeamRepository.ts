@@ -189,12 +189,23 @@ export class ProjectTeamRepository extends Context.Service<
     readonly getAttentionItem: (
       id: ProjectAttentionItemId,
     ) => Result<Option.Option<ProjectAttentionItem>>;
-    /** None when the item does not exist or was already answered. */
+    /** None when the item does not exist, was already answered, or was replaced. */
     readonly answerAttentionItem: (input: {
       readonly id: ProjectAttentionItemId;
       readonly answer: string;
       readonly answeredAt: IsoDateTime;
     }) => Result<Option.Option<ProjectAttentionItem>>;
+    /** Closes the task's open items of this kind without an answer; returns the closed items. */
+    readonly supersedeOpenAttentionItems: (input: {
+      readonly taskId: ProjectTaskId;
+      readonly kind: ProjectAttentionKind;
+      readonly supersededAt: IsoDateTime;
+    }) => Result<ReadonlyArray<ProjectAttentionItem>>;
+    /** The newest answered or replaced items, newest first. */
+    readonly listRecentClosedAttentionItems: (input: {
+      readonly projectId: ProjectId;
+      readonly limit: number;
+    }) => Result<ReadonlyArray<ProjectAttentionItem>>;
     readonly listOpenAttentionItems: (input: {
       readonly projectId: ProjectId;
       readonly taskId?: ProjectTaskId;
@@ -260,6 +271,7 @@ const TaskRow = Schema.Struct({
 });
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
+  supersededAt: Schema.NullOr(IsoDateTime),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
 });
 const CountRow = Schema.Struct({ count: NonNegativeInt });
@@ -335,7 +347,8 @@ export const make = Effect.gen(function* () {
     answered_at AS "answeredAt",
     asker_thread_id AS "askerThreadId",
     batch_id AS "batchId",
-    created_at AS "createdAt"
+    created_at AS "createdAt",
+    superseded_at AS "supersededAt"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -660,7 +673,22 @@ export const make = Effect.gen(function* () {
     execute: ({ id, answer, answeredAt }) => sql`
       UPDATE project_attention_items
       SET answer = ${answer}, answered_at = ${answeredAt}
-      WHERE item_id = ${id} AND answered_at IS NULL
+      WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
+      RETURNING ${attentionColumns}
+    `,
+  });
+  const supersedeAttentionRows = SqlSchema.findAll({
+    Request: Schema.Struct({
+      taskId: ProjectTaskId,
+      kind: ProjectAttentionKind,
+      supersededAt: IsoDateTime,
+    }),
+    Result: AttentionRow,
+    execute: ({ taskId, kind, supersededAt }) => sql`
+      UPDATE project_attention_items
+      SET superseded_at = ${supersededAt}
+      WHERE task_id = ${taskId} AND kind = ${kind}
+        AND answered_at IS NULL AND superseded_at IS NULL
       RETURNING ${attentionColumns}
     `,
   });
@@ -673,6 +701,7 @@ export const make = Effect.gen(function* () {
       WHERE ${sql.and([
         sql`project_id = ${projectId}`,
         sql`answered_at IS NULL`,
+        sql`superseded_at IS NULL`,
         ...(taskId === undefined ? [] : [sql`task_id = ${taskId}`]),
       ])}
       ORDER BY created_at ASC, rowid ASC
@@ -696,6 +725,18 @@ export const make = Effect.gen(function* () {
       FROM project_attention_items
       WHERE project_id = ${projectId} AND answered_at IS NOT NULL
       ORDER BY answered_at DESC, rowid DESC
+      LIMIT ${limit}
+    `,
+  });
+  const findRecentAttention = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId, limit: Schema.Int }),
+    Result: AttentionRow,
+    execute: ({ projectId, limit }) => sql`
+      SELECT ${attentionColumns}
+      FROM project_attention_items
+      WHERE project_id = ${projectId}
+        AND (answered_at IS NOT NULL OR superseded_at IS NOT NULL)
+      ORDER BY created_at DESC, rowid DESC
       LIMIT ${limit}
     `,
   });
@@ -886,6 +927,14 @@ export const make = Effect.gen(function* () {
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),
     answerAttentionItem: (input) =>
       answerAttentionRow(input).pipe(Effect.mapError(toRepositoryError("answerAttentionItem"))),
+    supersedeOpenAttentionItems: (input) =>
+      supersedeAttentionRows(input).pipe(
+        Effect.mapError(toRepositoryError("supersedeOpenAttentionItems")),
+      ),
+    listRecentClosedAttentionItems: (input) =>
+      findRecentAttention(input).pipe(
+        Effect.mapError(toRepositoryError("listRecentClosedAttentionItems")),
+      ),
     listOpenAttentionItems: (input) =>
       findOpenAttention(input).pipe(Effect.mapError(toRepositoryError("listOpenAttentionItems"))),
     listAttentionItemsSince: (input) =>

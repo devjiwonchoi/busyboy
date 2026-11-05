@@ -11,6 +11,7 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
+  type ProjectDecisionCard,
   type ProjectSitrep,
   type ProjectId,
   type ProjectManagerAvatar,
@@ -41,6 +42,7 @@ import {
   type ProjectTeamMemoryListResult,
   type ProjectTeamMemoryWriteInput,
   type ProjectTeamMemoryWriteResult,
+  type ProjectTeamAnswerDecisionInput,
   type ProjectTeamRequestSitrepInput,
   type ProjectTeamRequestSitrepResult,
   type ProjectTeamSettings,
@@ -115,6 +117,40 @@ const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
 
 export const JOURNAL_LIMIT = 20;
 const JOURNAL_TEXT_MAX_CHARS = 200;
+/** Answered or replaced cards kept in the PM thread after they close. */
+const CLOSED_DECISION_CARD_LIMIT = 30;
+const CARD_WAKE_QUESTION_MAX_CHARS = 600;
+
+const ATTENTION_KIND_LABEL: Record<ProjectAttentionItem["kind"], string> = {
+  approval: "plan approval",
+  decision: "a decision",
+  blocker: "help with a blocker",
+};
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/** Wakes the PM when a card appears, so it can add a recommendation beside it. */
+export function decisionCardWakeText(
+  task: Pick<ProjectTask, "title">,
+  item: Pick<ProjectAttentionItem, "kind" | "question">,
+): string {
+  return [
+    `[Decision card] The task "${task.title}" asks the user for ${ATTENTION_KIND_LABEL[item.kind]}:`,
+    clip(item.question, CARD_WAKE_QUESTION_MAX_CHARS),
+    "The card with its buttons is already in front of the user, and their click goes straight to the task lead.",
+    "If it helps the user decide, reply with one or two plain-language lines: what this is, the tradeoff, and your recommendation. Otherwise reply \"No action.\"",
+  ].join("\n");
+}
+
+/** Tells the PM what the user chose on a card; the answer already reached the lead. */
+export function decisionAnsweredWakeText(
+  task: Pick<ProjectTask, "title">,
+  item: Pick<ProjectAttentionItem, "answer">,
+): string {
+  return `[Decision answered] The user answered the card from "${task.title}": ${clip(item.answer ?? "", CARD_WAKE_QUESTION_MAX_CHARS)}\nIt already reached the task lead; do not relay it with attention_answer. Reply in one short line, such as "Noted."`;
+}
 
 const trimJournalText = (text: string): string =>
   text.length <= JOURNAL_TEXT_MAX_CHARS ? text : `${text.slice(0, JOURNAL_TEXT_MAX_CHARS - 1)}…`;
@@ -398,6 +434,11 @@ export class ProjectTeamService extends Context.Service<
     readonly answerAttention: (
       callerThreadId: ThreadId,
       input: ProjectTeamAttentionAnswerInput,
+    ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+
+    /** projectTeam.answerDecision RPC: the user answered a card; goes straight to the lead. */
+    readonly answerDecision: (
+      input: ProjectTeamAnswerDecisionInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
 
     readonly listMemory: (
@@ -1101,6 +1142,11 @@ const make = Effect.gen(function* () {
         askerThreadId: callerThreadId,
       });
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
+      yield* wakeManagerWith(
+        task.projectId,
+        `project-team:card:${item.id}`,
+        decisionCardWakeText(task, item),
+      );
       return { item };
     }).pipe(orTeamError("Could not ask the user."));
 
@@ -1124,6 +1170,56 @@ const make = Effect.gen(function* () {
       });
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question."));
+
+  const answerDecision: ProjectTeamService["Service"]["answerDecision"] = (input) =>
+    Effect.gen(function* () {
+      const manager = yield* requireManager(input.projectId);
+      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      if (Option.isNone(item) || item.value.projectId !== input.projectId) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} was not found in this project.`,
+          input.projectId,
+        );
+      }
+      const answered = yield* router.answer({
+        item: item.value,
+        answer: input.answer,
+        senderThreadId: manager.threadId,
+      });
+      const task = yield* requireTask(answered.taskId, answered.projectId);
+      yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
+      yield* wakeManagerWith(
+        answered.projectId,
+        `project-team:card-answered:${answered.id}`,
+        decisionAnsweredWakeText(task, answered),
+      );
+      return { item: answered };
+    }).pipe(orTeamError("Could not answer the question.", input.projectId));
+
+  /** Queues a short server message for the PM, once per key; skipped when the PM is off or gone. */
+  const wakeManagerWith = (projectId: ProjectId, key: string, text: string) =>
+    Effect.gen(function* () {
+      const manager = yield* repository.getManager(projectId);
+      if (Option.isNone(manager) || !manager.value.settings.enabled) return;
+      const shell = yield* threads.getThreadShell(manager.value.threadId);
+      if (shell === null || shell.deletedAt !== null || shell.archivedAt !== null) return;
+      yield* threads.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make(key),
+        threadId: manager.value.threadId,
+        messageId: MessageId.make(key),
+        text,
+        attachments: [],
+        dispatchMode: { type: "queue_after_active" },
+        createdBy: "system",
+        creationSource: "server",
+      });
+    }).pipe(
+      // The card is already on screen; a missed wake only costs the PM's recommendation.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("waking the PM about a decision card failed", { projectId, cause }),
+      ),
+    );
 
   const listMemory: ProjectTeamService["Service"]["listMemory"] = (callerThreadId) =>
     Effect.gen(function* () {
@@ -1215,6 +1311,26 @@ const make = Effect.gen(function* () {
       } satisfies ProjectManagerPresence;
     });
 
+  /** Open questions and the latest closed ones, oldest first, each with its task's name. */
+  const listDecisionCards = (projectId: ProjectId, open: ReadonlyArray<ProjectAttentionItem>) =>
+    Effect.gen(function* () {
+      const closed = yield* repository.listRecentClosedAttentionItems({
+        projectId,
+        limit: CLOSED_DECISION_CARD_LIMIT,
+      });
+      const tasks = new Map(
+        (yield* repository.listTasks({ projectId })).map((task) => [task.id, task]),
+      );
+      return [...closed, ...open]
+        .toSorted((a, b) => isoMillis(a.createdAt) - isoMillis(b.createdAt))
+        .flatMap((item): ReadonlyArray<ProjectDecisionCard> => {
+          const task = tasks.get(item.taskId);
+          return task === undefined
+            ? []
+            : [{ item, taskNumber: task.number, taskTitle: task.title }];
+        });
+    });
+
   const attentionSnapshot: ProjectTeamService["Service"]["attentionSnapshot"] = Effect.gen(
     function* () {
       const managers = yield* repository.listManagers();
@@ -1226,6 +1342,7 @@ const make = Effect.gen(function* () {
           const latestSitrep = yield* repository.getLatestSitrep(projectId);
           const latestPosted = yield* repository.getLatestPostedSitrep(projectId);
           const presence = yield* managerPresence(manager, open, latestSitrep);
+          const decisionCards = yield* listDecisionCards(projectId, open);
           return {
             projectId,
             pmThreadId: manager.threadId,
@@ -1238,6 +1355,7 @@ const make = Effect.gen(function* () {
             persona: resolvePersona(projectId, manager.settings),
             enabled: manager.settings.enabled,
             presence,
+            decisionCards,
           } satisfies ProjectTeamAttentionSummary;
         }),
       );
@@ -1302,6 +1420,7 @@ const make = Effect.gen(function* () {
     updateSettingsAsManager,
     updateSettings,
     askUser,
+    answerDecision,
     answerAttention,
     listMemory,
     writeMemory,

@@ -6,7 +6,12 @@ import { pendingSubagentRequestsByThread } from "@t3tools/client-runtime/state/t
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ProjectTeamAttentionIndex } from "@t3tools/client-runtime/state/project-team";
-import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  OrchestrationV2ThreadShell,
+  ProjectTeamAttentionSummary,
+  ThreadId,
+} from "@t3tools/contracts";
 import type { ClientSettings } from "@t3tools/contracts/settings";
 import * as Option from "effect/Option";
 import { useEffect, useRef } from "react";
@@ -233,13 +238,13 @@ function EnvironmentNotifications({
       // Default persona names repeat across projects, so the title names the project too.
       const who = `${summary.persona.name} (${projectTitle})`;
       // Distinct tags keep a sitrep from replacing an unseen Needs-you notification.
-      const notify = (title: string, kind: "attention" | "sitrep") =>
+      const notify = (title: string, kind: "attention" | "sitrep", body = projectTitle) =>
         showThreadNotification({
           environmentId,
           threadId: summary.pmThreadId,
           tagSuffix: kind,
           title,
-          body: projectTitle,
+          body,
           mode,
           viewing: activeEnvironmentId === environmentId && activeThreadId === summary.pmThreadId,
           navigate,
@@ -252,7 +257,11 @@ function EnvironmentNotifications({
             hasNotificationSound(getClientSettings().notificationMode),
           );
         }
-        notify(`${who} · Needs you: ${summary.openCount}`, "attention");
+        notify(
+          `${who} · Needs you: ${summary.openCount}`,
+          "attention",
+          newestOpenCardText(summary) ?? projectTitle,
+        );
       }
       if (
         summary.enabled &&
@@ -324,4 +333,20 @@ function showThreadNotification(input: {
       }),
     );
   }
+}
+
+const NOTIFICATION_QUESTION_MAX_CHARS = 140;
+
+/** "<task name>: <question>" for the newest open card, so the alert says what is waiting. */
+function newestOpenCardText(summary: ProjectTeamAttentionSummary): string | null {
+  const card = summary.decisionCards.findLast(
+    (candidate) => candidate.item.answeredAt === null && candidate.item.supersededAt === null,
+  );
+  if (!card) return null;
+  const question = card.item.question.replace(/\s+/g, " ").trim();
+  const clipped =
+    question.length > NOTIFICATION_QUESTION_MAX_CHARS
+      ? `${question.slice(0, NOTIFICATION_QUESTION_MAX_CHARS)}…`
+      : question;
+  return `${card.taskTitle}: ${clipped}`;
 }

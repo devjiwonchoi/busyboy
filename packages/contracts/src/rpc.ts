@@ -332,6 +332,8 @@ import {
 import {
   ProjectTeamAttentionSnapshot,
   ProjectTeamError,
+  ProjectTeamAnswerDecisionInput,
+  ProjectTeamAttentionItemResult,
   ProjectTeamRequestSitrepInput,
   ProjectTeamRequestSitrepResult,
   ProjectTeamSettingsResult,
@@ -495,6 +497,7 @@ export const WS_METHODS = {
 
   projectTeamSubscribeAttention: "projectTeam.subscribeAttention",
   projectTeamRequestSitrep: "projectTeam.requestSitrep",
+  projectTeamAnswerDecision: "projectTeam.answerDecision",
   projectTeamUpdateSettings: "projectTeam.updateSettings",
 
   pullRequestsList: "pullRequests.list",
@@ -1753,6 +1756,12 @@ const WsProjectTeamRequestSitrepRpc = Rpc.make(WS_METHODS.projectTeamRequestSitr
   error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
 });
 
+const WsProjectTeamAnswerDecisionRpc = Rpc.make(WS_METHODS.projectTeamAnswerDecision, {
+  payload: ProjectTeamAnswerDecisionInput,
+  success: ProjectTeamAttentionItemResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
 const WsProjectTeamUpdateSettingsRpc = Rpc.make(WS_METHODS.projectTeamUpdateSettings, {
   payload: ProjectTeamUpdateSettingsInput,
   success: ProjectTeamSettingsResult,
@@ -1849,6 +1858,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsScheduledTasksGetWebhookDeliveryRpc,
   WsProjectTeamSubscribeAttentionRpc,
   WsProjectTeamRequestSitrepRpc,
+  WsProjectTeamAnswerDecisionRpc,
   WsProjectTeamUpdateSettingsRpc,
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,
