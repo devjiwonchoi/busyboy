@@ -596,8 +596,16 @@ const make = Effect.gen(function* () {
 
   const setTask = (input: Omit<ProjectTeamRepository.UpdateProjectTaskInput, "now">) =>
     Effect.gen(function* () {
-      const updated = yield* repository.updateTask({ ...input, now: yield* nowIso });
+      const now = yield* nowIso;
+      const updated = yield* repository.updateTask({ ...input, now });
       if (Option.isNone(updated)) return yield* teamError(`Task ${input.id} was not found.`);
+      // A finished task's questions can no longer be answered, so close them.
+      if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
+        yield* repository.supersedeOpenAttentionItems({
+          taskId: updated.value.id,
+          supersededAt: now,
+        });
+      }
       return updated.value;
     });
 
