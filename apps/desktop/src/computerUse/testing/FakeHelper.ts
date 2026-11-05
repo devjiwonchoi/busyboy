@@ -12,6 +12,9 @@
  *   process (stage 1) spawns a copy that serves the socket (stage 2), forwards
  *   SIGTERM to it (unless `FAKE_HELPER_STAGE1_IGNORE_SIGTERM=1`), and exits with
  *   it; stage 2 stops itself when stage 1 dies.
+ * - `FAKE_HELPER_ACCESSIBILITY_FILE=<path>`: Accessibility is granted while the
+ *   file says `granted`. While it is not, `app.state` fails with
+ *   `permission_required`. Without the variable, Accessibility is not granted.
  * - Method `test.crash`: exit with code 70.
  * `hello` reports the serving pid. Other methods echo `{method, params}`.
  */
@@ -54,6 +57,13 @@ function serve() {
     return Buffer.concat([header, json]);
   };
 
+  const accessibility = () => {
+    const file = env.FAKE_HELPER_ACCESSIBILITY_FILE;
+    if (!file) return "not_granted";
+    const text = NodeFS.existsSync(file) ? NodeFS.readFileSync(file, "utf8").trim() : "";
+    return text === "granted" ? "granted" : "not_granted";
+  };
+
   const answer = (message: Record<string, unknown>): Record<string, unknown> => {
     const id = message.id;
     switch (message.method) {
@@ -78,11 +88,24 @@ function serve() {
         return {
           id,
           result: {
-            accessibility: "not_granted",
+            accessibility: accessibility(),
             screenRecording: "granted",
             stopMonitor: "available",
           },
         };
+      case "app.state":
+        if (env.FAKE_HELPER_ACCESSIBILITY_FILE && accessibility() !== "granted") {
+          return {
+            id,
+            error: {
+              code: "permission_required",
+              message: "Accessibility is not granted",
+              details: { missing: ["accessibility"] },
+              retryable: false,
+            },
+          };
+        }
+        return { id, result: { method: message.method, params: message.params } };
       case "test.crash":
         process.exit(70);
       default:

@@ -27,8 +27,9 @@ afterEach(async () => {
 });
 
 /** A router over a real supervisor running FakeHelper.ts. */
-const withHelperProcess = () => {
+const withHelperProcess = (options: { readonly accessibilityFile?: boolean } = {}) => {
   const socketDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "cu-host-"));
+  const accessibilityFile = NodePath.join(socketDir, "accessibility");
   const children: Array<NodeChildProcess.ChildProcess> = [];
   const spawn: SpawnHelper = (_executable, env) => {
     const child = NodeChildProcess.spawn(process.execPath, [FAKE_HELPER], {
@@ -57,7 +58,10 @@ const withHelperProcess = () => {
     socketPath: NodePath.join(socketDir, "helper.sock"),
     clientVersion: "test",
     supported: true,
-    env: { BUSYBOY_CU_SOCKET_DIR: socketDir },
+    env: {
+      BUSYBOY_CU_SOCKET_DIR: socketDir,
+      ...(options.accessibilityFile ? { FAKE_HELPER_ACCESSIBILITY_FILE: accessibilityFile } : {}),
+    },
     spawn,
     onStatus: (status) => events.push(router!.helperStatusChanged(status)),
   });
@@ -66,7 +70,8 @@ const withHelperProcess = () => {
     await router!.shutdown();
     NodeFS.rmSync(socketDir, { recursive: true, force: true });
   });
-  return { router, events, children };
+  const grantAccessibility = () => NodeFS.writeFileSync(accessibilityFile, "granted");
+  return { router, supervisor, events, children, grantAccessibility };
 };
 
 const isAlive = (pid: number | undefined) => {
@@ -156,6 +161,88 @@ describe("ComputerUseRouter with a helper process", () => {
       result: { status: { state: "running" } },
     });
   });
+
+  it("starts a fresh helper when settings sees Accessibility become granted", async () => {
+    const { router, supervisor, events, children, grantAccessibility } = withHelperProcess({
+      accessibilityFile: true,
+    });
+    await router.handle({ type: "configure", enabled: true });
+    await router.handle({ type: "request", id: 1, method: "permissions.status", params: {} });
+    expect(events.at(-1)).toMatchObject({ id: 1, result: { accessibility: "not_granted" } });
+    expect(children).toHaveLength(1);
+
+    // The user grants Accessibility while the settings page polls.
+    grantAccessibility();
+    events.length = 0;
+    await router.handle({
+      type: "request",
+      id: 2,
+      method: "permissions.status",
+      params: {},
+      passive: true,
+    });
+    expect(events.at(-1)).toMatchObject({ id: 2, result: { accessibility: "granted" } });
+    expect(children).toHaveLength(2);
+    expect(isAlive(children[0]!.pid)).toBe(false);
+    expect(supervisor.status).toEqual({ state: "running" });
+    // A planned restart, not a crash: no error status on the way.
+    expect(events.filter((event) => event.type === "status")).toEqual([
+      { type: "status", state: "stopped" },
+      { type: "status", state: "starting" },
+      { type: "status", state: "running" },
+    ]);
+
+    // Already granted: further polls leave the new helper alone.
+    await router.handle({
+      type: "request",
+      id: 3,
+      method: "permissions.status",
+      params: {},
+      passive: true,
+    });
+    expect(children).toHaveLength(2);
+  });
+
+  it("starts a fresh helper before a tool call once Accessibility is granted", async () => {
+    const { router, events, children, grantAccessibility } = withHelperProcess({
+      accessibilityFile: true,
+    });
+    await router.handle({ type: "configure", enabled: true });
+    await router.handle({
+      type: "request",
+      id: 1,
+      method: "app.state",
+      params: { app: "TextEdit" },
+    });
+    expect(events.at(-1)).toMatchObject({
+      id: 1,
+      error: { code: "permission_required", details: { missing: ["accessibility"] } },
+    });
+
+    // Granted in System Settings without BusyBoy settings open.
+    grantAccessibility();
+    await router.handle({
+      type: "request",
+      id: 2,
+      method: "app.state",
+      params: { app: "TextEdit" },
+    });
+    expect(events.at(-1)).toEqual({
+      type: "response",
+      id: 2,
+      result: { method: "app.state", params: { app: "TextEdit" } },
+    });
+    expect(children).toHaveLength(2);
+    expect(isAlive(children[0]!.pid)).toBe(false);
+
+    await router.handle({
+      type: "request",
+      id: 3,
+      method: "app.state",
+      params: { app: "TextEdit" },
+    });
+    expect(children).toHaveLength(2);
+  });
 });
 
 /** An in-process stand-in for the helper connection. */
@@ -209,6 +296,7 @@ const fakeSupervisor = (
       if (options.stopHangs?.value) await new Promise(() => {});
     },
     restart: async () => client as unknown as HelperClient,
+    recycle: async () => client as unknown as HelperClient,
     setStartAllowed: (allowed: boolean) => void log.push(`allowed:${allowed}`),
   };
   return { supervisor, sent, resolvers, log, stops: () => stops, starts: () => starts };
