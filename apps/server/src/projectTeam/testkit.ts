@@ -10,8 +10,10 @@ import {
   type OrchestratorMcpDelegateTaskInput,
   type OrchestratorMcpDelegateTaskResult,
   ProjectId,
+  type PullRequestState,
   type ServerProvider,
   ThreadId,
+  type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -24,6 +26,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
@@ -31,6 +34,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import * as ContextCare from "./ContextCare.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
+import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
@@ -52,6 +56,11 @@ export interface FakeThread {
   subagents?: Array<Pick<OrchestrationV2Subagent, "origin" | "status">>;
   /** Provider turns; only `id`, `status` and `tokenUsage` matter to the team services. */
   providerTurns?: Array<Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage">>;
+  worktreePath?: string | null;
+  branch?: string | null;
+  /** Parent in the thread lineage, e.g. the lead of a provider subagent. */
+  parentThreadId?: ThreadId | null;
+  pullRequests?: Array<Pick<ThreadPullRequestLink, "host" | "repository" | "number" | "url">>;
 }
 
 export interface TeamHarness {
@@ -64,6 +73,10 @@ export interface TeamHarness {
   readonly sendFailures: { remaining: number };
   /** Provider snapshots the registry reports; empty unless a test fills it. */
   readonly providers: Array<ServerProvider>;
+  /** PR state by PR number; a missing number fails the lookup. */
+  readonly pullRequestStates: Map<number, PullRequestState>;
+  /** Runs after a thread is archived, like the server's worktree cleanup effect. */
+  onArchive: (threadId: ThreadId) => Effect.Effect<void>;
   /** Starts every task lead on a thread named lead-<n>. */
   readonly delegate: ProjectTeamService.DelegateTaskLead;
   readonly addProject: (projectId: ProjectId, title: string) => void;
@@ -83,7 +96,8 @@ export type TeamServices =
   | TaskOutcomeReactor.TaskOutcomeReactor
   | StalledTaskSweep.StalledTaskSweep
   | DefaultManagerReactor.DefaultManagerReactor
-  | ContextCare.ContextCare;
+  | ContextCare.ContextCare
+  | FinishedTaskCleanup.FinishedTaskCleanup;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -121,6 +135,24 @@ const makeProject = (projectId: ProjectId, title: string): ProjectStore.ProjectR
   updatedAt: START,
   deletedAt: null,
 });
+
+const toShell = (thread: FakeThread): OrchestrationV2ThreadShell =>
+  ({
+    id: thread.id,
+    projectId: thread.projectId,
+    title: thread.title,
+    activeRunId: thread.activeRunId,
+    worktreePath: thread.worktreePath ?? null,
+    branch: thread.branch ?? null,
+    pullRequests: thread.pullRequests ?? [],
+    lineage: {
+      parentThreadId: thread.parentThreadId ?? null,
+      relationshipToParent: thread.parentThreadId == null ? null : "subagent",
+      rootThreadId: thread.id,
+    },
+    deletedAt: thread.deletedAt === null ? null : DateTime.makeUnsafe(thread.deletedAt),
+    archivedAt: thread.archivedAt === null ? null : DateTime.makeUnsafe(thread.archivedAt),
+  }) as unknown as OrchestrationV2ThreadShell;
 
 /** Runs `body` against the team services with in-memory storage and fake threads. */
 export const withTeam = <A, E>(
@@ -163,21 +195,29 @@ export const withTeam = <A, E>(
           if (command.type === "thread.delete") target.deletedAt = START;
         }).pipe(
           Effect.andThen(Ref.update(dispatched, (all) => [...all, command])),
+          Effect.andThen(
+            Effect.suspend(() =>
+              command.type === "thread.archive" ? harness.onArchive(command.threadId) : Effect.void,
+            ),
+          ),
           Effect.as({ sequence: 1, storedEvents: [] }),
         ),
       getThreadShell: (threadId) =>
         Effect.sync(() => {
           const thread = threads.get(threadId);
-          if (thread === undefined) return null;
-          return {
-            id: thread.id,
-            projectId: thread.projectId,
-            title: thread.title,
-            activeRunId: thread.activeRunId,
-            deletedAt: thread.deletedAt === null ? null : DateTime.makeUnsafe(thread.deletedAt),
-            archivedAt: thread.archivedAt === null ? null : DateTime.makeUnsafe(thread.archivedAt),
-          } as unknown as OrchestrationV2ThreadShell;
+          return thread === undefined ? null : toShell(thread);
         }),
+      listProjectThreads: ({ projectId }) =>
+        Effect.sync(() =>
+          [...threads.values()]
+            .filter(
+              (thread) =>
+                thread.projectId === projectId &&
+                thread.archivedAt === null &&
+                thread.deletedAt === null,
+            )
+            .map(toShell),
+        ),
       sendToThread: (input) =>
         Effect.suspend(() => {
           if (sendFailures.remaining > 0) {
@@ -215,6 +255,16 @@ export const withTeam = <A, E>(
     });
 
     const providers: Array<ServerProvider> = [];
+    const pullRequestStates = new Map<number, PullRequestState>();
+    const pullRequestService = Layer.mock(PullRequestService.PullRequestService)({
+      summary: (input) =>
+        Effect.suspend(() => {
+          const state = pullRequestStates.get(input.number);
+          return state === undefined
+            ? Effect.die(new Error(`no PR #${input.number}`))
+            : Effect.succeed({ state } as never);
+        }),
+    });
     const sendFailures = { remaining: 0 };
     const providerRegistry = Layer.mock(ProviderRegistry.ProviderRegistry)({
       getProviders: Effect.sync(() => [...providers]),
@@ -236,6 +286,7 @@ export const withTeam = <A, E>(
       StalledTaskSweep.layer,
       DefaultManagerReactor.layer,
       ContextCare.layer,
+      FinishedTaskCleanup.layer,
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
@@ -243,6 +294,7 @@ export const withTeam = <A, E>(
       Layer.provide(
         Layer.mergeAll(
           threadManagement,
+          pullRequestService,
           projectStore,
           providerRegistry,
           ServerSettings.layerTest(),
@@ -262,6 +314,8 @@ export const withTeam = <A, E>(
       delegated,
       sendFailures,
       providers,
+      pullRequestStates,
+      onArchive: () => Effect.void,
       delegate: (input) =>
         Effect.gen(function* () {
           yield* Ref.update(delegated, (all) => [...all, input]);
