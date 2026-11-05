@@ -180,7 +180,9 @@ export const installPasswordPreload = (
   let fieldsByElement = new Map<Element, FieldEntry>();
   let formsBySubmitButton = new Map<Element, DetectedLoginForm>();
   let typedUsername: string | undefined;
-  let lastReportKey = stringify({ forms: [] });
+  // Every document reports once, even with no login forms: after a sign-in in
+  // a frame, the next page having none is how main knows it succeeded.
+  let lastReportKey: string | null = null;
   let scanPending = false;
 
   const toGuestForm = (form: DetectedLoginForm): GuestLoginForm => {

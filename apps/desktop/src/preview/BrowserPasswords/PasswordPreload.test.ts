@@ -85,6 +85,14 @@ describe("installPasswordPreload", () => {
     expect(page.on(PASSWORD_FRAME_TOKEN_CHANNEL)).toHaveLength(1);
   });
 
+  it("reports a page without login forms once, so main can see a sign-in left it", () => {
+    const page = setup("<h1>Welcome</h1>");
+    page.handle.scanNow();
+    expect(page.on(PASSWORD_FORMS_CHANNEL).map((message) => message.payload)).toEqual([
+      { forms: [] },
+    ]);
+  });
+
   it("captures typed values once when a button click causes a submit", () => {
     const page = setup(SIGN_IN);
     page.input("user").value = "ada";
