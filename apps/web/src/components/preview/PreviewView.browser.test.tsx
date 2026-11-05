@@ -17,7 +17,9 @@ import "~/index.css";
 import type { PreviewableServer } from "./useDiscoveredLocalServers";
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(async (_tabId: string, _url: string): Promise<void> => undefined),
+  navigate: vi.fn(
+    async (_tabId: string, _url: string, _transition?: string): Promise<void> => undefined,
+  ),
   rememberPreviewUrl: vi.fn(),
   readPreparedConnection: vi.fn(() => ({ httpBaseUrl: "http://172.25.85.75:3873" })),
   readEnvironmentScope: vi.fn((_environmentId?: unknown, _scope?: unknown) => true),
@@ -36,7 +38,6 @@ const mocks = vi.hoisted(() => ({
   servers: [] as PreviewableServer[],
   recordingTabIds: new Set<string>(),
   recordingRuntimeTabId: null as string | null,
-  recordVisitForThread: vi.fn(),
 }));
 
 const STUB_BROWSER_DEFAULTS = {
@@ -72,10 +73,6 @@ vi.mock(import("./previewBridge"), async (original) => ({
       close: mocks.closePictureInPicture,
     },
   } as never,
-}));
-vi.mock(import("~/browserHistoryStore"), async (original) => ({
-  ...(await original()),
-  recordVisitForThread: mocks.recordVisitForThread,
 }));
 vi.mock(import("~/state/session"), async (original) => ({
   ...(await original()),
@@ -275,15 +272,14 @@ describe("PreviewView", () => {
     ],
     ["localhost:5173/app", "http://localhost:5173/app"],
   ])(
-    "preserves a direct localhost URL %s in a WSL environment and records it",
+    "preserves a direct localhost URL %s in a WSL environment as a typed visit",
     async (submitted, expected) => {
       await render(view());
       await submitAddress(submitted);
       await vi.waitFor(() =>
-        expect(mocks.navigate).toHaveBeenCalledWith(TEST_RUNTIME_TAB_ID, expected),
+        expect(mocks.navigate).toHaveBeenCalledWith(TEST_RUNTIME_TAB_ID, expected, "typed"),
       );
       expect(mocks.rememberPreviewUrl).toHaveBeenCalledWith(TEST_THREAD_REF, expected);
-      expect(mocks.recordVisitForThread).toHaveBeenCalledWith(TEST_THREAD_REF, expected);
     },
   );
 
@@ -308,18 +304,12 @@ describe("PreviewView", () => {
       expect(mocks.navigate).toHaveBeenCalledWith(
         TEST_RUNTIME_TAB_ID,
         "http://172.25.85.75:5173/app?mode=test#top",
+        undefined,
       ),
     );
     expect(mocks.rememberPreviewUrl).toHaveBeenCalledWith(
       TEST_THREAD_REF,
       "http://172.25.85.75:5173/app?mode=test#top",
-    );
-    // History keys off the requested loopback URL, which stays stable across hosts.
-    await vi.waitFor(() =>
-      expect(mocks.recordVisitForThread).toHaveBeenCalledWith(
-        TEST_THREAD_REF,
-        "http://localhost:5173/app?mode=test#top",
-      ),
     );
   });
 

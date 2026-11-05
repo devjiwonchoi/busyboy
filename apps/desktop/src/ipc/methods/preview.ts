@@ -30,6 +30,7 @@ import * as Option from "effect/Option";
 import * as NodeURL from "node:url";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
+import * as BrowserHistory from "../../preview/BrowserHistory/BrowserHistory.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
 import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
@@ -78,9 +79,10 @@ export const createTab = DesktopIpc.makeIpcMethod({
     zoomFactor,
     colorScheme,
     serverTab,
+    openedByAgent,
   }) {
     const manager = yield* PreviewManager.PreviewManager;
-    yield* manager.createTab(tabId, { zoomFactor, colorScheme, serverTab });
+    yield* manager.createTab(tabId, { zoomFactor, colorScheme, serverTab, openedByAgent });
   }),
 });
 
@@ -108,9 +110,9 @@ export const navigate = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_NAVIGATE_CHANNEL,
   payload: DesktopPreviewNavigateInputSchema,
   result: Schema.Void,
-  handler: Effect.fn("desktop.ipc.preview.navigate")(function* ({ tabId, url }) {
+  handler: Effect.fn("desktop.ipc.preview.navigate")(function* ({ tabId, url, transition }) {
     const manager = yield* PreviewManager.PreviewManager;
-    yield* manager.navigate(tabId, url);
+    yield* manager.navigate(tabId, url, transition);
   }),
 });
 
@@ -311,7 +313,16 @@ export const getPreviewConfig = DesktopIpc.makeIpcMethod({
     // Creating the session first is what installs the UA rewrite and permission
     // handlers; a guest that attached to an untouched partition would run with
     // Electron's default UA and Chromium's default permission behaviour.
-    yield* manager.getBrowserSession(scope, persistent, namespace);
+    const browserSession = yield* manager.getBrowserSession(scope, persistent, namespace);
+    // Main learns which profile a guest belongs to here, before any guest
+    // attaches, so it can keep that profile's history and skip incognito.
+    const history = yield* Effect.serviceOption(BrowserHistory.BrowserHistory);
+    if (Option.isSome(history)) {
+      history.value.registerSession(browserSession, {
+        profileId: profileId ?? DEFAULT_BROWSER_PROFILE_ID,
+        persistent,
+      });
+    }
     return {
       partition: yield* manager.getBrowserPartition(scope, persistent, namespace),
       webPreferences: PREVIEW_WEBVIEW_PREFERENCES,

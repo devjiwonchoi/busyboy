@@ -26,6 +26,11 @@ const lineEncoder = new TextEncoder();
 const AGENT_INPUT_COMMAND =
   /"method":"(?:Input\.|Page\.navigate"|Runtime\.(?:evaluate|callFunctionOn)")/;
 const AGENT_DOWNLOAD_WINDOW_MS = 5_000;
+/** Commands that make the page navigate: input that can follow a link, or explicit navigation. */
+const AGENT_NAVIGATION_COMMAND =
+  /"method":"(?:Input\.|Page\.(?:navigate|reload|navigateToHistoryEntry)")/;
+/** A navigation this soon after an agent command is attributed to that agent's thread. */
+export const AGENT_NAVIGATION_WINDOW_MS = 2_000;
 
 export interface DesktopBrowserTabKey {
   readonly threadId: string;
@@ -46,6 +51,7 @@ interface AttachedTab {
   downloadDirectory: string | null;
   pendingDownloadGuid: string | null;
   agentInputAt: number;
+  agentNavigationAt: number;
   readonly onMessage: (
     event: Electron.Event,
     method: string,
@@ -62,6 +68,10 @@ export class DesktopBrowserHost extends Context.Service<
     readonly attach: (key: DesktopBrowserTabKey, debuggee: DesktopBrowserTabDebugger) => void;
     readonly detach: (key: DesktopBrowserTabKey) => void;
     readonly humanStartedDownload: (source: Electron.WebContents) => boolean;
+    /** The agent thread that drove this guest within the attribution window, if any. */
+    readonly agentAttribution: (
+      source: Electron.WebContents,
+    ) => { readonly threadId: string } | null;
     readonly placeDownload: (source: Electron.WebContents, item: Electron.DownloadItem) => boolean;
     readonly pointers: Stream.Stream<{
       readonly key: DesktopBrowserTabKey;
@@ -148,6 +158,7 @@ export const make = Effect.gen(function* () {
       downloadDirectory: null,
       pendingDownloadGuid: null,
       agentInputAt: Number.NEGATIVE_INFINITY,
+      agentNavigationAt: Number.NEGATIVE_INFINITY,
       onMessage: (_event, method, params, sessionId) => {
         if (method === "Browser.downloadWillBegin") {
           const guid = (params as { guid?: unknown } | undefined)?.guid;
@@ -177,12 +188,25 @@ export const make = Effect.gen(function* () {
         return;
       }
       if (AGENT_INPUT_COMMAND.test(command.value.message)) tab.agentInputAt = performance.now();
+      if (AGENT_NAVIGATION_COMMAND.test(command.value.message)) {
+        tab.agentNavigationAt = performance.now();
+      }
       relayFor(tab).receive(command.value.message);
     });
 
   const humanStartedDownload = (source: Electron.WebContents) => {
     const tab = [...tabs.values()].find((candidate) => candidate.debuggee.webContents === source);
     return tab !== undefined && performance.now() - tab.agentInputAt > AGENT_DOWNLOAD_WINDOW_MS;
+  };
+
+  const agentAttribution = (source: Electron.WebContents) => {
+    const at = performance.now();
+    const tab = [...tabs.values()].find(
+      (candidate) =>
+        candidate.debuggee.webContents === source &&
+        at - candidate.agentNavigationAt <= AGENT_NAVIGATION_WINDOW_MS,
+    );
+    return tab === undefined ? null : { threadId: tab.key.threadId };
   };
 
   const announceAll = Effect.suspend(() =>
@@ -211,6 +235,7 @@ export const make = Effect.gen(function* () {
     detach,
     placeDownload,
     humanStartedDownload,
+    agentAttribution,
   });
 });
 

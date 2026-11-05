@@ -46,7 +46,12 @@ export interface AcquiredDesktopTab {
 
 export function acquireDesktopTab(
   tabId: string,
-  serverTab?: { readonly threadId: string; readonly tabId: string },
+  serverTab?: {
+    readonly threadId: string;
+    readonly tabId: string;
+    /** Tags the tab's first page load in browsing history as the agent's. */
+    readonly openedByAgent?: boolean;
+  },
 ): AcquiredDesktopTab {
   const current =
     leases.get(tabId) ??
@@ -58,7 +63,12 @@ export function acquireDesktopTab(
       ready: enqueueDesktopTabOperation(tabId, async () =>
         previewBridge?.createTab(tabId, {
           ...browserDefaultTabState(await resolveBrowserDefaults()),
-          ...(serverTab === undefined ? {} : { serverTab }),
+          ...(serverTab === undefined
+            ? {}
+            : {
+                serverTab: { threadId: serverTab.threadId, tabId: serverTab.tabId },
+                ...(serverTab.openedByAgent === true ? { openedByAgent: true } : {}),
+              }),
         }),
       ),
     } satisfies DesktopTabLease);

@@ -255,6 +255,10 @@
       "types": "./src/preview.ts",
       "import": "./src/preview.ts"
     },
+    "./browserHistoryLegacy": {
+      "types": "./src/browserHistoryLegacy.ts",
+      "import": "./src/browserHistoryLegacy.ts"
+    },
     "./previewViewport": {
       "types": "./src/previewViewport.ts",
       "import": "./src/previewViewport.ts"

@@ -10,7 +10,6 @@ import {
 import { isWebUrl, resolveBrowserLinkTargetPreference } from "~/browser/browserLinkTarget";
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
 import { isPreviewAvailableFor, previewRuntimeFor } from "~/browser/previewRuntime";
-import { recordVisitForThread } from "~/browserHistoryStore";
 import { applyPreviewServerSnapshot } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 
@@ -84,7 +83,6 @@ export async function openTerminalLinkInPreview<E>(
     input.fallbackToBrowser();
     return;
   }
-  recordVisitForThread(input.threadRef, input.url);
   applyPreviewServerSnapshot(input.threadRef, result.value);
   useRightPanelStore.getState().openBrowser(input.threadRef, result.value.tabId);
 }

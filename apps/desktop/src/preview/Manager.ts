@@ -67,6 +67,8 @@ import { MENU_ACTION_CHANNEL, PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL } from ".
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
 import * as PreviewPasskeys from "./Passkeys.ts";
 import * as BrowserSession from "./BrowserSession.ts";
+import * as BrowserHistory from "./BrowserHistory/BrowserHistory.ts";
+import type { HistoryRecorder, NavigationHint } from "./BrowserHistory/HistoryRecorder.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
   ANNOTATION_SEND_ENABLED_CHANNEL,
@@ -542,6 +544,17 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   const parentScope = yield* Scope.Scope;
   const browserHost = yield* DesktopBrowserHost.DesktopBrowserHost;
   const passkeys = yield* PreviewPasskeys.PreviewPasskeys;
+  // Optional so hosts without a history store (tests, tooling) keep working.
+  const browserHistory = Option.getOrNull(
+    yield* Effect.serviceOption(BrowserHistory.BrowserHistory),
+  );
+  const historyRecorders = new WeakMap<Electron.WebContents, HistoryRecorder>();
+  // Navigations requested before the tab has a guest; applied when it loads.
+  const pendingHistoryHints = new Map<string, NavigationHint>();
+  // Tabs an agent opened, by thread: their first load is the agent's visit.
+  const agentOpenedTabs = new Map<string, string>();
+  const hintHistory = (wc: Electron.WebContents, hint: NavigationHint) =>
+    historyRecorders.get(wc)?.setHint(hint);
   const context = yield* Effect.context<never>();
   const runFork = Effect.runForkWith(context);
   const resolvedArtifactDirectory = path.resolve(artifactDirectory);
@@ -1287,9 +1300,33 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       });
       if (Option.isSome(next)) yield* emitIfCurrent(tabId, next.value);
     });
+    const historyRecorder =
+      browserHistory?.recorderFor(wc.session, {
+        agentAttribution: () => browserHost.agentAttribution(wc),
+      }) ?? null;
+    if (historyRecorder) {
+      historyRecorders.set(wc, historyRecorder);
+      const openerThreadId = agentOpenedTabs.get(tabId);
+      agentOpenedTabs.delete(tabId);
+      if (openerThreadId !== undefined) historyRecorder.openedByAgent(openerThreadId);
+    }
     const sync = () => runFork(syncState(true));
-    const syncNavigation = () => runFork(syncState(false, true));
-    const syncInPageNavigation = () => runFork(syncState(false));
+    const syncNavigation = (_event: unknown, url: string, httpResponseCode: number) => {
+      historyRecorder?.commit({ url, httpResponseCode });
+      runFork(syncState(false, true));
+    };
+    const syncInPageNavigation = (_event: unknown, url: string, isMainFrame: boolean) => {
+      historyRecorder?.inPageNavigation({ url, isMainFrame });
+      runFork(syncState(false));
+    };
+    const titleUpdated = (_event: unknown, title: string) => {
+      historyRecorder?.title(title);
+      sync();
+    };
+    const stoppedLoading = () => {
+      historyRecorder?.stopLoading();
+      sync();
+    };
     const restoreRecordingCursor = () =>
       runFork(
         Effect.gen(function* () {
@@ -1308,6 +1345,11 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     const navigationStarted = (
       event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>,
     ) => {
+      historyRecorder?.startNavigation({
+        url: event.url,
+        isMainFrame: event.isMainFrame,
+        isSameDocument: event.isSameDocument,
+      });
       if (event.isMainFrame && !event.isSameDocument) cancelFaviconCapture();
     };
     const audioStateChanged = (
@@ -1414,6 +1456,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       isMainFrame: boolean,
     ): void => {
       if (code === -3 || !isMainFrame) return;
+      historyRecorder?.failLoad({ url: validatedUrl || wc.getURL(), isMainFrame });
       runFork(
         update(tabId, {
           navStatus: {
@@ -1469,6 +1512,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
           ? (payload as { direction?: unknown }).direction
           : undefined;
       if (direction !== "back" && direction !== "forward") return;
+      hintHistory(wc, "back_forward");
       runFork(
         attempt({ operation: "mouseNavigate", tabId, webContentsId: wc.id }, () => {
           if (direction === "back") {
@@ -1533,6 +1577,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       }
       if (isPreviewRefreshShortcut(input)) {
         event.preventDefault();
+        hintHistory(wc, "reload");
         runFork(
           attempt({ operation: "shortcut.refresh", tabId, webContentsId: wc.id }, () =>
             wc.reload(),
@@ -1545,13 +1590,15 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       scope,
       attempt({ operation: "detachListeners", tabId, webContentsId: wc.id }, () => {
         cancelFaviconCapture();
+        historyRecorder?.dispose();
+        historyRecorders.delete(wc);
         wc.off("did-start-navigation", navigationStarted);
         wc.off("did-navigate", syncNavigation);
         wc.off("did-navigate-in-page", syncInPageNavigation);
-        wc.off("page-title-updated", sync);
+        wc.off("page-title-updated", titleUpdated);
         wc.off("page-favicon-updated", faviconUpdated as never);
         wc.off("did-start-loading", sync);
-        wc.off("did-stop-loading", sync);
+        wc.off("did-stop-loading", stoppedLoading);
         wc.off("dom-ready", restoreRecordingCursor);
         wc.off("did-fail-load", failed as never);
         wc.off("audio-state-changed", audioStateChanged);
@@ -1569,10 +1616,10 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         wc.on("did-start-navigation", navigationStarted);
         wc.on("did-navigate", syncNavigation);
         wc.on("did-navigate-in-page", syncInPageNavigation);
-        wc.on("page-title-updated", sync);
+        wc.on("page-title-updated", titleUpdated);
         wc.on("page-favicon-updated", faviconUpdated as never);
         wc.on("did-start-loading", sync);
-        wc.on("did-stop-loading", sync);
+        wc.on("did-stop-loading", stoppedLoading);
         wc.on("dom-ready", restoreRecordingCursor);
         wc.on("did-fail-load", failed as never);
         wc.on("audio-state-changed", audioStateChanged);
@@ -1686,6 +1733,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     );
     if (result.created) {
       tabLifecycleGenerations.set(tabId, (tabLifecycleGenerations.get(tabId) ?? 0) + 1);
+      if (defaults?.openedByAgent === true && defaults.serverTab !== undefined) {
+        agentOpenedTabs.set(tabId, defaults.serverTab.threadId);
+      }
     }
     yield* emit(tabId, result.state);
     return result.state;
@@ -1753,6 +1803,8 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   });
 
   const closeTab = Effect.fn("PreviewManager.closeTab")(function* (tabId: string) {
+    pendingHistoryHints.delete(tabId);
+    agentOpenedTabs.delete(tabId);
     const claimed = yield* Ref.modify(closingTabIdsRef, (closingTabIds) => {
       if (closingTabIds.has(tabId)) return [false, closingTabIds] as const;
       return [true, new Set([...closingTabIds, tabId])] as const;
@@ -1914,6 +1966,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       latestNavStatus.url === pendingUrl &&
       wc.getURL() !== pendingUrl
     ) {
+      const hint = pendingHistoryHints.get(tabId);
+      pendingHistoryHints.delete(tabId);
+      if (hint) hintHistory(wc, hint);
       runFork(
         attemptPromise({ operation: "registerWebview.loadPendingUrl", tabId, webContentsId }, () =>
           wc.loadURL(pendingUrl),
@@ -1954,7 +2009,11 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     );
   });
 
-  const navigate = Effect.fn("PreviewManager.navigate")(function* (tabId: string, rawUrl: string) {
+  const navigate = Effect.fn("PreviewManager.navigate")(function* (
+    tabId: string,
+    rawUrl: string,
+    transition: NavigationHint = "link",
+  ) {
     const url = yield* attempt({ operation: "navigate.normalizeUrl", tabId }, () =>
       normalizePreviewUrl(rawUrl),
     );
@@ -1992,7 +2051,10 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       ] as const;
     });
     yield* emitIfCurrent(tabId, pending);
-    if (pending.webContentsId == null) return;
+    if (pending.webContentsId == null) {
+      pendingHistoryHints.set(tabId, transition);
+      return;
+    }
     const webContentsId = pending.webContentsId;
     const wc = webContents.fromId(webContentsId);
     if (!wc || wc.isDestroyed()) {
@@ -2037,6 +2099,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       );
       return;
     }
+    hintHistory(wc, transition);
     if (wc.getURL() === url) {
       yield* attempt({ operation: "navigate.reload", tabId, webContentsId: wc.id }, () =>
         wc.reload(),
@@ -2059,15 +2122,24 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
 
   const goBack = (tabId: string) =>
     withWebContents("goBack", tabId, (wc) => {
+      hintHistory(wc, "back_forward");
       if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
     });
   const goForward = (tabId: string) =>
     withWebContents("goForward", tabId, (wc) => {
+      hintHistory(wc, "back_forward");
       if (wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
     });
-  const refresh = (tabId: string) => withWebContents("refresh", tabId, (wc) => wc.reload());
+  const refresh = (tabId: string) =>
+    withWebContents("refresh", tabId, (wc) => {
+      hintHistory(wc, "reload");
+      wc.reload();
+    });
   const hardReload = (tabId: string) =>
-    withWebContents("hardReload", tabId, (wc) => wc.reloadIgnoringCache());
+    withWebContents("hardReload", tabId, (wc) => {
+      hintHistory(wc, "reload");
+      wc.reloadIgnoringCache();
+    });
 
   const openDevTools = Effect.fn("PreviewManager.openDevTools")(function* (tabId: string) {
     const wc = yield* requireWebContents(tabId);
@@ -3521,7 +3593,11 @@ export class PreviewManager extends Context.Service<
       webContentsId: number,
     ) => Effect.Effect<void, PreviewManagerError>;
     readonly prepareWebview: (webContents: Electron.WebContents) => Effect.Effect<void>;
-    readonly navigate: (tabId: string, url: string) => Effect.Effect<void, PreviewManagerError>;
+    readonly navigate: (
+      tabId: string,
+      url: string,
+      transition?: NavigationHint,
+    ) => Effect.Effect<void, PreviewManagerError>;
     readonly goBack: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
     readonly goForward: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
     readonly refresh: (tabId: string) => Effect.Effect<void, PreviewManagerError>;

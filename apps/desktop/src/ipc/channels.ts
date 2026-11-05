@@ -115,3 +115,11 @@ export const PREVIEW_RECORDING_INPUT_CHANNEL = "desktop:preview-recording-input"
 
 export const RECEIVE_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:receive-provider-auth-callback";
 export const CANCEL_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:cancel-provider-auth-callback";
+
+export const BROWSER_HISTORY_SEARCH_CHANNEL = "desktop:browser-history-search";
+export const BROWSER_HISTORY_RECENT_CHANNEL = "desktop:browser-history-recent";
+export const BROWSER_HISTORY_REMOVE_CHANNEL = "desktop:browser-history-remove";
+export const BROWSER_HISTORY_CLEAR_CHANNEL = "desktop:browser-history-clear";
+export const BROWSER_HISTORY_IMPORT_LEGACY_CHANNEL = "desktop:browser-history-import-legacy";
+export const BROWSER_HISTORY_STATUS_CHANNEL = "desktop:browser-history-status";
+export const BROWSER_HISTORY_CHANGED_CHANNEL = "desktop:browser-history-changed";
