@@ -104,4 +104,45 @@ describe("DesktopIpc", () => {
       assert.notInclude(error.message, cause.message);
     }),
   );
+
+  it.effect("answers sync calls from browser guests with null", () =>
+    Effect.gen(function* () {
+      let listener: DesktopIpc.DesktopIpcSyncListener | undefined;
+      let handled = 0;
+      const ipc = DesktopIpc.make(
+        makeIpcMain({
+          on: (_channel, registered) => {
+            listener = registered;
+          },
+        }),
+      );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* ipc.handleSync({
+            channel: "desktop.test.secret",
+            handler: () =>
+              Effect.sync(() => {
+                handled += 1;
+                return "secret";
+              }),
+          });
+          const guest: DesktopIpc.DesktopIpcSyncEvent = {
+            returnValue: undefined,
+            sender: { getType: () => "webview" },
+          };
+          listener!(guest);
+          assert.isNull(guest.returnValue);
+          assert.strictEqual(handled, 0);
+
+          const app: DesktopIpc.DesktopIpcSyncEvent = {
+            returnValue: undefined,
+            sender: { getType: () => "window" },
+          };
+          listener!(app);
+          assert.strictEqual(app.returnValue, "secret");
+        }),
+      );
+    }),
+  );
 });

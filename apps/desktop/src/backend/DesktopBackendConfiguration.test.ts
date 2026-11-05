@@ -139,7 +139,9 @@ describe("DesktopBackendConfiguration", () => {
         const first = yield* configuration.resolvePrimary;
         const second = yield* configuration.resolvePrimary;
 
-        assert.equal(first.executablePath, process.execPath);
+        // Packaged macOS: the bundled Node, never Electron in Node mode (that fuse is off).
+        assert.equal(first.executablePath, "/missing/resources/server/bin/busyboy-node");
+        assert.equal(environment.compileCachePath, "/missing/resources/server/compileCache.cjs");
         assert.deepEqual(first.args.slice(0, 3), [
           "--require",
           environment.compileCachePath,
@@ -148,7 +150,7 @@ describe("DesktopBackendConfiguration", () => {
         assert.equal(first.entryPath, environment.backendEntryPath);
         assert.equal(first.cwd, environment.backendCwd);
         assert.equal(first.captureOutput, true);
-        assert.equal(first.env.ELECTRON_RUN_AS_NODE, "1");
+        assert.isUndefined(first.env.ELECTRON_RUN_AS_NODE);
         assert.isUndefined(first.env.BUSYBOY_PORT);
         assert.isUndefined(first.env.BUSYBOY_MODE);
         assert.isUndefined(first.env.BUSYBOY_DESKTOP_LAN_HOST);

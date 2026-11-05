@@ -12,6 +12,7 @@
 //   signing:      a Developer ID Application identity in the keychain, or CSC_LINK + CSC_KEY_PASSWORD
 //   notarization: APPLE_API_KEY + APPLE_API_KEY_ID + APPLE_API_ISSUER, or APPLE_KEYCHAIN_PROFILE
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -69,6 +70,45 @@ const COMPUTER_USE_FILE_EXCLUSIONS = [
   "!apps/desktop/prod-resources/computer-use",
   "!apps/desktop/prod-resources/computer-use/**/*",
 ];
+// Electron fuses for the release app. The app holds the user's macOS permissions, its
+// keychain items, and the Computer Use helper's trust, so no other program may run code
+// as BusyBoy: Node mode, NODE_OPTIONS, and the inspector are off, and Electron only runs
+// the integrity-checked app.asar.
+export const ELECTRON_FUSES = {
+  runAsNode: false,
+  enableNodeOptionsEnvironmentVariable: false,
+  enableNodeCliInspectArguments: false,
+  enableEmbeddedAsarIntegrityValidation: true,
+  onlyLoadAppFromAsar: true,
+} as const;
+
+// Fuse wire layout from @electron/fuses: sentinel, version byte, length byte, then one
+// byte per fuse ("1" on, "0" off) in this order.
+const FUSE_SENTINEL = "dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX";
+const FUSE_ORDER = [
+  "runAsNode",
+  "enableCookieEncryption",
+  "enableNodeOptionsEnvironmentVariable",
+  "enableNodeCliInspectArguments",
+  "enableEmbeddedAsarIntegrityValidation",
+  "onlyLoadAppFromAsar",
+] as const;
+
+// The server runs outside app.asar on its own Node, because Electron's Node mode is off.
+// Same Node as Electron 44 embeds; the hashes are from nodejs.org's SHASUMS256.txt.
+export const SERVER_NODE_VERSION = "24.21.0";
+const SERVER_NODE_SHA256: Readonly<Record<string, string>> = {
+  arm64: "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057",
+  x64: "1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097",
+};
+// Staged inside the app project so extraResources can copy it; kept out of app.asar.
+const SERVER_STAGE_DIR = "server-runtime";
+export const SERVER_NODE_PATH = "Contents/Resources/server/bin/busyboy-node";
+const SERVER_STAGE_EXCLUSIONS = [`!${SERVER_STAGE_DIR}`, `!${SERVER_STAGE_DIR}/**/*`];
+// electron-builder's default entitlements minus disable-library-validation, so a copy of
+// the app can't be made to load a dylib or .node addon signed by someone else.
+const ENTITLEMENTS = "apps/desktop/resources/entitlements.mac.plist";
+
 export interface ReleaseOptions {
   /** Bundle the computer-use helper (`--computer-use`). Off by default. */
   readonly computerUse: boolean;
@@ -227,6 +267,98 @@ export function checkComputerUseHelper(
   verify(bundle);
 }
 
+/** Downloads the server's Node, checks it against the pinned hash, and stages it. */
+function stageServerNode(serverStage: string, arch: string, scratch: string) {
+  const expected = SERVER_NODE_SHA256[arch];
+  if (!expected) throw new Error(`No pinned Node ${SERVER_NODE_VERSION} for arch '${arch}'.`);
+  const name = `node-v${SERVER_NODE_VERSION}-darwin-${arch}`;
+  const archive = NodePath.join(scratch, `${name}.tar.gz`);
+  run("curl", [
+    "--fail",
+    "--silent",
+    "--show-error",
+    "--location",
+    "--output",
+    archive,
+    `https://nodejs.org/dist/v${SERVER_NODE_VERSION}/${name}.tar.gz`,
+  ]);
+  const actual = NodeCrypto.createHash("sha256").update(NodeFS.readFileSync(archive)).digest("hex");
+  if (actual !== expected) {
+    throw new Error(`${name}.tar.gz has sha256 ${actual}, expected ${expected}.`);
+  }
+  run("tar", ["-xzf", archive, "-C", scratch, `${name}/bin/node`, `${name}/LICENSE`]);
+  const binDir = NodePath.join(serverStage, "bin");
+  NodeFS.mkdirSync(binDir, { recursive: true });
+  NodeFS.copyFileSync(
+    NodePath.join(scratch, name, "bin/node"),
+    NodePath.join(binDir, "busyboy-node"),
+  );
+  NodeFS.chmodSync(NodePath.join(binDir, "busyboy-node"), 0o755);
+  NodeFS.copyFileSync(
+    NodePath.join(scratch, name, "LICENSE"),
+    NodePath.join(binDir, "NODE_LICENSE"),
+  );
+}
+
+/** Reads Electron's fuse wire from a framework binary; `undefined` when absent. */
+export function readFuses(binary: Buffer): Partial<Record<(typeof FUSE_ORDER)[number], boolean>> {
+  const at = binary.indexOf(FUSE_SENTINEL);
+  if (at === -1) throw new Error("The Electron framework has no fuse wire.");
+  const length = binary[at + FUSE_SENTINEL.length + 1] ?? 0;
+  const wire = binary.subarray(
+    at + FUSE_SENTINEL.length + 2,
+    at + FUSE_SENTINEL.length + 2 + length,
+  );
+  return Object.fromEntries(
+    FUSE_ORDER.slice(0, length).map((fuse, index) => [fuse, wire[index] === 0x31]),
+  );
+}
+
+function captured(command: string, args: ReadonlyArray<string>): string {
+  const result = NodeChildProcess.spawnSync(command, args, { encoding: "utf8" });
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr}`);
+  return `${result.stdout}${result.stderr}`;
+}
+
+/**
+ * Release gate: the fuses are set, no binary may load someone else's libraries, and the
+ * server's Node is signed under its own identifier, never the app's, so the Computer Use
+ * helper (which trusts the app's identifier) does not trust it.
+ */
+export function checkPackagedHardening(app: string) {
+  const framework = NodePath.join(
+    app,
+    "Contents/Frameworks/Electron Framework.framework/Electron Framework",
+  );
+  const fuses = readFuses(NodeFS.readFileSync(framework));
+  for (const [fuse, wanted] of Object.entries(ELECTRON_FUSES)) {
+    if (fuses[fuse as keyof typeof fuses] !== wanted) {
+      throw new Error(
+        `Fuse ${fuse} is ${String(fuses[fuse as keyof typeof fuses])}, expected ${wanted}.`,
+      );
+    }
+  }
+  const plist = NodeFS.readFileSync(NodePath.join(app, "Contents/Info.plist"), "utf8");
+  if (!plist.includes("ElectronAsarIntegrity")) {
+    throw new Error(
+      "Info.plist has no ElectronAsarIntegrity, so the asar check would fail closed.",
+    );
+  }
+  for (const binary of [app, NodePath.join(app, SERVER_NODE_PATH)]) {
+    const entitlements = captured("codesign", ["-d", "--entitlements", "-", "--xml", binary]);
+    if (entitlements.includes("disable-library-validation")) {
+      throw new Error(`${binary} is signed with disable-library-validation.`);
+    }
+  }
+  const node = captured("codesign", ["-dv", NodePath.join(app, SERVER_NODE_PATH)]);
+  const identifier = /^Identifier=(.*)$/m.exec(node)?.[1];
+  if (!identifier || identifier === APP_ID) {
+    throw new Error(
+      `The server's Node is signed as '${identifier}', which the helper would trust.`,
+    );
+  }
+}
+
 /** electron-builder's `.app` output: `dist/mac-arm64/BusyBoy.app`, or `dist/mac` for x64. */
 function findPackagedApp(distDir: string): string {
   for (const entry of NodeFS.readdirSync(distDir)) {
@@ -239,18 +371,36 @@ function findPackagedApp(distDir: string): string {
 export function createBuilderConfig(
   version: string,
   release: ReleaseOptions = DEFAULT_RELEASE_OPTIONS,
+  // codesign runs from another directory, so the stage passes its absolute path.
+  projectDir = "",
 ) {
+  const entitlements = NodePath.join(projectDir, ENTITLEMENTS);
   return {
     appId: APP_ID,
     productName: PRODUCT_NAME,
     artifactName: `${PRODUCT_NAME}-\${version}-\${arch}.\${ext}`,
     electronLanguages: ["en-US"],
     files: release.computerUse
-      ? [...FILE_EXCLUSIONS, ...COMPUTER_USE_FILE_EXCLUSIONS]
-      : FILE_EXCLUSIONS,
+      ? [...FILE_EXCLUSIONS, ...SERVER_STAGE_EXCLUSIONS, ...COMPUTER_USE_FILE_EXCLUSIONS]
+      : [...FILE_EXCLUSIONS, ...SERVER_STAGE_EXCLUSIONS],
+    electronFuses: ELECTRON_FUSES,
     directories: { buildResources: "apps/desktop/resources" },
     extraResources: [
       { from: "apps/desktop/prod-resources/resource-monitor", to: "resource-monitor" },
+      {
+        // electron-builder always drops a node_modules at the root of `from`, so the server
+        // sits one level down, and a pattern naming node_modules keeps it from being skipped.
+        from: SERVER_STAGE_DIR,
+        to: ".",
+        filter: [
+          "server/**/*",
+          "server/node_modules/**/*",
+          "!server/pnpm-lock.yaml",
+          "!server/pnpm-workspace.yaml",
+          // `files` exclusions don't reach extra resources.
+          ...FILE_EXCLUSIONS,
+        ],
+      },
       ...(release.computerUse
         ? [{ from: "apps/desktop/prod-resources/computer-use", to: "computer-use" }]
         : []),
@@ -263,6 +413,8 @@ export function createBuilderConfig(
       target: ["dmg", "zip"],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      entitlements,
+      entitlementsInherit: entitlements,
       // The helper is signed by its own build; keep electron-builder from re-signing it.
       ...(release.computerUse ? { signIgnore: [COMPUTER_USE_SIGN_IGNORE] } : {}),
       extendInfo: {
@@ -318,18 +470,19 @@ export function buildDesktopRelease(options: {
   const serverPackage = readJson("apps/server/package.json");
   const desktopPackage = readJson("apps/desktop/package.json");
 
-  const dependencies = {
+  // The app (app.asar) and the server (Resources/server) each get only their own externals.
+  const dependencies = pinInstalledVersions(
+    selectDesktopRuntimeExternalDependencies(
+      resolveCatalogDependencies(desktopPackage.dependencies, catalog),
+    ),
+    "apps/desktop",
+  );
+  const serverDependencies = {
     ...pinInstalledVersions(
       selectCliRuntimeExternalDependencies(
         resolveCatalogDependencies(serverPackage.dependencies, catalog),
       ),
       "apps/server",
-    ),
-    ...pinInstalledVersions(
-      selectDesktopRuntimeExternalDependencies(
-        resolveCatalogDependencies(desktopPackage.dependencies, catalog),
-      ),
-      "apps/desktop",
     ),
     // fff-node loads its prebuilt binary from a platform package.
     [`@ff-labs/fff-bin-darwin-${arch}`]: serverPackage.dependencies["@ff-labs/fff-node"],
@@ -345,7 +498,14 @@ export function buildDesktopRelease(options: {
       });
     copy("apps/desktop/dist-electron", "apps/desktop/dist-electron");
     copy("apps/desktop/resources", "apps/desktop/resources");
-    copy("apps/server/dist", "apps/server/dist");
+    // The window's UI is served from app.asar; the server keeps its own full copy.
+    copy("apps/server/dist/client", "apps/server/dist/client");
+    const serverStage = NodePath.join(stageApp, SERVER_STAGE_DIR, "server");
+    copy("apps/server/dist", NodePath.join(SERVER_STAGE_DIR, "server/apps/server/dist"));
+    copy(
+      "apps/desktop/dist-electron/compileCache.cjs",
+      NodePath.join(SERVER_STAGE_DIR, "server/compileCache.cjs"),
+    );
     const resourcesDir = NodePath.join(stageApp, "apps/desktop/resources");
     stageIcons(resourcesDir);
     stageResourceMonitor(resourcesDir);
@@ -355,12 +515,17 @@ export function buildDesktopRelease(options: {
       recursive: true,
     });
 
-    const patchedDependencies = Object.fromEntries(
-      Object.entries((workspace.patchedDependencies ?? {}) as Record<string, string>).filter(
-        ([key]) => Object.hasOwn(dependencies, patchPackageName(key)),
-      ),
-    );
-    if (Object.keys(patchedDependencies).length > 0) copy("patches", "patches");
+    // pnpm refuses patches for packages a stage doesn't install, so each stage gets its own.
+    const patchesFor = (stageDependencies: Record<string, string>) =>
+      Object.fromEntries(
+        Object.entries((workspace.patchedDependencies ?? {}) as Record<string, string>).filter(
+          ([key]) => Object.hasOwn(stageDependencies, patchPackageName(key)),
+        ),
+      );
+    const patchedDependencies = patchesFor(dependencies);
+    const serverPatches = patchesFor(serverDependencies);
+    if (Object.keys({ ...patchedDependencies, ...serverPatches }).length > 0)
+      copy("patches", "patches");
 
     const rootPackage = readJson("package.json");
     NodeFS.writeFileSync(
@@ -376,7 +541,7 @@ export function buildDesktopRelease(options: {
           license: "MIT",
           main: "apps/desktop/dist-electron/boot.cjs",
           packageManager: rootPackage.packageManager,
-          build: createBuilderConfig(version, release),
+          build: createBuilderConfig(version, release, stageApp),
           dependencies,
           devDependencies: { electron: desktopPackage.dependencies.electron },
         },
@@ -384,23 +549,50 @@ export function buildDesktopRelease(options: {
         2,
       )}\n`,
     );
-    NodeFS.writeFileSync(
-      NodePath.join(stageApp, "pnpm-workspace.yaml"),
+    const stageWorkspace = (patches: Record<string, string>) =>
       stringifyYaml({
         nodeLinker: "hoisted",
         supportedArchitectures: { os: ["darwin"], cpu: [arch] },
         allowBuilds: workspace.allowBuilds ?? {},
         overrides: resolveCatalogDependencies(workspace.overrides ?? {}, catalog),
-        patchedDependencies,
+        patchedDependencies: patches,
         // TypeScript is a typings-only peer; auto-installing it would ship a compiler.
         packageExtensions: {
           "electron-webauthn": { peerDependenciesMeta: { typescript: { optional: true } } },
           "@electron-webauthn/macos": { peerDependenciesMeta: { typescript: { optional: true } } },
         },
-      }),
+      });
+    NodeFS.writeFileSync(
+      NodePath.join(stageApp, "pnpm-workspace.yaml"),
+      stageWorkspace(patchedDependencies),
     );
-
     run("pnpm", ["install", "--prod"], { cwd: stageApp });
+
+    NodeFS.writeFileSync(
+      NodePath.join(serverStage, "package.json"),
+      `${JSON.stringify(
+        {
+          name: "busyboy-server",
+          version,
+          private: true,
+          packageManager: rootPackage.packageManager,
+          dependencies: serverDependencies,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    // Patch paths are relative to the project, so the server stage points two levels up.
+    NodeFS.writeFileSync(
+      NodePath.join(serverStage, "pnpm-workspace.yaml"),
+      stageWorkspace(
+        Object.fromEntries(
+          Object.entries(serverPatches).map(([key, file]) => [key, `../../${file}`]),
+        ),
+      ),
+    );
+    run("pnpm", ["install", "--prod"], { cwd: serverStage });
+    stageServerNode(serverStage, arch, stageRoot);
 
     run(
       "pnpm",
@@ -427,6 +619,7 @@ export function buildDesktopRelease(options: {
       // electron-builder puts x64 apps in mac/ and other arches in mac-<arch>/.
       NodePath.join(distDir, arch === "x64" ? "mac" : `mac-${arch}`, `${PRODUCT_NAME}.app`),
     ]);
+    checkPackagedHardening(findPackagedApp(distDir));
     if (release.computerUse) {
       // The DMG and ZIP are made from this app, so its helper is the one users get.
       checkComputerUseHelper(

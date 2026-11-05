@@ -10,6 +10,7 @@ import {
   COMPUTER_USE_BUNDLE_NAME,
   COMPUTER_USE_SIGN_IGNORE,
   createBuilderConfig,
+  readFuses,
 } from "./build-desktop-release.ts";
 
 const dirs: Array<string> = [];
@@ -31,6 +32,17 @@ describe("computer-use helper in the release build", () => {
     const config = createBuilderConfig("1.2.3");
     expect(config.extraResources).toEqual([
       { from: "apps/desktop/prod-resources/resource-monitor", to: "resource-monitor" },
+      {
+        from: "server-runtime",
+        to: ".",
+        filter: expect.arrayContaining([
+          "server/**/*",
+          "server/node_modules/**/*",
+          "!server/pnpm-lock.yaml",
+          // Source maps stay out of the server copy too.
+          "!**/*.map",
+        ]),
+      },
     ]);
     expect(config.mac).not.toHaveProperty("signIgnore");
     expect(config.files.some((pattern) => pattern.includes("computer-use"))).toBe(false);
@@ -67,5 +79,46 @@ describe("computer-use helper in the release build", () => {
     const release = fakeHelper("release binary");
     checkComputerUseHelper(release, verify);
     expect(verified).toEqual([release]);
+  });
+});
+
+describe("release hardening", () => {
+  it("keeps other programs from running code as BusyBoy", () => {
+    const config = createBuilderConfig("1.2.3");
+    // ELECTRON_RUN_AS_NODE, NODE_OPTIONS and --inspect would let any program run code
+    // under BusyBoy's signature, which the Computer Use helper and the keychain trust.
+    expect(config.electronFuses).toEqual({
+      runAsNode: false,
+      enableNodeOptionsEnvironmentVariable: false,
+      enableNodeCliInspectArguments: false,
+      enableEmbeddedAsarIntegrityValidation: true,
+      onlyLoadAppFromAsar: true,
+    });
+    expect(config.mac.entitlements).toBe(config.mac.entitlementsInherit);
+    const entitlements = NodeFS.readFileSync(
+      NodePath.join(import.meta.dirname, "..", config.mac.entitlements),
+      "utf8",
+    );
+    expect(entitlements).toContain("com.apple.security.cs.allow-jit");
+    expect(entitlements).not.toContain("disable-library-validation");
+    // The server stage ships beside app.asar, never inside it.
+    expect(config.files).toContain("!server-runtime/**/*");
+  });
+
+  it("reads the fuse wire the way Electron lays it out", () => {
+    const wire = Buffer.concat([
+      Buffer.from("padding"),
+      Buffer.from("dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX"),
+      Buffer.from([1, 6]),
+      Buffer.from("010010"),
+    ]);
+    expect(readFuses(wire)).toEqual({
+      runAsNode: false,
+      enableCookieEncryption: true,
+      enableNodeOptionsEnvironmentVariable: false,
+      enableNodeCliInspectArguments: false,
+      enableEmbeddedAsarIntegrityValidation: true,
+      onlyLoadAppFromAsar: false,
+    });
   });
 });

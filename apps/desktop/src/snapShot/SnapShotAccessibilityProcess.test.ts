@@ -1,19 +1,14 @@
 import { assert, beforeEach, it } from "@effect/vitest";
 import * as NodeEvents from "node:events";
-import * as NodeProcess from "node:process";
 import { vi } from "vite-plus/test";
 
 const forkMock = vi.hoisted(() =>
   vi.fn<
-    (
-      _path: string,
-      _args: ReadonlyArray<string>,
-      _options: { env?: NodeJS.ProcessEnv; execPath?: string },
-    ) => unknown
+    (_path: string, _args: ReadonlyArray<string>, _options: { serviceName?: string }) => unknown
   >(),
 );
 
-vi.mock("node:child_process", () => ({ fork: forkMock }));
+vi.mock("electron", () => ({ utilityProcess: { fork: forkMock } }));
 
 import {
   makeSnapShotAccessibilityProcessPool,
@@ -23,7 +18,7 @@ import {
 const makeWorker = () =>
   Object.assign(new NodeEvents.EventEmitter(), {
     kill: vi.fn(() => true),
-    send: vi.fn(),
+    postMessage: vi.fn(),
   });
 let worker = makeWorker();
 const request = {
@@ -72,8 +67,9 @@ it("returns accessibility extracted by the helper", async () => {
 
   await read.started;
   assert.deepEqual(await read.result, context);
-  assert.strictEqual(forkMock.mock.calls[0]?.[2]?.env?.ELECTRON_RUN_AS_NODE, "1");
-  assert.strictEqual(forkMock.mock.calls[0]?.[2]?.execPath, NodeProcess.execPath);
+  // A utility process, so release builds can keep ELECTRON_RUN_AS_NODE off.
+  assert.strictEqual(forkMock.mock.calls[0]?.[0], "accessibility.cjs");
+  assert.deepEqual(forkMock.mock.calls[0]?.[1], ["read"]);
 });
 
 it("hands a warm helper to the capture and prewarms its replacement", async () => {
@@ -87,8 +83,8 @@ it("hands a warm helper to the capture and prewarms its replacement", async () =
   const read = pool.read(request);
 
   assert.lengthOf(forkMock.mock.calls, 2);
-  assert.deepEqual(warmWorker.send.mock.calls[0]?.[0], request);
-  assert.lengthOf(replacementWorker.send.mock.calls, 0);
+  assert.deepEqual(warmWorker.postMessage.mock.calls[0]?.[0], request);
+  assert.lengthOf(replacementWorker.postMessage.mock.calls, 0);
 
   warmWorker.emit("message", "started");
   warmWorker.emit("message", { type: "result", context: { accessibleText: "Ready" } });
@@ -118,7 +114,7 @@ it("replaces a warm helper that exits before capture", async () => {
 
   assert.deepEqual(await read.result, { accessibleText: "Recovered" });
   assert.lengthOf(forkMock.mock.calls, 3);
-  assert.deepEqual(captureWorker.send.mock.calls[0]?.[0], request);
+  assert.deepEqual(captureWorker.postMessage.mock.calls[0]?.[0], request);
   pool.close();
 });
 
@@ -130,7 +126,7 @@ it("allows cold startup to exceed the request-start budget", async () => {
     await vi.advanceTimersByTimeAsync(1_500);
     assert.lengthOf(worker.kill.mock.calls, 0);
     worker.emit("message", "ready");
-    assert.deepEqual(worker.send.mock.calls[0]?.[0], request);
+    assert.deepEqual(worker.postMessage.mock.calls[0]?.[0], request);
     worker.emit("message", "started");
     worker.emit("message", { type: "result", context: { accessibleText: "Ready" } });
     assert.deepEqual(await read.result, { accessibleText: "Ready" });
