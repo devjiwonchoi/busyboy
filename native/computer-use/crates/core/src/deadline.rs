@@ -11,6 +11,8 @@ pub const MAX_CALL_TIMEOUT: Duration = Duration::from_millis(250);
 #[derive(Debug, Clone, Copy)]
 pub struct Deadline {
     at: Instant,
+    /// Longest single call; [`MAX_CALL_TIMEOUT`] unless raised for a retry.
+    call_cap: Duration,
 }
 
 impl Deadline {
@@ -21,7 +23,7 @@ impl Deadline {
     }
 
     pub fn after(duration: Duration) -> Self {
-        Deadline { at: Instant::now() + duration }
+        Deadline { at: Instant::now() + duration, call_cap: MAX_CALL_TIMEOUT }
     }
 
     pub fn remaining(&self) -> Duration {
@@ -32,14 +34,21 @@ impl Deadline {
         Instant::now() >= self.at
     }
 
-    /// Timeout for the next single platform call: the smaller of the remaining time and 250 ms.
+    /// Timeout for the next single platform call: the smaller of the remaining time
+    /// and the call cap (250 ms unless raised with [`Deadline::with_call_cap`]).
     pub fn call_timeout(&self) -> Duration {
-        self.remaining().min(MAX_CALL_TIMEOUT)
+        self.remaining().min(self.call_cap)
+    }
+
+    /// The same deadline, but single calls may take up to `call_cap`. Used to give
+    /// a slow app a second chance, still within the request deadline.
+    pub fn with_call_cap(&self, call_cap: Duration) -> Deadline {
+        Deadline { at: self.at, call_cap }
     }
 
     /// The earlier of this deadline and `duration` from now.
     pub fn capped(&self, duration: Duration) -> Deadline {
-        Deadline { at: self.at.min(Instant::now() + duration) }
+        Deadline { at: self.at.min(Instant::now() + duration), call_cap: self.call_cap }
     }
 
     pub fn check(&self, phase: &str) -> Result<(), ErrorObject> {

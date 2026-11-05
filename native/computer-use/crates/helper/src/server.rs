@@ -90,6 +90,20 @@ impl Conn {
     }
 }
 
+/// Method plus turn and reason, for the log. Notifications carry no private data,
+/// but only these fields are logged.
+fn describe(notification: &Notification) -> String {
+    let field = |name: &str| notification.params.get(name).and_then(|value| value.as_str()).map(str::to_owned);
+    let mut summary = notification.method.clone();
+    if let Some(turn) = field("turnId") {
+        summary.push_str(&format!(" turn {turn}"));
+    }
+    if let Some(reason) = field("reason") {
+        summary.push_str(&format!(" reason {reason}"));
+    }
+    summary
+}
+
 /// Every verified, handshaken connection, for notifications.
 #[derive(Default)]
 pub struct Hub {
@@ -118,18 +132,23 @@ impl Hub {
         });
         let sender = Mutex::new(sender);
         Arc::new(move |notification: Notification| {
-            let _ = lock(&sender).send(notification);
+            let summary = describe(&notification);
+            match lock(&sender).send(notification) {
+                Ok(()) => log(format!("notification queued: {summary}")),
+                Err(_) => log(format!("notification dropped, the writer thread is gone: {summary}")),
+            }
         })
     }
 
     fn broadcast(&self, notification: &Notification) {
+        let summary = describe(notification);
         let Ok(body) = serde_json::to_vec(notification) else {
+            log(format!("notification not encodable: {summary}"));
             return;
         };
         let conns: Vec<Arc<Conn>> = lock(&self.conns).values().cloned().collect();
-        for conn in conns {
-            conn.write_body(&body);
-        }
+        let written = conns.iter().filter(|conn| conn.write_body(&body)).count();
+        log(format!("notification written to {written} of {} connections: {summary}", conns.len()));
     }
 
     fn add(&self, conn: Arc<Conn>) -> u64 {

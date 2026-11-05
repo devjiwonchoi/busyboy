@@ -352,6 +352,17 @@ export class HelperSupervisor {
     return this.client();
   }
 
+  /**
+   * Stops the helper and starts a fresh one. This is not a crash: the crash
+   * counter and backoff stay as they are. Used after Accessibility is granted,
+   * because macOS may keep refusing accessibility calls from a process that
+   * started without the grant.
+   */
+  async recycle(): Promise<HelperClient> {
+    await this.stop();
+    return this.client();
+  }
+
   private reset(): void {
     this.terminal = null;
     this.crashes = [];

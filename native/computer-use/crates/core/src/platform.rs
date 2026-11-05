@@ -210,13 +210,15 @@ pub trait Platform: Send + Sync + 'static {
     /// Element at a screen point (points), restricted to the app.
     fn element_at(&self, app: &RunningApp, x: f64, y: f64, deadline: Deadline) -> Option<Self::Element>;
 
+    /// `None` when the app did not answer (for example a timeout). A failed read
+    /// must not look like a change: it is not a closed window or a lost focus.
     fn fingerprint(
         &self,
         app: &RunningApp,
         window: Option<&WindowInfo>,
         target: Option<&Self::Element>,
         deadline: Deadline,
-    ) -> Fingerprint;
+    ) -> Option<Fingerprint>;
 
     // -- element actions ----------------------------------------------------
 

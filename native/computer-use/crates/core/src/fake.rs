@@ -10,7 +10,7 @@ use cu_protocol::{
     ScreenshotOmitted, ScrollAmount, ScrollDirection, StopMonitorStatus, TextRange,
 };
 
-use crate::keys::{Key, KeyChord};
+use crate::keys::{Key, KeyChord, Modifiers};
 use crate::platform::*;
 use crate::text::menu_title_matches;
 use crate::tree::*;
@@ -79,6 +79,19 @@ pub struct FakeWorld {
     pub pointer_route: Option<PointerRoute>,
     /// Every pointer delivery the engine asked for.
     pub pointer_calls: Vec<PointerCall>,
+    /// When set, only this many more fingerprint reads succeed; later ones get no
+    /// answer, like an app that times out.
+    pub fingerprint_reads_left: Option<usize>,
+    /// When set, every posted key also counts a press on this node, like an app
+    /// that redraws something unrelated on each key.
+    pub key_side_effect: Option<u64>,
+    /// Window reads time out while the per-call limit is below this, like a
+    /// napping app that answers slowly.
+    pub window_read_needs: std::time::Duration,
+    /// The next this-many window reads time out, like a brief stall.
+    pub window_read_timeouts: usize,
+    /// Window reads so far, including failed ones.
+    pub window_reads: usize,
 }
 
 #[derive(Default)]
@@ -286,8 +299,15 @@ impl Platform for FakePlatform {
         })
     }
 
-    fn windows(&self, app: &RunningApp, _deadline: Deadline) -> CuResult<Vec<WindowInfo>> {
+    fn windows(&self, app: &RunningApp, deadline: Deadline) -> CuResult<Vec<WindowInfo>> {
         self.with_world(|world| {
+            world.window_reads += 1;
+            let stalled = world.window_read_timeouts > 0;
+            world.window_read_timeouts = world.window_read_timeouts.saturating_sub(1);
+            if stalled || deadline.call_timeout() < world.window_read_needs {
+                return Err(ErrorObject::new(ErrorCode::Timeout, "the app did not respond during reading windows")
+                    .with_details(serde_json::json!({ "phase": "reading windows" })));
+            }
             let index = Self::app_index(world, app).ok_or_else(|| not_found("app is not running"))?;
             Ok(world.apps[index].windows.clone())
         })
@@ -444,10 +464,16 @@ impl Platform for FakePlatform {
         _window: Option<&WindowInfo>,
         target: Option<&u64>,
         _deadline: Deadline,
-    ) -> Fingerprint {
+    ) -> Option<Fingerprint> {
         self.with_world(|world| {
+            if let Some(left) = &mut world.fingerprint_reads_left {
+                if *left == 0 {
+                    return None;
+                }
+                *left -= 1;
+            }
             let Some(index) = Self::app_index(world, app) else {
-                return Fingerprint::default();
+                return Some(Fingerprint::default());
             };
             let fake_app = &world.apps[index];
             let mut hasher = DefaultHasher::new();
@@ -456,14 +482,14 @@ impl Platform for FakePlatform {
                 node.children.len().hash(&mut hasher);
                 node.presses.hash(&mut hasher);
             }
-            Fingerprint {
+            Some(Fingerprint {
                 window_ids: fake_app.windows.iter().map(|window| window.id.clone()).collect(),
                 focused_element: fake_app.focused,
                 target: target.and_then(|id| Self::probe_node(world, *id)),
                 parent_child_count: None,
                 menu_open: false,
                 window_hash: hasher.finish(),
-            }
+            })
         })
     }
 
@@ -598,12 +624,28 @@ impl Platform for FakePlatform {
     fn post_key(&self, app: &RunningApp, chord: &KeyChord) -> CuResult<()> {
         self.with_world(|world| {
             world.posted_keys.push(*chord);
-            if let (Key::Char(character), true) = (chord.key, chord.modifiers.is_empty())
-                && let Some(index) = Self::app_index(world, app)
-                && let Some(focused) = world.apps[index].focused
-                && let Some(node) = world.nodes.get_mut(&focused)
+            if let Some(id) = world.key_side_effect
+                && let Some(node) = world.nodes.get_mut(&id)
             {
-                node.value.get_or_insert_with(String::new).push(character);
+                node.presses += 1;
+            }
+            let Some(node) = Self::app_index(world, app)
+                .and_then(|index| world.apps[index].focused)
+                .and_then(|focused| world.nodes.get_mut(&focused))
+            else {
+                return;
+            };
+            let only_cmd = Modifiers { cmd: true, ..Modifiers::default() };
+            match chord.key {
+                Key::Char(character) if chord.modifiers.is_empty() => {
+                    node.value.get_or_insert_with(String::new).push(character);
+                }
+                // Select all, as a text view does.
+                Key::Char('a') if chord.modifiers == only_cmd && node.accepts_selected_text => {
+                    let length = node.value.as_deref().map(crate::text::utf16_len).unwrap_or(0);
+                    node.selected_range = Some(TextRange { start: 0, length });
+                }
+                _ => {}
             }
         });
         Ok(())

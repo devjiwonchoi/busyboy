@@ -12,6 +12,7 @@ pub mod keys;
 pub mod outline;
 pub mod platform;
 pub mod refs;
+pub mod stop;
 pub mod text;
 pub mod tree;
 

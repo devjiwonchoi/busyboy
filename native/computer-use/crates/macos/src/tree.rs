@@ -118,20 +118,42 @@ fn app_element_error(failure: AxFailure) -> ErrorObject {
     }
 }
 
+/// The app's window list from a batched read. The batch hides why a value is
+/// missing, so a missing list is read again on its own: a timeout must stay a
+/// timeout and never look like "no windows". An app without a window list, or
+/// with an empty one, has no windows.
+fn app_windows(application: &AxElement, batched: Option<&CFType>, deadline: Deadline) -> Result<Vec<AxElement>, AxFailure> {
+    if let Some(value) = batched {
+        return Ok(as_elements(value));
+    }
+    match application.attr("AXWindows", deadline) {
+        Ok(value) => Ok(value.as_deref().map(as_elements).unwrap_or_default()),
+        Err(AxFailure::Unsupported) => Ok(Vec::new()),
+        Err(failure) => Err(failure),
+    }
+}
+
 /// AX windows paired with their [`WindowInfo`].
 fn window_pairs(app: &RunningApp, deadline: Deadline) -> CuResult<Vec<(AxElement, WindowInfo)>> {
     let application = AxElement::application(app.process.pid);
     let values = application.attrs(&["AXWindows", "AXFocusedWindow"], deadline).map_err(app_element_error)?;
-    let elements = values[0].as_deref().map(as_elements).unwrap_or_default();
+    let elements = app_windows(&application, values[0].as_deref(), deadline).map_err(app_element_error)?;
     let focused = values[1].as_deref().and_then(as_element);
 
     let mut found = Vec::new();
     for element in elements {
-        let Ok(values) = element.attrs(&["AXRole", "AXTitle", "AXPosition", "AXSize", "AXMinimized", "AXMain"], deadline)
-        else {
-            continue;
+        let values = match element.attrs(&["AXRole", "AXTitle", "AXPosition", "AXSize", "AXMinimized", "AXMain"], deadline) {
+            Ok(values) => values,
+            // A slow app: fail the read so it is tried again, rather than drop the window.
+            Err(AxFailure::Timeout) => return Err(app_element_error(AxFailure::Timeout)),
+            // The window closed while we read it, or is not a real window.
+            Err(_) => continue,
         };
-        if values[0].as_deref().and_then(as_string).as_deref() != Some("AXWindow") {
+        let Some(role) = values[0].as_deref().and_then(as_string) else {
+            // Every element has a role; none means the app did not answer in time.
+            return Err(app_element_error(AxFailure::Timeout));
+        };
+        if role != "AXWindow" {
             continue;
         }
         let Some(bounds) = rect_from(values[2].as_deref(), values[3].as_deref()) else {
@@ -177,9 +199,10 @@ pub fn windows(app: &RunningApp, deadline: Deadline) -> CuResult<Vec<WindowInfo>
     Ok(window_pairs(app, deadline)?.into_iter().map(|(_, info)| info).collect())
 }
 
-/// The AX window element for a window id from [`windows`].
-pub fn window_element(app: &RunningApp, window: &WindowInfo, deadline: Deadline) -> Option<AxElement> {
-    window_pairs(app, deadline).ok()?.into_iter().find(|(_, info)| info.id == window.id).map(|(element, _)| element)
+/// The AX window element for a window id from [`windows`]. `Ok(None)` when the
+/// window is gone; a read that timed out stays an error.
+pub fn window_element(app: &RunningApp, window: &WindowInfo, deadline: Deadline) -> CuResult<Option<AxElement>> {
+    Ok(window_pairs(app, deadline)?.into_iter().find(|(_, info)| info.id == window.id).map(|(element, _)| element))
 }
 
 // -- tree walk ----------------------------------------------------------------
@@ -253,7 +276,7 @@ pub fn snapshot(
     deadline: Deadline,
     cancel: &CancelToken,
 ) -> CuResult<RawTree<AxElement>> {
-    let root = window_element(app, window, deadline)
+    let root = window_element(app, window, deadline)?
         .ok_or_else(|| ErrorObject::new(ErrorCode::WindowNotFound, "the window closed; call computer_snapshot again"))?;
 
     let mut tree = RawTree { nodes: Vec::new(), truncated: None, menus: Vec::new(), needs_web_accessibility: false };
@@ -560,19 +583,19 @@ pub fn element_at(app: &RunningApp, x: f64, y: f64, deadline: Deadline) -> Optio
 
 // -- fingerprint --------------------------------------------------------------
 
-/// Cheap observable state, polled every 50 ms while an action settles.
+/// Cheap observable state, polled every 50 ms while an action settles. `None` when
+/// the app did not answer: a busy or slow app can time out right after it gets a
+/// key, and an empty reading would look like every window closed.
 pub fn fingerprint(
     app: &RunningApp,
     window: Option<&WindowInfo>,
     target: Option<&AxElement>,
     deadline: Deadline,
-) -> Fingerprint {
+) -> Option<Fingerprint> {
     let application = AxElement::application(app.process.pid);
-    let Ok(values) = application.attrs(&["AXWindows", "AXFocusedUIElement", "AXChildren", "AXFocusedWindow"], deadline)
-    else {
-        return Fingerprint::default();
-    };
-    let windows = values[0].as_deref().map(as_elements).unwrap_or_default();
+    let values =
+        application.attrs(&["AXWindows", "AXFocusedUIElement", "AXChildren", "AXFocusedWindow"], deadline).ok()?;
+    let windows = app_windows(&application, values[0].as_deref(), deadline).ok()?;
     let focused = values[1].as_deref().and_then(as_element);
     let app_children = values[2].as_deref().map(as_elements).unwrap_or_default();
 
@@ -603,14 +626,14 @@ pub fn fingerprint(
     let target_probe = target.and_then(|target| probe_element(target, deadline, false).ok());
     let parent_child_count = target.and_then(|target| parent(target, deadline)).map(|parent| child_count(&parent, deadline));
 
-    Fingerprint {
+    Some(Fingerprint {
         window_ids: windows.iter().map(|window| format!("{:x}", element_hash(window))).collect(),
         focused_element: focused.as_ref().map(element_hash),
         target: target_probe,
         parent_child_count,
         menu_open,
         window_hash: hasher.finish(),
-    }
+    })
 }
 
 #[cfg(test)]

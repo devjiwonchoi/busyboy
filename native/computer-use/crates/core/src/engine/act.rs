@@ -8,13 +8,13 @@
 use std::time::Duration;
 
 use cu_protocol::{
-    ActResult, Action, AppActParams, ErrorCode, ErrorObject, FillValue, ForbiddenReason, MouseButton, ScrollAmount,
+    ActResult, Action, AppActParams, Effect, ErrorCode, ErrorObject, FillValue, ForbiddenReason, MouseButton, ScrollAmount,
     ScrollDirection, TextRange,
 };
 use serde_json::json;
 
 use super::state::{CaptureOptions, identity, pick_window};
-use super::verify::diff;
+use super::verify::{effect_between, text_keys_landed};
 use super::{AppSlot, Engine, forbidden_error};
 use crate::deadline::{CancelToken, Deadline};
 use crate::forbidden::is_security_pane;
@@ -38,17 +38,25 @@ struct Delivery<E> {
     target: Option<E>,
     /// A read-back already confirmed the change.
     confirmed: bool,
+    /// Text-editing keys went to a text element: only a text, selection, window,
+    /// or menu change shows they landed.
+    text_keys: bool,
     notes: Vec<String>,
 }
 
 impl<E> Delivery<E> {
     fn new(method: &'static str, target: Option<E>) -> Self {
-        Delivery { method, target, confirmed: false, notes: Vec::new() }
+        Delivery { method, target, confirmed: false, text_keys: false, notes: Vec::new() }
     }
 
     fn confirmed(mut self, confirmed: bool) -> Self {
         self.confirmed = confirmed;
         self
+    }
+
+    /// Whether the observed effect shows the action landed.
+    fn landed(&self, effect: &Effect) -> bool {
+        self.confirmed || if self.text_keys { text_keys_landed(effect) } else { effect.any() }
     }
 }
 
@@ -84,6 +92,36 @@ fn is_navigation(chord: &KeyChord) -> bool {
         )
     ) && !chord.modifiers.cmd
         && !chord.modifiers.ctrl
+}
+
+/// Keys whose only job in a text element is to change its text, caret, or
+/// selection: characters, delete, arrows, and cmd+a/x/v/z. Others (tab,
+/// return, escape, other shortcuts) may rightly move focus or change the window.
+fn edits_text(chord: &KeyChord) -> bool {
+    let modifiers = chord.modifiers;
+    if modifiers.ctrl || modifiers.function {
+        return false;
+    }
+    match chord.key {
+        Key::Char(character) if modifiers.cmd => !modifiers.alt && matches!(character, 'a' | 'x' | 'v' | 'z'),
+        Key::Char(_) => true,
+        Key::Named(key) => matches!(
+            key,
+            NamedKey::Space
+                | NamedKey::Delete
+                | NamedKey::ForwardDelete
+                | NamedKey::Up
+                | NamedKey::Down
+                | NamedKey::Left
+                | NamedKey::Right
+                | NamedKey::Home
+                | NamedKey::End
+        ),
+    }
+}
+
+fn is_text_role(role: &str) -> bool {
+    matches!(role, roles::TEXT_FIELD | roles::TEXT_AREA | roles::COMBO_BOX)
 }
 
 fn is_row(role: &str) -> bool {
@@ -126,7 +164,7 @@ impl<P: Platform> Engine<P> {
         let mut slot = super::lock(&slot);
         self.guard(cancel)?;
 
-        let windows = self.platform.windows(&app, deadline)?;
+        let windows = self.read_windows(&app, deadline)?;
         let target_window = self.action_window(&params.action, &slot, &windows)?;
         if let Some(window) = &target_window {
             if window.private {
@@ -141,22 +179,32 @@ impl<P: Platform> Engine<P> {
         }
 
         let initial_target = self.initial_target(&params.action, &slot, &app, deadline)?;
+        // Keys aimed at an element go to it, so focus it first. Doing that before
+        // the first reading means the comparison shows what the keys did, not
+        // our own focus move.
+        if let (Action::Key { keys, element: Some(_) }, Some(target)) = (&params.action, &initial_target) {
+            check_refused(&parse_key_sequence(keys)?)?;
+            self.platform.set_focused(target, deadline)?;
+        }
         let before = self.platform.fingerprint(&app, target_window.as_ref(), initial_target.as_ref(), deadline);
 
         let pointer = params.context.experimental_pointer;
-        let delivery =
+        let mut delivery =
             self.deliver(&app, &slot, &windows, target_window.as_ref(), &params.action, pointer, deadline, cancel)?;
         self.guard(cancel)?;
 
         let watched = delivery.target.as_ref().or(initial_target.as_ref());
         let after = self.settle(&app, target_window.as_ref(), watched, deadline, cancel);
         self.guard(cancel)?;
-        let effect = diff(&before, &after);
-        let verified = delivery.confirmed || effect.any();
+        let effect = effect_between(before.as_ref(), after.as_ref());
+        let verified = delivery.landed(&effect);
+        if before.is_none() || after.is_none() {
+            delivery.notes.push("the app did not answer while the result was checked, so changes are unknown".to_owned());
+        }
         self.touch_web_accessibility(&app, &params.context.turn_id);
 
         let state = if params.return_state {
-            let windows = self.platform.windows(&app, deadline)?;
+            let windows = self.read_windows(&app, deadline)?;
             let window = target_window
                 .as_ref()
                 .and_then(|window| windows.iter().find(|candidate| candidate.id == window.id && !candidate.private))
@@ -579,20 +627,21 @@ impl<P: Platform> Engine<P> {
     ) -> CuResult<Delivery<P::Element>> {
         let chords = parse_key_sequence(keys)?;
         check_refused(&chords)?;
-
-        if let Some(target) = &target {
-            self.platform.set_focused(target, deadline)?;
-        }
+        // A target was focused before the "before" reading (see `app_act`).
 
         // Keys into a password field would bypass the secure-field rule; allow only navigation.
         let receiver = target.clone().or_else(|| self.platform.focused_element(app, deadline));
-        if let Some(receiver) = &receiver
-            && let Ok(probe) = self.platform.probe(receiver, deadline)
+        let receiver_probe = receiver.as_ref().and_then(|receiver| self.platform.probe(receiver, deadline).ok());
+        if let Some(probe) = &receiver_probe
             && (probe.states.secure || probe.role == roles::SECURE_TEXT_FIELD)
             && chords.iter().any(|chord| !is_navigation(chord))
         {
             return Err(ErrorObject::new(ErrorCode::SecureField, "typing into secure text fields is not allowed"));
         }
+        let text_keys = receiver_probe
+            .as_ref()
+            .is_some_and(|probe| is_text_role(&probe.role) || probe.states.editable)
+            && chords.iter().all(edits_text);
 
         let mut method = "keys";
         for chord in &chords {
@@ -625,7 +674,9 @@ impl<P: Platform> Engine<P> {
             std::thread::sleep(Duration::from_millis(10));
         }
         let watched = target.or_else(|| self.platform.focused_element(app, deadline));
-        Ok(Delivery::new(method, watched))
+        let mut delivery = Delivery::new(method, watched);
+        delivery.text_keys = text_keys;
+        Ok(delivery)
     }
 
     #[allow(clippy::too_many_arguments)]

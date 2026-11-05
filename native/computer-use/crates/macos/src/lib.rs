@@ -33,7 +33,7 @@ use cu_protocol::{
 
 /// Value stamped into `kCGEventSourceUserData` on every event we post, so the stop
 /// monitor can ignore our own input.
-pub const EVENT_TAG: i64 = 0x4255_5359_424F_5901; // "BUSYBOY\x01"
+pub use cu_core::stop::EVENT_TAG;
 
 /// Event sink shared with background watchers. Empty until the engine installs it.
 pub type SharedSink = Arc<Mutex<Option<EventSink>>>;
@@ -174,7 +174,7 @@ impl Platform for MacPlatform {
         window: Option<&WindowInfo>,
         target: Option<&AxElement>,
         deadline: Deadline,
-    ) -> Fingerprint {
+    ) -> Option<Fingerprint> {
         tree::fingerprint(app, window, target, deadline)
     }
 

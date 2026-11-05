@@ -30,7 +30,7 @@ import * as NodeOS from "node:os";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import { makeElectronOverlay, type ComputerUseTrafficObserver } from "./ComputerUseOverlay.ts";
-import { HelperRequestError } from "./HelperClient.ts";
+import { HelperRequestError, type HelperClient } from "./HelperClient.ts";
 import { HELPER_BUNDLE_NAME, HelperInstaller } from "./HelperInstall.ts";
 import {
   HelperSupervisor,
@@ -106,8 +106,35 @@ const disabledError: ComputerUseErrorObject = {
 
 type Supervisor = Pick<
   HelperSupervisor,
-  "client" | "connected" | "stop" | "restart" | "status" | "install" | "hello" | "setStartAllowed"
+  | "client"
+  | "connected"
+  | "stop"
+  | "restart"
+  | "recycle"
+  | "status"
+  | "install"
+  | "hello"
+  | "setStartAllowed"
 >;
+
+const PERMISSIONS_STATUS = "permissions.status";
+
+/** What a helper reply says about Accessibility, if anything. */
+const accessibilityIn = (
+  method: string,
+  outcome: { readonly result: unknown } | { readonly error: unknown },
+): "granted" | "missing" | null => {
+  if ("result" in outcome) {
+    if (method !== PERMISSIONS_STATUS) return null;
+    const value = (outcome.result as { accessibility?: unknown } | null)?.accessibility;
+    if (value === "granted") return "granted";
+    return value === "not_granted" ? "missing" : null;
+  }
+  if (!(outcome.error instanceof HelperRequestError)) return null;
+  if (outcome.error.error.code !== "permission_required") return null;
+  const missing = (outcome.error.error.details as { missing?: unknown } | undefined)?.missing;
+  return Array.isArray(missing) && missing.includes("accessibility") ? "missing" : null;
+};
 
 interface Session {
   readonly threadId: string;
@@ -130,6 +157,10 @@ export class ComputerUseRouter {
   private readonly awaitingSend = new Set<number>();
   private readonly cancelledBeforeSend = new Set<number>();
   private idleTimer: unknown = null;
+  /** The helper connection that last said Accessibility is not granted. */
+  private accessibilityMissing: HelperClient | null = null;
+  /** A restart after Accessibility was granted; requests wait for it. */
+  private recycling: Promise<void> | null = null;
   private readonly timers: SupervisorTimers;
   private readonly idleStopMs: number;
 
@@ -286,7 +317,7 @@ export class ComputerUseRouter {
       // Polling: answer from a running helper only, and leave its idle clock alone.
       const client = this.supervisor.connected;
       if (!client) throw notRunningError;
-      return client.send(method, params).response;
+      return this.sendTracked(client, method, params);
     }
     this.touch();
     if (method === DESKTOP_COMPUTER_USE_METHODS.helperRestart) {
@@ -307,17 +338,86 @@ export class ComputerUseRouter {
     }
 
     this.awaitingSend.add(id);
-    const client = await this.supervisor.client();
+    const client = await this.readyClient();
     this.awaitingSend.delete(id);
     if (this.cancelledBeforeSend.has(id)) throw cancelledBeforeSendError;
-    const sent = client.send(method, params);
-    this.inFlight.set(id, sent.id);
-    const result = await sent.response;
+    const result = await this.sendTracked(client, method, params, (helperId) =>
+      this.inFlight.set(id, helperId),
+    );
     if (method === "session.begin") {
       const session = sessionOf(params);
       if (session) this.sessions.set(session.turnId, session);
     }
     return result;
+  }
+
+  /**
+   * The helper to send a request to. macOS may keep refusing accessibility
+   * calls from a helper that started before Accessibility was granted. So
+   * while the running helper has said the grant is missing, ask it again
+   * first, and start a fresh helper once the grant is there.
+   */
+  private readyClient(): Promise<HelperClient> {
+    // The usual case: nothing to check, so no extra wait.
+    if (this.recycling === null && this.accessibilityMissing === null) {
+      return this.supervisor.client();
+    }
+    return this.clientAfterGrantCheck();
+  }
+
+  private async clientAfterGrantCheck(): Promise<HelperClient> {
+    if (this.recycling) await this.recycling;
+    const client = await this.supervisor.client();
+    if (client !== this.accessibilityMissing) return client;
+    const status = await client.request(PERMISSIONS_STATUS, {}).catch(() => null);
+    if (accessibilityIn(PERMISSIONS_STATUS, { result: status }) !== "granted") return client;
+    await this.recycleForAccessibility();
+    return this.supervisor.client();
+  }
+
+  /** Sends one request and remembers what its reply says about Accessibility. */
+  private async sendTracked(
+    client: HelperClient,
+    method: string,
+    params: unknown,
+    onSent?: (helperId: number) => void,
+  ): Promise<unknown> {
+    const sent = client.send(method, params);
+    onSent?.(sent.id);
+    let result: unknown;
+    try {
+      result = await sent.response;
+    } catch (error) {
+      await this.accessibilitySeen(client, accessibilityIn(method, { error }));
+      throw error;
+    }
+    await this.accessibilitySeen(client, accessibilityIn(method, { result }));
+    return result;
+  }
+
+  private async accessibilitySeen(
+    client: HelperClient,
+    state: "granted" | "missing" | null,
+  ): Promise<void> {
+    if (state === "missing") this.accessibilityMissing = client;
+    else if (state === "granted" && client === this.accessibilityMissing) {
+      await this.recycleForAccessibility();
+    }
+  }
+
+  /** Not a crash: the supervisor keeps its crash count. */
+  private recycleForAccessibility(): Promise<void> {
+    this.accessibilityMissing = null;
+    this.recycling ??= this.supervisor
+      .recycle()
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .finally(() => {
+        this.recycling = null;
+      });
+    return this.recycling;
   }
 
   /** A cancel for a request still waiting for the helper: answer it `stopped` without sending. */

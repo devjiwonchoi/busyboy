@@ -4,16 +4,21 @@
 //! copies a few fields and sends them to a dispatcher thread, which classifies the
 //! input and calls the engine. The callback never calls the engine itself, because
 //! the engine may call `set` in response.
+//!
+//! It logs to stderr (the desktop forwards that to its log) so a live session shows
+//! whether the tap exists, gets input, and fires. It never logs which keys were
+//! pressed: only counts, and whether a key was Esc.
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use cu_core::Deadline;
 use cu_core::platform::{MonitorTarget, PlatformEvent};
+use cu_core::stop::{InputKind, PhysicalInput, classify_input};
 use objc2::rc::autoreleasepool;
 use objc2_app_kit::NSWorkspace;
 use objc2_core_foundation::{CFMachPort, CFRetained, CFRunLoop, kCFRunLoopCommonModes};
@@ -34,19 +39,24 @@ const RETRY_AFTER: Duration = Duration::from_secs(5);
 /// Budget for finding the key-focused app when a key event has no target pid.
 const FOCUS_LOOKUP: Duration = Duration::from_millis(100);
 
+/// At most one key-count line per this long.
+const COUNT_LOG_EVERY: Duration = Duration::from_secs(5);
+
 /// Set when the last tap creation attempt failed; cleared when one succeeds.
 static TAP_FAILED: AtomicBool = AtomicBool::new(false);
+
+fn log(message: impl std::fmt::Display) {
+    eprintln!("busyboy-computer-use[{}]: stop monitor: {message}", std::process::id());
+}
+
+fn thread_name() -> String {
+    std::thread::current().name().unwrap_or("unnamed").to_owned()
+}
 
 /// Whether the stop monitor can run: input monitoring is allowed (checked without a
 /// prompt) and the last tap creation did not fail.
 pub fn available() -> bool {
     CGPreflightListenEventAccess() && !TAP_FAILED.load(Ordering::SeqCst)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputKind {
-    KeyDown,
-    MouseDown,
 }
 
 /// The fields the tap callback copies out of one event.
@@ -59,33 +69,6 @@ struct RawInput {
     x: f64,
     y: f64,
     user_data: i64,
-}
-
-/// Decides what one physical input means. `key_target` is the process a key-down goes
-/// to (its target pid, or the key-focused app). `location` is in screen points with a
-/// top-left origin, the same space as the target frames.
-pub(crate) fn classify(
-    kind: InputKind,
-    keycode: i64,
-    key_target: Option<i32>,
-    location: (f64, f64),
-    user_data: i64,
-    targets: &[MonitorTarget],
-) -> Option<PlatformEvent> {
-    if user_data == EVENT_TAG {
-        return None;
-    }
-    match kind {
-        InputKind::KeyDown if keycode == ESCAPE_KEYCODE => Some(PlatformEvent::Escape),
-        InputKind::KeyDown => {
-            let pid = key_target?;
-            targets.iter().any(|target| target.pid == pid).then_some(PlatformEvent::UserInput { pid })
-        }
-        InputKind::MouseDown => targets
-            .iter()
-            .find(|target| target.frames.iter().any(|frame| frame.contains(location.0, location.1)))
-            .map(|target| PlatformEvent::UserInput { pid: target.pid }),
-    }
 }
 
 /// Retained tap port, shared with the thread that runs it.
@@ -109,6 +92,11 @@ struct Shared {
     tap: Mutex<TapState>,
     /// Sender to the dispatcher thread, started with the first tap.
     events: OnceLock<Sender<RawInput>>,
+    /// Key-downs the tap has seen, and how many of them we posted ourselves.
+    keys_seen: AtomicU64,
+    own_keys_seen: AtomicU64,
+    /// When the key count was last logged.
+    count_logged: Mutex<Option<Instant>>,
 }
 
 /// State the tap callback reads. Owned by the tap thread for its lifetime.
@@ -131,6 +119,9 @@ impl StopMonitor {
                 targets: Mutex::new(Vec::new()),
                 tap: Mutex::new(TapState::NotStarted),
                 events: OnceLock::new(),
+                keys_seen: AtomicU64::new(0),
+                own_keys_seen: AtomicU64::new(0),
+                count_logged: Mutex::new(None),
             }),
         }
     }
@@ -141,8 +132,12 @@ impl StopMonitor {
     }
 
     pub fn set(&self, armed: bool, targets: Vec<MonitorTarget>) {
+        let target_count = targets.len();
         *self.shared.targets.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = targets;
-        self.shared.armed.store(armed, Ordering::SeqCst);
+        let was_armed = self.shared.armed.swap(armed, Ordering::SeqCst);
+        if armed != was_armed {
+            log(format!("{} ({target_count} target apps)", if armed { "armed" } else { "disarmed" }));
+        }
         let mut tap = self.shared.tap.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if armed {
             let retry = match &*tap {
@@ -151,12 +146,19 @@ impl StopMonitor {
                 TapState::Running(_) => false,
             };
             // Never create the tap without input-monitoring access: that would prompt.
-            if retry && CGPreflightListenEventAccess() {
-                *tap = start_tap(&self.shared);
+            if retry {
+                if CGPreflightListenEventAccess() {
+                    *tap = start_tap(&self.shared);
+                } else if !was_armed {
+                    log("not started: Input Monitoring is not granted to this process");
+                }
             }
         }
         if let TapState::Running(port) = &*tap {
             CGEvent::tap_enable(&port.0, armed);
+            if armed != was_armed {
+                log(format!("tap {} (enabled now: {})", if armed { "enabled" } else { "disabled" }, CGEvent::tap_is_enabled(&port.0)));
+            }
         }
     }
 }
@@ -168,9 +170,11 @@ fn dispatcher(shared: &Arc<Shared>) -> Sender<RawInput> {
             let (sender, receiver) = mpsc::channel::<RawInput>();
             let shared = Arc::clone(shared);
             let spawned = std::thread::Builder::new().name("cu-stop-dispatch".into()).spawn(move || {
+                log("dispatcher running");
                 for input in receiver {
                     dispatch(&shared, input);
                 }
+                log("dispatcher ended");
             });
             if let Err(error) = spawned {
                 eprintln!("computer-use: stop dispatcher did not start: {error}");
@@ -185,16 +189,54 @@ fn dispatch(shared: &Shared, input: RawInput) {
         return;
     }
     let targets = shared.targets.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
-    let key_target = if input.kind == InputKind::KeyDown && input.keycode != ESCAPE_KEYCODE && !targets.is_empty() {
+    let escape = input.kind == InputKind::KeyDown && input.keycode == ESCAPE_KEYCODE;
+    let key_target = if input.kind == InputKind::KeyDown && !escape && !targets.is_empty() {
         if input.target_pid > 0 { Some(input.target_pid) } else { key_focused_pid() }
     } else {
         None
     };
-    if let Some(event) =
-        classify(input.kind, input.keycode, key_target, (input.x, input.y), input.user_data, &targets)
-    {
-        emit(&shared.sink, event);
+    let physical = PhysicalInput {
+        kind: input.kind,
+        escape,
+        key_target,
+        location: (input.x, input.y),
+        user_data: input.user_data,
+    };
+    if escape {
+        log("Esc key-down seen");
     }
+    match classify_input(&physical, &targets) {
+        Some(event) => {
+            match event {
+                PlatformEvent::Escape => log("stop: user_escape"),
+                PlatformEvent::UserInput { pid } => log(format!("stop: user_input in pid {pid}")),
+                PlatformEvent::LockChanged { .. } => {}
+            }
+            let has_sink = shared.sink.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some();
+            if !has_sink {
+                log("stop dropped: no engine is listening yet");
+            }
+            emit(&shared.sink, event);
+        }
+        None if escape => log("Esc ignored"),
+        None => {}
+    }
+}
+
+/// Counts key-downs and logs the totals at most every few seconds, so a live log
+/// shows whether the tap gets any keyboard input. Never logs which keys.
+fn count_key(shared: &Shared, ours: bool) {
+    let seen = shared.keys_seen.fetch_add(1, Ordering::Relaxed) + 1;
+    let own = if ours { shared.own_keys_seen.fetch_add(1, Ordering::Relaxed) + 1 } else { shared.own_keys_seen.load(Ordering::Relaxed) };
+    // try_lock: never wait inside the tap callback.
+    let Ok(mut logged) = shared.count_logged.try_lock() else {
+        return;
+    };
+    if logged.is_some_and(|at| at.elapsed() < COUNT_LOG_EVERY) {
+        return;
+    }
+    *logged = Some(Instant::now());
+    log(format!("{seen} key-downs seen so far ({own} posted by us)"));
 }
 
 /// The app that receives key events: the system-wide focused app, else the frontmost app.
@@ -215,8 +257,17 @@ fn start_tap(shared: &Arc<Shared>) -> TapState {
     let context = TapContext { shared: Arc::clone(shared), events, port: OnceLock::new() };
     let spawned = std::thread::Builder::new().name("cu-stop-monitor".into()).spawn(move || run_tap(context, reply));
     let port = match spawned {
-        Ok(_) => created.recv_timeout(CREATE_WAIT).ok().flatten(),
-        Err(_) => None,
+        Ok(_) => match created.recv_timeout(CREATE_WAIT) {
+            Ok(port) => port,
+            Err(_) => {
+                log(format!("tap thread did not report within {} ms", CREATE_WAIT.as_millis()));
+                None
+            }
+        },
+        Err(error) => {
+            log(format!("tap thread did not start: {error}"));
+            None
+        }
     };
     TAP_FAILED.store(port.is_none(), Ordering::SeqCst);
     match port {
@@ -250,14 +301,17 @@ fn run_tap(context: TapContext, reply: Sender<Option<Arc<TapPort>>>) {
         )
     };
     let Some(port) = port else {
+        log("could not create the event tap (is Input Monitoring granted to this helper?)");
         let _ = reply.send(None);
         return;
     };
     let Some(source) = CFMachPort::new_run_loop_source(None, Some(&port), 0) else {
+        log("could not make a run loop source for the event tap");
         let _ = reply.send(None);
         return;
     };
     let Some(run_loop) = CFRunLoop::current() else {
+        log("no run loop on the tap thread");
         let _ = reply.send(None);
         return;
     };
@@ -265,11 +319,22 @@ fn run_tap(context: TapContext, reply: Sender<Option<Arc<TapPort>>>) {
     run_loop.add_source(Some(&source), unsafe { kCFRunLoopCommonModes });
     let port = Arc::new(TapPort(port));
     let _ = context.port.set(Arc::clone(&port));
-    // Start disabled; `set` enables it while armed.
-    CGEvent::tap_enable(&port.0, context.shared.armed.load(Ordering::SeqCst));
-    let _ = reply.send(Some(port));
+    // Enabled only while armed; `set` turns it on and off.
+    let armed = context.shared.armed.load(Ordering::SeqCst);
+    CGEvent::tap_enable(&port.0, armed);
+    log(format!(
+        "session tap created (listen-only, key-down and mouse-down), added to the run loop of thread {}, enabled: {}",
+        thread_name(),
+        CGEvent::tap_is_enabled(&port.0)
+    ));
+    if reply.send(Some(port)).is_err() {
+        log("the tap was created too late; it keeps running but cannot be turned off");
+    }
     loop {
         CFRunLoop::run();
+        // `run` returns only when the run loop has nothing to wait on.
+        log(format!("run loop on thread {} returned; running it again", thread_name()));
+        std::thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -286,10 +351,14 @@ unsafe extern "C-unwind" fn on_event(
     // SAFETY: `user_info` is the TapContext owned by the tap thread, alive while the tap runs.
     let context = unsafe { &*(user_info as *const TapContext) };
     if kind == CGEventType::TapDisabledByTimeout || kind == CGEventType::TapDisabledByUserInput {
+        let why = if kind == CGEventType::TapDisabledByTimeout { "timeout" } else { "user input" };
         if context.shared.armed.load(Ordering::SeqCst)
             && let Some(port) = context.port.get()
         {
             CGEvent::tap_enable(&port.0, true);
+            log(format!("tap was disabled by {why}; enabled again"));
+        } else {
+            log(format!("tap was disabled by {why} while not armed"));
         }
         return passthrough;
     }
@@ -304,6 +373,9 @@ unsafe extern "C-unwind" fn on_event(
     // SAFETY: the event is valid for the duration of the callback.
     let event = Some(unsafe { event.as_ref() });
     let user_data = CGEvent::integer_value_field(event, CGEventField::EventSourceUserData);
+    if input_kind == InputKind::KeyDown {
+        count_key(&context.shared, user_data == EVENT_TAG);
+    }
     if user_data == EVENT_TAG {
         return passthrough;
     }
@@ -326,44 +398,12 @@ unsafe extern "C-unwind" fn on_event(
 
 #[cfg(test)]
 mod tests {
-    use cu_core::tree::Rect;
-
     use super::*;
 
-    fn targets() -> Vec<MonitorTarget> {
-        vec![MonitorTarget { pid: 42, frames: vec![Rect { x: 100.0, y: 100.0, width: 400.0, height: 300.0 }] }]
-    }
-
     #[test]
-    fn escape_stops_anywhere_even_without_targets() {
-        assert_eq!(classify(InputKind::KeyDown, 53, Some(7), (0.0, 0.0), 0, &[]), Some(PlatformEvent::Escape));
-        assert_eq!(classify(InputKind::KeyDown, 53, None, (0.0, 0.0), 0, &targets()), Some(PlatformEvent::Escape));
-    }
-
-    #[test]
-    fn our_own_events_are_ignored() {
-        assert_eq!(classify(InputKind::KeyDown, 53, None, (0.0, 0.0), EVENT_TAG, &targets()), None);
-        assert_eq!(classify(InputKind::MouseDown, 0, None, (200.0, 200.0), EVENT_TAG, &targets()), None);
-    }
-
-    #[test]
-    fn key_down_into_a_target_app_is_user_input() {
-        assert_eq!(
-            classify(InputKind::KeyDown, 0, Some(42), (0.0, 0.0), 0, &targets()),
-            Some(PlatformEvent::UserInput { pid: 42 })
-        );
-        assert_eq!(classify(InputKind::KeyDown, 0, Some(7), (0.0, 0.0), 0, &targets()), None);
-        assert_eq!(classify(InputKind::KeyDown, 0, None, (0.0, 0.0), 0, &targets()), None);
-    }
-
-    #[test]
-    fn mouse_down_inside_a_target_frame_is_user_input() {
-        assert_eq!(
-            classify(InputKind::MouseDown, 0, None, (150.0, 120.0), 0, &targets()),
-            Some(PlatformEvent::UserInput { pid: 42 })
-        );
-        assert_eq!(classify(InputKind::MouseDown, 0, None, (50.0, 50.0), 0, &targets()), None);
-        assert_eq!(classify(InputKind::MouseDown, 0, None, (500.0, 400.0), 0, &targets()), None);
+    fn escape_is_virtual_key_53() {
+        // kVK_Escape in Carbon's Events.h.
+        assert_eq!(ESCAPE_KEYCODE, 0x35);
     }
 
     #[test]

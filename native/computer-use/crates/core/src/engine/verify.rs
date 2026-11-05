@@ -38,9 +38,26 @@ pub(crate) fn diff(before: &Fingerprint, after: &Fingerprint) -> Effect {
     effect
 }
 
+/// What changed, when both readings exist. A reading the app did not answer
+/// tells us nothing, so it shows no change rather than every change.
+pub(crate) fn effect_between(before: Option<&Fingerprint>, after: Option<&Fingerprint>) -> Effect {
+    match (before, after) {
+        (Some(before), Some(after)) => diff(before, after),
+        _ => Effect::default(),
+    }
+}
+
+/// Whether keys sent to a text element landed. Their job is to change its text
+/// or selection, or to open or close a window or menu. Focus moves and tree
+/// changes alone do not count: apps redraw for many reasons, and a key the app
+/// ignored can still leave those behind.
+pub(crate) fn text_keys_landed(effect: &Effect) -> bool {
+    effect.value_changed || effect.selection_changed || effect.new_window || effect.window_closed || effect.menu_opened
+}
+
 impl<P: Platform> Engine<P> {
     /// Waits until the fingerprint stops changing for 150 ms, capped at 3 s and the
-    /// request deadline. Returns the last fingerprint.
+    /// request deadline. Returns the last reading the app answered, if any.
     pub(crate) fn settle(
         &self,
         app: &RunningApp,
@@ -48,7 +65,7 @@ impl<P: Platform> Engine<P> {
         target: Option<&P::Element>,
         deadline: Deadline,
         cancel: &CancelToken,
-    ) -> Fingerprint {
+    ) -> Option<Fingerprint> {
         let started = Instant::now();
         // Bound every read by the settle cap, not only the loop.
         let deadline = deadline.capped(MAX_SETTLE);
@@ -56,9 +73,12 @@ impl<P: Platform> Engine<P> {
         let mut quiet_since = Instant::now();
         while started.elapsed() < MAX_SETTLE && deadline.remaining() > POLL && !cancel.is_cancelled() {
             std::thread::sleep(POLL);
-            let next = self.platform.fingerprint(app, window, target, deadline);
-            if next != last {
-                last = next;
+            // Skip readings the app did not answer; keep the last real one.
+            let Some(next) = self.platform.fingerprint(app, window, target, deadline) else {
+                continue;
+            };
+            if last.as_ref() != Some(&next) {
+                last = Some(next);
                 quiet_since = Instant::now();
             } else if quiet_since.elapsed() >= QUIET {
                 break;
@@ -91,5 +111,27 @@ mod tests {
         let effect = diff(&before, &after);
         assert!(effect.new_window && effect.window_closed && effect.focus_changed && effect.menu_opened && effect.value_changed);
         assert!(!effect.selection_changed);
+    }
+
+    #[test]
+    fn an_unanswered_reading_shows_no_change() {
+        let before = Fingerprint {
+            window_ids: vec!["w1".into()],
+            focused_element: Some(1),
+            window_hash: 9,
+            ..Fingerprint::default()
+        };
+        // An empty reading would look like a closed window, lost focus, and a new tree.
+        assert!(diff(&before, &Fingerprint::default()).window_closed);
+        assert_eq!(effect_between(Some(&before), None), Effect::default());
+        assert_eq!(effect_between(None, Some(&before)), Effect::default());
+    }
+
+    #[test]
+    fn text_keys_need_a_text_or_window_change() {
+        let churn = Effect { focus_changed: true, tree_changed: true, ..Effect::default() };
+        assert!(!text_keys_landed(&churn));
+        assert!(text_keys_landed(&Effect { selection_changed: true, ..churn.clone() }));
+        assert!(text_keys_landed(&Effect { value_changed: true, ..Effect::default() }));
     }
 }

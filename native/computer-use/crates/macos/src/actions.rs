@@ -235,7 +235,7 @@ const SCROLL_SEARCH_DEPTH: usize = 5;
 const SCROLL_SEARCH_NODES: usize = 300;
 
 pub fn main_scroll_area(app: &RunningApp, window: &WindowInfo, deadline: Deadline) -> Option<AxElement> {
-    let root = crate::tree::window_element(app, window, deadline)?;
+    let root = crate::tree::window_element(app, window, deadline).ok().flatten()?;
     let mut queue = VecDeque::from([(root, 0usize)]);
     let mut visited = 0;
     let mut best: Option<(f64, AxElement)> = None;
