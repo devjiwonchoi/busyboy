@@ -236,7 +236,7 @@ export const BrowserPasswordPeekResult = Schema.Struct({
 export type BrowserPasswordPeekResult = typeof BrowserPasswordPeekResult.Type;
 
 export const BrowserSignInOptionsInput = Schema.Struct({
-  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  tabId: BrowserPasswordTabId,
   origin: Schema.String.check(Schema.isMaxLength(BROWSER_PASSWORD_URL_MAX_LENGTH)),
 });
 export type BrowserSignInOptionsInput = typeof BrowserSignInOptionsInput.Type;
@@ -250,7 +250,7 @@ export const BrowserSignInOptions = Schema.Struct({
 export type BrowserSignInOptions = typeof BrowserSignInOptions.Type;
 
 export const BrowserSignInInput = Schema.Struct({
-  tabId: Schema.String.check(Schema.isMaxLength(128)),
+  tabId: BrowserPasswordTabId,
   origin: Schema.String.check(Schema.isMaxLength(BROWSER_PASSWORD_URL_MAX_LENGTH)),
   choice: Schema.Union([
     Schema.Struct({ kind: Schema.Literal("saved"), loginId: Id }),
