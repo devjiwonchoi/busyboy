@@ -19,17 +19,16 @@ import {
   type DetectedLoginForm,
   type DetectionEnvironment,
 } from "./LoginFormDetection.ts";
-import {
-  MAX_SUBMITTED_VALUE_LENGTH,
-  MAX_TOKEN_LENGTH,
-  type GuestChildFrame,
-  type GuestFieldFocus,
-  type GuestFieldKey,
-  type GuestFormsReport,
-  type GuestLoginForm,
-  type GuestRect,
-  type GuestSubmit,
-  type LoginFieldRole,
+import { MAX_SUBMITTED_VALUE_LENGTH, MAX_TOKEN_LENGTH } from "./PasswordGuestLimits.ts";
+import type {
+  GuestChildFrame,
+  GuestFieldFocus,
+  GuestFieldKey,
+  GuestFormsReport,
+  GuestLoginForm,
+  GuestRect,
+  GuestSubmit,
+  LoginFieldRole,
 } from "./PasswordGuestMessages.ts";
 
 /**

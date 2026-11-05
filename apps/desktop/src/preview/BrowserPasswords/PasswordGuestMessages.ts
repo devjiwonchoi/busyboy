@@ -1,15 +1,24 @@
 import * as Schema from "effect/Schema";
 
+import {
+  MAX_FIELDS_PER_FORM,
+  MAX_FORMS_PER_FRAME,
+  MAX_SUBMITTED_VALUE_LENGTH,
+  MAX_TOKEN_LENGTH,
+} from "./PasswordGuestLimits.ts";
+
 /**
  * Messages between the guest preload and main about login forms. Every guest
  * message is hostile input: main decodes it with these schemas, caps sizes,
  * and rate-limits per frame before using it.
  */
 
-export const MAX_FORMS_PER_FRAME = 20;
-export const MAX_FIELDS_PER_FORM = 8;
-export const MAX_TOKEN_LENGTH = 64;
-export const MAX_SUBMITTED_VALUE_LENGTH = 4096;
+export {
+  MAX_FIELDS_PER_FORM,
+  MAX_FORMS_PER_FRAME,
+  MAX_SUBMITTED_VALUE_LENGTH,
+  MAX_TOKEN_LENGTH,
+} from "./PasswordGuestLimits.ts";
 
 const Token = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MAX_TOKEN_LENGTH));
 const Coordinate = Schema.Number.check(Schema.isFinite());

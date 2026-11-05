@@ -1,5 +1,5 @@
 import type { LoginFieldRole, LoginFormKind } from "./PasswordGuestMessages.ts";
-import { MAX_FIELDS_PER_FORM, MAX_FORMS_PER_FRAME } from "./PasswordGuestMessages.ts";
+import { MAX_FIELDS_PER_FORM, MAX_FORMS_PER_FRAME } from "./PasswordGuestLimits.ts";
 
 /**
  * Finds login forms in one frame's DOM. Pure DOM logic with no Electron
