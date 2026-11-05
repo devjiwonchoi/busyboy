@@ -109,6 +109,9 @@ import { parseComposerContextHref } from "@t3tools/shared/composerContextReferen
 import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
+import { TaskReferenceChip } from "./chat/TaskReferenceChip";
+import { parseTaskReferenceHref, remarkTaskReferences } from "./chat/taskReferences.logic";
+import { useThreadTaskReferences } from "../state/projectTeam";
 import {
   artifactTemplateFromHastProperties,
   renderCodexInlineDirectivesAsMarkdown,
@@ -2256,6 +2259,7 @@ function useChatMarkdownState({
   githubMedia = false,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
+  const taskReferences = useThreadTaskReferences(threadRef ?? null);
   const markdownRef = useRef<HTMLDivElement>(null);
   const mediaRequestId = useRef(0);
   // A preview opened from another thread or workspace never carries over.
@@ -2423,6 +2427,7 @@ function useChatMarkdownState({
     if (parseAssistantCitationHref(href)) return href;
     if (parseComposerContextHref(href)) return href;
     if (parseThreadLinkHref(href)) return href;
+    if (parseTaskReferenceHref(href) !== null) return href;
     if (isWindowsDrivePathHref(href)) return href;
     return rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href);
   };
@@ -2656,6 +2661,7 @@ function useChatMarkdownState({
     resolvedTheme,
     pullRequestsEnabled,
     skills,
+    taskReferences,
     threadRef,
     updateThreadPullRequestLink,
   };
@@ -2807,10 +2813,16 @@ const CHAT_MARKDOWN_COMPONENTS = {
       updateThreadPullRequestLink,
       fileLinkChip,
       renderContextReference,
+      taskReferences,
     } = use(ChatMarkdownRendererContext);
     const text = use(ChatMarkdownTextContext);
     const citation = href ? parseAssistantCitationHref(href) : null;
     if (citation) return <AssistantCitationChip citation={citation} />;
+    const taskNumber = href ? parseTaskReferenceHref(href) : null;
+    const referencedTask = taskNumber === null ? undefined : taskReferences?.get(taskNumber);
+    if (referencedTask !== undefined) {
+      return <TaskReferenceChip environmentId={environmentId ?? null} task={referencedTask} />;
+    }
     const linkedThreadId = href ? parseThreadLinkHref(href) : null;
     if (linkedThreadId) {
       const label = hastPlainTextDeep(node) || linkedThreadId;
@@ -3291,13 +3303,22 @@ function ChatMarkdown({
     localMediaPreview,
     closeLocalMediaPreview,
   } = useChatMarkdownState({ text, ...props });
+  const { taskReferences } = componentState;
   const incrementalParsing =
     props.isStreaming === true &&
     extraRemarkPlugins.length === 0 &&
+    taskReferences === null &&
     /(?:^|\n) {0,3}(?:`{3}|~{3})/.test(text);
   const remarkPlugins = [
     ...(lineBreaks ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : CHAT_MARKDOWN_REMARK_PLUGINS),
     ...extraRemarkPlugins,
+    ...(taskReferences === null
+      ? []
+      : [
+          [remarkTaskReferences, { tasks: taskReferences }] satisfies NonNullable<
+            ReactMarkdownOptions["remarkPlugins"]
+          >[number],
+        ]),
     ...(incrementalParsing ? [createIncrementalMarkdownPlugin()] : []),
   ];
 

@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   parseScopedProjectKey,
   parseScopedThreadKey,
+  scopeProjectRef,
   scopedProjectKey,
   scopeThreadRef,
   scopedThreadKey,
@@ -14,6 +15,7 @@ import {
 import type {
   EnvironmentId,
   ProjectTeamAnswerDecisionInput,
+  ProjectTaskReference,
   ProjectTeamAttentionSummary,
   ProjectTeamUpdateSettingsInput,
   ScopedProjectRef,
@@ -23,6 +25,8 @@ import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
+import { useThreadShell } from "./entities";
+import { taskReferencesForThread } from "./projectTeam.logic";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useAtomCommand } from "./use-atom-command";
 
@@ -169,4 +173,15 @@ export function useUpdateTeamSettings() {
       environmentId: ref.environmentId,
       input: { ...patch, projectId: ref.projectId },
     });
+}
+
+/** The project's tasks by number in a PM or task-lead thread; see taskReferencesForThread. */
+export function useThreadTaskReferences(
+  ref: ScopedThreadRef | null,
+): ReadonlyMap<number, ProjectTaskReference> | null {
+  const projectId = useThreadShell(ref)?.projectId ?? null;
+  const summary = useProjectManager(
+    ref === null || projectId === null ? null : scopeProjectRef(ref.environmentId, projectId),
+  );
+  return taskReferencesForThread(summary, ref?.threadId ?? null);
 }

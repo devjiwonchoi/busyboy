@@ -70,6 +70,7 @@ function summary(
       lastAction: null,
     },
     decisionCards: [],
+    tasks: [],
     ...overrides,
   };
 }

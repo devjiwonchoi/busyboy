@@ -600,6 +600,15 @@ export const ProjectManagerPresence = Schema.Struct({
 });
 export type ProjectManagerPresence = typeof ProjectManagerPresence.Type;
 
+/** Enough of a task for the app to show "#N" as a named chip. */
+export const ProjectTaskReference = Schema.Struct({
+  number: PositiveInt,
+  title: Schema.String,
+  stage: ProjectTaskStage,
+  leadThreadId: Schema.NullOr(ThreadId),
+});
+export type ProjectTaskReference = typeof ProjectTaskReference.Type;
+
 export const ProjectTeamAttentionSummary = Schema.Struct({
   projectId: ProjectId,
   pmThreadId: ThreadId,
@@ -618,6 +627,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   decisionCards: Schema.Array(ProjectDecisionCard).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
+  /** Every task in the project, so "#N" in PM text can be resolved per project. */
+  tasks: Schema.Array(ProjectTaskReference),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
