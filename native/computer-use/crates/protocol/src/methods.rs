@@ -100,6 +100,8 @@ pub enum ForbiddenReason {
     PrivateWindow,
     UnidentifiedApp,
     ElevatedWindow,
+    Automation,
+    FileManager,
 }
 
 impl ForbiddenReason {
@@ -112,6 +114,8 @@ impl ForbiddenReason {
             ForbiddenReason::PrivateWindow => "private_window",
             ForbiddenReason::UnidentifiedApp => "unidentified_app",
             ForbiddenReason::ElevatedWindow => "elevated_window",
+            ForbiddenReason::Automation => "automation",
+            ForbiddenReason::FileManager => "file_manager",
         }
     }
 }

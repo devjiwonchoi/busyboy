@@ -1,5 +1,7 @@
 //! Apps and windows computer use refuses. The server and the helper share this list.
 
+use std::sync::OnceLock;
+
 use cu_protocol::ForbiddenReason;
 
 /// One match rule.
@@ -63,6 +65,24 @@ const RULES: &[(ForbiddenReason, &[Rule])] = &[
             Exact("com.apple.ScreenSaver.Engine"),
         ],
     ),
+    (
+        ForbiddenReason::Automation,
+        &[
+            Exact("com.apple.ScriptEditor2"),
+            Exact("com.apple.AppleScriptUtility"),
+            Exact("com.apple.ScriptMenuApp"),
+            Exact("com.apple.ScriptMonitor"),
+            Exact("com.apple.Automator"),
+            Prefix("com.apple.Automator."),
+            Exact("com.apple.AutomatorRunner"),
+            Exact("com.apple.AutomatorInstaller"),
+            Exact("com.apple.shortcuts"),
+            Prefix("com.apple.shortcuts."),
+            Exact("com.apple.ShortcutsActions"),
+            Prefix("com.latenightsw.ScriptDebugger"),
+        ],
+    ),
+    (ForbiddenReason::FileManager, &[Exact("com.apple.finder")]),
 ];
 
 /// Returns why an app is forbidden, if it is. `None` bundle IDs are unidentified apps.
@@ -86,23 +106,74 @@ pub fn forbidden_reason(bundle_id: Option<&str>) -> Option<ForbiddenReason> {
 /// and "Always allow" is never offered.
 pub const SYSTEM_SETTINGS_BUNDLE_IDS: &[&str] = &["com.apple.systempreferences", "com.apple.Settings"];
 
-/// Window titles (lowercased, English) of System Settings panes where actions are refused.
-const SECURITY_PANE_TITLES: &[&str] = &[
-    "privacy & security",
-    "security & privacy",
-    "passwords",
-    "users & groups",
-    "touch id & password",
-    "login password",
+/// Bundle IDs of the System Settings pane extensions where actions are refused.
+/// Backends read each pane's localized names from these bundles.
+pub const SECURITY_PANE_EXTENSION_IDS: &[&str] = &[
+    "com.apple.settings.PrivacySecurity.extension",
+    "com.apple.Passwords-Settings.extension",
+    "com.apple.Sharing-Settings.extension",
+    "com.apple.Users-Groups-Settings.extension",
+    "com.apple.Touch-ID-Settings.extension",
+    "com.apple.LoginItems-Settings.extension",
+    "com.apple.Network-Settings.extension",
+    "com.apple.NetworkExtensionSettingsUI.NESettingsUIExtension",
+    "com.apple.Profiles-Settings.extension",
+    "com.apple.Internet-Accounts-Settings.extension",
 ];
 
-/// True when an action in this System Settings window must be refused.
-pub fn is_security_pane(bundle_id: &str, window_title: &str) -> bool {
-    if !SYSTEM_SETTINGS_BUNDLE_IDS.contains(&bundle_id) {
+/// English names of those panes. Used when the localized names cannot be read.
+const FALLBACK_SECURITY_PANE_NAMES: &[&str] = &[
+    "Privacy & Security",
+    "Security & Privacy",
+    "Passwords",
+    "AutoFill & Passwords",
+    "Sharing",
+    "Users & Groups",
+    "Touch ID & Password",
+    "Login Password",
+    "Login Items",
+    "Login Items & Extensions",
+    "Network",
+    "VPN",
+    "Device Management",
+    "Profiles",
+    "Internet Accounts",
+];
+
+/// The built-in English pane names.
+pub fn fallback_security_pane_names() -> &'static [String] {
+    static NAMES: OnceLock<Vec<String>> = OnceLock::new();
+    NAMES.get_or_init(|| FALLBACK_SECURITY_PANE_NAMES.iter().map(|name| normalize_title(name)).collect())
+}
+
+/// Lowercased and trimmed, without bidi marks, so names and titles compare as text.
+pub fn normalize_title(title: &str) -> String {
+    let stripped: String = title
+        .chars()
+        .filter(|c| !matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
+        .collect();
+    stripped.trim().to_lowercase()
+}
+
+/// True when an action in this System Settings window must be refused. `pane_names`
+/// are the risky panes' names in any language.
+pub fn is_security_pane(bundle_id: &str, window_title: &str, pane_names: &[String]) -> bool {
+    if !SYSTEM_SETTINGS_BUNDLE_IDS.iter().any(|id| id.eq_ignore_ascii_case(bundle_id)) {
         return false;
     }
-    let title = window_title.trim().to_lowercase();
-    SECURITY_PANE_TITLES.iter().any(|pane| title == *pane || title.starts_with(&format!("{pane} ")))
+    let title = normalize_title(window_title);
+    if title.is_empty() {
+        return false;
+    }
+    let matches = |name: &str| {
+        title == name
+            || title.starts_with(&format!("{name} "))
+            || [" – ", " - ", " — "].iter().any(|separator| title.ends_with(&format!("{separator}{name}")))
+    };
+    fallback_security_pane_names().iter().chain(pane_names).any(|name| {
+        let name = normalize_title(name);
+        !name.is_empty() && matches(&name)
+    })
 }
 
 /// Browser bundle IDs whose windows get the private-window check.
@@ -188,11 +259,70 @@ mod tests {
     }
 
     #[test]
+    fn forbids_script_and_automation_apps() {
+        for id in [
+            "com.apple.ScriptEditor2",
+            "com.apple.Automator",
+            "com.apple.Automator.Automator-Application-Stub",
+            "com.apple.AutomatorRunner",
+            "com.apple.shortcuts",
+            "com.apple.shortcuts.droplet",
+            "com.apple.shortcuts.events",
+            "com.apple.ScriptMenuApp",
+            "com.latenightsw.ScriptDebugger8",
+            "COM.APPLE.SCRIPTEDITOR2",
+        ] {
+            assert_eq!(forbidden_reason(Some(id)), Some(ForbiddenReason::Automation), "{id}");
+        }
+        assert_eq!(forbidden_reason(Some("com.apple.finder")), Some(ForbiddenReason::FileManager));
+        assert_eq!(forbidden_reason(Some("com.apple.Finder")), Some(ForbiddenReason::FileManager));
+        assert_eq!(ForbiddenReason::Automation.as_str(), "automation");
+        assert_eq!(ForbiddenReason::FileManager.as_str(), "file_manager");
+    }
+
+    #[test]
+    fn leaves_automation_lookalikes_alone() {
+        assert_eq!(forbidden_reason(Some("com.apple.shortcutsx")), None);
+        assert_eq!(forbidden_reason(Some("com.apple.AutomatorX")), None);
+        assert_eq!(forbidden_reason(Some("com.apple.finder.SyncExtension2")), None);
+        assert_eq!(forbidden_reason(Some("com.apple.findmy")), None);
+        assert_eq!(forbidden_reason(Some("com.example.ScriptEditor2")), None);
+    }
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
     fn detects_security_panes_only_in_system_settings() {
-        assert!(is_security_pane("com.apple.systempreferences", "Privacy & Security"));
-        assert!(is_security_pane("com.apple.Settings", "Users & Groups"));
-        assert!(!is_security_pane("com.apple.systempreferences", "Displays"));
-        assert!(!is_security_pane("com.apple.TextEdit", "Passwords"));
+        assert!(is_security_pane("com.apple.systempreferences", "Privacy & Security", &[]));
+        assert!(is_security_pane("com.apple.Settings", "Users & Groups", &[]));
+        assert!(is_security_pane("com.apple.systempreferences", "Sharing", &[]));
+        assert!(is_security_pane("com.apple.systempreferences", "  login items  ", &[]));
+        assert!(!is_security_pane("com.apple.systempreferences", "Displays", &[]));
+        assert!(!is_security_pane("com.apple.systempreferences", "", &[]));
+        assert!(!is_security_pane("com.apple.TextEdit", "Passwords", &[]));
+    }
+
+    #[test]
+    fn detects_localized_security_panes() {
+        let panes = names(&["공유", "개인정보 보호 및 보안", "共有", "プライバシーとセキュリティ", "\u{200f}بصمة الإصبع وكلمة السر"]);
+        assert!(is_security_pane("com.apple.systempreferences", "공유", &panes));
+        assert!(is_security_pane("com.apple.systempreferences", "개인정보 보호 및 보안", &panes));
+        assert!(is_security_pane("com.apple.systempreferences", "共有", &panes));
+        assert!(is_security_pane("com.apple.systempreferences", "プライバシーとセキュリティ", &panes));
+        assert!(is_security_pane("com.apple.systempreferences", "بصمة الإصبع وكلمة السر", &panes));
+        // Separators before or after the pane name.
+        assert!(is_security_pane("com.apple.systempreferences", "공유 – 화면 공유", &panes));
+        assert!(is_security_pane("com.apple.systempreferences", "시스템 설정 - 공유", &panes));
+        // English names apply whatever the scan found.
+        assert!(is_security_pane("com.apple.systempreferences", "Privacy & Security", &panes));
+        // Other panes, and words that only contain a pane name, stay allowed.
+        assert!(!is_security_pane("com.apple.systempreferences", "디스플레이", &panes));
+        assert!(!is_security_pane("com.apple.systempreferences", "공유된 항목", &panes));
+        // Same titles in other apps are not panes.
+        assert!(!is_security_pane("com.apple.Notes", "공유", &panes));
+        assert!(!is_security_pane("com.apple.finder", "共有", &panes));
     }
 
     #[test]

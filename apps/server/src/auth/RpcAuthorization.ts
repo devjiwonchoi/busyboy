@@ -261,7 +261,7 @@ const requiredScopesForRpcCall = (
     const start = (payload as { start?: unknown } | null)?.start === true;
     return start ? [AuthSettingsWriteScope] : [AuthOrchestrationReadScope];
   }
-  // "Always allow" also writes `computerUseAlwaysAllowedApps` to settings.
+  // "Always allow" also writes a project grant to `computerUseAppGrants` in settings.
   if (method === WS_METHODS.computerUseAnswerAppRequest) {
     const always = (payload as { choice?: unknown } | null)?.choice === "always";
     return always

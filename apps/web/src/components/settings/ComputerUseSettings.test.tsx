@@ -48,10 +48,21 @@ function walk(node: ReactNode, visit: (element: AnyElement) => void, texts: Arra
 
 const SETTINGS: ComputerUseSettingValues = {
   enableAgentComputerUse: DEFAULT_UNIFIED_SETTINGS.enableAgentComputerUse,
-  computerUseAlwaysAllowedApps: DEFAULT_UNIFIED_SETTINGS.computerUseAlwaysAllowedApps,
+  computerUseAppGrants: DEFAULT_UNIFIED_SETTINGS.computerUseAppGrants,
   computerUseScreenshots: DEFAULT_UNIFIED_SETTINGS.computerUseScreenshots,
   computerUseExperimentalPointer: DEFAULT_UNIFIED_SETTINGS.computerUseExperimentalPointer,
 };
+
+const NOW = Date.parse("2026-11-05T00:00:00.000Z");
+
+const grant = (appName: string, bundleId: string, project: string, expiresAt: string) => ({
+  bundleId,
+  appName,
+  projectId: `project-${project.toLowerCase()}`,
+  projectName: project,
+  grantedAt: "2026-11-01T00:00:00.000Z",
+  expiresAt,
+});
 
 const status = (
   permissions: ComputerUseSettingsStatus["permissions"],
@@ -77,6 +88,7 @@ const NOT_GRANTED = status(
 function render(input: {
   supported?: boolean | null;
   settings?: Partial<ComputerUseSettingValues>;
+  now?: number;
   status?: ComputerUseSettingsStatus | null;
 }) {
   const calls = {
@@ -95,6 +107,7 @@ function render(input: {
     onRestartHelper: () => {
       calls.restart += 1;
     },
+    now: input.now ?? NOW,
   });
   const elements: Array<AnyElement> = [];
   const texts: Array<string> = [];
@@ -173,21 +186,38 @@ describe("Computer Use settings section", () => {
 
   it("shows the empty always-allowed list", () => {
     const view = render({ settings: { enableAgentComputerUse: true }, status: GRANTED });
-    expect(view.text).toContain("Apps you always allow will appear here.");
+    expect(view.text).toContain("Apps you always allow in a project will appear here.");
+    expect(view.text).toContain("only in the project shown, for 30 days");
   });
 
-  it("removes an always-allowed app", () => {
+  it("lists each grant with its project and expiry, hides expired ones, and removes one", () => {
+    const textEditWebsite = grant(
+      "TextEdit",
+      "com.apple.TextEdit",
+      "Website",
+      "2026-12-01T00:00:00.000Z",
+    );
+    const textEditBackend = grant(
+      "TextEdit",
+      "com.apple.TextEdit",
+      "Backend",
+      "2026-12-01T00:00:00.000Z",
+    );
+    const expiredNotes = grant("Notes", "com.apple.Notes", "Website", "2026-11-01T00:00:00.000Z");
     const view = render({
       settings: {
         enableAgentComputerUse: true,
-        computerUseAlwaysAllowedApps: ["com.apple.TextEdit", "com.apple.Notes"],
+        computerUseAppGrants: [textEditWebsite, textEditBackend, expiredNotes],
       },
       status: GRANTED,
     });
-    expect(view.text).not.toContain("Apps you always allow will appear here.");
-    expect(view.text).toContain("com.apple.Notes");
-    view.buttons("Remove com.apple.TextEdit")[0]!.props.onClick();
-    expect(view.calls.update).toEqual([{ computerUseAlwaysAllowedApps: ["com.apple.Notes"] }]);
+    expect(view.text).toContain("TextEdit in Website");
+    expect(view.text).toContain("TextEdit in Backend");
+    expect(view.text).toContain("until");
+    expect(view.text).not.toContain("Notes in Website");
+    view.buttons("Remove TextEdit in Website")[0]!.props.onClick();
+    // Removing one grant keeps the same app's grant in the other project and drops expired ones.
+    expect(view.calls.update).toEqual([{ computerUseAppGrants: [textEditBackend] }]);
   });
 
   it("explains the platform limit and shows no controls when unsupported", () => {

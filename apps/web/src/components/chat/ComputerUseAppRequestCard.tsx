@@ -3,7 +3,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
-  COMPUTER_USE_NO_ALWAYS_ALLOW_BUNDLE_IDS,
+  computerUseOffersAlwaysAllow,
   type ComputerUseAppRequestChoice,
   type EnvironmentId,
   type OrchestrationV2ProjectedTurnItem,
@@ -31,7 +31,7 @@ const ANSWERED_LABELS: Record<
 > = {
   allow_once: "Allowed for this turn",
   allow_thread: "Allowed for this thread",
-  always: "Always allowed",
+  always: "Always allowed in this project",
   deny: "Denied",
   cancelled: "Request ended",
 };
@@ -128,9 +128,8 @@ export function ComputerUseAppRequestPrompt(props: {
   readonly onChoose: (choice: ComputerUseAppRequestChoice) => void;
 }) {
   const { item } = props;
-  // The server never offers it for System Settings; the card checks too.
-  const offerAlways =
-    item.allowAlways && !COMPUTER_USE_NO_ALWAYS_ALLOW_BUNDLE_IDS.includes(item.bundleId);
+  // The server never offers it for System Settings, browsers, or scratch chats; the card checks too.
+  const offerAlways = item.allowAlways && computerUseOffersAlwaysAllow(item.bundleId);
   return (
     <div
       data-v2-item-type={item.type}
@@ -169,7 +168,7 @@ export function ComputerUseAppRequestPrompt(props: {
             disabled={props.disabled}
             onClick={() => props.onChoose("always")}
           >
-            Always allow
+            Always allow in this project
           </Button>
         ) : null}
         <Button

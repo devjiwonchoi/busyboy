@@ -34,6 +34,7 @@ import * as McpHttpServer from "../../McpHttpServer.ts";
 import * as McpSessionRegistry from "../../McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import * as PreviewBrowser from "../../../preview/PreviewBrowser.ts";
+import * as ComputerUseProjectScope from "../../../computerUse/ComputerUseProjectScope.ts";
 import * as ComputerUseTurns from "../../../computerUse/ComputerUseTurns.ts";
 import * as DesktopComputerUseChannel from "../../../computerUse/DesktopComputerUseChannel.ts";
 
@@ -61,6 +62,7 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(ThreadSearch.ThreadSearch)({}),
   Layer.mock(DesktopComputerUseChannel.DesktopComputerUseChannel)({ available: true }),
   Layer.mock(ComputerUseTurns.ComputerUseTurns)({}),
+  ComputerUseProjectScope.layerTest(new Map()),
 );
 
 const ToolsListPayload = Schema.fromJsonString(

@@ -23,6 +23,7 @@ import {
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
+import * as ComputerUseProjectScope from "../computerUse/ComputerUseProjectScope.ts";
 import * as ComputerUseTurns from "../computerUse/ComputerUseTurns.ts";
 import * as DesktopComputerUseChannel from "../computerUse/DesktopComputerUseChannel.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -839,6 +840,8 @@ const registerComputerUseTools = Effect.fn("McpHttpServer.registerComputerUseToo
     | DesktopComputerUseChannel.DesktopComputerUseChannel
     | ThreadManagementService.ThreadManagementService
     | ServerSettings.ServerSettingsService
+    | ComputerUseProjectScope.ComputerUseProjectScope
+    | Crypto.Crypto
   >();
   const built = yield* ComputerUseToolkit;
   for (const tool of Object.values(ComputerUseToolkit.tools)) {

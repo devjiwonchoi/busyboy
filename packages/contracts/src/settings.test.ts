@@ -56,7 +56,7 @@ describe("ServerSettings computer use", () => {
     const upgraded = decodeServerSettings({ enableAgentBrowserAccess: false });
     for (const settings of [DEFAULT_SERVER_SETTINGS, upgraded]) {
       expect(settings.enableAgentComputerUse).toBe(false);
-      expect(settings.computerUseAlwaysAllowedApps).toEqual([]);
+      expect(settings.computerUseAppGrants).toEqual([]);
       expect(settings.computerUseScreenshots).toBe(true);
       expect(settings.computerUseExperimentalPointer).toBe(false);
     }
@@ -68,9 +68,26 @@ describe("ServerSettings computer use", () => {
     });
     const input = {
       enableAgentComputerUse: true,
-      computerUseAlwaysAllowedApps: ["com.apple.TextEdit"],
+      computerUseAppGrants: [
+        {
+          bundleId: "com.apple.TextEdit",
+          appName: "TextEdit",
+          projectId: "project-a",
+          projectName: "Website",
+          grantedAt: "2026-11-05T00:00:00.000Z",
+          expiresAt: "2026-12-05T00:00:00.000Z",
+        },
+      ],
     };
     expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(input);
+  });
+
+  it("drops the old global always-allowed list, so those apps ask again", () => {
+    const upgraded = decodeServerSettings({
+      computerUseAlwaysAllowedApps: ["com.apple.TextEdit"],
+    }) as Record<string, unknown>;
+    expect(upgraded.computerUseAppGrants).toEqual([]);
+    expect(upgraded).not.toHaveProperty("computerUseAlwaysAllowedApps");
   });
 });
 

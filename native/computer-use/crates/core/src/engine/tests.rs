@@ -651,6 +651,34 @@ fn refless_actions_check_the_focused_window_even_when_private() {
 }
 
 #[test]
+fn refuses_actions_in_localized_security_panes_but_allows_reads() {
+    let harness = Harness::new();
+    harness.platform.with_text_editor();
+    harness.platform.with_world(|world| {
+        let app = &mut world.apps[0];
+        app.name = "System Settings".into();
+        app.bundle_id = Some("com.apple.systempreferences".into());
+        app.windows[0].title = "공유".into();
+    });
+    harness.begin("u1");
+    let settings = |action: Value| {
+        harness.call(
+            method::APP_ACT,
+            json!({"threadId": "t1", "turnId": "u1", "app": "System Settings", "action": action}),
+        )
+    };
+
+    assert!(harness.state("u1", "System Settings").is_ok());
+    let error = settings(json!({"kind": "key", "keys": "cmd+a"})).unwrap_err();
+    assert_eq!(error.code, ErrorCode::AppForbidden);
+    assert_eq!(error.details.unwrap()["reason"], "system_security");
+
+    // Another pane in the same language is fine.
+    harness.platform.with_world(|world| world.apps[0].windows[0].title = "디스플레이".into());
+    assert!(settings(json!({"kind": "key", "keys": "cmd+a"})).is_ok());
+}
+
+#[test]
 fn press_refuses_characters_into_secure_fields() {
     let harness = Harness::new();
     harness.platform.with_text_editor();
