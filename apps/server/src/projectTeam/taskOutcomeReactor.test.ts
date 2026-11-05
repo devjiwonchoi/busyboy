@@ -380,7 +380,7 @@ describe("TaskOutcomeReactor", () => {
         );
         // #3 waits on #2, which is still running.
         assert.deepStrictEqual(yield* harness.messagesTo(pm), [
-          "#1 done · #4 is next in the inbox",
+          "#1 done: First · #4 is next in the inbox",
         ]);
       }),
     ),
@@ -410,36 +410,68 @@ describe("TaskOutcomeReactor", () => {
           );
         }
         assert.deepStrictEqual(yield* harness.messagesTo(pm), [
-          "#1 in review · #2 is next in the inbox",
+          "#1 in review: Reviewed · PR https://github.com/acme/repo/pull/1 · #2 is next in the inbox",
         ]);
       }),
     ),
   );
 
-  it.effect("stays quiet for a done task with an empty inbox, waiting_user, and stalled", () =>
+  it.effect("wakes the PM with the title and result when a task finishes with an empty inbox", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const reactor = yield* TaskOutcomeReactor;
         const team = yield* ProjectTeamService.ProjectTeamService;
         const pm = yield* setUpManager;
-        const finished = yield* startLead(pm, "Finished", harness.delegate);
-        const asking = yield* startLead(pm, "Asking", harness.delegate);
-        const quiet = yield* startLead(pm, "Quiet", harness.delegate);
-        yield* team.updateTask(finished.leadThreadId, { stage: "done" });
-        yield* team.askUser(asking.leadThreadId, { kind: "approval", question: "Plan?" });
+        const report = yield* startLead(pm, "Linear REA analysis", harness.delegate);
+        yield* team.updateTask(report.leadThreadId, {
+          stage: "done",
+          resultSummary: "Mapped the sync engine.\nReport is in the thread.",
+        });
 
-        const at = "2026-11-04T00:05:00.000Z";
-        for (const lead of [finished, asking, quiet]) {
+        for (const ordinal of [1, 2]) {
           yield* reactor.handle(
-            leadTurnEnded({ lead: lead.leadThreadId, status: "completed", completedAt: at }),
+            leadTurnEnded({
+              lead: report.leadThreadId,
+              status: "completed",
+              completedAt: `2026-11-04T00:0${ordinal}:00.000Z`,
+              ordinal,
+            }),
           );
         }
-        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+        // One wake per completion, on one line, even with nothing waiting in the inbox.
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), [
+          "#1 done: Linear REA analysis · Mapped the sync engine. Report is in the thread.",
+        ]);
       }),
     ),
   );
 
-  it.effect("stays quiet when task leads are at capacity", () =>
+  it.effect("stays quiet for waiting_user and stalled", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const asking = yield* startLead(pm, "Asking", harness.delegate);
+        const quiet = yield* startLead(pm, "Quiet", harness.delegate);
+        yield* team.askUser(asking.leadThreadId, { kind: "approval", question: "Plan?" });
+
+        const at = "2026-11-04T00:05:00.000Z";
+        for (const lead of [asking, quiet]) {
+          yield* reactor.handle(
+            leadTurnEnded({ lead: lead.leadThreadId, status: "completed", completedAt: at }),
+          );
+        }
+        // The question shows up as its own decision card; the outcome adds nothing.
+        const wakes = (yield* harness.messagesTo(pm)).filter(
+          (text) => !text.startsWith("[Decision card]"),
+        );
+        assert.deepStrictEqual(wakes, []);
+      }),
+    ),
+  );
+
+  it.effect("reports a finished task without a next task when task leads are at capacity", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const reactor = yield* TaskOutcomeReactor;
@@ -459,7 +491,7 @@ describe("TaskOutcomeReactor", () => {
             completedAt: "2026-11-04T00:05:00.000Z",
           }),
         );
-        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), ["#1 done: Finished"]);
       }),
     ),
   );

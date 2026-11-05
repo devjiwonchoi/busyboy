@@ -70,14 +70,25 @@ export function nextInboxTask(
   return ready[0] ?? null;
 }
 
+/** Long result summaries are cut so the wake stays one line. */
+const WAKE_SUMMARY_MAX_LENGTH = 280;
+
+function oneLine(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > WAKE_SUMMARY_MAX_LENGTH
+    ? `${flat.slice(0, WAKE_SUMMARY_MAX_LENGTH - 1).trimEnd()}…`
+    : flat;
+}
+
 /**
  * The one line that wakes the PM after a task lead's turn, or null to stay quiet.
- * Only a failure, or a task that just became done or in review and frees room for a
- * ready inbox task, wakes it; later turns with the same outcome stay quiet.
+ * A failure wakes it, and so does a task that just became done or in review, so the PM
+ * can tell the user right away. The completion line names the next ready inbox task when
+ * there is room to start it. Later turns with the same outcome stay quiet.
  * Stalls are left to StalledTaskSweep.
  */
 export function outcomeWakeText(input: {
-  readonly task: Pick<ProjectTask, "number" | "title">;
+  readonly task: Pick<ProjectTask, "number" | "title" | "resultSummary" | "prUrl">;
   readonly outcome: ProjectTaskOutcome;
   /** The task's outcome before this turn. */
   readonly previousOutcome: ProjectTaskOutcome | null;
@@ -89,14 +100,21 @@ export function outcomeWakeText(input: {
   }
   if (input.outcome !== "done" && input.outcome !== "in_review") return null;
   if (input.previousOutcome === input.outcome) return null;
+  const parts =
+    input.outcome === "done"
+      ? [`#${input.task.number} done: ${oneLine(input.task.title)}`]
+      : [`#${input.task.number} in review: ${oneLine(input.task.title)}`];
+  if (input.outcome === "in_review" && input.task.prUrl !== null) {
+    parts.push(`PR ${input.task.prUrl}`);
+  }
+  const summary = input.task.resultSummary === null ? "" : oneLine(input.task.resultSummary);
+  if (summary.length > 0) parts.push(summary);
   const active = input.projectTasks.filter((task) =>
     (ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage),
   ).length;
-  if (active >= input.maxConcurrentTasks) return null;
-  const next = nextInboxTask(input.projectTasks);
-  if (next === null) return null;
-  const status = input.outcome === "done" ? "done" : "in review";
-  return `#${input.task.number} ${status} · #${next.number} is next in the inbox`;
+  const next = active < input.maxConcurrentTasks ? nextInboxTask(input.projectTasks) : null;
+  if (next !== null) parts.push(`#${next.number} is next in the inbox`);
+  return parts.join(" · ");
 }
 
 export class TaskOutcomeReactor extends Context.Service<

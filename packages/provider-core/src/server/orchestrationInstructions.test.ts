@@ -98,16 +98,31 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "never the user's approval");
   });
 
+  it("has the PM report a finished task right away, and not again in the sitrep", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "tell the user right away in 2–4 short lines");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "its result or PR link");
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      "already reported on its done or in-review wake is not news",
+    );
+    assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "Do not summarize results on these wakes");
+  });
+
   it("has sitreps cover the user's own threads, by name", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "covers your tasks and `otherThreads` together");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "Needs you: each question waiting for the user");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "by their title, never by number alone");
-    assert.include(PROJECT_MANAGER_INSTRUCTIONS, 'On "[Thread waiting] "<title>" is waiting on you for');
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      'On "[Thread waiting] "<title>" is waiting on you for',
+    );
   });
 
   it("lists the PM's wakes and keeps decisions in memory across compactions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N failed: …"');
-    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N done · #M is next in the inbox"');
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N done: <title> · <result>"');
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N in review: <title> · PR <url>"');
+    assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "A task finishing does not wake you");
     assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "reached a terminal state");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"decisions" and "preferences"');
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "After a context compaction, call `team_status`");
