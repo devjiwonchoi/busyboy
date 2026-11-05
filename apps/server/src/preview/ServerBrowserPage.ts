@@ -156,7 +156,7 @@ const SNAPSHOT_SCRIPT = `(() => {
   };
 })()`;
 
-const MASKED_VALUE = "••••••••";
+export const MASKED_VALUE = "••••••••";
 // The broker waits 15s for the host; a snapshot, retry included, answers well before.
 const SNAPSHOT_TIMEOUT_MS = 10_000;
 // How long a frame in another process gets to answer; one that crashed never does.
@@ -167,7 +167,7 @@ const FRAME_ANSWER_MS = 1_000;
 // accessible text. Open shadow roots included.
 const DOTTED_SCRIPT = PROTECTED_VALUES_SCRIPT;
 
-const pageChanged = () =>
+export const pageChanged = () =>
   new ServerBrowserOperationError(
     "PreviewAutomationExecutionError",
     "The page changed while capturing its snapshot. Take another snapshot.",
@@ -202,7 +202,7 @@ const answered = <A>(promise: Promise<A>) => {
  * each reader's values, or undefined for one that didn't answer, and fails when the
  * page's own frames don't or frames came or went.
  */
-const openReaders = async (page: Page, cdp: CDPSession) => {
+export const openReaders = async (page: Page, cdp: CDPSession, expression = DOTTED_SCRIPT) => {
   const frames = page.frames();
   const owners = new Map<Frame, CDPSession | null | undefined>(
     await Promise.all(
@@ -255,7 +255,7 @@ const openReaders = async (page: Page, cdp: CDPSession) => {
           ids.map(async (contextId) => {
             const { result, exceptionDetails } = await session.send("Runtime.evaluate", {
               contextId,
-              expression: DOTTED_SCRIPT,
+              expression,
               returnByValue: true,
             });
             if (exceptionDetails) throw pageChanged();
@@ -281,7 +281,7 @@ const openReaders = async (page: Page, cdp: CDPSession) => {
     ...frames.flatMap((frame) => {
       const owner = owners.get(frame);
       if (owner) return owner === cdp ? [] : [sessionReader(frame, owner)];
-      const own = () => frame.evaluate(DOTTED_SCRIPT) as Promise<Array<string>>;
+      const own = async () => [await frame.evaluate(expression)].flat() as Array<string>;
       return ownerOf(frame) === null ? [{ frames: [frame], read: own }] : [];
     }),
   ];
@@ -310,7 +310,7 @@ const openReaders = async (page: Page, cdp: CDPSession) => {
  * four characters only matches between non-word characters; inside other words
  * it would mask unrelated text.
  */
-const dottedPattern = (values: ReadonlyArray<string>) => {
+export const dottedPattern = (values: ReadonlyArray<string>) => {
   const sources = values
     .flatMap((value) => {
       const json = JSON.stringify(value).slice(1, -1);
@@ -399,6 +399,8 @@ type SnapshotInput = {
   readonly consoleEntries: ReadonlyArray<PreviewAutomationConsoleEntry>;
   readonly networkEntries: ReadonlyArray<PreviewAutomationNetworkEntry>;
   readonly actionTimeline: PreviewAutomationSnapshot["actionTimeline"];
+  /** Passwords filled earlier, masked too, even where the page now shows them as text. */
+  readonly remembered?: ReadonlyArray<string>;
 };
 
 const capture = async (
@@ -434,7 +436,10 @@ const capture = async (
   // A value that changed meanwhile may be in the tree under neither reading.
   if (after.some((values, i) => values && JSON.stringify(values) !== JSON.stringify(before[i])))
     throw pageChanged();
-  const dotted = dottedPattern(after.flatMap((values) => values ?? []));
+  const dotted = dottedPattern([
+    ...after.flatMap((values) => values ?? []),
+    ...(input.remembered ?? []),
+  ]);
   // A frame that didn't answer both times, such as one that crashed, can only hold values the
   // tree shows if the tree shows its content.
   const unread = readers.flatMap((reader, i) => (after[i] ? [] : reader.frames));

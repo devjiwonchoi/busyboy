@@ -75,6 +75,7 @@ import * as ServerConfig from "../config.ts";
 import { resolveRootCliCommand } from "../cli/invocation.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PreviewAutomationBroker from "../mcp/PreviewAutomationBroker.ts";
+import * as CredentialGuard from "./CredentialGuard.ts";
 import * as DesktopBrowserChannel from "./DesktopBrowserChannel.ts";
 import * as PreviewManager from "./Manager.ts";
 import * as ServerBrowserPage from "./ServerBrowserPage.ts";
@@ -458,6 +459,8 @@ const make = Effect.gen(function* () {
   const previewBrowser = yield* PreviewBrowser.PreviewBrowser;
   const desktopChannel = yield* DesktopBrowserChannel.DesktopBrowserChannel;
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
+  // Keeps passwords filled in any tab away from agent tools.
+  const credentials = CredentialGuard.makeCredentialGuard();
   const launchServices = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
   const setupCommand = yield* resolveRootCliCommand(PreviewBrowserHost.SETUP_SUBCOMMAND);
 
@@ -721,6 +724,7 @@ const make = Effect.gen(function* () {
     if (!desktop) await prepareContext(context);
     const page = adopted?.page ?? desktop?.page ?? (await context.newPage());
     const cdp = await context.newCDPSession(page);
+    await credentials.install({ page, cdp });
     // The desktop's page is already a normal browser. A popup's first request
     // went out before it became a tab; everything after presents as Chrome.
     if (!desktop) await presentAsChrome(cdp, host);
@@ -1441,6 +1445,11 @@ const make = Effect.gen(function* () {
       try {
         await encoder.evaluate(ServerBrowserPage.RECORDING_ENCODER_SCRIPT);
         // Seed idle pages before returning so an immediate stop has a frame to encode.
+        if (!(await credentials.mayShowFrame(tab)))
+          throw new ServerBrowserPage.ServerBrowserOperationError(
+            "PreviewAutomationExecutionError",
+            "A filled password shows as plain text on this page, so recording didn't start.",
+          );
         const firstFrame = await ServerBrowserPage.captureViewport(tab.page, tab.cdp, {
           format: "jpeg",
           quality: RECORDING_SCREENCAST.quality,
@@ -1456,11 +1465,17 @@ const make = Effect.gen(function* () {
         const framesInFlight = new Set<Promise<void>>();
         opened.on("Page.screencastFrame", (frame) => {
           const cssWidth = tab.page.viewportSize()?.width ?? frame.metadata.deviceWidth;
-          const delivered: Promise<void> = encoder
-            .evaluate(
-              ([data, width]) =>
-                (globalThis as unknown as EncoderWindow).__t3Recorder.frame(data, width),
-              [frame.data, cssWidth] as const,
+          // A frame showing a filled password as text is dropped; the video holds the last one.
+          const delivered: Promise<void> = credentials
+            .mayShowFrame(tab)
+            .then((show) =>
+              show
+                ? encoder.evaluate(
+                    ([data, width]) =>
+                      (globalThis as unknown as EncoderWindow).__t3Recorder.frame(data, width),
+                    [frame.data, cssWidth] as const,
+                  )
+                : true,
             )
             .then(async (accepted) => {
               if (!accepted) await opened.send("Page.stopScreencast");
@@ -1905,7 +1920,9 @@ const make = Effect.gen(function* () {
       }
       case "snapshot": {
         return withScreencastsPaused(tab, () =>
-          ServerBrowserPage.snapshot({ ...tab, renderScale: RENDER_SCALE }),
+          credentials.snapshot(tab, (remembered) =>
+            ServerBrowserPage.snapshot({ ...tab, renderScale: RENDER_SCALE, remembered }),
+          ),
         );
       }
       case "click": {
@@ -1932,6 +1949,8 @@ const make = Effect.gen(function* () {
           uploadFiles(tab, input as PreviewAutomationUploadInput),
         );
       case "type":
+        // Text the agent typed is its own, so a password field holding it stays usable.
+        credentials.typed(tab.page, (input as PreviewAutomationTypeInput).text);
         return recordAction(tab, "type", () =>
           ServerBrowserPage.type(tab.page, input as PreviewAutomationTypeInput),
         );
@@ -1944,6 +1963,12 @@ const make = Effect.gen(function* () {
           ServerBrowserPage.scroll(tab.page, input as PreviewAutomationScrollInput),
         );
       case "evaluate":
+        await credentials.assertMayEvaluate(
+          tab,
+          [...tabs.values()].filter(
+            (other) => other !== tab && other.page.context() === tab.page.context(),
+          ),
+        );
         return ServerBrowserPage.evaluate(
           tab.page,
           tab.cdp,
@@ -1965,13 +1990,14 @@ const make = Effect.gen(function* () {
       catch: ServerBrowserPage.toOperationError,
     }).pipe(
       Effect.match({
-        onSuccess: (result) => ({ ok: true as const, result }),
+        // Every answer to an agent masks filled passwords, wherever the page put them.
+        onSuccess: (result) => ({ ok: true as const, result: credentials.mask(result) }),
         onFailure: (error) => ({
           ok: false as const,
           error: {
             _tag: error.tag,
-            message: error.message,
-            ...(error.detail === undefined ? {} : { detail: error.detail }),
+            message: credentials.maskText(error.message),
+            ...(error.detail === undefined ? {} : { detail: credentials.mask(error.detail) }),
           },
         }),
       }),
