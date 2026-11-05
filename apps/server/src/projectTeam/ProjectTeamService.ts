@@ -134,7 +134,7 @@ const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
 
 export const JOURNAL_LIMIT = 20;
 const JOURNAL_TEXT_MAX_CHARS = 200;
-/** Answered or replaced cards kept in "Waiting on you" after they close. */
+/** Answered or replaced cards kept in the PM chat after they close. */
 const CLOSED_DECISION_CARD_LIMIT = 30;
 
 function clip(text: string, max: number): string {
@@ -1322,7 +1322,7 @@ const make = Effect.gen(function* () {
           (input.kind === "approval" ? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY] : []),
         askerThreadId: callerThreadId,
       });
-      // The question shows on the task's page and in "Waiting on you"; the PM is not woken.
+      // The question shows on the task's page and above the PM composer; the PM is not woken.
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
       return { item };
     }).pipe(orTeamError("Could not ask the user."));

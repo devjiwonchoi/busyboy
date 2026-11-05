@@ -157,7 +157,7 @@ describe("AttentionRouter", () => {
           assert.include(stale.message, "replaced by a newer question");
           assert.strictEqual(second.item.supersededAt, null);
 
-          // Cards show on the task page and in "Waiting on you"; the PM is not woken for them.
+          // Cards show on the task page and above the PM composer; the PM is not woken for them.
           const toPm = yield* harness.messagesTo(pm);
           assert.isFalse(toPm.some((text) => text.includes("Plan v2?")));
         }),
