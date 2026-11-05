@@ -1,4 +1,9 @@
-import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  type ProjectId,
+  type ProjectTaskId,
+  type ScopedProjectRef,
+} from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "./ThreadHoverCard";
 import { CollapsibleSectionHeader } from "./ui/collapsible-section-header";
@@ -76,7 +81,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useParams, useRouter } from "@tanstack/react-router";
 
 import { useSideChatStore } from "../sideChatStore";
 import {
@@ -258,6 +263,9 @@ import {
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
+import { NewTaskDialog, type NewTaskTarget } from "./sidebar/NewTaskDialog";
+import { selectSidebarTasksWithoutSession, SidebarTaskRow } from "./sidebar/SidebarTaskRows";
+import { taskRouteParams } from "../taskRoutes";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -371,6 +379,15 @@ interface SidebarThreadPartitionInput {
   readonly workingShelfEnabled: boolean;
   /** Threads shown as a project section heading instead of a row. */
   readonly headingThreadKeys: ReadonlySet<string>;
+  /** Each task's current lead; earlier sessions of a task open from its page instead. */
+  readonly taskByLeadKey: ReadonlyMap<string, SidebarLeadTask>;
+}
+
+/** The task a lead thread row stands for; clicking the row opens the task's page. */
+export interface SidebarLeadTask {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+  readonly taskId: ProjectTaskId;
 }
 
 /** The manager a project section's heading stands for, when it is on. */
@@ -476,6 +493,17 @@ function useSidebarThreads(input: {
   const headingThreadKeys = new Set(
     [...projectManagerByProjectKey.values()].map((manager) => manager.threadKey),
   );
+  const taskByLeadKey = new Map<string, SidebarLeadTask>();
+  for (const { entry } of projectManagerByProjectKey.values()) {
+    for (const task of entry.summary.tasks) {
+      if (task.leadThreadId === null) continue;
+      taskByLeadKey.set(scopedThreadKey(scopeThreadRef(entry.environmentId, task.leadThreadId)), {
+        environmentId: entry.environmentId,
+        projectId: entry.summary.projectId,
+        taskId: task.id,
+      });
+    }
+  }
   // A manager's section has no collapse control, so a key stored before it had a
   // manager must not keep it collapsed.
   const collapsedProjectKeys = new Set(
@@ -488,6 +516,7 @@ function useSidebarThreads(input: {
     optimisticDrop,
     workingShelfEnabled,
     headingThreadKeys,
+    taskByLeadKey,
   });
 
   const { pinnedThreads, workingThreads } = partition;
@@ -542,6 +571,7 @@ function useSidebarThreads(input: {
     projectSectionKeys,
     projectKeyOf,
     projectManagerByProjectKey,
+    taskByLeadKey,
     collapsedProjectKeys,
     toggleProjectCollapsed: (projectKey: string) =>
       setCollapsedProjectKeyList((keys) =>
@@ -572,6 +602,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     optimisticDrop,
     workingShelfEnabled,
     headingThreadKeys,
+    taskByLeadKey,
   } = input;
   // A manager's task leads are its project's ordinary rows.
   const visible = filterSidebarV2VisibleThreads(
@@ -579,6 +610,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     scopedProjectKeys,
     (thread) => headingThreadKeys.has(threadShellKey(thread)),
     (thread) =>
+      taskByLeadKey.has(threadShellKey(thread)) &&
       isProjectManagerTaskLead(thread, (environmentId, threadId) =>
         headingThreadKeys.has(
           scopedThreadKey(scopeThreadRef(environmentId as EnvironmentId, threadId as ThreadId)),
@@ -1109,6 +1141,7 @@ function SidebarProjectHeader(props: {
     readonly manager: SidebarSectionProjectManager;
     readonly isActive: boolean;
     readonly onOpenThread: (threadRef: ScopedThreadRef) => void;
+    readonly onNewTask: () => void;
     readonly jumpLabel: string | null;
   };
 }) {
@@ -1140,6 +1173,7 @@ function SidebarProjectHeader(props: {
           isActive={pm.isActive}
           onOpenThread={pm.onOpenThread}
           onNewThread={props.onNewThread}
+          onNewTask={pm.onNewTask}
           jumpLabel={pm.jumpLabel}
         />
       </SortableSidebarMarker>
@@ -1954,6 +1988,7 @@ export default function Sidebar() {
     projectScopeItems,
   } = useSidebarLookups();
   const router = useRouter();
+  const routeTaskId = (useParams({ strict: false }) as { readonly taskId?: string }).taskId ?? null;
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
@@ -2231,6 +2266,7 @@ export default function Sidebar() {
     projectSectionKeys,
     projectKeyOf,
     projectManagerByProjectKey,
+    taskByLeadKey,
     collapsedProjectKeys,
     toggleProjectCollapsed,
   } = useSidebarThreads({
@@ -2296,11 +2332,29 @@ export default function Sidebar() {
     if (isMobile) {
       setOpenMobile(false);
     }
+    // A task's lead row stands for the task: open its page, with the lead's chat beside the spec.
+    const leadTask = taskByLeadKey.get(scopedThreadKey(threadRef));
+    if (leadTask !== undefined) {
+      return router.navigate(
+        taskRouteParams(leadTask.environmentId, leadTask.projectId, leadTask.taskId),
+      );
+    }
     return router.navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(threadRef),
     });
   };
+  const navigateToTask = (
+    environmentId: EnvironmentId,
+    projectId: ProjectId,
+    taskId: ProjectTaskId,
+  ) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    return router.navigate(taskRouteParams(environmentId, projectId, taskId));
+  };
+  const [newTaskTarget, setNewTaskTarget] = useState<NewTaskTarget | null>(null);
 
   const handleThreadFileDrop = async (threadRef: ScopedThreadRef, files: File[]) => {
     const dropId = queuePendingFileDrop({ threadRef, files });
@@ -3779,7 +3833,11 @@ export default function Sidebar() {
                             dragOverPinned={
                               dragState?.activeKey === threadKey && dragTargetSection === "pinned"
                             }
-                            isActive={routeThreadKey === threadKey}
+                            isActive={
+                              routeThreadKey === threadKey ||
+                              (routeTaskId !== null &&
+                                taskByLeadKey.get(threadKey)?.taskId === routeTaskId)
+                            }
                             nested={
                               section === "active" &&
                               projectManagerByProjectKey.has(projectKeyOf(thread))
@@ -3926,6 +3984,12 @@ export default function Sidebar() {
                                         manager,
                                         isActive: routeThreadKey === manager.threadKey,
                                         onOpenThread: navigateToThread,
+                                        onNewTask: () =>
+                                          setNewTaskTarget({
+                                            environmentId: manager.entry.environmentId,
+                                            projectId: manager.entry.summary.projectId,
+                                            projectName: projectGroup?.displayName ?? "",
+                                          }),
                                         jumpLabel: showJumpHints
                                           ? (jumpLabelByKey.get(manager.threadKey) ?? null)
                                           : null,
@@ -3934,6 +3998,25 @@ export default function Sidebar() {
                                   : {})}
                               />,
                             );
+                            if (manager && !collapsedProjectKeys.has(projectKey)) {
+                              const { environmentId, summary } = manager.entry;
+                              for (const { task, depth } of selectSidebarTasksWithoutSession(
+                                summary,
+                              )) {
+                                items.push(
+                                  <SidebarTaskRow
+                                    key={`task:${environmentId}:${task.id}`}
+                                    task={task}
+                                    taskKeyPrefix={summary.taskKeyPrefix}
+                                    depth={depth}
+                                    isActive={routeTaskId === task.id}
+                                    onOpen={() =>
+                                      void navigateToTask(environmentId, summary.projectId, task.id)
+                                    }
+                                  />,
+                                );
+                              }
+                            }
                           }
                         }
                       }
@@ -3969,6 +4052,17 @@ export default function Sidebar() {
           ) : null}
         </SidebarGroup>
       </SidebarContent>
+      <NewTaskDialog
+        target={newTaskTarget}
+        onClose={() => setNewTaskTarget(null)}
+        onCreated={(detail) => {
+          const target = newTaskTarget;
+          setNewTaskTarget(null);
+          if (target !== null) {
+            void navigateToTask(target.environmentId, detail.task.projectId, detail.task.id);
+          }
+        }}
+      />
       <SidebarChromeFooter />
     </>
   );
