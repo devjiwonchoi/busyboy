@@ -25,5 +25,11 @@ export const DesktopBrowserCommand = Schema.Union([
     x: Schema.Finite,
     y: Schema.Finite,
   }),
+  /** An agent tool action on the tab started or ended. */
+  Schema.Struct({
+    type: Schema.Literal("agentAction"),
+    ...TabKey,
+    phase: Schema.Literals(["start", "end"]),
+  }),
 ]);
 export type DesktopBrowserCommand = typeof DesktopBrowserCommand.Type;

@@ -119,6 +119,8 @@ export type BrowserDefaultSettings = Pick<
   | "browserCustomSearchUrl"
   | "browserZeroStateSuggestions"
   | "browserRemoteSearchSuggestions"
+  | "browserOfferToSavePasswords"
+  | "browserPasswordsRequireDeviceAuth"
   | "pullRequestLinksOpenInApp"
 >;
 
@@ -171,6 +173,14 @@ export function getChangedBrowserSettingLabels(settings: BrowserDefaultSettings)
     ...(settings.browserRemoteSearchSuggestions !==
     DEFAULT_UNIFIED_SETTINGS.browserRemoteSearchSuggestions
       ? ["Search suggestions"]
+      : []),
+    ...(settings.browserOfferToSavePasswords !==
+    DEFAULT_UNIFIED_SETTINGS.browserOfferToSavePasswords
+      ? ["Offer to save passwords"]
+      : []),
+    ...(settings.browserPasswordsRequireDeviceAuth !==
+    DEFAULT_UNIFIED_SETTINGS.browserPasswordsRequireDeviceAuth
+      ? ["Ask before filling passwords"]
       : []),
     ...(settings.pullRequestLinksOpenInApp !== DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp
       ? ["Open pull requests in BusyBoy"]

@@ -1,4 +1,9 @@
 import {
+  BrowserPasswordFillChooseInput,
+  BrowserPasswordPeekResult,
+  BrowserPasswordPromptInput,
+  BrowserPasswordPromptResponse,
+  BrowserPasswordTabInput,
   BrowserLoginSummary,
   BrowserNeverSaveEntry,
   BrowserPasswordsAddInput,
@@ -21,6 +26,7 @@ import * as Schema from "effect/Schema";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserPasswords from "../../preview/BrowserPasswords/BrowserPasswords.ts";
+import * as PasswordAutofill from "../../preview/BrowserPasswords/PasswordAutofill.ts";
 import { requireAppSender } from "../appSender.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
@@ -123,5 +129,67 @@ export const methods = [
     BrowserPasswordsIdsInput,
     Schema.Void,
     (passwords, input) => passwords.neverSaveRemove(input),
+  ),
+] as const;
+
+export const installPasswordAutofillEventForwarding = Effect.fn(
+  "desktop.ipc.browserPasswords.installAutofillEventForwarding",
+)(function* () {
+  const electronWindow = yield* ElectronWindow.ElectronWindow;
+  const autofill = yield* PasswordAutofill.PasswordAutofill;
+  const runFork = Effect.runForkWith(yield* Effect.context<never>());
+  const unsubscribe = autofill.subscribe((event) =>
+    runFork(electronWindow.sendAll(IpcChannels.BROWSER_PASSWORDS_AUTOFILL_EVENT_CHANNEL, event)),
+  );
+  yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+});
+
+const autofillMethod = <P, PE, R, RE>(
+  channel: string,
+  payload: Schema.Codec<P, PE>,
+  result: Schema.Codec<R, RE>,
+  run: (autofill: PasswordAutofill.PasswordAutofillShape, input: P) => Effect.Effect<R>,
+) =>
+  DesktopIpc.makeIpcMethod({
+    channel,
+    payload,
+    result,
+    handler: Effect.fn(`desktop.ipc.browserPasswords.${channel}`)(function* (input: P, event) {
+      yield* requireAppSender(channel, event);
+      return yield* run(yield* PasswordAutofill.PasswordAutofill, input);
+    }),
+  });
+
+export const autofillMethods = [
+  autofillMethod(
+    IpcChannels.BROWSER_PASSWORDS_AUTOFILL_CHOOSE_CHANNEL,
+    BrowserPasswordFillChooseInput,
+    Schema.Void,
+    (autofill, input) => autofill.choose(input.tabId, input.requestId, input.loginId),
+  ),
+  autofillMethod(
+    IpcChannels.BROWSER_PASSWORDS_AUTOFILL_DISMISS_CHANNEL,
+    BrowserPasswordTabInput,
+    Schema.Void,
+    (autofill, input) => autofill.dismissFillList(input.tabId),
+  ),
+  autofillMethod(
+    IpcChannels.BROWSER_PASSWORDS_AUTOFILL_RESPOND_CHANNEL,
+    BrowserPasswordPromptResponse,
+    Schema.Void,
+    (autofill, input) => autofill.respondToPrompt(input),
+  ),
+  autofillMethod(
+    IpcChannels.BROWSER_PASSWORDS_AUTOFILL_PEEK_CHANNEL,
+    BrowserPasswordPromptInput,
+    BrowserPasswordPeekResult,
+    (autofill, input) =>
+      autofill.peek(input.tabId, input.promptId).pipe(Effect.map((password) => ({ password }))),
+  ),
+  autofillMethod(
+    IpcChannels.BROWSER_PASSWORDS_AUTOFILL_REOPEN_CHANNEL,
+    BrowserPasswordTabInput,
+    Schema.Void,
+    (autofill, input) => autofill.reopenPrompt(input.tabId),
   ),
 ] as const;

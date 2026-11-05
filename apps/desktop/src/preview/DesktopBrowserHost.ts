@@ -26,6 +26,10 @@ const lineEncoder = new TextEncoder();
 const AGENT_INPUT_COMMAND =
   /"method":"(?:Input\.|Page\.navigate"|Runtime\.(?:evaluate|callFunctionOn)")/;
 const AGENT_DOWNLOAD_WINDOW_MS = 5_000;
+/** Keyboard and pointer input only an agent tool sends. */
+const AGENT_KEY_INPUT_COMMAND = /"method":"Input\./;
+/** An action this old is treated as finished even if its end never arrived. */
+const AGENT_ACTION_MAX_MS = 5 * 60_000;
 /** Commands that make the page navigate: input that can follow a link, or explicit navigation. */
 const AGENT_NAVIGATION_COMMAND =
   /"method":"(?:Input\.|Page\.(?:navigate|reload|navigateToHistoryEntry)")/;
@@ -52,6 +56,11 @@ interface AttachedTab {
   pendingDownloadGuid: string | null;
   agentInputAt: number;
   agentNavigationAt: number;
+  /** Agent tool actions in progress, and when one last started or ended. */
+  agentActions: number;
+  agentActionAt: number;
+  /** Last keyboard or pointer input an agent sent. */
+  agentKeyInputAt: number;
   readonly onMessage: (
     event: Electron.Event,
     method: string,
@@ -68,6 +77,12 @@ export class DesktopBrowserHost extends Context.Service<
     readonly attach: (key: DesktopBrowserTabKey, debuggee: DesktopBrowserTabDebugger) => void;
     readonly detach: (key: DesktopBrowserTabKey) => void;
     readonly humanStartedDownload: (source: Electron.WebContents) => boolean;
+    /**
+     * True while an agent tool action runs on this guest, or within `ms` after
+     * one ended or after the agent's last key or pointer input. Playwright's
+     * own bookkeeping (such as reading the title after each load) does not count.
+     */
+    readonly agentActingWithin: (source: Electron.WebContents, ms: number) => boolean;
     /** The agent thread that drove this guest within the attribution window, if any. */
     readonly agentAttribution: (
       source: Electron.WebContents,
@@ -159,6 +174,9 @@ export const make = Effect.gen(function* () {
       pendingDownloadGuid: null,
       agentInputAt: Number.NEGATIVE_INFINITY,
       agentNavigationAt: Number.NEGATIVE_INFINITY,
+      agentActions: 0,
+      agentActionAt: Number.NEGATIVE_INFINITY,
+      agentKeyInputAt: Number.NEGATIVE_INFINITY,
       onMessage: (_event, method, params, sessionId) => {
         if (method === "Browser.downloadWillBegin") {
           const guid = (params as { guid?: unknown } | undefined)?.guid;
@@ -183,11 +201,23 @@ export const make = Effect.gen(function* () {
         runFork(PubSub.publish(pointers, { key: { threadId, tabId }, phase, x, y }));
         return;
       }
+      if (command.value.type === "agentAction") {
+        tab.agentActions =
+          command.value.phase === "start"
+            ? tab.agentActions + 1
+            : Math.max(0, tab.agentActions - 1);
+        tab.agentActionAt = performance.now();
+        return;
+      }
       if (command.value.type === "release") {
         tab.relay = null;
+        tab.agentActions = 0;
         return;
       }
       if (AGENT_INPUT_COMMAND.test(command.value.message)) tab.agentInputAt = performance.now();
+      if (AGENT_KEY_INPUT_COMMAND.test(command.value.message)) {
+        tab.agentKeyInputAt = performance.now();
+      }
       if (AGENT_NAVIGATION_COMMAND.test(command.value.message)) {
         tab.agentNavigationAt = performance.now();
       }
@@ -235,6 +265,16 @@ export const make = Effect.gen(function* () {
     detach,
     placeDownload,
     humanStartedDownload,
+    agentActingWithin: (source, ms) => {
+      const at = performance.now();
+      return [...tabs.values()].some(
+        (candidate) =>
+          candidate.debuggee.webContents === source &&
+          ((candidate.agentActions > 0 && at - candidate.agentActionAt <= AGENT_ACTION_MAX_MS) ||
+            at - candidate.agentActionAt <= ms ||
+            at - candidate.agentKeyInputAt <= ms),
+      );
+    },
     agentAttribution,
   });
 });

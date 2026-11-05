@@ -21,6 +21,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { readPreviewAnnotationTheme } from "./annotationTheme";
 import { useBrowserDefaults } from "./browserDefaults";
 import { useBrowserPointerStore } from "./browserPointerStore";
+import { usePasswordAutofillStore } from "./passwordAutofillStore";
 import { HostedBrowserWebview } from "./HostedBrowserWebview";
 import { openUrlInPreview } from "./openFileInPreview";
 import { rendersServerTabNatively } from "./previewRuntime";
@@ -88,6 +89,12 @@ export function ElectronBrowserHost() {
     return preview.onPointerEvent((event) => {
       useBrowserPointerStore.getState().apply(event);
     });
+  }, []);
+
+  useEffect(() => {
+    const autofill = window.desktopBridge?.browserPasswords?.autofill;
+    if (!autofill) return;
+    return autofill.onEvent((event) => usePasswordAutofillStore.getState().apply(event));
   }, []);
 
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: true });

@@ -291,6 +291,33 @@ export class PasswordDatabase {
     return row.note_encrypted === null ? "" : this.cipher.decrypt(row.note_encrypted);
   }
 
+  /** Logins for one realm, most recently used first (fill dropdown order). */
+  forRealm(signonRealm: string): ReadonlyArray<BrowserLoginSummary> {
+    const rows = this.db
+      .prepare(
+        `SELECT ${SUMMARY_COLUMNS} FROM logins WHERE signon_realm = ?
+         ORDER BY IFNULL(last_used_at, 0) DESC, IFNULL(last_filled_at, 0) DESC, id`,
+      )
+      .all(signonRealm) as unknown as LoginRow[];
+    return rows.map(toSummary);
+  }
+
+  /** True when the stored password for this login equals `candidate`. Decrypts one row. */
+  passwordEquals(id: number, candidate: string): boolean {
+    return this.revealPassword(id) === candidate;
+  }
+
+  /** A sign-in with this login succeeded. */
+  recordUse(id: number, at: number): void {
+    this.db
+      .prepare("UPDATE logins SET last_used_at = ?, times_used = times_used + 1 WHERE id = ?")
+      .run(at, id);
+  }
+
+  recordFill(id: number, at: number): void {
+    this.db.prepare("UPDATE logins SET last_filled_at = ? WHERE id = ?").run(at, id);
+  }
+
   neverSaveList(): ReadonlyArray<BrowserNeverSaveEntry> {
     const rows = this.db
       .prepare("SELECT id, origin, created_at FROM never_save ORDER BY origin COLLATE NOCASE")

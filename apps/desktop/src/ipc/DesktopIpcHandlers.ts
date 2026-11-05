@@ -83,6 +83,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* PreviewIpc.installPreviewEventForwarding();
   yield* BrowserHistoryIpc.installBrowserHistoryEventForwarding();
   yield* BrowserPasswordsIpc.installBrowserPasswordsEventForwarding();
+  yield* BrowserPasswordsIpc.installPasswordAutofillEventForwarding();
 
   yield* ipc.handle(AppActivationIpc.setReady);
   yield* ipc.handle(AppActivationIpc.complete);
@@ -156,6 +157,9 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(BrowserHistoryIpc.remoteSuggestions);
   for (const passwordsMethod of BrowserPasswordsIpc.methods) {
     yield* ipc.handle(passwordsMethod);
+  }
+  for (const autofillMethod of BrowserPasswordsIpc.autofillMethods) {
+    yield* ipc.handle(autofillMethod);
   }
   yield* ipc.handle(PreviewIpc.listBrowserImportSources);
   yield* ipc.handle(PreviewIpc.importBrowserCookies);

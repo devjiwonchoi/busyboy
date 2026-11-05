@@ -68,6 +68,7 @@ import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
 import * as PreviewPasskeys from "./Passkeys.ts";
 import * as BrowserSession from "./BrowserSession.ts";
 import * as BrowserHistory from "./BrowserHistory/BrowserHistory.ts";
+import * as PasswordAutofill from "./BrowserPasswords/PasswordAutofill.ts";
 import type { HistoryRecorder, NavigationHint } from "./BrowserHistory/HistoryRecorder.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
@@ -549,6 +550,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     yield* Effect.serviceOption(BrowserHistory.BrowserHistory),
   );
   const historyRecorders = new WeakMap<Electron.WebContents, HistoryRecorder>();
+  const passwordAutofill = Option.getOrNull(
+    yield* Effect.serviceOption(PasswordAutofill.PasswordAutofill),
+  );
   // Navigations requested before the tab has a guest; applied when it loads.
   const pendingHistoryHints = new Map<string, NavigationHint>();
   // Tabs an agent opened, by thread: their first load is the agent's visit.
@@ -1310,6 +1314,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       agentOpenedTabs.delete(tabId);
       if (openerThreadId !== undefined) historyRecorder.openedByAgent(openerThreadId);
     }
+    let detachPasswordAutofill = () => {};
     const sync = () => runFork(syncState(true));
     const syncNavigation = (_event: unknown, url: string, httpResponseCode: number) => {
       historyRecorder?.commit({ url, httpResponseCode });
@@ -1592,6 +1597,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         cancelFaviconCapture();
         historyRecorder?.dispose();
         historyRecorders.delete(wc);
+        detachPasswordAutofill();
         wc.off("did-start-navigation", navigationStarted);
         wc.off("did-navigate", syncNavigation);
         wc.off("did-navigate-in-page", syncInPageNavigation);
@@ -1627,6 +1633,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         wc.ipc.on(RECORDING_INPUT_CHANNEL, recordingInput);
         wc.ipc.on(MOUSE_NAVIGATE_CHANNEL, mouseNavigate);
         detachPasskeys = passkeys.attachGuest(wc);
+        detachPasswordAutofill = passwordAutofill?.attachGuest(wc, tabId) ?? (() => {});
         wc.setWindowOpenHandler((details) => {
           const action = previewWindowOpenAction(details);
           if (action === "popup") {

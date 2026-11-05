@@ -178,4 +178,17 @@ describe("SessionControl", () => {
     await control.release("viewer-a");
     await expect(control.agent("agent-b", async () => "acted")).resolves.toBe("acted");
   });
+
+  it("reports when each agent action starts and ends, even when it fails", async () => {
+    const phases: string[] = [];
+    const control = new SessionControl("agent", undefined, (phase) => phases.push(phase));
+    await control.agent("agent", async () => phases.push("run"));
+    await expect(
+      control.agent("agent", async () => {
+        throw new Error("click failed");
+      }),
+    ).rejects.toThrow("click failed");
+    await control.observe(async () => "read");
+    expect(phases).toEqual(["start", "run", "end", "start", "end"]);
+  });
 });

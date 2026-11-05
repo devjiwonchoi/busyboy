@@ -149,6 +149,103 @@ export type BrowserPasswordsProfileInput = typeof BrowserPasswordsProfileInput.T
 export const BrowserPasswordsChangedEvent = Schema.Struct({ profileId: BrowserProfileId });
 export type BrowserPasswordsChangedEvent = typeof BrowserPasswordsChangedEvent.Type;
 
+/** Where the fill list goes, in CSS pixels relative to the webview's top-left. */
+export const BrowserPasswordAnchorRect = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+  width: Schema.Number,
+  height: Schema.Number,
+});
+export type BrowserPasswordAnchorRect = typeof BrowserPasswordAnchorRect.Type;
+
+export const BrowserPasswordFillRow = Schema.Struct({ loginId: Id, username: Schema.String });
+export type BrowserPasswordFillRow = typeof BrowserPasswordFillRow.Type;
+
+/**
+ * Main → app renderer. The fill list and the save prompt are drawn by BusyBoy
+ * over the webview, never inside the page.
+ */
+export type BrowserPasswordAutofillEvent =
+  | {
+      readonly type: "fillList";
+      readonly tabId: string;
+      readonly requestId: string;
+      readonly rect: BrowserPasswordAnchorRect;
+      readonly rows: ReadonlyArray<BrowserPasswordFillRow>;
+      /** Set when the field's frame is on another origin than the page ("for login.example.net"). */
+      readonly frameOrigin: string | null;
+      /** -1 when nothing is highlighted. */
+      readonly selectedIndex: number;
+    }
+  | { readonly type: "fillListClosed"; readonly tabId: string }
+  | {
+      readonly type: "savePrompt";
+      readonly tabId: string;
+      readonly promptId: string;
+      readonly mode: "save" | "update";
+      readonly origin: string;
+      /** Set when the login form was in a frame on another origin than the page. */
+      readonly frameOrigin: string | null;
+      readonly username: string;
+      /** Folded into the key icon in the address bar; the prompt can be reopened. */
+      readonly collapsed: boolean;
+    }
+  | { readonly type: "savePromptClosed"; readonly tabId: string };
+
+/**
+ * A browser tab's runtime id: a JSON tuple of environment, thread, project and
+ * tab ids, so well over 128 characters.
+ */
+export const BrowserPasswordTabId = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(1024),
+);
+
+export const BrowserPasswordFillChooseInput = Schema.Struct({
+  tabId: BrowserPasswordTabId,
+  requestId: Schema.String.check(Schema.isMaxLength(64)),
+  loginId: Id,
+});
+export type BrowserPasswordFillChooseInput = typeof BrowserPasswordFillChooseInput.Type;
+
+export const BrowserPasswordTabInput = Schema.Struct({
+  tabId: BrowserPasswordTabId,
+});
+export type BrowserPasswordTabInput = typeof BrowserPasswordTabInput.Type;
+
+export const BrowserPasswordPromptInput = Schema.Struct({
+  tabId: BrowserPasswordTabId,
+  promptId: Schema.String.check(Schema.isMaxLength(64)),
+});
+export type BrowserPasswordPromptInput = typeof BrowserPasswordPromptInput.Type;
+
+export const BrowserPasswordPromptResponse = Schema.Struct({
+  tabId: BrowserPasswordTabId,
+  promptId: Schema.String.check(Schema.isMaxLength(64)),
+  action: Schema.Literals(["save", "notNow", "never"]),
+  /** The username as edited in the prompt. */
+  username: Schema.optional(Username),
+});
+export type BrowserPasswordPromptResponse = typeof BrowserPasswordPromptResponse.Type;
+
+export const BrowserPasswordPeekResult = Schema.Struct({
+  /** Null when the prompt is gone. */
+  password: Schema.NullOr(Schema.String),
+});
+export type BrowserPasswordPeekResult = typeof BrowserPasswordPeekResult.Type;
+
+export interface DesktopBrowserPasswordAutofillBridge {
+  onEvent: (listener: (event: BrowserPasswordAutofillEvent) => void) => () => void;
+  /** The person picked a row in BusyBoy's fill list. Main runs the device check, then fills. */
+  choose: (input: BrowserPasswordFillChooseInput) => Promise<void>;
+  dismissFillList: (input: BrowserPasswordTabInput) => Promise<void>;
+  respondToPrompt: (input: BrowserPasswordPromptResponse) => Promise<void>;
+  /** The password the person just typed, for the prompt's peek toggle. No device check. */
+  peek: (input: BrowserPasswordPromptInput) => Promise<BrowserPasswordPeekResult>;
+  /** Re-expand a collapsed prompt from the address bar key icon. */
+  reopenPrompt: (input: BrowserPasswordTabInput) => Promise<void>;
+}
+
 /**
  * The settings window's view of the vault. Only `reveal` ever returns a
  * password, after the device check, and only to this trusted UI.
@@ -169,4 +266,5 @@ export interface DesktopBrowserPasswordsBridge {
     remove: (input: BrowserPasswordsIdsInput) => Promise<void>;
   };
   onChanged: (listener: (event: BrowserPasswordsChangedEvent) => void) => () => void;
+  autofill: DesktopBrowserPasswordAutofillBridge;
 }

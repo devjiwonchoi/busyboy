@@ -206,6 +206,14 @@ function createFakePasswordsBridge(options: {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    autofill: {
+      onEvent: () => () => {},
+      choose: vi.fn(async () => {}),
+      dismissFillList: vi.fn(async () => {}),
+      respondToPrompt: vi.fn(async () => {}),
+      peek: vi.fn(async () => ({ password: null })),
+      reopenPrompt: vi.fn(async () => {}),
+    },
   } satisfies DesktopBrowserPasswordsBridge;
   return bridge;
 }

@@ -358,6 +358,13 @@ export const ClientSettingsSchema = Schema.Struct({
   browserZeroStateSuggestions: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
+  browserOfferToSavePasswords: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(true)),
+  ),
+  // Fill only: revealing or copying a saved password always asks.
+  browserPasswordsRequireDeviceAuth: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(true)),
+  ),
 
   confirmQuit: QuitConfirmationModeSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_QUIT_CONFIRMATION_MODE)),
@@ -1419,6 +1426,8 @@ export const ClientSettingsPatch = Schema.Struct({
   browserCustomSearchUrl: Schema.optionalKey(BrowserCustomSearchUrl),
   browserRemoteSearchSuggestions: Schema.optionalKey(Schema.Boolean),
   browserZeroStateSuggestions: Schema.optionalKey(Schema.Boolean),
+  browserOfferToSavePasswords: Schema.optionalKey(Schema.Boolean),
+  browserPasswordsRequireDeviceAuth: Schema.optionalKey(Schema.Boolean),
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
