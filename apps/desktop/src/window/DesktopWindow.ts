@@ -25,7 +25,7 @@ import {
   TRACKPAD_SCROLL_END_CHANNEL,
   WINDOW_FULLSCREEN_STATE_CHANNEL,
 } from "../ipc/channels.ts";
-import { PASSKEY_BRIDGE_ARGUMENT, PASSWORD_BRIDGE_ARGUMENT } from "../preview/GuestProtocol.ts";
+import { hardenPreviewWebPreferences } from "../preview/WebviewPreferences.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 import * as PreviewPasskeys from "../preview/Passkeys.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
@@ -458,32 +458,11 @@ export const make = Effect.gen(function* () {
         event.preventDefault();
         return;
       }
-      // The renderer names the preload in the <webview> tag; pin it here so only
-      // BusyBoy's own guest preload ever runs next to a previewed page.
-      webPreferences.preload = environment.path.join(environment.dirname, "preview-pick-preload.cjs");
-      webPreferences.sandbox = true;
-      webPreferences.nodeIntegration = false;
-      // Persistent profiles run the preload in subframes too, so a login form
-      // inside a cross-origin iframe is scoped to that iframe's own origin. The
-      // sandbox still applies; the entry runs only the password module there.
-      // Incognito partitions (no `persist:` prefix) never get the password module.
-      const savesPasswords = params.partition.startsWith("persist:");
-      webPreferences.nodeIntegrationInSubFrames = savesPasswords;
-      // Isolated, so a previewed page never shares a world with the preload's ipcRenderer.
-      webPreferences.contextIsolation = true;
-      webPreferences.disableHtmlFullscreenWindowResize = true;
-      if (previewPasskeys.bridgeEnabled) {
-        webPreferences.additionalArguments = [
-          ...(webPreferences.additionalArguments ?? []),
-          PASSKEY_BRIDGE_ARGUMENT,
-        ];
-      }
-      if (savesPasswords) {
-        webPreferences.additionalArguments = [
-          ...(webPreferences.additionalArguments ?? []),
-          PASSWORD_BRIDGE_ARGUMENT,
-        ];
-      }
+      hardenPreviewWebPreferences(webPreferences, {
+        partition: params.partition,
+        preloadPath: environment.path.join(environment.dirname, "preview-pick-preload.cjs"),
+        passkeyBridge: previewPasskeys.bridgeEnabled,
+      });
     });
 
     const contextMenuContents = new WeakSet<Electron.WebContents>();

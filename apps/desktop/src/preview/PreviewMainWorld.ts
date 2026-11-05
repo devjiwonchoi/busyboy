@@ -11,8 +11,10 @@ import { getElementContext } from "react-grab/primitives";
 
 import { PREVIEW_ELEMENT_CONTEXT_KEY } from "./GuestProtocol.ts";
 
-const optionalString = (value: unknown): string | null => (typeof value === "string" ? value : null);
-const optionalNumber = (value: unknown): number | null => (typeof value === "number" ? value : null);
+const optionalString = (value: unknown): string | null =>
+  typeof value === "string" ? value : null;
+const optionalNumber = (value: unknown): number | null =>
+  typeof value === "number" ? value : null;
 
 const readElementContext = async (element: unknown) => {
   if (!(element instanceof Element)) return null;

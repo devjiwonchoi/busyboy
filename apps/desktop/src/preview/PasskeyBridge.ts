@@ -155,7 +155,9 @@ export function installPasskeyBridge(invoke: InvokePasskeyCeremony, channels: Pa
       // The native layer cannot tell a synced passkey from a security key.
       authenticatorAttachment: null,
       response: withValues(
-        Object.create(AuthenticatorAttestationResponse.prototype) as AuthenticatorAttestationResponse,
+        Object.create(
+          AuthenticatorAttestationResponse.prototype,
+        ) as AuthenticatorAttestationResponse,
         {
           clientDataJSON: fromBase64Url(data.clientDataJSON),
           attestationObject: fromBase64Url(data.attestationObject),
@@ -177,7 +179,9 @@ export function installPasskeyBridge(invoke: InvokePasskeyCeremony, channels: Pa
     });
   };
 
-  const credentialFromGetResult = (data: Extract<GetCredentialResult, { success: true }>["data"]) => {
+  const credentialFromGetResult = (
+    data: Extract<GetCredentialResult, { success: true }>["data"],
+  ) => {
     const userHandle = data.userHandle.length > 0 ? data.userHandle : null;
     const { prf, largeBlob } = data.extensions ?? {};
     const extensionResults: AuthenticationExtensionsClientOutputs = {

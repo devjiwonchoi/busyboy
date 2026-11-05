@@ -127,12 +127,12 @@ it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
         ElectronApp.layer,
         DesktopIpc.layer(
           {
-          handle: (channel, handler) => {
-            handlers.set(channel, handler);
-          },
-          removeHandler: (channel) => {
-            handlers.delete(channel);
-          },
+            handle: (channel, handler) => {
+              handlers.set(channel, handler);
+            },
+            removeHandler: (channel) => {
+              handlers.delete(channel);
+            },
             on: vi.fn(),
             removeAllListeners: vi.fn(),
           },

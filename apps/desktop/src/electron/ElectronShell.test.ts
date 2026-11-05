@@ -160,9 +160,14 @@ describe("ElectronShell", () => {
       ElectronShell.remoteEditorHost("cursor://vscode-remote/ssh-remote+box%20one/home/u"),
       "box one",
     );
-    assert.strictEqual(ElectronShell.remoteEditorHost("zed://ssh/zed.example/home/u"), "zed.example");
     assert.strictEqual(
-      ElectronShell.remoteEditorHost("jetbrains://gateway/ssh/environment?h=jb.example&launchIde=true"),
+      ElectronShell.remoteEditorHost("zed://ssh/zed.example/home/u"),
+      "zed.example",
+    );
+    assert.strictEqual(
+      ElectronShell.remoteEditorHost(
+        "jetbrains://gateway/ssh/environment?h=jb.example&launchIde=true",
+      ),
       "jb.example",
     );
     assert.isNull(ElectronShell.remoteEditorHost("https://example.com/"));
