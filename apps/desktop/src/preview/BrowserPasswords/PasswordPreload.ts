@@ -57,7 +57,7 @@ export interface PasswordPreloadHandle {
   readonly scanNow: () => void;
 }
 
-export const FRAME_MESSAGE_TYPE = "t3code-password-frame";
+export const FRAME_MESSAGE_TYPE = "busyboy-password-frame";
 export const SCAN_DEBOUNCE_MS = 300;
 export const GEOMETRY_THROTTLE_MS = 200;
 /** A click on the submit button and the `submit` it causes are one submission. */
