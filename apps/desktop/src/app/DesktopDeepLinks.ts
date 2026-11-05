@@ -51,6 +51,26 @@ export const make = Effect.gen(function* () {
     yield* Effect.addFinalizer(() => Effect.sync(() => Electron.app.releaseSingleInstanceLock()));
   }
 
+  // Links can arrive between taking the lock and configure; queue them until then.
+  const pendingSecondInstances: Array<readonly string[]> = [];
+  let handleSecondInstance = (argv: readonly string[]) => {
+    pendingSecondInstances.push(argv);
+  };
+  // macOS hands a launch link to open-url, which can fire before configure runs.
+  const pendingOpenUrls: Array<string> = [];
+  let handleOpenUrl = (url: string) => {
+    pendingOpenUrls.push(url);
+    return true;
+  };
+  if (isPrimaryInstance) {
+    yield* electronApp.on("second-instance", (_event: unknown, argv: readonly string[]) => {
+      handleSecondInstance(argv);
+    });
+    yield* electronApp.on("open-url", (event: { preventDefault: () => void }, url: string) => {
+      if (handleOpenUrl(url)) event.preventDefault();
+    });
+  }
+
   return DesktopDeepLinks.of({
     configure: Effect.gen(function* () {
       const electronApp = yield* ElectronApp.ElectronApp;
@@ -59,14 +79,21 @@ export const make = Effect.gen(function* () {
       const context = yield* Effect.context<ElectronWindow.ElectronWindow>();
       const runPromise = Effect.runPromiseWith(context);
 
-      // The SDK bridge holds Electron's single-instance lock (acquired at
-      // bridge creation) so OAuth deep-link callbacks on Windows/Linux are
-      // forwarded to the running app. In a secondary instance the bridge has
-      // already begun quitting the app; app.quit() is asynchronous, so stop
-      // bootstrap here before whenReady can fire.
+      // The single-instance lock forwards a second launch's links (Windows/Linux)
+      // to the running app. A secondary instance quits; app.quit() is
+      // asynchronous, so stop bootstrap here before whenReady can fire.
       if (!isPrimaryInstance) {
         yield* electronApp.quit;
         return yield* Effect.interrupt;
+      }
+
+      // macOS registers busyboy:// through Info.plist and Linux through
+      // DesktopLinuxUrlHandler. The NSIS installer does not, so a packaged
+      // Windows app writes its own HKCU entry pointing at this exe.
+      if (environment.isPackaged && environment.platform === "win32") {
+        yield* electronApp.setAsDefaultProtocolClient(
+          ElectronProtocol.getDesktopScheme(environment.isDevelopment),
+        );
       }
 
       const startProviderAuthHandoff = (value: string | undefined) => {
@@ -125,21 +152,18 @@ export const make = Effect.gen(function* () {
         void runPromise(webLinks.receive(url));
         return true;
       };
-      yield* electronApp.on("open-url", (event: { preventDefault: () => void }, url: string) => {
-        if (
-          startProviderAuthHandoff(url) ||
-          resumeProviderAuth(url) ||
-          openWebLink(url) ||
-          openAppLink(url)
-        )
-          event.preventDefault();
-      });
+      handleOpenUrl = (url) =>
+        startProviderAuthHandoff(url) ||
+        resumeProviderAuth(url) ||
+        openWebLink(url) ||
+        openAppLink(url);
+      for (const url of pendingOpenUrls.splice(0)) handleOpenUrl(url);
       yield* electronApp.on("open-file", (event: { preventDefault: () => void }, path: string) => {
         if (!DesktopWebLinks.isWebPageFile(path)) return;
         event.preventDefault();
         void runPromise(webLinks.receive(NodeURL.pathToFileURL(path).href));
       });
-      yield* electronApp.on("second-instance", (_event: unknown, argv: readonly string[]) => {
+      handleSecondInstance = (argv) => {
         if (
           argv?.some(
             (value) =>
@@ -153,7 +177,8 @@ export const make = Effect.gen(function* () {
             if (Option.isSome(mainWindow)) yield* electronWindow.reveal(mainWindow.value);
           }),
         );
-      });
+      };
+      for (const argv of pendingSecondInstances.splice(0)) handleSecondInstance(argv);
     }).pipe(Effect.withSpan("desktop.deepLinks.configure")),
   });
 });
