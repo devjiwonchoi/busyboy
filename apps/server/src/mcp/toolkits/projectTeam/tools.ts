@@ -122,7 +122,7 @@ const TaskSearchTool = Tool.make("task_search", {
 const TeamStatusTool = Tool.make("team_status", {
   ...shared,
   description:
-    "The team's state: tasks by stage, stalled tasks, open questions for the user, settings, and changes since a time. Call it first whenever you are woken. For a sitrep, pass the since time from the request.",
+    "The team's state: tasks by stage, stalled tasks, open questions for the user, the project's other threads (ones the user started, with status and any waiting question), settings, and changes since a time. Call it first whenever you are woken. For a sitrep, pass the since time from the request.",
   parameters: ProjectTeamStatusInput,
   success: ProjectTeamStatus,
 })

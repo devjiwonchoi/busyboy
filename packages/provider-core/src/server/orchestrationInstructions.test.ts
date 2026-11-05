@@ -98,6 +98,12 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "never the user's approval");
   });
 
+  it("has sitreps cover the user's own threads, by name", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "covers your tasks and `otherThreads` together");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "Needs you: each question waiting for the user");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "by their title, never by number alone");
+  });
+
   it("lists the PM's wakes and keeps decisions in memory across compactions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N failed: …"');
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N done · #M is next in the inbox"');
