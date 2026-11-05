@@ -167,4 +167,43 @@ describe("DesktopBrowserHost", () => {
       expect(host.agentAttribution(makeDebuggee().tab.webContents)).toBeNull();
     }),
   );
+
+  it.effect(
+    "counts agent tool actions and key input as acting, but not Playwright's own scripts",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* DesktopBrowserHost.make;
+        const debuggee = makeDebuggee();
+        host.attach(key, debuggee.tab);
+        const guest = debuggee.tab.webContents;
+        const cdp = (id: number, method: string) =>
+          host.handleCommandLine(
+            encodeJson({ type: "cdp", ...key, message: encodeJson({ id, method, params: {} }) }),
+          );
+        const agentAction = (phase: "start" | "end") =>
+          host.handleCommandLine(encodeJson({ type: "agentAction", ...key, phase }));
+
+        // Reading the title after a page load.
+        yield* cdp(1, "Runtime.evaluate");
+        yield* cdp(2, "Runtime.callFunctionOn");
+        expect(host.agentActingWithin(guest, 10_000)).toBe(false);
+
+        yield* agentAction("start");
+        expect(host.agentActingWithin(guest, 0)).toBe(true);
+        yield* agentAction("end");
+        expect(host.agentActingWithin(guest, 10_000)).toBe(true);
+
+        const other = makeDebuggee();
+        host.attach({ threadId: "thread-1", tabId: "tab-2" }, other.tab);
+        yield* host.handleCommandLine(
+          encodeJson({
+            type: "cdp",
+            threadId: "thread-1",
+            tabId: "tab-2",
+            message: encodeJson({ id: 3, method: "Input.insertText", params: { text: "x" } }),
+          }),
+        );
+        expect(host.agentActingWithin(other.tab.webContents, 10_000)).toBe(true);
+      }),
+  );
 });

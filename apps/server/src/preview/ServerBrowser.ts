@@ -727,8 +727,18 @@ const make = Effect.gen(function* () {
     if (!desktop) await recordCopies(cdp);
     page.setDefaultTimeout(NAVIGATION_TIMEOUT_MS);
     page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
-    const control = new SessionControl(snapshot.automationOwner ?? null, () =>
-      ServerBrowserPage.invalidateRefs(page),
+    const control = new SessionControl(
+      snapshot.automationOwner ?? null,
+      () => ServerBrowserPage.invalidateRefs(page),
+      (phase) => {
+        if (desktop)
+          runFork(
+            desktopChannel.agentAction(
+              { threadId: snapshot.threadId, tabId: snapshot.tabId },
+              phase,
+            ),
+          );
+      },
     );
     const tab: ServerTab = {
       threadId: ThreadId.make(snapshot.threadId),

@@ -57,6 +57,8 @@ export class DesktopBrowserChannel extends Context.Service<
       key: DesktopTabKey,
       pointer: { readonly phase: "move" | "click"; readonly x: number; readonly y: number },
     ) => Effect.Effect<void>;
+    /** Marks an agent tool action, so the desktop can tell it from Playwright's own traffic. */
+    readonly agentAction: (key: DesktopTabKey, phase: "start" | "end") => Effect.Effect<void>;
   }
 >()("t3/preview/DesktopBrowserChannel") {}
 
@@ -78,6 +80,7 @@ const make = Effect.gen(function* () {
       isAttached: () => Effect.succeed(false),
       endpoint: () => Effect.die("No desktop app is attached to this server."),
       pointer: () => Effect.void,
+      agentAction: () => Effect.void,
     });
   }
 
@@ -217,6 +220,7 @@ const make = Effect.gen(function* () {
     isAttached: (key) => Effect.sync(() => attachedTabs.has(keyOf(key))),
     endpoint,
     pointer: (key, pointer) => command({ type: "pointer", ...key, ...pointer }),
+    agentAction: (key, phase) => command({ type: "agentAction", ...key, phase }),
   });
 });
 

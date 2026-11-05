@@ -15,15 +15,21 @@ export class BrowserControlInterrupted extends Error {
 export class SessionControl {
   readonly agentId: string | null;
   private readonly onGenerationChange: () => void;
+  private readonly onAgentAction: (phase: "start" | "end") => void;
   private tail: Promise<unknown> = Promise.resolve();
   private pending: Promise<void> = Promise.resolve();
   private owner: string | null = null;
   private epoch = 0;
   private closed = false;
 
-  constructor(agentId: string | null, onGenerationChange: () => void = () => {}) {
+  constructor(
+    agentId: string | null,
+    onGenerationChange: () => void = () => {},
+    onAgentAction: (phase: "start" | "end") => void = () => {},
+  ) {
     this.agentId = agentId;
     this.onGenerationChange = onGenerationChange;
+    this.onAgentAction = onAgentAction;
   }
 
   get controller() {
@@ -86,7 +92,17 @@ export class SessionControl {
       return Promise.reject(
         new BrowserControlInterrupted("A human controls this tab.", "humanControl"),
       );
-    return this.action(() => this.agentMayAct(agentId) && this.owner === null, run);
+    return this.action(
+      () => this.agentMayAct(agentId) && this.owner === null,
+      async () => {
+        this.onAgentAction("start");
+        try {
+          return await run();
+        } finally {
+          this.onAgentAction("end");
+        }
+      },
+    );
   }
 
   agentCanActNow(agentId: string) {

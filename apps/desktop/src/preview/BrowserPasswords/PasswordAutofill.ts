@@ -128,7 +128,7 @@ export const make = Effect.gen(function* () {
       clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
       randomId: () => NodeCrypto.randomUUID(),
       topLevelUrl: () => (wc.isDestroyed() ? "" : wc.getURL()),
-      agentActiveWithin: (ms) => browserHost.agentInputWithin(wc, ms),
+      agentActiveWithin: (ms) => browserHost.agentActingWithin(wc, ms),
       vault: () => passwords.vault(profileId),
       settings: () => ({
         offerToSave: settings.current()?.browserOfferToSavePasswords !== false,
