@@ -7,6 +7,7 @@ import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } 
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import type { ProjectManagerPersona, WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
+import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
   getQuestionAnswerPreview,
@@ -90,6 +91,7 @@ import { FileDiff } from "@pierre/diffs/react";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 import {
   type TimelineEntry,
+  type WorkLogEntry,
   providerErrorPresentation,
   createMessageAttachmentPreviewProjector,
   selectMessageImageResources,
@@ -228,6 +230,7 @@ import {
   threadReadTargetTitle,
   toolGroupAction,
   workEntryDisplayLabel,
+  workEntryIsAnsweredQuestion,
   workEntryReadOutput,
   workEntryIsVisibleInGroup,
   worktreeSetupAgentStarted,
@@ -1896,8 +1899,14 @@ type TimelineRow = MessagesTimelineRow;
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
   const isExpandedToolGroup = row.kind === "work" && row.isExpandedToolGroup;
   const isSubagentGroup = row.kind === "event" && row.projectedItem.item.type === "subagent";
+  const answeredQuestionEntry =
+    row.kind === "work" &&
+    row.groupedEntries.length === 1 &&
+    workEntryIsAnsweredQuestion(row.groupedEntries[0]!)
+      ? row.groupedEntries[0]!
+      : null;
   const isWorkLogRow =
-    row.kind === "work" ||
+    (row.kind === "work" && answeredQuestionEntry === null) ||
     row.kind === "work-live" ||
     row.kind === "work-toggle" ||
     row.kind === "thinking";
@@ -1916,6 +1925,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                   row.message.role === "assistant" &&
                   !row.showAssistantMeta) ||
                 row.kind === "worktree-setup" ||
+                answeredQuestionEntry !== null ||
                 row.kind === "event" ||
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
@@ -1958,6 +1968,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
           {row.kind === "thinking" ? <ThinkingTimelineRow row={row} /> : null}
         </WorkLogBlock>
       ) : null}
+      {answeredQuestionEntry ? <AnsweredQuestionTimelineRow entry={answeredQuestionEntry} /> : null}
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
       {row.kind === "attempt-fold" ? <AttemptFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
@@ -5663,6 +5674,65 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         </WorkLogDetails>
       ) : null}
     </WorkLogRow>
+  );
+}
+
+function AnsweredQuestionTimelineRow({ entry }: { entry: WorkLogEntry }) {
+  const answer = entry.questionAnswer;
+  if (!answer) return null;
+  const payload = entry.structuredPayload;
+  const questions = payload?.type === "user_input_request" ? payload.questions : [];
+  return (
+    <AnsweredQuestionSection
+      questions={questions}
+      answer={answer}
+      renderAttachments={(questionId) =>
+        (answer.attachmentsByQuestionId[questionId]?.length ?? 0) > 0 ? (
+          <QuestionAnswerAttachments answer={answer} questionId={questionId} />
+        ) : null
+      }
+    />
+  );
+}
+
+function QuestionAnswerAttachments({
+  answer,
+  questionId,
+}: {
+  answer: import("@t3tools/contracts").UserInputAttachmentAnswerPayload;
+  questionId: string;
+}) {
+  const { activeThreadEnvironmentId } = use(TimelineRowCtx);
+  const attachments = answer.attachmentsByQuestionId[questionId] ?? [];
+  const urls = useAssetUrls(
+    activeThreadEnvironmentId,
+    attachments.map((attachment) => ({ _tag: "attachment" as const, attachmentId: attachment.id })),
+  );
+  return (
+    <div className="flex flex-wrap gap-2">
+      {attachments.map((attachment, index) => {
+        const url = urls[index];
+        return (
+          <a
+            key={attachment.id}
+            href={url ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm underline"
+          >
+            {attachment.type === "image" && url ? (
+              <img
+                src={url}
+                alt={attachment.name}
+                className="h-20 max-w-32 rounded object-contain"
+              />
+            ) : (
+              attachment.name
+            )}
+          </a>
+        );
+      })}
+    </div>
   );
 }
 

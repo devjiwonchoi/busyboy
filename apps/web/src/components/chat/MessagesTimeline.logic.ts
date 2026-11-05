@@ -83,6 +83,11 @@ function timelineEntryRunId(entry: TimelineEntry): RunId | null {
   return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
 }
 
+/** An answered question stays in the timeline as its own section, outside folds and groups. */
+export function workEntryIsAnsweredQuestion(entry: WorkLogEntry): boolean {
+  return entry.itemType === "user_input_request" && entry.questionAnswer !== undefined;
+}
+
 function workEntryIsActiveTurnActivity(entry: WorkLogEntry): boolean {
   return (
     entry.toolLifecycleStatus === "inProgress" ||
@@ -1084,6 +1089,7 @@ function deriveTurnFolds(input: {
         continue;
       }
       if (entry.kind === "work" && entry.entry.itemType === "notification") continue;
+      if (entry.kind === "work" && workEntryIsAnsweredQuestion(entry.entry)) continue;
       hiddenEntryIds.add(entry.id);
     }
     if (hiddenEntryIds.size === 0) {
@@ -1413,6 +1419,7 @@ export function deriveMessagesTimelineRows(input: {
         entry.entry.sourceActivityKind === "runtime.error" ||
         entry.entry.itemType === "system_notice" ||
         entry.entry.itemType === "notification" ||
+        workEntryIsAnsweredQuestion(entry.entry) ||
         !runIdIsActiveResponse(entry.entry.runId) ||
         entry.entry.sourceActivityKind === "context-compaction" ||
         collapsedEntryIds.has(entry.id) ||
@@ -1580,7 +1587,8 @@ export function deriveMessagesTimelineRows(input: {
         timelineEntry.entry.tone === "error" ||
         timelineEntry.entry.sourceActivityKind === "runtime.error" ||
         timelineEntry.entry.itemType === "system_notice" ||
-        timelineEntry.entry.itemType === "notification"
+        timelineEntry.entry.itemType === "notification" ||
+        workEntryIsAnsweredQuestion(timelineEntry.entry)
       ) {
         nextRows.push({
           kind: "work",
@@ -1603,6 +1611,7 @@ export function deriveMessagesTimelineRows(input: {
           nextEntry.entry.sourceActivityKind === "runtime.error" ||
           nextEntry.entry.itemType === "system_notice" ||
           nextEntry.entry.itemType === "notification" ||
+          workEntryIsAnsweredQuestion(nextEntry.entry) ||
           activeWorkEntryIds.has(nextEntry.id) ||
           collapsedEntryIds.has(nextEntry.id) ||
           collapsedSupersededEntryIds.has(nextEntry.id) ||
