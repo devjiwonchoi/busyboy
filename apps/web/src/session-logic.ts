@@ -318,6 +318,8 @@ export function hasActionableProposedPlan(plan: LatestProposedPlanState | null):
 }
 
 const STANDALONE_V2_ITEM_TYPES = new Set<OrchestrationV2ProjectedTurnItem["item"]["type"]>([
+  // Sign-in and history cards wait for the person, so they stand alone like secret requests.
+  "browser_request",
   "fork",
   "handoff",
   "run_interrupt_request",
