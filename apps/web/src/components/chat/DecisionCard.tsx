@@ -16,6 +16,7 @@ import {
   type PendingUserInputDraftAnswer,
 } from "../../pendingUserInput";
 import { useAnswerDecision } from "../../state/projectTeam";
+import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 
@@ -120,6 +121,7 @@ function OpenDecisionCard({
   const answerDecision = useAnswerDecision();
   const [draft, setDraft] = useState<PendingUserInputDraftAnswer | undefined>(undefined);
   const [sending, setSending] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
   const requestId = RuntimeRequestId.make(card.item.id);
   const panelQuestion = { ...question, multiSelect: false };
 
@@ -137,39 +139,59 @@ function OpenDecisionCard({
     });
   };
 
+  // The inline card and the full-screen view render the same draft, so a pick or note carries over.
+  const panel = (expanded: boolean) => (
+    <ComposerPendingUserInputPanel
+      pendingUserInputs={[
+        {
+          requestId,
+          createdAt: card.item.createdAt,
+          questions: [panelQuestion],
+          responseCapability: "message",
+          dismissible: false,
+        },
+      ]}
+      cwd={cwd}
+      threadRef={threadRef}
+      respondingRequestIds={sending ? [requestId] : []}
+      answers={draft ? { [QUESTION_ID]: draft } : {}}
+      questionIndex={0}
+      keyboardShortcuts={false}
+      expanded={expanded}
+      onToggleExpanded={() => setFullScreen(!expanded)}
+      {...(expanded ? { scrollClassName: "max-h-[calc(90dvh-3rem)]" } : {})}
+      onToggleOption={(_questionId, optionValue) =>
+        setDraft((current) =>
+          togglePendingUserInputOptionSelection(panelQuestion, current, optionValue),
+        )
+      }
+      onChangeNote={(_questionId, note) =>
+        setDraft((current) => setPendingUserInputNote(current, note))
+      }
+      onAdvance={() => submit(draft)}
+      onDismiss={() => undefined}
+    />
+  );
+
   return (
     <div
       data-decision-card={card.item.id}
       data-decision-card-state="open"
       className="rounded-xl border border-border/70 bg-card/60 py-1"
     >
-      <ComposerPendingUserInputPanel
-        pendingUserInputs={[
-          {
-            requestId,
-            createdAt: card.item.createdAt,
-            questions: [panelQuestion],
-            responseCapability: "message",
-            dismissible: false,
-          },
-        ]}
-        cwd={cwd}
-        threadRef={threadRef}
-        respondingRequestIds={sending ? [requestId] : []}
-        answers={draft ? { [QUESTION_ID]: draft } : {}}
-        questionIndex={0}
-        keyboardShortcuts={false}
-        onToggleOption={(_questionId, optionValue) =>
-          setDraft((current) =>
-            togglePendingUserInputOptionSelection(panelQuestion, current, optionValue),
-          )
-        }
-        onChangeNote={(_questionId, note) =>
-          setDraft((current) => setPendingUserInputNote(current, note))
-        }
-        onAdvance={() => submit(draft)}
-        onDismiss={() => undefined}
-      />
+      {panel(false)}
+      {/* Once answered, the card leaves the open state and this view closes with it. */}
+      <Dialog open={fullScreen} onOpenChange={setFullScreen}>
+        <DialogPopup
+          showCloseButton={false}
+          bottomStickOnMobile={false}
+          className="max-h-[90dvh] w-[min(92vw,64rem)] max-w-none py-1"
+          data-decision-card-expanded={card.item.id}
+        >
+          <DialogTitle className="sr-only">{decisionCardHeader(card)}</DialogTitle>
+          {panel(true)}
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 }
