@@ -188,7 +188,7 @@ import {
   reduceCommandPaletteUiState,
   type SearchOverlayMode,
 } from "./CommandPalette.logic";
-import { orderItemsByPreferredIds, sortLogicalProjectsForSidebar } from "./Sidebar.logic";
+import { orderProjectsForSidebar } from "./Sidebar.logic";
 import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteContent } from "./CommandPaletteContent";
 import {
@@ -435,7 +435,6 @@ function useProjectLookups(projects: ReturnType<typeof useProjects>) {
 const selectCommandPaletteClientSettings = (settings: ClientSettings) => ({
   sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
   sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
-  sidebarProjectSortOrder: settings.sidebarProjectSortOrder,
   sidebarThreadSortOrder: settings.sidebarThreadSortOrder,
 });
 type CommandPaletteClientSettings = ReturnType<typeof selectCommandPaletteClientSettings>;
@@ -446,14 +445,12 @@ function useSortedProjectGroups({
   clientSettings,
   primaryEnvironmentId,
   environmentLabelById,
-  threads,
 }: {
   readonly projects: ReturnType<typeof useProjects>;
   readonly projectOrder: ReturnType<typeof useUiStateStore.getState>["projectOrder"];
   readonly clientSettings: CommandPaletteClientSettings;
   readonly primaryEnvironmentId: ReturnType<typeof usePrimaryEnvironmentId>;
   readonly environmentLabelById: ReadonlyMap<EnvironmentId, string>;
-  readonly threads: ReturnType<typeof useThreadShells>;
 }) {
   // oxlint-disable-next-line t3code/no-manual-memo -- Kept until the palette's item building moves out of this component (see above).
   "use memo";
@@ -461,22 +458,13 @@ function useSortedProjectGroups({
     sidebarProjectGroupingMode: clientSettings.sidebarProjectGroupingMode,
     sidebarProjectGroupingOverrides: clientSettings.sidebarProjectGroupingOverrides,
   };
-  const orderedProjects = orderItemsByPreferredIds({
-    items: projects,
-    preferredIds: projectOrder,
-    getId: getProjectOrderKey,
-  });
-  const unsortedProjectGroups = buildSidebarProjectSnapshots({
-    projects: clientSettings.sidebarProjectSortOrder === "manual" ? orderedProjects : projects,
+  // Same manual order as the sidebar.
+  return buildSidebarProjectSnapshots({
+    projects: orderProjectsForSidebar(projects, projectOrder, getProjectOrderKey),
     settings: projectGroupingSettings,
     primaryEnvironmentId,
     resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
   });
-  return sortLogicalProjectsForSidebar(
-    unsortedProjectGroups,
-    threads,
-    clientSettings.sidebarProjectSortOrder,
-  );
 }
 
 export function CommandPalette({ children }: { children: ReactNode }) {
@@ -859,7 +847,6 @@ function OpenCommandPaletteDialog(props: {
     clientSettings,
     primaryEnvironmentId,
     environmentLabelById,
-    threads,
   });
   const contextualProjectRef = resolveThreadActionProjectRef({
     activeDraftThread,

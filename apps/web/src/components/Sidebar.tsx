@@ -188,6 +188,8 @@ import {
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
   resolveSidebarDropTarget,
+  planSidebarProjectReorder,
+  sidebarProjectKeyOfId,
   resolveSidebarDropVerb,
   resolveSidebarRowAccessibility,
   type SidebarDropVerb,
@@ -217,6 +219,7 @@ import {
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
   createSidebarCollisionDetection,
+  createSidebarProjectCollisionDetection,
   createSidebarSortingStrategy,
   restrictBelowSidebarLabel,
 } from "./Sidebar.drag";
@@ -487,8 +490,8 @@ function useSidebarThreads(input: {
 
   const { pinnedThreads, workingThreads } = partition;
 
-  // Active threads render in per-project sections, most recent project
-  // first. Collapsed projects hide their rows like the project filter does.
+  // Active threads render in per-project sections, in the user's manual
+  // project order. Collapsed projects hide their rows like the project filter does.
   const activeThreadsByProject = groupSidebarThreadsByProject(
     partition.activeThreads,
     projectKeyOf,
@@ -504,6 +507,7 @@ function useSidebarThreads(input: {
           ),
       )
       .map((group) => group.projectKey),
+    new Set(projectGroups.filter((group) => group.isScratch).map((group) => group.projectKey)),
   );
   const activeThreads = projectSectionKeys.flatMap((projectKey) =>
     collapsedProjectKeys.has(projectKey) ? [] : (activeThreadsByProject.get(projectKey) ?? []),
@@ -970,11 +974,13 @@ function SortableSidebarMarker(props: {
   className?: string;
   children?: ReactNode;
   "data-testid"?: string;
+  // Only project headers can be dragged, to reorder projects.
+  draggable?: boolean;
   onContextMenu?: (event: ReactMouseEvent) => void;
 }) {
-  const { setNodeRef, transform, transition } = useSortable({
+  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sidebarMarkerId(props.marker),
-    disabled: SIDEBAR_SORTABLE_DRAG_DISABLED,
+    disabled: props.draggable ? SIDEBAR_SORTABLE_DRAG_ENABLED : SIDEBAR_SORTABLE_DRAG_DISABLED,
     animateLayoutChanges: animateSidebarLayoutChanges,
   });
   return (
@@ -982,8 +988,14 @@ function SortableSidebarMarker(props: {
       ref={setNodeRef}
       data-thread-selection-safe
       data-testid={props["data-testid"]}
-      className={cn("list-none", props.className)}
+      data-dragging={isDragging ? "" : undefined}
+      className={cn(
+        "list-none",
+        isDragging && "relative z-10 rounded-md bg-sidebar shadow-md",
+        props.className,
+      )}
       onContextMenu={props.onContextMenu}
+      {...(props.draggable ? listeners : {})}
       style={{
         transform: CSS.Translate.toString(transform),
         transition: props.marker.endsWith("-placeholder") ? "none" : transition,
@@ -1086,6 +1098,7 @@ function SidebarSectionHeader(props: {
 function SidebarProjectHeader(props: {
   marker: SidebarListMarker;
   label: string;
+  draggable: boolean;
   expanded: boolean;
   onToggle: () => void;
   onNewThread: (() => void) | null;
@@ -1109,6 +1122,7 @@ function SidebarProjectHeader(props: {
     return (
       <SortableSidebarMarker
         marker={props.marker}
+        draggable={props.draggable}
         data-testid="sidebar-project-header"
         className="mx-0.5 mt-2"
         {...(handleContextMenu ? { onContextMenu: handleContextMenu } : {})}
@@ -1132,6 +1146,7 @@ function SidebarProjectHeader(props: {
   return (
     <SortableSidebarMarker
       marker={props.marker}
+      draggable={props.draggable}
       data-testid="sidebar-project-header"
       className="group/project mx-0.5 mt-2 flex h-7 items-center"
       {...(handleContextMenu ? { onContextMenu: handleContextMenu } : {})}
@@ -2003,6 +2018,7 @@ export default function Sidebar() {
   const projectGroupsRef = useRef(projectGroups);
   const persistedProjectScopeKey = useUiStateStore((store) => store.sidebarProjectScopeKey);
   const setPersistedProjectScopeKey = useUiStateStore((store) => store.setSidebarProjectScopeKey);
+  const setProjectOrder = useUiStateStore((store) => store.setProjectOrder);
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
     { open: false, query: "" },
@@ -2040,6 +2056,9 @@ export default function Sidebar() {
     readonly targetSection: SidebarSection | null;
     readonly contextDrag: boolean;
   } | null>(null);
+  // The project header being dragged to reorder projects. A thread drag uses dragState instead.
+  const [projectDragKey, setProjectDragKey] = useState<string | null>(null);
+  const projectDragKeyRef = useRef<string | null>(null);
   const dragSensorRef = useRef<SidebarPointerSensor | null>(null);
   const contextDragKeyRef = useRef<string | null>(null);
   const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
@@ -2400,10 +2419,12 @@ export default function Sidebar() {
   const finishThreadDrag = (started: boolean) => {
     dragSensorRef.current = null;
     contextDragKeyRef.current = null;
+    projectDragKeyRef.current = null;
     endThreadContextDrag();
     if (started) {
       listMotionRef.current?.release();
       setDragState(null);
+      setProjectDragKey(null);
     }
   };
   const attachDragSensor = (sensor: SidebarPointerSensor) => {
@@ -2427,6 +2448,7 @@ export default function Sidebar() {
     return bounds !== undefined && (point.x < bounds.left || point.x > bounds.right);
   };
   const moveThreadContextDrag = (point: { x: number; y: number }) => {
+    if (projectDragKeyRef.current !== null) return false;
     const contextDrag = pointerOutsideThreadList(point);
     setDragState((current) =>
       current === null || current.contextDrag === contextDrag
@@ -2444,6 +2466,7 @@ export default function Sidebar() {
     return true;
   };
   const dropThreadContextDrag = (point: { x: number; y: number }) => {
+    if (projectDragKeyRef.current !== null) return false;
     if (!pointerOutsideThreadList(point)) return false;
     dropThreadContext(point, contextDragThreads());
     return true;
@@ -2545,6 +2568,30 @@ export default function Sidebar() {
     })();
   };
 
+  const handleSidebarDragStart = (event: DragStartEvent) => {
+    const projectKey = sidebarProjectKeyOfId(String(event.active.id));
+    if (projectKey === null) {
+      handleThreadDragStart(event);
+      return;
+    }
+    projectDragKeyRef.current = projectKey;
+    contextDragKeyRef.current = null;
+    dragLabelOffsetRef.current = 0;
+    listMotionRef.current?.suspend();
+    setProjectDragKey(projectKey);
+  };
+  const handleProjectDragEnd = (event: DragEndEvent) => {
+    const activeProjectKey = sidebarProjectKeyOfId(String(event.active.id));
+    const overProjectKey = event.over ? sidebarProjectKeyOfId(String(event.over.id)) : null;
+    if (activeProjectKey === null || overProjectKey === null) return;
+    const order = planSidebarProjectReorder({
+      groups: projectGroups,
+      activeProjectKey,
+      overProjectKey,
+      savedOrder: useUiStateStore.getState().projectOrder,
+    });
+    if (order !== null) setProjectOrder(order);
+  };
   const handleThreadDragStart = (event: DragStartEvent) => {
     const activeKey = String(event.active.id);
     contextDragKeyRef.current = activeKey;
@@ -2659,7 +2706,9 @@ export default function Sidebar() {
     routeDraftIdForRows ?? "",
   ].join("\0");
   const listMotionAnimate =
-    dragState === null && sidebarListItems.length + visibleDraftSessionCount > 0;
+    dragState === null &&
+    projectDragKey === null &&
+    sidebarListItems.length + visibleDraftSessionCount > 0;
   // The effect reads only `animate`; the pass object is cached on both fields,
   // so a new layout key alone also triggers it.
   const listMotionPass = { layoutKey: listMotionLayoutKey, animate: listMotionAnimate };
@@ -2698,6 +2747,12 @@ export default function Sidebar() {
   const draggedFromSection = dragState?.activeSection;
   const dragActivationY = dragState?.activationY;
   const dndCollisionDetection = (() => {
+    if (projectDragKey !== null) {
+      return createSidebarProjectCollisionDetection((projectKey) => {
+        const group = projectGroupByScopeKey.get(projectKey);
+        return group !== undefined && !group.isScratch;
+      });
+    }
     if (draggedThreadKey === undefined || draggedFromSection === undefined)
       return createSidebarCollisionDetection(() => true);
     const source = threadByKey.get(draggedThreadKey);
@@ -2728,6 +2783,10 @@ export default function Sidebar() {
     );
   })();
   const handleThreadDragEnd = (event: DragEndEvent) => {
+    if (sidebarProjectKeyOfId(String(event.active.id)) !== null) {
+      handleProjectDragEnd(event);
+      return;
+    }
     const activeKey = String(event.active.id);
     const activeSection = sectionByThreadKey.get(activeKey);
     const target =
@@ -3646,7 +3705,7 @@ export default function Sidebar() {
                 autoScroll={!isContextDrag}
                 collisionDetection={dndCollisionDetection}
                 modifiers={dndModifiers}
-                onDragStart={handleThreadDragStart}
+                onDragStart={handleSidebarDragStart}
                 onDragOver={handleThreadDragOver}
                 onDragEnd={handleThreadDragEnd}
               >
@@ -3816,6 +3875,13 @@ export default function Sidebar() {
                                 key={item.marker}
                                 marker={item.marker}
                                 label={projectGroup?.displayName ?? "Unknown project"}
+                                draggable={
+                                  projectGroup !== undefined &&
+                                  !projectGroup.isScratch &&
+                                  dragState === null &&
+                                  optimisticDrop === null &&
+                                  renamingThreadKey === null
+                                }
                                 expanded={!collapsedProjectKeys.has(projectKey)}
                                 onToggle={() => toggleProjectCollapsed(projectKey)}
                                 onNewThread={
