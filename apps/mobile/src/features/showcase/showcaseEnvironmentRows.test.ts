@@ -10,7 +10,7 @@ import {
 function environment(
   environmentId: string,
   environmentLabel: string,
-  displayUrl = "http://127.0.0.1:3773/",
+  displayUrl = "http://127.0.0.1:3873/",
 ): ConnectedEnvironmentSummary {
   return {
     environmentId: EnvironmentId.make(environmentId),
@@ -35,7 +35,7 @@ it("presents showcase transports as remote endpoints", () => {
     [
       "https://moonbase.tail9f3a.ts.net/",
       "https://suspense-vps.hel1.t3.sh/",
-      "http://100.82.16.5:3773/",
+      "http://100.82.16.5:3873/",
     ],
   );
 });
@@ -53,15 +53,15 @@ it("leaves environments outside the showcase fixture unchanged", () => {
 it("does not persist a cosmetic showcase URL when only the label is saved", () => {
   assert.equal(
     resolveShowcaseEnvironmentUpdateDisplayUrl({
-      actualDisplayUrl: "http://127.0.0.1:3773/",
+      actualDisplayUrl: "http://127.0.0.1:3873/",
       presentedDisplayUrl: "https://moonbase.tail9f3a.ts.net/",
       submittedDisplayUrl: "https://moonbase.tail9f3a.ts.net/",
     }),
-    "http://127.0.0.1:3773/",
+    "http://127.0.0.1:3873/",
   );
   assert.equal(
     resolveShowcaseEnvironmentUpdateDisplayUrl({
-      actualDisplayUrl: "http://127.0.0.1:3773/",
+      actualDisplayUrl: "http://127.0.0.1:3873/",
       presentedDisplayUrl: "https://moonbase.tail9f3a.ts.net/",
       submittedDisplayUrl: "https://new-host.example.com/",
     }),

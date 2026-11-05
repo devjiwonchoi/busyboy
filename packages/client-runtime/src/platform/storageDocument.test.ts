@@ -60,8 +60,8 @@ const LAN_PROFILE = new BearerConnectionProfile({
   connectionId: LAN_TARGET.connectionId,
   environmentId: ENVIRONMENT_ID,
   label: LAN_TARGET.label,
-  httpBaseUrl: "http://192.168.1.10:3773",
-  wsBaseUrl: "ws://192.168.1.10:3773",
+  httpBaseUrl: "http://192.168.1.10:3873",
+  wsBaseUrl: "ws://192.168.1.10:3873",
 });
 
 describe("ConnectionCatalogDocument", () => {

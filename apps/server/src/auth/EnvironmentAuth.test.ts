@@ -498,7 +498,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
       const sessions = yield* SessionStore.SessionStore;
 
-      const pairingUrl = yield* serverAuth.issueStartupPairingUrl("http://127.0.0.1:3773");
+      const pairingUrl = yield* serverAuth.issueStartupPairingUrl("http://127.0.0.1:3873");
       const token = new URLSearchParams(new URL(pairingUrl).hash.slice(1)).get("token");
       const listedPairingLinks = yield* serverAuth.listPairingLinks();
       expect(token).toBeTruthy();
@@ -601,15 +601,15 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         serverAuth.authenticateWebSocketUpgrade({
           url: "/ws",
           cookies: { [sessions.cookieName]: exchanged.sessionToken },
-          headers: { host: "192.168.1.50:3773", ...headers },
+          headers: { host: "192.168.1.50:3873", ...headers },
         } as never);
 
-      yield* upgrade({ origin: "http://192.168.1.50:3773" });
+      yield* upgrade({ origin: "http://192.168.1.50:3873" });
       yield* upgrade({
         origin: "https://box.tail1234.ts.net",
         "x-forwarded-host": "box.tail1234.ts.net",
       });
-      yield* upgrade({ origin: "t3code://app" });
+      yield* upgrade({ origin: "busyboy://app" });
       yield* upgrade({ origin: "http://localhost:5733" });
       yield* upgrade({});
 
@@ -663,7 +663,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         url: "/ws",
         cookies: {},
         headers: {
-          host: "192.168.1.50:3773",
+          host: "192.168.1.50:3873",
           origin: "http://192.168.1.50:8080",
           authorization: `Bearer ${bearer.token}`,
         },

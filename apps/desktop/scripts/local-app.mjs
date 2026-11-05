@@ -23,7 +23,7 @@ const checkoutDir = NodePath.resolve(scriptPath, "../../../..");
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone script has no Effect runtime.
 const homeDir = NodeOS.homedir();
 const root =
-  process.env.T3CODE_LOCAL_APP_ROOT?.trim() || NodePath.join(homeDir, ".busyboy", "source");
+  process.env.BUSYBOY_LOCAL_APP_ROOT?.trim() || NodePath.join(homeDir, ".busyboy", "source");
 const currentLink = NodePath.join(root, "current");
 const preparedPath = NodePath.join(root, "prepared.json");
 const logPath = NodePath.join(root, "update.log");
@@ -49,9 +49,9 @@ export function makeLauncherScript(localAppRoot) {
     'slot=$(cd "$root/current" && pwd -P) || exit 1',
     'gitdir="$slot/.git"',
     'if [ -f "$gitdir" ]; then gitdir=$(sed -n "s/^gitdir: //p" "$gitdir"); fi',
-    'export T3CODE_LOCAL_APP_ROOT="$root"',
-    'export T3CODE_LOCAL_APP_LAUNCHER="$0"',
-    'export T3CODE_LOCAL_APP_COMMIT="$(cat "$gitdir/HEAD")"',
+    'export BUSYBOY_LOCAL_APP_ROOT="$root"',
+    'export BUSYBOY_LOCAL_APP_LAUNCHER="$0"',
+    'export BUSYBOY_LOCAL_APP_COMMIT="$(cat "$gitdir/HEAD")"',
     'cd "$slot/apps/desktop" || exit 1',
     // Launch the app folder like a packaged build, so Electron reads its package.json
     // (name, version, and the boot entry that turns on the compile cache).
@@ -165,7 +165,7 @@ function rebuildBundleFrom(dir) {
   const result = NodeChildProcess.spawnSync(
     process.execPath,
     [NodePath.join(dir, "apps/desktop/scripts/local-app.mjs"), "bundle"],
-    { env: { ...process.env, T3CODE_LOCAL_APP_ROOT: root }, stdio: ["ignore", "ignore", "pipe"] },
+    { env: { ...process.env, BUSYBOY_LOCAL_APP_ROOT: root }, stdio: ["ignore", "ignore", "pipe"] },
   );
   if (result.status !== 0) {
     throw new Error(`Rebuilding ${appBundlePath} failed: ${result.stderr?.toString().trim()}`);

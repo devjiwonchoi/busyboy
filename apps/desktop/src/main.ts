@@ -19,6 +19,11 @@ import * as Electron from "electron";
 
 import * as NetService from "@t3tools/shared/Net";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import {
+  migrateLegacyBusyBoyHome,
+  migrateLegacyElectronUserData,
+  resolveBusyBoyHome,
+} from "@t3tools/shared/busyboyHome";
 import type { RemoteT3RunnerOptions } from "@t3tools/ssh/tunnel";
 import serverPackageJson from "../../server/package.json" with { type: "json" };
 
@@ -80,6 +85,23 @@ if (process.argv.includes("--version")) {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "EPIPE") throw error;
   }
   Electron.app.exit(0);
+}
+
+// Older builds kept BusyBoy's data in T3 Code's ~/.t3 and Electron profile.
+// Copy it into BusyBoy's own home once, before anything creates ~/.busyboy.
+// ~/.t3 is only read.
+try {
+  const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL?.trim());
+  migrateLegacyBusyBoyHome({ homeDirectory: NodeOS.homedir(), env: process.env });
+  migrateLegacyElectronUserData({
+    appDataDirectory: Electron.app.getPath("appData"),
+    busyBoyHome: resolveBusyBoyHome({ homeDirectory: NodeOS.homedir(), env: process.env }),
+    isDevelopment,
+  });
+} catch (error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  Electron.dialog.showErrorBox("BusyBoy could not copy its data", detail);
+  Electron.app.exit(1);
 }
 
 const layerDesktopEnvironment = Layer.unwrap(

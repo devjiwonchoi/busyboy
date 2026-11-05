@@ -176,7 +176,7 @@ describe("DesktopPreReadyPlatform", () => {
         assert.equal(identity.desktopName, "dev.jiwon.BusyBoy.desktop");
         assert.include(identity.desktopEntry ?? "", 'Exec="/Applications/current.AppImage" %U');
         assert.include(identity.desktopEntry ?? "", "Name=BusyBoy (Beta)");
-        assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t3code;");
+        assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/busyboy;");
         assert.include(
           identity.desktopEntry ?? "",
           "Icon=/xdg/icons/dev.jiwon.BusyBoy.desktop.png",
@@ -206,7 +206,7 @@ describe("DesktopPreReadyPlatform", () => {
     return Effect.gen(function* () {
       yield* DesktopPreReadyPlatform.make;
       const contents = writeFileSyncMock.mock.calls[0]?.[1];
-      assert.include(contents, "MimeType=x-scheme-handler/t3code;");
+      assert.include(contents, "MimeType=x-scheme-handler/busyboy;");
       assert.include(contents, "Icon=");
       assert.equal(setDesktopNameMock.mock.calls.length, 1);
     }).pipe(Effect.provideService(HostProcess.Platform, "linux"));

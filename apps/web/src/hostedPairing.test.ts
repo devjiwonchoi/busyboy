@@ -18,15 +18,15 @@ describe("hostedPairing", () => {
     vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "");
     vi.stubEnv("VITE_HTTP_URL", "");
     vi.stubEnv("VITE_WS_URL", "");
-    expect(isHostedStaticApp(new URL("http://localhost:3773/"))).toBe(false);
+    expect(isHostedStaticApp(new URL("http://localhost:3873/"))).toBe(false);
     expect(isHostedStaticApp(new URL("https://app.t3.codes/"))).toBe(false);
   });
 
   it("reads hosted pairing host and query token parameters", () => {
-    const url = new URL("https://app.t3.codes/pair?host=100.64.1.2:3773&token=ABCD1234");
+    const url = new URL("https://app.t3.codes/pair?host=100.64.1.2:3873&token=ABCD1234");
 
     expect(readHostedPairingRequest(url)).toEqual({
-      host: "100.64.1.2:3773",
+      host: "100.64.1.2:3873",
       token: "ABCD1234",
       label: "",
     });
@@ -38,7 +38,7 @@ describe("hostedPairing", () => {
 
     const url = new URL(
       buildHostedPairingUrl({
-        host: "https://backend.example.com:3773",
+        host: "https://backend.example.com:3873",
         token: "pairing-token",
         label: "Workstation",
       }),
@@ -46,7 +46,7 @@ describe("hostedPairing", () => {
 
     expect(url.origin).toBe("https://preview.t3.codes");
     expect(url.pathname).toBe("/pair");
-    expect(url.searchParams.get("host")).toBe("https://backend.example.com:3773");
+    expect(url.searchParams.get("host")).toBe("https://backend.example.com:3873");
     expect(url.searchParams.get("label")).toBe("Workstation");
     expect(url.searchParams.has("token")).toBe(false);
     expect(url.hash).toBe("#token=pairing-token");

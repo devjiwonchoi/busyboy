@@ -205,7 +205,7 @@ function createBuilderConfig(version: string) {
         NSLocalNetworkUsageDescription:
           "BusyBoy connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
       },
-      protocols: [{ name: PRODUCT_NAME, schemes: ["t3code"] }],
+      protocols: [{ name: PRODUCT_NAME, schemes: ["busyboy"] }],
     },
     dmg: {
       title: `${PRODUCT_NAME} ${version}`,

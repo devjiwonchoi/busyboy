@@ -36,7 +36,7 @@ describe("tailscale endpoint provider", () => {
   it.effect("resolves Tailscale endpoints as add-on advertised endpoints", () =>
     Effect.gen(function* () {
       const endpoints = yield* resolveTailscaleAdvertisedEndpoints({
-        port: 3773,
+        port: 3873,
         networkInterfaces: {
           tailscale0: [
             {
@@ -53,7 +53,7 @@ describe("tailscale endpoint provider", () => {
       });
       assert.deepEqual(endpoints, [
         {
-          id: "tailscale-ip:http://100.100.100.100:3773",
+          id: "tailscale-ip:http://100.100.100.100:3873",
           label: "Tailscale IP",
           provider: {
             id: "tailscale",
@@ -61,8 +61,8 @@ describe("tailscale endpoint provider", () => {
             kind: "private-network",
             isAddon: true,
           },
-          httpBaseUrl: "http://100.100.100.100:3773/",
-          wsBaseUrl: "ws://100.100.100.100:3773/",
+          httpBaseUrl: "http://100.100.100.100:3873/",
+          wsBaseUrl: "ws://100.100.100.100:3873/",
           reachability: "private-network",
           compatibility: {
             hostedHttpsApp: "mixed-content-blocked",
@@ -100,7 +100,7 @@ describe("tailscale endpoint provider", () => {
     Effect.gen(function* () {
       let readerCalls = 0;
       const endpoints = yield* resolveTailscaleAdvertisedEndpoints({
-        port: 3773,
+        port: 3873,
         networkInterfaces: {},
         readMagicDnsName: Effect.sync(() => {
           readerCalls += 1;
@@ -120,7 +120,7 @@ describe("tailscale endpoint provider", () => {
     () =>
       Effect.gen(function* () {
         const endpoints = yield* resolveTailscaleAdvertisedEndpoints({
-          port: 3773,
+          port: 3873,
           networkInterfaces: {},
           statusJson: `{"Self":{"DNSName":"desktop.tail.ts.net."}}`,
           serveEnabled: true,

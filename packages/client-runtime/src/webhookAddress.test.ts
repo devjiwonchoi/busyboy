@@ -14,7 +14,7 @@ describe("webhookAddress", () => {
   });
 
   it("says only this computer can call a loopback address", () => {
-    const result = webhookAddress(endpoint, "http://127.0.0.1:3773/");
+    const result = webhookAddress(endpoint, "http://127.0.0.1:3873/");
     expect(result.copyable).toBe(true);
     expect(result.note).toContain("Only this computer");
   });

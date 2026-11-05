@@ -61,7 +61,7 @@ describe("local app", () => {
       ...process.env,
       HOME: tmp,
       PATH: `${bin}:${process.env.PATH}`,
-      T3CODE_LOCAL_APP_ROOT: root,
+      BUSYBOY_LOCAL_APP_ROOT: root,
     };
   });
 
@@ -147,10 +147,7 @@ describe("local app", () => {
 
     assert.include(script, "root='/Users/me/.busyboy/source'");
     assert.include(script, 'slot=$(cd "$root/current" && pwd -P) || exit 1');
-    assert.include(script, 'export T3CODE_LOCAL_APP_LAUNCHER="$0"');
-    assert.include(
-      script,
-      'exec "$(dirname "$0")/Electron" "$slot/apps/desktop" "$@"',
-    );
+    assert.include(script, 'export BUSYBOY_LOCAL_APP_LAUNCHER="$0"');
+    assert.include(script, 'exec "$(dirname "$0")/Electron" "$slot/apps/desktop" "$@"');
   });
 });

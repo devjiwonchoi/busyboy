@@ -73,8 +73,8 @@ reduced-capability local build. Personal Team builds omit the widget and share e
 entitlement, and native Sign in with Apple entitlement; builds without this opt-in are unchanged.
 
 ```bash
-T3CODE_IOS_PERSONAL_TEAM=1 \
-T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.t3code.dev \
+BUSYBOY_IOS_PERSONAL_TEAM=1 \
+BUSYBOY_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.t3code.dev \
 vp run ios:dev
 ```
 
@@ -87,8 +87,8 @@ vp run ios:release
 The Personal Team equivalent also needs a unique bundle identifier:
 
 ```bash
-T3CODE_IOS_PERSONAL_TEAM=1 \
-T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.t3code \
+BUSYBOY_IOS_PERSONAL_TEAM=1 \
+BUSYBOY_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.t3code \
 vp run ios:release
 ```
 
@@ -127,8 +127,8 @@ Preview and production variants use Expo fingerprinting so OTA updates only reac
 
 The development variant uses `appVersion` to avoid recalculating the native fingerprint for each Metro launch manifest. `MOBILE_VERSION_POLICY` can override either default. If you distribute a custom Release build with the development identity and publish OTA updates to it, set `MOBILE_VERSION_POLICY=fingerprint` for both its build and updates. Changing the runtime policy requires a native rebuild for OTA matching; an existing dev client can still load local Metro bundles.
 
-EAS builds and OTA updates need your own Expo project. Set `T3CODE_EAS_PROJECT_ID` (and
-`T3CODE_EAS_OWNER` when the project belongs to an Expo organization). Without them, OTA updates
+EAS builds and OTA updates need your own Expo project. Set `BUSYBOY_EAS_PROJECT_ID` (and
+`BUSYBOY_EAS_OWNER` when the project belongs to an Expo organization). Without them, OTA updates
 are off.
 
 Create a PR preview dev-client build manually:

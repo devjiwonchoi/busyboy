@@ -361,8 +361,8 @@ describe("connection onboarding", () => {
           target: new PrimaryConnectionTarget({
             environmentId: PAIRED_ENVIRONMENT_ID,
             label: "Host environment",
-            httpBaseUrl: "http://127.0.0.1:3773",
-            wsBaseUrl: "ws://127.0.0.1:3773",
+            httpBaseUrl: "http://127.0.0.1:3873",
+            wsBaseUrl: "ws://127.0.0.1:3873",
           }),
         }),
       );
@@ -556,7 +556,7 @@ describe("connection onboarding", () => {
         input: {
           environmentId,
           label: "  Renamed environment  ",
-          httpBaseUrl: "http://100.65.180.100:3773/path",
+          httpBaseUrl: "http://100.65.180.100:3873/path",
         },
         entry: Option.some({
           target: new BearerConnectionTarget({
@@ -587,8 +587,8 @@ describe("connection onboarding", () => {
         profile: {
           environmentId,
           label: "Renamed environment",
-          httpBaseUrl: "http://100.65.180.100:3773/",
-          wsBaseUrl: "ws://100.65.180.100:3773/",
+          httpBaseUrl: "http://100.65.180.100:3873/",
+          wsBaseUrl: "ws://100.65.180.100:3873/",
         },
         credential: { token: "bearer-token" },
       });

@@ -11,7 +11,7 @@ describe("browser target resolver", () => {
   beforeEach(() => readPreparedConnection.mockReset());
 
   it("maps environment ports onto a private network host", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.25:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.25:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -28,7 +28,7 @@ describe("browser target resolver", () => {
   });
 
   it("preserves explicit loopback URL navigation for a remote Tailscale environment", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://100.65.180.100:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://100.65.180.100:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -44,7 +44,7 @@ describe("browser target resolver", () => {
   });
 
   it("preserves explicit IPv4 loopback URL navigation for a private network environment", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.50:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.50:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -60,7 +60,7 @@ describe("browser target resolver", () => {
   });
 
   it("preserves URL credentials on explicit loopback navigation", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://100.65.180.100:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://100.65.180.100:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -72,7 +72,7 @@ describe("browser target resolver", () => {
 
   it("preserves credentialed loopback URLs for private IPv6 environments", async () => {
     readPreparedConnection.mockReturnValue({
-      httpBaseUrl: "http://[fd7a:115c:a1e0::53]:3773",
+      httpBaseUrl: "http://[fd7a:115c:a1e0::53]:3873",
     });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
@@ -84,7 +84,7 @@ describe("browser target resolver", () => {
   });
 
   it("preserves schemeless localhost navigation for a remote environment", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.25:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.25:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -95,7 +95,7 @@ describe("browser target resolver", () => {
   });
 
   it("keeps localhost navigation local for a local environment", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.1:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.1:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -111,7 +111,7 @@ describe("browser target resolver", () => {
   });
 
   it("keeps localhost navigation local for the full IPv4 loopback range", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.2:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.2:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -144,7 +144,7 @@ describe("browser target resolver", () => {
   });
 
   it("normalizes schemeless localhost server-picker values", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://localhost:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://localhost:3873" });
     const { resolveDiscoveredServerUrl } = await import("./browserTargetResolver");
     expect(resolveDiscoveredServerUrl(EnvironmentId.make("environment-1"), "localhost:5173")).toBe(
       "http://localhost:5173/",
@@ -155,7 +155,7 @@ describe("browser target resolver", () => {
   });
 
   it("maps discovered loopback servers onto a remote environment host", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.25:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.1.25:3873" });
     const { resolveDiscoveredServerUrl } = await import("./browserTargetResolver");
     expect(
       resolveDiscoveredServerUrl(EnvironmentId.make("environment-1"), "localhost:3000/app"),
@@ -167,14 +167,14 @@ describe("browser target resolver", () => {
     env.isElectron = true;
     try {
       readPreparedConnection.mockReturnValue({
-        httpBaseUrl: "http://172.24.66.27:3773",
+        httpBaseUrl: "http://172.24.66.27:3873",
         target: { _tag: "PrimaryConnectionTarget" },
       });
       expect(
         resolveDiscoveredServerUrl(EnvironmentId.make("environment-1"), "localhost:3001/"),
       ).toBe("http://localhost:3001/");
       readPreparedConnection.mockReturnValue({
-        httpBaseUrl: "http://192.168.1.25:3773",
+        httpBaseUrl: "http://192.168.1.25:3873",
         target: { _tag: "BearerConnectionTarget", connectionId: "saved:remote" },
       });
       expect(
@@ -186,7 +186,7 @@ describe("browser target resolver", () => {
   });
 
   it("preserves localhost server-picker values when the prepared base is 127.0.0.1", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.1:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.1:3873" });
     const { resolveDiscoveredServerUrl } = await import("./browserTargetResolver");
     expect(
       resolveDiscoveredServerUrl(EnvironmentId.make("environment-1"), "localhost:5173/app?x=1#top"),
@@ -202,7 +202,7 @@ describe("browser target resolver", () => {
 
   it("supports private IPv6 environment hosts", async () => {
     readPreparedConnection.mockReturnValue({
-      httpBaseUrl: "http://[fd7a:115c:a1e0::53]:3773",
+      httpBaseUrl: "http://[fd7a:115c:a1e0::53]:3873",
     });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
@@ -215,7 +215,7 @@ describe("browser target resolver", () => {
   });
 
   it("supports a local IPv6 environment host", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://[::1]:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://[::1]:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {
@@ -226,7 +226,7 @@ describe("browser target resolver", () => {
   });
 
   it("maps local IPv4 environment ports onto localhost for dual-stack guests", async () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.1:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://127.0.0.1:3873" });
     const { resolveBrowserNavigationTarget } = await import("./browserTargetResolver");
     expect(
       resolveBrowserNavigationTarget(EnvironmentId.make("environment-1"), {

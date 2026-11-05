@@ -142,8 +142,8 @@ const primaryEnvironment = {
     target: new PrimaryConnectionTarget({
       environmentId: primaryId,
       label: "This computer",
-      httpBaseUrl: "http://127.0.0.1:3773",
-      wsBaseUrl: "ws://127.0.0.1:3773",
+      httpBaseUrl: "http://127.0.0.1:3873",
+      wsBaseUrl: "ws://127.0.0.1:3873",
     }),
   },
 } as const;
