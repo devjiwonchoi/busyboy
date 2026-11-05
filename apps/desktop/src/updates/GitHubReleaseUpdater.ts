@@ -14,15 +14,18 @@ import * as Layer from "effect/Layer";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
+import * as UpdateSignature from "./updateSignature.ts";
 
 /**
  * Updates a macOS release build from the repository's GitHub Releases.
  *
- * Release builds are ad-hoc signed, and Squirrel.Mac (behind electron-updater)
- * refuses to install an update whose signature does not match the running
- * app's. So this updater does the install itself: it downloads the release
- * ZIP, unpacks it next to the app's state, and after the app quits a detached
- * shell swaps the bundle in place and reopens it.
+ * This updater does the install itself instead of Squirrel.Mac: it downloads
+ * the release ZIP, unpacks it next to the app's state, and after the app quits
+ * a detached shell swaps the bundle in place and reopens it.
+ *
+ * Before staging, the update must prove it came from us: the release's
+ * Ed25519-signed manifest must cover the ZIP (see updateSignature.ts), and the
+ * unpacked app must carry BusyBoy's Developer ID signature.
  */
 
 export interface GitHubReleaseAsset {
@@ -39,6 +42,7 @@ export interface GitHubRelease {
 export interface AvailableUpdate {
   readonly version: string;
   readonly releaseNotes: string;
+  readonly zipName: string;
   readonly zipUrl: string;
 }
 
@@ -84,6 +88,7 @@ export function resolveAvailableUpdate(input: {
   return {
     version,
     releaseNotes: input.release.body ?? "",
+    zipName: asset.name,
     zipUrl: asset.browser_download_url,
   };
 }
@@ -113,6 +118,24 @@ open "$target"
 
 class GitHubReleaseUpdaterFailure extends Error {}
 
+/** Must match APP_ID in scripts/build-desktop-release.ts and its Developer ID team. */
+export const APP_CODE_REQUIREMENT =
+  'anchor apple generic and identifier "dev.jiwon.busyboy" and certificate leaf[subject.OU] = "5PA4R2B5FF"';
+
+/** Throws unless the app bundle carries BusyBoy's Developer ID signature. */
+export function verifyAppCodeSignature(appPath: string): void {
+  const result = NodeChildProcess.spawnSync(
+    "codesign",
+    ["--verify", "--deep", "--strict", `-R=${APP_CODE_REQUIREMENT}`, appPath],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    throw new UpdateSignature.UpdateVerificationError(
+      "The new app is not signed with BusyBoy's Apple Developer ID.",
+    );
+  }
+}
+
 export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (input: {
   readonly owner: string;
   readonly repo: string;
@@ -122,8 +145,13 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
   readonly stagingDir: string;
   readonly quit: Effect.Effect<void>;
   readonly fetch?: typeof globalThis.fetch;
+  /** Tests swap these; release builds use the shipped key and codesign. */
+  readonly publicKeys?: ReadonlyArray<string>;
+  readonly verifyCodeSignature?: (appPath: string) => void;
 }) {
   const fetch = input.fetch ?? globalThis.fetch;
+  const verifyCodeSignature = input.verifyCodeSignature ?? verifyAppCodeSignature;
+  const userAgent = `${input.productName}/${input.currentVersion}`;
   const events = new NodeEvents.EventEmitter();
   let available: AvailableUpdate | null = null;
   let stagedApp: string | null = null;
@@ -151,10 +179,19 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
   const download = async (update: AvailableUpdate): Promise<string> => {
     const versionDir = NodePath.join(input.stagingDir, update.version);
     NodeFS.rmSync(input.stagingDir, { recursive: true, force: true });
+    // An unsigned or tampered release is refused before its ZIP is downloaded.
+    const manifest = await UpdateSignature.fetchVerifiedManifest({
+      owner: input.owner,
+      repo: input.repo,
+      version: update.version,
+      fetch,
+      userAgent,
+      ...(input.publicKeys ? { publicKeys: input.publicKeys } : {}),
+    });
     NodeFS.mkdirSync(versionDir, { recursive: true });
 
     const response = await fetch(update.zipUrl, {
-      headers: { "User-Agent": `${input.productName}/${input.currentVersion}` },
+      headers: { "User-Agent": userAgent },
     });
     if (!response.ok || response.body === null) {
       throw new GitHubReleaseUpdaterFailure(
@@ -177,6 +214,8 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
       NodeFS.createWriteStream(zipPath),
     );
 
+    await UpdateSignature.verifyUpdateFile({ manifest, path: zipPath, name: update.zipName });
+
     // ditto keeps the bundle's symlinks and signature intact.
     const extractDir = NodePath.join(versionDir, "app");
     const result = NodeChildProcess.spawnSync("ditto", ["-x", "-k", zipPath, extractDir], {
@@ -190,7 +229,9 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
     if (app === undefined) {
       throw new GitHubReleaseUpdaterFailure("The update archive does not contain an app bundle.");
     }
-    return NodePath.join(extractDir, app);
+    const appPath = NodePath.join(extractDir, app);
+    verifyCodeSignature(appPath);
+    return appPath;
   };
 
   const prepareInstall = (staged: string): void => {
@@ -263,7 +304,14 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
         if (available === null) {
           throw new GitHubReleaseUpdaterFailure("No update is available to download.");
         }
-        stagedApp = await download(available);
+        stagedApp = null;
+        try {
+          stagedApp = await download(available);
+        } catch (cause) {
+          // Never leave a refused or partial update where it could be installed.
+          NodeFS.rmSync(input.stagingDir, { recursive: true, force: true });
+          throw cause;
+        }
         events.emit("update-downloaded", { version: available.version });
       },
       catch: (cause) =>
@@ -320,12 +368,45 @@ export function parseGitHubFeed(appUpdateYml: string): { owner: string; repo: st
   return { owner: entries.owner, repo: entries.repo };
 }
 
-/** Packaged macOS builds with a GitHub feed update here; everything else uses electron-updater. */
+/**
+ * Checks electron-updater's Windows installer against the release's signed
+ * manifest. Unsigned builds have no publisherName, so electron-updater's own
+ * check only compares against latest.yml from the same, possibly tampered,
+ * release.
+ */
+export function makeWindowsDownloadVerifier(input: {
+  readonly owner: string;
+  readonly repo: string;
+  readonly userAgent: string;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly publicKeys?: ReadonlyArray<string>;
+}): ElectronUpdater.VerifyDownload {
+  return async ({ version, files }) => {
+    const manifest = await UpdateSignature.fetchVerifiedManifest({
+      owner: input.owner,
+      repo: input.repo,
+      version,
+      fetch: input.fetch ?? globalThis.fetch,
+      userAgent: input.userAgent,
+      ...(input.publicKeys ? { publicKeys: input.publicKeys } : {}),
+    });
+    for (const path of files) {
+      await UpdateSignature.verifyUpdateFile({ manifest, path });
+    }
+  };
+}
+
+/**
+ * Packaged builds with a GitHub feed verify every update before installing it:
+ * macOS through this updater, Windows through electron-updater plus the signed
+ * manifest. Development builds use electron-updater as is.
+ */
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     const feed =
-      environment.isPackaged && environment.platform === "darwin"
+      environment.isPackaged &&
+      (environment.platform === "darwin" || environment.platform === "win32")
         ? yield* Effect.sync(() => {
             try {
               return parseGitHubFeed(NodeFS.readFileSync(environment.appUpdateYmlPath, "utf8"));
@@ -336,6 +417,18 @@ export const layer = Layer.unwrap(
         : null;
     if (feed === null) {
       return ElectronUpdater.layer;
+    }
+
+    if (environment.platform === "win32") {
+      return Layer.succeed(
+        ElectronUpdater.ElectronUpdater,
+        ElectronUpdater.makeVerified(
+          makeWindowsDownloadVerifier({
+            ...feed,
+            userAgent: `${PRODUCT_NAME}/${environment.appVersion}`,
+          }),
+        ),
+      );
     }
 
     const electronApp = yield* ElectronApp.ElectronApp;
