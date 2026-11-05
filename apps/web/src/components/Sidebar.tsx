@@ -204,7 +204,6 @@ import {
   sortThreadsForSidebar,
   groupSidebarThreadsByProject,
   orderSidebarProjectSections,
-  isProjectManagerTaskLead,
   selectSidebarProjectManagers,
   sortWorkingThreadsBySend,
   useThreadJumpHintVisibility,
@@ -567,17 +566,10 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     workingShelfEnabled,
     headingThreadKeys,
   } = input;
-  // A manager's task leads are its project's ordinary rows.
-  const visible = filterSidebarV2VisibleThreads(
-    threads,
-    scopedProjectKeys,
-    (thread) => headingThreadKeys.has(threadShellKey(thread)),
-    (thread) =>
-      isProjectManagerTaskLead(thread, (environmentId, threadId) =>
-        headingThreadKeys.has(
-          scopedThreadKey(scopeThreadRef(environmentId as EnvironmentId, threadId as ThreadId)),
-        ),
-      ),
+  // A manager's task leads are subagents like any other: they live in the
+  // manager's Lineage panel, not in the sidebar list.
+  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, (thread) =>
+    headingThreadKeys.has(threadShellKey(thread)),
   );
   inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];

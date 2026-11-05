@@ -460,13 +460,11 @@ export function filterSidebarV2VisibleThreads<
   scopedProjectKeys: ReadonlySet<string> | null,
   /** Threads shown as a project section heading instead of a row. */
   isSectionHeading: (thread: T) => boolean = () => false,
-  /** Subagent threads listed as rows anyway, such as a PM's task leads. */
-  isListedSubagent: (thread: T) => boolean = () => false,
 ): T[] {
   return threads.filter(
     (thread) =>
       thread.archivedAt === null &&
-      (!isSidebarSubagentThread(thread) || isListedSubagent(thread)) &&
+      !isSidebarSubagentThread(thread) &&
       !isSectionHeading(thread) &&
       (scopedProjectKeys === null ||
         scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
@@ -525,22 +523,6 @@ export function orderSidebarProjectSections<T>(
     keys.push(projectKey);
   }
   return keys;
-}
-
-/**
- * A project manager's task lead: a subagent thread whose parent is the PM
- * thread. Unlike other subagent threads it lists as an ordinary sidebar row.
- */
-export function isProjectManagerTaskLead(
-  thread: Pick<SidebarThreadSummary, "lineage"> & { readonly environmentId: string },
-  isProjectManagerThread: (environmentId: string, threadId: string) => boolean,
-): boolean {
-  const parentId = thread.lineage.parentThreadId;
-  return (
-    isSidebarSubagentThread(thread) &&
-    parentId != null &&
-    isProjectManagerThread(thread.environmentId, parentId)
-  );
 }
 
 export function getSidebarForkParentThreadId(
