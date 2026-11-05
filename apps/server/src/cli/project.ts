@@ -505,7 +505,7 @@ const projectRemoveCommand = Command.make("remove", {
     Argument.withDescription("Project id or workspace root to remove."),
   ),
   force: Flag.Boolean("force").pipe(
-    Flag.withDescription("Delete the project and all of its threads."),
+    Flag.withDescription("Accepted for compatibility. Removing archives the project's threads."),
     Flag.withDefault(false),
   ),
 }).pipe(

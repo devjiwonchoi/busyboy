@@ -303,7 +303,7 @@ describe("project settings permissions", () => {
     await vi.waitFor(() => expect(state.delete).toHaveBeenCalledOnce());
     expect(state.delete).toHaveBeenCalledWith({
       environmentId: primaryId,
-      input: { projectId: state.projects[0]!.id, force: true },
+      input: { projectId: state.projects[0]!.id },
     });
     await vi.waitFor(() => expect(state.releaseUploads).toHaveBeenCalledOnce());
     expect(state.clearDraft).toHaveBeenCalledOnce();

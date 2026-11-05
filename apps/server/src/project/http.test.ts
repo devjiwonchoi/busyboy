@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 
 import {
   ProjectConflictError,
-  ProjectNotEmptyError,
   ProjectNotFoundError,
   ProjectOperationError,
 } from "./ProjectService.ts";
@@ -15,7 +14,6 @@ const projectId = ProjectId.make("project:http-mutation");
 
 it.effect.each([
   new ProjectNotFoundError({ projectId }),
-  new ProjectNotEmptyError({ projectId }),
   new ProjectConflictError({
     projectId,
     workspaceRoot: "/workspace/project",

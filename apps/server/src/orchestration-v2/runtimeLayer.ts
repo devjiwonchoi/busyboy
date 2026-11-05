@@ -90,8 +90,8 @@ export const layerProjectService = ProjectService.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
       ProjectStore.layer,
-      ProjectionStore.layer,
       layerEventSinkProvided,
+      layerCommandReceiptStoreProvided,
       IdAllocator.layer,
     ),
   ),
@@ -250,8 +250,9 @@ const layerThreadManagementProvided = ThreadManagementService.layer.pipe(
       layerOrchestratorProvided,
       layerCommandReceiptStoreProvided,
       layerProviderSessionManagerProvided,
-      // Lets dispatch refuse to archive a project's PM thread.
+      // Lets dispatch refuse to archive a project's PM thread unless the project was removed.
       ProjectTeamRepository.layer,
+      ProjectStore.layer,
     ),
   ),
 );

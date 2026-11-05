@@ -70,8 +70,8 @@ export interface RemovedProjectMembers {
 }
 
 /**
- * Confirms, then force-deletes the given project checkouts with their threads
- * and drafts. Resolves null when the user cancels or a step fails (failures
+ * Confirms, then removes the given project checkouts. The server archives their
+ * threads; drafts are cleared. Resolves null when the user cancels or a step fails (failures
  * are reported as toasts).
  */
 export function useRemoveProjectMembers() {
@@ -96,11 +96,12 @@ export function useRemoveProjectMembers() {
     const targetKind = hasOtherMembers || !isWholeGroup ? "checkout" : "project";
     const singleMember = members.length === 1 ? members[0]! : null;
     const targetLabel = singleMember?.title ?? group.displayName;
+    const threadCount = projectThreads.length;
     const confirmed = await settlePromise(() =>
       api.dialogs.confirm(
         [
-          projectThreads.length > 0
-            ? `Remove ${targetKind} "${targetLabel}" and delete its ${projectThreads.length} thread${projectThreads.length === 1 ? "" : "s"}?`
+          threadCount > 0
+            ? `Remove ${targetKind} "${targetLabel}" and archive its ${threadCount} thread${threadCount === 1 ? "" : "s"}?`
             : `Remove ${targetKind} "${targetLabel}"?`,
           ...(singleMember
             ? [
@@ -110,15 +111,10 @@ export function useRemoveProjectMembers() {
                   : []),
               ]
             : [`This removes ${members.length} grouped project entries.`]),
-          ...(projectThreads.length > 0
-            ? [
-                "This permanently clears conversation history for those threads and any archived threads.",
-              ]
-            : ["This permanently clears any archived conversation history."]),
+          "Conversations are kept in Archived threads. Add the same folder again to bring the project and its threads back.",
           isWholeGroup && !hasOtherMembers
             ? "This removes only the project entries, not the files on disk."
             : "Other entries in this grouped project are unaffected.",
-          "This action cannot be undone.",
         ].join("\n"),
         { variant: "destructive" },
       ),
@@ -137,7 +133,6 @@ export function useRemoveProjectMembers() {
           environmentId: member.environmentId,
           input: {
             projectId: member.id,
-            force: true,
           },
         }),
         () => undefined,

@@ -6,7 +6,6 @@ import {
   type ProjectCreatePayload,
   type ProjectUpdatePayload,
   type ProjectSnapshot,
-  type ThreadId,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as Context from "effect/Context";
@@ -17,19 +16,16 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
+import * as CommandReceiptStore from "../orchestration-v2/CommandReceiptStore.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import {
   decodeProjectCommandRejection,
   encodeProjectCommandRejection,
   planProjectCommand,
   type ProjectCommand,
-  projectThreadDeleteCommandId,
 } from "../orchestration-v2/ProjectCommands.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
-import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
-import { planThreadDeletion } from "../orchestration-v2/ThreadDeletion.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectEnrichmentService from "./ProjectEnrichmentService.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
@@ -49,6 +45,7 @@ export interface ProjectBootstrapInput extends ProjectCreateInput {}
 export interface ProjectDeleteInput {
   readonly commandId: CommandId;
   readonly projectId: ProjectId;
+  /** Accepted for older clients. Removal never deletes threads, so it needs no force. */
   readonly force?: boolean;
 }
 
@@ -74,15 +71,6 @@ export class ProjectConflictError extends Schema.TaggedError<ProjectConflictErro
   }
 }
 
-export class ProjectNotEmptyError extends Schema.TaggedError<ProjectNotEmptyError>()(
-  "ProjectNotEmptyError",
-  { projectId: ProjectId },
-) {
-  override get message(): string {
-    return `Project ${this.projectId} is not empty.`;
-  }
-}
-
 export class ProjectOperationError extends Schema.TaggedError<ProjectOperationError>()(
   "ProjectOperationError",
   {
@@ -90,8 +78,6 @@ export class ProjectOperationError extends Schema.TaggedError<ProjectOperationEr
       "normalize-workspace",
       "read-project",
       "list-projects",
-      "list-threads",
-      "delete-thread",
       "dispatch-project-command",
     ]),
     projectId: Schema.optional(ProjectId),
@@ -107,7 +93,6 @@ export class ProjectOperationError extends Schema.TaggedError<ProjectOperationEr
 export type ProjectServiceError =
   | ProjectNotFoundError
   | ProjectConflictError
-  | ProjectNotEmptyError
   | ProjectOperationError;
 
 export class ProjectService extends Context.Service<
@@ -144,10 +129,9 @@ export const make = Effect.gen(function* () {
   const projects = yield* ProjectStore.ProjectStoreV2;
   const projectEnrichment = yield* ProjectEnrichmentService.ProjectEnrichmentService;
   const workspacePaths = yield* WorkspacePaths.WorkspacePaths;
-  const threadProjections = yield* ProjectionStore.ProjectionStoreV2;
   const eventSink = yield* EventSink.EventSinkV2;
+  const receipts = yield* CommandReceiptStore.CommandReceiptStoreV2;
   const idAllocator = yield* IdAllocator.IdAllocatorV2;
-  const threadCommands = yield* ThreadCommandExecutor.ThreadCommandExecutor;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const projectLocks = yield* KeyedLock.make<ProjectId>();
   const workspaceLocks = yield* KeyedLock.make<string>();
@@ -324,6 +308,19 @@ export const make = Effect.gen(function* () {
     return Option.isNone(row) ? Option.none() : Option.some(yield* hydrate(row.value));
   });
 
+  /** The most recently removed project for a folder, which adding the folder again restores. */
+  const findRemovedProject = (workspaceRoot: string) =>
+    projects.list({ includeDeleted: true }).pipe(
+      Effect.map((rows) =>
+        Option.fromUndefinedOr(
+          rows
+            .filter((row) => row.workspaceRoot === workspaceRoot && row.deletedAt !== null)
+            .toSorted((left, right) => right.deletedAt!.localeCompare(left.deletedAt!))[0],
+        ),
+      ),
+      Effect.mapError((cause) => new ProjectOperationError({ operation: "list-projects", cause })),
+    );
+
   const create: ProjectService["Service"]["create"] = Effect.fn("ProjectService.create")(
     function* (input) {
       const workspaceRoot = yield* normalizeWorkspaceRoot({
@@ -331,6 +328,34 @@ export const make = Effect.gen(function* () {
         workspaceRoot: input.workspaceRoot,
         createIfMissing: input.createWorkspaceRootIfMissing ?? false,
       });
+      // A retried command replays its first outcome instead of being planned again.
+      const receipt = yield* receipts
+        .getProjectByCommandId(input.commandId)
+        .pipe(
+          Effect.mapError(
+            (cause) => new ProjectOperationError({ operation: "read-project", cause }),
+          ),
+        );
+      if (Option.isSome(receipt) && receipt.value.commandType === "project.restore") {
+        return yield* readCommitted(receipt.value.projectId);
+      }
+      // Adding a removed project's folder again brings that project back under its
+      // own id, with its team, settings and archived threads.
+      const isNewId =
+        Option.isNone(receipt) &&
+        Option.isNone(yield* readRow(input.projectId, { includeDeleted: true }));
+      const removed = isNewId ? yield* findRemovedProject(workspaceRoot) : Option.none();
+      if (Option.isSome(removed)) {
+        const projectId = removed.value.projectId;
+        yield* commit({
+          type: "project.restore",
+          commandId: input.commandId,
+          projectId,
+          workspaceRoot,
+        });
+        yield* projectEnrichment.invalidate([workspaceRoot]);
+        return yield* readCommitted(projectId);
+      }
       yield* commit({
         type: "project.create",
         commandId: input.commandId,
@@ -390,88 +415,6 @@ export const make = Effect.gen(function* () {
     },
   );
 
-  const deleteChildThread = Effect.fn("ProjectService.deleteChildThread")(function* (
-    input: ProjectDeleteInput,
-    threadId: ThreadId,
-  ) {
-    const projection = yield* threadProjections.getThreadRecords(threadId, [
-      "runs",
-      "attempts",
-      "nodes",
-      "runtimeRequests",
-      "subagents",
-      "providerSessions",
-    ]);
-    if (projection.thread.deletedAt !== null || projection.thread.projectId !== input.projectId) {
-      return;
-    }
-    const command = {
-      type: "thread.delete" as const,
-      commandId: CommandId.make(projectThreadDeleteCommandId(input.commandId, threadId)),
-      threadId,
-    };
-    const now = yield* DateTime.now;
-    const plan = yield* planThreadDeletion({
-      command,
-      projection,
-      attachmentIds: yield* threadProjections.getThreadAttachmentIds(threadId),
-      now,
-      idAllocator,
-    });
-    const committed = yield* eventSink.commitCommand({
-      commandId: command.commandId,
-      commandType: command.type,
-      threadId,
-      acceptedAt: now,
-      events: plan.events,
-      effects: plan.effects,
-    });
-    if (
-      committed.receipt.threadId !== command.threadId ||
-      committed.receipt.commandType !== command.type
-    ) {
-      return yield* Effect.fail("The thread deletion command ID belongs to a different command.");
-    }
-    if (committed.receipt.status === "rejected") {
-      return yield* Effect.fail(
-        committed.receipt.error ?? "Thread deletion was previously rejected.",
-      );
-    }
-  });
-
-  const deleteChildThreads = Effect.fn("ProjectService.deleteChildThreads")(function* (
-    input: ProjectDeleteInput,
-  ) {
-    const { projectId } = input;
-    const snapshot = yield* threadProjections
-      .getShellSnapshot()
-      .pipe(
-        Effect.mapError(
-          (cause) => new ProjectOperationError({ operation: "list-threads", projectId, cause }),
-        ),
-      );
-    const projectThreads = [...snapshot.threads, ...snapshot.archivedThreads].filter(
-      (thread) => thread.projectId === projectId,
-    );
-    if (projectThreads.length > 0 && input.force !== true) {
-      return yield* new ProjectNotEmptyError({ projectId });
-    }
-    // Delete children durably before the project so a failed cascade can be retried.
-    yield* Effect.forEach(
-      projectThreads,
-      (thread) =>
-        threadCommands
-          .withLock(thread.id, deleteChildThread(input, thread.id))
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new ProjectOperationError({ operation: "delete-thread", projectId, cause }),
-            ),
-          ),
-      { concurrency: 1, discard: true },
-    );
-  });
-
   // A machine-disabled provider instance that a deleted project's override
   // once turned on must not stay probed and alive forever. Nothing else
   // removes the entry, so deletion is where it goes; best-effort because a
@@ -498,10 +441,9 @@ export const make = Effect.gen(function* () {
         return yield* new ProjectNotFoundError({ projectId });
       }
 
+      // Threads are not deleted: ProjectRemovalReactor archives them once this
+      // commits, and adding the folder again restores them with the project.
       const isFirstDelete = existing.value.deletedAt === null;
-      if (isFirstDelete) {
-        yield* deleteChildThreads(input);
-      }
       yield* commit({ type: "project.delete", commandId: input.commandId, projectId });
       if (isFirstDelete) {
         yield* clearProjectSettingsOverrides(projectId);
@@ -573,6 +515,4 @@ export const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(ProjectService, make).pipe(
-  Layer.provide(ThreadCommandExecutor.layer),
-);
+export const layer = Layer.effect(ProjectService, make);

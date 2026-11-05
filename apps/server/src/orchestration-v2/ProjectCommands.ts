@@ -16,14 +16,6 @@ import * as Schema from "effect/Schema";
 import type { UnsequencedProjectEvent } from "../persistence/OrchestrationEventStore.ts";
 import type { ProjectRow } from "./ProjectStore.ts";
 
-/** The command id that deletes one of a project's threads while deleting the project. */
-export const projectThreadDeleteCommandId = (projectCommandId: string, threadId: string): string =>
-  `${projectCommandId}:delete-thread:${threadId}`;
-
-/** True when a thread deletion is part of deleting its project. */
-export const isProjectThreadDeleteCommandId = (commandId: string, threadId: string): boolean =>
-  commandId.endsWith(`:delete-thread:${threadId}`);
-
 export interface ProjectCreateCommand {
   readonly type: "project.create";
   readonly commandId: CommandId;
@@ -53,7 +45,19 @@ export interface ProjectDeleteCommand {
   readonly projectId: ProjectId;
 }
 
-export type ProjectCommand = ProjectCreateCommand | ProjectMetaUpdateCommand | ProjectDeleteCommand;
+/** Brings a removed project back, keeping its id, settings and threads. */
+export interface ProjectRestoreCommand {
+  readonly type: "project.restore";
+  readonly commandId: CommandId;
+  readonly projectId: ProjectId;
+  readonly workspaceRoot: string;
+}
+
+export type ProjectCommand =
+  | ProjectCreateCommand
+  | ProjectMetaUpdateCommand
+  | ProjectDeleteCommand
+  | ProjectRestoreCommand;
 
 export class ProjectCommandInvariantError extends Schema.TaggedError<ProjectCommandInvariantError>()(
   "ProjectCommandInvariantError",
@@ -225,9 +229,36 @@ export function planProjectCommand(input: {
       });
     }
 
+    case "project.restore": {
+      const removed = state.project;
+      if (removed === undefined) return missingProject();
+      if (removed.deletedAt === null) {
+        return invariant(`Project '${command.projectId}' is not removed.`);
+      }
+      const conflict = requireWorkspaceAvailable(command.workspaceRoot);
+      if (conflict !== undefined) return Result.fail(conflict);
+      return Result.succeed({
+        ...base,
+        type: "project.created",
+        payload: {
+          projectId: command.projectId,
+          title: removed.title,
+          workspaceRoot: command.workspaceRoot,
+          defaultModelSelection: removed.defaultModelSelection,
+          defaultThreadEnvMode: removed.defaultThreadEnvMode,
+          faviconPath: removed.faviconPath,
+          projectIcon: removed.projectIcon,
+          scripts: removed.scripts,
+          createdAt: removed.createdAt,
+          updatedAt: occurredAt,
+          restoredFromDeletedAt: removed.deletedAt,
+        },
+      });
+    }
+
     case "project.delete": {
       if (activeProject === undefined) return missingProject();
-      // Thread children are deleted by ProjectService before this event commits.
+      // The project's threads are archived after this event commits (ProjectRemovalReactor).
       return Result.succeed({
         ...base,
         type: "project.deleted",
