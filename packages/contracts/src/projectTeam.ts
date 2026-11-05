@@ -289,7 +289,8 @@ export type ProjectOtherThreadStatus = typeof ProjectOtherThreadStatus.Type;
 
 /** What a thread outside the task board is waiting on the user for. */
 export const ProjectOtherThreadRequest = Schema.Struct({
-  kind: Schema.Literals(["question", "approval", "plan"]),
+  /** `reply`: the thread's turn ended and the user has not looked at it yet. */
+  kind: Schema.Literals(["question", "approval", "plan", "reply"]),
   text: Schema.String,
   since: IsoDateTime,
 });

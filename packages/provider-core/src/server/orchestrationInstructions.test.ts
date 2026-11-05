@@ -102,6 +102,7 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "covers your tasks and `otherThreads` together");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "Needs you: each question waiting for the user");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "by their title, never by number alone");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, 'On "[Thread waiting] "<title>" is waiting on you for');
   });
 
   it("lists the PM's wakes and keeps decisions in memory across compactions", () => {

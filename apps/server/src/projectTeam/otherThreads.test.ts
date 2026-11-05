@@ -22,10 +22,16 @@ const sitrepRequests = (harness: TeamHarness, pm: ThreadId) =>
     .pipe(Effect.map((texts) => texts.filter((text) => text.startsWith("[Sitrep due]"))));
 
 const QUESTION = "Use the REA MCP server or the CLI for the binary scan?";
+const READY_ASK = 'Reply "ready" once you are at the Mac for the Touch ID and keychain steps.';
+
+const threadWaitingWakes = (harness: TeamHarness, pm: ThreadId) =>
+  harness
+    .messagesTo(pm)
+    .pipe(Effect.map((texts) => texts.filter((text) => text.startsWith("[Thread waiting]"))));
 
 describe("PM status covers threads outside the task board", () => {
   it.effect(
-    "a thread the user started shows in team_status and sitreps, and its question counts as Needs you",
+    "a thread the user started shows in team_status and sitreps, counts its question as Needs you, and wakes the PM when it waits on the user",
     () =>
       withTeam((harness) =>
         Effect.gen(function* () {
@@ -107,20 +113,58 @@ describe("PM status covers threads outside the task board", () => {
           assert.strictEqual(needsYou?.openCount, 1);
           assert.strictEqual(needsYou?.presence.waitingOnUser, 1);
 
-          // The user answers and the thread finishes: nothing waits on the user any more.
+          // The PM is woken once, with the thread's title and its question.
+          yield* sitreps.check;
+          yield* sitreps.check;
+          assert.deepStrictEqual(yield* threadWaitingWakes(harness, pm), [
+            `[Thread waiting] "REA 조사와 활용 개선 방법" is waiting on you for a question: ${QUESTION}`,
+          ]);
+
+          // The user answers in the thread and it works on: nothing waits on the user.
+          yield* TestClock.adjust("1 minute");
+          const answeredAt = yield* DateTime.now;
+          userThread.shell = {
+            ...userThread.shell,
+            status: "running",
+            pendingRuntimeRequest: null,
+            latestRunStartedAt: answeredAt,
+            lastVisitedAt: answeredAt,
+          };
+          userThread.turnItems = [];
+          assert.strictEqual((yield* team.teamStatus(pm, {})).otherThreads[0]?.status, "running");
+          const answered = (yield* team.attentionSnapshot).projects[0];
+          assert.strictEqual(answered?.openCount, 0);
+          assert.strictEqual(answered?.presence.waitingOnUser, 0);
+
+          // After the user has left, the thread ends its turn asking them to reply "ready".
+          yield* TestClock.adjust("10 minutes");
+          const completedAt = yield* DateTime.now;
           userThread.activeRunId = null;
           userThread.shell = {
             ...userThread.shell,
             status: "completed",
-            pendingRuntimeRequest: null,
-            latestRunCompletedAt: yield* DateTime.now,
+            latestRunCompletedAt: completedAt,
+            latestVisibleMessage: {
+              role: "assistant",
+              text: READY_ASK,
+              updatedAt: completedAt,
+            } as OrchestrationV2ThreadShell["latestVisibleMessage"],
           };
-          userThread.turnItems = [];
-          const done = yield* team.teamStatus(pm, {});
-          assert.strictEqual(done.otherThreads[0]?.status, "idle");
-          const answered = (yield* team.attentionSnapshot).projects[0];
-          assert.strictEqual(answered?.openCount, 0);
-          assert.strictEqual(answered?.presence.waitingOnUser, 0);
+          // A user still watching would see it at once, so the PM waits a moment first.
+          yield* sitreps.check;
+          assert.strictEqual((yield* threadWaitingWakes(harness, pm)).length, 1);
+          yield* TestClock.adjust("3 minutes");
+          yield* sitreps.check;
+          assert.deepStrictEqual((yield* threadWaitingWakes(harness, pm)).slice(1), [
+            `[Thread waiting] "REA 조사와 활용 개선 방법" is waiting on you for a reply: ${READY_ASK}`,
+          ]);
+          const replying = (yield* team.teamStatus(pm, {})).otherThreads[0];
+          assert.strictEqual(replying?.status, "waiting_on_user");
+          assert.strictEqual(replying?.pendingRequest?.kind, "reply");
+
+          // Once the user opens the thread, it is idle.
+          userThread.shell = { ...userThread.shell, lastVisitedAt: yield* DateTime.now };
+          assert.strictEqual((yield* team.teamStatus(pm, {})).otherThreads[0]?.status, "idle");
         }),
       ),
   );

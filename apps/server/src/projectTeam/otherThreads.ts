@@ -42,10 +42,26 @@ function linkedPullRequest(shell: Shell): { readonly url: string; readonly at: n
   return fallback === null ? null : { url: fallback.url, at: 0 };
 }
 
+/**
+ * The finished turn the user has not looked at yet, which the sidebar shows as ready:
+ * the agent handed the thread back and waits for the user's reply.
+ */
+function unseenCompletedAt(shell: Shell): DateTime.Utc | null {
+  if (shell.activeRunId !== null || shell.status !== "completed") return null;
+  const completedAt = shell.latestRunCompletedAt ?? null;
+  const visitedAt = shell.lastVisitedAt ?? null;
+  if (completedAt === null || visitedAt === null) return null;
+  return DateTime.toEpochMillis(completedAt) > DateTime.toEpochMillis(visitedAt)
+    ? completedAt
+    : null;
+}
+
 function threadStatus(shell: Shell): ProjectOtherThreadStatus {
   if (shell.pendingRuntimeRequest !== null) return "waiting_on_user";
   if (shell.activeRunId !== null || ACTIVE_RUN_STATUSES.has(shell.status)) return "running";
-  if (shell.hasActionableProposedPlan) return "waiting_on_user";
+  if (shell.hasActionableProposedPlan || unseenCompletedAt(shell) !== null) {
+    return "waiting_on_user";
+  }
   if (shell.status === "failed") return "failed";
   return "idle";
 }
@@ -57,13 +73,24 @@ function requestText(
 ): ProjectOtherThreadRequest | null {
   const pending = shell.pendingRuntimeRequest;
   if (pending === null) {
-    return shell.hasActionableProposedPlan && shell.activeRunId === null
-      ? {
-          kind: "plan",
-          text: "A proposed plan is waiting for approval.",
-          since: iso(shell.latestRunCompletedAt ?? shell.updatedAt),
-        }
-      : null;
+    if (shell.hasActionableProposedPlan && shell.activeRunId === null) {
+      return {
+        kind: "plan",
+        text: "A proposed plan is waiting for approval.",
+        since: iso(shell.latestRunCompletedAt ?? shell.updatedAt),
+      };
+    }
+    const completedAt = unseenCompletedAt(shell);
+    if (completedAt === null) return null;
+    const lastMessage = shell.latestVisibleMessage;
+    return {
+      kind: "reply",
+      text:
+        lastMessage !== null && lastMessage.role === "assistant"
+          ? trim(lastMessage.text, REQUEST_TEXT_MAX_CHARS)
+          : "Its turn ended and it is waiting for a reply.",
+      since: iso(completedAt),
+    };
   }
   const since = iso(pending.createdAt);
   const item = turnItems.find(
@@ -158,6 +185,9 @@ export const readOtherThreads = (input: {
     );
   });
 
-/** Counts toward the PM's "Needs you". */
+/**
+ * Counts toward the PM's "Needs you": an open question, approval or plan. A finished
+ * turn waiting for a reply does not, since the sidebar already shows it as ready.
+ */
 export const isWaitingOnUser = (thread: ProjectOtherThread): boolean =>
-  thread.pendingRequest !== null;
+  thread.pendingRequest !== null && thread.pendingRequest.kind !== "reply";

@@ -226,6 +226,10 @@ export const withTeam = <A, E>(
           ),
           Effect.as({ sequence: 1, storedEvents: [] }),
         ),
+      hasReceipt: (commandId) =>
+        Ref.get(dispatched).pipe(
+          Effect.map((commands) => commands.some((command) => command.commandId === commandId)),
+        ),
       getThreadShell: (threadId) =>
         Effect.sync(() => {
           const thread = threads.get(threadId);
