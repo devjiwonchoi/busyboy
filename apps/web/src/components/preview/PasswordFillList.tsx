@@ -2,6 +2,8 @@
 
 import { useRouter } from "@tanstack/react-router";
 import { KeyRound, Settings2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
 
 import { readBrowserPasswordsBridge } from "~/browser/browserPasswords";
 import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
@@ -96,14 +98,25 @@ export function PasswordFillList(props: {
   );
 }
 
-/** The fill list and save prompt for one tab, with "Manage passwords…" opening Settings. */
+/**
+ * The fill list and save prompt for one tab, with "Manage passwords…" opening Settings.
+ *
+ * The page itself is a native surface fixed above the panel, so the overlays
+ * render in their own layer over the same rect, one level above that surface.
+ */
 export function PreviewPasswordOverlays(props: {
   readonly tabId: string;
   readonly zoomFactor: number;
 }) {
   // Optional so the preview still renders where no router is mounted.
   const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined;
-  return (
+  const surface = useBrowserSurfaceStore(
+    useShallow((state) => {
+      const current = state.byTabId[props.tabId];
+      return { rect: current?.rect ?? null, zIndex: current?.zIndex ?? 0 };
+    }),
+  );
+  const overlays = (
     <>
       <PasswordFillList
         tabId={props.tabId}
@@ -112,5 +125,22 @@ export function PreviewPasswordOverlays(props: {
       />
       <PasswordSavePrompt tabId={props.tabId} />
     </>
+  );
+  if (surface.rect === null || typeof document === "undefined") return overlays;
+  return createPortal(
+    <div
+      className="pointer-events-none fixed *:pointer-events-auto"
+      style={{
+        left: surface.rect.x,
+        top: surface.rect.y,
+        width: surface.rect.width,
+        height: surface.rect.height,
+        zIndex: surface.zIndex + 1,
+      }}
+      data-preview-password-overlays={props.tabId}
+    >
+      {overlays}
+    </div>,
+    document.body,
   );
 }

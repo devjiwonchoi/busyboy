@@ -6,6 +6,7 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
+import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
 import { usePasswordAutofillStore } from "~/browser/passwordAutofillStore";
 
 import { PreviewPasswordOverlays } from "./PasswordFillList";
@@ -46,6 +47,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   usePasswordAutofillStore.setState({ fillLists: {}, prompts: {} });
+  useBrowserSurfaceStore.setState({ byTabId: {} });
   delete (window as { desktopBridge?: unknown }).desktopBridge;
   vi.unstubAllGlobals();
 });
@@ -62,6 +64,60 @@ async function render() {
 }
 
 describe("in-page password autofill", () => {
+  it("draws the save prompt above the page surface that covers the panel", async () => {
+    installBridge();
+    const rect = { x: 10, y: 10, width: 360, height: 320 };
+    useBrowserSurfaceStore.setState({
+      byTabId: {
+        [TAB]: {
+          rect,
+          visible: true,
+          zIndex: 30,
+          content: null,
+          fittedSourceContent: null,
+          fitSourceContent: false,
+          cornerRadius: 0,
+          updatedAt: 0,
+          owner: null,
+        },
+      },
+    });
+    // Stands in for the fixed page surface the desktop app lays over the panel.
+    const surface = document.createElement("div");
+    Object.assign(surface.style, {
+      position: "fixed",
+      left: `${rect.x}px`,
+      top: `${rect.y}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      zIndex: "30",
+      background: "white",
+    });
+    document.body.append(surface);
+    try {
+      await render();
+      await emit({
+        type: "savePrompt",
+        tabId: TAB,
+        promptId: "p-0",
+        mode: "save",
+        origin: "http://127.0.0.1:4000",
+        frameOrigin: null,
+        username: "alice",
+        collapsed: false,
+      });
+      const dialog = page.getByRole("dialog", { name: "Save password?" });
+      await expect.element(dialog).toBeVisible();
+      const box = dialog.element().getBoundingClientRect();
+      expect(box.right).toBeLessThanOrEqual(rect.x + rect.width);
+      expect(box.top).toBeGreaterThanOrEqual(rect.y);
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      expect(dialog.element().contains(top)).toBe(true);
+    } finally {
+      surface.remove();
+    }
+  });
+
   it("lists saved logins under the field and asks main to fill the chosen one", async () => {
     const autofill = installBridge();
     await render();
