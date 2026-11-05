@@ -64,6 +64,7 @@ import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import {
   buildMultiSelectThreadContextMenuItems,
   filterSidebarV2VisibleThreads,
+  isProjectManagerTaskLead,
   groupSidebarThreadsByProject,
   orderSidebarProjectSections,
   selectSidebarProjectManagers,
@@ -197,7 +198,7 @@ describe("project manager sidebar heading", () => {
     expect(container.querySelector('[aria-label="Remy, working"]')).not.toBeNull();
   });
 
-  it("has no tasks fold under the heading", async () => {
+  it("has no tasks fold: task leads are ordinary rows below the heading", async () => {
     await renderHeading();
     expect(container.textContent).not.toMatch(/\btasks?\b/);
     expect(container.querySelector("ul")).toBeNull();
@@ -322,24 +323,32 @@ describe("project manager sidebar sections", () => {
     expect([...managers.keys()]).toEqual(["env-1:project-1"]);
   });
 
-  it("hides the PM's task leads from the list but keeps the user's own threads", () => {
-    const subagent = (id: string, parentThreadId: string) =>
+  it("lists the PM's unarchived task leads as ordinary rows, but no other subagents", () => {
+    const subagent = (id: string, parentThreadId: string, patch: Record<string, unknown> = {}) =>
       shell(id, {
         lineage: { rootThreadId: parentThreadId, parentThreadId, relationshipToParent: "subagent" },
+        ...patch,
       });
     const threads = [
       shell("pm-thread"),
-      subagent("task-lead", "pm-thread"),
-      shell("research-thread"),
-      subagent("helper", "research-thread"),
+      subagent("lead", "pm-thread"),
+      subagent("lead-archived", "pm-thread", { archivedAt: "2026-09-13T12:00:00Z" }),
+      subagent("lead-other-env", "pm-thread", { environmentId: "env-2" }),
+      subagent("helper", "user-thread"),
+      subagent("grandchild", "lead"),
       shell("user-thread"),
     ];
+    const isPmThread = (environmentId: string, threadId: string) =>
+      environmentId === "env-1" && threadId === "pm-thread";
     const visible = filterSidebarV2VisibleThreads(
       threads as never[],
       null,
-      (thread: { id: string }) => thread.id === "pm-thread",
+      (thread: { environmentId: string; id: string }) =>
+        isPmThread(thread.environmentId, thread.id),
+      (thread: Parameters<typeof isProjectManagerTaskLead>[0]) =>
+        isProjectManagerTaskLead(thread, isPmThread),
     ) as { id: string }[];
-    expect(visible.map((thread) => thread.id)).toEqual(["research-thread", "user-thread"]);
+    expect(visible.map((thread) => thread.id)).toEqual(["lead", "user-thread"]);
   });
 
   it("orders projects by their threads, then the rest in fallback order", () => {
