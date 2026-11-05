@@ -97,7 +97,6 @@ import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
 export const MAX_TASK_NUDGES = 2;
-export const SETTINGS_PIN_MS = 24 * 60 * MINUTE_MS;
 const DEFAULT_TASK_EVENT_LIMIT = 20;
 /** Stages the PM presence counts; done and cancelled tasks never show. */
 const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
@@ -967,9 +966,7 @@ const make = Effect.gen(function* () {
         sitreps: yield* repository.listRecentPostedSitreps({ projectId, limit: JOURNAL_LIMIT }),
       });
       const memoryTopics = (yield* repository.listMemory(projectId)).map((entry) => entry.topic);
-      if (input.reason === "user_asked" && role.type === "pm") {
-        yield* sitreps.noteUserAsked(projectId);
-      }
+      if (role.type === "pm") yield* sitreps.noteStatusRead(projectId);
       return {
         projectId,
         tasks: {
@@ -1052,10 +1049,9 @@ const make = Effect.gen(function* () {
             ...(quietHours === undefined ? {} : { quietHours }),
             persona,
             ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
-            // Only setting the interval by hand stops it adapting; other fields keep the pin as is.
-            ...(patch.sitrepIntervalMinutes === undefined
-              ? {}
-              : { pinnedUntil: isoFromMillis(isoMillis(now) + SETTINGS_PIN_MS) }),
+            // Only setting the interval by hand stops it adapting, for good; other fields
+            // keep the pin as is.
+            ...(patch.sitrepIntervalMinutes === undefined ? {} : { intervalPinnedAt: now }),
           };
           yield* repository.updateManagerSettings({ projectId, settings, now });
           return { manager, settings, now, previousPersona, persona };

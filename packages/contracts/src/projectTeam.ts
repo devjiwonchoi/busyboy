@@ -221,8 +221,8 @@ export const ProjectTeamSettings = Schema.Struct({
   ),
   sitrepNotify: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   quietHours: Schema.optionalKey(ProjectTeamQuietHours),
-  /** Set when the user picks values directly; no automatic adjustment until then. */
-  pinnedUntil: Schema.optionalKey(IsoDateTime),
+  /** When the sitrep interval was set by hand. The server never adapts it after that. */
+  intervalPinnedAt: Schema.optionalKey(IsoDateTime),
   /** Absent until the user or PM picks one; the server resolves a per-project default. */
   persona: Schema.optionalKey(ProjectManagerPersona),
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -431,11 +431,6 @@ export const ProjectTeamStatusInput = Schema.Struct({
     description:
       "Report changes after this time. Defaults to the later of the last sitrep and the last user message.",
   }),
-  reason: Schema.optional(
-    Schema.Literal("user_asked").annotate({
-      description: "Pass user_asked when the user asked for progress.",
-    }),
-  ),
 });
 export type ProjectTeamStatusInput = typeof ProjectTeamStatusInput.Type;
 

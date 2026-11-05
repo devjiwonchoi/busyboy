@@ -47,7 +47,7 @@ describe("ProjectTeamRepository", () => {
       const pinned = {
         ...DEFAULT_PROJECT_TEAM_SETTINGS,
         sitrepIntervalMinutes: 30,
-        pinnedUntil: t2,
+        intervalPinnedAt: t2,
       };
       yield* team.updateManagerSettings({ projectId, settings: pinned, now: t1 });
 

@@ -26,7 +26,7 @@ let current: ProjectTeamAttentionSummary;
 let root: Root;
 let container: HTMLDivElement;
 
-function summary(minutes: number, pinnedUntil?: string): ProjectTeamAttentionSummary {
+function summary(minutes: number, intervalPinnedAt?: string): ProjectTeamAttentionSummary {
   return {
     projectId: "project-1",
     pmThreadId: "pm-thread",
@@ -39,7 +39,7 @@ function summary(minutes: number, pinnedUntil?: string): ProjectTeamAttentionSum
       maxConcurrentTasks: 6,
       sitrepIntervalMinutes: minutes,
       sitrepNotify: true,
-      ...(pinnedUntil ? { pinnedUntil } : {}),
+      ...(intervalPinnedAt ? { intervalPinnedAt } : {}),
     },
   } as ProjectTeamAttentionSummary;
 }
@@ -61,10 +61,10 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.allowed = true;
   current = summary(60);
-  // The server pins a user-saved interval for 24 hours and pushes the new summary.
+  // The server pins a user-saved interval and pushes the new summary.
   state.updateSettings.mockReset().mockImplementation(async (_ref, patch) => {
     if (patch.sitrepIntervalMinutes !== undefined) {
-      current = summary(patch.sitrepIntervalMinutes, "2999-01-01T00:00:00.000Z");
+      current = summary(patch.sitrepIntervalMinutes, "2026-11-05T00:00:00.000Z");
       await renderPicker();
     }
     return { _tag: "Success" };
@@ -101,6 +101,59 @@ describe("sitrep interval picker", () => {
 
     await saveInterval("90");
     expect(trigger().textContent).toBe("Sitrep 1h 30m");
+  });
+
+  it("saves a typed interval when a phone tap closes the picker without blurring the input", async () => {
+    const outside = document.createElement("div");
+    outside.style.cssText = "width: 200px; height: 200px";
+    document.body.append(outside);
+    await renderPicker();
+    await act(async () => trigger().click());
+    // The phone number pad has no Enter key.
+    await userEvent.clear(minutesInput());
+    await userEvent.type(minutesInput(), "30");
+    // On iOS a tap on plain content closes the popover but leaves focus in the input.
+    await act(async () => {
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) {
+        const Event = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+        outside.dispatchEvent(
+          new Event(type, { bubbles: true, button: 0, pointerType: "touch" } as never),
+        );
+      }
+      outside.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await vi.waitFor(() => expect(minutesInput()).toBeNull());
+    expect(state.updateSettings).toHaveBeenCalledExactlyOnceWith(projectRef, {
+      sitrepIntervalMinutes: 30,
+    });
+    expect(trigger().textContent).toBe("Sitrep 30m");
+    outside.remove();
+  });
+
+  it("closes on Escape and saves the typed interval once", async () => {
+    await renderPicker();
+    await act(async () => trigger().click());
+    await userEvent.clear(minutesInput());
+    await userEvent.type(minutesInput(), "25");
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(minutesInput()).toBeNull());
+    expect(state.updateSettings).toHaveBeenCalledExactlyOnceWith(projectRef, {
+      sitrepIntervalMinutes: 25,
+    });
+  });
+
+  it("keeps what the user is typing when the server changes the interval meanwhile", async () => {
+    await renderPicker();
+    await act(async () => trigger().click());
+    await userEvent.clear(minutesInput());
+    await userEvent.type(minutesInput(), "45");
+    current = summary(30);
+    await renderPicker();
+    expect(minutesInput().value).toBe("45");
+    await userEvent.keyboard("{Enter}");
+    expect(state.updateSettings).toHaveBeenCalledExactlyOnceWith(projectRef, {
+      sitrepIntervalMinutes: 45,
+    });
   });
 
   it("does not save an interval outside 5 to 1440 minutes", async () => {

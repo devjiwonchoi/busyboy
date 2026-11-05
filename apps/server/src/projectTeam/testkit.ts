@@ -89,12 +89,14 @@ export function assistantMessage(input: {
   readonly threadId: ThreadId;
   readonly runId: string;
   readonly text: string;
+  readonly id?: string;
+  readonly createdAt?: string;
 }): OrchestrationV2ConversationMessage {
-  const at = DateTime.makeUnsafe(START);
+  const at = DateTime.makeUnsafe(input.createdAt ?? START);
   return {
     createdBy: "agent",
     creationSource: "provider",
-    id: MessageId.make(`message:${input.runId}`),
+    id: MessageId.make(input.id ?? `message:${input.runId}`),
     threadId: input.threadId,
     runId: input.runId as never,
     nodeId: null,

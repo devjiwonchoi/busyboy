@@ -6,7 +6,7 @@ import {
   type ScopedProjectRef,
 } from "@t3tools/contracts";
 import { RefreshCwIcon } from "lucide-react";
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { useUpdateTeamSettings } from "../../state/projectTeam";
 import { useEnvironmentScope } from "../../state/session";
@@ -29,9 +29,9 @@ export function formatSitrepInterval(minutes: number): string {
   return rest === 0 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 60)}h ${rest}m`;
 }
 
-/** The server picks the interval itself unless the user saved one in the last 24 hours. */
+/** The server adapts the interval itself until the user saves one. */
 function isAutoInterval(settings: ProjectTeamAttentionSummary["settings"]): boolean {
-  return settings.pinnedUntil === undefined || Date.parse(settings.pinnedUntil) <= Date.now();
+  return settings.intervalPinnedAt === undefined;
 }
 
 interface SitrepControlProps {
@@ -39,31 +39,40 @@ interface SitrepControlProps {
   summary: ProjectTeamAttentionSummary;
 }
 
-export function SitrepSettingsContent(props: SitrepControlProps) {
-  const { settings } = props.summary;
-  // Remounting on a new saved value resets the draft.
-  return <SitrepSettingsFields key={settings.sitrepIntervalMinutes} {...props} />;
-}
-
-function SitrepSettingsFields({ projectRef, summary: { settings } }: SitrepControlProps) {
+export function SitrepSettingsContent({ projectRef, summary: { settings } }: SitrepControlProps) {
   const canOperate = useEnvironmentScope(projectRef.environmentId, AuthOrchestrationOperateScope);
   const updateSettings = useUpdateTeamSettings();
-  const [draft, setDraft] = useState(String(settings.sitrepIntervalMinutes));
+  // Null until the user types, so a server-side change shows without wiping a draft.
+  const [typed, setTyped] = useState<string | null>(null);
+  // Escape and unmount can both save before a re-render; send each draft once.
+  const sent = useRef<string | null>(null);
+  const draft = typed ?? String(settings.sitrepIntervalMinutes);
   const minutes = Number(draft);
   const valid =
     /^\d+$/.test(draft) &&
     minutes >= MIN_PROJECT_TEAM_SITREP_INTERVAL_MINUTES &&
     minutes <= MAX_PROJECT_TEAM_SITREP_INTERVAL_MINUTES;
-  // Saving pins the interval for 24 hours, so blur only saves a changed value;
+  // Saving pins the interval, so closing only saves a changed value;
   // Enter on the same value pins a server-chosen interval on purpose.
   const save = (explicit: boolean) => {
-    if (!canOperate || !valid) return;
+    if (!canOperate || !valid || typed === null || typed === sent.current) return;
     if (minutes === settings.sitrepIntervalMinutes && (!explicit || !isAutoInterval(settings))) {
       return;
     }
+    sent.current = typed;
+    setTyped(null);
     void updateSettings(projectRef, { sitrepIntervalMinutes: minutes });
   };
+  // Phones have no Enter on the number pad, and a tap outside closes the popover
+  // without blurring the input, so a typed value is also saved when the field unmounts.
+  const saveOnUnmount = useRef(save);
+  saveOnUnmount.current = save;
+  useEffect(() => () => saveOnUnmount.current(false), []);
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      save(false);
+      return;
+    }
     // Menus treat typed keys as typeahead.
     event.stopPropagation();
     if (event.key !== "Enter") return;
@@ -86,7 +95,10 @@ function SitrepSettingsFields({ projectRef, summary: { settings } }: SitrepContr
           aria-invalid={!valid || undefined}
           disabled={!canOperate}
           value={draft}
-          onChange={(event) => setDraft(event.currentTarget.value.trim())}
+          onChange={(event) => {
+            sent.current = null;
+            setTyped(event.currentTarget.value.trim());
+          }}
           onKeyDown={onKeyDown}
           onBlur={() => save(false)}
           className="w-20"

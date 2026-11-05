@@ -128,7 +128,7 @@ describe("projectTeam MCP toolkit", () => {
           const item = content(asked).item;
           assert.strictEqual(item.askerThreadId, lead);
 
-          const status = yield* call(pm, "team_status", { reason: "user_asked" });
+          const status = yield* call(pm, "team_status", {});
           assert.isFalse(status.isError);
           assert.deepStrictEqual(
             content(status).openAttention.map((open: { id: string }) => open.id),

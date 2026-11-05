@@ -23,19 +23,19 @@ describe("ProjectTeamSettings", () => {
     );
   });
 
-  it("keeps quiet hours and pin", () => {
+  it("keeps quiet hours and the interval pin", () => {
     expect(
       Schema.decodeUnknownSync(ProjectTeamSettings)({
         sitrepIntervalMinutes: 30,
         quietHours: { start: "22:00", end: "07:30" },
-        pinnedUntil: "2026-11-05T00:00:00.000Z",
+        intervalPinnedAt: "2026-11-05T00:00:00.000Z",
       }),
     ).toEqual({
       maxConcurrentTasks: 6,
       sitrepIntervalMinutes: 30,
       sitrepNotify: true,
       quietHours: { start: "22:00", end: "07:30" },
-      pinnedUntil: "2026-11-05T00:00:00.000Z",
+      intervalPinnedAt: "2026-11-05T00:00:00.000Z",
       enabled: true,
     });
   });
@@ -209,10 +209,9 @@ describe("MCP inputs", () => {
     });
   });
 
-  it("accepts the user_asked reason only", () => {
+  it("still accepts the old user_asked reason and drops it", () => {
     const decode = Schema.decodeUnknownSync(ProjectTeamStatusInput);
-    expect(decode({ reason: "user_asked" })).toEqual({ reason: "user_asked" });
-    expect(() => decode({ reason: "bored" })).toThrow();
+    expect(decode({ reason: "user_asked" })).toEqual({});
   });
 
   it("validates ask_user kinds", () => {

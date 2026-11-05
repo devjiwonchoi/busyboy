@@ -30,23 +30,51 @@ const sitrepRequests = (harness: TeamHarness, pm: ThreadId) =>
     .messagesTo(pm)
     .pipe(Effect.map((texts) => texts.filter((text) => text.startsWith("[Sitrep due]"))));
 
-/** Ends the PM's turn for the latest sitrep request with the given text. */
-const postSitrep = (harness: TeamHarness, pm: ThreadId, text: string) =>
+const latestSitrepRequest = (harness: TeamHarness, pm: ThreadId) =>
   Effect.gen(function* () {
-    const sitreps = yield* SitrepScheduler;
     const request = (yield* Ref.get(harness.dispatched))
       .filter((command) => command.type === "message.dispatch" && command.threadId === pm)
       .at(-1);
     assert(request?.type === "message.dispatch");
-    const runId = `run-${request.messageId}`;
-    harness.threads.get(pm)!.messages.push(assistantMessage({ threadId: pm, runId, text }));
+    return { messageId: request.messageId, runId: `run-${request.messageId}` };
+  });
+
+/** The PM writes one message in its sitrep turn, at the current test time. */
+const writeInSitrepTurn = (harness: TeamHarness, pm: ThreadId, text: string) =>
+  Effect.gen(function* () {
+    const { runId } = yield* latestSitrepRequest(harness, pm);
+    const thread = harness.threads.get(pm)!;
+    const now = DateTime.formatIso(yield* DateTime.now);
+    thread.messages.push(
+      assistantMessage({
+        threadId: pm,
+        runId,
+        text,
+        id: `message:${runId}:${thread.messages.length}`,
+        createdAt: now,
+      }),
+    );
+  });
+
+/** Ends the PM's turn for the latest sitrep request. */
+const finishSitrepTurn = (harness: TeamHarness, pm: ThreadId) =>
+  Effect.gen(function* () {
+    const sitreps = yield* SitrepScheduler;
+    const { messageId, runId } = yield* latestSitrepRequest(harness, pm);
     yield* sitreps.handle({
       id: EventId.make(`event-${runId}`),
       threadId: pm,
       occurredAt: DateTime.makeUnsafe(START),
       type: "run.updated",
-      payload: { id: runId, threadId: pm, status: "completed", userMessageId: request.messageId },
+      payload: { id: runId, threadId: pm, status: "completed", userMessageId: messageId },
     } as unknown as OrchestrationV2DomainEvent);
+  });
+
+/** Ends the PM's turn for the latest sitrep request with the given text. */
+const postSitrep = (harness: TeamHarness, pm: ThreadId, text: string) =>
+  Effect.gen(function* () {
+    yield* writeInSitrepTurn(harness, pm, text);
+    yield* finishSitrepTurn(harness, pm);
   });
 
 const userMessage = (pm: ThreadId, at: string): OrchestrationV2DomainEvent =>
@@ -67,54 +95,50 @@ const userMessage = (pm: ThreadId, at: string): OrchestrationV2DomainEvent =>
   }) as unknown as OrchestrationV2DomainEvent;
 
 describe("SitrepScheduler", () => {
-  it.effect(
-    "sends one sitrep three minutes after the first milestone and folds in later ones",
-    () =>
-      withTeam((harness) =>
-        Effect.gen(function* () {
-          const sitreps = yield* SitrepScheduler;
-          const team = yield* ProjectTeamService.ProjectTeamService;
-          const pm = yield* setUpManager;
-          const a = yield* startLead(pm, "Hello", harness.delegate);
-          const b = yield* startLead(pm, "Goodbye", harness.delegate);
+  it.effect("folds milestones into one sitrep once the interval has passed", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const sitreps = yield* SitrepScheduler;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const a = yield* startLead(pm, "Hello", harness.delegate);
+        const b = yield* startLead(pm, "Goodbye", harness.delegate);
 
-          yield* team.updateTask(a.leadThreadId, {
-            stage: "done",
-            resultSummary: "Added hello.sh.",
-          });
+        yield* team.updateTask(a.leadThreadId, { stage: "done", resultSummary: "Added hello.sh." });
+        yield* TestClock.adjust("1 minute");
+        yield* sitreps.check;
+        yield* team.updateTask(b.leadThreadId, {
+          stage: "done",
+          resultSummary: "Added goodbye.sh.",
+        });
+        // Finished tasks do not cut the 60-minute interval short.
+        for (let minute = 2; minute < 60; minute++) {
           yield* TestClock.adjust("1 minute");
           yield* sitreps.check;
-          yield* team.updateTask(b.leadThreadId, {
-            stage: "done",
-            resultSummary: "Added goodbye.sh.",
-          });
-          yield* TestClock.adjust("1 minute");
-          yield* sitreps.check;
-          assert.deepStrictEqual(yield* sitrepRequests(harness, pm), []);
+        }
+        assert.deepStrictEqual(yield* sitrepRequests(harness, pm), []);
 
-          yield* TestClock.adjust("1 minute");
-          yield* sitreps.check;
-          yield* TestClock.adjust("1 minute");
-          yield* sitreps.check;
-          const requests = yield* sitrepRequests(harness, pm);
-          assert.deepStrictEqual(requests, [
-            "[Sitrep due] since 2026-11-04T00:00:00.000Z. Call team_status(since) and post a 3–6 line sitrep.",
-          ]);
-          const snapshot = yield* team.attentionSnapshot;
-          assert.strictEqual(snapshot.projects[0]?.sitrepInProgress, true);
-          assert.strictEqual(snapshot.projects[0]?.latestSitrepId, null);
+        yield* TestClock.adjust("1 minute");
+        yield* sitreps.check;
+        const requests = yield* sitrepRequests(harness, pm);
+        assert.deepStrictEqual(requests, [
+          "[Sitrep due] since 2026-11-04T00:00:00.000Z. Call team_status(since) and post a 3–6 line sitrep.",
+        ]);
+        const snapshot = yield* team.attentionSnapshot;
+        assert.strictEqual(snapshot.projects[0]?.sitrepInProgress, true);
+        assert.strictEqual(snapshot.projects[0]?.latestSitrepId, null);
 
-          yield* postSitrep(harness, pm, "#1 and #2 are done.");
-          const posted = (yield* team.attentionSnapshot).projects[0];
-          assert.strictEqual(posted?.sitrepInProgress, false);
-          assert.strictEqual(posted?.unreadSitrepCount, 1);
-          const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
-          const latest = Option.getOrThrow(yield* repository.getLatestSitrep(PROJECT_ID));
-          assert.strictEqual(latest.body, "#1 and #2 are done.");
-          assert.strictEqual(latest.reason, "milestone");
-          assert.strictEqual(posted?.latestSitrepId, latest.id);
-        }),
-      ),
+        yield* postSitrep(harness, pm, "#1 and #2 are done.");
+        const posted = (yield* team.attentionSnapshot).projects[0];
+        assert.strictEqual(posted?.sitrepInProgress, false);
+        assert.strictEqual(posted?.unreadSitrepCount, 1);
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const latest = Option.getOrThrow(yield* repository.getLatestSitrep(PROJECT_ID));
+        assert.strictEqual(latest.body, "#1 and #2 are done.");
+        assert.strictEqual(latest.reason, "milestone");
+        assert.strictEqual(posted?.latestSitrepId, latest.id);
+      }),
+    ),
   );
 
   it.effect("sends no sitreps while the PM is turned off and resumes when it is back on", () =>
@@ -173,9 +197,9 @@ describe("SitrepScheduler", () => {
         const sitreps = yield* SitrepScheduler;
         const pm = yield* setUpManager;
         yield* sitreps.noteMilestone(PROJECT_ID);
-        yield* TestClock.adjust("150 seconds");
-        yield* sitreps.handle(userMessage(pm, "2026-11-04T00:02:30.000Z"));
-        yield* TestClock.adjust("30 seconds");
+        yield* TestClock.adjust("59 minutes");
+        yield* sitreps.handle(userMessage(pm, "2026-11-04T00:59:00.000Z"));
+        yield* TestClock.adjust("1 minute");
         yield* sitreps.check;
         assert.deepStrictEqual(yield* sitrepRequests(harness, pm), []);
 
@@ -191,49 +215,52 @@ describe("SitrepScheduler", () => {
     ),
   );
 
-  it.effect("halves the interval once per sitrep window when the user asks, down to 15", () =>
+  it.effect("never changes the interval when the PM checks progress while chatting", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        yield* TestClock.adjust("1 minute");
+        yield* team.teamStatus(pm, {});
+        yield* TestClock.adjust("40 minutes");
+        const status = yield* team.teamStatus(pm, {});
+        assert.strictEqual(status.settings.sitrepIntervalMinutes, 60);
+        const events = yield* repository.listProjectEventsSince({
+          projectId: PROJECT_ID,
+          since: "2026-11-04T00:00:00.000Z" as never,
+        });
+        assert.isFalse(events.some((event) => event.kind === "preference_changed"));
+      }),
+    ),
+  );
+
+  it.effect("halves an interval the user never set once per window on Sitrep now", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* ProjectTeamService.ProjectTeamService;
-        const sitreps = yield* SitrepScheduler;
         const pm = yield* setUpManager;
         const interval = team
           .teamStatus(pm, {})
           .pipe(Effect.map((status) => status.settings.sitrepIntervalMinutes));
         yield* TestClock.adjust("1 minute");
-        yield* team.teamStatus(pm, { reason: "user_asked" });
-        yield* team.teamStatus(pm, { reason: "user_asked" });
+        yield* team.requestSitrep({ projectId: PROJECT_ID });
         assert.strictEqual(yield* interval, 30);
-
-        yield* sitreps.noteMilestone(PROJECT_ID);
-        yield* TestClock.adjust("3 minutes");
-        yield* sitreps.check;
-        const [request] = yield* sitrepRequests(harness, pm);
-        assert.include(
-          request,
-          "Mention: interval changed to 30 min because you asked for progress before the next sitrep",
-        );
         yield* postSitrep(harness, pm, "All quiet.");
+        yield* TestClock.adjust("1 minute");
+        // A second press right after the sitrep is not "before the next one was due".
+        yield* team.requestSitrep({ projectId: PROJECT_ID });
+        assert.strictEqual(yield* interval, 30);
+        yield* postSitrep(harness, pm, "Still quiet.");
 
         yield* TestClock.adjust("16 minutes");
-        yield* team.teamStatus(pm, { reason: "user_asked" });
-        assert.strictEqual(yield* interval, 15);
-        yield* TestClock.adjust("8 minutes");
-        yield* team.teamStatus(pm, { reason: "user_asked" });
-        assert.strictEqual(yield* interval, 15);
-      }),
-    ),
-  );
-
-  it.effect("halves only once when the Sitrep button and the PM both report the ask", () =>
-    withTeam(() =>
-      Effect.gen(function* () {
-        const team = yield* ProjectTeamService.ProjectTeamService;
-        const pm = yield* setUpManager;
-        yield* TestClock.adjust("1 minute");
         yield* team.requestSitrep({ projectId: PROJECT_ID });
-        const status = yield* team.teamStatus(pm, { reason: "user_asked" });
-        assert.strictEqual(status.settings.sitrepIntervalMinutes, 30);
+        assert.strictEqual(yield* interval, 15);
+        const requests = yield* sitrepRequests(harness, pm);
+        assert.include(
+          requests[0],
+          "Mention: interval changed to 30 min because you asked for a sitrep before the next one was due",
+        );
       }),
     ),
   );
@@ -330,10 +357,11 @@ describe("SitrepScheduler", () => {
         const pm = yield* setUpManager;
         for (let i = 0; i < 3; i++) {
           yield* sitreps.noteMilestone(PROJECT_ID);
-          yield* TestClock.adjust("3 minutes");
+          yield* TestClock.adjust("60 minutes");
           yield* sitreps.check;
           yield* postSitrep(harness, pm, `Sitrep ${i}`);
         }
+        assert.strictEqual((yield* sitrepRequests(harness, pm)).length, 3);
         const manager = Option.getOrThrow(yield* repository.getManager(PROJECT_ID));
         assert.strictEqual(manager.settings.sitrepIntervalMinutes, 120);
         assert.strictEqual(manager.unreadSitrepStreak, 0);
@@ -341,19 +369,65 @@ describe("SitrepScheduler", () => {
     ),
   );
 
-  it.effect("leaves a pinned interval alone", () =>
-    withTeam(() =>
+  it.effect("keeps an interval the user set and sends sitreps on it", () =>
+    withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* ProjectTeamService.ProjectTeamService;
+        const sitreps = yield* SitrepScheduler;
         const pm = yield* setUpManager;
-        yield* team.updateSettingsAsManager(pm, { sitrepIntervalMinutes: 90 });
-        yield* TestClock.adjust("23 hours");
-        const pinned = yield* team.teamStatus(pm, { reason: "user_asked" });
-        assert.strictEqual(pinned.settings.sitrepIntervalMinutes, 90);
-        yield* TestClock.adjust("2 hours");
-        yield* team.teamStatus(pm, { reason: "user_asked" });
-        const unpinned = yield* team.teamStatus(pm, {});
-        assert.strictEqual(unpinned.settings.sitrepIntervalMinutes, 45);
+        const saved = yield* team.updateSettings({
+          projectId: PROJECT_ID,
+          sitrepIntervalMinutes: 20,
+        });
+        assert.strictEqual(saved.settings.intervalPinnedAt, "2026-11-04T00:00:00.000Z");
+        yield* TestClock.adjust("1 minute");
+        yield* startLead(pm, "Long job", harness.delegate);
+
+        for (let minute = 2; minute < 20; minute++) {
+          yield* TestClock.adjust("1 minute");
+          yield* sitreps.check;
+        }
+        assert.deepStrictEqual(yield* sitrepRequests(harness, pm), []);
+        yield* TestClock.adjust("1 minute");
+        yield* sitreps.check;
+        assert.strictEqual((yield* sitrepRequests(harness, pm)).length, 1);
+        yield* postSitrep(harness, pm, "Long job is planning.");
+
+        // A day later, neither progress checks, Sitrep now, nor unread sitreps move it.
+        yield* TestClock.adjust("25 hours");
+        yield* team.teamStatus(pm, {});
+        yield* team.requestSitrep({ projectId: PROJECT_ID });
+        yield* postSitrep(harness, pm, "Still planning.");
+        for (let i = 0; i < 3; i++) {
+          yield* sitreps.noteMilestone(PROJECT_ID);
+          yield* TestClock.adjust("20 minutes");
+          yield* sitreps.check;
+          yield* postSitrep(harness, pm, `Sitrep ${i}`);
+        }
+        const status = yield* team.teamStatus(pm, {});
+        assert.strictEqual(status.settings.sitrepIntervalMinutes, 20);
+      }),
+    ),
+  );
+
+  it.effect("records the sitrep, not a follow-up the PM wrote after it", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        yield* team.requestSitrep({ projectId: PROJECT_ID });
+        yield* TestClock.adjust("1 second");
+        yield* writeInSitrepTurn(harness, pm, "Checking the board.");
+        yield* TestClock.adjust("1 second");
+        yield* team.teamStatus(pm, {});
+        yield* TestClock.adjust("1 second");
+        yield* writeInSitrepTurn(harness, pm, "Cache is done; Search is in review.");
+        yield* TestClock.adjust("1 second");
+        yield* writeInSitrepTurn(harness, pm, "Approval relayed. Start on Search next?");
+        yield* finishSitrepTurn(harness, pm);
+        const latest = Option.getOrThrow(yield* repository.getLatestSitrep(PROJECT_ID));
+        assert.strictEqual(latest.body, "Cache is done; Search is in review.");
       }),
     ),
   );
