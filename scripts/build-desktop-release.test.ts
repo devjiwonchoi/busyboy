@@ -10,7 +10,10 @@ import {
   COMPUTER_USE_BUNDLE_NAME,
   COMPUTER_USE_SIGN_IGNORE,
   createBuilderConfig,
+  fileExclusions,
   readFuses,
+  resolveWindowsSigning,
+  WINDOWS_SIGNING_ENV,
 } from "./build-desktop-release.ts";
 
 const dirs: Array<string> = [];
@@ -120,5 +123,52 @@ describe("release hardening", () => {
       enableEmbeddedAsarIntegrityValidation: true,
       onlyLoadAppFromAsar: false,
     });
+  });
+});
+
+describe("Windows release", () => {
+  const signingEnv = Object.fromEntries(WINDOWS_SIGNING_ENV.map((name) => [name, `${name}-value`]));
+
+  it("builds a per-arch NSIS installer with the same fuses and busyboy:// links", () => {
+    const config = createBuilderConfig("1.2.3", { computerUse: true, platform: "win" });
+    expect(config.win.target).toEqual(["nsis"]);
+    expect(config.win.icon).toBe("icon.ico");
+    expect(config.nsis.artifactName).toBe("BusyBoy-Setup-${version}-${arch}.${ext}");
+    expect(config.electronFuses.runAsNode).toBe(false);
+    expect(config.protocols).toEqual([{ name: "BusyBoy", schemes: ["busyboy"] }]);
+    // The Computer Use helper is macOS only.
+    expect(config.extraResources.some((resource) => resource.to === "computer-use")).toBe(false);
+    // Unsigned until Azure Trusted Signing is set up.
+    expect(config.forceCodeSigning).toBe(false);
+    expect(config.win).not.toHaveProperty("azureSignOptions");
+  });
+
+  it("keeps the Windows terminal binaries in Windows builds only", () => {
+    expect(fileExclusions("win")).not.toContain(
+      "!**/node_modules/node-pty/third_party/conpty/**/*",
+    );
+    expect(fileExclusions("win")).toContain("!**/node_modules/node-pty/prebuilds/darwin-*/**/*");
+    expect(fileExclusions("mac")).toContain("!**/node_modules/node-pty/third_party/conpty/**/*");
+  });
+
+  it("signs with Azure Trusted Signing only when every setting is present", () => {
+    expect(resolveWindowsSigning({})).toBeUndefined();
+    const signing = resolveWindowsSigning(signingEnv);
+    expect(signing).toEqual({
+      publisherName: "AZURE_TRUSTED_SIGNING_PUBLISHER_NAME-value",
+      endpoint: "AZURE_TRUSTED_SIGNING_ENDPOINT-value",
+      codeSigningAccountName: "AZURE_TRUSTED_SIGNING_ACCOUNT_NAME-value",
+      certificateProfileName: "AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME-value",
+    });
+    const config = createBuilderConfig("1.2.3", {
+      computerUse: false,
+      platform: "win",
+      windowsSigning: signing,
+    });
+    expect(config.forceCodeSigning).toBe(true);
+    expect(config.win.azureSignOptions).toEqual(signing);
+    expect(() => resolveWindowsSigning({ ...signingEnv, AZURE_CLIENT_SECRET: undefined })).toThrow(
+      "missing AZURE_CLIENT_SECRET",
+    );
   });
 });

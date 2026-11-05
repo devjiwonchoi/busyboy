@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off - A plain build script that shells out to pnpm, cargo, and electron-builder.
-// Packages BusyBoy for macOS as a DMG (for first installs) and a ZIP (for the
-// in-app updater). A trimmed, mac-only port of t3code's build-desktop-artifact.
+// Packages BusyBoy on the host it runs on. A trimmed port of t3code's build-desktop-artifact.
+//   macOS:   a DMG (for first installs) and a ZIP (for the in-app updater)
+//   Windows: an NSIS installer plus latest.yml and a blockmap (for electron-updater)
 //
-//   node scripts/build-desktop-release.ts --version 0.0.3 [--skip-build] [--out release]
+//   node scripts/build-desktop-release.ts --version 0.0.3 [--arch arm64] [--skip-build] [--out release]
 //
 // The build stages the bundled desktop and server output into a temporary
 // directory, installs only their runtime-external packages there, and runs
-// electron-builder against it. The app is signed with a Developer ID and
-// notarized, so the build fails without signing and notarization credentials:
+// electron-builder against it. The macOS app is signed with a Developer ID and
+// notarized, so that build fails without signing and notarization credentials:
 //   signing:      a Developer ID Application identity in the keychain, or CSC_LINK + CSC_KEY_PASSWORD
 //   notarization: APPLE_API_KEY + APPLE_API_KEY_ID + APPLE_API_ISSUER, or APPLE_KEYCHAIN_PROFILE
+// The Windows installer is signed with Azure Trusted Signing when every AZURE_* variable in
+// WINDOWS_SIGNING_ENV is set, and is built unsigned otherwise.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
@@ -27,9 +30,16 @@ export const PRODUCT_NAME = "BusyBoy";
 export const APP_ID = "dev.jiwon.busyboy";
 export const UPDATE_REPOSITORY = { owner: "devjiwonchoi", repo: "busyboy" } as const;
 
+export type ReleasePlatform = "mac" | "win";
+
 // The in-app updater downloads this asset; keep the two in sync.
 export function macZipAssetName(version: string, arch: string): string {
   return `${PRODUCT_NAME}-${version}-${arch}.zip`;
+}
+
+// electron-updater picks the latest.yml entry whose name contains the running arch.
+export function windowsInstallerName(version: string, arch: string): string {
+  return `${PRODUCT_NAME}-Setup-${version}-${arch}.exe`;
 }
 
 // Their versions show up in the app and server, so the build stamps them.
@@ -48,9 +58,20 @@ const FILE_EXCLUSIONS = [
   "!apps/desktop/resources/browser-secret/**/*",
   "!apps/desktop/prod-resources/browser-secret",
   "!apps/desktop/prod-resources/browser-secret/**/*",
-  "!**/node_modules/node-pty/prebuilds/win32-*/**/*",
-  "!**/node_modules/node-pty/third_party/conpty/**/*",
 ];
+
+// Each platform keeps only its own node-pty binaries; Windows terminals need ConPTY.
+const PLATFORM_FILE_EXCLUSIONS: Readonly<Record<ReleasePlatform, ReadonlyArray<string>>> = {
+  mac: [
+    "!**/node_modules/node-pty/prebuilds/win32-*/**/*",
+    "!**/node_modules/node-pty/third_party/conpty/**/*",
+  ],
+  win: ["!**/node_modules/node-pty/prebuilds/darwin-*/**/*"],
+};
+
+export function fileExclusions(platform: ReleasePlatform): Array<string> {
+  return [...FILE_EXCLUSIONS, ...PLATFORM_FILE_EXCLUSIONS[platform]];
+}
 
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
@@ -98,20 +119,64 @@ const FUSE_ORDER = [
 // Same Node as Electron 44 embeds; the hashes are from nodejs.org's SHASUMS256.txt.
 export const SERVER_NODE_VERSION = "24.21.0";
 const SERVER_NODE_SHA256: Readonly<Record<string, string>> = {
-  arm64: "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057",
-  x64: "1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097",
+  "darwin-arm64": "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057",
+  "darwin-x64": "1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097",
+  "win-arm64": "8779b1bde1d39f8d420e3b57aa657b39891af434d3de44a919044cec06785921",
+  "win-x64": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
 };
 // Staged inside the app project so extraResources can copy it; kept out of app.asar.
 const SERVER_STAGE_DIR = "server-runtime";
 export const SERVER_NODE_PATH = "Contents/Resources/server/bin/busyboy-node";
+// Relative to the unpacked app directory (win-unpacked/).
+export const WINDOWS_SERVER_NODE_PATH = "resources/server/bin/busyboy-node.exe";
+
+// Azure Trusted Signing, as upstream T3 Code signs its Windows builds. electron-builder's
+// TrustedSigning module also reads AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET.
+export const WINDOWS_SIGNING_ENV = [
+  "AZURE_TENANT_ID",
+  "AZURE_CLIENT_ID",
+  "AZURE_CLIENT_SECRET",
+  "AZURE_TRUSTED_SIGNING_ENDPOINT",
+  "AZURE_TRUSTED_SIGNING_ACCOUNT_NAME",
+  "AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME",
+  "AZURE_TRUSTED_SIGNING_PUBLISHER_NAME",
+] as const;
+
+export interface WindowsSigning {
+  readonly publisherName: string;
+  readonly endpoint: string;
+  readonly codeSigningAccountName: string;
+  readonly certificateProfileName: string;
+}
+
+/** Signing settings when every variable is set, `undefined` when none is, and an error otherwise. */
+export function resolveWindowsSigning(
+  env: Readonly<Record<string, string | undefined>>,
+): WindowsSigning | undefined {
+  const missing = WINDOWS_SIGNING_ENV.filter((name) => !env[name]);
+  if (missing.length === WINDOWS_SIGNING_ENV.length) return undefined;
+  if (missing.length > 0) {
+    throw new Error(`Windows signing is half configured; missing ${missing.join(", ")}.`);
+  }
+  return {
+    publisherName: env.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME!,
+    endpoint: env.AZURE_TRUSTED_SIGNING_ENDPOINT!,
+    codeSigningAccountName: env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME!,
+    certificateProfileName: env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME!,
+  };
+}
 const SERVER_STAGE_EXCLUSIONS = [`!${SERVER_STAGE_DIR}`, `!${SERVER_STAGE_DIR}/**/*`];
 // electron-builder's default entitlements minus disable-library-validation, so a copy of
 // the app can't be made to load a dylib or .node addon signed by someone else.
 const ENTITLEMENTS = "apps/desktop/resources/entitlements.mac.plist";
 
 export interface ReleaseOptions {
-  /** Bundle the computer-use helper (`--computer-use`). Off by default. */
+  /** Bundle the computer-use helper (`--computer-use`, macOS only). Off by default. */
   readonly computerUse: boolean;
+  /** Defaults to macOS. */
+  readonly platform?: ReleasePlatform;
+  /** Windows only; unsigned when absent. */
+  readonly windowsSigning?: WindowsSigning | undefined;
 }
 
 const DEFAULT_RELEASE_OPTIONS: ReleaseOptions = { computerUse: false };
@@ -122,13 +187,23 @@ function readJson(relativePath: string): Record<string, any> {
   return JSON.parse(NodeFS.readFileSync(NodePath.join(repoRoot, relativePath), "utf8"));
 }
 
+// On Windows pnpm is a .cmd shim, which Node only starts through a shell.
+const quoteForCmd = (arg: string) => (/^[\w./:=@\\-]+$/.test(arg) ? arg : `"${arg}"`);
+
 function run(
   command: string,
   args: ReadonlyArray<string>,
   options: NodeChildProcess.SpawnSyncOptions = {},
 ) {
   console.log(`[release] $ ${command} ${args.join(" ")}`);
-  const result = NodeChildProcess.spawnSync(command, args, { stdio: "inherit", ...options });
+  const result =
+    process.platform === "win32" && command === "pnpm"
+      ? NodeChildProcess.spawnSync([command, ...args].map(quoteForCmd).join(" "), {
+          stdio: "inherit",
+          shell: true,
+          ...options,
+        })
+      : NodeChildProcess.spawnSync(command, args, { stdio: "inherit", ...options });
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} exited with ${result.status ?? result.signal}`);
   }
@@ -189,8 +264,17 @@ function withReleaseVersions<T>(version: string, body: () => T): T {
   }
 }
 
-function stageIcons(resourcesDir: string) {
+function stageIcons(resourcesDir: string, platform: ReleasePlatform) {
   const sourcePng = NodePath.join(repoRoot, "assets/busyboy.png");
+  if (platform === "win") {
+    // The window and taskbar read icon.ico at runtime; electron-builder embeds it in the exe.
+    NodeFS.copyFileSync(
+      NodePath.join(repoRoot, "assets/busyboy.ico"),
+      NodePath.join(resourcesDir, "icon.ico"),
+    );
+    NodeFS.copyFileSync(sourcePng, NodePath.join(resourcesDir, "icon.png"));
+    return;
+  }
   const iconsetDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "busyboy-iconset-"));
   const iconset = NodePath.join(iconsetDir, "icon.iconset");
   NodeFS.mkdirSync(iconset);
@@ -232,9 +316,10 @@ function stageResourceMonitor(resourcesDir: string) {
   ]);
   const destination = NodePath.join(resourcesDir, "resource-monitor");
   NodeFS.mkdirSync(destination, { recursive: true });
-  const target = NodePath.join(destination, "t3-resource-monitor");
+  const binary = process.platform === "win32" ? "t3-resource-monitor.exe" : "t3-resource-monitor";
+  const target = NodePath.join(destination, binary);
   NodeFS.copyFileSync(
-    NodePath.join(repoRoot, "native/resource-monitor/target/release/t3-resource-monitor"),
+    NodePath.join(repoRoot, "native/resource-monitor/target/release", binary),
     target,
   );
   NodeFS.chmodSync(target, 0o755);
@@ -268,11 +353,20 @@ export function checkComputerUseHelper(
 }
 
 /** Downloads the server's Node, checks it against the pinned hash, and stages it. */
-function stageServerNode(serverStage: string, arch: string, scratch: string) {
-  const expected = SERVER_NODE_SHA256[arch];
-  if (!expected) throw new Error(`No pinned Node ${SERVER_NODE_VERSION} for arch '${arch}'.`);
-  const name = `node-v${SERVER_NODE_VERSION}-darwin-${arch}`;
-  const archive = NodePath.join(scratch, `${name}.tar.gz`);
+function stageServerNode(
+  serverStage: string,
+  platform: ReleasePlatform,
+  arch: string,
+  scratch: string,
+) {
+  const nodeOs = platform === "win" ? "win" : "darwin";
+  const expected = SERVER_NODE_SHA256[`${nodeOs}-${arch}`];
+  if (!expected) {
+    throw new Error(`No pinned Node ${SERVER_NODE_VERSION} for ${nodeOs}-${arch}.`);
+  }
+  const name = `node-v${SERVER_NODE_VERSION}-${nodeOs}-${arch}`;
+  const extension = platform === "win" ? "zip" : "tar.gz";
+  const archive = NodePath.join(scratch, `${name}.${extension}`);
   run("curl", [
     "--fail",
     "--silent",
@@ -280,20 +374,30 @@ function stageServerNode(serverStage: string, arch: string, scratch: string) {
     "--location",
     "--output",
     archive,
-    `https://nodejs.org/dist/v${SERVER_NODE_VERSION}/${name}.tar.gz`,
+    `https://nodejs.org/dist/v${SERVER_NODE_VERSION}/${name}.${extension}`,
   ]);
   const actual = NodeCrypto.createHash("sha256").update(NodeFS.readFileSync(archive)).digest("hex");
   if (actual !== expected) {
-    throw new Error(`${name}.tar.gz has sha256 ${actual}, expected ${expected}.`);
+    throw new Error(`${name}.${extension} has sha256 ${actual}, expected ${expected}.`);
   }
-  run("tar", ["-xzf", archive, "-C", scratch, `${name}/bin/node`, `${name}/LICENSE`]);
   const binDir = NodePath.join(serverStage, "bin");
   NodeFS.mkdirSync(binDir, { recursive: true });
-  NodeFS.copyFileSync(
-    NodePath.join(scratch, name, "bin/node"),
-    NodePath.join(binDir, "busyboy-node"),
-  );
-  NodeFS.chmodSync(NodePath.join(binDir, "busyboy-node"), 0o755);
+  if (platform === "win") {
+    // Windows' own bsdtar reads zips; Git's GNU tar, which may come first on PATH, does not.
+    const tar = NodePath.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+    run(tar, ["-xf", archive, "-C", scratch, `${name}/node.exe`, `${name}/LICENSE`]);
+    NodeFS.copyFileSync(
+      NodePath.join(scratch, name, "node.exe"),
+      NodePath.join(binDir, "busyboy-node.exe"),
+    );
+  } else {
+    run("tar", ["-xzf", archive, "-C", scratch, `${name}/bin/node`, `${name}/LICENSE`]);
+    NodeFS.copyFileSync(
+      NodePath.join(scratch, name, "bin/node"),
+      NodePath.join(binDir, "busyboy-node"),
+    );
+    NodeFS.chmodSync(NodePath.join(binDir, "busyboy-node"), 0o755);
+  }
   NodeFS.copyFileSync(
     NodePath.join(scratch, name, "LICENSE"),
     NodePath.join(binDir, "NODE_LICENSE"),
@@ -359,6 +463,30 @@ export function checkPackagedHardening(app: string) {
   }
 }
 
+/**
+ * Release gate for Windows: the exe carries the same fuses, and the server has its own Node.
+ * `unpacked` is electron-builder's `win-unpacked` (x64) or `win-<arch>-unpacked` directory.
+ */
+export function checkWindowsHardening(unpacked: string) {
+  const fuses = readFuses(NodeFS.readFileSync(NodePath.join(unpacked, `${PRODUCT_NAME}.exe`)));
+  for (const [fuse, wanted] of Object.entries(ELECTRON_FUSES)) {
+    if (fuses[fuse as keyof typeof fuses] !== wanted) {
+      throw new Error(
+        `Fuse ${fuse} is ${String(fuses[fuse as keyof typeof fuses])}, expected ${wanted}.`,
+      );
+    }
+  }
+  for (const required of [
+    WINDOWS_SERVER_NODE_PATH,
+    "resources/server/apps/server/dist/bin.mjs",
+    "resources/app.asar",
+  ]) {
+    if (!NodeFS.existsSync(NodePath.join(unpacked, required))) {
+      throw new Error(`The Windows app is missing ${required}.`);
+    }
+  }
+}
+
 /** electron-builder's `.app` output: `dist/mac-arm64/BusyBoy.app`, or `dist/mac` for x64. */
 function findPackagedApp(distDir: string): string {
   for (const entry of NodeFS.readdirSync(distDir)) {
@@ -374,15 +502,18 @@ export function createBuilderConfig(
   // codesign runs from another directory, so the stage passes its absolute path.
   projectDir = "",
 ) {
+  const platform = release.platform ?? "mac";
+  const computerUse = release.computerUse && platform === "mac";
+  const exclusions = fileExclusions(platform);
   const entitlements = NodePath.join(projectDir, ENTITLEMENTS);
   return {
     appId: APP_ID,
     productName: PRODUCT_NAME,
     artifactName: `${PRODUCT_NAME}-\${version}-\${arch}.\${ext}`,
     electronLanguages: ["en-US"],
-    files: release.computerUse
-      ? [...FILE_EXCLUSIONS, ...SERVER_STAGE_EXCLUSIONS, ...COMPUTER_USE_FILE_EXCLUSIONS]
-      : [...FILE_EXCLUSIONS, ...SERVER_STAGE_EXCLUSIONS],
+    files: computerUse
+      ? [...exclusions, ...SERVER_STAGE_EXCLUSIONS, ...COMPUTER_USE_FILE_EXCLUSIONS]
+      : [...exclusions, ...SERVER_STAGE_EXCLUSIONS],
     electronFuses: ELECTRON_FUSES,
     directories: { buildResources: "apps/desktop/resources" },
     extraResources: [
@@ -398,17 +529,20 @@ export function createBuilderConfig(
           "!server/pnpm-lock.yaml",
           "!server/pnpm-workspace.yaml",
           // `files` exclusions don't reach extra resources.
-          ...FILE_EXCLUSIONS,
+          ...exclusions,
         ],
       },
-      ...(release.computerUse
+      ...(computerUse
         ? [{ from: "apps/desktop/prod-resources/computer-use", to: "computer-use" }]
         : []),
     ],
     // Writes resources/app-update.yml, which turns the in-app updater on.
     publish: [{ provider: "github", ...UPDATE_REPOSITORY, releaseType: "release" }],
-    // Fail instead of shipping an unsigned app when no Developer ID is found.
-    forceCodeSigning: true,
+    // macOS: fail instead of shipping an unsigned app when no Developer ID is found.
+    // Windows: unsigned unless Azure Trusted Signing is configured.
+    forceCodeSigning: platform === "mac" || release.windowsSigning !== undefined,
+    // Registers busyboy:// with Launch Services and, through the NSIS installer, the registry.
+    protocols: [{ name: PRODUCT_NAME, schemes: ["busyboy"] }],
     mac: {
       target: ["dmg", "zip"],
       icon: "icon.icns",
@@ -416,7 +550,7 @@ export function createBuilderConfig(
       entitlements,
       entitlementsInherit: entitlements,
       // The helper is signed by its own build; keep electron-builder from re-signing it.
-      ...(release.computerUse ? { signIgnore: [COMPUTER_USE_SIGN_IGNORE] } : {}),
+      ...(computerUse ? { signIgnore: [COMPUTER_USE_SIGN_IGNORE] } : {}),
       extendInfo: {
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSScreenCaptureUsageDescription:
@@ -426,8 +560,24 @@ export function createBuilderConfig(
         NSLocalNetworkUsageDescription:
           "BusyBoy connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
       },
-      protocols: [{ name: PRODUCT_NAME, schemes: ["busyboy"] }],
     },
+    // Same NSIS setup as upstream T3 Code: a per-user one-click installer, with a blockmap
+    // so electron-updater downloads only the changed blocks.
+    win: {
+      target: ["nsis"],
+      icon: "icon.ico",
+      // Edits the exe's icon and version info even when it is not signed.
+      signAndEditExecutable: true,
+      // Smart App Control checks unpacked native libraries on their own; sign them too.
+      signExts: [".node", ".dll"],
+      ...(release.windowsSigning ? { azureSignOptions: release.windowsSigning } : {}),
+    },
+    nsis: {
+      artifactName: `${PRODUCT_NAME}-Setup-\${version}-\${arch}.\${ext}`,
+      differentialPackage: true,
+    },
+    // The staged packages already match the target; rebuilding needs a compiler on the runner.
+    ...(platform === "win" ? { npmRebuild: false } : {}),
     dmg: {
       title: `${PRODUCT_NAME} ${version}`,
       contents: [
@@ -436,6 +586,29 @@ export function createBuilderConfig(
       ],
     },
   };
+}
+
+function collectArtifacts(
+  distDir: string,
+  outputDir: string,
+  pattern: RegExp,
+  required: ReadonlyArray<string>,
+): Array<string> {
+  NodeFS.mkdirSync(outputDir, { recursive: true });
+  const artifacts: Array<string> = [];
+  for (const entry of NodeFS.readdirSync(distDir)) {
+    if (!pattern.test(entry)) continue;
+    const to = NodePath.join(outputDir, entry);
+    NodeFS.copyFileSync(NodePath.join(distDir, entry), to);
+    artifacts.push(to);
+  }
+  for (const name of required) {
+    if (!artifacts.some((file) => NodePath.basename(file) === name)) {
+      throw new Error(`electron-builder did not produce ${name}.`);
+    }
+  }
+  console.log(`[release] Artifacts:\n${artifacts.map((file) => `  ${file}`).join("\n")}`);
+  return artifacts;
 }
 
 export function buildDesktopRelease(options: {
@@ -447,11 +620,12 @@ export function buildDesktopRelease(options: {
 }) {
   const { version, arch } = options;
   const release = options.release ?? DEFAULT_RELEASE_OPTIONS;
+  const platform = release.platform ?? "mac";
   if (!VERSION_PATTERN.test(version)) throw new Error(`Version '${version}' is not x.y.z.`);
 
   // electron-builder only warns and skips notarization without credentials,
   // so check before the long build instead of shipping an app Gatekeeper blocks.
-  if (!process.env.APPLE_API_KEY && !process.env.APPLE_KEYCHAIN_PROFILE) {
+  if (platform === "mac" && !process.env.APPLE_API_KEY && !process.env.APPLE_KEYCHAIN_PROFILE) {
     throw new Error(
       "Notarization needs APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER, or APPLE_KEYCHAIN_PROFILE.",
     );
@@ -485,7 +659,8 @@ export function buildDesktopRelease(options: {
       "apps/server",
     ),
     // fff-node loads its prebuilt binary from a platform package.
-    [`@ff-labs/fff-bin-darwin-${arch}`]: serverPackage.dependencies["@ff-labs/fff-node"],
+    [`@ff-labs/fff-bin-${platform === "win" ? "win32" : "darwin"}-${arch}`]:
+      serverPackage.dependencies["@ff-labs/fff-node"],
   };
 
   const stageRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "busyboy-release-stage-"));
@@ -507,9 +682,9 @@ export function buildDesktopRelease(options: {
       NodePath.join(SERVER_STAGE_DIR, "server/compileCache.cjs"),
     );
     const resourcesDir = NodePath.join(stageApp, "apps/desktop/resources");
-    stageIcons(resourcesDir);
+    stageIcons(resourcesDir, platform);
     stageResourceMonitor(resourcesDir);
-    if (release.computerUse) stageComputerUse(resourcesDir);
+    if (release.computerUse && platform === "mac") stageComputerUse(resourcesDir);
     // electron-builder drops buildResources from the packaged app; extraResources read this copy.
     NodeFS.cpSync(resourcesDir, NodePath.join(stageApp, "apps/desktop/prod-resources"), {
       recursive: true,
@@ -552,7 +727,7 @@ export function buildDesktopRelease(options: {
     const stageWorkspace = (patches: Record<string, string>) =>
       stringifyYaml({
         nodeLinker: "hoisted",
-        supportedArchitectures: { os: ["darwin"], cpu: [arch] },
+        supportedArchitectures: { os: [platform === "win" ? "win32" : "darwin"], cpu: [arch] },
         allowBuilds: workspace.allowBuilds ?? {},
         overrides: resolveCatalogDependencies(workspace.overrides ?? {}, catalog),
         patchedDependencies: patches,
@@ -592,8 +767,15 @@ export function buildDesktopRelease(options: {
       ),
     );
     run("pnpm", ["install", "--prod"], { cwd: serverStage });
-    stageServerNode(serverStage, arch, stageRoot);
+    stageServerNode(serverStage, platform, arch, stageRoot);
 
+    const builderEnv: NodeJS.ProcessEnv = { ...process.env };
+    if (platform === "win") {
+      // CSC_LINK is the macOS certificate; electron-builder would read it as a Windows one.
+      delete builderEnv.CSC_LINK;
+      delete builderEnv.CSC_KEY_PASSWORD;
+      if (!release.windowsSigning) builderEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
+    }
     run(
       "pnpm",
       [
@@ -601,16 +783,26 @@ export function buildDesktopRelease(options: {
         "electron-builder",
         "--projectDir",
         stageApp,
-        "--mac",
+        platform === "win" ? "--win" : "--mac",
         `--${arch}`,
         "--publish",
         "never",
       ],
-      { cwd: NodePath.join(repoRoot, "apps/desktop") },
+      { cwd: NodePath.join(repoRoot, "apps/desktop"), env: builderEnv },
     );
 
-    // Gatekeeper's own check that the packaged app is signed and notarized.
     const distDir = NodePath.join(stageApp, "dist");
+    if (platform === "win") {
+      checkWindowsHardening(
+        NodePath.join(distDir, arch === "x64" ? "win-unpacked" : `win-${arch}-unpacked`),
+      );
+      return collectArtifacts(distDir, options.outputDir, /\.(exe|yml|blockmap)$/, [
+        windowsInstallerName(version, arch),
+        "latest.yml",
+      ]);
+    }
+
+    // Gatekeeper's own check that the packaged app is signed and notarized.
     run("spctl", [
       "--assess",
       "--type",
@@ -631,19 +823,9 @@ export function buildDesktopRelease(options: {
       );
     }
 
-    NodeFS.mkdirSync(options.outputDir, { recursive: true });
-    const artifacts: Array<string> = [];
-    for (const entry of NodeFS.readdirSync(distDir)) {
-      if (!/\.(dmg|zip|yml|blockmap)$/.test(entry)) continue;
-      const to = NodePath.join(options.outputDir, entry);
-      NodeFS.copyFileSync(NodePath.join(distDir, entry), to);
-      artifacts.push(to);
-    }
-    if (!artifacts.some((file) => file.endsWith(macZipAssetName(version, arch)))) {
-      throw new Error(`electron-builder did not produce ${macZipAssetName(version, arch)}.`);
-    }
-    console.log(`[release] Artifacts:\n${artifacts.map((file) => `  ${file}`).join("\n")}`);
-    return artifacts;
+    return collectArtifacts(distDir, options.outputDir, /\.(dmg|zip|yml|blockmap)$/, [
+      macZipAssetName(version, arch),
+    ]);
   } finally {
     if (process.env.BUSYBOY_KEEP_STAGE === "1") {
       console.log(`[release] Kept stage at ${stageRoot}`);
@@ -658,7 +840,7 @@ if (import.meta.main) {
     options: {
       version: { type: "string" },
       out: { type: "string", default: "release" },
-      arch: { type: "string", default: "arm64" },
+      arch: { type: "string", default: process.arch },
       "skip-build": { type: "boolean", default: false },
       "computer-use": { type: "boolean", default: false },
     },
@@ -669,11 +851,24 @@ if (import.meta.main) {
     );
     process.exit(1);
   }
+  const platform: ReleasePlatform = process.platform === "win32" ? "win" : "mac";
+  if (platform === "mac" && process.platform !== "darwin") {
+    console.error("Release builds run on macOS or Windows.");
+    process.exit(1);
+  }
+  const windowsSigning = platform === "win" ? resolveWindowsSigning(process.env) : undefined;
+  if (platform === "win") {
+    console.log(
+      windowsSigning
+        ? "[release] Signing the Windows build with Azure Trusted Signing."
+        : "[release] No Azure Trusted Signing settings; the Windows build is unsigned.",
+    );
+  }
   buildDesktopRelease({
     version: values.version,
     outputDir: NodePath.resolve(repoRoot, values.out),
     skipBuild: values["skip-build"],
     arch: values.arch,
-    release: { computerUse: values["computer-use"] },
+    release: { computerUse: values["computer-use"], platform, windowsSigning },
   });
 }
