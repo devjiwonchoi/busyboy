@@ -10770,6 +10770,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "computer_use_app_request.record":
         yield* dispatchComputerUseAppRequestRecord(command, events);
+        break;
       case "browser_request.record":
         yield* dispatchBrowserRequestRecord(command, events);
         break;
