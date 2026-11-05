@@ -1,0 +1,155 @@
+import { assert, describe, it } from "@effect/vitest";
+import { ProjectTaskId, ThreadId } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+
+import * as ProjectTeamService from "./ProjectTeamService.ts";
+import { PROJECT_ID, setUpManager, withTeam } from "./testkit.ts";
+
+const service = ProjectTeamService.ProjectTeamService;
+
+const todo = (id: string, text: string) => ({ id, text, done: false, subtaskId: null });
+
+describe("ProjectTeamService tasks as specs", () => {
+  it.effect("lets the user dump a task, shape its spec, restore a version and split a todo", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+
+        // Quick dump: no planner, the context becomes spec v1.
+        const created = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          title: "Sidebar scroll jumps while dragging",
+          context: "Dragging a project up jumps the list to the top.",
+          startPlanning: false,
+        });
+        assert.strictEqual(created.key, "DE-1");
+        assert.strictEqual(created.task.stage, "inbox");
+        assert.strictEqual(created.versions.length, 1);
+        assert.strictEqual(created.versions[0]?.author, "user");
+        assert.strictEqual(
+          created.versions[0]?.spec.background,
+          "Dragging a project up jumps the list to the top.",
+        );
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+
+        // The user writes a goal and todos: v2.
+        const edited = yield* team.updateTaskSpec({
+          projectId: PROJECT_ID,
+          taskId: created.task.id,
+          baseVersion: 1,
+          spec: {
+            background: "Dragging a project up jumps the list to the top.",
+            goal: "Dragging keeps the scroll position.",
+            nonGoals: "",
+            todos: [todo("t1", "Add a journey test"), todo("t2", "Keep scrollTop on drag start")],
+          },
+        });
+        assert.deepStrictEqual(
+          edited.versions.map((version) => version.version),
+          [1, 2],
+        );
+
+        // An edit based on an old version is refused instead of overwriting v2.
+        const stale = yield* team
+          .updateTaskSpec({
+            projectId: PROJECT_ID,
+            taskId: created.task.id,
+            baseVersion: 1,
+            spec: { background: "", goal: "", nonGoals: "", todos: [] },
+          })
+          .pipe(Effect.flip);
+        assert.include(stale.message, "changed to v2");
+
+        // Restoring v1 adds v3 with v1's content; nothing is deleted.
+        const restored = yield* team.restoreTaskSpec({
+          projectId: PROJECT_ID,
+          taskId: created.task.id,
+          version: 1,
+        });
+        assert.strictEqual(restored.versions.length, 3);
+        assert.strictEqual(restored.versions[2]?.note, "Restored v1");
+        assert.strictEqual(restored.versions[2]?.spec.goal, "");
+
+        // Back to the todos, then split one into its own task.
+        yield* team.restoreTaskSpec({ projectId: PROJECT_ID, taskId: created.task.id, version: 2 });
+        const split = yield* team.splitTaskTodo({
+          projectId: PROJECT_ID,
+          taskId: created.task.id,
+          todoId: "t1",
+        });
+        assert.strictEqual(split.subtask.title, "Add a journey test");
+        assert.strictEqual(split.subtask.parentTaskId, created.task.id);
+        assert.deepStrictEqual(
+          split.parent.children.map((child) => child.id),
+          [split.subtask.id],
+        );
+        const current = split.parent.versions.at(-1)!;
+        assert.strictEqual(current.version, 5);
+        assert.strictEqual(current.spec.todos[0]?.subtaskId, split.subtask.id);
+        const again = yield* team
+          .splitTaskTodo({ projectId: PROJECT_ID, taskId: created.task.id, todoId: "t1" })
+          .pipe(Effect.flip);
+        assert.include(again.message, "already its own task");
+      }),
+    ),
+  );
+
+  it.effect("asks the PM to start a planner and links the lead as a task session", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        yield* team.updateSettings({ projectId: PROJECT_ID, taskKeyPrefix: "BB" });
+
+        const created = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          title: "Direct task creation",
+          context: "",
+          startPlanning: true,
+        });
+        assert.strictEqual(created.key, "BB-1");
+        // An empty dump still gives the lead something to read.
+        assert.strictEqual(created.task.request, "Direct task creation");
+        const [wake] = yield* harness.messagesTo(pm);
+        assert.include(wake, "[Task added by the user] BB-1 Direct task creation");
+        assert.include(wake, `task_start (taskId: ${created.task.id})`);
+
+        yield* team.startTask(pm, { taskId: created.task.id }, harness.delegate);
+        const detail = yield* team.getTaskDetail({
+          projectId: PROJECT_ID,
+          taskId: created.task.id,
+        });
+        assert.deepStrictEqual(
+          detail.sessions.map(({ threadId, role }) => ({ threadId, role })),
+          [{ threadId: ThreadId.make("lead-1"), role: "lead" }],
+        );
+
+        const snapshot = yield* team.attentionSnapshot;
+        assert.strictEqual(snapshot.projects[0]?.taskKeyPrefix, "BB");
+      }),
+    ),
+  );
+
+  it.effect("keeps PM-created tasks on the same spec history", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, {
+          title: "Add hello.sh",
+          request: "Add hello.sh with a test.",
+        });
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.versions[0]?.author, "pm");
+        assert.strictEqual(detail.versions[0]?.authorThreadId, pm);
+        assert.strictEqual(detail.versions[0]?.spec.background, "Add hello.sh with a test.");
+
+        const missing = yield* team
+          .getTaskDetail({ projectId: PROJECT_ID, taskId: ProjectTaskId.make("task:nope") })
+          .pipe(Effect.flip);
+        assert.include(missing.message, "was not found");
+      }),
+    ),
+  );
+});

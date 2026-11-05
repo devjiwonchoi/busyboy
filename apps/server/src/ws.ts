@@ -2082,6 +2082,26 @@ const layerWsRpc = (
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.updateSettings(input)),
           ),
+        [WS_METHODS.projectTeamCreateTask]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.createTaskForUser(input)),
+          ),
+        [WS_METHODS.projectTeamGetTask]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.getTaskDetail(input)),
+          ),
+        [WS_METHODS.projectTeamUpdateTaskSpec]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.updateTaskSpec(input)),
+          ),
+        [WS_METHODS.projectTeamRestoreTaskSpec]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.restoreTaskSpec(input)),
+          ),
+        [WS_METHODS.projectTeamSplitTaskTodo]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.splitTaskTodo(input)),
+          ),
         [WS_METHODS.secretsAnswerRequest]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(secretRequests.answer(input)),

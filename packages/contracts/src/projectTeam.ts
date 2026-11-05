@@ -190,6 +190,31 @@ export const ProjectTaskSession = Schema.Struct({
 });
 export type ProjectTaskSession = typeof ProjectTaskSession.Type;
 
+export const ProjectTaskKeyPrefix = TrimmedNonEmptyString.check(
+  Schema.isPattern(/^[A-Z][A-Z0-9]{0,5}$/),
+).annotate({ description: "Task ID prefix: 1 to 6 capital letters or digits, such as BB." });
+export type ProjectTaskKeyPrefix = typeof ProjectTaskKeyPrefix.Type;
+
+/** A prefix from the project's name: the initials of its words, or its first letters. */
+export function defaultTaskKeyPrefix(projectTitle: string): string {
+  const words = projectTitle
+    .normalize("NFKD")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter((word) => /^[A-Za-z]/.test(word));
+  const prefix =
+    words.length >= 2
+      ? words.map((word) => word[0]).join("")
+      : (words[0] ?? "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2);
+  const upper = prefix.toUpperCase().slice(0, 6);
+  return upper.length > 0 ? upper : "T";
+}
+
+/** A task's ID as people write it, such as BB-7. */
+export function formatTaskKey(prefix: string, taskNumber: number): string {
+  return `${prefix}-${taskNumber}`;
+}
+
 export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
@@ -285,6 +310,8 @@ export const ProjectTeamSettings = Schema.Struct({
   /** Absent until the user or PM picks one; the server resolves a per-project default. */
   persona: Schema.optionalKey(ProjectManagerPersona),
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** Absent until the user picks one; the server derives it from the project's name. */
+  taskKeyPrefix: Schema.optionalKey(ProjectTaskKeyPrefix),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -694,6 +721,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   ),
   /** Every task in the project, so "#N" in PM text can be resolved per project. */
   tasks: Schema.Array(ProjectTaskReference),
+  /** Resolved task ID prefix, such as BB for BB-7. */
+  taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
@@ -735,8 +764,71 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
     }),
   ),
   enabled: Schema.optional(Schema.Boolean),
+  taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
 });
 export type ProjectTeamUpdateSettingsInput = typeof ProjectTeamUpdateSettingsInput.Type;
+
+// App-facing task RPCs.
+
+export const ProjectTeamCreateTaskInput = Schema.Struct({
+  projectId: ProjectId,
+  title: ProjectTaskTitle,
+  /** Whatever the user dumped into the composer. May be empty. */
+  context: ProjectTaskSpecText,
+  parentTaskId: Schema.optional(ProjectTaskId),
+  /** True asks the PM to start a planner on the task right away. */
+  startPlanning: Schema.Boolean,
+});
+export type ProjectTeamCreateTaskInput = typeof ProjectTeamCreateTaskInput.Type;
+
+export const ProjectTeamTaskRefInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+});
+export type ProjectTeamTaskRefInput = typeof ProjectTeamTaskRefInput.Type;
+
+export const ProjectTeamTaskDetail = Schema.Struct({
+  task: ProjectTask,
+  /** Such as BB-7. */
+  key: Schema.String,
+  /** Oldest first; the last one is current. */
+  versions: Schema.Array(ProjectTaskSpecVersion),
+  sessions: Schema.Array(ProjectTaskSession),
+  children: Schema.Array(ProjectTaskBrief),
+  /** Open questions and approvals pinned on the task. */
+  openAttention: Schema.Array(ProjectAttentionItem),
+});
+export type ProjectTeamTaskDetail = typeof ProjectTeamTaskDetail.Type;
+
+export const ProjectTeamUpdateTaskSpecInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  /** The version the edit started from; a newer version makes the update fail. */
+  baseVersion: PositiveInt,
+  spec: ProjectTaskSpec,
+  note: Schema.optional(TrimmedString.check(Schema.isMaxLength(500))),
+});
+export type ProjectTeamUpdateTaskSpecInput = typeof ProjectTeamUpdateTaskSpecInput.Type;
+
+export const ProjectTeamRestoreTaskSpecInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  version: PositiveInt,
+});
+export type ProjectTeamRestoreTaskSpecInput = typeof ProjectTeamRestoreTaskSpecInput.Type;
+
+export const ProjectTeamSplitTaskTodoInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  todoId: ProjectTaskTodoId,
+});
+export type ProjectTeamSplitTaskTodoInput = typeof ProjectTeamSplitTaskTodoInput.Type;
+
+export const ProjectTeamSplitTaskTodoResult = Schema.Struct({
+  subtask: ProjectTask,
+  parent: ProjectTeamTaskDetail,
+});
+export type ProjectTeamSplitTaskTodoResult = typeof ProjectTeamSplitTaskTodoResult.Type;
 
 export class ProjectTeamError extends Schema.TaggedError<ProjectTeamError>()("ProjectTeamError", {
   message: Schema.String,

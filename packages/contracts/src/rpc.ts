@@ -346,6 +346,13 @@ import {
   ProjectTeamSettingsResult,
   ProjectTeamSubscribeAttentionInput,
   ProjectTeamUpdateSettingsInput,
+  ProjectTeamCreateTaskInput,
+  ProjectTeamRestoreTaskSpecInput,
+  ProjectTeamSplitTaskTodoInput,
+  ProjectTeamSplitTaskTodoResult,
+  ProjectTeamTaskDetail,
+  ProjectTeamTaskRefInput,
+  ProjectTeamUpdateTaskSpecInput,
 } from "./projectTeam.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import { BrowserRequestAnswerInput, BrowserRequestError } from "./browserRequest.ts";
@@ -512,6 +519,11 @@ export const WS_METHODS = {
   projectTeamRequestSitrep: "projectTeam.requestSitrep",
   projectTeamAnswerDecision: "projectTeam.answerDecision",
   projectTeamUpdateSettings: "projectTeam.updateSettings",
+  projectTeamCreateTask: "projectTeam.createTask",
+  projectTeamGetTask: "projectTeam.getTask",
+  projectTeamUpdateTaskSpec: "projectTeam.updateTaskSpec",
+  projectTeamRestoreTaskSpec: "projectTeam.restoreTaskSpec",
+  projectTeamSplitTaskTodo: "projectTeam.splitTaskTodo",
 
   pullRequestsList: "pullRequests.list",
   pullRequestsListStats: "pullRequests.listStats",
@@ -1811,6 +1823,36 @@ const WsProjectTeamUpdateSettingsRpc = Rpc.make(WS_METHODS.projectTeamUpdateSett
   error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
 });
 
+const WsProjectTeamCreateTaskRpc = Rpc.make(WS_METHODS.projectTeamCreateTask, {
+  payload: ProjectTeamCreateTaskInput,
+  success: ProjectTeamTaskDetail,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamGetTaskRpc = Rpc.make(WS_METHODS.projectTeamGetTask, {
+  payload: ProjectTeamTaskRefInput,
+  success: ProjectTeamTaskDetail,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamUpdateTaskSpecRpc = Rpc.make(WS_METHODS.projectTeamUpdateTaskSpec, {
+  payload: ProjectTeamUpdateTaskSpecInput,
+  success: ProjectTeamTaskDetail,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamRestoreTaskSpecRpc = Rpc.make(WS_METHODS.projectTeamRestoreTaskSpec, {
+  payload: ProjectTeamRestoreTaskSpecInput,
+  success: ProjectTeamTaskDetail,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamSplitTaskTodoRpc = Rpc.make(WS_METHODS.projectTeamSplitTaskTodo, {
+  payload: ProjectTeamSplitTaskTodoInput,
+  success: ProjectTeamSplitTaskTodoResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
 const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
@@ -1908,6 +1950,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectTeamRequestSitrepRpc,
   WsProjectTeamAnswerDecisionRpc,
   WsProjectTeamUpdateSettingsRpc,
+  WsProjectTeamCreateTaskRpc,
+  WsProjectTeamGetTaskRpc,
+  WsProjectTeamUpdateTaskSpecRpc,
+  WsProjectTeamRestoreTaskSpecRpc,
+  WsProjectTeamSplitTaskTodoRpc,
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,
   WsServerGetBackgroundPolicyRpc,
