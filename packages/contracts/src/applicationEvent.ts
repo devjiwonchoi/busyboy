@@ -45,6 +45,11 @@ export const ApplicationProjectCreatedPayload = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
+  /**
+   * Set when a removed project is added again: when it was removed. Threads its
+   * removal archived (archived at or after this time) are brought back.
+   */
+  restoredFromDeletedAt: Schema.optional(IsoDateTime),
 });
 export type ApplicationProjectCreatedPayload = typeof ApplicationProjectCreatedPayload.Type;
 

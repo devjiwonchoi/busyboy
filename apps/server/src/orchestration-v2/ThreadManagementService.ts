@@ -56,6 +56,7 @@ import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimi
 import { projectTurnItemForDetail } from "./WireProjection.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 
 export type ThreadManagementSendMode = "auto" | "queue" | "steer" | "restart";
 
@@ -461,6 +462,7 @@ const make = Effect.gen(function* () {
   const projectTeamRepository = yield* Effect.serviceOption(
     ProjectTeamRepository.ProjectTeamRepository,
   );
+  const projectStore = yield* Effect.serviceOption(ProjectStore.ProjectStoreV2);
 
   const assertProviderInstanceEnabled: ThreadManagementServiceShape["assertProviderInstanceEnabled"] =
     (input) =>
@@ -564,9 +566,20 @@ const make = Effect.gen(function* () {
     }
   };
 
+  /** True when the thread's project was removed, which archives all of its threads. */
+  const isProjectRemoved = (threadId: ThreadId) =>
+    Option.isNone(projectStore)
+      ? Effect.succeed(false)
+      : orchestrator.getThreadRecords(threadId, []).pipe(
+          Effect.flatMap((projection) => projectStore.value.get(projection.thread.projectId)),
+          Effect.map(Option.isNone),
+          Effect.orElseSucceed(() => false),
+        );
+
   /**
    * A project's PM is long-lived, so no path (client, MCP tool, lifecycle service)
-   * may archive its thread. An unreadable role lets the archive through.
+   * may archive its thread, unless its project was removed. An unreadable role
+   * lets the archive through.
    */
   const assertNotProjectManager = (
     command: Extract<OrchestrationV2ServerCommand, { readonly type: "thread.archive" }>,
@@ -581,15 +594,21 @@ const make = Effect.gen(function* () {
             }).pipe(Effect.as(Option.none())),
           ),
           Effect.flatMap((manager) =>
-            Option.isSome(manager)
-              ? Effect.fail(
-                  new Orchestrator.OrchestratorDispatchError({
-                    commandId: command.commandId,
-                    commandType: command.type,
-                    cause: PROJECT_MANAGER_ARCHIVE_REJECTION,
-                  }),
-                )
-              : Effect.void,
+            Option.isNone(manager)
+              ? Effect.void
+              : isProjectRemoved(command.threadId).pipe(
+                  Effect.flatMap((removed) =>
+                    removed
+                      ? Effect.void
+                      : Effect.fail(
+                          new Orchestrator.OrchestratorDispatchError({
+                            commandId: command.commandId,
+                            commandType: command.type,
+                            cause: PROJECT_MANAGER_ARCHIVE_REJECTION,
+                          }),
+                        ),
+                  ),
+                ),
           ),
         );
 

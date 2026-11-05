@@ -47,11 +47,10 @@ export function DesktopAppActivationCoordinator() {
           workspaceRoot,
         ) ?? null,
       createProject: async (environmentId, workspaceRoot) => {
-        const projectId = newProjectId();
         const result = await createProject({
           environmentId,
           input: {
-            projectId,
+            projectId: newProjectId(),
             title: inferProjectTitleFromPath(workspaceRoot),
             workspaceRoot,
             createWorkspaceRootIfMissing: false,
@@ -62,7 +61,8 @@ export function DesktopAppActivationCoordinator() {
           const error = squashAtomCommandFailure(result);
           throw error instanceof Error ? error : new Error("BusyBoy could not add the project.");
         }
-        return projectId;
+        // A removed project's folder comes back as that project, under its old id.
+        return result.value.id;
       },
       waitForProject: async (projectRef) => {
         await waitForProject(projectRef);

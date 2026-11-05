@@ -1699,10 +1699,15 @@ const layerWsRpc = (
           listProjects: projectStore.listShells(),
           latestSequence: applicationEvents.latestApplicationSequence,
         });
+        // A removed project's threads are archived, so the archive still lists it.
+        const removedProjects = (yield* projectStore.list({ includeDeleted: true }))
+          .filter((row) => row.deletedAt !== null)
+          .map(ProjectStore.toShell);
         return {
           schemaVersion: threads.schemaVersion,
           snapshotSequence,
           projects,
+          removedProjects,
           threads: threads.archivedThreads,
         } as const;
       }).pipe(
@@ -2634,7 +2639,7 @@ const layerWsRpc = (
                 new ProjectMutationError({
                   commandId: mutation.commandId,
                   message:
-                    cause._tag === "ProjectNotEmptyError"
+                    cause._tag === "ProjectConflictError"
                       ? cause.message
                       : "Failed to mutate project.",
                   cause,

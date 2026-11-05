@@ -86,6 +86,7 @@ import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
+import { useRestoreRemovedProject } from "../../hooks/useRestoreRemovedProject";
 import { useSideChatStore } from "../../sideChatStore";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
@@ -3066,6 +3067,7 @@ export function GeneralSettingsPanel() {
 export function ArchivedThreadsPanel() {
   const { scope, groups: projectGroups, environments } = useSettingsScope();
   const { confirmAndUnarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const restoreRemovedProject = useRestoreRemovedProject();
   const {
     snapshots: archivedSnapshots,
     error: archiveError,
@@ -3079,9 +3081,15 @@ export function ArchivedThreadsPanel() {
       scope.kind === "project" || scope.kind === "checkout"
         ? new Set(scope.members.map((member) => `${member.environmentId}:${member.id}`))
         : null;
+    // A removed project's threads were archived with it, so it is listed too.
     const projectsByEnvironmentAndId = new Map(
       archivedSnapshots.flatMap(({ environmentId, snapshot }) =>
-        snapshot.projects
+        [
+          ...snapshot.projects.map((project) => ({ ...project, removed: false })),
+          ...(selectedProjectKeys === null ? (snapshot.removedProjects ?? []) : []).map(
+            (project) => ({ ...project, removed: true }),
+          ),
+        ]
           .filter(
             (project) =>
               selectedProjectKeys === null ||
@@ -3145,9 +3153,10 @@ export function ArchivedThreadsPanel() {
       }
       if (projectThreads.length > 0) {
         const physicalProjectKey = `${project.environmentId}:${project.id}` as const;
-        const logicalGroup = hasMultipleEnvironments
-          ? logicalGroupsByProjectKey.get(physicalProjectKey)
-          : undefined;
+        const logicalGroup =
+          hasMultipleEnvironments && !project.removed
+            ? logicalGroupsByProjectKey.get(physicalProjectKey)
+            : undefined;
         const groupKey = logicalGroup?.projectKey ?? physicalProjectKey;
         const group = groups.get(groupKey);
         if (group) {
@@ -3155,7 +3164,9 @@ export function ArchivedThreadsPanel() {
         } else {
           groups.set(groupKey, {
             project,
-            title: logicalGroup?.displayName ?? project.title,
+            title: project.removed
+              ? `${project.title} (removed)`
+              : (logicalGroup?.displayName ?? project.title),
             threads: projectThreads,
           });
         }
@@ -3173,8 +3184,27 @@ export function ArchivedThreadsPanel() {
     return { groups: sortedGroups, hasMultipleEnvironments };
   })();
 
+  type ArchivedProject = (typeof archivedGroups)[number]["project"];
+
+  const handleRestoreProject = async (project: ArchivedProject) => {
+    const result = await restoreRemovedProject(project);
+    if (result._tag === "Success") {
+      refreshArchivedThreads();
+    } else if (!isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Failed to restore project",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    }
+  };
+
   const handleArchivedThreadContextMenu = async (
     thread: Parameters<typeof confirmAndUnarchiveThread>[0],
+    project: ArchivedProject,
     position: { x: number; y: number },
   ) => {
     const threadRef = scopeThreadRef(thread.environmentId, thread.id);
@@ -3182,11 +3212,18 @@ export function ArchivedThreadsPanel() {
     if (!api) return;
     const clicked = await api.contextMenu.show(
       [
-        { id: "unarchive", label: "Unarchive" },
+        project.removed
+          ? { id: "restore-project", label: "Restore project" }
+          : { id: "unarchive", label: "Unarchive" },
         { id: "delete", label: "Delete", destructive: true },
       ],
       position,
     );
+
+    if (clicked === "restore-project") {
+      await handleRestoreProject(project);
+      return;
+    }
 
     if (clicked === "unarchive") {
       const result = await confirmAndUnarchiveThread(thread);
@@ -3258,6 +3295,19 @@ export function ArchivedThreadsPanel() {
             id={index === 0 ? searchableSetting("archive").id : undefined}
             title={title}
             icon={<ProjectFavicon project={project} />}
+            headerAction={
+              project.removed ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => void handleRestoreProject(project)}
+                >
+                  <ArchiveX className="size-3.5" />
+                  <span>Restore project</span>
+                </Button>
+              ) : undefined
+            }
           >
             {projectThreads.map((thread) => (
               <SettingsRow
@@ -3266,7 +3316,7 @@ export function ArchivedThreadsPanel() {
                   event.preventDefault();
                   void (async () => {
                     const result = await settlePromise(() =>
-                      handleArchivedThreadContextMenu(thread, {
+                      handleArchivedThreadContextMenu(thread, project, {
                         x: event.clientX,
                         y: event.clientY,
                       }),
@@ -3294,35 +3344,37 @@ export function ArchivedThreadsPanel() {
                   </span>
                 }
                 control={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    className="shrink-0"
-                    onClick={() => {
-                      void (async () => {
-                        const result = await confirmAndUnarchiveThread(thread);
-                        if (result._tag === "Success") {
-                          refreshArchivedThreads();
-                          return;
-                        }
-                        if (!isAtomCommandInterrupted(result)) {
-                          const error = squashAtomCommandFailure(result);
-                          toastManager.add(
-                            stackedThreadToast({
-                              type: "error",
-                              title: "Failed to unarchive thread",
-                              description:
-                                error instanceof Error ? error.message : "An error occurred.",
-                            }),
-                          );
-                        }
-                      })();
-                    }}
-                  >
-                    <ArchiveX className="size-3.5" />
-                    <span>Unarchive</span>
-                  </Button>
+                  project.removed ? undefined : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      className="shrink-0"
+                      onClick={() => {
+                        void (async () => {
+                          const result = await confirmAndUnarchiveThread(thread);
+                          if (result._tag === "Success") {
+                            refreshArchivedThreads();
+                            return;
+                          }
+                          if (!isAtomCommandInterrupted(result)) {
+                            const error = squashAtomCommandFailure(result);
+                            toastManager.add(
+                              stackedThreadToast({
+                                type: "error",
+                                title: "Failed to unarchive thread",
+                                description:
+                                  error instanceof Error ? error.message : "An error occurred.",
+                              }),
+                            );
+                          }
+                        })();
+                      }}
+                    >
+                      <ArchiveX className="size-3.5" />
+                      <span>Unarchive</span>
+                    </Button>
+                  )
                 }
               />
             ))}

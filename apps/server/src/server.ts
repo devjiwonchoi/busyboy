@@ -137,6 +137,7 @@ import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as RuntimeLayer from "./orchestration-v2/runtimeLayer.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
+import * as ProjectRemovalReactor from "./project/ProjectRemovalReactor.ts";
 import * as ThreadSearch from "./orchestration-v2/ThreadSearch.ts";
 import * as ResourceCleanupService from "./orchestration-v2/ResourceCleanupService.ts";
 import * as ThreadWorktreeService from "./orchestration-v2/ThreadWorktreeService.ts";
@@ -499,6 +500,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     }),
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
   layerProjectTeam,
+  ProjectRemovalReactor.layerWorker,
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),

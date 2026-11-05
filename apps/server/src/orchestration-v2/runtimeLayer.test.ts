@@ -11,6 +11,7 @@ import {
   CheckpointRef,
   CommandId,
   ContextTransferId,
+  DEFAULT_PROJECT_TEAM_SETTINGS,
   EventId,
   MessageId,
   NodeId,
@@ -31,8 +32,6 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
@@ -49,6 +48,9 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as OrchestrationEventStore from "../persistence/OrchestrationEventStore.ts";
 import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import { projectMutationOperation } from "../project/ProjectMutation.ts";
+import * as ProjectRemovalReactor from "../project/ProjectRemovalReactor.ts";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistryTestkit from "../mcp/McpSessionRegistry.testkit.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
@@ -280,12 +282,16 @@ const layerTest = Layer.mergeAll(
   Layer.provide(layerPlatformTest),
 );
 
-const layerProjectDeletionTest = Layer.mergeAll(
-  RuntimeLayer.layer.pipe(Layer.provide(RuntimeLayer.layerProjectService)),
-  RuntimeLayer.layerProjectService,
-  RuntimeLayer.layerEventSink,
-  ThreadCommandExecutor.layer,
-).pipe(
+const layerProjectRemovalTest = ProjectRemovalReactor.layer.pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(
+      RuntimeLayer.layer.pipe(Layer.provide(RuntimeLayer.layerProjectService)),
+      RuntimeLayer.layerProjectService,
+      RuntimeLayer.layerEventInfrastructure,
+      ProjectStore.layer,
+      ProjectTeamRepository.layer,
+    ),
+  ),
   Layer.provide(
     Layer.mock(ProjectEnrichmentService.ProjectEnrichmentService)({
       peek: () =>
@@ -310,7 +316,7 @@ const layerProjectDeletionTest = Layer.mergeAll(
   ),
   Layer.provide(McpSessionRegistryTestkit.layer),
   Layer.provide(McpProviderSessions.layer),
-  Layer.provide(SqlitePersistence.layerMemory),
+  Layer.provideMerge(SqlitePersistence.layerMemory),
   Layer.provide(layerCheckpointStoreTest),
   Layer.provide(layerServerConfig),
   Layer.provide(ServerSettings.layerTest()),
@@ -319,106 +325,128 @@ const layerProjectDeletionTest = Layer.mergeAll(
   Layer.provide(layerPlatformTest),
 );
 
-it.layer(layerProjectDeletionTest)("project deletion during thread commands", (it) => {
-  it.effect("waits for an in-flight thread update before planning deletion", () =>
+it.layer(layerProjectRemovalTest)("removing a project", (it) => {
+  it.effect("archives its threads, keeps them in the archive, and restores them on re-add", () =>
     Effect.gen(function* () {
       const projects = yield* ProjectService.ProjectService;
-      const orchestrator = yield* Orchestrator.OrchestratorV2;
-      const eventSink = yield* EventSink.EventSinkV2;
-      const executor = yield* ThreadCommandExecutor.ThreadCommandExecutor;
-      const projectId = ProjectId.make("runtime-project-delete-concurrent");
-      const threadId = ThreadId.make("runtime-thread-delete-concurrent");
-      const updateCommandId = CommandId.make("runtime-thread-delete-concurrent-update");
-      yield* projects.create({
-        commandId: CommandId.make("runtime-project-delete-concurrent-create"),
-        projectId,
-        title: "Concurrent deletion",
-        workspaceRoot: "/work/concurrent-deletion",
+      const threads = yield* ThreadManagementService.ThreadManagementService;
+      const team = yield* ProjectTeamRepository.ProjectTeamRepository;
+      const reactor = yield* ProjectRemovalReactor.ProjectRemovalReactor;
+      const events = yield* OrchestrationEventStore.OrchestrationEventStore;
+      const workspaceRoot = "/work/removal-journey";
+      const projectId = ProjectId.make("project-removal-journey");
+      const pm = ThreadId.make("removal-journey-pm");
+      const chat = ThreadId.make("removal-journey-chat");
+      const helper = ThreadId.make("removal-journey-helper");
+      const doneEarlier = ThreadId.make("removal-journey-done-earlier");
+      let seen = yield* events.latestApplicationSequence;
+      // Feeds the reactor what its worker would read from the event stream.
+      const reactToNewEvents = Effect.gen(function* () {
+        const through = yield* events.latestApplicationSequence;
+        yield* Stream.runForEach(
+          events.readApplicationEvents({ afterSequence: seen, throughSequence: through }),
+          reactor.handle,
+        );
+        seen = through;
       });
-      yield* orchestrator.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("runtime-thread-delete-concurrent-create"),
-        createdBy: "user",
-        creationSource: "web",
-        threadId,
-        projectId,
-        title: "Original title",
-        modelSelection,
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: null,
-      });
+      const shell = (threadId: ThreadId) =>
+        threads
+          .getShellSnapshot()
+          .pipe(
+            Effect.map((snapshot) =>
+              [...snapshot.threads, ...snapshot.archivedThreads].find(
+                (thread) => thread.id === threadId,
+              ),
+            ),
+          );
+      const createThread = (threadId: ThreadId) =>
+        threads.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make(`${threadId}:create`),
+          createdBy: "user",
+          creationSource: "web",
+          threadId,
+          projectId,
+          title: threadId,
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+        });
 
-      const updateReady = yield* Deferred.make<void>();
-      const releaseUpdate = yield* Deferred.make<void>();
-      const deletionQueued = yield* Deferred.make<void>();
-      const commitCommand = eventSink.commitCommand;
-      const withLock = executor.withLock;
-      let threadLockRequests = 0;
-      const commitSpy = vi
-        .spyOn(eventSink, "commitCommand")
-        .mockImplementation((input) =>
-          input.commandId === updateCommandId
-            ? Deferred.succeed(updateReady, undefined).pipe(
-                Effect.andThen(Deferred.await(releaseUpdate)),
-                Effect.andThen(commitCommand(input)),
-              )
-            : commitCommand(input),
-        );
-      const observeLock: ThreadCommandExecutor.ThreadCommandExecutor["Service"]["withLock"] = (
-        key,
-        effect,
-      ) => {
-        if (key !== threadId || ++threadLockRequests !== 2) return withLock(key, effect);
-        return Deferred.succeed(deletionQueued, undefined).pipe(
-          Effect.andThen(withLock(key, effect)),
-        );
-      };
-      const lockSpy = vi.spyOn(executor, "withLock").mockImplementation(observeLock);
-      yield* Effect.gen(function* () {
-        const updateFiber = yield* orchestrator
-          .dispatch({
-            type: "thread.metadata.update",
-            commandId: updateCommandId,
-            threadId,
-            title: "Updated before deletion",
-          })
-          .pipe(Effect.forkChild({ startImmediately: true }));
-        yield* Effect.raceFirst(
-          Deferred.await(updateReady),
-          Fiber.join(updateFiber).pipe(
-            Effect.andThen(Effect.die("The update completed before reaching its commit barrier.")),
-          ),
-        );
-        const deleteFiber = yield* projects
-          .delete({
-            commandId: CommandId.make("runtime-project-delete-concurrent-delete"),
-            projectId,
-            force: true,
-          })
-          .pipe(Effect.forkChild({ startImmediately: true }));
-        yield* Effect.raceFirst(
-          Deferred.await(deletionQueued),
-          Fiber.join(deleteFiber).pipe(
-            Effect.andThen(Effect.die("Project deletion bypassed the in-flight thread command.")),
-          ),
-        );
-        yield* Deferred.succeed(releaseUpdate, undefined);
-        yield* Fiber.join(updateFiber);
-        const deletedProject = yield* Fiber.join(deleteFiber);
-        const projection = yield* orchestrator.getThreadProjection(threadId);
-        assert.isNotNull(deletedProject.deletedAt);
-        assert.isNotNull(projection.thread.deletedAt);
-        assert.equal(projection.thread.title, "Updated before deletion");
-      }).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            commitSpy.mockRestore();
-            lockSpy.mockRestore();
-          }),
-        ),
+      // A project with a PM, two chats, and a thread archived before removal.
+      yield* projects.create({
+        commandId: CommandId.make("removal-journey:add"),
+        projectId,
+        title: "Removal journey",
+        workspaceRoot,
+      });
+      for (const threadId of [pm, chat, helper, doneEarlier]) yield* createThread(threadId);
+      yield* team.upsertManager({
+        projectId,
+        threadId: pm,
+        settings: DEFAULT_PROJECT_TEAM_SETTINGS,
+        now: "2026-11-05T00:00:00.000Z",
+      });
+      yield* threads.dispatch({
+        type: "thread.archive",
+        commandId: CommandId.make("removal-journey:archive-earlier"),
+        threadId: doneEarlier,
+      });
+      yield* reactToNewEvents;
+      yield* TestClock.adjust("1 minute");
+
+      // Remove the project the way the app does.
+      const removed = yield* projectMutationOperation(projects, {
+        type: "project.delete",
+        commandId: CommandId.make("removal-journey:remove"),
+        projectId,
+        force: true,
+      });
+      assert.isNotNull(removed.deletedAt);
+      yield* reactToNewEvents;
+
+      // Nothing is deleted: every thread, the PM included, is in the archive.
+      const archive = yield* threads.getShellSnapshot({ location: "archive" });
+      assert.sameMembers(
+        archive.archivedThreads
+          .filter((thread) => thread.projectId === projectId)
+          .map((thread) => thread.id),
+        [pm, chat, helper, doneEarlier],
       );
+      for (const threadId of [pm, chat, helper, doneEarlier]) {
+        assert.isNull((yield* shell(threadId))?.deletedAt);
+      }
+
+      // Adding the folder again brings back the same project and the threads its
+      // removal archived; the thread archived earlier stays archived.
+      const readded = yield* projectMutationOperation(projects, {
+        type: "project.create",
+        commandId: CommandId.make("removal-journey:re-add"),
+        projectId: ProjectId.make("project-removal-journey-new-id"),
+        title: "removal-journey",
+        workspaceRoot,
+      });
+      assert.equal(readded.id, projectId);
+      assert.isNull(readded.deletedAt);
+      assert.equal(readded.title, "Removal journey");
+      yield* reactToNewEvents;
+
+      for (const threadId of [pm, chat, helper]) {
+        assert.isNull((yield* shell(threadId))?.archivedAt, `${threadId} is restored`);
+      }
+      assert.isNotNull((yield* shell(doneEarlier))?.archivedAt);
+
+      // A retried re-add replays the restore instead of creating a second project.
+      const retried = yield* projectMutationOperation(projects, {
+        type: "project.create",
+        commandId: CommandId.make("removal-journey:re-add"),
+        projectId: ProjectId.make("project-removal-journey-new-id"),
+        title: "removal-journey",
+        workspaceRoot,
+      });
+      assert.equal(retried.id, projectId);
     }),
   );
 });

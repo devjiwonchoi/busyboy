@@ -6,7 +6,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 
-import { isProjectThreadDeleteCommandId } from "../orchestration-v2/ProjectCommands.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as OrchestrationEventStore from "../persistence/OrchestrationEventStore.ts";
@@ -24,7 +23,10 @@ export class DefaultManagerReactor extends Context.Service<
      * Scratch project), whose PM from before this rule is removed.
      */
     readonly ensureAll: Effect.Effect<void>;
-    /** Gives a new project other than Scratch a PM, and replaces a PM whose thread was deleted. */
+    /**
+     * Gives a new or restored project other than Scratch a PM (a restored one gets
+     * its old PM back), and replaces a PM whose thread was deleted.
+     */
     readonly handle: (event: ApplicationStoredEvent) => Effect.Effect<void>;
   }
 >()("t3/projectTeam/defaultManagerReactor") {}
@@ -95,13 +97,8 @@ const make = Effect.gen(function* () {
       return event.type === "project.created" ? ensure(event.payload.projectId) : Effect.void;
     }
     const { threadId, type } = event.event;
-    // Deleting a project deletes its threads first; that PM is not replaced.
-    if (
-      type !== "thread.deleted" ||
-      (event.commandId !== null && isProjectThreadDeleteCommandId(event.commandId, threadId))
-    ) {
-      return Effect.void;
-    }
+    // A removed project is skipped by ensure, so deleting its archived PM adds none.
+    if (type !== "thread.deleted") return Effect.void;
     return repository.getManagerByThreadId(threadId).pipe(
       Effect.flatMap((manager) =>
         Option.isSome(manager) ? ensure(manager.value.projectId) : Effect.void,

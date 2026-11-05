@@ -3021,6 +3021,8 @@ export const OrchestrationV2ArchivedShellSnapshot = Schema.Struct({
   schemaVersion: PositiveInt,
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProjectShell),
+  /** Removed projects, so the threads their removal archived stay findable. */
+  removedProjects: Schema.optional(Schema.Array(OrchestrationProjectShell)),
   threads: Schema.Array(OrchestrationV2ThreadShell),
 });
 export type OrchestrationV2ArchivedShellSnapshot = typeof OrchestrationV2ArchivedShellSnapshot.Type;

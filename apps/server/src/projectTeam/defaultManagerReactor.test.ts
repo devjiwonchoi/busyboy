@@ -5,7 +5,6 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { projectThreadDeleteCommandId } from "../orchestration-v2/ProjectCommands.ts";
 import { DefaultManagerReactor } from "./defaultManagerReactor.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { defaultPersonaName } from "./persona.ts";
@@ -100,31 +99,6 @@ describe("DefaultManagerReactor", () => {
         assert.notStrictEqual(manager.threadId, pm);
         assert.deepStrictEqual(manager.settings, before.settings);
         assert.strictEqual(harness.threads.get(manager.threadId)?.title, "Ada");
-      }),
-    ),
-  );
-
-  it.effect("does not replace the PM while its project is being deleted", () =>
-    withTeam((harness) =>
-      Effect.gen(function* () {
-        const reactor = yield* DefaultManagerReactor;
-        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
-        const pm = yield* setUpManager;
-        const other = ThreadId.make("not-a-pm");
-        harness.addThread(other);
-
-        harness.threads.get(pm)!.deletedAt = "2026-11-04T00:01:00.000Z";
-        yield* reactor.handle(
-          threadDeleted(pm, projectThreadDeleteCommandId("delete-project", pm)),
-        );
-        yield* reactor.handle(threadDeleted(other, "delete-other"));
-
-        const manager = Option.getOrThrow(yield* repository.getManager(PROJECT_ID));
-        assert.strictEqual(manager.threadId, pm);
-        const creates = (yield* Ref.get(harness.dispatched)).filter(
-          (command) => command.type === "thread.create",
-        );
-        assert.strictEqual(creates.length, 1);
       }),
     ),
   );
