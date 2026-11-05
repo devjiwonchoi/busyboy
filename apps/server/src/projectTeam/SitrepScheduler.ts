@@ -86,9 +86,6 @@ export function sitrepDueText(input: {
   const lines = [
     `[Sitrep due] since ${input.since}. Call team_status(since) and post a 3–6 line sitrep.`,
   ];
-  if (input.reason === "liveness") {
-    lines.push("Nothing changed; one line on what is still running is enough.");
-  }
   if (input.reason === "requested") {
     lines.push("The user asked for this sitrep; post it even if nothing changed.");
   }
@@ -373,12 +370,6 @@ const make = Effect.gen(function* () {
         reason = "milestone";
       } else if (yield* hasChangesSince(manager.projectId, windowStart)) {
         reason = "interval";
-      } else if (elapsed >= 2 * intervalMs) {
-        const active = yield* repository.listTasks({
-          projectId: manager.projectId,
-          stages: ACTIVE_TASK_STAGES,
-        });
-        if (active.length > 0) reason = "liveness";
       }
       if (reason === null) return;
 
