@@ -81,6 +81,8 @@ export const ProjectTask = Schema.Struct({
   request: Schema.String,
   stage: ProjectTaskStage,
   waitsOn: Schema.Array(ProjectTaskId),
+  /** The task this one was split from, shown as its parent. */
+  parentTaskId: Schema.NullOr(ProjectTaskId).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   leadThreadId: Schema.NullOr(ThreadId),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
@@ -130,6 +132,88 @@ export const ProjectTaskEvent = Schema.Struct({
   createdAt: IsoDateTime,
 });
 export type ProjectTaskEvent = typeof ProjectTaskEvent.Type;
+
+const ProjectTaskSpecText = Schema.String.check(Schema.isMaxLength(60_000));
+export const ProjectTaskTodoId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
+export type ProjectTaskTodoId = typeof ProjectTaskTodoId.Type;
+
+export const ProjectTaskTodo = Schema.Struct({
+  id: ProjectTaskTodoId,
+  text: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  done: Schema.Boolean,
+  /** Set once the todo was split into its own task. */
+  subtaskId: Schema.NullOr(ProjectTaskId),
+});
+export type ProjectTaskTodo = typeof ProjectTaskTodo.Type;
+
+/** The written spec of a task. Every change is kept as a new version. */
+export const ProjectTaskSpec = Schema.Struct({
+  background: ProjectTaskSpecText,
+  goal: ProjectTaskSpecText,
+  nonGoals: ProjectTaskSpecText,
+  todos: Schema.Array(ProjectTaskTodo).check(Schema.isMaxLength(200)),
+}).check(
+  Schema.makeFilter((spec) =>
+    new Set(spec.todos.map((todo) => todo.id)).size === spec.todos.length
+      ? true
+      : "Each todo needs its own id.",
+  ),
+);
+export type ProjectTaskSpec = typeof ProjectTaskSpec.Type;
+
+export const ProjectTaskSpecAuthor = Schema.Literals(["user", "pm", "agent"]);
+export type ProjectTaskSpecAuthor = typeof ProjectTaskSpecAuthor.Type;
+
+export const ProjectTaskSpecVersion = Schema.Struct({
+  taskId: ProjectTaskId,
+  /** 1 for the first version. */
+  version: PositiveInt,
+  spec: ProjectTaskSpec,
+  author: ProjectTaskSpecAuthor,
+  /** The agent or PM thread that wrote this version. Null when the user did. */
+  authorThreadId: Schema.NullOr(ThreadId),
+  /** Why the spec changed, such as "Restored v2". */
+  note: Schema.String,
+  createdAt: IsoDateTime,
+});
+export type ProjectTaskSpecVersion = typeof ProjectTaskSpecVersion.Type;
+
+export const ProjectTaskSessionRole = Schema.Literals(["lead", "planner", "implementer"]);
+export type ProjectTaskSessionRole = typeof ProjectTaskSessionRole.Type;
+
+/** An agent thread working on a task. Its own subagents are not listed here. */
+export const ProjectTaskSession = Schema.Struct({
+  taskId: ProjectTaskId,
+  threadId: ThreadId,
+  role: ProjectTaskSessionRole,
+  createdAt: IsoDateTime,
+});
+export type ProjectTaskSession = typeof ProjectTaskSession.Type;
+
+export const ProjectTaskKeyPrefix = TrimmedNonEmptyString.check(
+  Schema.isPattern(/^[A-Z][A-Z0-9]{0,5}$/),
+).annotate({ description: "Task ID prefix: 1 to 6 capital letters or digits, such as BB." });
+export type ProjectTaskKeyPrefix = typeof ProjectTaskKeyPrefix.Type;
+
+/** A prefix from the project's name: the initials of its words, or its first letters. */
+export function defaultTaskKeyPrefix(projectTitle: string): string {
+  const words = projectTitle
+    .normalize("NFKD")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter((word) => /^[A-Za-z]/.test(word));
+  const prefix =
+    words.length >= 2
+      ? words.map((word) => word[0]).join("")
+      : (words[0] ?? "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2);
+  const upper = prefix.toUpperCase().slice(0, 6);
+  return upper.length > 0 ? upper : "T";
+}
+
+/** A task's ID as people write it, such as BB-7. */
+export function formatTaskKey(prefix: string, taskNumber: number): string {
+  return `${prefix}-${taskNumber}`;
+}
 
 export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
@@ -226,6 +310,8 @@ export const ProjectTeamSettings = Schema.Struct({
   /** Absent until the user or PM picks one; the server resolves a per-project default. */
   persona: Schema.optionalKey(ProjectManagerPersona),
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** Absent until the user picks one; the server derives it from the project's name. */
+  taskKeyPrefix: Schema.optionalKey(ProjectTaskKeyPrefix),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -635,6 +721,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   ),
   /** Every task in the project, so "#N" in PM text can be resolved per project. */
   tasks: Schema.Array(ProjectTaskReference),
+  /** Resolved task ID prefix, such as BB for BB-7. */
+  taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
@@ -676,8 +764,71 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
     }),
   ),
   enabled: Schema.optional(Schema.Boolean),
+  taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
 });
 export type ProjectTeamUpdateSettingsInput = typeof ProjectTeamUpdateSettingsInput.Type;
+
+// App-facing task RPCs.
+
+export const ProjectTeamCreateTaskInput = Schema.Struct({
+  projectId: ProjectId,
+  title: ProjectTaskTitle,
+  /** Whatever the user dumped into the composer. May be empty. */
+  context: ProjectTaskSpecText,
+  parentTaskId: Schema.optional(ProjectTaskId),
+  /** True asks the PM to start a planner on the task right away. */
+  startPlanning: Schema.Boolean,
+});
+export type ProjectTeamCreateTaskInput = typeof ProjectTeamCreateTaskInput.Type;
+
+export const ProjectTeamTaskRefInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+});
+export type ProjectTeamTaskRefInput = typeof ProjectTeamTaskRefInput.Type;
+
+export const ProjectTeamTaskDetail = Schema.Struct({
+  task: ProjectTask,
+  /** Such as BB-7. */
+  key: Schema.String,
+  /** Oldest first; the last one is current. */
+  versions: Schema.Array(ProjectTaskSpecVersion),
+  sessions: Schema.Array(ProjectTaskSession),
+  children: Schema.Array(ProjectTaskBrief),
+  /** Open questions and approvals pinned on the task. */
+  openAttention: Schema.Array(ProjectAttentionItem),
+});
+export type ProjectTeamTaskDetail = typeof ProjectTeamTaskDetail.Type;
+
+export const ProjectTeamUpdateTaskSpecInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  /** The version the edit started from; a newer version makes the update fail. */
+  baseVersion: PositiveInt,
+  spec: ProjectTaskSpec,
+  note: Schema.optional(TrimmedString.check(Schema.isMaxLength(500))),
+});
+export type ProjectTeamUpdateTaskSpecInput = typeof ProjectTeamUpdateTaskSpecInput.Type;
+
+export const ProjectTeamRestoreTaskSpecInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  version: PositiveInt,
+});
+export type ProjectTeamRestoreTaskSpecInput = typeof ProjectTeamRestoreTaskSpecInput.Type;
+
+export const ProjectTeamSplitTaskTodoInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  todoId: ProjectTaskTodoId,
+});
+export type ProjectTeamSplitTaskTodoInput = typeof ProjectTeamSplitTaskTodoInput.Type;
+
+export const ProjectTeamSplitTaskTodoResult = Schema.Struct({
+  subtask: ProjectTask,
+  parent: ProjectTeamTaskDetail,
+});
+export type ProjectTeamSplitTaskTodoResult = typeof ProjectTeamSplitTaskTodoResult.Type;
 
 export class ProjectTeamError extends Schema.TaggedError<ProjectTeamError>()("ProjectTeamError", {
   message: Schema.String,

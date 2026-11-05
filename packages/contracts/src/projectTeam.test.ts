@@ -6,6 +6,9 @@ import {
   ProjectAttentionItem,
   ProjectManagerPresence,
   ProjectTask,
+  ProjectTaskSpec,
+  defaultTaskKeyPrefix,
+  formatTaskKey,
   ProjectTeamAskUserInput,
   ProjectTeamSettings,
   ProjectTeamSettingsUpdateInput,
@@ -141,8 +144,31 @@ describe("ProjectTask", () => {
       createdAt: "2026-11-04T00:00:00.000Z",
       updatedAt: "2026-11-04T00:00:00.000Z",
     };
-    expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual(task);
+    // Tasks stored before subtasks existed have no parent.
+    expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual({ ...task, parentTaskId: null });
     expect(() => Schema.decodeUnknownSync(ProjectTask)({ ...task, stage: "review" })).toThrow();
+  });
+});
+
+describe("task keys", () => {
+  it("derives a prefix from the project name and formats keys", () => {
+    expect(defaultTaskKeyPrefix("BusyBoy")).toBe("BB");
+    expect(defaultTaskKeyPrefix("t3 code")).toBe("TC");
+    expect(defaultTaskKeyPrefix("busyboy")).toBe("BU");
+    expect(defaultTaskKeyPrefix("한글")).toBe("T");
+    expect(formatTaskKey("BB", 7)).toBe("BB-7");
+  });
+
+  it("rejects a spec with two todos sharing an id", () => {
+    const todo = { id: "t1", text: "Write it", done: false, subtaskId: null };
+    expect(() =>
+      Schema.decodeUnknownSync(ProjectTaskSpec)({
+        background: "",
+        goal: "",
+        nonGoals: "",
+        todos: [todo, todo],
+      }),
+    ).toThrow("Each todo needs its own id.");
   });
 });
 

@@ -64,6 +64,16 @@ import {
   type ProjectTeamTaskStartResult,
   type ProjectTeamTaskUpdateInput,
   type ProjectTeamUpdateSettingsInput,
+  type ProjectTeamCreateTaskInput,
+  type ProjectTeamRestoreTaskSpecInput,
+  type ProjectTeamSplitTaskTodoInput,
+  type ProjectTeamSplitTaskTodoResult,
+  type ProjectTeamTaskDetail,
+  type ProjectTeamTaskRefInput,
+  type ProjectTeamUpdateTaskSpecInput,
+  type ProjectTaskSpec,
+  defaultTaskKeyPrefix,
+  formatTaskKey,
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -130,6 +140,17 @@ const ATTENTION_KIND_LABEL: Record<ProjectAttentionItem["kind"], string> = {
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/** Wakes the PM when the user adds a task and asks for a plan. */
+export function planRequestedWakeText(
+  key: string,
+  task: Pick<ProjectTask, "id" | "title">,
+): string {
+  return [
+    `[Task added by the user] ${key} ${task.title}`,
+    `The user wants a plan for it. Start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user if it has to wait.`,
+  ].join("\n");
 }
 
 /** Wakes the PM when a card appears, so it can add a recommendation beside it. */
@@ -438,6 +459,27 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamAttentionAnswerInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
 
+    /** projectTeam.createTask RPC: the user adds a task; startPlanning asks the PM to start it. */
+    readonly createTaskForUser: (
+      input: ProjectTeamCreateTaskInput,
+    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
+    /** projectTeam.getTask RPC. */
+    readonly getTaskDetail: (
+      input: ProjectTeamTaskRefInput,
+    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
+    /** projectTeam.updateTaskSpec RPC: the user's edit becomes the next version. */
+    readonly updateTaskSpec: (
+      input: ProjectTeamUpdateTaskSpecInput,
+    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
+    /** projectTeam.restoreTaskSpec RPC: an old version comes back as the next version. */
+    readonly restoreTaskSpec: (
+      input: ProjectTeamRestoreTaskSpecInput,
+    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
+    /** projectTeam.splitTaskTodo RPC: a todo becomes its own task under this one. */
+    readonly splitTaskTodo: (
+      input: ProjectTeamSplitTaskTodoInput,
+    ) => Effect.Effect<ProjectTeamSplitTaskTodoResult, ProjectTeamError>;
+
     /** projectTeam.answerDecision RPC: the user answered a card; goes straight to the lead. */
     readonly answerDecision: (
       input: ProjectTeamAnswerDecisionInput,
@@ -495,6 +537,7 @@ const make = Effect.gen(function* () {
   });
   const managerLocks = yield* KeyedLock.make<ProjectId>();
   const taskStartLocks = yield* KeyedLock.make<ProjectId>();
+  const specLocks = yield* KeyedLock.make<ProjectTaskId>();
 
   const roleOf: ProjectTeamService["Service"]["roleOf"] = (threadId) =>
     roleOfThread(threadId).pipe(
@@ -720,6 +763,8 @@ const make = Effect.gen(function* () {
         request: input.request,
         waitsOn,
         now: yield* nowIso,
+        author: "pm",
+        authorThreadId: callerThreadId,
       });
       yield* appendEvent(task, "created", task.title, callerThreadId);
       yield* router.publish(role.projectId);
@@ -775,6 +820,12 @@ const make = Effect.gen(function* () {
             id: task.id,
             stage: "planning",
             leadThreadId: lead.childThreadId,
+          });
+          yield* repository.addTaskSession({
+            taskId: started.id,
+            threadId: lead.childThreadId,
+            role: "lead",
+            createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
           yield* router.publish(role.projectId);
@@ -1034,6 +1085,7 @@ const make = Effect.gen(function* () {
       readonly quietHours?: ProjectTeamSettings["quietHours"] | null | undefined;
       readonly persona?: PersonaPatch | undefined;
       readonly enabled?: boolean | undefined;
+      readonly taskKeyPrefix?: string | undefined;
     },
     actorThreadId: ThreadId | null,
   ) =>
@@ -1071,6 +1123,7 @@ const make = Effect.gen(function* () {
             ...(quietHours === undefined ? {} : { quietHours }),
             persona,
             ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
+            ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
             // Only setting the interval by hand stops it adapting, for good; other fields
             // keep the pin as is.
             ...(patch.sitrepIntervalMinutes === undefined ? {} : { intervalPinnedAt: now }),
@@ -1188,6 +1241,175 @@ const make = Effect.gen(function* () {
       });
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question."));
+
+  const taskKeyPrefixFor = (projectId: ProjectId, settings: ProjectTeamSettings) =>
+    Effect.gen(function* () {
+      if (settings.taskKeyPrefix !== undefined) return settings.taskKeyPrefix;
+      const project = yield* projects.get(projectId);
+      return defaultTaskKeyPrefix(Option.isSome(project) ? project.value.title : "");
+    });
+
+  const taskDetail = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      const manager = yield* requireManager(task.projectId);
+      const prefix = yield* taskKeyPrefixFor(task.projectId, manager.settings);
+      return {
+        task,
+        key: formatTaskKey(prefix, task.number),
+        versions: yield* repository.listSpecVersions(task.id),
+        sessions: yield* repository.listTaskSessions(task.id),
+        children: (yield* repository.listChildTasks(task.id)).map(toTaskBrief),
+        openAttention: yield* repository.listOpenAttentionItems({
+          projectId: task.projectId,
+          taskId: task.id,
+        }),
+      } satisfies ProjectTeamTaskDetail;
+    });
+
+  const latestSpec = (task: ProjectTask) =>
+    repository.getLatestSpecVersion(task.id).pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(teamError(`#${task.number} has no spec.`, task.projectId)),
+          onSome: Effect.succeed,
+        }),
+      ),
+    );
+
+  /** Stores the user's spec as the next version while holding the task's spec lock. */
+  const appendUserSpec = (task: ProjectTask, spec: ProjectTaskSpec, note: string) =>
+    Effect.gen(function* () {
+      const version = yield* repository.appendSpecVersion({
+        taskId: task.id,
+        spec,
+        author: "user",
+        authorThreadId: null,
+        note,
+        createdAt: yield* nowIso,
+      });
+      yield* appendEvent(task, "note", `Spec v${version.version}: ${note}`, null);
+      return version;
+    });
+
+  const createTaskForUser: ProjectTeamService["Service"]["createTaskForUser"] = (input) =>
+    Effect.gen(function* () {
+      yield* requireManager(input.projectId);
+      if (input.parentTaskId !== undefined) {
+        yield* requireTask(input.parentTaskId, input.projectId);
+      }
+      const context = input.context.trim();
+      const task = yield* repository.createTask({
+        id: ProjectTaskId.make(yield* newId("task")),
+        projectId: input.projectId,
+        title: input.title,
+        request: context.length > 0 ? context : input.title,
+        waitsOn: [],
+        parentTaskId: input.parentTaskId,
+        spec: { background: context, goal: "", nonGoals: "", todos: [] },
+        now: yield* nowIso,
+        author: "user",
+        authorThreadId: null,
+      });
+      yield* appendEvent(task, "created", task.title, null);
+      const detail = yield* taskDetail(task);
+      if (input.startPlanning) {
+        yield* wakeManagerWith(
+          task.projectId,
+          `project-team:plan-requested:${task.id}`,
+          planRequestedWakeText(detail.key, task),
+        );
+      }
+      yield* router.publish(task.projectId);
+      return detail;
+    }).pipe(orTeamError("Could not create the task.", input.projectId));
+
+  const getTaskDetail: ProjectTeamService["Service"]["getTaskDetail"] = (input) =>
+    requireTask(input.taskId, input.projectId).pipe(
+      Effect.flatMap(taskDetail),
+      orTeamError("Could not read the task.", input.projectId),
+    );
+
+  const updateTaskSpec: ProjectTeamService["Service"]["updateTaskSpec"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* requireTask(input.taskId, input.projectId);
+      yield* specLocks.withLock(
+        task.id,
+        Effect.gen(function* () {
+          const latest = yield* latestSpec(task);
+          if (latest.version !== input.baseVersion) {
+            return yield* teamError(
+              `The spec changed to v${latest.version} while you edited v${input.baseVersion}.`,
+              task.projectId,
+            );
+          }
+          yield* appendUserSpec(task, input.spec, input.note || "Edited by the user");
+        }),
+      );
+      yield* router.publish(task.projectId);
+      return yield* taskDetail(task);
+    }).pipe(orTeamError("Could not update the spec.", input.projectId));
+
+  const restoreTaskSpec: ProjectTeamService["Service"]["restoreTaskSpec"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* requireTask(input.taskId, input.projectId);
+      yield* specLocks.withLock(
+        task.id,
+        Effect.gen(function* () {
+          const versions = yield* repository.listSpecVersions(task.id);
+          const source = versions.find((version) => version.version === input.version);
+          if (source === undefined) {
+            return yield* teamError(`#${task.number} has no v${input.version}.`, task.projectId);
+          }
+          yield* appendUserSpec(task, source.spec, `Restored v${input.version}`);
+        }),
+      );
+      yield* router.publish(task.projectId);
+      return yield* taskDetail(task);
+    }).pipe(orTeamError("Could not restore the spec.", input.projectId));
+
+  const splitTaskTodo: ProjectTeamService["Service"]["splitTaskTodo"] = (input) =>
+    Effect.gen(function* () {
+      const parent = yield* requireTask(input.taskId, input.projectId);
+      const subtask = yield* specLocks.withLock(
+        parent.id,
+        Effect.gen(function* () {
+          const latest = yield* latestSpec(parent);
+          const todo = latest.spec.todos.find((candidate) => candidate.id === input.todoId);
+          if (todo === undefined) {
+            return yield* teamError(`#${parent.number} has no such todo.`, parent.projectId);
+          }
+          if (todo.subtaskId !== null) {
+            return yield* teamError(`"${todo.text}" is already its own task.`, parent.projectId);
+          }
+          const subtask = yield* repository.createTask({
+            id: ProjectTaskId.make(yield* newId("task")),
+            projectId: parent.projectId,
+            title: clip(todo.text, 500),
+            request: todo.text,
+            waitsOn: [],
+            parentTaskId: parent.id,
+            spec: { background: todo.text, goal: "", nonGoals: "", todos: [] },
+            now: yield* nowIso,
+            author: "user",
+            authorThreadId: null,
+          });
+          yield* appendEvent(subtask, "created", subtask.title, null);
+          yield* appendUserSpec(
+            parent,
+            {
+              ...latest.spec,
+              todos: latest.spec.todos.map((candidate) =>
+                candidate.id === todo.id ? { ...candidate, subtaskId: subtask.id } : candidate,
+              ),
+            },
+            `Split "${clip(todo.text, 80)}" into its own task`,
+          );
+          return subtask;
+        }),
+      );
+      yield* router.publish(parent.projectId);
+      return { subtask, parent: yield* taskDetail(parent) };
+    }).pipe(orTeamError("Could not split the todo.", input.projectId));
 
   const answerDecision: ProjectTeamService["Service"]["answerDecision"] = (input) =>
     Effect.gen(function* () {
@@ -1375,12 +1597,7 @@ const make = Effect.gen(function* () {
               }).pipe(Effect.as([])),
             ),
           )).filter(isWaitingOnUser).length;
-          const presence = yield* managerPresence(
-            manager,
-            open,
-            latestSitrep,
-            otherThreadsWaiting,
-          );
+          const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
           const decisionCards = yield* listDecisionCards(projectId, open);
           const tasks = yield* repository.listTasks({ projectId });
           return {
@@ -1396,6 +1613,7 @@ const make = Effect.gen(function* () {
             enabled: manager.settings.enabled,
             presence,
             decisionCards,
+            taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
             tasks: tasks.map((task) => ({
               number: task.number,
               title: task.title,
@@ -1468,6 +1686,11 @@ const make = Effect.gen(function* () {
     updateSettingsAsManager,
     updateSettings,
     askUser,
+    createTaskForUser,
+    getTaskDetail,
+    updateTaskSpec,
+    restoreTaskSpec,
+    splitTaskTodo,
     answerDecision,
     answerAttention,
     listMemory,

@@ -25,6 +25,11 @@ import {
   ProjectTaskEventKind,
   ProjectTaskId,
   ProjectTaskOutcome,
+  ProjectTaskSession,
+  ProjectTaskSessionRole,
+  ProjectTaskSpec,
+  ProjectTaskSpecAuthor,
+  ProjectTaskSpecVersion,
   ProjectTaskStage,
   ProjectTeamSettings,
   ThreadId,
@@ -63,6 +68,12 @@ export interface CreateProjectTaskInput {
   readonly request: string;
   readonly waitsOn: ReadonlyArray<ProjectTaskId>;
   readonly now: IsoDateTime;
+  readonly parentTaskId?: ProjectTaskId | undefined;
+  /** Spec v1. Defaults to the request as background. */
+  readonly spec?: ProjectTaskSpec | undefined;
+  /** Who wrote spec v1. Defaults to the PM. */
+  readonly author?: ProjectTaskSpecAuthor | undefined;
+  readonly authorThreadId?: ThreadId | null | undefined;
 }
 
 export interface UpdateProjectTaskInput {
@@ -76,6 +87,15 @@ export interface UpdateProjectTaskInput {
   readonly resultSummary?: string;
   readonly lastOutcome?: ProjectTaskOutcome;
   readonly nudgeCount?: number;
+}
+
+export interface AppendProjectTaskSpecVersionInput {
+  readonly taskId: ProjectTaskId;
+  readonly spec: ProjectTaskSpec;
+  readonly author: ProjectTaskSpecAuthor;
+  readonly authorThreadId: ThreadId | null;
+  readonly note: string;
+  readonly createdAt: IsoDateTime;
 }
 
 export interface AppendProjectTaskEventInput {
@@ -150,6 +170,28 @@ export class ProjectTeamRepository extends Context.Service<
       readonly stages?: ReadonlyArray<ProjectTaskStage>;
     }) => Result<ReadonlyArray<ProjectTask>>;
     readonly findTaskByLeadThreadId: (threadId: ThreadId) => Result<Option.Option<ProjectTask>>;
+    readonly listChildTasks: (parentTaskId: ProjectTaskId) => Result<ReadonlyArray<ProjectTask>>;
+
+    /** Oldest first. */
+    readonly listSpecVersions: (
+      taskId: ProjectTaskId,
+    ) => Result<ReadonlyArray<ProjectTaskSpecVersion>>;
+    readonly getLatestSpecVersion: (
+      taskId: ProjectTaskId,
+    ) => Result<Option.Option<ProjectTaskSpecVersion>>;
+    /** Stores the spec as the next version number. */
+    readonly appendSpecVersion: (
+      input: AppendProjectTaskSpecVersionInput,
+    ) => Result<ProjectTaskSpecVersion>;
+    /** Links an agent thread to a task; linking it again keeps the first role. */
+    readonly addTaskSession: (input: {
+      readonly taskId: ProjectTaskId;
+      readonly threadId: ThreadId;
+      readonly role: ProjectTaskSessionRole;
+      readonly createdAt: IsoDateTime;
+    }) => Result<void>;
+    /** Oldest first. */
+    readonly listTaskSessions: (taskId: ProjectTaskId) => Result<ReadonlyArray<ProjectTaskSession>>;
     /**
      * Updates the given fields. A stage change also sets stage_changed_at and
      * resets nudge_count to 0, overriding a nudgeCount in the same call.
@@ -274,12 +316,17 @@ const AttentionRow = Schema.Struct({
   supersededAt: Schema.NullOr(IsoDateTime),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
 });
+const SpecVersionRow = Schema.Struct({
+  ...ProjectTaskSpecVersion.fields,
+  spec: Schema.fromJsonString(ProjectTaskSpec),
+});
 const CountRow = Schema.Struct({ count: NonNegativeInt });
 const IdRow = Schema.Struct({ id: Schema.String });
 
 const SettingsJson = Schema.fromJsonString(ProjectTeamSettings);
 const WaitsOnJson = Schema.fromJsonString(Schema.Array(ProjectTaskId));
 const OptionsJson = Schema.fromJsonString(Schema.Array(Schema.String));
+const SpecJson = Schema.fromJsonString(ProjectTaskSpec);
 
 const ProjectIdRequest = Schema.Struct({ projectId: ProjectId });
 
@@ -317,6 +364,7 @@ export const make = Effect.gen(function* () {
     request AS "request",
     stage AS "stage",
     waits_on_json AS "waitsOn",
+    parent_task_id AS "parentTaskId",
     lead_thread_id AS "leadThreadId",
     pr_url AS "prUrl",
     plan_summary AS "planSummary",
@@ -458,17 +506,18 @@ export const make = Effect.gen(function* () {
       title: Schema.String,
       request: Schema.String,
       waitsOn: WaitsOnJson,
+      parentTaskId: Schema.NullOr(ProjectTaskId),
       now: IsoDateTime,
     }),
     Result: TaskRow,
-    execute: ({ id, projectId, title, request, waitsOn, now }) => sql`
+    execute: ({ id, projectId, title, request, waitsOn, parentTaskId, now }) => sql`
       INSERT INTO project_tasks (
-        task_id, project_id, number, title, request, stage, waits_on_json,
+        task_id, project_id, number, title, request, stage, waits_on_json, parent_task_id,
         nudge_count, stage_changed_at, created_at, updated_at
       )
       SELECT
         ${id}, ${projectId}, COALESCE(MAX(number), 0) + 1, ${title}, ${request}, 'inbox',
-        ${waitsOn}, 0, ${now}, ${now}, ${now}
+        ${waitsOn}, ${parentTaskId}, 0, ${now}, ${now}, ${now}
       FROM project_tasks
       WHERE project_id = ${projectId}
       RETURNING ${taskColumns}
@@ -543,6 +592,94 @@ export const make = Effect.gen(function* () {
       `;
     },
   });
+  const findChildTasks = SqlSchema.findAll({
+    Request: Schema.Struct({ parentTaskId: ProjectTaskId }),
+    Result: TaskRow,
+    execute: ({ parentTaskId }) => sql`
+      SELECT ${taskColumns}
+      FROM project_tasks
+      WHERE parent_task_id = ${parentTaskId}
+      ORDER BY number ASC
+    `,
+  });
+
+  // Spec versions and sessions
+
+  const specVersionColumns = sql.literal(`
+    task_id AS "taskId",
+    version AS "version",
+    spec_json AS "spec",
+    author AS "author",
+    author_thread_id AS "authorThreadId",
+    note AS "note",
+    created_at AS "createdAt"
+  `);
+  const insertSpecVersion = SqlSchema.findOne({
+    Request: Schema.Struct({
+      taskId: ProjectTaskId,
+      spec: SpecJson,
+      author: ProjectTaskSpecAuthor,
+      authorThreadId: Schema.NullOr(ThreadId),
+      note: Schema.String,
+      createdAt: IsoDateTime,
+    }),
+    Result: SpecVersionRow,
+    execute: ({ taskId, spec, author, authorThreadId, note, createdAt }) => sql`
+      INSERT INTO project_task_spec_versions (
+        task_id, version, spec_json, author, author_thread_id, note, created_at
+      )
+      SELECT
+        ${taskId}, COALESCE(MAX(version), 0) + 1, ${spec}, ${author}, ${authorThreadId},
+        ${note}, ${createdAt}
+      FROM project_task_spec_versions
+      WHERE task_id = ${taskId}
+      RETURNING ${specVersionColumns}
+    `,
+  });
+  const findSpecVersions = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: SpecVersionRow,
+    execute: ({ taskId }) => sql`
+      SELECT ${specVersionColumns}
+      FROM project_task_spec_versions
+      WHERE task_id = ${taskId}
+      ORDER BY version ASC
+    `,
+  });
+  const findLatestSpecVersion = SqlSchema.findOneOption({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: SpecVersionRow,
+    execute: ({ taskId }) => sql`
+      SELECT ${specVersionColumns}
+      FROM project_task_spec_versions
+      WHERE task_id = ${taskId}
+      ORDER BY version DESC
+      LIMIT 1
+    `,
+  });
+  const insertTaskSession = SqlSchema.void({
+    Request: ProjectTaskSession,
+    execute: ({ taskId, threadId, role, createdAt }) => sql`
+      INSERT INTO project_task_sessions (task_id, thread_id, role, created_at)
+      VALUES (${taskId}, ${threadId}, ${role}, ${createdAt})
+      ON CONFLICT (task_id, thread_id) DO NOTHING
+    `,
+  });
+  const findTaskSessions = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: ProjectTaskSession,
+    execute: ({ taskId }) => sql`
+      SELECT
+        task_id AS "taskId",
+        thread_id AS "threadId",
+        role AS "role",
+        created_at AS "createdAt"
+      FROM project_task_sessions
+      WHERE task_id = ${taskId}
+      ORDER BY created_at ASC, thread_id ASC
+    `,
+  });
+
   const searchTaskRows = SqlSchema.findAll({
     Request: Schema.Struct({ projectId: ProjectId, pattern: Schema.String, limit: Schema.Int }),
     Result: TaskRow,
@@ -885,7 +1022,27 @@ export const make = Effect.gen(function* () {
         Effect.mapError(toRepositoryError("setUnreadSitrepStreak")),
       ),
 
-    createTask: (input) => insertTask(input).pipe(Effect.mapError(toRepositoryError("createTask"))),
+    createTask: (input) =>
+      Effect.gen(function* () {
+        const task = yield* insertTask({
+          id: input.id,
+          projectId: input.projectId,
+          title: input.title,
+          request: input.request,
+          waitsOn: input.waitsOn,
+          parentTaskId: input.parentTaskId ?? null,
+          now: input.now,
+        });
+        yield* insertSpecVersion({
+          taskId: task.id,
+          spec: input.spec ?? { background: input.request, goal: "", nonGoals: "", todos: [] },
+          author: input.author ?? "pm",
+          authorThreadId: input.authorThreadId ?? null,
+          note: "Created",
+          createdAt: input.now,
+        });
+        return task;
+      }).pipe(sql.withTransaction, Effect.mapError(toRepositoryError("createTask"))),
     getTask: (id) => findTask({ id }).pipe(Effect.mapError(toRepositoryError("getTask"))),
     listTasks: ({ projectId, stages }) =>
       stages !== undefined && stages.length === 0
@@ -897,6 +1054,20 @@ export const make = Effect.gen(function* () {
       findTaskByLead({ threadId }).pipe(
         Effect.mapError(toRepositoryError("findTaskByLeadThreadId")),
       ),
+    listChildTasks: (parentTaskId) =>
+      findChildTasks({ parentTaskId }).pipe(Effect.mapError(toRepositoryError("listChildTasks"))),
+    listSpecVersions: (taskId) =>
+      findSpecVersions({ taskId }).pipe(Effect.mapError(toRepositoryError("listSpecVersions"))),
+    getLatestSpecVersion: (taskId) =>
+      findLatestSpecVersion({ taskId }).pipe(
+        Effect.mapError(toRepositoryError("getLatestSpecVersion")),
+      ),
+    appendSpecVersion: (input) =>
+      insertSpecVersion(input).pipe(Effect.mapError(toRepositoryError("appendSpecVersion"))),
+    addTaskSession: (input) =>
+      insertTaskSession(input).pipe(Effect.mapError(toRepositoryError("addTaskSession"))),
+    listTaskSessions: (taskId) =>
+      findTaskSessions({ taskId }).pipe(Effect.mapError(toRepositoryError("listTaskSessions"))),
     updateTask: (input) =>
       updateTaskRow(input).pipe(Effect.mapError(toRepositoryError("updateTask"))),
     searchTasks: ({ projectId, query, limit }) =>
