@@ -105,7 +105,7 @@ const make = Effect.gen(function* () {
       }
       if (item.supersededAt !== null) {
         return yield* teamError(
-          `Attention item ${item.id} was replaced by a newer question.`,
+          `Attention item ${item.id} is closed: a newer question replaced it or its task ended.`,
           item.projectId,
         );
       }
