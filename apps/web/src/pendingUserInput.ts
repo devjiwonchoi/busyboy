@@ -17,6 +17,8 @@ export function projectPendingUserInputAnswer(
 export interface PendingUserInputDraftAnswer {
   selectedOptionValues?: string[];
   customAnswer?: string;
+  /** Free text attached to the picked option, e.g. what to change. */
+  note?: string;
   attachmentCount?: number;
   attachmentsBlocked?: boolean;
 }
@@ -53,6 +55,48 @@ function normalizeSelectedOptionValues(value: string[] | undefined): string[] {
   return Array.from(new Set(value.filter((entry) => typeof entry === "string")));
 }
 
+const NOTE_PREFIX = "Note: ";
+const NOTE_SEPARATOR = `\n${NOTE_PREFIX}`;
+
+/** Options like "Request changes" ask for detail, so picking one opens the note field. */
+export function pendingUserInputOptionInvitesNote(option: {
+  label: string;
+  value?: string | undefined;
+}): boolean {
+  return /\b(request(ed)? changes?|changes? requested|revise|reject|decline|other|feedback|something else)\b/i.test(
+    `${option.label} ${option.value ?? ""}`,
+  );
+}
+
+function withNote(answer: string | string[], note: string | null): string | string[] {
+  if (note === null) return answer;
+  return Array.isArray(answer)
+    ? [...answer, `${NOTE_PREFIX}${note}`]
+    : `${answer}${NOTE_SEPARATOR}${note}`;
+}
+
+/** Splits an answer sent with a note back into the picked option(s) and the note. */
+export function splitPendingUserInputAnswerNote(answer: unknown): {
+  choices: string[];
+  note: string | null;
+} {
+  if (Array.isArray(answer)) {
+    const values = answer.filter((entry): entry is string => typeof entry === "string");
+    const noteEntry = values.find((entry) => entry.startsWith(NOTE_PREFIX));
+    return {
+      choices: values.filter((entry) => entry !== noteEntry),
+      note: noteEntry ? noteEntry.slice(NOTE_PREFIX.length) : null,
+    };
+  }
+  if (typeof answer !== "string") return { choices: [], note: null };
+  const index = answer.indexOf(NOTE_SEPARATOR);
+  if (index === -1) return { choices: [answer], note: null };
+  return {
+    choices: [answer.slice(0, index)],
+    note: answer.slice(index + NOTE_SEPARATOR.length),
+  };
+}
+
 export function resolvePendingUserInputAnswer(
   question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
@@ -71,15 +115,17 @@ export function resolvePendingUserInputAnswer(
   const selectedOptionValues = normalizeSelectedOptionValues(draft?.selectedOptionValues).filter(
     (value) => question.options.some((option) => (option.value ?? option.label) === value),
   );
+  const note = question.allowCustomAnswer === false ? null : normalizeDraftAnswer(draft?.note);
   if (question.multiSelect) {
     return selectedOptionValues.length > 0
-      ? selectedOptionValues
+      ? withNote(selectedOptionValues, note)
       : (customAnswer ??
           (question.allowCustomAnswer !== false && (draft?.attachmentCount ?? 0) > 0 ? "" : null));
   }
 
+  const selected = selectedOptionValues[0];
   return (
-    selectedOptionValues[0] ??
+    (selected !== undefined ? withNote(selected, note) : undefined) ??
     customAnswer ??
     (question.allowCustomAnswer !== false && (draft?.attachmentCount ?? 0) > 0 ? "" : null)
   );
@@ -97,6 +143,7 @@ export function setPendingUserInputCustomAnswer(
 
   return {
     customAnswer,
+    ...(draft?.note ? { note: draft.note } : {}),
     ...(selectedOptionValues && selectedOptionValues.length > 0 ? { selectedOptionValues } : {}),
   };
 }
@@ -130,6 +177,7 @@ export function togglePendingUserInputOptionSelection(
 
     return {
       customAnswer: "",
+      ...(draft?.note ? { note: draft.note } : {}),
       ...(nextSelectedOptionValues.length > 0
         ? { selectedOptionValues: nextSelectedOptionValues }
         : {}),
@@ -138,8 +186,16 @@ export function togglePendingUserInputOptionSelection(
 
   return {
     customAnswer: "",
+    ...(draft?.note ? { note: draft.note } : {}),
     selectedOptionValues: [optionValue],
   };
+}
+
+export function setPendingUserInputNote(
+  draft: PendingUserInputDraftAnswer | undefined,
+  note: string,
+): PendingUserInputDraftAnswer {
+  return { ...draft, note };
 }
 
 export function buildPendingUserInputAnswers(

@@ -60,6 +60,7 @@ function Questions({ initialIndex = 0 }: { initialIndex?: number }) {
             ),
           }));
         }}
+        onChangeNote={() => {}}
         onDismiss={() => {}}
       />
     </>

@@ -27,6 +27,7 @@ import {
   derivePendingUserInputProgress,
   projectPendingUserInputAnswer,
   setPendingUserInputCustomAnswer,
+  setPendingUserInputNote,
   togglePendingUserInputOptionSelection,
   type PendingUserInputDraftAnswer,
 } from "../../pendingUserInput";
@@ -473,6 +474,22 @@ export function usePendingThreadRequests(input: {
     setPendingUserInputAnswersByRequestId,
   });
 
+  const onChangeActivePendingUserInputNote = useStableCallback(
+    (questionId: string, note: string) => {
+      if (!activePendingUserInput) return;
+      setPendingUserInputAnswersByRequestId((existing) => ({
+        ...existing,
+        [activePendingRequestKey]: {
+          ...existing[activePendingRequestKey],
+          [questionId]: setPendingUserInputNote(
+            existing[activePendingRequestKey]?.[questionId],
+            note,
+          ),
+        },
+      }));
+    },
+  );
+
   const onAdvanceActivePendingUserInput = () => {
     if (
       !activePendingUserInput ||
@@ -516,6 +533,7 @@ export function usePendingThreadRequests(input: {
     onDismissUserInput: onDismissUserInputStable,
     onSelectActivePendingUserInputOption: onSelectActivePendingUserInputOptionStable,
     onChangeActivePendingUserInputCustomAnswer,
+    onChangeActivePendingUserInputNote,
     onAdvanceActivePendingUserInput,
     onAdvanceActivePendingUserInputStable,
     onPreviousActivePendingUserInputQuestion: onPreviousActivePendingUserInputQuestionStable,

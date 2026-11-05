@@ -2437,6 +2437,7 @@ export default function ChatView(props: ChatViewProps) {
     onDismissUserInput: onDismissUserInputStable,
     onSelectActivePendingUserInputOption: onSelectActivePendingUserInputOptionStable,
     onChangeActivePendingUserInputCustomAnswer,
+    onChangeActivePendingUserInputNote,
     onAdvanceActivePendingUserInput,
     onAdvanceActivePendingUserInputStable,
     onPreviousActivePendingUserInputQuestion: onPreviousActivePendingUserInputQuestionStable,
@@ -8241,6 +8242,9 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               onChangeActivePendingUserInputCustomAnswer={
                                 onChangeActivePendingUserInputCustomAnswer
+                              }
+                              onChangeActivePendingUserInputNote={
+                                onChangeActivePendingUserInputNote
                               }
                               onProviderModelSelect={onProviderModelSelectStable}
                               onOpenProviderSetup={openProviderSetupStable}
