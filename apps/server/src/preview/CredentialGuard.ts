@@ -35,6 +35,19 @@ interface FrameCredentials {
   readonly revealed: boolean;
 }
 
+const isFrameCredentials = (value: unknown): value is FrameCredentials => {
+  const frame = value as Partial<FrameCredentials> | null;
+  return (
+    typeof frame === "object" &&
+    frame !== null &&
+    typeof frame.origin === "string" &&
+    typeof frame.empty === "number" &&
+    Array.isArray(frame.values) &&
+    frame.values.every((each) => typeof each === "string") &&
+    typeof frame.revealed === "boolean"
+  );
+};
+
 /** Reads password fields, and whether a known value shows as plain text, in one frame. */
 const readScript = (known: ReadonlyArray<string>) => `((known) => {
   const values = [];
@@ -157,7 +170,9 @@ export const makeCredentialGuard = () => {
       );
       const results = await read();
       if (results.some((result) => result === undefined)) return undefined;
-      return (results as unknown as ReadonlyArray<ReadonlyArray<FrameCredentials>>).flat();
+      const frames = (results as unknown as ReadonlyArray<ReadonlyArray<unknown>>).flat();
+      // Anything else means the read didn't run as written, so nothing is known.
+      return frames.every(isFrameCredentials) ? frames : undefined;
     };
     // Frames come and go while a page loads; a second look usually finds it settled.
     return attempt().catch(() => attempt().catch(() => undefined));
