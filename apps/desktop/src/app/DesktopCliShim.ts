@@ -147,7 +147,12 @@ export const install = Effect.gen(function* () {
           appImage,
           executableName: path.basename(process.execPath),
         }),
-        onNone: () => ({ kind: "direct" as const, executable: process.execPath, entry }),
+        onNone: () => ({
+          kind: "direct" as const,
+          // Packaged macOS builds ship their own Node; their Electron ignores ELECTRON_RUN_AS_NODE.
+          executable: Option.getOrElse(environment.serverNodePath, () => process.execPath),
+          entry,
+        }),
       });
   const content = renderCliShim({ target, shimPath, t3Home: environment.baseDir });
 

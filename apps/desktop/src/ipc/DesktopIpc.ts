@@ -10,6 +10,8 @@ export interface DesktopIpcInvokeEvent {
 
 export interface DesktopIpcSyncEvent {
   returnValue: unknown;
+  /** Electron's WebContents; `"webview"` marks an in-app browser guest. */
+  readonly sender?: { readonly getType?: () => string };
 }
 
 export type DesktopIpcHandleListener = (
@@ -128,6 +130,12 @@ export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
           try: () => {
             ipcMain.removeAllListeners(channel);
             ipcMain.on(channel, (event) => {
+              // Sync methods serve only the app window's preload. One of them returns the
+              // backend's bootstrap token, so a browser guest page must never get an answer.
+              if (event.sender?.getType?.() === "webview") {
+                event.returnValue = null;
+                return;
+              }
               event.returnValue = runSync(
                 Effect.gen(function* () {
                   yield* Effect.annotateCurrentSpan({ channel });

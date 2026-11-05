@@ -137,6 +137,28 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
+  it.effect("runs the packaged macOS server from Resources/server on its bundled Node", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment({
+        platform: "darwin",
+        isPackaged: true,
+        appPath: "/Applications/BusyBoy.app/Contents/Resources/app.asar",
+        resourcesPath: "/Applications/BusyBoy.app/Contents/Resources",
+      });
+
+      const resources = "/Applications/BusyBoy.app/Contents/Resources";
+      assert.equal(environment.serverRoot, `${resources}/server`);
+      assert.equal(environment.backendEntryPath, `${resources}/server/apps/server/dist/bin.mjs`);
+      assert.deepEqual(
+        environment.serverNodePath,
+        Option.some(`${resources}/server/bin/busyboy-node`),
+      );
+      assert.equal(environment.compileCachePath, `${resources}/server/compileCache.cjs`);
+      // The window's UI stays inside the integrity-checked app.asar.
+      assert.equal(environment.clientAssetsDir, `${resources}/app.asar/apps/server/dist/client`);
+    }),
+  );
+
   it.effect("uses the stable desktop entry as the packaged Linux portal identity", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment({

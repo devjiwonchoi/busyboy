@@ -55,6 +55,12 @@ export class DesktopEnvironment extends Context.Service<
     readonly appRoot: string;
     readonly serverRoot: string;
     readonly backendEntryPath: string;
+    /**
+     * The Node binary that runs the backend and the CLI. Packaged macOS builds ship their
+     * own, because their Electron has ELECTRON_RUN_AS_NODE turned off. None elsewhere: the
+     * backend runs on Electron in Node mode.
+     */
+    readonly serverNodePath: Option.Option<string>;
     readonly clientAssetsDir: string;
     readonly backendCwd: string;
     readonly preloadPath: string;
@@ -174,10 +180,15 @@ const make = Effect.fn("desktop.environment.make")(function* (
   });
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
+  // Packaged macOS builds keep the server outside app.asar, in Resources/server, with its
+  // own Node binary: Electron's Node mode is fused off there, and plain Node can't read asar.
+  const separateServer = input.isPackaged && input.platform === "darwin";
   const serverRoot =
     input.isPackaged && input.platform === "win32"
       ? path.join(input.resourcesPath, "server.asar")
-      : appRoot;
+      : separateServer
+        ? path.join(input.resourcesPath, "server")
+        : appRoot;
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion,
@@ -218,10 +229,17 @@ const make = Effect.fn("desktop.environment.make")(function* (
     appRoot,
     serverRoot,
     backendEntryPath: path.join(serverRoot, "apps/server/dist/bin.mjs"),
-    clientAssetsDir: path.join(serverRoot, "apps/server/dist/client"),
+    serverNodePath: separateServer
+      ? Option.some(path.join(serverRoot, "bin", "busyboy-node"))
+      : Option.none(),
+    // The app window's UI is served from app.asar, where the integrity check covers it.
+    clientAssetsDir: path.join(separateServer ? appRoot : serverRoot, "apps/server/dist/client"),
     backendCwd: input.isPackaged ? homeDirectory : appRoot,
     preloadPath: path.join(input.dirname, "preload.cjs"),
-    compileCachePath: path.join(input.dirname, "compileCache.cjs"),
+    // Loaded by the backend's Node, so it sits beside the server when that runs outside asar.
+    compileCachePath: separateServer
+      ? path.join(serverRoot, "compileCache.cjs")
+      : path.join(input.dirname, "compileCache.cjs"),
     appUpdateYmlPath: input.isPackaged
       ? path.join(resourcesPath, "app-update.yml")
       : path.join(input.appPath, "dev-app-update.yml"),

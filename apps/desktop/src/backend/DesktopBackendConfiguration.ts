@@ -219,8 +219,11 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       ...buildObservabilityFragment(input.observabilitySettings),
     };
 
+    // Packaged macOS builds run the backend on their bundled Node: their Electron ignores
+    // ELECTRON_RUN_AS_NODE, so no other program can run code as BusyBoy.
+    const serverNode = environment.serverNodePath;
     return {
-      executablePath: process.execPath,
+      executablePath: Option.getOrElse(serverNode, () => process.execPath),
       // Packaged builds only, so a dev instance never shares the cache with the
       // prod app it is often run from. `--require` rather than NODE_COMPILE_CACHE,
       // so the setting does not leak into the provider and terminal processes
@@ -235,7 +238,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       cwd: environment.backendCwd,
       env: {
         ...backendChildEnvPatch(),
-        ELECTRON_RUN_AS_NODE: "1",
+        ...(Option.isNone(serverNode) ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
         BUSYBOY_CLI_PATH: Option.getOrUndefined(input.cliPath),
       },
       extendEnv: true,

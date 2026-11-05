@@ -1,7 +1,6 @@
 // @effect-diagnostics globalTimers:off -- Helper timeouts run at child-process callback boundaries outside Effect fibers.
-// @effect-diagnostics nodeBuiltinImport:off -- This desktop-only helper owns a Node child process.
 
-import * as NodeChildProcess from "node:child_process";
+import { utilityProcess, type UtilityProcess } from "electron";
 
 import type {
   CapturedWindowAccessibilityContext,
@@ -46,18 +45,15 @@ const unavailableProcess = (): AccessibilityProcess => ({
 });
 
 export function startSnapShotAccessibilityProcess(workerPath: string): AccessibilityProcess {
-  let worker: NodeChildProcess.ChildProcess;
+  let worker: UtilityProcess;
   try {
-    worker = NodeChildProcess.fork(workerPath, ["read"], {
-      // Electron defaults to its Helper executable on macOS, which does not
-      // share the main app's Accessibility grant checked during setup.
-      execPath: process.execPath,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
-      },
-      execArgv: [],
-      stdio: ["ignore", "ignore", "inherit", "ipc"],
+    // A utility process, not `child_process.fork`: fork needs ELECTRON_RUN_AS_NODE, which
+    // release builds turn off so no other program can run code as BusyBoy. Utility processes
+    // load the worker from the integrity-checked app.asar, and without `disclaim` macOS
+    // attributes them to BusyBoy, so they share the app's Accessibility grant.
+    worker = utilityProcess.fork(workerPath, ["read"], {
+      serviceName: "BusyBoy Snapshot Accessibility",
+      stdio: ["ignore", "ignore", "inherit"],
     });
   } catch {
     return unavailableProcess();
@@ -90,9 +86,7 @@ export function startSnapShotAccessibilityProcess(workerPath: string): Accessibi
     startTimeout ??= setTimeout(() => finish(), START_TIMEOUT_MS);
     startTimeout.unref();
     try {
-      worker.send(request, (error) => {
-        if (error) finish();
-      });
+      worker.postMessage(request);
     } catch {
       finish();
     }

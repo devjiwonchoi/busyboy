@@ -3,27 +3,40 @@ import {
   type SnapShotAccessibilityRequest,
 } from "./SnapShotAccessibility.ts";
 
-process.once("disconnect", () => process.exit(0));
+// Runs as an Electron utility process; `process.parentPort` is its channel to the app.
+const parentPort = (
+  process as {
+    readonly parentPort?: {
+      on(event: "message", listener: (event: { readonly data: unknown }) => void): void;
+      postMessage(message: unknown): void;
+    };
+  }
+).parentPort;
+
+const send = (message: unknown) => parentPort?.postMessage(message);
+
+const nextMessage = () =>
+  new Promise<unknown>((resolve) => {
+    parentPort?.on("message", (event) => resolve(event.data));
+  });
 
 async function readAccessibility() {
   const { App } = await import("@crowecawcaw/xa11y");
-  process.send?.("ready");
-  const request = await new Promise<SnapShotAccessibilityRequest>((resolve) => {
-    process.once("message", resolve);
-  });
+  send("ready");
+  const request = (await nextMessage()) as SnapShotAccessibilityRequest;
   let started = false;
   const markStarted = () => {
     if (started) return;
     started = true;
-    process.send?.("started");
+    send("started");
   };
   const context = await readAccessibleWindowContextWithApp(App, request, markStarted).catch(
     () => undefined,
   );
   markStarted();
-  process.send?.({ type: "result", context });
+  send({ type: "result", context });
 }
 
-if (process.argv[2] === "read") {
-  void readAccessibility().catch(() => process.send?.({ type: "result" }));
+if (process.argv.includes("read")) {
+  void readAccessibility().catch(() => send({ type: "result" }));
 }
