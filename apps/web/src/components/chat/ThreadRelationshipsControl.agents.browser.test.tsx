@@ -1234,3 +1234,89 @@ it.each(["source", "target"])(
     }
   },
 );
+
+it("lists the project manager's running and finished task leads in its Lineage panel", async () => {
+  const environmentId = EnvironmentId.make("test");
+  const taskLead = (id: string, title: string, status: string) => ({
+    source: {
+      id,
+      title,
+      status,
+      activityRunStatus: null,
+      lineage: { parentThreadId: "pm", relationshipToParent: "subagent" },
+    },
+    agent: {
+      id: `agent-${id}`,
+      origin: "app_owned",
+      driver: "claudeAgent",
+      providerInstanceId: "claudeAgent",
+      threadId: "pm",
+      runId: null,
+      childThreadId: id,
+      title,
+      status,
+      startedAt: DateTime.makeUnsafe("2026-09-21T12:00:00Z"),
+      completedAt: status === "running" ? null : DateTime.makeUnsafe("2026-09-21T12:10:00Z"),
+      updatedAt: DateTime.makeUnsafe("2026-09-21T12:10:00Z"),
+    },
+  });
+  const running = taskLead("lead-running", "Hide task threads", "running");
+  const finished = taskLead("lead-done", "Fix row buttons", "completed");
+  state.projection = {
+    thread: {
+      id: "pm",
+      title: "Nova",
+      lineage: { relationshipToParent: null },
+      activeProviderThreadId: null,
+    },
+    runs: [],
+    providerThreads: [],
+    providerSessions: [],
+    contextTransfers: [],
+    subagents: [running.agent, finished.agent],
+  };
+  state.shells = [
+    {
+      environmentId,
+      source: {
+        id: "pm",
+        title: "Nova",
+        status: "running",
+        lineage: { parentThreadId: null, relationshipToParent: null },
+      },
+    },
+    { environmentId, source: running.source },
+    { environmentId, source: finished.source },
+    {
+      environmentId,
+      source: {
+        id: "user-thread",
+        title: "Research notes",
+        status: "completed",
+        lineage: { parentThreadId: null, relationshipToParent: null },
+      },
+    },
+  ];
+  await render(
+    <ThreadRelationshipsPanel environmentId={environmentId} threadId={ThreadId.make("pm")} />,
+  );
+  const text = () => textNodes(" ", true);
+
+  expect(heading()).toBe("Lineage · 1 running");
+  expect(text()).toContain("Hide task threads");
+  expect(text()).toContain("Previous agents");
+  expect(text()).not.toContain("Fix row buttons");
+  expect(text()).not.toContain("Research notes");
+
+  await click(sectionToggle(false));
+  expect(text()).toContain("Fix row buttons");
+
+  const openRow = (title: string) =>
+    [...container.querySelectorAll<HTMLElement>("button, a, [role='button']")].find((element) =>
+      element.textContent?.includes(title),
+    )!;
+  await click(openRow("Hide task threads"));
+  expect(state.navigate).toHaveBeenCalledWith(
+    expect.objectContaining({ params: expect.objectContaining({ threadId: "lead-running" }) }),
+  );
+});
