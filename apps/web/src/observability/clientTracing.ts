@@ -15,9 +15,9 @@ import { APP_VERSION } from "~/branding";
 
 const DEFAULT_EXPORT_INTERVAL_MS = 1_000;
 const CLIENT_TRACING_RESOURCE = {
-  serviceName: "t3code-web",
+  serviceName: "busyboy-web",
   attributes: {
-    "service.namespace": "t3code",
+    "service.namespace": "busyboy",
     "service.runtime": "t3-web",
     "service.mode": isElectron ? "electron" : "browser",
     "service.version": APP_VERSION,

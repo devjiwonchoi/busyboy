@@ -25,14 +25,14 @@ const config = {
   bootstrap: {
     mode: "desktop",
     noBrowser: true,
-    port: 3773,
+    port: 3873,
     t3Home: "/tmp/t3",
     host: "127.0.0.1",
     desktopBootstrapToken: "desktop-bootstrap-token",
     tailscaleServeEnabled: false,
     tailscaleServePort: 443,
   },
-  httpBaseUrl: new URL("http://127.0.0.1:3773"),
+  httpBaseUrl: new URL("http://127.0.0.1:3873"),
   captureOutput: true,
 };
 

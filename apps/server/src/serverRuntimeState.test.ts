@@ -24,7 +24,7 @@ describe("server ownership", () => {
   const layerOwnership = ProcessRunner.layer.pipe(Layer.provideMerge(NodeServices.layer));
   const makeState = ServerRuntimeState.makePersistedServerRuntimeState({
     config: { host: undefined, devUrl: undefined },
-    port: 3773,
+    port: 3873,
   });
 
   it.effect("lets only one of two racing starts own a state directory", () =>

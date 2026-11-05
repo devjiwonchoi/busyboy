@@ -53,7 +53,7 @@ export const bareHost = (host: string): string => (host.startsWith(".") ? host.s
  */
 export const snapshotCookieDatabase = Effect.fn("CookieDatabase.snapshotCookieDatabase")(function* (
   cookiePath: string,
-  tempPrefix = "t3code-cookie-import-",
+  tempPrefix = "busyboy-cookie-import-",
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

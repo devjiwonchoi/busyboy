@@ -1398,8 +1398,8 @@ describe("EnvironmentRegistry routes", () => {
     connectionId: LAN_TARGET.connectionId,
     environmentId: LAN_TARGET.environmentId,
     label: LAN_TARGET.label,
-    httpBaseUrl: "http://192.168.1.10:3773/",
-    wsBaseUrl: "ws://192.168.1.10:3773/",
+    httpBaseUrl: "http://192.168.1.10:3873/",
+    wsBaseUrl: "ws://192.168.1.10:3873/",
   });
   const lanRegistration = (target = LAN_TARGET, profile = LAN_PROFILE) =>
     new BearerConnectionRegistration({ target, profile, credential: BEARER_CREDENTIAL });
@@ -1615,15 +1615,15 @@ describe("EnvironmentRegistry routes", () => {
 
   it.effect("saves the Tailscale mark when the server reports a learned address as tailnet", () =>
     Effect.gen(function* () {
-      const httpBaseUrl = "http://100.101.102.103:3773/";
-      const learnedId = `learned:${LAN_TARGET.environmentId}:http://100.101.102.103:3773@${LAN_TARGET.connectionId}`;
+      const httpBaseUrl = "http://100.101.102.103:3873/";
+      const learnedId = `learned:${LAN_TARGET.environmentId}:http://100.101.102.103:3873@${LAN_TARGET.connectionId}`;
       const learned = new BearerConnectionTarget({ ...LAN_TARGET, connectionId: learnedId });
       const learnedProfile = new BearerConnectionProfile({
         connectionId: learnedId,
         environmentId: LAN_TARGET.environmentId,
         label: LAN_TARGET.label,
         httpBaseUrl,
-        wsBaseUrl: "ws://100.101.102.103:3773/",
+        wsBaseUrl: "ws://100.101.102.103:3873/",
         learned: true,
       });
       const harness = yield* makeHarness(
@@ -1656,7 +1656,7 @@ describe("EnvironmentRegistry routes", () => {
 
   it.effect("drops a learned route whose profile was not saved instead of duplicating it", () =>
     Effect.gen(function* () {
-      const learnedId = `learned:${LAN_TARGET.environmentId}:100.64.0.9:3773@${LAN_TARGET.connectionId}`;
+      const learnedId = `learned:${LAN_TARGET.environmentId}:100.64.0.9:3873@${LAN_TARGET.connectionId}`;
       const learned = new BearerConnectionTarget({ ...LAN_TARGET, connectionId: learnedId });
       const harness = yield* makeHarness(
         [LAN_TARGET, learned, learned],

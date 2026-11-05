@@ -93,8 +93,8 @@ describe("connection presentation", () => {
         ),
       };
     };
-    const lan = route("lan", "http://192.168.4.53:3773/");
-    const tailnet = route("tailnet", "http://100.115.1.44:3773/");
+    const lan = route("lan", "http://192.168.4.53:3873/");
+    const tailnet = route("tailnet", "http://100.115.1.44:3873/");
     const serve = route("serve", "https://machine.tailnet.ts.net/");
     const entry: ConnectionCatalogEntry = {
       ...ENTRY,
@@ -104,9 +104,9 @@ describe("connection presentation", () => {
     };
 
     expect(environmentMcpUrl({ entry, connectedTarget: tailnet.target })).toBe(
-      "http://100.115.1.44:3773/mcp",
+      "http://100.115.1.44:3873/mcp",
     );
-    expect(environmentMcpUrl({ entry })).toBe("http://192.168.4.53:3773/mcp");
+    expect(environmentMcpUrl({ entry })).toBe("http://192.168.4.53:3873/mcp");
   });
 
   it("passes over routes without an address of their own", () => {

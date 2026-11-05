@@ -84,7 +84,7 @@ describe("session cookie isolation", () => {
   it("isolates remote web servers by server state", () => {
     const first = resolveSessionCookieName({
       mode: "web",
-      port: 3773,
+      port: 3873,
       host: "192.168.1.50",
       instanceKey: "/srv/t3-one",
       environmentId: "environment-one",
@@ -129,13 +129,13 @@ describe("session cookie isolation", () => {
     expect(
       resolveSessionCookieName({
         mode: "desktop",
-        port: 3773,
+        port: 3873,
         host: "127.0.0.1",
         instanceKey: "/tmp/desktop",
         environmentId: "environment-one",
         development: true,
       }),
-    ).toBe("t3_session_3773");
+    ).toBe("t3_session_3873");
   });
 
   it("isolates development servers even when they bind a wildcard host", () => {

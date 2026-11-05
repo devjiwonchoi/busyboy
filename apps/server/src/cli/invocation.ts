@@ -41,7 +41,7 @@ const decodeInstallManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(I
 /**
  * The script this CLI was started through: the `t3` npm launcher that
  * downloaded and ran this executable (it names itself in
- * `T3CODE_NPM_LAUNCHER_PATH`), or the Node entry script of a build run from
+ * `BUSYBOY_NPM_LAUNCHER_PATH`), or the Node entry script of a build run from
  * source. A standalone executable has none and reports its own path.
  *
  * The variable is inherited by everything the server spawns, so a launcher
@@ -49,7 +49,7 @@ const decodeInstallManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(I
  * from an agent's shell must not claim to be the npm install.
  */
 const resolveEntryPath = Effect.gen(function* () {
-  const npmLauncher = (yield* HostProcess.Environment).T3CODE_NPM_LAUNCHER_PATH?.trim();
+  const npmLauncher = (yield* HostProcess.Environment).BUSYBOY_NPM_LAUNCHER_PATH?.trim();
   if (npmLauncher) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -149,12 +149,12 @@ const hostShellWord = (platform: NodeJS.Platform, value: string) =>
 /**
  * The launcher a person can type to run this install when `t3` is not on
  * PATH: the desktop app's `t3` shim, which the app and the shim itself name in
- * `T3CODE_CLI_PATH`, or a standalone binary's own path. Script installs (a
+ * `BUSYBOY_CLI_PATH`, or a standalone binary's own path. Script installs (a
  * repo checkout) have no single launcher and keep plain `t3`.
  */
 const resolveInstallLauncher = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const shim = (yield* HostProcess.Environment).T3CODE_CLI_PATH?.trim();
+  const shim = (yield* HostProcess.Environment).BUSYBOY_CLI_PATH?.trim();
   if (shim && (yield* fs.exists(shim).pipe(Effect.orElseSucceed(() => false)))) {
     return Option.some(shim);
   }

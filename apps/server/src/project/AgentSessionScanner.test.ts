@@ -827,6 +827,19 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
           contents: claudeSessionLine(worktreeCwd),
           mtimeMs: Date.parse("2026-01-01T00:00:00.000Z"),
         });
+        const busyboyWorktreeCwd = path.join(
+          claudeHomePath,
+          ".busyboy",
+          "worktrees",
+          "busyboy",
+          "wt-1",
+        );
+        yield* fileSystem.makeDirectory(busyboyWorktreeCwd, { recursive: true });
+        yield* writeTranscript({
+          filePath: path.join(claudeHomePath, "projects", "-slug-busyboy", "b.jsonl"),
+          contents: claudeSessionLine(busyboyWorktreeCwd),
+          mtimeMs: Date.parse("2026-01-01T00:00:00.000Z"),
+        });
 
         const result = yield* runScan({ claudeHomePath, codexHomePath });
 

@@ -82,8 +82,8 @@ function installDesktopBootstrap() {
   testWindow.desktopBridge = {
     getLocalEnvironmentBootstrap: () => ({
       label: "Local environment",
-      httpBaseUrl: "http://localhost:3773",
-      wsBaseUrl: "ws://localhost:3773",
+      httpBaseUrl: "http://localhost:3873",
+      wsBaseUrl: "ws://localhost:3873",
       bootstrapToken: "desktop-bootstrap-token",
     }),
   } as unknown as DesktopBridge;
@@ -161,8 +161,8 @@ describe("resolveInitialServerAuthGateState", () => {
     testWindow.desktopBridge = {
       getLocalEnvironmentBootstrap: () => ({
         label: "Windows",
-        httpBaseUrl: "http://localhost:3773",
-        wsBaseUrl: "ws://localhost:3773",
+        httpBaseUrl: "http://localhost:3873",
+        wsBaseUrl: "ws://localhost:3873",
         bootstrapToken: "desktop-bootstrap-token",
       }),
     } as unknown as DesktopBridge;
@@ -216,8 +216,8 @@ describe("resolveInitialServerAuthGateState", () => {
     testWindow.desktopBridge = {
       getLocalEnvironmentBootstrap: () => ({
         label: "Windows",
-        httpBaseUrl: "http://127.0.0.1:3773",
-        wsBaseUrl: "ws://127.0.0.1:3773",
+        httpBaseUrl: "http://127.0.0.1:3873",
+        wsBaseUrl: "ws://127.0.0.1:3873",
       }),
     } as unknown as DesktopBridge;
 
@@ -589,8 +589,8 @@ describe("resolveInitialServerAuthGateState", () => {
     testWindow.desktopBridge = {
       getLocalEnvironmentBootstrap: () => ({
         label: "Windows",
-        httpBaseUrl: "http://localhost:3773",
-        wsBaseUrl: "ws://localhost:3773",
+        httpBaseUrl: "http://localhost:3873",
+        wsBaseUrl: "ws://localhost:3873",
         bootstrapToken: "desktop-bootstrap-token",
       }),
     } as unknown as DesktopBridge;

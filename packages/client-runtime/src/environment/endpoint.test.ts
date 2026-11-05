@@ -19,11 +19,11 @@ describe("advertised endpoint helpers", () => {
     expect(normalizeHttpBaseUrl("https://example.com/path?x=1#hash")).toBe("https://example.com/");
     expect(normalizeHttpBaseUrl("wss://example.com/socket")).toBe("https://example.com/");
     expect(deriveWsBaseUrl("https://example.com/api")).toBe("wss://example.com/");
-    expect(deriveWsBaseUrl("http://127.0.0.1:3773")).toBe("ws://127.0.0.1:3773/");
+    expect(deriveWsBaseUrl("http://127.0.0.1:3873")).toBe("ws://127.0.0.1:3873/");
   });
 
   it("marks HTTP endpoints as blocked from hosted HTTPS apps", () => {
-    expect(classifyHostedHttpsCompatibility("http://192.168.1.44:3773")).toBe(
+    expect(classifyHostedHttpsCompatibility("http://192.168.1.44:3873")).toBe(
       "mixed-content-blocked",
     );
     expect(classifyHostedHttpsCompatibility("https://desktop.example.com", "compatible")).toBe(
@@ -34,20 +34,20 @@ describe("advertised endpoint helpers", () => {
   it("creates provider-neutral endpoint records", () => {
     expect(
       createAdvertisedEndpoint({
-        id: "lan:http://192.168.1.44:3773",
+        id: "lan:http://192.168.1.44:3873",
         label: "LAN",
         provider: coreProvider,
-        httpBaseUrl: "http://192.168.1.44:3773",
+        httpBaseUrl: "http://192.168.1.44:3873",
         reachability: "lan",
         source: "desktop-core",
         isDefault: true,
       }),
     ).toEqual({
-      id: "lan:http://192.168.1.44:3773",
+      id: "lan:http://192.168.1.44:3873",
       label: "LAN",
       provider: coreProvider,
-      httpBaseUrl: "http://192.168.1.44:3773/",
-      wsBaseUrl: "ws://192.168.1.44:3773/",
+      httpBaseUrl: "http://192.168.1.44:3873/",
+      wsBaseUrl: "ws://192.168.1.44:3873/",
       reachability: "lan",
       compatibility: {
         hostedHttpsApp: "mixed-content-blocked",

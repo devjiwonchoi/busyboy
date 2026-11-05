@@ -1,3 +1,4 @@
+import { BUSYBOY_HOME_DIRNAME, migrateLegacyBusyBoyHome } from "@t3tools/shared/busyboyHome";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   listLoginShellCandidates,
@@ -119,7 +120,17 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
-    return join(yield* HostProcess.HomeDirectory, ".t3");
+    const homeDirectory = yield* HostProcess.HomeDirectory;
+    // Older builds kept BusyBoy's data in T3 Code's ~/.t3; copy it over once.
+    const migration = yield* Effect.sync(() =>
+      migrateLegacyBusyBoyHome({ homeDirectory, env: {} }),
+    );
+    if (migration.kind === "migrated") {
+      yield* Effect.logDebug("Copied BusyBoy data from ~/.t3 to ~/.busyboy", {
+        stateDirs: migration.stateDirs,
+      });
+    }
+    return join(homeDirectory, BUSYBOY_HOME_DIRNAME);
   }
   return resolve(yield* expandHomePath(raw.trim()));
 });

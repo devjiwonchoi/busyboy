@@ -110,10 +110,10 @@ describe("DesktopUpdates", () => {
   it.effect("enables local-app updates without a feed and shows their failure reason", () => {
     const harness = makeHarness({
       env: {
-        T3CODE_DESKTOP_MOCK_UPDATES: "false",
-        T3CODE_LOCAL_APP_ROOT: "/Users/me/.busyboy/source",
-        T3CODE_LOCAL_APP_LAUNCHER: "/Users/me/Applications/BusyBoy.app/Contents/MacOS/Launcher",
-        T3CODE_LOCAL_APP_COMMIT: "abcdef1234567890abcdef1234567890abcdef12",
+        BUSYBOY_DESKTOP_MOCK_UPDATES: "false",
+        BUSYBOY_LOCAL_APP_ROOT: "/Users/me/.busyboy/source",
+        BUSYBOY_LOCAL_APP_LAUNCHER: "/Users/me/Applications/BusyBoy.app/Contents/MacOS/Launcher",
+        BUSYBOY_LOCAL_APP_COMMIT: "abcdef1234567890abcdef1234567890abcdef12",
       },
       checkForUpdates: Effect.fail(
         new ElectronUpdater.ElectronUpdaterCheckForUpdatesError({

@@ -8,12 +8,12 @@ const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
-const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
+const isIosPersonalTeamBuild = repoEnv.BUSYBOY_IOS_PERSONAL_TEAM === "1";
 const runtimeVersionPolicy =
   process.env.MOBILE_VERSION_POLICY ??
   (APP_VARIANT === "development" ? "appVersion" : "fingerprint");
 
-const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
+const personalTeamBundleIdentifier = repoEnv.BUSYBOY_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
 const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
 const fromRepoRoot = (relativePath: string) => `../../${relativePath}`;
@@ -26,7 +26,7 @@ if (
     !IOS_BUNDLE_IDENTIFIER_PATTERN.test(personalTeamBundleIdentifier))
 ) {
   throw new Error(
-    "T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID must be a reverse-DNS identifier such as com.example.t3code when T3CODE_IOS_PERSONAL_TEAM=1.",
+    "BUSYBOY_IOS_PERSONAL_TEAM_BUNDLE_ID must be a reverse-DNS identifier such as com.example.busyboy when BUSYBOY_IOS_PERSONAL_TEAM=1.",
   );
 }
 
@@ -72,21 +72,21 @@ const RELEASE_ASSETS = {
 const VARIANT_CONFIG = {
   development: {
     appName: "BusyBoy Dev",
-    scheme: "t3code-dev",
+    scheme: "busyboy-dev",
     iosBundleIdentifier: "com.devjiwonchoi.busyboy.dev",
     androidPackage: "com.devjiwonchoi.busyboy.dev",
     assets: DEVELOPMENT_ASSETS,
   },
   preview: {
     appName: "BusyBoy Preview",
-    scheme: "t3code-preview",
+    scheme: "busyboy-preview",
     iosBundleIdentifier: "com.devjiwonchoi.busyboy.preview",
     androidPackage: "com.devjiwonchoi.busyboy.preview",
     assets: PREVIEW_ASSETS,
   },
   production: {
     appName: "BusyBoy",
-    scheme: "t3code",
+    scheme: "busyboy",
     iosBundleIdentifier: "com.devjiwonchoi.busyboy",
     androidPackage: "com.devjiwonchoi.busyboy",
     assets: RELEASE_ASSETS,
@@ -106,9 +106,9 @@ function resolveAppVariant(value: string | undefined): AppVariant {
 
 const variant = VARIANT_CONFIG[APP_VARIANT];
 // Signing team and EAS project are per-developer, so they come from the repository env.
-const appleTeamId = repoEnv.T3CODE_APPLE_TEAM_ID?.trim() || undefined;
-const easProjectId = repoEnv.T3CODE_EAS_PROJECT_ID?.trim() || undefined;
-const easOwner = repoEnv.T3CODE_EAS_OWNER?.trim() || undefined;
+const appleTeamId = repoEnv.BUSYBOY_APPLE_TEAM_ID?.trim() || undefined;
+const easProjectId = repoEnv.BUSYBOY_EAS_PROJECT_ID?.trim() || undefined;
+const easOwner = repoEnv.BUSYBOY_EAS_OWNER?.trim() || undefined;
 const iosBundleIdentifier = isIosPersonalTeamBuild
   ? personalTeamBundleIdentifier!
   : variant.iosBundleIdentifier;
@@ -227,7 +227,7 @@ const config: ExpoConfig = {
   slug: "busyboy",
   platforms: ["ios", "android"],
   scheme: variant.scheme,
-  version: repoEnv.T3CODE_MOBILE_VERSION ?? "2.0.0",
+  version: repoEnv.BUSYBOY_MOBILE_VERSION ?? "2.0.0",
   runtimeVersion: {
     // Development manifests resolve on every launch, so avoid fingerprint's
     // expensive native-project calculation there. Preview and production stay
@@ -238,7 +238,7 @@ const config: ExpoConfig = {
   icon: variant.assets.appIcon,
   userInterfaceStyle: "automatic",
   updates: {
-    enabled: easProjectId !== undefined && repoEnv.T3CODE_MOBILE_UPDATES_ENABLED !== "0",
+    enabled: easProjectId !== undefined && repoEnv.BUSYBOY_MOBILE_UPDATES_ENABLED !== "0",
     ...(easProjectId ? { url: `https://u.expo.dev/${easProjectId}` } : {}),
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,
@@ -290,8 +290,8 @@ const config: ExpoConfig = {
   android: {
     icon: variant.assets.appIcon,
     package: variant.androidPackage,
-    ...(repoEnv.T3CODE_ANDROID_GOOGLE_SERVICES_FILE
-      ? { googleServicesFile: repoEnv.T3CODE_ANDROID_GOOGLE_SERVICES_FILE }
+    ...(repoEnv.BUSYBOY_ANDROID_GOOGLE_SERVICES_FILE
+      ? { googleServicesFile: repoEnv.BUSYBOY_ANDROID_GOOGLE_SERVICES_FILE }
       : {}),
     adaptiveIcon: {
       backgroundColor: variant.assets.androidAdaptiveBackgroundColor,

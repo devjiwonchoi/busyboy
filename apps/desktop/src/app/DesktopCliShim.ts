@@ -57,11 +57,11 @@ export const renderCliShim = (input: {
             "chcp 65001 >nul",
           ]
         : []),
-      `set "T3CODE_CLI_PATH=${cmdText(input.shimPath)}"`,
-      `if not defined T3CODE_HOME set "T3CODE_HOME=${cmdText(input.t3Home)}"`,
+      `set "BUSYBOY_CLI_PATH=${cmdText(input.shimPath)}"`,
+      `if not defined BUSYBOY_HOME set "BUSYBOY_HOME=${cmdText(input.t3Home)}"`,
       'set "ELECTRON_RUN_AS_NODE=1"',
       // Electron's Windows executable starts without stdin; this tells the CLI to reopen the console.
-      'set "T3CODE_DESKTOP_CLI_LAUNCHER=1"',
+      'set "BUSYBOY_DESKTOP_CLI_LAUNCHER=1"',
       // A goto, not a parenthesized block: "Program Files (x86)" would close the block early.
       `if exist ${cmdWord(target.executable)} goto run`,
       ...restore,
@@ -78,9 +78,9 @@ export const renderCliShim = (input: {
   const header = [
     "#!/bin/sh",
     `# ${MARKER}`,
-    `export T3CODE_CLI_PATH=${shellWord(input.shimPath)}`,
+    `export BUSYBOY_CLI_PATH=${shellWord(input.shimPath)}`,
     `home=${shellWord(input.t3Home)}`,
-    'export T3CODE_HOME="${T3CODE_HOME:-$home}"',
+    'export BUSYBOY_HOME="${BUSYBOY_HOME:-$home}"',
     "export ELECTRON_RUN_AS_NODE=1",
     `app=${shellWord(target.kind === "appimage" ? target.appImage : target.executable)}`,
     'if [ ! -x "$app" ]; then',
@@ -121,11 +121,14 @@ export const renderCliShim = (input: {
   ].join("\n");
 };
 
+/** BusyBoy's CLI command. T3 Code installs its own `t3`, so this must differ. */
+export const COMMAND_NAME = "busyboy";
+
 export const launcherPath = (environment: DesktopEnvironment.DesktopEnvironment["Service"]) =>
   environment.path.join(
     environment.baseDir,
     "bin",
-    environment.platform === "win32" ? "t3.cmd" : "t3",
+    environment.platform === "win32" ? `${COMMAND_NAME}.cmd` : COMMAND_NAME,
   );
 
 export const install = Effect.gen(function* () {
@@ -151,7 +154,7 @@ export const install = Effect.gen(function* () {
   return yield* Effect.gen(function* () {
     const existing = yield* fs.readFileString(shimPath).pipe(Effect.option);
     if (Option.isSome(existing) && !existing.value.includes(MARKER)) {
-      yield* logWarning("leaving a t3 launcher the app did not write", { shimPath });
+      yield* logWarning("leaving a busyboy launcher the app did not write", { shimPath });
       return Option.none<string>();
     }
     if (Option.getOrUndefined(existing) !== content) {

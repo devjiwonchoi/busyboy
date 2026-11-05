@@ -179,7 +179,7 @@ export const findWindowsShim = Effect.fn("cli.update.find_windows_shim")(functio
   const path = yield* Path.Path;
   const environment = yield* HostProcess.Environment;
   const candidates = [
-    ...(environment["T3CODE_INSTALL_BIN_DIR"] ? [environment["T3CODE_INSTALL_BIN_DIR"]] : []),
+    ...(environment["BUSYBOY_INSTALL_BIN_DIR"] ? [environment["BUSYBOY_INSTALL_BIN_DIR"]] : []),
     ...(environment["PATH"] ?? environment["Path"] ?? "").split(";"),
   ].filter((entry) => entry.trim().length > 0);
   for (const directory of candidates) {
@@ -273,7 +273,7 @@ const belongsToBootService = Effect.fn("cli.update.belongs_to_boot_service")(fun
   const runner = yield* ProcessRunner.ProcessRunner;
   if (platform === "linux") {
     const cgroup = yield* fs.readFileString(`/proc/${pid}/cgroup`).pipe(Effect.option);
-    return Option.isSome(cgroup) && cgroup.value.includes("/t3code.service");
+    return Option.isSome(cgroup) && cgroup.value.includes("/busyboy.service");
   }
   if (platform === "darwin") {
     const parent = yield* runner

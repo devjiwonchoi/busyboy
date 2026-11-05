@@ -9,8 +9,8 @@ import {
 
 describe("buildPairingUrl", () => {
   it("uses HTTP for a schemeless IP address", () => {
-    expect(buildPairingUrl("192.168.1.100:3773", "pairing-token")).toBe(
-      "http://192.168.1.100:3773/#token=pairing-token",
+    expect(buildPairingUrl("192.168.1.100:3873", "pairing-token")).toBe(
+      "http://192.168.1.100:3873/#token=pairing-token",
     );
   });
 
@@ -21,8 +21,8 @@ describe("buildPairingUrl", () => {
   });
 
   it("preserves an explicit scheme for an IP address", () => {
-    expect(buildPairingUrl("https://192.168.1.100:3773", "pairing-token")).toBe(
-      "https://192.168.1.100:3773/#token=pairing-token",
+    expect(buildPairingUrl("https://192.168.1.100:3873", "pairing-token")).toBe(
+      "https://192.168.1.100:3873/#token=pairing-token",
     );
   });
 });
@@ -37,7 +37,7 @@ describe("extractPairingUrlFromQrPayload", () => {
   it("unwraps mobile deep links that carry an encoded pairing url", () => {
     expect(
       extractPairingUrlFromQrPayload(
-        "t3code://pair?pairingUrl=https%3A%2F%2Fremote.example.com%2Fpair%23token%3Dpairing-token",
+        "busyboy://pair?pairingUrl=https%3A%2F%2Fremote.example.com%2Fpair%23token%3Dpairing-token",
       ),
     ).toBe("https://remote.example.com/pair#token=pairing-token");
   });

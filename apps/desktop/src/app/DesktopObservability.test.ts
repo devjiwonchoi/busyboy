@@ -62,7 +62,7 @@ const layerEnvironmentFor = (
       Layer.mergeAll(
         NodeServices.layer,
         DesktopConfig.layerTest({
-          T3CODE_HOME: baseDir,
+          BUSYBOY_HOME: baseDir,
           VITE_DEV_SERVER_URL: isDevelopment ? "http://127.0.0.1:5733" : undefined,
           ...env,
         }),
@@ -208,7 +208,7 @@ describe("DesktopObservability", () => {
         const factory = yield* DesktopObservability.DesktopBackendOutputLogFactory;
         const outputLog = yield* factory.forInstance("primary");
         yield* outputLog.beginSession({
-          details: "pid=123 port=3773 cwd=/repo",
+          details: "pid=123 port=3873 cwd=/repo",
         });
         yield* outputLog.writeOutputChunk("stdout", new TextEncoder().encode("hello server\n"));
         assert.isFalse(yield* fileSystem.exists(logPath));
@@ -234,7 +234,7 @@ describe("DesktopObservability", () => {
       assert.equal(start.annotations.runId, "test-run");
       assert.equal(start.annotations.instanceId, "primary");
       assert.equal(start.annotations.phase, "START");
-      assert.equal(start.annotations.details, "pid=123 port=3773 cwd=/repo");
+      assert.equal(start.annotations.details, "pid=123 port=3873 cwd=/repo");
 
       assert.equal(output.message, "backend child process output");
       assert.equal(output.level, "INFO");
@@ -392,8 +392,8 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
-        T3CODE_OTLP_HEADERS: "x-scope=desktop",
+        BUSYBOY_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
+        BUSYBOY_OTLP_HEADERS: "x-scope=desktop",
       });
       const tracePath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -436,7 +436,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_HEADERS: "x-scope=desktop",
+        BUSYBOY_OTLP_HEADERS: "x-scope=desktop",
       });
       yield* writeObservabilitySettings(layerEnvironment, {
         otlpLogsUrl: "https://settings.example.com/v1/logs",
@@ -482,7 +482,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
+        BUSYBOY_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
       });
 
       yield* Effect.scoped(
@@ -493,9 +493,9 @@ describe("DesktopObservability", () => {
 
       assert.lengthOf(requests, 1);
       const body = requests[0]?.body ?? "";
-      assert.include(body, '"stringValue":"t3code-desktop"');
+      assert.include(body, '"stringValue":"busyboy-desktop"');
       assert.include(body, "deployment.environment.name");
-      assert.include(body, '"key":"service.namespace","value":{"stringValue":"t3code"}');
+      assert.include(body, '"key":"service.namespace","value":{"stringValue":"busyboy"}');
       assert.notInclude(body, "renamed");
     }).pipe(
       Effect.scoped,
@@ -525,7 +525,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_HEADERS: "x-scope=desktop",
+        BUSYBOY_OTLP_HEADERS: "x-scope=desktop",
       });
       yield* writeObservabilitySettings(layerEnvironment, {
         otlpLogsUrl: "https://settings.example.com/v1/logs",
@@ -565,7 +565,7 @@ describe("DesktopObservability", () => {
         prefix: "t3-desktop-observability-test-",
       });
       const layerEnvironment = layerEnvironmentFor(baseDir, true, {
-        T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
+        BUSYBOY_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
       });
 
       yield* Effect.scoped(

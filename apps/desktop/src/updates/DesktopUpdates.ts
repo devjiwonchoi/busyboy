@@ -328,7 +328,7 @@ function getAutoUpdateDisabledReason(args: {
   // The local app updates from its own checkout, with no feed or package.
   if (args.isLocalApp) {
     return args.disabledByEnv
-      ? "Automatic updates are disabled by the T3CODE_DISABLE_AUTO_UPDATE setting."
+      ? "Automatic updates are disabled by the BUSYBOY_DISABLE_AUTO_UPDATE setting."
       : null;
   }
   if (!args.hasUpdateFeedConfig) {
@@ -338,7 +338,7 @@ function getAutoUpdateDisabledReason(args: {
     return "Automatic updates are only available in packaged production builds.";
   }
   if (args.disabledByEnv) {
-    return "Automatic updates are disabled by the T3CODE_DISABLE_AUTO_UPDATE setting.";
+    return "Automatic updates are disabled by the BUSYBOY_DISABLE_AUTO_UPDATE setting.";
   }
   if (args.platform === "linux" && !args.appImage && !args.isDebPackage) {
     return "Automatic updates on Linux require the AppImage or the .deb package.";

@@ -96,7 +96,7 @@ it.effect("parks automatic pull until activation without delaying command readin
           mode: "desktop",
           cwd,
           host: "localhost",
-          port: 3773,
+          port: 3873,
           devUrl: undefined,
           noBrowser: true,
           startupPresentation: "browser",
@@ -162,7 +162,7 @@ it.effect("parks automatic pull until activation without delaying command readin
         Layer.mock(EnvironmentAuth.EnvironmentAuth)({}),
         Layer.mock(ExternalLauncher.ExternalLauncher)({}),
         Layer.mock(HttpServer.HttpServer)({
-          address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 3773),
+          address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 3873),
         }),
         Path.layer,
       );

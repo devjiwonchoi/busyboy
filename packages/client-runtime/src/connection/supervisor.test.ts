@@ -80,8 +80,8 @@ const LAN_ROUTE: ConnectionRoute = {
       connectionId: LAN_TARGET.connectionId,
       environmentId: TARGET.environmentId,
       label: TARGET.label,
-      httpBaseUrl: "http://192.168.1.10:3773/",
-      wsBaseUrl: "ws://192.168.1.10:3773/",
+      httpBaseUrl: "http://192.168.1.10:3873/",
+      wsBaseUrl: "ws://192.168.1.10:3873/",
     }),
   ),
 };
@@ -1659,7 +1659,7 @@ describe("EnvironmentSupervisor routes", () => {
         ),
         enabled: true,
       };
-      const lanAddress = yield* Ref.make("http://192.168.1.10:3773/");
+      const lanAddress = yield* Ref.make("http://192.168.1.10:3873/");
       const learned = yield* Ref.make<ReadonlyArray<string>>([]);
       const harness = yield* makeHarness({
         checkRoute: (route) =>
@@ -1706,9 +1706,9 @@ describe("EnvironmentSupervisor routes", () => {
         connectionRouteId(
           Option.getOrThrow(yield* SubscriptionRef.get(supervisor.prepared)).target,
         ),
-      ).toBe(`learned:${TARGET.environmentId}:http://192.168.1.10:3773@public`);
+      ).toBe(`learned:${TARGET.environmentId}:http://192.168.1.10:3873@public`);
       expect(yield* Ref.get(learned)).toEqual([
-        `learned:${TARGET.environmentId}:http://192.168.1.10:3773@public`,
+        `learned:${TARGET.environmentId}:http://192.168.1.10:3873@public`,
       ]);
     }),
   );

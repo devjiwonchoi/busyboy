@@ -19,7 +19,7 @@ import type { PreviewableServer } from "./useDiscoveredLocalServers";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(async (_tabId: string, _url: string): Promise<void> => undefined),
   rememberPreviewUrl: vi.fn(),
-  readPreparedConnection: vi.fn(() => ({ httpBaseUrl: "http://172.25.85.75:3773" })),
+  readPreparedConnection: vi.fn(() => ({ httpBaseUrl: "http://172.25.85.75:3873" })),
   readEnvironmentScope: vi.fn((_environmentId?: unknown, _scope?: unknown) => true),
   setAnnotationSendEnabled: vi.fn(async (_tabId: string, _enabled: boolean): Promise<void> => {}),
   cancelPickElement: vi.fn(async (_tabId: string) => undefined),
@@ -126,7 +126,7 @@ vi.mock(import("~/previewStateStore"), async (original) => ({
 vi.mock(import("~/state/environments"), async (original) => ({
   ...(await original()),
   useEnvironment: (() => ({ label: "WSL" })) as never,
-  useEnvironmentHttpBaseUrl: () => "http://172.25.85.75:3773",
+  useEnvironmentHttpBaseUrl: () => "http://172.25.85.75:3873",
   usePrimaryEnvironmentId: () => null,
 }));
 vi.mock(import("~/browser/browserRecording"), async (original) => ({

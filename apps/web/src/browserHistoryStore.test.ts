@@ -290,7 +290,7 @@ describe("useBrowserHistoryStore", () => {
   });
 
   it("deduplicates loopback aliases and the resolved environment host", () => {
-    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.64.2:3773" });
+    readPreparedConnection.mockReturnValue({ httpBaseUrl: "http://192.168.64.2:3873" });
     useBrowserHistoryStore.getState().registerThreadProject(threadRef, "proj-a");
     recordVisitForThread(threadRef, "http://localhost:5173/app", 1);
     recordVisitForThread(threadRef, "http://127.0.0.1:5173/app", 2);

@@ -47,7 +47,7 @@ const baseConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   bootstrap: {
     mode: "desktop",
     noBrowser: true,
-    port: 3773,
+    port: 3873,
     t3Home: "/tmp/t3",
     host: "127.0.0.1",
     desktopBootstrapToken: "token",
@@ -57,7 +57,7 @@ const baseConfig: DesktopBackendManager.DesktopBackendStartConfig = {
     desktopTelemetryControlFd: 5,
   },
   extendEnv: true,
-  httpBaseUrl: new URL("http://127.0.0.1:3773"),
+  httpBaseUrl: new URL("http://127.0.0.1:3873"),
   captureOutput: true,
   preflightFailure: Option.none(),
 };
@@ -288,7 +288,7 @@ describe("DesktopBackendManager", () => {
         }).pipe(Effect.flip, Effect.forkChild);
 
         const request = yield* Deferred.await(requested);
-        assert.equal(request.url, "http://127.0.0.1:3773/.well-known/t3/environment");
+        assert.equal(request.url, "http://127.0.0.1:3873/.well-known/t3/environment");
 
         yield* TestClock.adjust(Duration.millis(50));
         const error = yield* Fiber.join(readiness);
@@ -297,13 +297,13 @@ describe("DesktopBackendManager", () => {
         assert.equal(error.executablePath, "/electron");
         assert.equal(error.entryPath, "/server/bin.mjs");
         assert.equal(error.cwd, "/server");
-        assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3773/");
-        assert.equal(error.readinessUrl.href, "http://127.0.0.1:3773/.well-known/t3/environment");
+        assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3873/");
+        assert.equal(error.readinessUrl.href, "http://127.0.0.1:3873/.well-known/t3/environment");
         assert.equal(error.timeoutMs, 50);
         assert.isDefined(error.cause);
         assert.equal(
           error.message,
-          "Timed out after 50ms waiting for desktop backend readiness at http://127.0.0.1:3773/.well-known/t3/environment.",
+          "Timed out after 50ms waiting for desktop backend readiness at http://127.0.0.1:3873/.well-known/t3/environment.",
         );
       }).pipe(Effect.provide(layer));
     }),
@@ -334,7 +334,7 @@ describe("DesktopBackendManager", () => {
       assert.equal(error.executablePath, "/electron");
       assert.equal(error.entryPath, "/server/bin.mjs");
       assert.equal(error.cwd, "/server");
-      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3773/");
+      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3873/");
       assert.isDefined(error.cause);
       assert.equal(
         error.message,
@@ -372,7 +372,7 @@ describe("DesktopBackendManager", () => {
       assert.equal(error.executablePath, "/electron");
       assert.equal(error.entryPath, "/server/bin.mjs");
       assert.equal(error.cwd, "/server");
-      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3773/");
+      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3873/");
       assert.strictEqual(error.cause, spawnCause);
       assert.equal(
         error.message,
@@ -417,7 +417,7 @@ describe("DesktopBackendManager", () => {
       assert.equal(error.executablePath, "/electron");
       assert.equal(error.entryPath, "/server/bin.mjs");
       assert.equal(error.cwd, "/server");
-      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3773/");
+      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3873/");
       assert.strictEqual(error.cause, exitCause);
       assert.equal(error.message, "Failed to read the exit status of desktop backend process 123.");
       assert.notInclude(error.message, "exit-status-secret-sentinel");
@@ -460,7 +460,7 @@ describe("DesktopBackendManager", () => {
       assert.equal(error.executablePath, "/electron");
       assert.equal(error.entryPath, "/server/bin.mjs");
       assert.equal(error.cwd, "/server");
-      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3773/");
+      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3873/");
       assert.equal(error.pid, 123);
       assert.equal(error.streamName, "stdout");
       assert.strictEqual(error.cause, outputCause);
@@ -509,7 +509,7 @@ describe("DesktopBackendManager", () => {
       assert.equal(error.executablePath, "/electron");
       assert.equal(error.entryPath, "/server/bin.mjs");
       assert.equal(error.cwd, "/server");
-      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3773/");
+      assert.equal(error.httpBaseUrl.href, "http://127.0.0.1:3873/");
       assert.equal(error.pid, 123);
       assert.equal(error.streamName, "stdout");
       assert.equal(error.chunkByteLength, chunk.byteLength);
@@ -694,7 +694,7 @@ describe("DesktopBackendManager", () => {
         yield* Deferred.await(firstRequest);
 
         assert.equal(readyCount, 0);
-        assert.deepEqual(requestUrls, ["http://127.0.0.1:3773/.well-known/t3/environment"]);
+        assert.deepEqual(requestUrls, ["http://127.0.0.1:3873/.well-known/t3/environment"]);
 
         yield* TestClock.adjust(Duration.millis(100));
         yield* Deferred.await(backendReady);
@@ -703,8 +703,8 @@ describe("DesktopBackendManager", () => {
 
         assert.equal(readyCount, 1);
         assert.deepEqual(requestUrls, [
-          "http://127.0.0.1:3773/.well-known/t3/environment",
-          "http://127.0.0.1:3773/.well-known/t3/environment",
+          "http://127.0.0.1:3873/.well-known/t3/environment",
+          "http://127.0.0.1:3873/.well-known/t3/environment",
         ]);
       }).pipe(Effect.provide(TestClock.layer())),
     ),

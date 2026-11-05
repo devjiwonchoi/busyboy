@@ -83,7 +83,10 @@ function layerEnvironmentFor(baseDir: string, env: Record<string, string | undef
     runningUnderArm64Translation: false,
   }).pipe(
     Layer.provide(
-      Layer.mergeAll(NodeServices.layer, DesktopConfig.layerTest({ T3CODE_HOME: baseDir, ...env })),
+      Layer.mergeAll(
+        NodeServices.layer,
+        DesktopConfig.layerTest({ BUSYBOY_HOME: baseDir, ...env }),
+      ),
     ),
   );
 }
@@ -95,7 +98,7 @@ function layer(input: {
   readonly spawnerLayer?: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
   readonly desktopSettingsLayer?: Layer.Layer<DesktopAppSettings.DesktopAppSettings>;
 }) {
-  const env = { T3CODE_HOME: input.baseDir, ...input.env };
+  const env = { BUSYBOY_HOME: input.baseDir, ...input.env };
   const layerEnvironment = layerEnvironmentFor(input.baseDir, env);
   const layerNetwork = Layer.succeed(DesktopNetworkInterfaces.DesktopNetworkInterfaces, {
     read: Effect.succeed(input.networkInterfaces ?? emptyNetworkInterfaces),
@@ -429,8 +432,8 @@ describe("DesktopServerExposure", () => {
         );
       }),
       {
-        T3CODE_DESKTOP_LAN_HOST: "100.90.1.2",
-        T3CODE_DESKTOP_HTTPS_ENDPOINTS: "https://public.example.test",
+        BUSYBOY_DESKTOP_LAN_HOST: "100.90.1.2",
+        BUSYBOY_DESKTOP_HTTPS_ENDPOINTS: "https://public.example.test",
       },
     ),
   );
@@ -440,13 +443,13 @@ describe("DesktopServerExposure", () => {
       lanNetworkInterfaces,
       Effect.gen(function* () {
         const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
-        yield* serverExposure.configureFromSettings({ port: 3773 });
+        yield* serverExposure.configureFromSettings({ port: 3873 });
         yield* serverExposure.setMode("network-accessible");
 
         const endpoints = yield* serverExposure.getAdvertisedEndpoints;
         assert.deepEqual(endpoints, [
           {
-            id: "desktop-loopback:3773",
+            id: "desktop-loopback:3873",
             label: "This machine",
             provider: {
               id: "desktop-core",
@@ -454,8 +457,8 @@ describe("DesktopServerExposure", () => {
               kind: "core",
               isAddon: false,
             },
-            httpBaseUrl: "http://127.0.0.1:3773/",
-            wsBaseUrl: "ws://127.0.0.1:3773/",
+            httpBaseUrl: "http://127.0.0.1:3873/",
+            wsBaseUrl: "ws://127.0.0.1:3873/",
             reachability: "loopback",
             compatibility: {
               hostedHttpsApp: "mixed-content-blocked",
@@ -466,7 +469,7 @@ describe("DesktopServerExposure", () => {
             description: "Loopback endpoint for this desktop app.",
           },
           {
-            id: "desktop-lan:http://192.168.1.20:3773",
+            id: "desktop-lan:http://192.168.1.20:3873",
             label: "Local network",
             provider: {
               id: "desktop-core",
@@ -474,8 +477,8 @@ describe("DesktopServerExposure", () => {
               kind: "core",
               isAddon: false,
             },
-            httpBaseUrl: "http://192.168.1.20:3773/",
-            wsBaseUrl: "ws://192.168.1.20:3773/",
+            httpBaseUrl: "http://192.168.1.20:3873/",
+            wsBaseUrl: "ws://192.168.1.20:3873/",
             reachability: "lan",
             compatibility: {
               hostedHttpsApp: "mixed-content-blocked",
@@ -507,7 +510,7 @@ describe("DesktopServerExposure", () => {
             description: "User-configured HTTPS endpoint for this desktop backend.",
           },
           {
-            id: "manual:http://desktop.example.test:3773",
+            id: "manual:http://desktop.example.test:3873",
             label: "Custom endpoint",
             provider: {
               id: "manual",
@@ -515,8 +518,8 @@ describe("DesktopServerExposure", () => {
               kind: "manual",
               isAddon: false,
             },
-            httpBaseUrl: "http://desktop.example.test:3773/",
-            wsBaseUrl: "ws://desktop.example.test:3773/",
+            httpBaseUrl: "http://desktop.example.test:3873/",
+            wsBaseUrl: "ws://desktop.example.test:3873/",
             reachability: "public",
             compatibility: {
               hostedHttpsApp: "mixed-content-blocked",
@@ -529,8 +532,8 @@ describe("DesktopServerExposure", () => {
         ]);
       }),
       {
-        T3CODE_DESKTOP_HTTPS_ENDPOINTS:
-          "https://desktop.example.ts.net,http://desktop.example.test:3773,not-a-url",
+        BUSYBOY_DESKTOP_HTTPS_ENDPOINTS:
+          "https://desktop.example.ts.net,http://desktop.example.test:3873,not-a-url",
       },
     ),
   );

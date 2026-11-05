@@ -55,16 +55,16 @@ const emptyBackendObservabilitySettings: BackendObservabilitySettings = {
 };
 
 const DESKTOP_BACKEND_ENV_NAMES = [
-  "T3CODE_PORT",
-  "T3CODE_MODE",
-  "T3CODE_NO_BROWSER",
-  "T3CODE_HOST",
-  "T3CODE_DESKTOP_WS_URL",
-  "T3CODE_DESKTOP_LAN_ACCESS",
-  "T3CODE_DESKTOP_LAN_HOST",
-  "T3CODE_DESKTOP_HTTPS_ENDPOINTS",
-  "T3CODE_TAILSCALE_SERVE",
-  "T3CODE_TAILSCALE_SERVE_PORT",
+  "BUSYBOY_PORT",
+  "BUSYBOY_MODE",
+  "BUSYBOY_NO_BROWSER",
+  "BUSYBOY_HOST",
+  "BUSYBOY_DESKTOP_WS_URL",
+  "BUSYBOY_DESKTOP_LAN_ACCESS",
+  "BUSYBOY_DESKTOP_LAN_HOST",
+  "BUSYBOY_DESKTOP_HTTPS_ENDPOINTS",
+  "BUSYBOY_TAILSCALE_SERVE",
+  "BUSYBOY_TAILSCALE_SERVE_PORT",
 ] as const;
 
 const backendChildEnvPatch = (): Record<string, string | undefined> =>
@@ -234,7 +234,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       env: {
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
-        T3CODE_CLI_PATH: Option.getOrUndefined(input.cliPath),
+        BUSYBOY_CLI_PATH: Option.getOrUndefined(input.cliPath),
       },
       extendEnv: true,
       bootstrap,

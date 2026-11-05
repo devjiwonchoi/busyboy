@@ -44,7 +44,7 @@ function direct(id: string, httpBaseUrl: string): ConnectionRoute {
   };
 }
 
-const LAN = direct("lan", "http://192.168.1.10:3773/");
+const LAN = direct("lan", "http://192.168.1.10:3873/");
 const TAILNET = direct("tailnet", "https://desk.tail1234.ts.net/");
 const PUBLIC = direct("public", "https://desk.example.com/");
 
@@ -61,12 +61,12 @@ describe("connection routes", () => {
   it("classifies direct routes by address", () => {
     expect(connectionRouteKind(LAN)).toBe("lan");
     // Tailscale, Cloudflare WARP and Mesh, and other VPNs share 100.64.0.0/10.
-    expect(connectionRouteKind(direct("ip", "http://100.101.102.103:3773/"))).toBe("vpn");
-    expect(connectionRouteLabel(direct("mesh", "http://100.96.0.1:3773/"))).toBe("VPN");
+    expect(connectionRouteKind(direct("ip", "http://100.101.102.103:3873/"))).toBe("vpn");
+    expect(connectionRouteLabel(direct("mesh", "http://100.96.0.1:3873/"))).toBe("VPN");
     expect(connectionRouteKind(TAILNET)).toBe("tailnet");
     expect(connectionRouteKind(PUBLIC)).toBe("public");
-    expect(connectionRouteKind(direct("lo", "http://127.0.0.1:3773/"))).toBe("loopback");
-    expect(connectionRouteKind(direct("ts6", "http://[fd7a:115c:a1e0::1]:3773/"))).toBe("tailnet");
+    expect(connectionRouteKind(direct("lo", "http://127.0.0.1:3873/"))).toBe("loopback");
+    expect(connectionRouteKind(direct("ts6", "http://[fd7a:115c:a1e0::1]:3873/"))).toBe("tailnet");
     expect(connectionRouteLabel(TAILNET)).toBe("Tailscale");
   });
 
@@ -78,7 +78,7 @@ describe("connection routes", () => {
   });
 
   it("keeps a user's order when a saved route is replaced", () => {
-    const repaired = direct("lan", "http://192.168.1.11:3773/");
+    const repaired = direct("lan", "http://192.168.1.11:3873/");
     expect(upsertRoute([PUBLIC, LAN], repaired)).toEqual([PUBLIC, repaired]);
   });
 });
@@ -149,18 +149,18 @@ describe("learned routes", () => {
     const next = mergeLearnedRoutes({
       entry: reordered,
       activeRoute: PUBLIC,
-      reported: [tailnet, { kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3773/" }],
+      reported: [tailnet, { kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3873/" }],
       allowInsecure: true,
     });
     expect(ids(next)).toEqual([
-      `learned:${ENVIRONMENT_ID}:http://100.101.102.103:3773@public`,
+      `learned:${ENVIRONMENT_ID}:http://100.101.102.103:3873@public`,
       "public",
       `learned:${ENVIRONMENT_ID}:${TAILNET_ORIGIN}@public`,
     ]);
   });
 
   it("labels a learned address Tailscale only while the server reports it as tailnet", () => {
-    const tailscale = { kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3773/" };
+    const tailscale = { kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3873/" };
     const first = mergeLearnedRoutes({
       entry: entryWithRoutes(publicOnly, [LAN, PUBLIC]),
       activeRoute: LAN,
@@ -188,14 +188,14 @@ describe("learned routes", () => {
   });
 
   it("labels a paired numeric Tailscale address Tailscale once the server confirms it", () => {
-    const paired = direct("paired", "http://100.101.102.103:3773/");
-    const other = direct("other", "http://100.96.0.1:3773/");
+    const paired = direct("paired", "http://100.101.102.103:3873/");
+    const other = direct("other", "http://100.96.0.1:3873/");
     const entry = entryWithRoutes(publicOnly, [paired, other, PUBLIC]);
     expect(connectionRouteLabel(paired)).toBe("VPN");
     const confirmed = mergeLearnedRoutes({
       entry,
       activeRoute: paired,
-      reported: [{ kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3773/" }],
+      reported: [{ kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3873/" }],
       allowInsecure: true,
     })!;
     expect(ids(confirmed)).toEqual(["paired", "other", "public"]);
@@ -208,7 +208,7 @@ describe("learned routes", () => {
       mergeLearnedRoutes({
         entry,
         activeRoute: PUBLIC,
-        reported: [{ httpBaseUrl: "http://192.168.1.10:3773" }],
+        reported: [{ httpBaseUrl: "http://192.168.1.10:3873" }],
         allowInsecure: true,
       }),
     ).toBeNull();
@@ -222,21 +222,21 @@ describe("learned routes", () => {
       entry: publicOnly,
       activeRoute: PUBLIC,
       reported: [
-        { kind: "lan", httpBaseUrl: "http://192.168.1.10:3773/" },
-        { kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3773/" },
+        { kind: "lan", httpBaseUrl: "http://192.168.1.10:3873/" },
+        { kind: "tailnet", httpBaseUrl: "http://100.101.102.103:3873/" },
         { kind: "tailnet", httpBaseUrl: `${TAILNET_ORIGIN}/` },
       ],
       allowInsecure: true,
     });
     expect(ids(routes)).toEqual([
-      `learned:${ENVIRONMENT_ID}:http://100.101.102.103:3773@public`,
+      `learned:${ENVIRONMENT_ID}:http://100.101.102.103:3873@public`,
       `learned:${ENVIRONMENT_ID}:${TAILNET_ORIGIN}@public`,
       "public",
     ]);
   });
 
   it("drops a plain HTTP LAN route learned earlier over an HTTPS-paired token", () => {
-    const lanOrigin = "http://192.168.1.10:3773";
+    const lanOrigin = "http://192.168.1.10:3873";
     const learnedStale = learned(`learned:${ENVIRONMENT_ID}:${lanOrigin}@public`, `${lanOrigin}/`);
     const routes = mergeLearnedRoutes({
       entry: entryWithRoutes(publicOnly, [learnedStale, PUBLIC]),
@@ -248,7 +248,7 @@ describe("learned routes", () => {
   });
 
   it("refuses a stale plain HTTP route borrowing an HTTPS-paired token", () => {
-    const lanOrigin = "http://10.0.0.42:3773";
+    const lanOrigin = "http://10.0.0.42:3873";
     const stale = learned(`learned:${ENVIRONMENT_ID}:${lanOrigin}@public`, `${lanOrigin}/`);
     const entry = entryWithRoutes(publicOnly, [stale, LAN, PUBLIC]);
     expect(sendsTokenInClear([stale, LAN, PUBLIC], stale)).toBe(true);
@@ -256,7 +256,7 @@ describe("learned routes", () => {
   });
 
   it("keeps plain HTTP routes that don't borrow the active HTTPS-paired token", () => {
-    const lanOrigin = "http://10.0.0.42:3773";
+    const lanOrigin = "http://10.0.0.42:3873";
     const overLan = learned(`learned:${ENVIRONMENT_ID}:${lanOrigin}@lan`, `${lanOrigin}/`);
     const routes = mergeLearnedRoutes({
       entry: entryWithRoutes(publicOnly, [overLan, LAN, PUBLIC]),
@@ -271,12 +271,12 @@ describe("learned routes", () => {
     const routes = mergeLearnedRoutes({
       entry: entryWithRoutes(publicOnly, [LAN, PUBLIC]),
       activeRoute: LAN,
-      reported: [{ kind: "lan", httpBaseUrl: "http://10.0.0.42:3773/" }],
+      reported: [{ kind: "lan", httpBaseUrl: "http://10.0.0.42:3873/" }],
       allowInsecure: true,
     });
     expect(ids(routes)).toEqual([
       "lan",
-      `learned:${ENVIRONMENT_ID}:http://10.0.0.42:3773@lan`,
+      `learned:${ENVIRONMENT_ID}:http://10.0.0.42:3873@lan`,
       "public",
     ]);
   });
@@ -287,8 +287,8 @@ describe("learned routes", () => {
         entry: entryWithRoutes(publicOnly, [LAN, PUBLIC]),
         activeRoute: LAN,
         reported: [
-          { httpBaseUrl: "http://10.0.0.42:3773/" },
-          { httpBaseUrl: "http://127.0.0.1:3773/" },
+          { httpBaseUrl: "http://10.0.0.42:3873/" },
+          { httpBaseUrl: "http://127.0.0.1:3873/" },
         ],
         allowInsecure: false,
       }),
@@ -322,18 +322,18 @@ describe("learned routes", () => {
     const first = mergeLearnedRoutes({
       entry: entryWithRoutes(publicOnly, [LAN, PUBLIC]),
       activeRoute: LAN,
-      reported: [{ httpBaseUrl: "http://desk.local:3773/" }],
+      reported: [{ httpBaseUrl: "http://desk.local:3873/" }],
       allowInsecure: true,
     })!;
     const moved = mergeLearnedRoutes({
       entry: entryWithRoutes(publicOnly, first),
       activeRoute: LAN,
-      reported: [{ httpBaseUrl: "https://desk.local:3773/" }],
+      reported: [{ httpBaseUrl: "https://desk.local:3873/" }],
       allowInsecure: true,
     });
     expect(moved).not.toBeNull();
     expect(moved!.map((route) => profileOf(route))).toContainEqual(
-      expect.objectContaining({ httpBaseUrl: "https://desk.local:3773/" }),
+      expect.objectContaining({ httpBaseUrl: "https://desk.local:3873/" }),
     );
   });
 });
