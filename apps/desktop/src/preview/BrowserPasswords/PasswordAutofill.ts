@@ -26,6 +26,7 @@ import {
   PASSWORD_SUBMIT_CHANNEL,
 } from "../GuestProtocol.ts";
 import * as BrowserPasswords from "./BrowserPasswords.ts";
+import { makeClientSettingsCache } from "./ClientSettingsCache.ts";
 import { GuestAutofill, type AutofillFrame } from "./GuestAutofill.ts";
 import {
   GuestChildFrame,
@@ -80,15 +81,22 @@ export const make = Effect.gen(function* () {
   const browserHost = yield* DesktopBrowserHost.DesktopBrowserHost;
   const clientSettings = yield* DesktopClientSettings.DesktopClientSettings;
   const powerMonitor = yield* ElectronPowerMonitor.ElectronPowerMonitor;
-  const runSync = Effect.runSyncWith(yield* Effect.context<never>());
+  const context = yield* Effect.context<never>();
+  const runFork = Effect.runForkWith(context);
 
   const sessions = new Map<string, GuestAutofill>();
   const listeners = new Set<(event: BrowserPasswordAutofillEvent) => void>();
   const unlockedUntil = new Map<string, number>();
   const typedUsernames = new Map<string, { username: string; at: number }>();
 
-  const settings = () =>
-    Option.getOrNull(runSync(clientSettings.get.pipe(Effect.orElseSucceed(() => Option.none()))));
+  const settings = makeClientSettingsCache({
+    get: clientSettings.get,
+    runFork: (effect) => {
+      runFork(effect);
+    },
+    runPromise: Effect.runPromiseWith(context),
+  });
+  settings.refresh();
 
   const emit = (event: BrowserPasswordAutofillEvent) => {
     for (const listener of listeners) listener(event);
@@ -100,7 +108,7 @@ export const make = Effect.gen(function* () {
   yield* powerMonitor.onSimpleEvent("suspend", lock);
 
   const authorizeFill = async (profileId: string, site: string) => {
-    if (settings()?.browserPasswordsRequireDeviceAuth === false) return true;
+    if ((await settings.read())?.browserPasswordsRequireDeviceAuth === false) return true;
     if ((unlockedUntil.get(profileId) ?? 0) > Date.now()) return true;
     const approved = await passwords.authorize({ action: "fill", site });
     if (approved) unlockedUntil.set(profileId, Date.now() + FILL_UNLOCK_WINDOW_MS);
@@ -122,7 +130,9 @@ export const make = Effect.gen(function* () {
       topLevelUrl: () => (wc.isDestroyed() ? "" : wc.getURL()),
       agentActiveWithin: (ms) => browserHost.agentInputWithin(wc, ms),
       vault: () => passwords.vault(profileId),
-      settings: () => ({ offerToSave: settings()?.browserOfferToSavePasswords !== false }),
+      settings: () => ({
+        offerToSave: settings.current()?.browserOfferToSavePasswords !== false,
+      }),
       authorizeFill: (site) => authorizeFill(profileId, site),
       emit,
       notifyChanged: () => passwords.notifyChanged(profileId),
@@ -188,9 +198,11 @@ export const make = Effect.gen(function* () {
       return () => wc.ipc.off(channel, listener);
     };
     const offs = [
-      on(PASSWORD_FORMS_CHANNEL, decoders.forms, (frame, report) =>
-        autofill.formsReported(frame, report),
-      ),
+      on(PASSWORD_FORMS_CHANNEL, decoders.forms, (frame, report) => {
+        // A submit always follows its page's forms report, so it sees fresh settings.
+        settings.refresh();
+        autofill.formsReported(frame, report);
+      }),
       on(PASSWORD_FIELD_FOCUS_CHANNEL, decoders.focus, (frame, focus) =>
         autofill.fieldFocused(frame, focus),
       ),
