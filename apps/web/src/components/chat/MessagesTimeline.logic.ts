@@ -47,7 +47,6 @@ import {
 } from "../../types";
 import {
   type MessageId,
-  type ProjectDecisionCard,
   type WorktreeSetupSnapshot,
   type OrchestrationV2ProjectedTurnItem,
   type RunAttemptId,
@@ -603,12 +602,6 @@ type MessagesTimelineRowContent =
       id: string;
       createdAt: string;
       htmlRender: HtmlRenderReference;
-    }
-  | {
-      kind: "decision-card";
-      id: string;
-      createdAt: string;
-      card: ProjectDecisionCard;
     }
   | {
       kind: "mcp-app";
@@ -2217,9 +2210,6 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
     case "proposed-plan":
       return a.proposedPlan === (b as typeof a).proposedPlan;
 
-    case "decision-card":
-      return Equal.equals(a.card, (b as typeof a).card);
-
     case "html-render": {
       // Entries rebuild on any tool update; an equal page must keep its mounted frame.
       const bh = b as typeof a;
@@ -2444,46 +2434,4 @@ export function reusePmTimelineValues<T extends PmTimelineValues>(
     if (prior === undefined || prior.since !== reply.since) return null;
   }
   return previous;
-}
-
-const decisionCardRowCache = new WeakMap<ProjectDecisionCard, MessagesTimelineRow>();
-
-function decisionCardRow(card: ProjectDecisionCard): MessagesTimelineRow {
-  const cached = decisionCardRowCache.get(card);
-  if (cached) return cached;
-  const row: MessagesTimelineRow = {
-    kind: "decision-card",
-    id: `decision-card:${card.item.id}`,
-    createdAt: card.item.createdAt,
-    card,
-  };
-  decisionCardRowCache.set(card, row);
-  return row;
-}
-
-/**
- * Places the PM's decision cards among the thread's rows by the time each question was
- * asked. A card goes before the first row that started later; rows without a time keep
- * their place.
- */
-export function mergeDecisionCardRows(
-  rows: MessagesTimelineRow[],
-  cards: ReadonlyArray<ProjectDecisionCard> | undefined,
-): MessagesTimelineRow[] {
-  if (!cards || cards.length === 0) return rows;
-  const pending = cards
-    .toSorted((a, b) => Date.parse(a.item.createdAt) - Date.parse(b.item.createdAt))
-    .map((card) => ({ at: Date.parse(card.item.createdAt), row: decisionCardRow(card) }));
-  const merged: MessagesTimelineRow[] = [];
-  let next = 0;
-  for (const row of rows) {
-    const rowTime = row.createdAt === null ? Number.NaN : Date.parse(row.createdAt);
-    while (next < pending.length && pending[next]!.at < rowTime) {
-      merged.push(pending[next]!.row);
-      next += 1;
-    }
-    merged.push(row);
-  }
-  for (; next < pending.length; next += 1) merged.push(pending[next]!.row);
-  return merged;
 }

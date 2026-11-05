@@ -462,11 +462,8 @@ describe("TaskOutcomeReactor", () => {
             leadTurnEnded({ lead: lead.leadThreadId, status: "completed", completedAt: at }),
           );
         }
-        // The question shows up as its own decision card; the outcome adds nothing.
-        const wakes = (yield* harness.messagesTo(pm)).filter(
-          (text) => !text.startsWith("[Decision card]"),
-        );
-        assert.deepStrictEqual(wakes, []);
+        // The question waits on the task's page; the outcome adds nothing for the PM.
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
       }),
     ),
   );

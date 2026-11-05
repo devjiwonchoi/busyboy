@@ -120,54 +120,51 @@ describe("AttentionRouter", () => {
     ),
   );
 
-  it.effect("shows each question as a card and replaces an unanswered approval with the newer plan", () =>
-    withTeam((harness) =>
-      Effect.gen(function* () {
-        const team = yield* ProjectTeamService.ProjectTeamService;
-        const pm = yield* setUpManager;
-        const lead = yield* startLead(pm, "Fix login", harness.delegate);
-        const first = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Plan v1?",
-        });
-        yield* TestClock.adjust("1 minute");
-        const second = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Plan v2?",
-        });
+  it.effect(
+    "shows each question as a card and replaces an unanswered approval with the newer plan",
+    () =>
+      withTeam((harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const pm = yield* setUpManager;
+          const lead = yield* startLead(pm, "Fix login", harness.delegate);
+          const first = yield* team.askUser(lead.leadThreadId, {
+            kind: "approval",
+            question: "Plan v1?",
+          });
+          yield* TestClock.adjust("1 minute");
+          const second = yield* team.askUser(lead.leadThreadId, {
+            kind: "approval",
+            question: "Plan v2?",
+          });
 
-        const summary = (yield* team.attentionSnapshot).projects[0];
-        assert.strictEqual(summary?.openCount, 1);
-        assert.deepStrictEqual(
-          summary?.decisionCards.map((card) => [
-            card.taskTitle,
-            card.item.question,
-            card.item.supersededAt === null,
-          ]),
-          [
-            ["Fix login", "Plan v1?", false],
-            ["Fix login", "Plan v2?", true],
-          ],
-        );
-        const stale = yield* team
-          .answerDecision({ projectId: PROJECT_ID, attentionItemId: first.item.id, answer: "Ok" })
-          .pipe(Effect.flip);
-        assert.include(stale.message, "replaced by a newer question");
-        assert.strictEqual(second.item.supersededAt, null);
+          const summary = (yield* team.attentionSnapshot).projects[0];
+          assert.strictEqual(summary?.openCount, 1);
+          assert.deepStrictEqual(
+            summary?.decisionCards.map((card) => [
+              card.taskTitle,
+              card.item.question,
+              card.item.supersededAt === null,
+            ]),
+            [
+              ["Fix login", "Plan v1?", false],
+              ["Fix login", "Plan v2?", true],
+            ],
+          );
+          const stale = yield* team
+            .answerDecision({ projectId: PROJECT_ID, attentionItemId: first.item.id, answer: "Ok" })
+            .pipe(Effect.flip);
+          assert.include(stale.message, "replaced by a newer question");
+          assert.strictEqual(second.item.supersededAt, null);
 
-        // Each new card wakes the PM, naming the task, so it can add a recommendation.
-        const toPm = yield* harness.messagesTo(pm);
-        assert.isTrue(
-          toPm.some(
-            (text) =>
-              text.startsWith('[Decision card] The task "Fix login"') && text.includes("Plan v2?"),
-          ),
-        );
-      }),
-    ),
+          // Cards show on the task page and in "Waiting on you"; the PM is not woken for them.
+          const toPm = yield* harness.messagesTo(pm);
+          assert.isFalse(toPm.some((text) => text.includes("Plan v2?")));
+        }),
+      ),
   );
 
-  it.effect("sends a card answer straight to the task lead, then tells the PM", () =>
+  it.effect("sends a card answer straight to the task lead without waking the PM", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* ProjectTeamService.ProjectTeamService;
@@ -195,12 +192,7 @@ describe("AttentionRouter", () => {
         const summary = (yield* team.attentionSnapshot).projects[0];
         assert.strictEqual(summary?.openCount, 0);
         assert.strictEqual(summary?.decisionCards[0]?.item.answer, "Approve\nNote: keep it small");
-        const toPm = yield* harness.messagesTo(pm);
-        assert.isTrue(
-          toPm.some((text) =>
-            text.startsWith('[Decision answered] The user answered the card from "Fix login"'),
-          ),
-        );
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
       }),
     ),
   );
