@@ -12,6 +12,7 @@ import {
   ProjectId,
   type ServerProvider,
   ThreadId,
+  type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -21,6 +22,7 @@ import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
@@ -31,6 +33,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import * as ContextCare from "./ContextCare.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
+import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
@@ -52,6 +55,11 @@ export interface FakeThread {
   subagents?: Array<Pick<OrchestrationV2Subagent, "origin" | "status">>;
   /** Provider turns; only `id`, `status` and `tokenUsage` matter to the team services. */
   providerTurns?: Array<Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage">>;
+  worktreePath?: string | null;
+  branch?: string | null;
+  /** Parent in the thread lineage, e.g. the lead of a provider subagent. */
+  parentThreadId?: ThreadId | null;
+  pullRequests?: Array<Pick<ThreadPullRequestLink, "host" | "repository" | "number" | "url">>;
 }
 
 export interface TeamHarness {
@@ -64,6 +72,12 @@ export interface TeamHarness {
   readonly sendFailures: { remaining: number };
   /** Provider snapshots the registry reports; empty unless a test fills it. */
   readonly providers: Array<ServerProvider>;
+  /** The branch checked out in a worktree; null when unknown. */
+  checkedOutBranch: (worktreePath: string) => string | null;
+  /** Runs after a thread is archived, like the server's worktree cleanup effect. */
+  onArchive: (threadId: ThreadId) => Effect.Effect<void>;
+  /** Runs after a thread is unarchived with restoreWorktree, like the restore effect. */
+  onRestore: (threadId: ThreadId) => Effect.Effect<void>;
   /** Starts every task lead on a thread named lead-<n>. */
   readonly delegate: ProjectTeamService.DelegateTaskLead;
   readonly addProject: (projectId: ProjectId, title: string) => void;
@@ -83,7 +97,8 @@ export type TeamServices =
   | TaskOutcomeReactor.TaskOutcomeReactor
   | StalledTaskSweep.StalledTaskSweep
   | DefaultManagerReactor.DefaultManagerReactor
-  | ContextCare.ContextCare;
+  | ContextCare.ContextCare
+  | FinishedTaskCleanup.FinishedTaskCleanup;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -124,6 +139,24 @@ const makeProject = (projectId: ProjectId, title: string): ProjectStore.ProjectR
   deletedAt: null,
 });
 
+const toShell = (thread: FakeThread): OrchestrationV2ThreadShell =>
+  ({
+    id: thread.id,
+    projectId: thread.projectId,
+    title: thread.title,
+    activeRunId: thread.activeRunId,
+    worktreePath: thread.worktreePath ?? null,
+    branch: thread.branch ?? null,
+    pullRequests: thread.pullRequests ?? [],
+    lineage: {
+      parentThreadId: thread.parentThreadId ?? null,
+      relationshipToParent: thread.parentThreadId == null ? null : "subagent",
+      rootThreadId: thread.id,
+    },
+    deletedAt: thread.deletedAt === null ? null : DateTime.makeUnsafe(thread.deletedAt),
+    archivedAt: thread.archivedAt === null ? null : DateTime.makeUnsafe(thread.archivedAt),
+  }) as unknown as OrchestrationV2ThreadShell;
+
 /** Runs `body` against the team services with in-memory storage and fake threads. */
 export const withTeam = <A, E>(
   body: (harness: TeamHarness) => Effect.Effect<A, E, TeamServices>,
@@ -160,26 +193,41 @@ export const withTeam = <A, E>(
           if (command.type === "thread.metadata.update" && command.title !== undefined) {
             target.title = command.title;
           }
+          if (command.type === "thread.metadata.update" && command.branch !== undefined) {
+            target.branch = command.branch;
+          }
           if (command.type === "thread.archive") target.archivedAt = START;
           if (command.type === "thread.unarchive") target.archivedAt = null;
           if (command.type === "thread.delete") target.deletedAt = START;
         }).pipe(
           Effect.andThen(Ref.update(dispatched, (all) => [...all, command])),
+          Effect.andThen(
+            Effect.suspend(() =>
+              command.type === "thread.archive"
+                ? harness.onArchive(command.threadId)
+                : command.type === "thread.unarchive" && command.restoreWorktree === true
+                  ? harness.onRestore(command.threadId)
+                  : Effect.void,
+            ),
+          ),
           Effect.as({ sequence: 1, storedEvents: [] }),
         ),
       getThreadShell: (threadId) =>
         Effect.sync(() => {
           const thread = threads.get(threadId);
-          if (thread === undefined) return null;
-          return {
-            id: thread.id,
-            projectId: thread.projectId,
-            title: thread.title,
-            activeRunId: thread.activeRunId,
-            deletedAt: thread.deletedAt === null ? null : DateTime.makeUnsafe(thread.deletedAt),
-            archivedAt: thread.archivedAt === null ? null : DateTime.makeUnsafe(thread.archivedAt),
-          } as unknown as OrchestrationV2ThreadShell;
+          return thread === undefined ? null : toShell(thread);
         }),
+      listProjectThreads: ({ projectId }) =>
+        Effect.sync(() =>
+          [...threads.values()]
+            .filter(
+              (thread) =>
+                thread.projectId === projectId &&
+                thread.archivedAt === null &&
+                thread.deletedAt === null,
+            )
+            .map(toShell),
+        ),
       sendToThread: (input) =>
         Effect.suspend(() => {
           if (sendFailures.remaining > 0) {
@@ -217,6 +265,11 @@ export const withTeam = <A, E>(
     });
 
     const providers: Array<ServerProvider> = [];
+    const gitWorkflow = Layer.mock(GitWorkflowService.GitWorkflowService)({
+      invalidateLocalStatus: () => Effect.void,
+      localStatus: (input) =>
+        Effect.sync(() => ({ refName: harness.checkedOutBranch(input.cwd) }) as never),
+    });
     const sendFailures = { remaining: 0 };
     const providerRegistry = Layer.mock(ProviderRegistry.ProviderRegistry)({
       getProviders: Effect.sync(() => [...providers]),
@@ -245,6 +298,7 @@ export const withTeam = <A, E>(
       Layer.provide(
         Layer.mergeAll(
           threadManagement,
+          gitWorkflow,
           projectStore,
           providerRegistry,
           ServerSettings.layerTest(),
@@ -264,6 +318,9 @@ export const withTeam = <A, E>(
       delegated,
       sendFailures,
       providers,
+      checkedOutBranch: () => null,
+      onArchive: () => Effect.void,
+      onRestore: () => Effect.void,
       delegate: (input) =>
         Effect.gen(function* () {
           yield* Ref.update(delegated, (all) => [...all, input]);
