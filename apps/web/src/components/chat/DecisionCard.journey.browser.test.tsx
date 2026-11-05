@@ -68,8 +68,9 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
       },
       () => server.summary,
     )) as never,
-  useAnswerDecision: (() => (_environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
-    answerDecision(input)) as never,
+  useAnswerDecision: (() =>
+    (_environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
+      answerDecision(input)) as never,
 }));
 
 function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDecisionCard {
@@ -163,9 +164,7 @@ it("shows a task lead's approval as a card in the PM thread, and Approve goes st
   expect(cardElement("open")).toBeNull();
 
   // A task lead asks for plan approval: the card appears without the PM saying anything.
-  await act(async () =>
-    publish({ ...server.summary!, openCount: 1, decisionCards: [card()] }),
-  );
+  await act(async () => publish({ ...server.summary!, openCount: 1, decisionCards: [card()] }));
   const open = await vi.waitFor(() => {
     const element = cardElement("open");
     expect(element).not.toBeNull();
@@ -244,4 +243,85 @@ it("sends a note with the choice and shows a replaced plan as one quiet line", a
   expect(answered.querySelector("[data-answered-question-note]")?.textContent).toBe(
     "Note: Keep the old redirect behind a flag",
   );
+});
+
+it("opens a long plan full screen, and a pick with a note made there reaches the task lead", async () => {
+  const steps = Array.from(
+    { length: 40 },
+    (_, index) => `${index + 1}. Step ${index + 1}: update the auth guard and its tests.`,
+  );
+  const longPlan = `Plan: move the redirect into the auth guard.\n\n${steps.join("\n")}\n\nLast line of the plan.`;
+  server.summary = {
+    ...server.summary!,
+    openCount: 1,
+    decisionCards: [card({ question: longPlan })],
+  };
+  await act(async () => root.render(<MessagesTimeline {...timelineProps()} />));
+  const open = await vi.waitFor(() => {
+    const element = cardElement("open");
+    expect(element).not.toBeNull();
+    return element!;
+  });
+
+  // Inline, the long plan sits in a short scroll box.
+  const inlineScroll = open.querySelector<HTMLElement>("[data-slot=scroll-area-viewport]")!;
+  expect(inlineScroll.getBoundingClientRect().height).toBeLessThanOrEqual(
+    window.innerHeight * 0.4 + 1,
+  );
+
+  const expandButton = () =>
+    open.querySelector<HTMLElement>('[data-pending-user-input-expand="inline"]')!;
+  const expandedView = () =>
+    document.querySelector<HTMLElement>(`[data-decision-card-expanded="attention-plan"]`);
+  await act(async () => expandButton().click());
+  const expanded = await vi.waitFor(() => {
+    const element = expandedView();
+    expect(element).not.toBeNull();
+    return element!;
+  });
+
+  // Full screen, the whole plan is readable in a view much taller than the inline box.
+  expect(expanded.textContent).toContain("Plan approval · Fix the login redirect");
+  expect(expanded.textContent).toContain("Last line of the plan.");
+  const expandedScroll = expanded.querySelector<HTMLElement>("[data-slot=scroll-area-viewport]")!;
+  expect(expandedScroll.getBoundingClientRect().height).toBeGreaterThan(
+    inlineScroll.getBoundingClientRect().height * 1.5,
+  );
+
+  // Pick and write a note in the full-screen view.
+  await act(async () => buttonIn(expanded, "Request changes").click());
+  const note = await vi.waitFor(() => {
+    const field = expanded.querySelector<HTMLTextAreaElement>("[data-pending-user-input-note]");
+    expect(field).not.toBeNull();
+    return field!;
+  });
+  await userEvent.type(note, "Split step 12 into two");
+
+  // Leaving full screen keeps the draft on the inline card.
+  await act(async () =>
+    expanded.querySelector<HTMLElement>('[data-pending-user-input-expand="expanded"]')!.click(),
+  );
+  await vi.waitFor(() => expect(expandedView()).toBeNull());
+  expect(open.querySelector<HTMLTextAreaElement>("[data-pending-user-input-note]")?.value).toBe(
+    "Split step 12 into two",
+  );
+  expect(server.answers).toHaveLength(0);
+
+  // Back to full screen to submit.
+  await act(async () => expandButton().click());
+  const reopened = await vi.waitFor(() => {
+    const element = expandedView();
+    expect(element).not.toBeNull();
+    return element!;
+  });
+  await act(async () => buttonIn(reopened, "Submit").click());
+
+  await vi.waitFor(() => expect(server.answers).toHaveLength(1));
+  expect(server.answers[0]?.answer).toBe("Request changes\nNote: Split step 12 into two");
+  expect(server.leadMessages).toEqual([
+    `[User answer via BusyBoy PM] ${longPlan} → Request changes\nNote: Split step 12 into two`,
+  ]);
+  // The answered card replaces the open one, and the full-screen view closes with it.
+  await vi.waitFor(() => expect(cardElement("answered")).not.toBeNull());
+  await vi.waitFor(() => expect(expandedView()).toBeNull());
 });

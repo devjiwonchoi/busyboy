@@ -7,7 +7,7 @@ import {
   pendingUserInputOptionInvitesNote,
   type PendingUserInputDraftAnswer,
 } from "../../pendingUserInput";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { cn } from "~/lib/utils";
 import { ComposerBanner } from "./ComposerBanner";
@@ -27,6 +27,11 @@ interface PendingUserInputPanelProps {
   onDismiss: (requestId: RuntimeRequestId) => void;
   /** Number keys pick options. Off where several cards share the screen. */
   keyboardShortcuts?: boolean;
+  /** Shows a header button that opens the card full screen, or closes it when `expanded`. */
+  onToggleExpanded?: () => void;
+  expanded?: boolean;
+  /** Overrides the body's scroll box, e.g. to lift the height cap in an expanded view. */
+  scrollClassName?: string;
 }
 
 export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserInputPanel({
@@ -42,6 +47,9 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
   onAdvance,
   onDismiss,
   keyboardShortcuts = true,
+  onToggleExpanded,
+  expanded = false,
+  scrollClassName,
 }: PendingUserInputPanelProps) {
   if (pendingUserInputs.length === 0) return null;
   const activePrompt = pendingUserInputs[0];
@@ -62,6 +70,9 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
       onAdvance={onAdvance}
       onDismiss={onDismiss}
       keyboardShortcuts={keyboardShortcuts}
+      onToggleExpanded={onToggleExpanded}
+      expanded={expanded}
+      scrollClassName={scrollClassName}
     />
   );
 });
@@ -79,6 +90,9 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onAdvance,
   onDismiss,
   keyboardShortcuts,
+  onToggleExpanded,
+  expanded,
+  scrollClassName,
 }: {
   prompt: PendingUserInput;
   cwd: string | undefined;
@@ -92,6 +106,9 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onAdvance: () => void;
   onDismiss: (requestId: RuntimeRequestId) => void;
   keyboardShortcuts: boolean;
+  onToggleExpanded: (() => void) | undefined;
+  expanded: boolean;
+  scrollClassName: string | undefined;
 }) {
   // Message-mode requests remain answerable after their provider turn ends.
   const canRespond = prompt.responseCapability !== "not_resumable";
@@ -248,6 +265,32 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
               {questionIndex + 1}/{prompt.questions.length}
             </span>
           ) : null}
+          {onToggleExpanded ? (
+            // A span, because the header row is itself a button.
+            <ComposerBanner.Dismiss
+              render={<span role="button" tabIndex={0} />}
+              aria-label={expanded ? "Exit full screen" : "Open full screen"}
+              title={expanded ? "Exit full screen" : "Open full screen"}
+              data-pending-user-input-expand={expanded ? "expanded" : "inline"}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onToggleExpanded();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                onToggleExpanded();
+              }}
+            >
+              {expanded ? (
+                <Minimize2Icon className="size-3.5" />
+              ) : (
+                <Maximize2Icon className="size-3.5" />
+              )}
+            </ComposerBanner.Dismiss>
+          ) : null}
           <ComposerBanner.ToggleIcon expanded={!isCollapsed} />
           {prompt.dismissible ? (
             <ComposerBanner.Dismiss
@@ -272,7 +315,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
         </ComposerBanner.Actions>
       </CollapsibleTrigger>
       <CollapsiblePanel>
-        <ComposerBanner.Scroll>
+        <ComposerBanner.Scroll className={scrollClassName}>
           <ComposerBanner.Body className="pe-1 pb-1 wrap-anywhere">
             <ChatMarkdown
               text={activeQuestion.question}
