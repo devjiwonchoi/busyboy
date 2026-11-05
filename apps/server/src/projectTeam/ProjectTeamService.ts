@@ -93,6 +93,7 @@ import {
   teamError,
 } from "./common.ts";
 import { isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
+import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
@@ -140,7 +141,7 @@ export function decisionCardWakeText(
     `[Decision card] The task "${task.title}" asks the user for ${ATTENTION_KIND_LABEL[item.kind]}:`,
     clip(item.question, CARD_WAKE_QUESTION_MAX_CHARS),
     "The card with its buttons is already in front of the user, and their click goes straight to the task lead.",
-    "If it helps the user decide, reply with one or two plain-language lines: what this is, the tradeoff, and your recommendation. Otherwise reply \"No action.\"",
+    'If it helps the user decide, reply with one or two plain-language lines: what this is, the tradeoff, and your recommendation. Otherwise reply "No action."',
   ].join("\n");
 }
 
@@ -480,6 +481,7 @@ const make = Effect.gen(function* () {
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const router = yield* AttentionRouter.AttentionRouter;
   const sitreps = yield* SitrepScheduler.SitrepScheduler;
+  const finishedTasks = yield* FinishedTaskCleanup.FinishedTaskCleanup;
   const newId = yield* makeIdGenerator;
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
 
@@ -824,6 +826,15 @@ const make = Effect.gen(function* () {
         yield* sitreps.noteMilestone(role.projectId);
       }
       if (stageChanged) yield* noteIdleMilestone(role.projectId, task.stage);
+      if (stageChanged && FinishedTaskCleanup.isFinishedStage(updated.stage)) {
+        // A PM cancel stops the lead now; otherwise the lead's turn ends first.
+        yield* finishedTasks.archiveLead(updated, {
+          stopLead: role.type === "pm" && updated.stage === "cancelled",
+        });
+      } else if (stageChanged && FinishedTaskCleanup.isFinishedStage(task.stage)) {
+        // Reopened, like moving a Linear issue out of Done: the lead and worktree return.
+        yield* finishedTasks.reviveLead(updated);
+      }
       yield* router.publish(role.projectId);
       return { task: updated };
     }).pipe(orTeamError("Could not update the task."));
@@ -1436,6 +1447,7 @@ export const layer = Layer.effect(ProjectTeamService, make);
 
 /** The service with its router and sitrep scheduler. */
 export const layerWithDependencies = layer.pipe(
+  Layer.provideMerge(FinishedTaskCleanup.layer),
   Layer.provideMerge(SitrepScheduler.layer),
   Layer.provideMerge(AttentionRouter.layer),
 );

@@ -10,7 +10,6 @@ import {
   type OrchestratorMcpDelegateTaskInput,
   type OrchestratorMcpDelegateTaskResult,
   ProjectId,
-  type PullRequestState,
   type ServerProvider,
   ThreadId,
   type ThreadPullRequestLink,
@@ -23,10 +22,10 @@ import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
@@ -73,10 +72,12 @@ export interface TeamHarness {
   readonly sendFailures: { remaining: number };
   /** Provider snapshots the registry reports; empty unless a test fills it. */
   readonly providers: Array<ServerProvider>;
-  /** PR state by PR number; a missing number fails the lookup. */
-  readonly pullRequestStates: Map<number, PullRequestState>;
+  /** The branch checked out in a worktree; null when unknown. */
+  checkedOutBranch: (worktreePath: string) => string | null;
   /** Runs after a thread is archived, like the server's worktree cleanup effect. */
   onArchive: (threadId: ThreadId) => Effect.Effect<void>;
+  /** Runs after a thread is unarchived with restoreWorktree, like the restore effect. */
+  onRestore: (threadId: ThreadId) => Effect.Effect<void>;
   /** Starts every task lead on a thread named lead-<n>. */
   readonly delegate: ProjectTeamService.DelegateTaskLead;
   readonly addProject: (projectId: ProjectId, title: string) => void;
@@ -190,6 +191,9 @@ export const withTeam = <A, E>(
           if (command.type === "thread.metadata.update" && command.title !== undefined) {
             target.title = command.title;
           }
+          if (command.type === "thread.metadata.update" && command.branch !== undefined) {
+            target.branch = command.branch;
+          }
           if (command.type === "thread.archive") target.archivedAt = START;
           if (command.type === "thread.unarchive") target.archivedAt = null;
           if (command.type === "thread.delete") target.deletedAt = START;
@@ -197,7 +201,11 @@ export const withTeam = <A, E>(
           Effect.andThen(Ref.update(dispatched, (all) => [...all, command])),
           Effect.andThen(
             Effect.suspend(() =>
-              command.type === "thread.archive" ? harness.onArchive(command.threadId) : Effect.void,
+              command.type === "thread.archive"
+                ? harness.onArchive(command.threadId)
+                : command.type === "thread.unarchive" && command.restoreWorktree === true
+                  ? harness.onRestore(command.threadId)
+                  : Effect.void,
             ),
           ),
           Effect.as({ sequence: 1, storedEvents: [] }),
@@ -255,15 +263,10 @@ export const withTeam = <A, E>(
     });
 
     const providers: Array<ServerProvider> = [];
-    const pullRequestStates = new Map<number, PullRequestState>();
-    const pullRequestService = Layer.mock(PullRequestService.PullRequestService)({
-      summary: (input) =>
-        Effect.suspend(() => {
-          const state = pullRequestStates.get(input.number);
-          return state === undefined
-            ? Effect.die(new Error(`no PR #${input.number}`))
-            : Effect.succeed({ state } as never);
-        }),
+    const gitWorkflow = Layer.mock(GitWorkflowService.GitWorkflowService)({
+      invalidateLocalStatus: () => Effect.void,
+      localStatus: (input) =>
+        Effect.sync(() => ({ refName: harness.checkedOutBranch(input.cwd) }) as never),
     });
     const sendFailures = { remaining: 0 };
     const providerRegistry = Layer.mock(ProviderRegistry.ProviderRegistry)({
@@ -286,7 +289,6 @@ export const withTeam = <A, E>(
       StalledTaskSweep.layer,
       DefaultManagerReactor.layer,
       ContextCare.layer,
-      FinishedTaskCleanup.layer,
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
@@ -294,7 +296,7 @@ export const withTeam = <A, E>(
       Layer.provide(
         Layer.mergeAll(
           threadManagement,
-          pullRequestService,
+          gitWorkflow,
           projectStore,
           providerRegistry,
           ServerSettings.layerTest(),
@@ -314,8 +316,9 @@ export const withTeam = <A, E>(
       delegated,
       sendFailures,
       providers,
-      pullRequestStates,
+      checkedOutBranch: () => null,
       onArchive: () => Effect.void,
+      onRestore: () => Effect.void,
       delegate: (input) =>
         Effect.gen(function* () {
           yield* Ref.update(delegated, (all) => [...all, input]);

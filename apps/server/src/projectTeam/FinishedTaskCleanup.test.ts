@@ -6,13 +6,11 @@ import * as nodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { ThreadId } from "@t3tools/contracts";
+import { type OrchestrationV2DomainEvent, ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
-import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
 import * as GitManager from "../git/GitManager.ts";
@@ -27,10 +25,9 @@ import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import { FinishedTaskCleanup } from "./FinishedTaskCleanup.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { type TeamHarness, setUpManager, startLead, withTeam } from "./testkit.ts";
+import { START, type TeamHarness, setUpManager, startLead, withTeam } from "./testkit.ts";
 
-const REPOSITORY = "acme/demo";
-const prUrl = (number: number) => `https://github.com/${REPOSITORY}/pull/${number}`;
+const PR_URL = "https://github.com/acme/demo/pull/1";
 
 const git = (cwd: string, ...args: ReadonlyArray<string>) =>
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], {
@@ -83,6 +80,12 @@ const makeRepository = (harness: TeamHarness) => {
                   }) as never,
               ),
             deleteMergedBranch: () => Effect.succeed(false),
+            // GitManager adds hooks and caching around this one git call.
+            createWorktree: (input) =>
+              Effect.sync(() => {
+                git(input.cwd, "worktree", "add", input.path!, input.refName);
+                return {} as never;
+              }),
           }),
         ),
         Layer.provide(GitVcsDriver.layer),
@@ -107,42 +110,39 @@ const makeRepository = (harness: TeamHarness) => {
         Layer.mock(ProjectStore.ProjectStoreV2)({
           get: () => Effect.succeed(Option.some({ workspaceRoot } as never)),
         }),
-        Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
+        Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
+          runForThread: () => Effect.succeed({ status: "no-script" } as const),
+        }),
       ),
     ),
     Layer.provide(NodeServices.layer),
   );
 
-  // Like the server's worktree.cleanup effect, which runs after every archive.
-  harness.onArchive = (threadId) =>
+  // Like the server's worktree.cleanup and worktree.restore effects.
+  const runWorktreeEffect = (operation: "removeForArchive" | "restore", threadId: ThreadId) =>
     ThreadWorktreeService.ThreadWorktreeService.pipe(
-      Effect.flatMap((service) => service.removeForArchive(threadId)),
+      Effect.flatMap((service) => service[operation](threadId)),
       Effect.provide(worktreeLayer),
       Effect.orDie,
     );
+  harness.onArchive = (threadId) => runWorktreeEffect("removeForArchive", threadId);
+  harness.onRestore = (threadId) => runWorktreeEffect("restore", threadId);
+  harness.checkedOutBranch = (cwd) =>
+    fs.existsSync(cwd) ? git(cwd, "rev-parse", "--abbrev-ref", "HEAD").toString().trim() : null;
 
   return {
     /** A lead thread working in its own worktree on its own branch. */
-    addLead: (threadId: ThreadId, prNumber: number | null) => {
+    addLead: (threadId: ThreadId) => {
       const branch = `task/${threadId}`;
       const worktreePath = nodePath.join(worktreesDir, "repo", threadId);
       git(workspaceRoot, "worktree", "add", "-b", branch, worktreePath);
       const thread = harness.addThread(threadId);
       thread.worktreePath = worktreePath;
       thread.branch = branch;
-      thread.pullRequests =
-        prNumber === null
-          ? []
-          : [
-              {
-                host: "github.com",
-                repository: REPOSITORY,
-                number: prNumber,
-                url: prUrl(prNumber),
-              },
-            ];
       return worktreePath;
     },
+    hasBranch: (branch: string) =>
+      git(workspaceRoot, "branch", "--list", branch).toString().trim() !== "",
     cleanup: () => fs.rmSync(base, { recursive: true, force: true }),
   };
 };
@@ -150,9 +150,17 @@ const makeRepository = (harness: TeamHarness) => {
 const isArchived = (harness: TeamHarness, threadId: ThreadId) =>
   harness.threads.get(threadId)?.archivedAt !== null;
 
+/** The event the server emits when a lead's turn ends. */
+const turnEnded = (threadId: ThreadId, runId: string) =>
+  ({
+    type: "run.updated",
+    threadId,
+    payload: { id: runId, threadId, status: "completed", startedAt: DateTime.makeUnsafe(START) },
+  }) as unknown as OrchestrationV2DomainEvent;
+
 describe("FinishedTaskCleanup", () => {
   it.effect(
-    "archives a finished task's lead and removes its worktree, and keeps it while the PR is open",
+    "a done task's lead and worktree go once its turn ends, and reopening the task brings them back",
     () =>
       withTeam((harness) =>
         Effect.gen(function* () {
@@ -162,44 +170,39 @@ describe("FinishedTaskCleanup", () => {
           yield* Effect.addFinalizer(() => Effect.sync(repo.cleanup));
           const pm = yield* setUpManager;
 
-          const merged = yield* startLead(pm, "Merged", harness.delegate);
-          const mergedWorktree = repo.addLead(merged.leadThreadId, 1);
+          const { task, leadThreadId: lead } = yield* startLead(pm, "Feature", harness.delegate);
+          const worktree = repo.addLead(lead);
+          // The lead works on its own branch name, not the thread's.
+          git(worktree, "checkout", "-b", "feature-x");
           // A provider subagent of the lead shares its worktree.
           const helper = harness.addThread(ThreadId.make("lead-1-helper"));
-          helper.worktreePath = mergedWorktree;
-          helper.parentThreadId = merged.leadThreadId;
+          helper.worktreePath = worktree;
+          helper.parentThreadId = lead;
 
-          const reviewing = yield* startLead(pm, "Reviewing", harness.delegate);
-          const reviewingWorktree = repo.addLead(reviewing.leadThreadId, 2);
+          // The lead marks its own task done mid-turn; it keeps its worktree until the turn ends.
+          harness.threads.get(lead)!.activeRunId = "run-1";
+          yield* team.updateTask(lead, { stage: "done", prUrl: PR_URL });
+          assert.isFalse(isArchived(harness, lead));
+          assert.isTrue(fs.existsSync(worktree));
 
-          // Both leads open a PR; the first is merged and its lead marks the task done.
-          yield* team.updateTask(merged.leadThreadId, { stage: "in_review", prUrl: prUrl(1) });
-          yield* team.updateTask(merged.leadThreadId, { stage: "done" });
-          yield* team.updateTask(reviewing.leadThreadId, { stage: "in_review", prUrl: prUrl(2) });
-          harness.pullRequestStates.set(1, "merged");
-          harness.pullRequestStates.set(2, "open");
-
-          yield* cleanup.sweep;
-
-          assert.isTrue(isArchived(harness, merged.leadThreadId));
+          harness.threads.get(lead)!.activeRunId = null;
+          yield* cleanup.handleEvent(turnEnded(lead, "run-1"));
+          assert.isTrue(isArchived(harness, lead));
           assert.isTrue(isArchived(harness, helper.id));
-          assert.isFalse(fs.existsSync(mergedWorktree));
-          // The branch is kept for the merged-branch check; only the folder goes.
-          assert.isFalse(isArchived(harness, reviewing.leadThreadId));
-          assert.isTrue(fs.existsSync(reviewingWorktree));
+          assert.isFalse(fs.existsSync(worktree));
+          assert.isTrue(repo.hasBranch("feature-x"));
 
-          // The second PR is merged while the task is still in review.
-          harness.pullRequestStates.set(2, "merged");
-          yield* TestClock.adjust("5 minutes");
-          yield* cleanup.sweep;
-          assert.isTrue(isArchived(harness, reviewing.leadThreadId));
-          assert.isFalse(fs.existsSync(reviewingWorktree));
+          // The PM reopens the task, like moving it from Done back to In Progress.
+          yield* team.updateTask(pm, { taskId: task.id, stage: "running" });
+          assert.isFalse(isArchived(harness, lead));
+          assert.isTrue(fs.existsSync(worktree));
+          assert.strictEqual(harness.checkedOutBranch(worktree), "feature-x");
         }).pipe(Effect.scoped),
       ),
   );
 
   it.effect(
-    "cleans up cancelled and PR-less done tasks, keeps uncommitted work and busy leads",
+    "a PM cancel archives at once but keeps uncommitted work, and startup cleans up tasks already done",
     () =>
       withTeam((harness) =>
         Effect.gen(function* () {
@@ -209,45 +212,32 @@ describe("FinishedTaskCleanup", () => {
           yield* Effect.addFinalizer(() => Effect.sync(repo.cleanup));
           const pm = yield* setUpManager;
 
-          const noPr = yield* startLead(pm, "Research", harness.delegate);
-          const noPrWorktree = repo.addLead(noPr.leadThreadId, null);
-          yield* team.updateTask(noPr.leadThreadId, { stage: "done" });
+          const dropped = yield* startLead(pm, "Dropped", harness.delegate);
+          const droppedWorktree = repo.addLead(dropped.leadThreadId);
+          fs.writeFileSync(nodePath.join(droppedWorktree, "draft.txt"), "unsaved");
+          harness.threads.get(dropped.leadThreadId)!.activeRunId = "run-dropped";
+          yield* team.updateTask(pm, { taskId: dropped.task.id, stage: "cancelled" });
+          assert.isTrue(isArchived(harness, dropped.leadThreadId));
+          // Git refuses to drop the uncommitted file without force.
+          assert.isTrue(fs.existsSync(nodePath.join(droppedWorktree, "draft.txt")));
 
-          const cancelled = yield* startLead(pm, "Dropped", harness.delegate);
-          const cancelledWorktree = repo.addLead(cancelled.leadThreadId, null);
-          fs.writeFileSync(nodePath.join(cancelledWorktree, "draft.txt"), "unsaved");
-          yield* team.updateTask(pm, { taskId: cancelled.task.id, stage: "cancelled" });
-
+          // Two tasks finished before this change: their leads are idle but still active.
+          const finished = yield* startLead(pm, "Finished", harness.delegate);
+          const finishedWorktree = repo.addLead(finished.leadThreadId);
           const busy = yield* startLead(pm, "Busy", harness.delegate);
-          const busyWorktree = repo.addLead(busy.leadThreadId, null);
-          yield* team.updateTask(busy.leadThreadId, { stage: "done" });
-          harness.threads.get(busy.leadThreadId)!.activeRunId = "run-busy";
-
-          const unknownPr = yield* startLead(pm, "Unknown PR", harness.delegate);
-          const unknownWorktree = repo.addLead(unknownPr.leadThreadId, 9);
-          yield* team.updateTask(unknownPr.leadThreadId, { stage: "done", prUrl: prUrl(9) });
+          const busyWorktree = repo.addLead(busy.leadThreadId);
+          for (const { leadThreadId } of [finished, busy]) {
+            harness.threads.get(leadThreadId)!.activeRunId = "run-old";
+            yield* team.updateTask(leadThreadId, { stage: "done" });
+          }
+          harness.threads.get(finished.leadThreadId)!.activeRunId = null;
 
           yield* cleanup.sweep;
-
-          assert.isTrue(isArchived(harness, noPr.leadThreadId));
-          assert.isFalse(fs.existsSync(noPrWorktree));
-          // Archived, but git refuses to drop the uncommitted file without force.
-          assert.isTrue(isArchived(harness, cancelled.leadThreadId));
-          assert.isTrue(fs.existsSync(nodePath.join(cancelledWorktree, "draft.txt")));
-          // A running lead and a PR whose state cannot be read are left alone.
+          assert.isTrue(isArchived(harness, finished.leadThreadId));
+          assert.isFalse(fs.existsSync(finishedWorktree));
+          // A lead still at work is left for the end of its turn.
           assert.isFalse(isArchived(harness, busy.leadThreadId));
           assert.isTrue(fs.existsSync(busyWorktree));
-          assert.isFalse(isArchived(harness, unknownPr.leadThreadId));
-          assert.isTrue(fs.existsSync(unknownWorktree));
-
-          // A thread the user unarchives after cleanup is not archived again.
-          const archiveCount = Ref.get(harness.dispatched).pipe(
-            Effect.map((commands) => commands.filter((c) => c.type === "thread.archive").length),
-          );
-          const before = yield* archiveCount;
-          harness.threads.get(noPr.leadThreadId)!.archivedAt = null;
-          yield* cleanup.sweep;
-          assert.strictEqual(yield* archiveCount, before);
         }).pipe(Effect.scoped),
       ),
   );

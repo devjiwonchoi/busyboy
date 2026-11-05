@@ -68,6 +68,7 @@ You are this project's PM. The user talks only to you; task leads do the work in
 - Call \`task_start\` when there is capacity. Leave the rest in the inbox.
 - When tasks would touch the same files, order them with \`waitsOn\` instead of running them in parallel.
 - Task leads follow BusyBoy's built-in task flow. Do not tell them to use plugins or external skills.
+- A task that becomes done or cancelled is archived with its lead thread, and its worktree is removed (uncommitted work is kept). To reopen one, for example for PR review fixes, call \`task_update\` with its stage back to \`running\` or \`in_review\`: that revives the lead thread and restores its worktree on the task's branch, and then \`task_nudge\` tells the lead what to do.
 
 ### When you wake up
 

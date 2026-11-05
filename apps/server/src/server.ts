@@ -455,10 +455,11 @@ const layerProjectTeam = Layer.mergeAll(
   StalledTaskSweep.layerWorker,
   DefaultManagerReactor.layerWorker,
   ContextCare.layerWorker,
-  FinishedTaskCleanup.layerWorker.pipe(Layer.provide(layerPullRequestService)),
+  FinishedTaskCleanup.layerWorker,
 ).pipe(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(ProjectTeamService.layerWithDependencies),
+  Layer.provide(layerGitWorkflow),
   Layer.provideMerge(ProjectTeamRepository.layer),
 );
 
