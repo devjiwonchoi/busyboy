@@ -4,6 +4,7 @@ import {
   resolveSidebarDropTarget,
   sidebarListItemId,
   sidebarMarkerId,
+  sidebarProjectKeyOfId,
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
@@ -85,6 +86,75 @@ export function createSidebarCollisionDetection(
   };
 }
 
+/**
+ * While a project header is dragged, only other project headers are drop
+ * targets. "No project" is not one, so nothing lands below it.
+ */
+export function createSidebarProjectCollisionDetection(
+  isTargetProject: (projectKey: string) => boolean,
+): CollisionDetection {
+  return (args) =>
+    closestCenter({
+      ...args,
+      droppableContainers: args.droppableContainers.filter((container) => {
+        if (container.id === args.active.id) return true;
+        const projectKey = sidebarProjectKeyOfId(String(container.id));
+        return projectKey !== null && isTargetProject(projectKey);
+      }),
+    });
+}
+
+/**
+ * Previews a project drag: each project section (its header and rows) moves as
+ * one block to its new place. The dragged project's rows are hidden, so only
+ * its header travels with the pointer.
+ */
+export function projectSidebarProjectDrag(
+  items: readonly SidebarListItem[],
+  rects: Layout["rects"],
+  activeIndex: number,
+  overIndex: number,
+): ReturnType<SortingStrategy>[] {
+  type Block = { start: number; end: number };
+  const blocks: Block[] = [];
+  for (const [index, item] of items.entries()) {
+    const isProject = item.kind === "marker" && item.marker.startsWith("project:");
+    const isOther = item.kind === "marker" && !isProject;
+    const current = blocks.at(-1);
+    if (isProject) blocks.push({ start: index, end: index });
+    else if (current && current.end === index - 1 && !isOther) current.end = index;
+  }
+  const from = blocks.findIndex((block) => block.start === activeIndex);
+  const to = blocks.findIndex((block) => block.start === overIndex);
+  const first = blocks[0];
+  const firstRect = first ? rects[first.start] : undefined;
+  if (from < 0 || !first || !firstRect) return [];
+  const ordered = [...blocks];
+  if (to >= 0 && to !== from) ordered.splice(to, 0, ordered.splice(from, 1)[0]!);
+  const result: ReturnType<SortingStrategy>[] = items.map(() => stationary);
+  // The gap above a block belongs to the block, so it moves along with it.
+  const leadOf = (block: Block) => {
+    const top = rects[block.start]?.top ?? 0;
+    const previous = block.start > 0 ? rects[block.start - 1] : undefined;
+    return previous ? Math.max(0, top - previous.bottom) : 0;
+  };
+  let cursor = firstRect.top - leadOf(first);
+  for (const block of ordered) {
+    const headerRect = rects[block.start];
+    if (!headerRect) continue;
+    const top = cursor + leadOf(block);
+    const shift = top - headerRect.top;
+    const dragged = block.start === activeIndex;
+    const end = dragged ? block.start : block.end;
+    for (let index = block.start; index <= block.end; index++) {
+      result[index] = index > end ? hidden : { ...stationary, y: shift };
+    }
+    cursor = top + ((rects[end]?.bottom ?? headerRect.bottom) - headerRect.top);
+  }
+  result[activeIndex] = stationary;
+  return result;
+}
+
 export function createSidebarSortingStrategy(input: {
   items: readonly SidebarListItem[];
   enabled?: boolean;
@@ -100,6 +170,9 @@ export function createSidebarSortingStrategy(input: {
 
   function project({ rects, activeIndex, overIndex }: Layout) {
     const active = items[activeIndex];
+    if (active?.kind === "marker" && active.marker.startsWith("project:")) {
+      return projectSidebarProjectDrag(items, rects, activeIndex, overIndex);
+    }
     const over = items[overIndex] ?? active;
     if (active?.kind !== "thread" || !over || !rects[0]) return [];
     const target = resolveSidebarDropTarget(items, active.key, sidebarListItemId(over));

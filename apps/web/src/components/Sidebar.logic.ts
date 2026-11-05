@@ -111,6 +111,12 @@ export function sidebarMarkerId(marker: SidebarListMarker): string {
   return `${SIDEBAR_MARKER_PREFIX}${marker}`;
 }
 
+/** The project key of a project header's sortable id, or null for any other id. */
+export function sidebarProjectKeyOfId(id: string): string | null {
+  const prefix = `${SIDEBAR_MARKER_PREFIX}project:`;
+  return id.startsWith(prefix) ? id.slice(prefix.length) : null;
+}
+
 export type SidebarListItem =
   | {
       readonly kind: "thread";
@@ -509,22 +515,78 @@ export function groupSidebarThreadsByProject<T>(
 }
 
 /**
- * Orders project sections: projects with threads by recency, then the rest in
- * their fallback order. A project's manager is its heading, not a thread, so a
- * busy PM never moves its project.
+ * Orders project sections by the projects' manual order. Recent activity never
+ * moves a section. Sections with threads but no known project come next, and
+ * the keys in `lastProjectKeys` ("No project") always come last.
  */
 export function orderSidebarProjectSections<T>(
   threadsByProject: ReadonlyMap<string, readonly T[]>,
-  fallbackProjectKeys: readonly string[],
+  orderedProjectKeys: readonly string[],
+  lastProjectKeys: ReadonlySet<string> = new Set(),
 ): string[] {
-  const keys = [...threadsByProject.keys()];
-  const seen = new Set(keys);
-  for (const projectKey of fallbackProjectKeys) {
-    if (seen.has(projectKey)) continue;
-    seen.add(projectKey);
-    keys.push(projectKey);
-  }
-  return keys;
+  const all = new Set([...orderedProjectKeys, ...threadsByProject.keys()]);
+  const keys = [...all];
+  return [
+    ...keys.filter((projectKey) => !lastProjectKeys.has(projectKey)),
+    ...keys.filter((projectKey) => lastProjectKeys.has(projectKey)),
+  ];
+}
+
+/**
+ * Orders projects for the sidebar by the saved manual order. Projects without a
+ * saved position follow in creation order, so a new project lands at the end.
+ */
+export function orderProjectsForSidebar<TProject extends { readonly createdAt: string }>(
+  projects: readonly TProject[],
+  projectOrder: readonly string[],
+  getId: (project: TProject) => string,
+): TProject[] {
+  const byCreation = projects
+    .map((project, index) => ({ project, index }))
+    .sort(
+      (left, right) =>
+        left.project.createdAt.localeCompare(right.project.createdAt) || left.index - right.index,
+    )
+    .map(({ project }) => project);
+  return orderItemsByPreferredIds({ items: byCreation, preferredIds: projectOrder, getId });
+}
+
+/** Keeps project groups in order, with "No project" last. */
+export function pinScratchProjectGroupLast<TGroup extends { readonly isScratch?: boolean }>(
+  groups: readonly TGroup[],
+): TGroup[] {
+  return [
+    ...groups.filter((group) => !group.isScratch),
+    ...groups.filter((group) => group.isScratch),
+  ];
+}
+
+/**
+ * The saved project order after dragging one project group onto another's
+ * place. Returns null when nothing moves. "No project" never moves and is
+ * never a target. Saved keys for projects not loaded right now are kept.
+ */
+export function planSidebarProjectReorder(input: {
+  readonly groups: ReadonlyArray<{
+    readonly projectKey: string;
+    readonly isScratch?: boolean;
+    readonly memberProjects: ReadonlyArray<{ readonly physicalProjectKey: string }>;
+  }>;
+  readonly activeProjectKey: string;
+  readonly overProjectKey: string;
+  readonly savedOrder: readonly string[];
+}): string[] | null {
+  const movable = input.groups.filter((group) => !group.isScratch);
+  const from = movable.findIndex((group) => group.projectKey === input.activeProjectKey);
+  const to = movable.findIndex((group) => group.projectKey === input.overProjectKey);
+  if (from < 0 || to < 0 || from === to) return null;
+  const next = [...movable];
+  next.splice(to, 0, next.splice(from, 1)[0]!);
+  const order = [...next, ...input.groups.filter((group) => group.isScratch)].flatMap((group) =>
+    group.memberProjects.map((member) => member.physicalProjectKey),
+  );
+  const known = new Set(order);
+  return [...order, ...input.savedOrder.filter((key) => !known.has(key))];
 }
 
 /**
@@ -1367,21 +1429,6 @@ export function sortLogicalProjectsForSidebar<
     (project) => threadsByProjectKey.get(project.projectKey) ?? [],
     (left, right) =>
       left.title.localeCompare(right.title) || left.projectKey.localeCompare(right.projectKey),
-  );
-}
-
-export function sortSidebarV2ProjectGroups<
-  TProject extends LogicalSidebarProject,
-  TThread extends ScopedSidebarThread & Pick<SidebarThreadSummary, "lineage">,
->(
-  projects: readonly TProject[],
-  threads: readonly TThread[],
-  sortOrder: SidebarProjectSortOrder,
-): TProject[] {
-  return sortLogicalProjectsForSidebar(
-    projects,
-    filterSidebarV2VisibleThreads(threads, null),
-    sortOrder,
   );
 }
 
