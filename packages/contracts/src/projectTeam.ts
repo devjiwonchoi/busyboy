@@ -218,6 +218,9 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
 export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
+export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm"]);
+export type ProjectAttentionAnsweredBy = typeof ProjectAttentionAnsweredBy.Type;
+
 export const ProjectAttentionItem = Schema.Struct({
   id: ProjectAttentionItemId,
   projectId: ProjectId,
@@ -233,6 +236,13 @@ export const ProjectAttentionItem = Schema.Struct({
   createdAt: IsoDateTime,
   /** Set when a newer question from the same task replaced this one before it was answered. */
   supersededAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /**
+   * Who answered: "user" clicked the card, "pm" relayed the user's chat words after the
+   * server checked them. Null while open and for items answered before this was recorded.
+   */
+  answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 

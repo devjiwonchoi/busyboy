@@ -1,6 +1,7 @@
 import {
   CommandId,
   MessageId,
+  type ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
   type ProjectAttentionItem,
   ProjectAttentionItemId,
@@ -25,12 +26,22 @@ import { MINUTE_MS, isoMillis, makeIdGenerator, nowIso, orTeamError, teamError }
 export const ATTENTION_BATCH_WINDOW_MS = 2 * MINUTE_MS;
 const RELAYED_QUESTION_MAX_CHARS = 500;
 
-export function relayedAnswerText(question: string, answer: string): string {
+/** Prefix of an answer the user gave by clicking the card. */
+export const USER_ANSWER_PREFIX = "[User answer via BusyBoy]";
+/** Prefix of an answer the PM relayed from the user's chat after the server checked it. */
+export const PM_RELAY_ANSWER_PREFIX = "[User's chat answer, relayed by BusyBoy PM]";
+
+export function relayedAnswerText(
+  question: string,
+  answer: string,
+  answeredBy: ProjectAttentionAnsweredBy,
+): string {
   const trimmed =
     question.length > RELAYED_QUESTION_MAX_CHARS
       ? `${question.slice(0, RELAYED_QUESTION_MAX_CHARS)}…`
       : question;
-  return `[User answer via BusyBoy PM] ${trimmed} → ${answer}`;
+  const prefix = answeredBy === "user" ? USER_ANSWER_PREFIX : PM_RELAY_ANSWER_PREFIX;
+  return `${prefix} ${trimmed} → ${answer}`;
 }
 
 export class AttentionRouter extends Context.Service<
@@ -48,6 +59,8 @@ export class AttentionRouter extends Context.Service<
       readonly item: ProjectAttentionItem;
       readonly answer: string;
       readonly senderThreadId: ThreadId;
+      /** "user" for a card click; "pm" for a relay the caller already checked. */
+      readonly answeredBy: ProjectAttentionAnsweredBy;
     }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /** Signals that a project's attention summary may have changed. */
     readonly publish: (projectId: ProjectId) => Effect.Effect<void>;
@@ -119,7 +132,7 @@ const make = Effect.gen(function* () {
           threadId: item.askerThreadId,
           messageId: MessageId.make(key),
           senderThreadId: input.senderThreadId,
-          text: relayedAnswerText(item.question, input.answer),
+          text: relayedAnswerText(item.question, input.answer, input.answeredBy),
           attachments: [],
           mode: "auto",
           createdBy: "agent",
@@ -130,6 +143,7 @@ const make = Effect.gen(function* () {
         id: item.id,
         answer: input.answer,
         answeredAt: yield* nowIso,
+        answeredBy: input.answeredBy,
       });
       if (Option.isNone(answered)) {
         return yield* teamError(`Attention item ${item.id} is already answered.`, item.projectId);

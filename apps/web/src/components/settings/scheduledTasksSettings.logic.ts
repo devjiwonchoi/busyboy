@@ -72,6 +72,8 @@ export interface DraftState {
   readonly signaturePrefix: string;
   /** Write-only: empty keeps the secret already stored on the server. */
   readonly signatureSecret: string;
+  /** The user accepted that anyone with the URL can start a run. Needed to save without a signature. */
+  readonly allowUnsigned: boolean;
 }
 
 export const WEBHOOK_SIGNATURE_DEFAULTS = {
@@ -93,6 +95,7 @@ export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedul
             ...(secret ? { secret } : {}),
           }
         : null,
+      ...(!draft.signatureEnabled && draft.allowUnsigned ? { allowUnsigned: true } : {}),
     };
   }
   if (draft.scheduleMode === "interval") {
@@ -149,6 +152,7 @@ export function taskToDraft(task: ScheduledTask): DraftState {
         }
       : { signatureEnabled: false, ...WEBHOOK_SIGNATURE_DEFAULTS }),
     signatureSecret: "",
+    allowUnsigned: schedule.type === "webhook" && schedule.allowUnsigned === true,
   };
 }
 

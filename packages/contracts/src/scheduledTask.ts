@@ -78,6 +78,10 @@ const ScheduledTaskWebhookSchedule = Schema.Struct({
     description: "Run when the task's webhook URL receives a request.",
   }),
   signature: Schema.NullOr(ScheduledTaskWebhookSignature),
+  allowUnsigned: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "True when the task was saved without a signature on purpose: anyone with the URL can start a run.",
+  }),
 }).annotate({
   description:
     "Run on each request to the task's webhook URL. The prompt may use {{body.path}}, {{headers.name}}, {{query.name}}, {{body}} and {{request}} placeholders.",
@@ -101,7 +105,12 @@ const ScheduledTaskUpsertWebhookSchedule = Schema.Struct({
       }),
     ),
   ).annotate({
-    description: "Signature check; omit or null to accept requests by URL token only.",
+    description:
+      "Signature check. Required unless allowUnsigned is true. Use request_secret for the secret.",
+  }),
+  allowUnsigned: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Dangerous. Set true only to save a webhook without a signature. Without a signature, anyone who learns the URL can make an agent run with text they choose. Use only when the user explicitly accepts that.",
   }),
 }).annotate({
   description:

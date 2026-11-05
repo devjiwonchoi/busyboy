@@ -192,7 +192,7 @@ const AskUserTool = Tool.make("ask_user", {
 const AttentionAnswerTool = Tool.make("attention_answer", {
   ...shared,
   description:
-    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's.",
+    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's. Approval and decision cards need the user's own words: the answer must quote exactly what the user wrote in this chat after the card appeared, or the call fails; otherwise let the user click the card. Blocker answers are not checked.",
   parameters: ProjectTeamAttentionAnswerInput,
   success: ProjectTeamAttentionItemResult,
 })

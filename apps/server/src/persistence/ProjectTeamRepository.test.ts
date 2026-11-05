@@ -299,11 +299,18 @@ describe("ProjectTeamRepository", () => {
         id: approval.id,
         answer: "yes",
         answeredAt: t2,
+        answeredBy: "user",
       });
       assert.strictEqual(Option.getOrThrow(answered).answer, "yes");
+      assert.strictEqual(Option.getOrThrow(answered).answeredBy, "user");
       assert.isTrue(
         Option.isNone(
-          yield* team.answerAttentionItem({ id: approval.id, answer: "no", answeredAt: t2 }),
+          yield* team.answerAttentionItem({
+            id: approval.id,
+            answer: "no",
+            answeredAt: t2,
+            answeredBy: "pm",
+          }),
         ),
       );
       assert.strictEqual(

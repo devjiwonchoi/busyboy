@@ -109,6 +109,7 @@ function card(
       batchId: ProjectAttentionBatchId.make(`batch-${id}`),
       createdAt,
       supersededAt: null,
+      answeredBy: null,
     },
   };
 }

@@ -366,6 +366,7 @@ describe("sidebar tasks", () => {
                 batchId: "batch-1" as never,
                 createdAt: NOW as never,
                 supersededAt: null,
+                answeredBy: null,
               },
             },
           ],

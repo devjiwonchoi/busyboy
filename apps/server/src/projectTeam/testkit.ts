@@ -129,6 +129,44 @@ export function assistantMessage(input: {
   };
 }
 
+/** A message the user typed in a thread, such as the PM's chat. */
+export function userMessage(input: {
+  readonly threadId: ThreadId;
+  readonly text: string;
+  readonly id?: string;
+  readonly createdAt?: string;
+  readonly createdBy?: OrchestrationV2ConversationMessage["createdBy"];
+  readonly creationSource?: OrchestrationV2ConversationMessage["creationSource"];
+}): OrchestrationV2ConversationMessage {
+  const at = DateTime.makeUnsafe(input.createdAt ?? START);
+  return {
+    createdBy: input.createdBy ?? "user",
+    creationSource: input.creationSource ?? "web",
+    id: MessageId.make(input.id ?? `user-message:${input.text}`),
+    threadId: input.threadId,
+    runId: null,
+    nodeId: null,
+    role: "user",
+    text: input.text,
+    attachments: [],
+    streaming: false,
+    createdAt: at,
+    updatedAt: at,
+  };
+}
+
+/** Adds a message the user typed in `threadId`'s chat. */
+export const userSays = (
+  harness: TeamHarness,
+  threadId: ThreadId,
+  text: string,
+  options: Omit<Parameters<typeof userMessage>[0], "threadId" | "text"> = {},
+) => {
+  const thread = harness.threads.get(threadId);
+  if (thread === undefined) throw new Error(`No fake thread ${threadId}.`);
+  thread.messages.push(userMessage({ threadId, text, ...options }));
+};
+
 const makeProject = (projectId: ProjectId, title: string): ProjectStore.ProjectRow => ({
   projectId,
   title,

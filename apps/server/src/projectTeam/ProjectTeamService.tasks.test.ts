@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import {
   PLAN_APPROVAL_ONLY,
   PLAN_APPROVAL_START,
+  type ProjectTeamError,
   ProjectTaskId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -9,7 +10,7 @@ import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { PROJECT_ID, setUpManager, withTeam } from "./testkit.ts";
+import { PROJECT_ID, setUpManager, userMessage, userSays, withTeam } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 
@@ -260,4 +261,135 @@ describe("ProjectTeamService tasks as specs", () => {
       }),
     ),
   );
+
+  describe("resuming a parked task", () => {
+    /** Starts a planner, lets `approve` answer its approval card, parks it with a plan, restarts it. */
+    const parkAndRestart = (
+      approve: (input: {
+        readonly pm: ThreadId;
+        readonly planner: ThreadId;
+        readonly harness: Parameters<Parameters<typeof withTeam>[0]>[0];
+      }) => Effect.Effect<void, ProjectTeamError, ProjectTeamService.ProjectTeamService>,
+    ) =>
+      withTeam((harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const pm = yield* setUpManager;
+          const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+          const { leadThreadId: planner } = yield* team.startTask(
+            pm,
+            { taskId: task.id },
+            harness.delegate,
+          );
+          yield* approve({ pm, planner, harness });
+          // Any agent can write a planSummary; it is not approval on its own.
+          yield* team.updateTask(planner, { stage: "inbox", planSummary: "Keep scrollTop." });
+          yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+          const resumed = (yield* Ref.get(harness.delegated))[1]?.task ?? "";
+          const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+          return {
+            approved: resumed.includes("The plan above is already approved"),
+            roles: detail.sessions.map((session) => session.role),
+          };
+        }),
+      );
+
+    it.effect("plans again when the plan summary has no answered approval card", () =>
+      Effect.gen(function* () {
+        const unasked = yield* parkAndRestart(() => Effect.void);
+        assert.deepStrictEqual(unasked, { approved: false, roles: ["lead", "lead"] });
+
+        const unanswered = yield* parkAndRestart(({ planner }) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            yield* team.askUser(planner, { kind: "approval", question: "Approve the plan?" });
+          }),
+        );
+        assert.deepStrictEqual(unanswered, { approved: false, roles: ["lead", "lead"] });
+      }),
+    );
+
+    it.effect("plans again when the user clicked something other than an approval", () =>
+      Effect.gen(function* () {
+        const result = yield* parkAndRestart(({ planner }) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            const { item } = yield* team.askUser(planner, {
+              kind: "approval",
+              question: "Approve the plan?",
+            });
+            yield* team.answerDecision({
+              projectId: PROJECT_ID,
+              attentionItemId: item.id,
+              answer: "Request changes\nNote: smaller",
+            });
+          }),
+        );
+        assert.deepStrictEqual(result, { approved: false, roles: ["lead", "lead"] });
+      }),
+    );
+
+    it.effect("resumes approved after the user clicks approve", () =>
+      Effect.gen(function* () {
+        const result = yield* parkAndRestart(({ planner }) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            const { item } = yield* team.askUser(planner, {
+              kind: "approval",
+              question: "Approve the plan?",
+            });
+            yield* team.answerDecision({
+              projectId: PROJECT_ID,
+              attentionItemId: item.id,
+              answer: `${PLAN_APPROVAL_ONLY}\nNote: ship it`,
+            });
+          }),
+        );
+        assert.deepStrictEqual(result, { approved: true, roles: ["lead", "implementer"] });
+      }),
+    );
+
+    it.effect("resumes approved after the PM relays the user's own chat words", () =>
+      Effect.gen(function* () {
+        const result = yield* parkAndRestart(({ pm, planner, harness }) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            const { item } = yield* team.askUser(planner, {
+              kind: "approval",
+              question: "Approve the plan?",
+            });
+            userSays(harness, pm, "전부 승인");
+            yield* team.answerAttention(pm, { attentionItemId: item.id, answer: "전부 승인" });
+          }),
+        );
+        assert.deepStrictEqual(result, { approved: true, roles: ["lead", "implementer"] });
+      }),
+    );
+
+    it("counts a card answered before the answerer was recorded only with a plan", () => {
+      const legacy = {
+        kind: "approval",
+        answer: "yes",
+        answeredBy: null,
+      } as unknown as Parameters<typeof ProjectTeamService.isPlanApproved>[1];
+      assert.isTrue(ProjectTeamService.isPlanApproved("Plan.", legacy));
+      assert.isFalse(ProjectTeamService.isPlanApproved(null, legacy));
+      assert.isFalse(ProjectTeamService.isPlanApproved("Plan.", undefined));
+    });
+  });
+});
+
+describe("isUserChatAnswer", () => {
+  const thread = "thread:pm" as Parameters<typeof userMessage>[0]["threadId"];
+  const said = (text: string) => [userMessage({ threadId: thread, text })];
+
+  it("matches the user's words as whole words, ignoring case and spacing", () => {
+    assert.isTrue(ProjectTeamService.isUserChatAnswer("전부 승인", said("네,  전부 승인"), 0));
+    assert.isTrue(ProjectTeamService.isUserChatAnswer("option b", said("Go with Option B."), 0));
+  });
+
+  it("doesn't let a short answer match part of a longer word", () => {
+    assert.isFalse(ProjectTeamService.isUserChatAnswer("B", said("maybe later"), 0));
+    assert.isFalse(ProjectTeamService.isUserChatAnswer("approve", said("I don't approved it"), 0));
+  });
 });

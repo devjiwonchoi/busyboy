@@ -9,6 +9,7 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 import {
   IsoDateTime,
   NonNegativeInt,
+  ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
   ProjectAttentionItem,
   ProjectAttentionItemId,
@@ -236,6 +237,7 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectAttentionItemId;
       readonly answer: string;
       readonly answeredAt: IsoDateTime;
+      readonly answeredBy: ProjectAttentionAnsweredBy;
     }) => Result<Option.Option<ProjectAttentionItem>>;
     /** Closes the task's open items of this kind without an answer; returns the closed items. */
     readonly supersedeOpenAttentionItems: (input: {
@@ -261,6 +263,10 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly limit: number;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
+    /** The task's newest approval item that a newer one did not replace, answered or not. */
+    readonly getLatestApprovalItem: (
+      taskId: ProjectTaskId,
+    ) => Result<Option.Option<ProjectAttentionItem>>;
     /** The newest item, answered or not, for batching. */
     readonly getLatestAttentionItem: (
       projectId: ProjectId,
@@ -314,6 +320,7 @@ const TaskRow = Schema.Struct({
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
   supersededAt: Schema.NullOr(IsoDateTime),
+  answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
 });
 const SpecVersionRow = Schema.Struct({
@@ -396,7 +403,8 @@ export const make = Effect.gen(function* () {
     asker_thread_id AS "askerThreadId",
     batch_id AS "batchId",
     created_at AS "createdAt",
-    superseded_at AS "supersededAt"
+    superseded_at AS "supersededAt",
+    answered_by AS "answeredBy"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -805,11 +813,12 @@ export const make = Effect.gen(function* () {
       id: ProjectAttentionItemId,
       answer: Schema.String,
       answeredAt: IsoDateTime,
+      answeredBy: ProjectAttentionAnsweredBy,
     }),
     Result: AttentionRow,
-    execute: ({ id, answer, answeredAt }) => sql`
+    execute: ({ id, answer, answeredAt, answeredBy }) => sql`
       UPDATE project_attention_items
-      SET answer = ${answer}, answered_at = ${answeredAt}
+      SET answer = ${answer}, answered_at = ${answeredAt}, answered_by = ${answeredBy}
       WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
       RETURNING ${attentionColumns}
     `,
@@ -875,6 +884,17 @@ export const make = Effect.gen(function* () {
         AND (answered_at IS NOT NULL OR superseded_at IS NOT NULL)
       ORDER BY created_at DESC, rowid DESC
       LIMIT ${limit}
+    `,
+  });
+  const findLatestApproval = SqlSchema.findOneOption({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: AttentionRow,
+    execute: ({ taskId }) => sql`
+      SELECT ${attentionColumns}
+      FROM project_attention_items
+      WHERE task_id = ${taskId} AND kind = 'approval' AND superseded_at IS NULL
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1
     `,
   });
   const findLatestAttention = SqlSchema.findOneOption({
@@ -1113,6 +1133,10 @@ export const make = Effect.gen(function* () {
     listRecentlyAnsweredAttentionItems: (input) =>
       findRecentlyAnswered(input).pipe(
         Effect.mapError(toRepositoryError("listRecentlyAnsweredAttentionItems")),
+      ),
+    getLatestApprovalItem: (taskId) =>
+      findLatestApproval({ taskId }).pipe(
+        Effect.mapError(toRepositoryError("getLatestApprovalItem")),
       ),
     getLatestAttentionItem: (projectId) =>
       findLatestAttention({ projectId }).pipe(

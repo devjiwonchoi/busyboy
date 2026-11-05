@@ -43,7 +43,12 @@ import * as Metrics from "../observability/Metrics.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
-import { isMissedFixedTimeRun, isSameSchedule, nextScheduledRunAt } from "./Schedule.ts";
+import {
+  capWebhookRuntimeMode,
+  isMissedFixedTimeRun,
+  isSameSchedule,
+  nextScheduledRunAt,
+} from "./Schedule.ts";
 import {
   redactHeaders,
   redactQuery,
@@ -916,6 +921,16 @@ export const layer = Layer.effect(
         // Look up by the *resolved* id so idempotent creates (commandId replays)
         // keep their run history, and so real load failures propagate instead
         // of silently resetting an existing row.
+        if (
+          input.schedule.type === "webhook" &&
+          input.schedule.signature == null &&
+          input.schedule.allowUnsigned !== true
+        ) {
+          return yield* taskError(
+            "A webhook task needs a signature check. Set signature (use request_secret for the secret), or set allowUnsigned: true if anyone with the URL may trigger a run.",
+            { taskId: id },
+          );
+        }
         const existingTask = yield* findTask(id);
         // Keep the existing next_run_at when the schedule itself is untouched:
         // editing a title or prompt must not postpone (or resurrect) a due
@@ -924,14 +939,15 @@ export const layer = Layer.effect(
           input.schedule.type === "webhook"
             ? {
                 type: "webhook",
-                signature:
-                  input.schedule.signature == null
-                    ? null
-                    : {
+                ...(input.schedule.signature == null
+                  ? { signature: null, allowUnsigned: true }
+                  : {
+                      signature: {
                         header: input.schedule.signature.header.toLowerCase(),
                         encoding: input.schedule.signature.encoding,
                         prefix: input.schedule.signature.prefix,
                       },
+                    }),
               }
             : input.schedule;
         const webhook =
@@ -985,7 +1001,10 @@ export const layer = Layer.effect(
           threadId: input.threadId ?? null,
           workspaceStrategy: input.workspaceStrategy,
           modelSelection: input.modelSelection,
-          runtimeMode: input.runtimeMode,
+          runtimeMode:
+            schedule.type === "webhook"
+              ? capWebhookRuntimeMode(input.runtimeMode)
+              : input.runtimeMode,
           interactionMode: input.interactionMode,
           createdBy: existingTask?.createdBy ?? input.createdBy ?? "user",
           creationSource: input.creationSource ?? "web",

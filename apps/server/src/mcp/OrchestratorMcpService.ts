@@ -87,6 +87,7 @@ import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import { capWebhookRuntimeMode } from "../scheduledTasks/Schedule.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
@@ -112,6 +113,8 @@ const DEFAULT_THREAD_LIST_LIMIT = 50;
 const DEFAULT_THREAD_READ_LIMIT = 50;
 const DEFAULT_THREAD_RUN_LIMIT = 10;
 const DEFAULT_THREAD_ITEM_MAX_CHARS = 20_000;
+const WEBHOOK_BIND_REFUSED =
+  "A webhook task always runs in a fresh thread; it cannot be bound to an existing thread.";
 
 interface ResolvedTarget {
   readonly modelSelection: ModelSelection;
@@ -1597,9 +1600,15 @@ const make = Effect.gen(function* () {
         const projectId = yield* resolveProjectTarget(parent, input.projectId);
         yield* assertLiveCallerForOtherProject(scope, parent, projectId);
         const project = yield* requireProject(projectId);
+        const isWebhook = input.schedule.type === "webhook";
+        // Webhook runs act on text from whoever calls the URL, so they always
+        // start in a fresh thread instead of the caller's (often the PM's).
+        if (isWebhook && input.bindToCurrentThread === true) {
+          return yield* failure("invalid_request", WEBHOOK_BIND_REFUSED);
+        }
         const bindToCurrentThread =
           input.bindToCurrentThread ??
-          (parent !== undefined && parent.thread.projectId === projectId);
+          (!isWebhook && parent !== undefined && parent.thread.projectId === projectId);
         if (
           bindToCurrentThread &&
           (parent === undefined || parent.thread.projectId !== projectId)
@@ -1625,7 +1634,7 @@ const make = Effect.gen(function* () {
           threadId: bindToCurrentThread && parent !== undefined ? parent.thread.id : null,
           workspaceStrategy: scheduledTaskWorkspaceStrategy(bindToCurrentThread),
           modelSelection,
-          runtimeMode: limits.runtimeMode,
+          runtimeMode: isWebhook ? capWebhookRuntimeMode(limits.runtimeMode) : limits.runtimeMode,
           interactionMode: limits.interactionMode,
           createdBy: "agent",
           creationSource: "mcp",
@@ -1690,6 +1699,19 @@ const make = Effect.gen(function* () {
             : input.bindToCurrentThread && parent !== undefined
               ? parent.thread.id
               : null;
+        // Refuse new bindings only: binding now, or turning a bound timer into
+        // a webhook. A webhook bound before this rule stays editable.
+        const becomesWebhook =
+          input.schedule?.type === "webhook" && existing.schedule.type !== "webhook";
+        if (
+          (input.schedule ?? existing.schedule).type === "webhook" &&
+          (input.bindToCurrentThread === true || (becomesWebhook && threadId !== null))
+        ) {
+          return yield* failure(
+            "invalid_request",
+            `${WEBHOOK_BIND_REFUSED} Pass bindToCurrentThread: false.`,
+          );
+        }
         // Rebinding changes where runs execute, so the workspace strategy must
         // follow: unbinding a root-strategy task would otherwise run loose
         // prompts in the shared project checkout.
