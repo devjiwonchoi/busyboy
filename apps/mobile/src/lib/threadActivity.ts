@@ -573,6 +573,7 @@ function itemIcon(item: OrchestrationV2TurnItem): ThreadFeedActivity["icon"] {
     case "thread_created":
       return "zap";
     case "secret_request":
+    case "computer_use_app_request":
       return "lock";
   }
 }
@@ -630,6 +631,8 @@ function itemSummary(
       return "Thread created";
     case "secret_request":
       return item.label;
+    case "computer_use_app_request":
+      return `Use ${item.appName}?`;
     case "dynamic_tool": {
       const classified = classifyToolActivity({
         itemType: "dynamic_tool_call",
@@ -689,6 +692,8 @@ function itemPreview(item: OrchestrationV2TurnItem): string | null {
       return item.targetThreadId;
     case "secret_request":
       return item.reason || null;
+    case "computer_use_app_request":
+      return item.bundleId;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":

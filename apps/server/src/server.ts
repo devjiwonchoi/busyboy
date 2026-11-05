@@ -68,6 +68,7 @@ import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import * as DesktopBrowserChannel from "./preview/DesktopBrowserChannel.ts";
+import * as ComputerUseTurns from "./computerUse/ComputerUseTurns.ts";
 import * as DesktopComputerUseChannel from "./computerUse/DesktopComputerUseChannel.ts";
 import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
 import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
@@ -597,7 +598,9 @@ const layerMakeRoutes = Layer.mergeAll(
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(layerPullRequestService),
   Layer.provide(ServerBrowser.layer.pipe(Layer.provide(DesktopBrowserChannel.layer))),
-  // Built once here; C3's MCP tools reach the helper through the same channel.
+  // One instance for the MCP tools and the card's answer RPC.
+  Layer.provide(ComputerUseTurns.layer),
+  // Built once here; the MCP tools reach the helper through the same channel.
   Layer.provide(DesktopComputerUseChannel.layer),
   Layer.provide(PreviewBrowser.layer),
   Layer.provide(PreviewAutomationBroker.layer),

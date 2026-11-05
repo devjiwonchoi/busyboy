@@ -7,6 +7,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ProviderInstanceId,
   ThreadId,
+  TurnItemId,
   AuthOrchestrationOperateScope,
   ORCHESTRATION_V2_WS_METHODS,
   AuthOrchestrationReadScope,
@@ -342,6 +343,52 @@ describe("computer-use status authorization", () => {
         ).toMatchObject({ requiredScope: AuthSettingsWriteScope });
         expect(starts).toEqual([false]);
       }).pipe(Effect.scoped),
+  );
+});
+
+describe("computer-use app request authorization", () => {
+  const group = WsRpcGroup.omit(
+    ...[...WsRpcGroup.requests.keys()].filter(
+      (
+        tag,
+      ): tag is Exclude<
+        keyof typeof RPC_REQUIRED_SCOPES,
+        typeof WS_METHODS.computerUseAnswerAppRequest
+      > => tag !== WS_METHODS.computerUseAnswerAppRequest,
+    ),
+  );
+
+  it.effect("answers with orchestration:operate but needs settings:write to always allow", () =>
+    Effect.gen(function* () {
+      const choices: Array<string> = [];
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.computerUseAnswerAppRequest, ({ choice }) =>
+              Effect.sync(() => {
+                choices.push(choice);
+              }),
+            ),
+            RpcAuthorization.layer([AuthOrchestrationOperateScope]),
+          ),
+        ),
+      );
+      const threadId = ThreadId.make("thread-1");
+      const turnItemId = TurnItemId.make("turn-item-1");
+      yield* client[WS_METHODS.computerUseAnswerAppRequest]({
+        threadId,
+        turnItemId,
+        choice: "allow_thread",
+      });
+      expect(
+        yield* client[WS_METHODS.computerUseAnswerAppRequest]({
+          threadId,
+          turnItemId,
+          choice: "always",
+        }).pipe(Effect.flip),
+      ).toMatchObject({ requiredScope: AuthSettingsWriteScope });
+      expect(choices).toEqual(["allow_thread"]);
+    }).pipe(Effect.scoped),
   );
 });
 

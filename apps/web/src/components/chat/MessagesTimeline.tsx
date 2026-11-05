@@ -310,6 +310,7 @@ import {
   type HandoffTimelineRun,
 } from "./V2LifecycleRow";
 import { SecretRequestCard } from "./SecretRequestCard";
+import { ComputerUseAppRequestCard } from "./ComputerUseAppRequestCard";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 
 import { SkillChipIcon, SkillInlineText } from "./SkillInlineText";
@@ -2978,6 +2979,15 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
   const { item, visibility, sourceThreadId } = row.projectedItem;
   if (item.type === "subagent" && (row.subagents?.length ?? 1) > 1) {
     return <V2SubagentGroup key={row.id} row={row} />;
+  }
+  if (item.type === "computer_use_app_request") {
+    return (
+      <ComputerUseAppRequestCard
+        environmentId={ctx.activeThreadEnvironmentId}
+        item={item}
+        visibility={visibility}
+      />
+    );
   }
   if (item.type === "secret_request") {
     return (

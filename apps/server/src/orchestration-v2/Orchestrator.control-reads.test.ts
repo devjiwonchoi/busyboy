@@ -940,3 +940,81 @@ it.effect("wakes the parent once when its delegated task asks a question", () =>
     });
   }).pipe(Effect.provide(DelegatedTaskQuestionReactor.layer.pipe(Layer.provideMerge(layerTest)))),
 );
+
+it.effect("records a computer-use app request card once and refuses another node", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:app-request");
+    const runId = RunId.make("run:app-request");
+    const nodeId = NodeId.make("node:app-request");
+    const turnItemId = TurnItemId.make("turn-item:app-request");
+    const now = yield* DateTime.now;
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-app-request"),
+      threadId,
+      projectId: ProjectId.make("project:app-request"),
+      title: "App request",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* projections.apply({
+      id: EventId.make("app-request:run"),
+      type: "run.created",
+      threadId,
+      occurredAt: now,
+      payload: {
+        id: runId,
+        threadId,
+        ordinal: 1,
+        providerInstanceId: instanceId,
+        modelSelection,
+        providerThreadId: null,
+        userMessageId: MessageId.make("message:app-request"),
+        rootNodeId: nodeId,
+        activeAttemptId: null,
+        status: "running",
+        requestedAt: now,
+        startedAt: now,
+        completedAt: null,
+        checkpointId: null,
+        contextHandoffId: null,
+      },
+    });
+    const record = (status: "pending" | "allow_once" | "cancelled", node = nodeId) =>
+      orchestrator.dispatch({
+        type: "computer_use_app_request.record",
+        commandId: CommandId.make(`app-request:${status}:${node}`),
+        threadId,
+        runId,
+        nodeId: node,
+        turnItemId,
+        appName: "TextEdit",
+        bundleId: "com.apple.TextEdit",
+        allowAlways: true,
+        appRequestStatus: status,
+      });
+    const card = Effect.map(projections.getThreadProjection(threadId), (projection) =>
+      projection.turnItems.find((item) => item.id === turnItemId),
+    );
+
+    yield* record("pending");
+    assert.deepInclude(yield* card, { status: "waiting", appRequestStatus: "pending" });
+    yield* record("allow_once");
+    assert.deepInclude(yield* card, { status: "completed", appRequestStatus: "allow_once" });
+    // Answered once: a later cancel changes nothing.
+    yield* record("cancelled");
+    assert.deepInclude(yield* card, { status: "completed", appRequestStatus: "allow_once" });
+
+    const wrongNode = yield* record("pending", NodeId.make("node:app-request:other")).pipe(
+      Effect.flip,
+    );
+    assert.include(String(wrongNode.cause), "is not the root of run");
+  }).pipe(Effect.provide(layerTest)),
+);

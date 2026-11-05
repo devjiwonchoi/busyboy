@@ -252,6 +252,8 @@ import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as ComputerUseSettings from "./computerUse/ComputerUseSettings.ts";
+import * as ComputerUseTools from "./computerUse/ComputerUseTools.ts";
+import * as ComputerUseTurns from "./computerUse/ComputerUseTurns.ts";
 import * as DesktopComputerUseChannel from "./computerUse/DesktopComputerUseChannel.ts";
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
@@ -1152,6 +1154,7 @@ const layerWsRpc = (
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
   computerUseChannel: DesktopComputerUseChannel.DesktopComputerUseChannel["Service"],
+  computerUseTurns: ComputerUseTurns.ComputerUseTurns["Service"],
 ) =>
   ServerWsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -2413,6 +2416,12 @@ const layerWsRpc = (
           withComputerUse(ComputerUseSettings.requestPermission(kind)),
         [WS_METHODS.computerUseRestartHelper]: (_input) =>
           withComputerUse(ComputerUseSettings.restartHelper()),
+        [WS_METHODS.computerUseAnswerAppRequest]: (input) =>
+          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
+            Effect.andThen(ComputerUseTools.answerAppRequest(input)),
+            Effect.provideService(ComputerUseTurns.ComputerUseTurns, computerUseTurns),
+            Effect.provideService(ServerSettings.ServerSettingsService, serverSettings),
+          ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
           TraceDiagnostics.readTraceDiagnostics({
@@ -3093,6 +3102,7 @@ export const layer = Layer.unwrap(
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
     const computerUseChannel = yield* DesktopComputerUseChannel.DesktopComputerUseChannel;
+    const computerUseTurns = yield* ComputerUseTurns.ComputerUseTurns;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
@@ -3148,6 +3158,7 @@ export const layer = Layer.unwrap(
               previewAutomationBroker,
               serverBrowser,
               computerUseChannel,
+              computerUseTurns,
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               // Request fibers run in the handlers' context, so this reporter sees

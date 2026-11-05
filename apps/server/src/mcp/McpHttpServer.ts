@@ -3,6 +3,8 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Tracer from "effect/Tracer";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -13,10 +15,19 @@ import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
 import { AiError, McpProtocol, McpSchema, McpServer, Tool, type Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { OrchestratorMcpFailure, PreviewAutomationError } from "@t3tools/contracts";
+import {
+  ComputerUseError,
+  OrchestratorMcpFailure,
+  PreviewAutomationError,
+} from "@t3tools/contracts";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
+import * as ComputerUseTurns from "../computerUse/ComputerUseTurns.ts";
+import * as DesktopComputerUseChannel from "../computerUse/DesktopComputerUseChannel.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as ComputerUseHandlers from "./toolkits/computerUse/handlers.ts";
+import { ComputerUseToolkit } from "./toolkits/computerUse/tools.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
 import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
@@ -706,6 +717,172 @@ const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(funct
 });
 
 /**
+ * `computer_*` tools are listed only to sessions holding the `computer-use`
+ * capability. Effect checks visibility synchronously inside the request fiber,
+ * which already carries the caller's invocation scope. Effect also checks it
+ * on `tools/call`; there a stale call must still reach the handler, so it gets
+ * `computer_use_unavailable` rather than "tool not found".
+ */
+const computerUseToolVisible = () => {
+  const fiber = Fiber.getCurrent();
+  if (fiber === undefined) return false;
+  const invocation = Context.getOption(fiber.context, McpInvocationContext.McpInvocationContext);
+  if (Option.isSome(invocation) && invocation.value.capabilities.has("computer-use")) return true;
+  const span = Context.getOption(fiber.context, Tracer.ParentSpan);
+  // The RPC server's span, e.g. "McpServer.@effect/mcp/2025-06-18/tools/call".
+  // If Effect renames this span, the test "computer_* tools are hidden and
+  // refused without the computer-use capability" in
+  // toolkits/computerUse/registration.test.ts fails.
+  return (
+    Option.isSome(span) &&
+    span.value._tag === "Span" &&
+    span.value.name.startsWith("McpServer.") &&
+    span.value.name.endsWith("/tools/call")
+  );
+};
+
+const isComputerUseError = Schema.is(ComputerUseError);
+
+/** Only a failure to decode the tool's arguments is the caller's fault. */
+const isParameterError = (failure: unknown): failure is AiError.AiError =>
+  AiError.isAiError(failure) && failure.reason._tag === "ToolParameterValidationError";
+
+type ComputerUseScreenshotWire = {
+  readonly mimeType: string;
+  readonly data: string;
+  readonly width: number;
+  readonly height: number;
+};
+type ComputerUseStateWire = {
+  readonly tree: string;
+  readonly screenshot: ComputerUseScreenshotWire | null;
+  readonly [key: string]: unknown;
+};
+
+const screenshotMetadata = (screenshot: ComputerUseScreenshotWire | null) =>
+  screenshot === null
+    ? null
+    : { mimeType: screenshot.mimeType, width: screenshot.width, height: screenshot.height };
+
+/** Tree text first, then the JSON result, then the screenshot as image content. */
+export const computerUseToolResult = (toolName: string, encoded: unknown) => {
+  const value = encoded as Record<string, unknown>;
+  const state = (
+    toolName === "computer_snapshot" ? value : (value.state as ComputerUseStateWire | undefined)
+  ) as ComputerUseStateWire | undefined;
+  if (state === undefined || typeof state.tree !== "string") {
+    return new McpSchema.CallToolResult({
+      isError: false,
+      structuredContent: value,
+      content: [{ type: "text", text: encodeJsonText(value) }],
+    });
+  }
+  const strippedState = { ...state, screenshot: screenshotMetadata(state.screenshot) };
+  const structured =
+    toolName === "computer_snapshot" ? strippedState : { ...value, state: strippedState };
+  const { tree: _tree, ...stateWithoutTree } = strippedState;
+  const header =
+    toolName === "computer_snapshot" ? stateWithoutTree : { ...value, state: stateWithoutTree };
+  return new McpSchema.CallToolResult({
+    isError: false,
+    structuredContent: structured,
+    content: [
+      { type: "text", text: state.tree },
+      { type: "text", text: encodeJsonText(header) },
+      ...(state.screenshot === null
+        ? []
+        : [
+            {
+              type: "image" as const,
+              data: new Uint8Array(Buffer.from(state.screenshot.data, "base64")),
+              mimeType: state.screenshot.mimeType,
+            },
+          ]),
+    ],
+  });
+};
+
+/** Tool errors carry `{code, message, hint?, details?, retryable}`. */
+export const computerUseToolFailure = <E>(cause: Cause.Cause<E>) => {
+  if (Cause.hasInterrupts(cause) || cause.reasons.some(Cause.isDieReason)) {
+    return Effect.failCause(cause).pipe(Effect.orDie);
+  }
+  const failure = cause.reasons.find(Cause.isFailReason)?.error;
+  const object = isComputerUseError(failure)
+    ? {
+        code: failure.code,
+        message: failure.message,
+        ...(failure.hint === undefined ? {} : { hint: failure.hint }),
+        ...(failure.details === undefined ? {} : { details: failure.details }),
+        retryable: failure.retryable,
+      }
+    : isParameterError(failure)
+      ? { code: "invalid_argument" as const, message: failure.message, retryable: false }
+      : {
+          code: "internal_error" as const,
+          message: "BusyBoy hit an internal error running this tool",
+          retryable: true,
+        };
+  return Effect.succeed(
+    new McpSchema.CallToolResult({
+      isError: true,
+      structuredContent: object,
+      content: [{ type: "text", text: encodeJsonText(object) }],
+    }),
+  );
+};
+
+const registerComputerUseTools = Effect.fn("McpHttpServer.registerComputerUseTools")(function* () {
+  const server = yield* McpServer.McpServer;
+  const services = yield* Effect.context<
+    | ComputerUseTurns.ComputerUseTurns
+    | DesktopComputerUseChannel.DesktopComputerUseChannel
+    | ThreadManagementService.ThreadManagementService
+    | ServerSettings.ServerSettingsService
+  >();
+  const built = yield* ComputerUseToolkit;
+  for (const tool of Object.values(ComputerUseToolkit.tools)) {
+    yield* server.addTool({
+      tool: new McpSchema.Tool({
+        name: tool.name,
+        description: Tool.getDescription(tool),
+        inputSchema: Tool.getJsonSchema(tool),
+        annotations: {
+          ...Context.getOption(tool.annotations, Tool.Title).pipe(
+            Option.map((title) => ({ title })),
+            Option.getOrUndefined,
+          ),
+          readOnlyHint: Context.get(tool.annotations, Tool.Readonly),
+          destructiveHint: Context.get(tool.annotations, Tool.Destructive),
+          idempotentHint: Context.get(tool.annotations, Tool.Idempotent),
+          openWorldHint: Context.get(tool.annotations, Tool.OpenWorld),
+        },
+      }),
+      annotations: Context.add(tool.annotations, McpSchema.EnabledWhen, computerUseToolVisible),
+      handle: (payload) =>
+        Effect.withFiber((fiber) => {
+          const invocation = Context.getUnsafe(
+            fiber.context,
+            McpInvocationContext.McpInvocationContext,
+          );
+          return built.handle(tool.name as never, payload as never).pipe(
+            Stream.unwrap,
+            Stream.run(Sink.last()),
+            Effect.flatMap(Effect.fromOption),
+            Effect.provide(services),
+            Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+            Effect.matchCauseEffect({
+              onFailure: computerUseToolFailure,
+              onSuccess: ({ encodedResult }) =>
+                Effect.succeed(computerUseToolResult(tool.name, encodedResult)),
+            }),
+          );
+        }),
+    });
+  }
+});
+
+/**
  * `McpServer.toolkit` asks for every service its tools declare when it
  * registers them, but the auth middleware provides `McpInvocationContext` to
  * each request instead. Registration must not get one: the services it
@@ -789,6 +966,11 @@ export const layerPullRequestsToolkit = toolkitRegistration(
   PullRequestsHandlers.layer,
 );
 
+export const layerComputerUseToolkit = imageToolRegistration(
+  registerComputerUseTools(),
+  ComputerUseHandlers.layer,
+);
+
 export const layerMcpTransport = McpServer.layerHttp({
   name: "BusyBoy",
   version: packageJson.version,
@@ -809,4 +991,5 @@ export const layer = Layer.mergeAll(
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,
   layerHtmlToolkit,
+  layerComputerUseToolkit,
 ).pipe(Layer.provideMerge(layerMcpTransport));

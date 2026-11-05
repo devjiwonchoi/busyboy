@@ -577,7 +577,7 @@ it.effect("cancels a stale waiting run when no checkpoint capture can finish it"
   }).pipe(Effect.provide(layer));
 });
 
-it.effect("closes a secret request card's form when its run is recovered", () => {
+it.effect("closes pending secret and app approval cards when their run is recovered", () => {
   const threadId = ThreadId.make("thread_secret_recovery");
   const runId = RunId.make("run_secret_recovery");
   let committedInput: Parameters<EventSink.EventSinkV2["Service"]["commitCommand"]>[0] | null =
@@ -604,6 +604,18 @@ it.effect("closes a secret request card's form when its run is recovered", () =>
         secretStatus: "pending",
         label: "GitHub token",
         reason: "Used as GH_TOKEN.",
+      },
+      {
+        id: "turn-item:computer-use-app-request:recovery",
+        threadId,
+        runId,
+        nodeId: null,
+        type: "computer_use_app_request",
+        status: "waiting",
+        appRequestStatus: "pending",
+        appName: "TextEdit",
+        bundleId: "com.apple.TextEdit",
+        allowAlways: true,
       },
     ],
   } as unknown as OrchestrationV2ThreadProjection;
@@ -635,10 +647,18 @@ it.effect("closes a secret request card's form when its run is recovered", () =>
 
   return Effect.gen(function* () {
     yield* (yield* ProviderRuntimeRecovery.ProviderRuntimeRecoveryService).reconcile("startup");
-    const itemEvent = committedInput?.events.find((event) => event.type === "turn-item.updated");
-    const card = itemEvent?.type === "turn-item.updated" ? itemEvent.payload : null;
-    assert.equal(card?.status, "cancelled");
-    assert.equal(card?.type === "secret_request" ? card.secretStatus : null, "cancelled");
+    const cards = (committedInput?.events ?? []).flatMap((event) =>
+      event.type === "turn-item.updated" ? [event.payload] : [],
+    );
+    const secret = cards.find((card) => card.type === "secret_request");
+    assert.equal(secret?.status, "cancelled");
+    assert.equal(secret?.type === "secret_request" ? secret.secretStatus : null, "cancelled");
+    const app = cards.find((card) => card.type === "computer_use_app_request");
+    assert.equal(app?.status, "cancelled");
+    assert.equal(
+      app?.type === "computer_use_app_request" ? app.appRequestStatus : null,
+      "cancelled",
+    );
   }).pipe(Effect.provide(layer));
 });
 

@@ -37,6 +37,7 @@ import {
   TurnItemId,
 } from "./baseSchemas.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
+import { ComputerUseAppRequestStatus } from "./desktopComputerUse.ts";
 import {
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
@@ -1308,6 +1309,19 @@ const OrchestrationV2SecretRequestFields = {
   secretStatus: OrchestrationV2SecretRequestStatus,
 } as const;
 
+/**
+ * Asks the user whether the agent may use one Mac app. Keyed by the
+ * helper-resolved bundle ID, never the model's string. `allow_thread` items
+ * are the thread's lasting approvals, so they persist and go with the thread.
+ */
+const OrchestrationV2ComputerUseAppRequestFields = {
+  type: Schema.Literal("computer_use_app_request"),
+  appName: Schema.String,
+  bundleId: TrimmedNonEmptyString,
+  allowAlways: Schema.Boolean,
+  appRequestStatus: ComputerUseAppRequestStatus,
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1485,6 +1499,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2ComputerUseAppRequestFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2224,6 +2242,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2ComputerUseAppRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
     type: Schema.Literal("subagent"),
     subagentId: NodeId,
     origin: Schema.Literals(["provider_native", "app_owned"]),
@@ -2957,6 +2979,19 @@ const OrchestrationV2InternalCommand = Schema.Union([
     reason: Schema.String,
     placeholder: Schema.optional(Schema.String),
     secretStatus: OrchestrationV2SecretRequestStatus,
+  }),
+  /** Internal: only the computer-use tools and their answer path record these. */
+  Schema.Struct({
+    type: Schema.Literal("computer_use_app_request.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    nodeId: NodeId,
+    turnItemId: TurnItemId,
+    appName: Schema.String,
+    bundleId: TrimmedNonEmptyString,
+    allowAlways: Schema.Boolean,
+    appRequestStatus: ComputerUseAppRequestStatus,
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

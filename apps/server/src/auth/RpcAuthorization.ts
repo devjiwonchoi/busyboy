@@ -83,6 +83,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.computerUseStatus]: AuthOrchestrationReadScope,
   [WS_METHODS.computerUseRequestPermission]: AuthSettingsWriteScope,
   [WS_METHODS.computerUseRestartHelper]: AuthSettingsWriteScope,
+  [WS_METHODS.computerUseAnswerAppRequest]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverSearchAcpRegistry]: AuthOrchestrationReadScope,
   [WS_METHODS.serverPrepareAcpRegistryAgent]: AuthProvidersManageScope,
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: AuthProvidersManageScope,
@@ -258,6 +259,13 @@ const requiredScopesForRpcCall = (
   if (method === WS_METHODS.computerUseStatus) {
     const start = (payload as { start?: unknown } | null)?.start === true;
     return start ? [AuthSettingsWriteScope] : [AuthOrchestrationReadScope];
+  }
+  // "Always allow" also writes `computerUseAlwaysAllowedApps` to settings.
+  if (method === WS_METHODS.computerUseAnswerAppRequest) {
+    const always = (payload as { choice?: unknown } | null)?.choice === "always";
+    return always
+      ? [AuthOrchestrationOperateScope, AuthSettingsWriteScope]
+      : [AuthOrchestrationOperateScope];
   }
   if (method === WS_METHODS.projectsMutate) {
     return requiredScopesForProjectMutation(decodeProjectMutation(payload));
