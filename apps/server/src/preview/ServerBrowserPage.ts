@@ -548,6 +548,7 @@ export const type = async (page: Page, input: PreviewAutomationTypeInput) => {
       throw new ServerBrowserOperationError(
         "PreviewAutomationTargetNotEditableError",
         SECRET_FIELD_REFUSAL,
+        { secretField: true },
       );
     }
   }

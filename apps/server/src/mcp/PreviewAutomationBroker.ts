@@ -292,9 +292,16 @@ const classifyResponseError = (
         detail.selectorLength >= 0
           ? detail.selectorLength
           : undefined;
+      // The server browser's own refusal says what to do instead (preview_sign_in).
+      const secretField =
+        context.clientId === SERVER_BROWSER_AUTOMATION_CLIENT_ID &&
+        detail !== undefined &&
+        "secretField" in detail &&
+        detail.secretField === true;
       return new PreviewAutomationTargetNotEditableError({
         ...context,
         ...remoteDiagnostics,
+        ...(secretField ? { reason: error.message.slice(0, MAX_REASON_CHARS) } : {}),
         ...(remoteSelectorKind === undefined && context.selectorKind === undefined
           ? {}
           : { selectorKind: remoteSelectorKind ?? context.selectorKind }),

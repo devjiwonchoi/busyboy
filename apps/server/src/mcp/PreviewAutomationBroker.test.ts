@@ -542,6 +542,44 @@ it.effect.each([
   ),
 );
 
+it.effect.each([
+  { clientId: SERVER_BROWSER_AUTOMATION_CLIENT_ID, shown: true },
+  { clientId: "client-1", shown: false },
+])(
+  "tells the agent to use preview_sign_in when typing a password is refused ($clientId)",
+  ({ clientId, shown }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const broker = yield* makeBroker;
+        const requests = requestsFrom(yield* broker.connect(makeHost({ clientId })));
+        yield* Stream.runForEach(requests, (request) =>
+          broker.respond({
+            clientId,
+            connectionId: request.connectionId,
+            requestId: request.requestId,
+            ok: false,
+            error: {
+              _tag: "PreviewAutomationTargetNotEditableError",
+              message: "This is a password field. Use preview_sign_in so the user signs in.",
+              detail: { secretField: true },
+            },
+          }),
+        ).pipe(Effect.forkScoped);
+        yield* Effect.yieldNow;
+        const error = yield* broker
+          .invoke<void>({
+            scope,
+            operation: "type",
+            input: { locator: "aria-ref=e7", text: "hunter2" },
+            tabId: PreviewTabId.make("tab-1"),
+          })
+          .pipe(Effect.flip);
+        expect(error).toBeInstanceOf(PreviewAutomationTargetNotEditableError);
+        expect(error.message.includes("preview_sign_in")).toBe(shown);
+      }),
+    ),
+);
+
 it.effect("distinguishes malformed remote failures", () =>
   Effect.scoped(
     Effect.gen(function* () {

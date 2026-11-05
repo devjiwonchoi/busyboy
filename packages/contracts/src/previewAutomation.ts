@@ -1033,9 +1033,14 @@ export class PreviewAutomationTargetNotEditableError extends Schema.TaggedError<
     ...PreviewAutomationRemoteDiagnosticFields,
     selectorKind: Schema.optional(Schema.Literals(["focused-element", "locator", "selector"])),
     selectorLength: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+    /** Why the server browser refused, such as a password field the person must fill. */
+    reason: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
+    if (this.reason !== undefined) {
+      return `Preview automation ${this.operation} refused: ${this.reason}`;
+    }
     if (this.selectorKind === "focused-element") {
       return `Preview automation ${this.operation} requires an editable focused element.`;
     }
