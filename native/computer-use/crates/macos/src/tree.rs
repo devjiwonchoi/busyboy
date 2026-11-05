@@ -38,7 +38,7 @@ fn dictionary_get(dictionary: &CFDictionary<CFString, CFType>, key: &CFString) -
 }
 
 /// Layer-0 windows of `pid`, including off-screen ones.
-fn cg_windows(pid: i32) -> Vec<CgWindow> {
+pub(crate) fn cg_windows(pid: i32) -> Vec<CgWindow> {
     let options = CGWindowListOption::OptionAll | CGWindowListOption::ExcludeDesktopElements;
     let Some(list) = CGWindowListCopyWindowInfo(options, 0) else {
         return Vec::new();

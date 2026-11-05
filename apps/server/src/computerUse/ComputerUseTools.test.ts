@@ -233,6 +233,7 @@ const setup = (
   settings: Partial<{
     enableAgentComputerUse: boolean;
     computerUseScreenshots: boolean;
+    computerUseExperimentalPointer: boolean;
     computerUseAlwaysAllowedApps: Array<string>;
   }> = {},
 ) =>
@@ -982,6 +983,28 @@ it.effect("snapshot maps its arguments and honors the screenshot setting", () =>
       });
       expect(result.screenshot).toBeNull();
       expect(result.screenshotOmitted).toBe("disabled_in_settings");
+    }),
+  ),
+);
+
+it.effect("sends the experimental pointer flag only when the setting is on", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const off = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      yield* off.run(ComputerUseTools.click({ app: "TextEdit", ref: "e1" }));
+      const offAct = off.harness.requests.find((request) => request.method === "app.act");
+      expect(offAct?.params).not.toHaveProperty("experimentalPointer");
+
+      const on = yield* setup({
+        computerUseAlwaysAllowedApps: ["com.apple.TextEdit"],
+        computerUseExperimentalPointer: true,
+      });
+      yield* on.run(ComputerUseTools.click({ app: "TextEdit", ref: "e1" }));
+      yield* on.run(ComputerUseTools.snapshot({ app: "TextEdit" }));
+      for (const method of ["app.act", "app.state"]) {
+        const request = on.harness.requests.find((candidate) => candidate.method === method);
+        expect(request?.params).toMatchObject({ experimentalPointer: true });
+      }
     }),
   ),
 );

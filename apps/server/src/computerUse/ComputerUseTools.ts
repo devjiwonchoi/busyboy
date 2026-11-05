@@ -328,17 +328,25 @@ const forward = (
     return yield* turns.whileActive(
       caller.threadId,
       run.id,
-      turns
-        .ensureSession(caller.threadId, run.id)
-        .pipe(
-          Effect.andThen(
-            channel.request(
-              method,
-              { threadId: caller.threadId, turnId: run.id, deadlineMs, ...params },
-              { timeoutMs: deadlineMs + CHANNEL_GRACE_MS },
-            ),
+      turns.ensureSession(caller.threadId, run.id).pipe(
+        Effect.andThen(
+          channel.request(
+            method,
+            {
+              threadId: caller.threadId,
+              turnId: run.id,
+              deadlineMs,
+              // Off unless the user turned on the experimental pointer; the helper
+              // treats a missing flag as off.
+              ...(caller.settings.computerUseExperimentalPointer
+                ? { experimentalPointer: true }
+                : {}),
+              ...params,
+            },
+            { timeoutMs: deadlineMs + CHANNEL_GRACE_MS },
           ),
         ),
+      ),
     );
   });
 

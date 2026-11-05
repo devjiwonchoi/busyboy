@@ -2,6 +2,8 @@
 //!
 //! All work is background-only: accessibility reads and actions, key events posted to
 //! one process, and per-window capture. Nothing here moves the pointer or activates an app.
+//! The experimental background pointer (`pointer`) posts mouse events to one window of
+//! one process, only when a request turns it on, and never moves the cursor.
 #![cfg(target_os = "macos")]
 
 pub mod actions;
@@ -12,6 +14,7 @@ pub mod capture;
 pub mod keys;
 pub mod monitor;
 pub mod permissions;
+pub mod pointer;
 pub mod session;
 pub mod tree;
 pub mod web;
@@ -21,10 +24,10 @@ use std::sync::{Arc, Mutex};
 use ax::AxElement;
 use cu_core::keys::KeyChord;
 use cu_core::platform::*;
-use cu_core::tree::{ElementAction, RawTree, TreeBudget, WindowInfo};
+use cu_core::tree::{ElementAction, RawTree, Rect, TreeBudget, WindowInfo};
 use cu_core::{CancelToken, CuResult, Deadline};
 use cu_protocol::{
-    AppEntry, FillValue, PermissionKind, PermissionsStatus, Screenshot, ScreenshotOmitted, ScrollAmount,
+    AppEntry, FillValue, MouseButton, PermissionKind, PermissionsStatus, Screenshot, ScreenshotOmitted, ScrollAmount,
     ScrollDirection, TextRange,
 };
 
@@ -81,7 +84,9 @@ impl Platform for MacPlatform {
     }
 
     fn capabilities(&self) -> Vec<String> {
-        Vec::new()
+        // Looking the private symbol up posts nothing.
+        let pointer = if pointer::private_post_available() { "experimental_pointer" } else { "experimental_pointer_public" };
+        vec![pointer.to_owned()]
     }
 
     fn set_event_sink(&self, sink: EventSink) {
@@ -246,5 +251,36 @@ impl Platform for MacPlatform {
 
     fn restore_web_accessibility(&self, app: &RunningApp) {
         self.web.restore(app);
+    }
+
+    fn element_frame(&self, element: &AxElement, deadline: Deadline) -> Option<Rect> {
+        element.frame(deadline).ok().flatten()
+    }
+
+    fn pointer_click(
+        &self,
+        app: &RunningApp,
+        window: &WindowInfo,
+        x: f64,
+        y: f64,
+        button: MouseButton,
+        count: u32,
+        guard: StepGuard<'_>,
+    ) -> CuResult<PointerRoute> {
+        pointer::click(app, window, x, y, button, count, guard)
+    }
+
+    fn pointer_scroll(
+        &self,
+        app: &RunningApp,
+        window: &WindowInfo,
+        x: f64,
+        y: f64,
+        direction: ScrollDirection,
+        amount: ScrollAmount,
+        times: u32,
+        guard: StepGuard<'_>,
+    ) -> CuResult<PointerRoute> {
+        pointer::scroll(app, window, x, y, direction, amount, times, guard)
     }
 }
