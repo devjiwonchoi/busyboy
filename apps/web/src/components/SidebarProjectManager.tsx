@@ -16,6 +16,7 @@ import {
 } from "../state/projectTeam.logic";
 import { useEnvironmentScope } from "../state/session";
 import { PmAvatar } from "./PmAvatar";
+import { JumpHintBadge } from "./sidebar/JumpHintBadge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export function SidebarProjectManagerBadges(props: { summary: ProjectTeamAttentionSummary }) {
@@ -87,6 +88,7 @@ export function SidebarProjectManagerHeading(props: {
   isActive: boolean;
   onOpenThread: (threadRef: ScopedThreadRef) => void;
   onNewThread: (() => void) | null;
+  jumpLabel?: string | null;
 }) {
   const { summary, pmThreadRef, projectName } = props;
   const canOperate = useEnvironmentScope(pmThreadRef.environmentId, AuthOrchestrationOperateScope);
@@ -98,7 +100,7 @@ export function SidebarProjectManagerHeading(props: {
       <div
         data-testid="sidebar-project-manager-heading"
         className={cn(
-          "flex h-7 items-center rounded-md transition-colors",
+          "relative flex h-7 items-center rounded-md transition-colors",
           props.isActive ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
         )}
       >
@@ -124,6 +126,7 @@ export function SidebarProjectManagerHeading(props: {
           <TooltipPopup side="right">{presence}</TooltipPopup>
         </Tooltip>
         <SidebarProjectManagerBadges summary={summary} />
+        {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
         <span
           className={cn(
             "flex shrink-0 items-center",

@@ -198,6 +198,7 @@ import {
   shouldRecedeSidebarThread,
   sidebarListItemId,
   sidebarMarkerId,
+  sidebarNavigationThreadKeys,
   sortInboxThreadsByReturn,
   sortPinnedThreadsForSidebar,
   sortThreadsForSidebar,
@@ -252,6 +253,7 @@ import {
   useComboboxFilter,
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
+import { JumpHintBadge } from "./sidebar/JumpHintBadge";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Tooltip, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -772,17 +774,6 @@ function threadTimeTimestamp(thread: SidebarThreadSummary): string {
   return thread.latestUserMessageAt ?? thread.updatedAt;
 }
 
-function JumpHintBadge(props: { label: string }) {
-  return (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute right-1.5 top-1/2 z-10 inline-flex h-5 -translate-y-1/2 items-center rounded-full border border-border/80 bg-background/95 px-1.5 font-mono text-3xs font-medium tracking-tight text-foreground shadow-sm"
-    >
-      {props.label}
-    </span>
-  );
-}
-
 function terminalProcessLabel(count: number): string {
   return `${count} terminal ${count === 1 ? "process" : "processes"} running`;
 }
@@ -1103,6 +1094,7 @@ function SidebarProjectHeader(props: {
     readonly manager: SidebarSectionProjectManager;
     readonly isActive: boolean;
     readonly onOpenThread: (threadRef: ScopedThreadRef) => void;
+    readonly jumpLabel: string | null;
   };
 }) {
   const pm = props.projectManager;
@@ -1132,6 +1124,7 @@ function SidebarProjectHeader(props: {
           isActive={pm.isActive}
           onOpenThread={pm.onOpenThread}
           onNewThread={props.onNewThread}
+          jumpLabel={pm.jumpLabel}
         />
       </SortableSidebarMarker>
     );
@@ -2250,16 +2243,6 @@ export default function Sidebar() {
   // event and defeat row memoization during streaming.
   const threadByKeyRef = useRef(threadByKey);
 
-  const jumpLabelByKey = (() => {
-    const mapping = new Map<string, string>();
-    for (const [index, threadKey] of orderedThreadKeys.entries()) {
-      const jumpCommand = threadJumpCommandForIndex(index);
-      if (!jumpCommand) break;
-      const label = shortcutLabelForCommand(keybindings, jumpCommand);
-      if (label) mapping.set(threadKey, label);
-    }
-    return mapping;
-  })();
   const { showThreadJumpHints: showJumpHints, updateThreadJumpHintsVisibility } =
     useThreadJumpHintVisibility();
 
@@ -2636,6 +2619,29 @@ export default function Sidebar() {
     // starts working while the Working shelf is collapsed.
     sidebarListItems = sidebarListItemsFresh;
   }
+  // Cmd+number and next/previous follow the rows on screen, PM headings included.
+  const navigationThreadKeys = sidebarNavigationThreadKeys(
+    sidebarListItems,
+    (projectKey) => projectManagerByProjectKey.get(projectKey)?.threadKey,
+  );
+  const navigationThreadRefByKey = new Map<string, ScopedThreadRef>(
+    [...projectManagerByProjectKey.values()].map(
+      (manager) => [manager.threadKey, manager.threadRef] as const,
+    ),
+  );
+  for (const [threadKey, thread] of threadByKey) {
+    navigationThreadRefByKey.set(threadKey, scopeThreadRef(thread.environmentId, thread.id));
+  }
+  const jumpLabelByKey = (() => {
+    const mapping = new Map<string, string>();
+    for (const [index, threadKey] of navigationThreadKeys.entries()) {
+      const jumpCommand = threadJumpCommandForIndex(index);
+      if (!jumpCommand) break;
+      const label = shortcutLabelForCommand(keybindings, jumpCommand);
+      if (label) mapping.set(threadKey, label);
+    }
+    return mapping;
+  })();
   useEffect(() => {
     if (
       dragState !== null &&
@@ -3315,18 +3321,18 @@ export default function Sidebar() {
       });
       const navigateToThreadKey = (targetThreadKey: string | null) => {
         if (!targetThreadKey) return false;
-        const targetThread = threadByKey.get(targetThreadKey);
-        if (!targetThread) return false;
+        const targetThreadRef = navigationThreadRefByKey.get(targetThreadKey);
+        if (!targetThreadRef) return false;
         event.preventDefault();
         event.stopPropagation();
-        navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
+        navigateToThread(targetThreadRef);
         return true;
       };
       const traversalDirection = threadTraversalDirectionFromCommand(command);
       if (traversalDirection !== null) {
         navigateToThreadKey(
           resolveAdjacentThreadId({
-            threadIds: orderedThreadKeys,
+            threadIds: navigationThreadKeys,
             currentThreadId: routeThreadKey,
             direction: traversalDirection,
           }),
@@ -3335,17 +3341,17 @@ export default function Sidebar() {
       }
       const jumpIndex = threadJumpIndexFromCommand(command ?? "");
       if (jumpIndex === null) return;
-      navigateToThreadKey(orderedThreadKeys[jumpIndex] ?? null);
+      navigateToThreadKey(navigationThreadKeys[jumpIndex] ?? null);
     };
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);
   }, [
     keybindings,
     navigateToThread,
-    orderedThreadKeys,
+    navigationThreadKeys,
+    navigationThreadRefByKey,
     routeTerminalOpen,
     routeThreadKey,
-    threadByKey,
   ]);
 
   const shouldShowJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
@@ -3831,6 +3837,9 @@ export default function Sidebar() {
                                         manager,
                                         isActive: routeThreadKey === manager.threadKey,
                                         onOpenThread: navigateToThread,
+                                        jumpLabel: showJumpHints
+                                          ? (jumpLabelByKey.get(manager.threadKey) ?? null)
+                                          : null,
                                       },
                                     }
                                   : {})}
