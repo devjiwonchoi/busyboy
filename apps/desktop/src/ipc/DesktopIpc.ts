@@ -50,9 +50,11 @@ export const appWindowSenderPolicy = (applicationUrl: string): DesktopIpcSenderP
 };
 
 export class DesktopIpcUntrustedSenderRejection extends Error {
-  constructor(readonly channel: string) {
+  readonly channel: string;
+  constructor(channel: string) {
     super(`${channel} is only available to the app window.`);
     this.name = "DesktopIpcUntrustedSenderRejection";
+    this.channel = channel;
   }
 }
 

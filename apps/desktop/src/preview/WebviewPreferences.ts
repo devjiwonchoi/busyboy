@@ -1,9 +1,12 @@
 /**
- * - `sandbox=true`: keeps the OS-level renderer sandbox enabled. Critical
- *   when paired with `contextIsolation=false` — without sandbox, the preload
- *   has full Node access (`require`, `fs`, `child_process`, ...) and that
- *   `require` would land on the page's shared `globalThis`, giving any
- *   third-party page in the preview full Node + IPC access to the host.
+ * - `contextIsolation=true`: the guest preload (picker, passwords, passkeys) runs in its own
+ *   JavaScript world, so a previewed page never reaches its `ipcRenderer`. The few pieces that
+ *   must touch the page's world are copied there with `contextBridge.executeInMainWorld`.
+ * - `sandbox=true`: keeps the OS-level renderer sandbox enabled, so the preload never has Node.
+ * - `nodeIntegration=false`: defense in depth; the page never gets Node.
+ *
+ * `DesktopWindow`'s `will-attach-webview` handler enforces the same values in the main process,
+ * so a renderer bug that drops this string still cannot weaken a guest.
  */
 export const PREVIEW_WEBVIEW_PREFERENCES =
-  "contextIsolation=false,sandbox=true,nodeIntegration=false";
+  "contextIsolation=true,sandbox=true,nodeIntegration=false";

@@ -458,6 +458,9 @@ export const make = Effect.gen(function* () {
         event.preventDefault();
         return;
       }
+      // The renderer names the preload in the <webview> tag; pin it here so only
+      // BusyBoy's own guest preload ever runs next to a previewed page.
+      webPreferences.preload = environment.path.join(environment.dirname, "preview-pick-preload.cjs");
       webPreferences.sandbox = true;
       webPreferences.nodeIntegration = false;
       // Persistent profiles run the preload in subframes too, so a login form
@@ -466,7 +469,8 @@ export const make = Effect.gen(function* () {
       // Incognito partitions (no `persist:` prefix) never get the password module.
       const savesPasswords = params.partition.startsWith("persist:");
       webPreferences.nodeIntegrationInSubFrames = savesPasswords;
-      webPreferences.contextIsolation = false;
+      // Isolated, so a previewed page never shares a world with the preload's ipcRenderer.
+      webPreferences.contextIsolation = true;
       webPreferences.disableHtmlFullscreenWindowResize = true;
       if (previewPasskeys.bridgeEnabled) {
         webPreferences.additionalArguments = [
