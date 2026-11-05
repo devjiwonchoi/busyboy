@@ -40,6 +40,7 @@ beforeEach(() => {
     current = makeProjectManagerSummaryFixture({
       enabled: patch.enabled ?? current.enabled,
       persona: { ...current.persona, ...patch.persona },
+      taskKeyPrefix: patch.taskKeyPrefix ?? current.taskKeyPrefix,
     });
     await renderSection();
     return { _tag: "Success" };
@@ -112,5 +113,23 @@ describe("project manager settings", () => {
     await renderSection();
     await userEvent.click(byLabel<HTMLElement>("Choose an avatar")!);
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
+  });
+  it("changes the task key prefix, uppercasing it and refusing an invalid one", async () => {
+    current = makeProjectManagerSummaryFixture({ taskKeyPrefix: "BU" });
+    await renderSection();
+    expect(container.textContent).toContain("Tasks are named like BU-7.");
+    const prefix = byLabel<HTMLInputElement>("Task key prefix")!;
+
+    await userEvent.clear(prefix);
+    await userEvent.type(prefix, "7x{Enter}");
+    expect(state.updateSettings).not.toHaveBeenCalled();
+    expect(prefix.value).toBe("BU");
+
+    await userEvent.clear(prefix);
+    await userEvent.type(prefix, "bb{Enter}");
+    expect(state.updateSettings).toHaveBeenCalledExactlyOnceWith(projectRef, {
+      taskKeyPrefix: "BB",
+    });
+    expect(container.textContent).toContain("Tasks are named like BB-7.");
   });
 });
