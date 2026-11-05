@@ -20,6 +20,7 @@ const task: ProjectTask = {
   request: "Add hello.sh that prints hello, with a test.",
   stage: "planning",
   waitsOn: [],
+  parentTaskId: null,
   leadThreadId: null,
   prUrl: null,
   planSummary: null,

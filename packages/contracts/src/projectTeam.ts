@@ -81,6 +81,8 @@ export const ProjectTask = Schema.Struct({
   request: Schema.String,
   stage: ProjectTaskStage,
   waitsOn: Schema.Array(ProjectTaskId),
+  /** The task this one was split from, shown as its parent. */
+  parentTaskId: Schema.NullOr(ProjectTaskId).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   leadThreadId: Schema.NullOr(ThreadId),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
@@ -130,6 +132,63 @@ export const ProjectTaskEvent = Schema.Struct({
   createdAt: IsoDateTime,
 });
 export type ProjectTaskEvent = typeof ProjectTaskEvent.Type;
+
+const ProjectTaskSpecText = Schema.String.check(Schema.isMaxLength(60_000));
+export const ProjectTaskTodoId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
+export type ProjectTaskTodoId = typeof ProjectTaskTodoId.Type;
+
+export const ProjectTaskTodo = Schema.Struct({
+  id: ProjectTaskTodoId,
+  text: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  done: Schema.Boolean,
+  /** Set once the todo was split into its own task. */
+  subtaskId: Schema.NullOr(ProjectTaskId),
+});
+export type ProjectTaskTodo = typeof ProjectTaskTodo.Type;
+
+/** The written spec of a task. Every change is kept as a new version. */
+export const ProjectTaskSpec = Schema.Struct({
+  background: ProjectTaskSpecText,
+  goal: ProjectTaskSpecText,
+  nonGoals: ProjectTaskSpecText,
+  todos: Schema.Array(ProjectTaskTodo).check(Schema.isMaxLength(200)),
+}).check(
+  Schema.makeFilter((spec) =>
+    new Set(spec.todos.map((todo) => todo.id)).size === spec.todos.length
+      ? true
+      : "Each todo needs its own id.",
+  ),
+);
+export type ProjectTaskSpec = typeof ProjectTaskSpec.Type;
+
+export const ProjectTaskSpecAuthor = Schema.Literals(["user", "pm", "agent"]);
+export type ProjectTaskSpecAuthor = typeof ProjectTaskSpecAuthor.Type;
+
+export const ProjectTaskSpecVersion = Schema.Struct({
+  taskId: ProjectTaskId,
+  /** 1 for the first version. */
+  version: PositiveInt,
+  spec: ProjectTaskSpec,
+  author: ProjectTaskSpecAuthor,
+  /** The agent or PM thread that wrote this version. Null when the user did. */
+  authorThreadId: Schema.NullOr(ThreadId),
+  /** Why the spec changed, such as "Restored v2". */
+  note: Schema.String,
+  createdAt: IsoDateTime,
+});
+export type ProjectTaskSpecVersion = typeof ProjectTaskSpecVersion.Type;
+
+export const ProjectTaskSessionRole = Schema.Literals(["lead", "planner", "implementer"]);
+export type ProjectTaskSessionRole = typeof ProjectTaskSessionRole.Type;
+
+/** An agent thread working on a task. Its own subagents are not listed here. */
+export const ProjectTaskSession = Schema.Struct({
+  taskId: ProjectTaskId,
+  threadId: ThreadId,
+  role: ProjectTaskSessionRole,
+  createdAt: IsoDateTime,
+});
+export type ProjectTaskSession = typeof ProjectTaskSession.Type;
 
 export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;

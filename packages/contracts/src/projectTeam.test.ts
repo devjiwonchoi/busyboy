@@ -141,7 +141,8 @@ describe("ProjectTask", () => {
       createdAt: "2026-11-04T00:00:00.000Z",
       updatedAt: "2026-11-04T00:00:00.000Z",
     };
-    expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual(task);
+    // Tasks stored before subtasks existed have no parent.
+    expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual({ ...task, parentTaskId: null });
     expect(() => Schema.decodeUnknownSync(ProjectTask)({ ...task, stage: "review" })).toThrow();
   });
 });

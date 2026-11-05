@@ -720,6 +720,8 @@ const make = Effect.gen(function* () {
         request: input.request,
         waitsOn,
         now: yield* nowIso,
+        author: "pm",
+        authorThreadId: callerThreadId,
       });
       yield* appendEvent(task, "created", task.title, callerThreadId);
       yield* router.publish(role.projectId);
@@ -775,6 +777,12 @@ const make = Effect.gen(function* () {
             id: task.id,
             stage: "planning",
             leadThreadId: lead.childThreadId,
+          });
+          yield* repository.addTaskSession({
+            taskId: started.id,
+            threadId: lead.childThreadId,
+            role: "lead",
+            createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
           yield* router.publish(role.projectId);

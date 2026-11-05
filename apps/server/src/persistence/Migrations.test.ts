@@ -14,7 +14,7 @@ import * as Stream from "effect/Stream";
 import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
 
-import { migrationManifest, runMigrations } from "./Migrations.ts";
+import { migrationEntries, migrationManifest, runMigrations } from "./Migrations.ts";
 import Migration0001 from "./Migrations/001_Baseline.ts";
 import Migration0002 from "./Migrations/002_RewriteThreadSettlementEvents.ts";
 import * as OrchestrationEventStore from "./OrchestrationEventStore.ts";
@@ -235,6 +235,60 @@ describe("runMigrations", () => {
         resetAt: "2026-06-01T05:00:00.000Z",
         autoResume: false,
       });
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+  it.effect("turns each existing task's request into spec v1 and its lead into a session", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* Migrator.make({})({
+        loader: Migrator.fromRecord(
+          Object.fromEntries(
+            migrationEntries
+              .filter(([id]) => id <= 5)
+              .map(([id, name, migration]) => [`${id}_${name}`, migration]),
+          ),
+        ),
+      });
+      const at = "2026-11-01T00:00:00.000Z";
+      yield* sql`
+        INSERT INTO project_tasks (
+          task_id, project_id, number, title, request, stage, waits_on_json, lead_thread_id,
+          stage_changed_at, created_at, updated_at
+        ) VALUES
+          ('task:a', 'project-1', 1, 'Started', 'Fix the sidebar.', 'running', '[]', 'lead-a',
+            ${at}, ${at}, ${at}),
+          ('task:b', 'project-1', 2, 'Inbox', 'Later.', 'inbox', '[]', NULL, ${at}, ${at}, ${at})
+      `;
+
+      yield* runMigrations();
+
+      const versions = yield* sql<{
+        readonly task_id: string;
+        readonly version: number;
+        readonly spec_json: string;
+        readonly author: string;
+      }>`SELECT task_id, version, spec_json, author FROM project_task_spec_versions ORDER BY task_id`;
+      assert.deepStrictEqual(
+        versions.map((row) => ({ ...row, spec_json: JSON.parse(row.spec_json) })),
+        [
+          {
+            task_id: "task:a",
+            version: 1,
+            author: "pm",
+            spec_json: { background: "Fix the sidebar.", goal: "", nonGoals: "", todos: [] },
+          },
+          {
+            task_id: "task:b",
+            version: 1,
+            author: "pm",
+            spec_json: { background: "Later.", goal: "", nonGoals: "", todos: [] },
+          },
+        ],
+      );
+      const sessions = yield* sql<{ readonly task_id: string; readonly thread_id: string }>`
+        SELECT task_id, thread_id FROM project_task_sessions
+      `;
+      assert.deepStrictEqual(sessions, [{ task_id: "task:a", thread_id: "lead-a" }]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 });
