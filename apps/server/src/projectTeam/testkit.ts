@@ -17,6 +17,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
@@ -24,6 +25,7 @@ import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
@@ -36,6 +38,7 @@ import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 
 export const START = "2026-11-04T00:00:00.000Z";
 export const PROJECT_ID = ProjectId.make("project-1");
+export const SCRATCH_ROOT = "/data/scratch";
 
 export interface FakeThread {
   readonly id: ThreadId;
@@ -64,6 +67,8 @@ export interface TeamHarness {
   /** Starts every task lead on a thread named lead-<n>. */
   readonly delegate: ProjectTeamService.DelegateTaskLead;
   readonly addProject: (projectId: ProjectId, title: string) => void;
+  /** Adds "No project": the Scratch project, whose folder is the scratch root. */
+  readonly addScratchProject: (projectId: ProjectId) => void;
   /** Registers a fake thread for a lead started by `delegate` so tests can set its state. */
   readonly addThread: (threadId: ThreadId) => FakeThread;
   /** Server messages dispatched to a thread. */
@@ -155,6 +160,7 @@ export const withTeam = <A, E>(
           }
           if (command.type === "thread.archive") target.archivedAt = START;
           if (command.type === "thread.unarchive") target.archivedAt = null;
+          if (command.type === "thread.delete") target.deletedAt = START;
         }).pipe(
           Effect.andThen(Ref.update(dispatched, (all) => [...all, command])),
           Effect.as({ sequence: 1, storedEvents: [] }),
@@ -220,6 +226,11 @@ export const withTeam = <A, E>(
       list: () => Effect.sync(() => [...projects.values()].filter((row) => row.deletedAt === null)),
     });
 
+    const managedProjectFolders = Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+      scratchRoot: Effect.succeed(Option.some(SCRATCH_ROOT)),
+      namedProjectsRoot: "/data/projects",
+    });
+
     const layer = Layer.mergeAll(
       TaskOutcomeReactor.layer,
       StalledTaskSweep.layer,
@@ -236,6 +247,8 @@ export const withTeam = <A, E>(
           providerRegistry,
           ServerSettings.layerTest(),
           NodeCrypto.layer,
+          managedProjectFolders,
+          Path.layer,
         ),
       ),
     );
@@ -261,6 +274,12 @@ export const withTeam = <A, E>(
         }),
       addProject: (projectId, title) => {
         projects.set(projectId, makeProject(projectId, title));
+      },
+      addScratchProject: (projectId) => {
+        projects.set(projectId, {
+          ...makeProject(projectId, "No project"),
+          workspaceRoot: SCRATCH_ROOT,
+        });
       },
       addThread: (threadId) => {
         const thread: FakeThread = {

@@ -9,14 +9,17 @@ import { projectThreadDeleteCommandId } from "../orchestration-v2/ProjectCommand
 import { DefaultManagerReactor } from "./defaultManagerReactor.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { defaultPersonaName } from "./persona.ts";
-import { PROJECT_ID, START, setUpManager, withTeam } from "./testkit.ts";
+import { PROJECT_ID, SCRATCH_ROOT, START, setUpManager, withTeam } from "./testkit.ts";
 
-const projectCreated = (projectId: ProjectId): ApplicationStoredEvent =>
+const projectCreated = (
+  projectId: ProjectId,
+  workspaceRoot = "/workspace/new",
+): ApplicationStoredEvent =>
   ({
     aggregateKind: "project",
     aggregateId: projectId,
     type: "project.created",
-    payload: { projectId, title: "New", workspaceRoot: "/workspace/new", createdAt: START },
+    payload: { projectId, title: "New", workspaceRoot, createdAt: START },
   }) as unknown as ApplicationStoredEvent;
 
 const threadDeleted = (threadId: ThreadId, commandId: string): ApplicationStoredEvent =>
@@ -122,6 +125,52 @@ describe("DefaultManagerReactor", () => {
           (command) => command.type === "thread.create",
         );
         assert.strictEqual(creates.length, 1);
+      }),
+    ),
+  );
+
+  it.effect("gives No project no PM, removes an old one, and gives a created project its PM", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* DefaultManagerReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const scratch = ProjectId.make("project-scratch");
+        const pmThreads = () =>
+          [...harness.threads.values()].filter(
+            (thread) => thread.id.startsWith("project-pm") && thread.deletedAt === null,
+          );
+        const pmProjects = Effect.map(team.attentionSnapshot, (snapshot) =>
+          snapshot.projects.map((summary) => summary.projectId),
+        );
+        // Only "No project" exists, and an earlier build already gave it a PM.
+        harness.projects.clear();
+        harness.addScratchProject(scratch);
+        const oldPm = (yield* team.ensureManager(scratch)).threadId;
+
+        // On startup that PM is removed: no manager, no live PM thread, no sidebar entry.
+        yield* reactor.ensureAll;
+        assert.isTrue(Option.isNone(yield* repository.getManager(scratch)));
+        assert.strictEqual(harness.threads.get(oldPm)?.deletedAt, START);
+        assert.deepStrictEqual(pmThreads(), []);
+        assert.deepStrictEqual(yield* pmProjects, []);
+
+        // Deleting the old PM thread and restarting do not bring it back.
+        yield* reactor.handle(threadDeleted(oldPm, `project-team:remove-scratch-pm:${oldPm}`));
+        yield* reactor.handle(projectCreated(scratch, SCRATCH_ROOT));
+        yield* reactor.ensureAll;
+        assert.deepStrictEqual(pmThreads(), []);
+        assert.deepStrictEqual(yield* pmProjects, []);
+
+        // Creating a project gives that project, and only it, a PM.
+        const created = ProjectId.make("project-new");
+        harness.addProject(created, "New");
+        yield* reactor.handle(projectCreated(created));
+        assert.deepStrictEqual(
+          pmThreads().map((thread) => thread.projectId),
+          [created],
+        );
+        assert.deepStrictEqual(yield* pmProjects, [created]);
       }),
     ),
   );
