@@ -125,6 +125,28 @@ export function sidebarListItemId(item: SidebarListItem): string {
   return item.kind === "thread" ? item.key : sidebarMarkerId(item.marker);
 }
 
+/**
+ * Thread keys in the order the sidebar shows them, for Cmd+number and
+ * next/previous thread. A project heading that is a PM conversation counts as
+ * a row before its section's threads.
+ */
+export function sidebarNavigationThreadKeys(
+  items: readonly SidebarListItem[],
+  headingThreadKeyOf: (projectKey: string) => string | undefined,
+): string[] {
+  const keys: string[] = [];
+  for (const item of items) {
+    if (item.kind === "thread") {
+      keys.push(item.key);
+      continue;
+    }
+    if (!item.marker.startsWith("project:")) continue;
+    const headingKey = headingThreadKeyOf(item.marker.slice("project:".length));
+    if (headingKey !== undefined) keys.push(headingKey);
+  }
+  return keys;
+}
+
 function sectionAtSidebarSlot(items: readonly SidebarListItem[], index: number): SidebarSection {
   let section: SidebarSection = "pinned";
   for (let i = 0; i < index && i < items.length; i += 1) {
