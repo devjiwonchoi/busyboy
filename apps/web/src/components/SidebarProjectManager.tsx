@@ -4,7 +4,7 @@ import {
   type ProjectTeamAttentionSummary,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import { ListPlusIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { cn } from "~/lib/utils";
@@ -88,6 +88,8 @@ export function SidebarProjectManagerHeading(props: {
   isActive: boolean;
   onOpenThread: (threadRef: ScopedThreadRef) => void;
   onNewThread: (() => void) | null;
+  /** Opens the new task composer for this project. */
+  onNewTask?: (() => void) | null;
   jumpLabel?: string | null;
 }) {
   const { summary, pmThreadRef, projectName } = props;
@@ -140,6 +142,23 @@ export function SidebarProjectManagerHeading(props: {
               summary={summary}
               onThreadActivate={props.onOpenThread}
             />
+          ) : null}
+          {canOperate && props.onNewTask ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={`New task in ${projectName}`}
+                    onClick={props.onNewTask}
+                    className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                  />
+                }
+              >
+                <ListPlusIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">New task</TooltipPopup>
+            </Tooltip>
           ) : null}
           {props.onNewThread ? (
             <button
