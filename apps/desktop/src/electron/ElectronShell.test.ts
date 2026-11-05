@@ -2,14 +2,21 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { beforeEach, vi } from "vite-plus/test";
 
-const { openExternalMock, writeTextMock } = vi.hoisted(() => ({
+const { openExternalMock, writeTextMock, showMessageBoxMock } = vi.hoisted(() => ({
   openExternalMock: vi.fn(),
   writeTextMock: vi.fn(),
+  showMessageBoxMock: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
   shell: {
     openExternal: openExternalMock,
+  },
+  dialog: {
+    showMessageBox: showMessageBoxMock,
+  },
+  BrowserWindow: {
+    getFocusedWindow: () => null,
   },
   clipboard: {
     writeText: writeTextMock,
@@ -22,6 +29,9 @@ describe("ElectronShell", () => {
   beforeEach(() => {
     openExternalMock.mockReset();
     writeTextMock.mockReset();
+    showMessageBoxMock.mockReset();
+    // The user confirms remote-editor links unless a test says otherwise.
+    showMessageBoxMock.mockResolvedValue({ response: 0, checkboxChecked: false });
   });
 
   it.effect("opens safe external URLs", () =>
@@ -33,6 +43,7 @@ describe("ElectronShell", () => {
 
       assert.equal(result, true);
       assert.deepEqual(openExternalMock.mock.calls, [["https://example.com/path"]]);
+      assert.strictEqual(showMessageBoxMock.mock.calls.length, 0);
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
@@ -106,8 +117,56 @@ describe("ElectronShell", () => {
       assert.deepEqual(openExternalMock.mock.calls, [
         ["vscode://vscode-remote/ssh-remote+example.com/home/user/project"],
       ]);
+      const [options] = showMessageBoxMock.mock.calls[0] as [{ message: string; detail: string }];
+      assert.include(options.message, "example.com");
+      assert.include(options.detail, "SSH");
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
+
+  it.effect("does not open a remote editor link the user cancels", () =>
+    Effect.gen(function* () {
+      openExternalMock.mockResolvedValue(undefined);
+      showMessageBoxMock.mockResolvedValue({ response: 1, checkboxChecked: false });
+
+      const electronShell = yield* ElectronShell.ElectronShell;
+      const result = yield* electronShell.openExternal(
+        "vscode://vscode-remote/ssh-remote+attacker.example/home/user",
+      );
+
+      assert.equal(result, false);
+      assert.strictEqual(showMessageBoxMock.mock.calls.length, 1);
+      assert.deepEqual(openExternalMock.mock.calls, []);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
+  it.effect("does not open a remote editor link when the dialog fails", () =>
+    Effect.gen(function* () {
+      showMessageBoxMock.mockRejectedValue(new Error("no dialog"));
+
+      const electronShell = yield* ElectronShell.ElectronShell;
+      const result = yield* electronShell.openExternal("zed://ssh/attacker.example/home");
+
+      assert.equal(result, false);
+      assert.deepEqual(openExternalMock.mock.calls, []);
+    }).pipe(Effect.provide(ElectronShell.layer)),
+  );
+
+  it("names the SSH host of each remote editor link", () => {
+    assert.strictEqual(
+      ElectronShell.remoteEditorHost("vscode://vscode-remote/ssh-remote+dev.example/home/u"),
+      "dev.example",
+    );
+    assert.strictEqual(
+      ElectronShell.remoteEditorHost("cursor://vscode-remote/ssh-remote+box%20one/home/u"),
+      "box one",
+    );
+    assert.strictEqual(ElectronShell.remoteEditorHost("zed://ssh/zed.example/home/u"), "zed.example");
+    assert.strictEqual(
+      ElectronShell.remoteEditorHost("jetbrains://gateway/ssh/environment?h=jb.example&launchIde=true"),
+      "jb.example",
+    );
+    assert.isNull(ElectronShell.remoteEditorHost("https://example.com/"));
+  });
 
   it.effect("opens Zed's ssh deep link", () =>
     Effect.gen(function* () {

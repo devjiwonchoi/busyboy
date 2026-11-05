@@ -125,16 +125,19 @@ it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
       Effect.provideService(HostProcess.Platform, "linux"),
       Effect.provide([
         ElectronApp.layer,
-        DesktopIpc.layer({
+        DesktopIpc.layer(
+          {
           handle: (channel, handler) => {
             handlers.set(channel, handler);
           },
           removeHandler: (channel) => {
             handlers.delete(channel);
           },
-          on: vi.fn(),
-          removeAllListeners: vi.fn(),
-        }),
+            on: vi.fn(),
+            removeAllListeners: vi.fn(),
+          },
+          () => true,
+        ),
       ]),
     );
     expect(native.setBadgeCount).toHaveBeenLastCalledWith(0);
