@@ -45,7 +45,7 @@ export const SITREP_UNREAD_STREAK_LIMIT = 3;
 /** A sitrep the PM has not written after this long (while idle) is given up on. */
 export const SITREP_PENDING_TIMEOUT_MS = 30 * MINUTE_MS;
 export const ABANDONED_SITREP_BODY = "(No sitrep was posted.)";
-const USER_ASKED_REASON = "you asked for progress before the next sitrep";
+const SITREP_NOW_REASON = "you asked for a sitrep before the next one was due";
 const SITREP_MESSAGE_PREFIX = "project-team:sitrep:";
 /** Task events that count as a change worth reporting. */
 const REPORTABLE_EVENT_KINDS = new Set(["created", "stage_changed", "summary"]);
@@ -55,8 +55,9 @@ export function preferenceChangedBody(minutes: number, reason: string): string {
   return `interval changed to ${minutes} min because ${reason}`;
 }
 
-export function isPinned(settings: ProjectTeamSettings, nowMs: number): boolean {
-  return settings.pinnedUntil !== undefined && isoMillis(settings.pinnedUntil) > nowMs;
+/** An interval the user set by hand is never adapted. */
+export function isPinned(settings: ProjectTeamSettings): boolean {
+  return settings.intervalPinnedAt !== undefined;
 }
 
 function minutesOfDay(time: string): number {
@@ -107,7 +108,6 @@ export class SitrepScheduler extends Context.Service<
   {
     /** A task finished, a PR opened, or nothing is running any more. */
     readonly noteMilestone: (projectId: ProjectId) => Effect.Effect<void>;
-    readonly noteUserAsked: (projectId: ProjectId) => Effect.Effect<void, ProjectTeamError>;
     /** Sends a sitrep request now, or returns the one the PM is still writing. */
     readonly request: (projectId: ProjectId) => Effect.Effect<ProjectSitrepId, ProjectTeamError>;
     /** Closes the sitrep still being written, e.g. because the PM thread was replaced. */
@@ -165,7 +165,7 @@ const make = Effect.gen(function* () {
           if (Option.isNone(manager)) return false;
           const now = yield* nowIso;
           const settings = manager.value.settings;
-          if (isPinned(settings, isoMillis(now))) return false;
+          if (isPinned(settings)) return false;
           const minutes = next(settings.sitrepIntervalMinutes);
           if (minutes === settings.sitrepIntervalMinutes) return false;
           yield* repository.updateManagerSettings({
@@ -201,11 +201,15 @@ const make = Effect.gen(function* () {
       );
     });
 
-  const noteUserAsked: SitrepScheduler["Service"]["noteUserAsked"] = (projectId) =>
+  /**
+   * "Sitrep now" before the next one was due shortens an interval the user never set.
+   * Chatting with the PM never changes it.
+   */
+  const shortenOnRequest = (projectId: ProjectId) =>
     Effect.gen(function* () {
       const manager = yield* requireManager(projectId);
       const nowMs = isoMillis(yield* nowIso);
-      if (isPinned(manager.settings, nowMs)) return;
+      if (isPinned(manager.settings)) return;
       const interval = manager.settings.sitrepIntervalMinutes;
       if (
         manager.lastSitrepAt !== null &&
@@ -213,15 +217,14 @@ const make = Effect.gen(function* () {
       ) {
         return;
       }
-      // One ask (e.g. the Sitrep button and the PM's team_status) halves only once
-      // per sitrep window.
+      // Pressing the button again in the same window halves only once.
       const events = yield* repository.listProjectEventsSince({
         projectId,
         since: manager.lastSitrepAt ?? manager.createdAt,
       });
       if (
         events.some(
-          (event) => event.kind === "preference_changed" && event.body.endsWith(USER_ASKED_REASON),
+          (event) => event.kind === "preference_changed" && event.body.endsWith(SITREP_NOW_REASON),
         )
       ) {
         return;
@@ -232,8 +235,8 @@ const make = Effect.gen(function* () {
           Math.max(MIN_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES, Math.floor(current / 2)),
         );
       if (halve(interval) >= interval) return;
-      yield* changeInterval(projectId, halve, USER_ASKED_REASON);
-    }).pipe(orTeamError("Could not adjust the sitrep interval.", projectId));
+      yield* changeInterval(projectId, halve, SITREP_NOW_REASON);
+    });
 
   const dispatchSitrep = (
     manager: ProjectTeamRepository.ProjectManagerRecord,
@@ -317,7 +320,7 @@ const make = Effect.gen(function* () {
       const manager = yield* requireManager(projectId);
       const latest = yield* latestSitrep(projectId, manager.threadId);
       if (Option.isSome(latest) && latest.value.body === null) return latest.value.id;
-      yield* noteUserAsked(projectId);
+      yield* shortenOnRequest(projectId);
       return yield* dispatchSitrep(yield* requireManager(projectId), "requested");
     }).pipe(orTeamError("Could not request a sitrep.", projectId));
 
@@ -351,13 +354,13 @@ const make = Effect.gen(function* () {
       const intervalMs = manager.settings.sitrepIntervalMinutes * MINUTE_MS;
       const dueAt = (yield* Ref.get(milestoneDueAt)).get(manager.projectId);
 
+      // Automatic sitreps never come closer together than the interval the user sees;
+      // a milestone only makes the next one due even when nothing else changed.
+      if (elapsed < intervalMs) return;
       let reason: ProjectSitrepReason | null = null;
       if (dueAt !== undefined && nowMs >= dueAt) {
         reason = "milestone";
-      } else if (
-        elapsed >= intervalMs &&
-        (yield* hasChangesSince(manager.projectId, windowStart))
-      ) {
+      } else if (yield* hasChangesSince(manager.projectId, windowStart)) {
         reason = "interval";
       } else if (elapsed >= 2 * intervalMs) {
         const active = yield* repository.listTasks({
@@ -426,7 +429,7 @@ const make = Effect.gen(function* () {
         if (
           Option.isSome(posted) &&
           posted.value.unreadSitrepStreak >= SITREP_UNREAD_STREAK_LIMIT &&
-          !isPinned(posted.value.settings, isoMillis(now))
+          !isPinned(posted.value.settings)
         ) {
           yield* repository.setUnreadSitrepStreak({
             projectId: manager.projectId,
@@ -489,7 +492,6 @@ const make = Effect.gen(function* () {
 
   return {
     noteMilestone,
-    noteUserAsked,
     request,
     abandonPending,
     check,

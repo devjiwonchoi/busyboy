@@ -312,7 +312,7 @@ describe("ProjectTeamService", () => {
     ),
   );
 
-  it.effect("pins settings the user picks for 24 hours", () =>
+  it.effect("pins an interval the user picks", () =>
     withTeam(() =>
       Effect.gen(function* () {
         const team = yield* service;
@@ -324,7 +324,7 @@ describe("ProjectTeamService", () => {
         });
         assert.strictEqual(result.settings.sitrepIntervalMinutes, 45);
         assert.strictEqual(result.settings.sitrepNotify, false);
-        assert.strictEqual(result.settings.pinnedUntil, "2026-11-05T00:00:00.000Z");
+        assert.strictEqual(result.settings.intervalPinnedAt, "2026-11-04T00:00:00.000Z");
         const missing = yield* team
           .updateSettings({ projectId: ProjectId.make("nope"), sitrepNotify: true })
           .pipe(Effect.flip);
@@ -340,16 +340,16 @@ describe("ProjectTeamService", () => {
         yield* setUpManager;
         const toggled = yield* team.updateSettings({ projectId: PROJECT_ID, sitrepNotify: false });
         assert.strictEqual(toggled.settings.sitrepNotify, false);
-        assert.strictEqual(toggled.settings.pinnedUntil, undefined);
+        assert.strictEqual(toggled.settings.intervalPinnedAt, undefined);
 
         const pinned = yield* team.updateSettings({
           projectId: PROJECT_ID,
           sitrepIntervalMinutes: 45,
         });
-        assert.strictEqual(pinned.settings.pinnedUntil, "2026-11-05T00:00:00.000Z");
+        assert.strictEqual(pinned.settings.intervalPinnedAt, "2026-11-04T00:00:00.000Z");
         yield* TestClock.adjust("1 hour");
         const kept = yield* team.updateSettings({ projectId: PROJECT_ID, sitrepNotify: true });
-        assert.strictEqual(kept.settings.pinnedUntil, "2026-11-05T00:00:00.000Z");
+        assert.strictEqual(kept.settings.intervalPinnedAt, "2026-11-04T00:00:00.000Z");
 
         const empty = yield* team.updateSettings({ projectId: PROJECT_ID }).pipe(Effect.flip);
         assert.include(empty.message, "no fields");
@@ -422,7 +422,7 @@ describe("ProjectTeamService", () => {
           defaultPersona(PROJECT_ID).avatar,
         );
         assert.isFalse(fromUser.settings.enabled);
-        assert.strictEqual(fromUser.settings.pinnedUntil, undefined);
+        assert.strictEqual(fromUser.settings.intervalPinnedAt, undefined);
         assert.strictEqual(harness.threads.get(pm)?.title, "Remy");
 
         const fromPm = yield* team.updateSettingsAsManager(pm, {
@@ -436,7 +436,7 @@ describe("ProjectTeamService", () => {
           voice: "chatty",
         });
         assert.isFalse(fromPm.settings.enabled);
-        assert.strictEqual(fromPm.settings.pinnedUntil, undefined);
+        assert.strictEqual(fromPm.settings.intervalPinnedAt, undefined);
         assert.strictEqual(harness.threads.get(pm)?.title, "Otto");
 
         const snapshot = yield* team.attentionSnapshot;

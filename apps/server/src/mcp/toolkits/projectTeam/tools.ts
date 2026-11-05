@@ -122,7 +122,7 @@ const TaskSearchTool = Tool.make("task_search", {
 const TeamStatusTool = Tool.make("team_status", {
   ...shared,
   description:
-    "The team's state: tasks by stage, stalled tasks, open questions for the user, settings, and changes since a time. Call it first whenever you are woken. Pass reason 'user_asked' when the user asks about progress. For a sitrep, pass the since time from the request.",
+    "The team's state: tasks by stage, stalled tasks, open questions for the user, settings, and changes since a time. Call it first whenever you are woken. For a sitrep, pass the since time from the request.",
   parameters: ProjectTeamStatusInput,
   success: ProjectTeamStatus,
 })
@@ -134,7 +134,7 @@ const TeamStatusTool = Tool.make("team_status", {
 const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
   ...shared,
   description:
-    "PM only. Change team settings only when the user asks: max concurrent tasks, sitrep interval, sitrep notifications, quiet hours, and your name, avatar emoji, or voice (chill, dry, or chatty). A sitrep interval set here stops automatic adjustment for 24 hours.",
+    "PM only. Change team settings only when the user asks: max concurrent tasks, sitrep interval, sitrep notifications, quiet hours, and your name, avatar emoji, or voice (chill, dry, or chatty). A sitrep interval set here is never adjusted automatically.",
   parameters: ProjectTeamSettingsUpdateInput,
   success: ProjectTeamSettingsResult,
 })

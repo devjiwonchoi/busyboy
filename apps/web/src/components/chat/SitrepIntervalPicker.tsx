@@ -29,9 +29,9 @@ export function formatSitrepInterval(minutes: number): string {
   return rest === 0 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 60)}h ${rest}m`;
 }
 
-/** The server picks the interval itself unless the user saved one in the last 24 hours. */
+/** The server adapts the interval itself until the user saves one. */
 function isAutoInterval(settings: ProjectTeamAttentionSummary["settings"]): boolean {
-  return settings.pinnedUntil === undefined || Date.parse(settings.pinnedUntil) <= Date.now();
+  return settings.intervalPinnedAt === undefined;
 }
 
 interface SitrepControlProps {

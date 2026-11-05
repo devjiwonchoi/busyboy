@@ -90,7 +90,7 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "call `team_status` first");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "[Sitrep due] since <time>");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "keep it to one short line naming what you did");
-    assert.include(PROJECT_MANAGER_INSTRUCTIONS, 'reason: "user_asked"');
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "When the user asks about progress, call `team_status`");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "Mention: ...");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "never the user's approval");
   });

@@ -26,7 +26,7 @@ let current: ProjectTeamAttentionSummary;
 let root: Root;
 let container: HTMLDivElement;
 
-function summary(minutes: number, pinnedUntil?: string): ProjectTeamAttentionSummary {
+function summary(minutes: number, intervalPinnedAt?: string): ProjectTeamAttentionSummary {
   return {
     projectId: "project-1",
     pmThreadId: "pm-thread",
@@ -39,7 +39,7 @@ function summary(minutes: number, pinnedUntil?: string): ProjectTeamAttentionSum
       maxConcurrentTasks: 6,
       sitrepIntervalMinutes: minutes,
       sitrepNotify: true,
-      ...(pinnedUntil ? { pinnedUntil } : {}),
+      ...(intervalPinnedAt ? { intervalPinnedAt } : {}),
     },
   } as ProjectTeamAttentionSummary;
 }
@@ -61,10 +61,10 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.allowed = true;
   current = summary(60);
-  // The server pins a user-saved interval for 24 hours and pushes the new summary.
+  // The server pins a user-saved interval and pushes the new summary.
   state.updateSettings.mockReset().mockImplementation(async (_ref, patch) => {
     if (patch.sitrepIntervalMinutes !== undefined) {
-      current = summary(patch.sitrepIntervalMinutes, "2999-01-01T00:00:00.000Z");
+      current = summary(patch.sitrepIntervalMinutes, "2026-11-05T00:00:00.000Z");
       await renderPicker();
     }
     return { _tag: "Success" };
