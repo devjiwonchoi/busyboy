@@ -1541,7 +1541,7 @@ describe("deriveMessagesTimelineRows", () => {
     ).toBe(true);
   });
 
-  it("folds all assistant messages before the terminal message", () => {
+  it("folds progress messages but keeps an earlier answer visible", () => {
     const timelineEntries = [
       {
         id: "assistant-first-entry",
@@ -1572,6 +1572,20 @@ describe("deriveMessagesTimelineRows", () => {
         },
       },
       {
+        id: "check-entry",
+        kind: "work" as const,
+        createdAt: "2026-01-01T00:00:04Z",
+        entry: {
+          id: "check-entry",
+          createdAt: "2026-01-01T00:00:04Z",
+          runId: "turn-1" as never,
+          label: "Ran git",
+          command: "git status",
+          tone: "tool" as const,
+          toolLifecycleStatus: "completed" as const,
+        },
+      },
+      {
         id: "assistant-final-entry",
         kind: "message" as const,
         createdAt: "2026-01-01T00:00:05Z",
@@ -1595,7 +1609,13 @@ describe("deriveMessagesTimelineRows", () => {
       supportsConversationRollback: false,
     });
 
-    expect(rows.map((row) => row.id)).toEqual(["turn-fold:turn-1", "assistant-final-entry"]);
+    // The first message ended a step with no tool call after it, so it was
+    // written for the user (e.g. an answer before a Stop hook continues the turn).
+    expect(rows.map((row) => row.id)).toEqual([
+      "turn-fold:turn-1",
+      "assistant-first-entry",
+      "assistant-final-entry",
+    ]);
   });
 
   it("derives a sane duration for a steer-superseded turn with one instant commentary message", () => {
@@ -2437,6 +2457,20 @@ describe("deriveMessagesTimelineRows", () => {
     const timelineEntries = [
       message("imported-prompt", "user", 0),
       message("imported-update", "assistant", 4),
+      {
+        id: "imported-command",
+        kind: "work" as const,
+        createdAt: at(5),
+        entry: {
+          id: "imported-command",
+          createdAt: at(5),
+          runId: null,
+          label: "Ran git",
+          command: "git status",
+          tone: "tool" as const,
+          toolLifecycleStatus: "completed" as const,
+        },
+      },
       message("imported-answer", "assistant", 8),
     ];
     const foldInput = { timelineEntries, latestRun: null, isWorking: false };
@@ -3801,6 +3835,19 @@ describe("v2 run and attempt history", () => {
           createdAt: "2026-01-01T00:00:05Z",
           updatedAt: "2026-01-01T00:00:06Z",
           streaming: false,
+        },
+      },
+      {
+        id: "wait-entry",
+        kind: "work" as const,
+        createdAt: "2026-01-01T00:00:07Z",
+        entry: {
+          id: "wait-entry",
+          createdAt: "2026-01-01T00:00:07Z",
+          runId: "turn-1" as never,
+          label: "Waited for the subagent",
+          tone: "tool" as const,
+          toolLifecycleStatus: "completed" as const,
         },
       },
       {

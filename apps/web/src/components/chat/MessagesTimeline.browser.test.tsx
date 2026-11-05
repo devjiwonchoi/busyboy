@@ -711,6 +711,71 @@ describe("MessagesTimeline messages", () => {
   });
 });
 
+describe("MessagesTimeline turn folds", () => {
+  it("keeps the answer visible when a Stop hook continues the turn with a short reply", async () => {
+    const runId = RunId.make("run-1");
+    const assistant = (text: string, id: string) => message(text, { role: "assistant", runId }, id);
+    await renderTimeline([
+      message("Are finished worktrees deleted automatically?", { runId }, "prompt"),
+      assistant("Let me check how worktrees are cleaned up.", "progress"),
+      work("read-cleanup", {
+        label: "Read cleanup code",
+        tone: "tool",
+        itemType: "command_execution",
+        command: "rg cleanup",
+        runId,
+        toolLifecycleStatus: "completed",
+      }),
+      assistant(
+        "No, they are not deleted automatically.\n\n- Worktrees are removed only when the thread is archived.\n- Finished tasks pile up until then.",
+        "answer",
+      ),
+      // The Stop hook's feedback is not shown; the turn continues with reasoning.
+      work("hook-reasoning", {
+        label: "Reply briefly to the hook feedback",
+        tone: "thinking",
+        itemType: "reasoning",
+        runId,
+        toolLifecycleStatus: "completed",
+      }),
+      {
+        id: "task-chip",
+        kind: "event",
+        createdAt: CREATED_AT,
+        projectedItem: v2Item("subagent", {
+          id: "task-chip",
+          nodeId: "node-task",
+          providerThreadId: "provider-thread-1",
+          providerTurnId: "provider-turn-1",
+          ordinal: 1,
+          status: "running",
+          title: "Clean up finished worktrees",
+          subagentId: "node-task",
+          origin: "provider_native",
+          driver: "claudeAgent",
+          providerInstanceId: "claudeAgent",
+          childThreadId: "thread-task",
+          prompt: "Clean up worktrees",
+          progress: "Planning",
+          result: null,
+        }),
+      } as Entry,
+      assistant("Four tasks are running now. I'll tell you when a plan or PR is ready.", "reply"),
+    ]);
+
+    const fold = button(/^Worked for|^Worked$/);
+    expect(fold.getAttribute("aria-expanded")).not.toBe("true");
+    expect(text()).toContain("No, they are not deleted automatically.");
+    expect(text()).toContain("Four tasks are running now.");
+    // Progress lines and tool calls still fold.
+    expect(text()).not.toContain("Let me check how worktrees are cleaned up.");
+    expect(buttons("Read cleanup code")).toHaveLength(0);
+
+    await click(fold);
+    expect(text()).toContain("Let me check how worktrees are cleaned up.");
+  });
+});
+
 describe("MessagesTimeline attachments", () => {
   const withAttachment = (attachment: Record<string, unknown>) =>
     message("Read the report.", {

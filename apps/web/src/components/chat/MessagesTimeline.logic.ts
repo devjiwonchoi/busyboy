@@ -951,6 +951,41 @@ function failedTimelineRunIds(
   return failed;
 }
 
+/** Tool rows, and cards a tool call left behind (a created chat, a fork). */
+function timelineEntryIsToolCall(entry: TimelineEntry): boolean {
+  if (timelineEntryIsPersistentResourceCard(entry)) return true;
+  if (entry.kind !== "work") return false;
+  const { itemType, tone, sourceActivityKind } = entry.entry;
+  return (
+    itemType !== "reasoning" &&
+    itemType !== "notification" &&
+    itemType !== "system_notice" &&
+    tone !== "thinking" &&
+    sourceActivityKind !== "context-compaction"
+  );
+}
+
+/**
+ * An assistant message with no tool call after it (before the next message)
+ * ended a step of the model's work, so it was written for the user. A Stop
+ * hook can continue the same turn after such an answer; the answer must not
+ * fold away behind the short reply that follows.
+ */
+function stepAnswerEntryIds(entries: ReadonlyArray<TimelineEntry>): ReadonlySet<string> {
+  const answers = new Set<string>();
+  let candidate: TimelineEntry | null = null;
+  for (const entry of entries) {
+    if (entry.kind === "message" && entry.message.role === "assistant") {
+      if (candidate) answers.add(candidate.id);
+      candidate = entry.message.text.trim().length > 0 ? entry : null;
+    } else if (timelineEntryIsToolCall(entry)) {
+      candidate = null;
+    }
+  }
+  if (candidate) answers.add(candidate.id);
+  return answers;
+}
+
 function deriveTurnFolds(input: {
   timelineEntries: ReadonlyArray<TimelineEntry>;
   terminalAssistantMessageIds: ReadonlySet<string>;
@@ -1060,11 +1095,12 @@ function deriveTurnFolds(input: {
       continue;
     }
     const hiddenEntryIds = new Set<string>();
+    const answerEntryIds = stepAnswerEntryIds(group.entries);
     const terminalEntryIndex = group.terminalEntry
       ? group.entries.findIndex((entry) => entry.id === group.terminalEntry?.id)
       : group.entries.length;
     for (const [index, entry] of group.entries.entries()) {
-      if (entry.id === group.terminalEntry?.id) {
+      if (entry.id === group.terminalEntry?.id || answerEntryIds.has(entry.id)) {
         continue;
       }
       const isCompaction =
