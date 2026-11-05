@@ -28,6 +28,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
+import { readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
   isoMillis,
@@ -332,12 +333,28 @@ const make = Effect.gen(function* () {
       return yield* dispatchSitrep(yield* requireManager(projectId), "requested");
     }).pipe(orTeamError("Could not request a sitrep.", projectId));
 
-  const hasChangesSince = (projectId: ProjectId, since: IsoDateTime) =>
+  /** Task changes, new questions, or threads outside the board that moved. */
+  const hasChangesSince = (manager: ProjectTeamRepository.ProjectManagerRecord, since: IsoDateTime) =>
     Effect.gen(function* () {
+      const projectId = manager.projectId;
       const events = yield* repository.listProjectEventsSince({ projectId, since });
       if (events.some((event) => REPORTABLE_EVENT_KINDS.has(event.kind))) return true;
       const items = yield* repository.listAttentionItemsSince({ projectId, since });
-      return items.length > 0;
+      if (items.length > 0) return true;
+      const others = yield* readOtherThreads({
+        threads,
+        repository,
+        projectId,
+        managerThreadId: manager.threadId,
+        withRequestText: false,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("could not read the project's other threads", { projectId, cause }).pipe(
+            Effect.as([]),
+          ),
+        ),
+      );
+      return others.some((thread) => isoMillis(thread.lastUpdateAt) > isoMillis(since));
     });
 
   const checkProject = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
@@ -368,7 +385,7 @@ const make = Effect.gen(function* () {
       let reason: ProjectSitrepReason | null = null;
       if (dueAt !== undefined && nowMs >= dueAt) {
         reason = "milestone";
-      } else if (yield* hasChangesSince(manager.projectId, windowStart)) {
+      } else if (yield* hasChangesSince(manager, windowStart)) {
         reason = "interval";
       }
       if (reason === null) return;
@@ -457,6 +474,19 @@ const make = Effect.gen(function* () {
       yield* router.publish(manager.projectId);
     });
 
+  /**
+   * A thread outside the task board may have started or stopped waiting on the user,
+   * which changes the PM's "Needs you" count.
+   */
+  const publishForOtherThread = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const shell = yield* threads.getThreadShell(threadId);
+      if (shell === null) return;
+      const manager = yield* repository.getManager(shell.projectId);
+      if (Option.isNone(manager) || manager.value.threadId === threadId) return;
+      yield* router.publish(shell.projectId);
+    });
+
   const handle: SitrepScheduler["Service"]["handle"] = (event) =>
     Effect.gen(function* () {
       const isUserMessage =
@@ -468,6 +498,10 @@ const make = Effect.gen(function* () {
         event.type === "run.updated" &&
         ThreadManagement.isTerminalRunStatus(event.payload.status) &&
         event.payload.userMessageId.startsWith(SITREP_MESSAGE_PREFIX);
+      if (!isSettledRun && (event.type === "runtime-request.updated" || event.type === "run.updated")) {
+        yield* publishForOtherThread(event.threadId);
+        return;
+      }
       if (!isUserMessage && !isSettledRun && event.type !== "thread.visited") return;
       const manager = yield* repository.getManagerByThreadId(event.threadId);
       if (Option.isNone(manager)) return;

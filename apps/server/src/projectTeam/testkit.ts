@@ -7,6 +7,7 @@ import {
   type OrchestrationV2ServerCommand,
   type OrchestrationV2Subagent,
   type OrchestrationV2ThreadShell,
+  type OrchestrationV2TurnItem,
   type OrchestratorMcpDelegateTaskInput,
   type OrchestratorMcpDelegateTaskResult,
   ProjectId,
@@ -60,6 +61,10 @@ export interface FakeThread {
   /** Parent in the thread lineage, e.g. the lead of a provider subagent. */
   parentThreadId?: ThreadId | null;
   pullRequests?: Array<Pick<ThreadPullRequestLink, "host" | "repository" | "number" | "url">>;
+  /** Shell fields a test sets directly, e.g. `status` or `pendingRuntimeRequest`. */
+  shell?: Partial<OrchestrationV2ThreadShell>;
+  /** Turn items; only `user_input_request` and `approval_request` matter to the team services. */
+  turnItems?: Array<OrchestrationV2TurnItem>;
 }
 
 export interface TeamHarness {
@@ -155,6 +160,15 @@ const toShell = (thread: FakeThread): OrchestrationV2ThreadShell =>
     },
     deletedAt: thread.deletedAt === null ? null : DateTime.makeUnsafe(thread.deletedAt),
     archivedAt: thread.archivedAt === null ? null : DateTime.makeUnsafe(thread.archivedAt),
+    status: thread.activeRunId === null ? "idle" : "running",
+    pendingRuntimeRequest: null,
+    latestVisibleMessage: null,
+    hasActionableProposedPlan: false,
+    latestRunStartedAt: null,
+    latestRunCompletedAt: null,
+    createdAt: DateTime.makeUnsafe(START),
+    updatedAt: DateTime.makeUnsafe(START),
+    ...thread.shell,
   }) as unknown as OrchestrationV2ThreadShell;
 
 /** Runs `body` against the team services with in-memory storage and fake threads. */
@@ -217,12 +231,13 @@ export const withTeam = <A, E>(
           const thread = threads.get(threadId);
           return thread === undefined ? null : toShell(thread);
         }),
-      listProjectThreads: ({ projectId }) =>
+      listProjectThreads: ({ projectId, includeSubagents }) =>
         Effect.sync(() =>
           [...threads.values()]
             .filter(
               (thread) =>
                 thread.projectId === projectId &&
+                (includeSubagents || thread.parentThreadId == null) &&
                 thread.archivedAt === null &&
                 thread.deletedAt === null,
             )
@@ -260,6 +275,7 @@ export const withTeam = <A, E>(
             messages,
             subagents: thread?.subagents ?? [],
             providerTurns: thread?.providerTurns ?? [],
+            turnItems: thread?.turnItems ?? [],
           };
         })) as never,
     });

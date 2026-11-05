@@ -83,6 +83,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
+import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
   isoFromMillis,
@@ -978,6 +979,13 @@ const make = Effect.gen(function* () {
       });
       const memoryTopics = (yield* repository.listMemory(projectId)).map((entry) => entry.topic);
       if (role.type === "pm") yield* sitreps.noteStatusRead(projectId);
+      const otherThreads = yield* readOtherThreads({
+        threads,
+        repository,
+        projectId,
+        managerThreadId: manager.threadId,
+        withRequestText: true,
+      });
       return {
         projectId,
         tasks: {
@@ -1008,7 +1016,9 @@ const make = Effect.gen(function* () {
           blocked: tasks
             .filter((task) => task.stage === "blocked" && changedSince(task))
             .map(toTaskBrief),
+          otherThreads: otherThreads.filter((thread) => isoMillis(thread.lastUpdateAt) > sinceMs),
         },
+        otherThreads,
         journal,
         memoryTopics,
       } satisfies ProjectTeamStatus;
@@ -1279,6 +1289,7 @@ const make = Effect.gen(function* () {
     manager: ProjectTeamRepository.ProjectManagerRecord,
     openAttention: ReadonlyArray<ProjectAttentionItem>,
     latestSitrep: Option.Option<{ readonly createdAt: IsoDateTime }>,
+    otherThreadsWaiting: number,
   ) =>
     Effect.gen(function* () {
       const tasks = yield* repository.listTasks({
@@ -1310,7 +1321,7 @@ const make = Effect.gen(function* () {
       return {
         running: running.length,
         // Same unit as the summary's openCount: open questions, not tasks.
-        waitingOnUser: openAttention.length,
+        waitingOnUser: openAttention.length + otherThreadsWaiting,
         stalled: live.filter(isStalled).length,
         inbox: tasks.filter((task) => task.stage === "inbox").length,
         nextSitrepAt,
@@ -1348,12 +1359,32 @@ const make = Effect.gen(function* () {
           const latestItem = yield* repository.getLatestAttentionItem(projectId);
           const latestSitrep = yield* repository.getLatestSitrep(projectId);
           const latestPosted = yield* repository.getLatestPostedSitrep(projectId);
-          const presence = yield* managerPresence(manager, open, latestSitrep);
+          // Questions waiting in threads outside the task board count as "Needs you" too.
+          const otherThreadsWaiting = (yield* readOtherThreads({
+            threads,
+            repository,
+            projectId,
+            managerThreadId: manager.threadId,
+            withRequestText: false,
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("could not read the project's other threads", {
+                projectId,
+                cause,
+              }).pipe(Effect.as([])),
+            ),
+          )).filter(isWaitingOnUser).length;
+          const presence = yield* managerPresence(
+            manager,
+            open,
+            latestSitrep,
+            otherThreadsWaiting,
+          );
           const decisionCards = yield* listDecisionCards(projectId, open);
           return {
             projectId,
             pmThreadId: manager.threadId,
-            openCount: open.length,
+            openCount: open.length + otherThreadsWaiting,
             latestBatchId: Option.isSome(latestItem) ? latestItem.value.batchId : null,
             latestSitrepId: Option.isSome(latestPosted) ? latestPosted.value.id : null,
             unreadSitrepCount: yield* repository.countUnreadSitreps(projectId),
