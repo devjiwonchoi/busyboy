@@ -4,6 +4,7 @@ import { useStableCallback } from "~/hooks/useStableCallback";
 import { type PendingUserInput } from "../../session-logic";
 import {
   derivePendingUserInputProgress,
+  pendingUserInputOptionInvitesNote,
   type PendingUserInputDraftAnswer,
 } from "../../pendingUserInput";
 import { CheckIcon } from "lucide-react";
@@ -21,6 +22,7 @@ interface PendingUserInputPanelProps {
   answers: Record<string, PendingUserInputDraftAnswer>;
   questionIndex: number;
   onToggleOption: (questionId: string, optionValue: string) => void;
+  onChangeNote: (questionId: string, note: string) => void;
   onAdvance: () => void;
   onDismiss: (requestId: RuntimeRequestId) => void;
 }
@@ -34,6 +36,7 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
   answers,
   questionIndex,
   onToggleOption,
+  onChangeNote,
   onAdvance,
   onDismiss,
 }: PendingUserInputPanelProps) {
@@ -52,6 +55,7 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
       answers={answers}
       questionIndex={questionIndex}
       onToggleOption={onToggleOption}
+      onChangeNote={onChangeNote}
       onAdvance={onAdvance}
       onDismiss={onDismiss}
     />
@@ -67,6 +71,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   answers,
   questionIndex,
   onToggleOption,
+  onChangeNote,
   onAdvance,
   onDismiss,
 }: {
@@ -78,6 +83,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   answers: Record<string, PendingUserInputDraftAnswer>;
   questionIndex: number;
   onToggleOption: (questionId: string, optionValue: string) => void;
+  onChangeNote: (questionId: string, note: string) => void;
   onAdvance: () => void;
   onDismiss: (requestId: RuntimeRequestId) => void;
 }) {
@@ -92,6 +98,11 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     optionValue: string;
   } | null>(null);
   const [collapsedQuestionId, setCollapsedQuestionId] = useState<string | null>(null);
+  // Questions whose note field the user opened. A note holds submit until the user sends it.
+  const [noteOpenQuestionIds, setNoteOpenQuestionIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   // The active question keys the shortcut listener, so it must keep its identity across renders.
   const progress = derivePendingUserInputProgress(prompt.questions, answers, questionIndex);
   const activeQuestion = progress.activeQuestion;
@@ -102,6 +113,17 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
       !customAnswerActive && progress.selectedOptionValues.includes(option.value ?? option.label),
   );
   const isCollapsed = collapsedQuestionId !== null && collapsedQuestionId === activeQuestion?.id;
+  const noteAllowed = activeQuestion !== null && activeQuestion.allowCustomAnswer !== false;
+  const activeNote = progress.activeDraft?.note ?? "";
+  const isNoteOpen =
+    noteAllowed &&
+    activeQuestion !== null &&
+    (noteOpenQuestionIds.has(activeQuestion.id) || activeNote.length > 0);
+  const openNote = (questionId: string) => {
+    setNoteOpenQuestionIds((existing) => new Set(existing).add(questionId));
+    // The field mounts on this render; focus it once it exists.
+    window.requestAnimationFrame(() => noteInputRef.current?.focus());
+  };
 
   // The optimistic pick is dropped once the draft confirms it or the question moves on.
   if (
@@ -135,6 +157,18 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     }
     setOptimisticSingleSelect({ questionId, optionValue });
     onToggleOption(questionId, optionValue);
+    const option = activeQuestion?.options.find(
+      (entry) => (entry.value ?? entry.label) === optionValue,
+    );
+    // An open note, or an option that asks for detail, waits for the user to send.
+    if (noteAllowed && (isNoteOpen || (option && pendingUserInputOptionInvitesNote(option)))) {
+      if (autoAdvanceTimerRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+      openNote(questionId);
+      return;
+    }
     if (autoAdvanceTimerRef.current !== null) {
       window.clearTimeout(autoAdvanceTimerRef.current);
     }
@@ -296,6 +330,50 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                 );
               })}
             </div>
+            {noteAllowed && !isNoteOpen ? (
+              <button
+                type="button"
+                disabled={disabled || isResponding}
+                onClick={() => openNote(activeQuestion.id)}
+                className="mt-1 rounded-md px-2.5 py-1.5 text-secondary-label text-xs outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50"
+                data-pending-user-input-add-note
+              >
+                Add a note
+              </button>
+            ) : null}
+            {isNoteOpen ? (
+              <div className="mt-2 flex flex-col gap-1.5 px-1">
+                <textarea
+                  ref={noteInputRef}
+                  aria-label="Note for your answer"
+                  placeholder="Add a note, e.g. what to change"
+                  value={activeNote}
+                  rows={2}
+                  disabled={disabled || isResponding}
+                  onChange={(event) => onChangeNote(activeQuestion.id, event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                      return;
+                    }
+                    event.preventDefault();
+                    if (progress.canAdvance && !responseDisabled) onAdvance();
+                  }}
+                  className="w-full resize-none rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-primary/40"
+                  data-pending-user-input-note
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    disabled={!progress.canAdvance || responseDisabled}
+                    onClick={onAdvance}
+                    className="rounded-md bg-primary px-2.5 py-1 font-medium text-primary-foreground text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                    data-pending-user-input-submit
+                  >
+                    {progress.isLastQuestion ? "Submit" : "Next"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </ComposerBanner.Body>
         </ComposerBanner.Scroll>
       </CollapsiblePanel>

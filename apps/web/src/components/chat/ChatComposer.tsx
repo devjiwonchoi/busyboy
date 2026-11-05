@@ -1634,6 +1634,7 @@ export interface ChatComposerProps {
   onAdvanceActivePendingUserInput: () => void;
   onDismissActivePendingUserInput: (requestId: RuntimeRequestId) => void;
   onPreviousActivePendingUserInputQuestion: () => void;
+  onChangeActivePendingUserInputNote: (questionId: string, note: string) => void;
   onChangeActivePendingUserInputCustomAnswer: (
     questionId: string,
     value: string,
@@ -1989,6 +1990,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onDismissActivePendingUserInput,
     onPreviousActivePendingUserInputQuestion,
     onChangeActivePendingUserInputCustomAnswer,
+    onChangeActivePendingUserInputNote,
     onProviderModelSelect,
     onOpenProviderSetup,
     getModelDisabledReason,
@@ -6525,6 +6527,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     answers={activePendingDraftAnswers}
                     questionIndex={activePendingQuestionIndex}
                     onToggleOption={onSelectActivePendingUserInputOption}
+                    onChangeNote={onChangeActivePendingUserInputNote}
                     onAdvance={onAdvanceActivePendingUserInput}
                     onDismiss={onDismissActivePendingUserInput}
                   />
@@ -6548,6 +6551,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       answers={activePendingDraftAnswers}
                       questionIndex={activePendingQuestionIndex}
                       onToggleOption={onSelectActivePendingUserInputOption}
+                      onChangeNote={onChangeActivePendingUserInputNote}
                       onAdvance={onAdvanceActivePendingUserInput}
                       onDismiss={onDismissActivePendingUserInput}
                     />
