@@ -111,7 +111,7 @@ describe("ProjectTeamService", () => {
         assert.strictEqual(input?.mode, "async");
         assert.strictEqual(input?.role, "implementation");
         assert.strictEqual(input?.clientRequestId, `task-start:${task.id}`);
-        assert.strictEqual(input?.title, "#1 Add hello.sh");
+        assert.strictEqual(input?.title, "DE-1 Add hello.sh");
         assert.isUndefined(input?.target);
         assert.include(input?.task, "Run vp test for changed files.");
         assert.include(input?.task, "ask_user");
@@ -213,7 +213,7 @@ describe("ProjectTeamService", () => {
         assert.strictEqual(message?.threadId, leadThreadId);
         assert.strictEqual(
           message?.text,
-          "[PM nudge] Continue. Current stage: planning. Next step: Finish the plan and ask for approval with ask_user(kind: approval). Write the plan.",
+          "[PM nudge] Continue. Current stage: planning. Next step: Write the plan into the spec with task_spec_write, then ask for approval with ask_user(kind: approval). Write the plan.",
         );
         const second = yield* team.nudgeTask(pm, { taskId: task.id });
         assert.strictEqual(second.task.nudgeCount, 2);

@@ -25,6 +25,10 @@ import {
   ProjectTeamTaskStartInput,
   ProjectTeamTaskStartResult,
   ProjectTeamTaskUpdateInput,
+  ProjectTeamTaskSpecReadInput,
+  ProjectTeamTaskSpecResult,
+  ProjectTeamTaskSpecWriteInput,
+  ProjectTeamTaskTodoSetInput,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -74,6 +78,39 @@ const TaskUpdateTool = Tool.make("task_update", {
 })
   .annotate(Tool.Title, "Update a team task")
   .annotate(Tool.Destructive, false);
+
+const TaskSpecReadTool = Tool.make("task_spec_read", {
+  ...shared,
+  description:
+    "Read a task's current spec (background, goal, non-goals, todos) and its version number. The user may have edited it since you last read it.",
+  parameters: ProjectTeamTaskSpecReadInput,
+  success: ProjectTeamTaskSpecResult,
+})
+  .annotate(Tool.Title, "Read a task spec")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+const TaskSpecWriteTool = Tool.make("task_spec_write", {
+  ...shared,
+  description:
+    "Replace a task's spec with a new version; every version is kept and the user can restore any of them. Write the plan here: goal, non-goals and todos. Pass the version you read as baseVersion.",
+  parameters: ProjectTeamTaskSpecWriteInput,
+  success: ProjectTeamTaskSpecResult,
+})
+  .annotate(Tool.Title, "Write a task spec")
+  .annotate(Tool.Destructive, false);
+
+const TaskTodoSetTool = Tool.make("task_todo_set", {
+  ...shared,
+  description:
+    "Check or uncheck one todo in a task's spec as you finish it. The user watches these on the task page.",
+  parameters: ProjectTeamTaskTodoSetInput,
+  success: ProjectTeamTaskSpecResult,
+})
+  .annotate(Tool.Title, "Check a task todo")
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
 
 const TaskNudgeTool = Tool.make("task_nudge", {
   ...shared,
@@ -145,7 +182,7 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
   description:
-    "Task lead only. The only way a task lead reaches the user: a decision, plan approval, or blocker only a person can resolve. Ask once with a self-contained question, then end your turn; the answer arrives as a message.",
+    'Task lead only. The only way a task lead reaches the user: a decision, plan approval, or blocker only a person can resolve. Ask once with a self-contained question, then end your turn; the answer arrives as a message. A plan approval without options offers "Approve and start" and "Approve only".',
   parameters: ProjectTeamAskUserInput,
   success: ProjectTeamAttentionItemResult,
 })
@@ -197,6 +234,9 @@ export const ProjectTeamToolkit = Toolkit.make(
   TaskCreateTool,
   TaskStartTool,
   TaskUpdateTool,
+  TaskSpecReadTool,
+  TaskSpecWriteTool,
+  TaskTodoSetTool,
   TaskNudgeTool,
   TaskListTool,
   TaskReadTool,

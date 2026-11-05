@@ -72,6 +72,12 @@ import {
   type ProjectTeamTaskRefInput,
   type ProjectTeamUpdateTaskSpecInput,
   type ProjectTaskSpec,
+  type ProjectTeamTaskSpecReadInput,
+  type ProjectTeamTaskSpecResult,
+  type ProjectTeamTaskSpecWriteInput,
+  type ProjectTeamTaskTodoSetInput,
+  PLAN_APPROVAL_ONLY,
+  PLAN_APPROVAL_START,
   defaultTaskKeyPrefix,
   formatTaskKey,
   ProviderInstanceId,
@@ -420,6 +426,21 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamTaskUpdateInput,
     ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
+    /** task_spec_read: a lead reads its own task's spec; the PM reads any. */
+    readonly readSpec: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamTaskSpecReadInput,
+    ) => Effect.Effect<ProjectTeamTaskSpecResult, ProjectTeamError>;
+    /** task_spec_write: the agent's spec becomes the next version. */
+    readonly writeSpec: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamTaskSpecWriteInput,
+    ) => Effect.Effect<ProjectTeamTaskSpecResult, ProjectTeamError>;
+    /** task_todo_set: checks or unchecks one todo, as a new version. */
+    readonly setTodo: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamTaskTodoSetInput,
+    ) => Effect.Effect<ProjectTeamTaskSpecResult, ProjectTeamError>;
     readonly nudgeTask: (
       callerThreadId: ThreadId,
       input: ProjectTeamTaskNudgeInput,
@@ -800,13 +821,25 @@ const make = Effect.gen(function* () {
             }
           }
           const memory = yield* repository.listMemory(role.projectId);
+          const key = formatTaskKey(
+            yield* taskKeyPrefixFor(role.projectId, manager.settings),
+            task.number,
+          );
+          const spec = yield* latestSpec(task);
+          // A task parked after its plan was approved resumes straight into the work.
+          const approved = task.planSummary !== null;
+          // A restart must not reuse the first lead's request id, or it gets that lead back.
+          const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
           const lead = yield* delegate({
-            task: buildTaskLeadPrompt({ task, memory, otherTasks: active }),
-            title: `#${task.number} ${task.title}`,
+            task: buildTaskLeadPrompt({ task, key, spec, approved, memory, otherTasks: active }),
+            title: `${key} ${task.title}`,
             role: "implementation",
             isolation: "worktree",
             mode: "async",
-            clientRequestId: `task-start:${task.id}`,
+            clientRequestId:
+              earlierSessions === 0
+                ? `task-start:${task.id}`
+                : `task-start:${task.id}:${earlierSessions + 1}`,
             ...(input.target === undefined ? {} : { target: input.target }),
           }).pipe(
             Effect.mapError((failure) =>
@@ -824,7 +857,7 @@ const make = Effect.gen(function* () {
           yield* repository.addTaskSession({
             taskId: started.id,
             threadId: lead.childThreadId,
-            role: "lead",
+            role: approved ? "implementer" : "lead",
             createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
@@ -833,6 +866,108 @@ const make = Effect.gen(function* () {
         }),
       );
     }).pipe(orTeamError("Could not start the task."));
+
+  /** The task a spec tool acts on: a lead's own task, or the one the PM names. */
+  const specTaskFor = (callerThreadId: ThreadId, taskId: ProjectTaskId | undefined, tool: string) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["pm", "lead"], tool);
+      const id = taskId ?? (role.type === "lead" ? role.taskId : undefined);
+      if (id === undefined) return yield* teamError(`${tool} needs a taskId.`);
+      if (role.type === "lead" && id !== role.taskId) {
+        return yield* teamError("A task lead can only use its own task's spec.", role.projectId);
+      }
+      return { task: yield* requireTask(id, role.projectId), author: role.type };
+    });
+
+  const specResult = (task: ProjectTask, current: ProjectTeamTaskSpecResult["current"]) =>
+    Effect.gen(function* () {
+      const manager = yield* requireManager(task.projectId);
+      const prefix = yield* taskKeyPrefixFor(task.projectId, manager.settings);
+      return { key: formatTaskKey(prefix, task.number), current };
+    });
+
+  /** Writes the next version from the latest one; a lead's write is an agent's. */
+  const appendAgentSpec = (
+    callerThreadId: ThreadId,
+    task: ProjectTask,
+    author: "pm" | "lead",
+    note: string,
+    next: (latest: ProjectTaskSpec) => Effect.Effect<ProjectTaskSpec, ProjectTeamError>,
+    baseVersion?: number,
+  ) =>
+    specLocks.withLock(
+      task.id,
+      Effect.gen(function* () {
+        const latest = yield* latestSpec(task);
+        if (baseVersion !== undefined && latest.version !== baseVersion) {
+          return yield* teamError(
+            `The spec is at v${latest.version} now, not v${baseVersion}. Read it again with task_spec_read and redo your change on top of it.`,
+            task.projectId,
+          );
+        }
+        const version = yield* repository.appendSpecVersion({
+          taskId: task.id,
+          spec: yield* next(latest.spec),
+          author: author === "pm" ? "pm" : "agent",
+          authorThreadId: callerThreadId,
+          note,
+          createdAt: yield* nowIso,
+        });
+        yield* appendEvent(task, "note", `Spec v${version.version}: ${note}`, callerThreadId);
+        return version;
+      }),
+    );
+
+  const readSpec: ProjectTeamService["Service"]["readSpec"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const { task } = yield* specTaskFor(callerThreadId, input.taskId, "task_spec_read");
+      return yield* specResult(task, yield* latestSpec(task));
+    }).pipe(orTeamError("Could not read the spec."));
+
+  const writeSpec: ProjectTeamService["Service"]["writeSpec"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const { task, author } = yield* specTaskFor(callerThreadId, input.taskId, "task_spec_write");
+      const version = yield* appendAgentSpec(
+        callerThreadId,
+        task,
+        author,
+        input.note,
+        () => Effect.succeed(input.spec),
+        input.baseVersion,
+      );
+      yield* router.publish(task.projectId);
+      return yield* specResult(task, version);
+    }).pipe(orTeamError("Could not write the spec."));
+
+  const setTodo: ProjectTeamService["Service"]["setTodo"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const { task, author } = yield* specTaskFor(callerThreadId, input.taskId, "task_todo_set");
+      const current = yield* latestSpec(task);
+      const todo = current.spec.todos.find((candidate) => candidate.id === input.todoId);
+      if (todo === undefined) {
+        return yield* teamError(
+          `The spec has no todo ${input.todoId}. Read it with task_spec_read.`,
+          task.projectId,
+        );
+      }
+      // Checking a todo that is already checked keeps the history quiet.
+      if (todo.done === input.done) return yield* specResult(task, current);
+      const version = yield* appendAgentSpec(
+        callerThreadId,
+        task,
+        author,
+        `${input.done ? "Checked" : "Unchecked"} "${clip(todo.text, 80)}"`,
+        (latest) =>
+          Effect.succeed({
+            ...latest,
+            todos: latest.todos.map((candidate) =>
+              candidate.id === input.todoId ? { ...candidate, done: input.done } : candidate,
+            ),
+          }),
+      );
+      yield* router.publish(task.projectId);
+      return yield* specResult(task, version);
+    }).pipe(orTeamError("Could not update the todo."));
 
   const updateTask: ProjectTeamService["Service"]["updateTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
@@ -1040,6 +1175,7 @@ const make = Effect.gen(function* () {
       });
       return {
         projectId,
+        taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
         tasks: {
           inbox: briefs("inbox"),
           planning: briefs("planning"),
@@ -1209,7 +1345,9 @@ const make = Effect.gen(function* () {
         task,
         kind: input.kind,
         question: input.question,
-        options: input.options ?? [],
+        options:
+          input.options ??
+          (input.kind === "approval" ? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY] : []),
         askerThreadId: callerThreadId,
       });
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
@@ -1678,6 +1816,9 @@ const make = Effect.gen(function* () {
     createTask,
     startTask,
     updateTask,
+    readSpec,
+    writeSpec,
+    setTodo,
     nudgeTask,
     listTasks,
     readTask,

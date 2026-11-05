@@ -46,6 +46,15 @@ const handlers = {
   task_update: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.updateTask(caller, input)),
   ),
+  task_spec_read: McpToolAccess.readsAsCaller((input) =>
+    withTeam((team, caller) => team.readSpec(caller, input)),
+  ),
+  task_spec_write: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.writeSpec(caller, input)),
+  ),
+  task_todo_set: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.setTodo(caller, input)),
+  ),
   task_nudge: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.nudgeTask(caller, input)),
   ),
