@@ -5,9 +5,14 @@ import { MarkdownFindContext, findRevealRef } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } from "./WorkLog";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
-import type { ProjectManagerPersona, WorktreeSetupSnapshot } from "@t3tools/contracts";
+import type {
+  ProjectDecisionCard,
+  ProjectManagerPersona,
+  WorktreeSetupSnapshot,
+} from "@t3tools/contracts";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
+import { DecisionCard } from "./DecisionCard";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
   getQuestionAnswerPreview,
@@ -180,6 +185,7 @@ import { ChangedFilesCard } from "./ChangedFilesTree";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
 import { useProjectManagerForThread } from "../../state/projectTeam";
+import { isOpenDecisionCard } from "../../state/projectTeam.logic";
 import {
   PmAuthorHeader,
   PmEventLine,
@@ -231,6 +237,7 @@ import {
   toolGroupAction,
   workEntryDisplayLabel,
   workEntryIsAnsweredQuestion,
+  mergeDecisionCardRows,
   workEntryReadOutput,
   workEntryIsVisibleInGroup,
   worktreeSetupAgentStarted,
@@ -872,7 +879,13 @@ const ConversationTimeline = memo(function ConversationTimeline({
     supportsConversationRollback,
     worktreeSetup,
   });
-  const rows = useStableRows(rawRows, listIdentityKey);
+  const stableRows = useStableRows(rawRows, listIdentityKey);
+  // Open questions dock above the composer; answered ones stay here as the record, placed
+  // by when they were asked.
+  const rows = mergeDecisionCardRows(
+    stableRows,
+    closedDecisionCards(projectManager?.decisionCards),
+  );
   const pmTimelineState = useStablePmTimelineState(
     projectManager?.persona ?? null,
     rows,
@@ -1937,6 +1950,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                 row.kind === "event" ||
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
+                row.kind === "decision-card" ||
                 row.kind === "mcp-app"
               ? "pb-2"
               : "pb-4",
@@ -1989,6 +2003,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "assistant-meta" ? <AssistantMetaTimelineRow row={row} /> : null}
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
       {row.kind === "html-render" ? <HtmlRenderTimelineRow row={row} /> : null}
+      {row.kind === "decision-card" ? <DecisionCardTimelineRow row={row} /> : null}
       {row.kind === "mcp-app" ? <McpAppTimelineRow row={row} /> : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
       {row.kind === "worktree-setup" ? <WorktreeSetupTimelineRow row={row} /> : null}
@@ -5700,6 +5715,41 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         </WorkLogDetails>
       ) : null}
     </WorkLogRow>
+  );
+}
+
+const closedDecisionCardsCache = new WeakMap<
+  ReadonlyArray<ProjectDecisionCard>,
+  ReadonlyArray<ProjectDecisionCard>
+>();
+
+/** Cards no longer waiting on the user; the same input array keeps the same result. */
+function closedDecisionCards(
+  cards: ReadonlyArray<ProjectDecisionCard> | undefined,
+): ReadonlyArray<ProjectDecisionCard> | undefined {
+  if (cards === undefined) return undefined;
+  let closed = closedDecisionCardsCache.get(cards);
+  if (closed === undefined) {
+    closed = cards.filter((card) => !isOpenDecisionCard(card));
+    closedDecisionCardsCache.set(cards, closed);
+  }
+  return closed;
+}
+
+function DecisionCardTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "decision-card" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  if (ctx.threadRef === null) return null;
+  return (
+    <DecisionCard
+      card={row.card}
+      environmentId={ctx.activeThreadEnvironmentId}
+      threadRef={ctx.threadRef}
+      cwd={ctx.markdownCwd}
+    />
   );
 }
 

@@ -228,6 +228,8 @@ import {
   useRightPanelStore,
 } from "../rightPanelStore";
 import { useSideChatStore } from "../sideChatStore";
+import { useDockedDecisionCards } from "../state/projectTeam";
+import { DockedDecisionCards } from "./chat/DockedDecisionCards";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import {
   isPreviewSupportedInRuntime,
@@ -7520,6 +7522,19 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
+  // The task page pins a task's questions under its spec, so its chat doesn't dock them again.
+  const dockedDecisionCards = useDockedDecisionCards(
+    isServerThread && !sideChat ? routeThreadRef : null,
+  );
+  const decisionCardsDock =
+    dockedDecisionCards.length > 0 ? (
+      <DockedDecisionCards
+        cards={dockedDecisionCards}
+        environmentId={environmentId}
+        threadRef={routeThreadRef}
+        cwd={gitCwd ?? undefined}
+      />
+    ) : null;
   const queuedRunsControl =
     isServerThread && activeThread ? (
       <QueuedRunsControl
@@ -8188,6 +8203,7 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
+                              decisionCardsDock={decisionCardsDock}
                               bannerItems={composerBannerItems}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
