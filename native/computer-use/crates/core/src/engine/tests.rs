@@ -454,6 +454,46 @@ fn fills_values_and_steps_sliders() {
     assert_eq!(harness.platform.with_world(|world| world.nodes[&slider].value.clone()).unwrap(), "5");
 }
 
+/// Runs one physical input through the stop classifier, as the OS monitor does.
+fn press(harness: &Harness, input: crate::stop::PhysicalInput) {
+    let targets = harness.platform.with_world(|world| world.monitor_targets.clone());
+    if let Some(event) = crate::stop::classify_input(&input, &targets) {
+        harness.platform.emit(event);
+    }
+}
+
+fn escape_key(user_data: i64) -> crate::stop::PhysicalInput {
+    crate::stop::PhysicalInput {
+        kind: crate::stop::InputKind::KeyDown,
+        escape: true,
+        key_target: None,
+        location: (0.0, 0.0),
+        user_data,
+    }
+}
+
+#[test]
+fn escape_during_a_session_sends_one_stopped_notification() {
+    let harness = Harness::new();
+    harness.platform.with_text_editor();
+    // The session is open but has not touched an app yet (an approval card is showing).
+    harness.begin("u1");
+    assert!(harness.platform.with_world(|world| world.monitor_armed));
+
+    // Our own Esc (tagged) stops nothing.
+    press(&harness, escape_key(crate::stop::EVENT_TAG));
+    assert!(harness.notifications.lock().unwrap().is_empty());
+
+    // The user presses Esc twice; the turn stops once.
+    press(&harness, escape_key(0));
+    press(&harness, escape_key(0));
+    let stopped: Vec<_> =
+        harness.notifications.lock().unwrap().iter().filter(|n| n.method == "stopped").cloned().collect();
+    assert_eq!(stopped.len(), 1);
+    assert_eq!(stopped[0].params, json!({"threadId": "t1", "turnId": "u1", "reason": "user_escape"}));
+    assert!(!harness.platform.with_world(|world| world.monitor_armed));
+}
+
 #[test]
 fn escape_stops_the_turn_and_cancels_in_flight_work() {
     let harness = Arc::new(Harness::new());
