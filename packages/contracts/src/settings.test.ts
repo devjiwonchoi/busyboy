@@ -51,6 +51,29 @@ describe("ServerSettings response streaming", () => {
   });
 });
 
+describe("ServerSettings computer use", () => {
+  it("keeps computer use off for new and upgraded installs", () => {
+    const upgraded = decodeServerSettings({ enableAgentBrowserAccess: false });
+    for (const settings of [DEFAULT_SERVER_SETTINGS, upgraded]) {
+      expect(settings.enableAgentComputerUse).toBe(false);
+      expect(settings.computerUseAlwaysAllowedApps).toEqual([]);
+      expect(settings.computerUseScreenshots).toBe(true);
+      expect(settings.computerUseExperimentalPointer).toBe(false);
+    }
+  });
+
+  it("accepts partial patches", () => {
+    expect(decodeServerSettingsPatch({ enableAgentComputerUse: true })).toEqual({
+      enableAgentComputerUse: true,
+    });
+    const input = {
+      enableAgentComputerUse: true,
+      computerUseAlwaysAllowedApps: ["com.apple.TextEdit"],
+    };
+    expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(input);
+  });
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();

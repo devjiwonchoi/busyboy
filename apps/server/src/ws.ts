@@ -251,6 +251,8 @@ import {
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
+import * as ComputerUseSettings from "./computerUse/ComputerUseSettings.ts";
+import * as DesktopComputerUseChannel from "./computerUse/DesktopComputerUseChannel.ts";
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
 const isProviderUploadFeedbackError = Schema.is(ProviderUploadFeedbackError);
@@ -1149,6 +1151,7 @@ const layerWsRpc = (
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
+  computerUseChannel: DesktopComputerUseChannel.DesktopComputerUseChannel["Service"],
 ) =>
   ServerWsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -1243,6 +1246,20 @@ const layerWsRpc = (
       const storageCleanup = yield* StorageCleanup.StorageCleanup;
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
+      const withComputerUse = <A, E>(
+        effect: Effect.Effect<
+          A,
+          E,
+          DesktopComputerUseChannel.DesktopComputerUseChannel | ServerSettings.ServerSettingsService
+        >,
+      ) =>
+        effect.pipe(
+          Effect.provideService(
+            DesktopComputerUseChannel.DesktopComputerUseChannel,
+            computerUseChannel,
+          ),
+          Effect.provideService(ServerSettings.ServerSettingsService, serverSettings),
+        );
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -2390,6 +2407,12 @@ const layerWsRpc = (
               : serverSettings.updateProviderInstance(providerInstanceMutation, patch);
             return ServerSettings.redactServerSettingsForClient(settings);
           }),
+        [WS_METHODS.computerUseStatus]: ({ start }) =>
+          withComputerUse(ComputerUseSettings.readStatus({ start: start === true })),
+        [WS_METHODS.computerUseRequestPermission]: ({ kind }) =>
+          withComputerUse(ComputerUseSettings.requestPermission(kind)),
+        [WS_METHODS.computerUseRestartHelper]: (_input) =>
+          withComputerUse(ComputerUseSettings.restartHelper()),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
           TraceDiagnostics.readTraceDiagnostics({
@@ -3069,6 +3092,7 @@ export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
+    const computerUseChannel = yield* DesktopComputerUseChannel.DesktopComputerUseChannel;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
@@ -3123,6 +3147,7 @@ export const layer = Layer.unwrap(
               clientAnalyticsProps,
               previewAutomationBroker,
               serverBrowser,
+              computerUseChannel,
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               // Request fibers run in the handlers' context, so this reporter sees

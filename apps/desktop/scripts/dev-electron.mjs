@@ -9,6 +9,7 @@ import {
   resolveElectronLaunchCommand,
 } from "./electron-launcher.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
+import { DEFAULT_IDENTITY } from "./build-computer-use.mjs";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL?.trim();
 if (!devServerUrl) {
@@ -58,6 +59,35 @@ NodeChildProcess.execFileSync(
   [NodePath.join(desktopDir, "scripts/build-browser-secret.mjs")],
   { stdio: "inherit" },
 );
+
+if (hostPlatform === "darwin") buildComputerUseHelper();
+
+// Computer use is optional in dev: without the Developer ID identity (never
+// ad hoc, see build-computer-use.mjs) the app starts and reports it unavailable.
+function buildComputerUseHelper() {
+  const identity = process.env.BUSYBOY_CU_SIGN_IDENTITY || DEFAULT_IDENTITY;
+  const identities = NodeChildProcess.spawnSync(
+    "security",
+    ["find-identity", "-v", "-p", "codesigning"],
+    { encoding: "utf8" },
+  );
+  if (!identities.stdout?.includes(identity)) {
+    console.warn(
+      `[dev-electron] Skipping the computer-use helper: no "${identity}" signing identity in the keychain. Computer use will report it unavailable.`,
+    );
+    return;
+  }
+  const result = NodeChildProcess.spawnSync(
+    process.execPath,
+    [NodePath.join(desktopDir, "scripts/build-computer-use.mjs"), "--dev-callers"],
+    { stdio: ["ignore", "ignore", "inherit"] },
+  );
+  if (result.status !== 0) {
+    console.warn(
+      "[dev-electron] The computer-use helper did not build; computer use will report it unavailable.",
+    );
+  }
+}
 
 await waitForResources({
   baseDir: desktopDir,

@@ -80,6 +80,9 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.serverGetDatabaseStorage]: AuthOrchestrationReadScope,
   [WS_METHODS.serverGetSettings]: AuthOrchestrationReadScope,
   [WS_METHODS.serverUpdateSettings]: AuthSettingsWriteScope,
+  [WS_METHODS.computerUseStatus]: AuthOrchestrationReadScope,
+  [WS_METHODS.computerUseRequestPermission]: AuthSettingsWriteScope,
+  [WS_METHODS.computerUseRestartHelper]: AuthSettingsWriteScope,
   [WS_METHODS.serverSearchAcpRegistry]: AuthOrchestrationReadScope,
   [WS_METHODS.serverPrepareAcpRegistryAgent]: AuthProvidersManageScope,
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: AuthProvidersManageScope,
@@ -251,6 +254,11 @@ const requiredScopesForRpcCall = (
     ];
   }
   if (method === WS_METHODS.serverUpdateSettings) return requiredScopesForSettingsUpdate(payload);
+  // Reading is orchestration:read; starting the helper is a settings action.
+  if (method === WS_METHODS.computerUseStatus) {
+    const start = (payload as { start?: unknown } | null)?.start === true;
+    return start ? [AuthSettingsWriteScope] : [AuthOrchestrationReadScope];
+  }
   if (method === WS_METHODS.projectsMutate) {
     return requiredScopesForProjectMutation(decodeProjectMutation(payload));
   }

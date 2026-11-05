@@ -27,6 +27,11 @@ import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
+  ComputerUseError,
+  ComputerUsePermissionKind,
+  ComputerUseSettingsStatus,
+} from "./desktopComputerUse.ts";
+import {
   CodexAuthCallbackInput,
   CodexAuthCallbackState,
   ProviderAuthCancelInput,
@@ -458,6 +463,9 @@ export const WS_METHODS = {
   serverGetDatabaseStorage: "server.getDatabaseStorage",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  computerUseStatus: "computerUse.status",
+  computerUseRequestPermission: "computerUse.requestPermission",
+  computerUseRestartHelper: "computerUse.restartHelper",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
   serverPrepareAcpRegistryAgent: "server.prepareAcpRegistryAgent",
@@ -741,6 +749,26 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
     providerInstanceMutation: Schema.optionalKey(ProviderInstanceMutation),
   }),
   success: ServerSettings,
+  error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+// Reads cached status unless the helper is running. `start: true` (settings:write)
+// starts it lazily while computer use is on; the settings section polls with it.
+const WsComputerUseStatusRpc = Rpc.make(WS_METHODS.computerUseStatus, {
+  payload: Schema.Struct({ start: Schema.optionalKey(Schema.Boolean) }),
+  success: ComputerUseSettingsStatus,
+  error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+const WsComputerUseRequestPermissionRpc = Rpc.make(WS_METHODS.computerUseRequestPermission, {
+  payload: Schema.Struct({ kind: ComputerUsePermissionKind }),
+  success: Schema.Struct({}),
+  error: Schema.Union([ComputerUseError, ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+const WsComputerUseRestartHelperRpc = Rpc.make(WS_METHODS.computerUseRestartHelper, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSettingsStatus,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
 
@@ -1824,6 +1852,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetDatabaseStorageRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
+  WsComputerUseStatusRpc,
+  WsComputerUseRequestPermissionRpc,
+  WsComputerUseRestartHelperRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerSearchAcpRegistryRpc,
   WsServerPrepareAcpRegistryAgentRpc,

@@ -14,6 +14,7 @@ import {
   AuthPreviewOperateScope,
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
+  COMPUTER_USE_SETTINGS_URLS,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -299,6 +300,48 @@ describe("settings mutation authorization", () => {
       ).toMatchObject({ requiredScope: AuthProvidersManageScope });
       expect(handled).toBe(false);
     }).pipe(Effect.scoped),
+  );
+});
+
+describe("computer-use status authorization", () => {
+  const group = WsRpcGroup.omit(
+    ...[...WsRpcGroup.requests.keys()].filter(
+      (
+        tag,
+      ): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof WS_METHODS.computerUseStatus> =>
+        tag !== WS_METHODS.computerUseStatus,
+    ),
+  );
+
+  it.effect(
+    "reads status with orchestration:read but needs settings:write to start the helper",
+    () =>
+      Effect.gen(function* () {
+        const starts: Array<boolean> = [];
+        const client = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              group.toLayerHandler(WS_METHODS.computerUseStatus, ({ start }) =>
+                Effect.sync(() => {
+                  starts.push(start === true);
+                  return {
+                    enabled: true,
+                    available: true,
+                    helper: { state: "stopped" as const },
+                    settingsUrls: COMPUTER_USE_SETTINGS_URLS,
+                  };
+                }),
+              ),
+              RpcAuthorization.layer([AuthOrchestrationReadScope]),
+            ),
+          ),
+        );
+        yield* client[WS_METHODS.computerUseStatus]({});
+        expect(
+          yield* client[WS_METHODS.computerUseStatus]({ start: true }).pipe(Effect.flip),
+        ).toMatchObject({ requiredScope: AuthSettingsWriteScope });
+        expect(starts).toEqual([false]);
+      }).pipe(Effect.scoped),
   );
 });
 
