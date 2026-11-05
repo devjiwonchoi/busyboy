@@ -115,6 +115,10 @@ export type BrowserDefaultSettings = Pick<
   | "browserRecordingShowMousePresses"
   | "browserLinkTarget"
   | "browserAutoShowFloatingPreview"
+  | "browserSearchEngine"
+  | "browserCustomSearchUrl"
+  | "browserZeroStateSuggestions"
+  | "browserRemoteSearchSuggestions"
   | "pullRequestLinksOpenInApp"
 >;
 
@@ -155,6 +159,18 @@ export function getChangedBrowserSettingLabels(settings: BrowserDefaultSettings)
     ...(settings.browserAutoShowFloatingPreview !==
     DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview
       ? ["Floating preview"]
+      : []),
+    ...(settings.browserSearchEngine !== DEFAULT_UNIFIED_SETTINGS.browserSearchEngine ||
+    settings.browserCustomSearchUrl !== DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl
+      ? ["Search engine"]
+      : []),
+    ...(settings.browserZeroStateSuggestions !==
+    DEFAULT_UNIFIED_SETTINGS.browserZeroStateSuggestions
+      ? ["Suggest frequent sites"]
+      : []),
+    ...(settings.browserRemoteSearchSuggestions !==
+    DEFAULT_UNIFIED_SETTINGS.browserRemoteSearchSuggestions
+      ? ["Search suggestions"]
       : []),
     ...(settings.pullRequestLinksOpenInApp !== DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp
       ? ["Open pull requests in BusyBoy"]

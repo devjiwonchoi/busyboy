@@ -240,6 +240,9 @@ describe("getChangedBrowserSettingLabels", () => {
         browserRecordingShowMousePresses: true,
         browserLinkTarget: "app",
         browserAutoShowFloatingPreview: !DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
+        browserSearchEngine: "google",
+        browserZeroStateSuggestions: false,
+        browserRemoteSearchSuggestions: true,
         pullRequestLinksOpenInApp: false,
       }),
     ).toEqual([
@@ -251,6 +254,9 @@ describe("getChangedBrowserSettingLabels", () => {
       "Recording mouse presses",
       "Open links in",
       "Floating preview",
+      "Search engine",
+      "Suggest frequent sites",
+      "Search suggestions",
       "Open pull requests in BusyBoy",
     ]);
   });

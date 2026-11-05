@@ -9,7 +9,10 @@ import type {
   BrowserHistorySearchResult,
   BrowserHistoryStatus,
 } from "@t3tools/contracts";
-import { DEFAULT_BROWSER_PROFILE_ID } from "@t3tools/contracts";
+import { DEFAULT_BROWSER_PROFILE_ID, INCOGNITO_BROWSER_PROFILE_ID } from "@t3tools/contracts";
+import type { BrowserHistorySuggestResult, BrowserHistorySuggestion } from "@t3tools/contracts";
+import { type AddressBarSearchEngine } from "@t3tools/shared/preview";
+import { session as electronSession } from "electron";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -23,6 +26,8 @@ import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
 import { HISTORY_RETENTION_MS, HistoryDatabase, type NewVisit } from "./HistoryDatabase.ts";
 import { HistoryRecorder, type AgentAttribution } from "./HistoryRecorder.ts";
 import { importLegacyOriginHistoryOnce } from "./LegacyOriginHistory.ts";
+import { frequentFromHistory, suggestFromHistory } from "./AddressBarSuggest.ts";
+import { RemoteSuggestionClient, type SuggestionFetch } from "./RemoteSearchSuggestions.ts";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const DELETION_LOCKED_ENV = "BUSYBOY_BROWSER_HISTORY_DELETION_LOCKED";
@@ -106,6 +111,27 @@ export interface BrowserHistoryShape {
     entries: ReadonlyArray<BrowserHistoryLegacyEntry>,
   ) => Effect.Effect<BrowserHistoryImportLegacyResult, BrowserHistoryError>;
   readonly status: (profileId: string) => Effect.Effect<BrowserHistoryStatus>;
+  /** Address bar history matches. Incognito and unavailable profiles get none. */
+  readonly suggest: (input: {
+    readonly profileId: string;
+    readonly text: string;
+    readonly limit: number;
+  }) => Effect.Effect<BrowserHistorySuggestResult>;
+  readonly frequent: (input: {
+    readonly profileId: string;
+    readonly limit: number;
+  }) => Effect.Effect<ReadonlyArray<BrowserHistorySuggestion>>;
+  /**
+   * Engine suggestions for typed text. Sends nothing unless `enabled`, and
+   * never for incognito or input carrying credentials.
+   */
+  readonly remoteSuggestions: (input: {
+    readonly enabled: boolean;
+    readonly profileId: string;
+    readonly engine: AddressBarSearchEngine;
+    readonly text: string;
+    readonly stillEnabled?: () => boolean;
+  }) => Effect.Effect<ReadonlyArray<string>>;
   readonly deletionLocked: boolean;
   readonly subscribeChanges: (listener: (profileId: string) => void) => () => void;
   /** Waits for queued visit writes; for tests and shutdown. */
@@ -126,6 +152,8 @@ export interface MakeBrowserHistoryOptions {
   /** Defaults to `setImmediate`; tests can run writes synchronously. */
   readonly schedule?: (task: () => void) => void;
   readonly onError?: (message: string, cause: unknown) => void;
+  /** Fetches an engine suggestion URL without cookies. Absent means never fetch. */
+  readonly fetchSuggestions?: SuggestionFetch;
 }
 
 /**
@@ -153,6 +181,10 @@ export function makeBrowserHistory(options: MakeBrowserHistoryOptions): BrowserH
   };
   const databases = new Map<string, HistoryDatabase | "failed">();
   const listeners = new Set<(profileId: string) => void>();
+  const fetchSuggestions = options.fetchSuggestions;
+  const remoteClient = new RemoteSuggestionClient({
+    fetch: fetchSuggestions ?? (() => Promise.reject(new Error("Remote suggestions are off."))),
+  });
   const queue: Array<() => void> = [];
   const drained: Array<() => void> = [];
   let flushScheduled = false;
@@ -171,6 +203,8 @@ export function makeBrowserHistory(options: MakeBrowserHistoryOptions): BrowserH
   };
 
   const database = (profileId: string): HistoryDatabase | null => {
+    // Incognito keeps nothing on disk, so it never gets a database.
+    if (profileId === INCOGNITO_BROWSER_PROFILE_ID) return null;
     const existing = databases.get(profileId);
     if (existing === "failed") return null;
     if (existing !== undefined) return existing;
@@ -322,6 +356,40 @@ export function makeBrowserHistory(options: MakeBrowserHistoryOptions): BrowserH
         available: database(profileId) !== null,
         deletionLocked: options.deletionLocked,
       })),
+    suggest: (input) =>
+      Effect.sync(() => {
+        const db = database(input.profileId);
+        if (db === null) return { matches: [], topOrigin: null };
+        try {
+          return suggestFromHistory(db, { text: input.text, now: now(), limit: input.limit });
+        } catch (cause) {
+          onError("Reading address bar suggestions failed.", cause);
+          return { matches: [], topOrigin: null };
+        }
+      }),
+    frequent: (input) =>
+      Effect.sync(() => {
+        const db = database(input.profileId);
+        if (db === null) return [];
+        try {
+          return frequentFromHistory(db, { now: now(), limit: input.limit });
+        } catch (cause) {
+          onError("Reading address bar suggestions failed.", cause);
+          return [];
+        }
+      }),
+    remoteSuggestions: (input) =>
+      Effect.promise(() =>
+        input.enabled
+          ? remoteClient.request({
+              enabled: true,
+              incognito: input.profileId === INCOGNITO_BROWSER_PROFILE_ID,
+              engine: input.engine,
+              input: input.text,
+              stillEnabled: input.stillEnabled,
+            })
+          : (remoteClient.cancel(), Promise.resolve([])),
+      ),
     deletionLocked: options.deletionLocked,
     subscribeChanges: (listener) => {
       listeners.add(listener);
@@ -345,6 +413,23 @@ export function makeBrowserHistory(options: MakeBrowserHistoryOptions): BrowserH
   };
 }
 
+/**
+ * A private in-memory session with no cookies, so suggestion requests carry
+ * nothing that identifies the person beyond the text itself.
+ */
+const SUGGESTIONS_PARTITION = "busyboy-search-suggestions";
+
+const fetchSuggestionsWithoutCookies: SuggestionFetch = async (url, signal) => {
+  const response = await electronSession.fromPartition(SUGGESTIONS_PARTITION).fetch(url, {
+    signal,
+    credentials: "omit",
+    cache: "no-store",
+    redirect: "error",
+  });
+  if (!response.ok) throw new Error(`Suggestion request failed with ${response.status}.`);
+  return response.text();
+};
+
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
@@ -353,6 +438,7 @@ export const make = Effect.gen(function* () {
   const history = makeBrowserHistory({
     rootDirectory,
     deletionLocked: process.env[DELETION_LOCKED_ENV] === "1",
+    fetchSuggestions: fetchSuggestionsWithoutCookies,
     onError: (message, cause) => {
       // Log each kind of failure once; a broken disk would otherwise log per navigation.
       if (reported.has(message)) return;

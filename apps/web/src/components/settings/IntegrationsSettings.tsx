@@ -102,6 +102,7 @@ import { ComputerUseSettings } from "./ComputerUseSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import { BrowserHistorySetting } from "./BrowserHistorySettings";
+import { BrowserAddressBarSettings } from "./BrowserAddressBarSettings";
 import { clearAllBrowserHistory, readBrowserHistoryBridge } from "~/browser/browserHistory";
 import type { ImportOutcome } from "./browserImportWizard.logic";
 
@@ -1206,6 +1207,7 @@ export function IntegrationsSettingsPanel() {
     <>
       <BrowserProfilesSetting disabled={previewDefaultsDisabled} />
       <BrowserHistorySetting />
+      <BrowserAddressBarSettings disabled={previewDefaultsDisabled} />
       <BrowserViewportSetting disabled={previewDefaultsDisabled} />
       <BrowserZoomSetting disabled={previewDefaultsDisabled} />
       <BrowserAppearanceSetting disabled={previewDefaultsDisabled} />

@@ -46,7 +46,76 @@ function previewUrlProtocol(rawUrl: string): string | undefined {
   return /^([A-Za-z][A-Za-z\d+.-]*):/.exec(rawUrl)?.[1]?.toLowerCase().concat(":");
 }
 
-const SEARCH_URL = "https://duckduckgo.com/?q=";
+export type AddressBarSearchEngineId = "duckduckgo" | "google" | "bing" | "brave" | "custom";
+
+export interface AddressBarSearchEngine {
+  readonly id: AddressBarSearchEngineId;
+  readonly name: string;
+  /** Search results page; `%s` is replaced by the encoded query. */
+  readonly searchUrl: string;
+  /** Public OpenSearch-style suggestion endpoint, if the engine has one. */
+  readonly suggestUrl: string | null;
+}
+
+export const ADDRESS_BAR_SEARCH_ENGINES: Readonly<
+  Record<Exclude<AddressBarSearchEngineId, "custom">, AddressBarSearchEngine>
+> = {
+  duckduckgo: {
+    id: "duckduckgo",
+    name: "DuckDuckGo",
+    searchUrl: "https://duckduckgo.com/?q=%s",
+    suggestUrl: "https://duckduckgo.com/ac/?q=%s&type=list",
+  },
+  google: {
+    id: "google",
+    name: "Google",
+    searchUrl: "https://www.google.com/search?q=%s",
+    suggestUrl: "https://suggestqueries.google.com/complete/search?client=firefox&q=%s",
+  },
+  bing: {
+    id: "bing",
+    name: "Bing",
+    searchUrl: "https://www.bing.com/search?q=%s",
+    suggestUrl: "https://api.bing.com/osjson.aspx?query=%s",
+  },
+  brave: {
+    id: "brave",
+    name: "Brave",
+    searchUrl: "https://search.brave.com/search?q=%s",
+    suggestUrl: "https://search.brave.com/api/suggest?q=%s",
+  },
+};
+
+export interface AddressBarSearchOptions {
+  readonly engine?: AddressBarSearchEngineId | undefined;
+  readonly customSearchUrl?: string | undefined;
+}
+
+/**
+ * The engine in use. A custom engine needs an http(s) template containing
+ * `%s`; anything else falls back to DuckDuckGo, today's default.
+ */
+export function resolveSearchEngine(options?: AddressBarSearchOptions): AddressBarSearchEngine {
+  const engine = options?.engine ?? "duckduckgo";
+  if (engine !== "custom") return ADDRESS_BAR_SEARCH_ENGINES[engine];
+  const template = options?.customSearchUrl?.trim() ?? "";
+  if (
+    template.includes("%s") &&
+    /^https?:\/\//i.test(template) &&
+    URL.canParse(template.replace("%s", "q"))
+  ) {
+    let name = "your search engine";
+    try {
+      name = new URL(template.replace("%s", "q")).hostname.replace(/^www\./, "");
+    } catch {}
+    return { id: "custom", name, searchUrl: template, suggestUrl: null };
+  }
+  return ADDRESS_BAR_SEARCH_ENGINES.duckduckgo;
+}
+
+export function searchUrlFor(text: string, options?: AddressBarSearchOptions): string {
+  return resolveSearchEngine(options).searchUrl.replace("%s", encodeURIComponent(text.trim()));
+}
 const ADDRESS_HOST_PATTERN = /^(?:localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[\da-f:.]+\])$/i;
 const BARE_HOST_PORT_PATTERN = /^[^/?#:@]+:\d+(?:[/?#]|$)/;
 const KNOWN_NON_WEB_SCHEMES: ReadonlySet<string> = new Set([
@@ -66,10 +135,26 @@ const KNOWN_NON_WEB_SCHEMES: ReadonlySet<string> = new Set([
   "wss:",
 ]);
 
-export function resolveAddressBarInput(rawInput: string): string {
+export type AddressBarInputKind =
+  | { readonly kind: "url"; readonly url: string }
+  | { readonly kind: "search"; readonly text: string };
+
+export function resolveAddressBarInput(
+  rawInput: string,
+  searchOptions?: AddressBarSearchOptions,
+): string {
+  const target = classifyAddressBarInput(rawInput);
+  return target.kind === "url" ? target.url : searchUrlFor(target.text, searchOptions);
+}
+
+/**
+ * Whether the address bar navigates to the input as a URL or searches for it.
+ * Throws for empty input and non-web schemes.
+ */
+export function classifyAddressBarInput(rawInput: string): AddressBarInputKind {
   const trimmed = rawInput.trim();
   if (/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) || trimmed.length === 0)
-    return normalizePreviewUrl(trimmed);
+    return { kind: "url", url: normalizePreviewUrl(trimmed) };
   if (!/\s/.test(trimmed)) {
     // `mailto:x` or `data:...` is an explicit scheme; `example.com:8080` or
     // `devbox:8080` is a bare host and port. `normalizePreviewUrl` would read
@@ -86,18 +171,18 @@ export function resolveAddressBarInput(rawInput: string): string {
           protocol,
         });
       }
-      return normalizePreviewUrl(trimmed);
+      return { kind: "url", url: normalizePreviewUrl(trimmed) };
     }
     const authority = trimmed.split(/[/?#]/, 1)[0] ?? "";
     const host = authority.replace(/^[^@]*@/, "").replace(/:\d+$/, "");
     const hasPort = host.length < authority.replace(/^[^@]*@/, "").length;
     if (hasPort || ADDRESS_HOST_PATTERN.test(host) || /^[^.]+(?:\.[^.]+)+\.?$/.test(host)) {
       try {
-        return normalizePreviewUrl(trimmed);
+        return { kind: "url", url: normalizePreviewUrl(trimmed) };
       } catch {}
     }
   }
-  return `${SEARCH_URL}${encodeURIComponent(trimmed)}`;
+  return { kind: "search", text: trimmed };
 }
 
 export function normalizePreviewUrl(rawUrl: string): string {

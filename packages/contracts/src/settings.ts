@@ -252,6 +252,17 @@ export const DEFAULT_BROWSER_RECORDING_FRAME_RATE: BrowserRecordingFrameRate = 3
 export const BrowserLinkTarget = Schema.Literals(["system", "app"]);
 export type BrowserLinkTarget = typeof BrowserLinkTarget.Type;
 export const DEFAULT_BROWSER_LINK_TARGET: BrowserLinkTarget = "system";
+export const BrowserSearchEngine = Schema.Literals([
+  "duckduckgo",
+  "google",
+  "bing",
+  "brave",
+  "custom",
+]);
+export type BrowserSearchEngine = typeof BrowserSearchEngine.Type;
+export const DEFAULT_BROWSER_SEARCH_ENGINE: BrowserSearchEngine = "duckduckgo";
+/** A search URL with `%s` where the query goes, e.g. `https://example.com/search?q=%s`. */
+export const BrowserCustomSearchUrl = Schema.String.check(Schema.isMaxLength(2048));
 
 export const LoadBalancingWeights = Schema.Record(
   TrimmedNonEmptyString,
@@ -331,6 +342,21 @@ export const ClientSettingsSchema = Schema.Struct({
 
   browserDefaultProfileId: BrowserProfileId.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_PROFILE_ID)),
+  ),
+
+  browserSearchEngine: BrowserSearchEngine.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_SEARCH_ENGINE)),
+  ),
+  browserCustomSearchUrl: BrowserCustomSearchUrl.pipe(
+    Schema.withDecodingDefault(Effect.succeed("")),
+  ),
+  // Off by default: when on, what you type in the address bar is sent to the
+  // search engine.
+  browserRemoteSearchSuggestions: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  browserZeroStateSuggestions: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(true)),
   ),
 
   confirmQuit: QuitConfirmationModeSetting.pipe(
@@ -1389,6 +1415,10 @@ export const ClientSettingsPatch = Schema.Struct({
   browserAutoShowFloatingPreview: Schema.optionalKey(Schema.Boolean),
   browserProfiles: Schema.optionalKey(Schema.Array(BrowserProfile)),
   browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
+  browserSearchEngine: Schema.optionalKey(BrowserSearchEngine),
+  browserCustomSearchUrl: Schema.optionalKey(BrowserCustomSearchUrl),
+  browserRemoteSearchSuggestions: Schema.optionalKey(Schema.Boolean),
+  browserZeroStateSuggestions: Schema.optionalKey(Schema.Boolean),
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
