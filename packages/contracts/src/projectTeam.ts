@@ -147,8 +147,18 @@ export const ProjectAttentionItem = Schema.Struct({
   askerThreadId: Schema.NullOr(ThreadId),
   batchId: ProjectAttentionBatchId,
   createdAt: IsoDateTime,
+  /** Set when a newer question from the same task replaced this one before it was answered. */
+  supersededAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
+
+/** A question shown to the user as a card, with the name of the task that asked it. */
+export const ProjectDecisionCard = Schema.Struct({
+  item: ProjectAttentionItem,
+  taskNumber: PositiveInt,
+  taskTitle: Schema.String,
+});
+export type ProjectDecisionCard = typeof ProjectDecisionCard.Type;
 
 export const ProjectMemoryEntry = Schema.Struct({
   id: ProjectMemoryEntryId,
@@ -567,6 +577,10 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   persona: ProjectManagerPersona,
   enabled: Schema.Boolean,
   presence: ProjectManagerPresence,
+  /** Open questions plus the latest closed ones, oldest first, shown as cards in the PM thread. */
+  decisionCards: Schema.Array(ProjectDecisionCard).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
@@ -587,6 +601,13 @@ export const ProjectTeamRequestSitrepResult = Schema.Struct({
   sitrepId: ProjectSitrepId,
 });
 export type ProjectTeamRequestSitrepResult = typeof ProjectTeamRequestSitrepResult.Type;
+
+export const ProjectTeamAnswerDecisionInput = Schema.Struct({
+  projectId: ProjectId,
+  attentionItemId: ProjectAttentionItemId,
+  answer: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
+});
+export type ProjectTeamAnswerDecisionInput = typeof ProjectTeamAnswerDecisionInput.Type;
 
 export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   projectId: ProjectId,

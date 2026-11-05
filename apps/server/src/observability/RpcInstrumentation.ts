@@ -96,6 +96,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.scheduledTasksGetWebhookDelivery]: "scheduledTasks",
   [WS_METHODS.projectTeamSubscribeAttention]: "projectTeam",
   [WS_METHODS.projectTeamRequestSitrep]: "projectTeam",
+  [WS_METHODS.projectTeamAnswerDecision]: "projectTeam",
   [WS_METHODS.projectTeamUpdateSettings]: "projectTeam",
   [WS_METHODS.secretsAnswerRequest]: "secrets",
 

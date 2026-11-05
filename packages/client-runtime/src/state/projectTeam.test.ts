@@ -69,6 +69,7 @@ function summary(
       nextSitrepAt: null,
       lastAction: null,
     },
+    decisionCards: [],
     ...overrides,
   };
 }

@@ -49,7 +49,7 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
       tag: WS_METHODS.projectTeamSubscribeAttention,
       transform: Stream.map(indexProjectTeamAttention),
     }),
-    // The attention stream carries the result, so neither command updates state itself.
+    // The attention stream carries the result, so no command updates state itself.
     requestSitrep: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:request-sitrep",
       tag: WS_METHODS.projectTeamRequestSitrep,
@@ -57,6 +57,16 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
       concurrency: {
         mode: "singleFlight",
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.projectId]),
+      },
+    }),
+    // The answer goes straight to the task lead; the attention stream then shows the card answered.
+    answerDecision: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:answer-decision",
+      tag: WS_METHODS.projectTeamAnswerDecision,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
       },
     }),
     updateSettings: createEnvironmentRpcCommand(runtime, {

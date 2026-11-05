@@ -115,6 +115,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.projectTeamSubscribeAttention]: AuthOrchestrationReadScope,
   // Both start or reconfigure PM turns on this environment.
   [WS_METHODS.projectTeamRequestSitrep]: AuthOrchestrationOperateScope,
+  // Sends the answer to a task lead.
+  [WS_METHODS.projectTeamAnswerDecision]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamUpdateSettings]: AuthOrchestrationOperateScope,
 
   [WS_METHODS.pullRequestsList]: AuthOrchestrationReadScope,

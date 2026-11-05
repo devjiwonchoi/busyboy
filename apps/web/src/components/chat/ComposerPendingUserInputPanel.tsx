@@ -25,6 +25,8 @@ interface PendingUserInputPanelProps {
   onChangeNote: (questionId: string, note: string) => void;
   onAdvance: () => void;
   onDismiss: (requestId: RuntimeRequestId) => void;
+  /** Number keys pick options. Off where several cards share the screen. */
+  keyboardShortcuts?: boolean;
 }
 
 export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserInputPanel({
@@ -39,6 +41,7 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
   onChangeNote,
   onAdvance,
   onDismiss,
+  keyboardShortcuts = true,
 }: PendingUserInputPanelProps) {
   if (pendingUserInputs.length === 0) return null;
   const activePrompt = pendingUserInputs[0];
@@ -58,6 +61,7 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
       onChangeNote={onChangeNote}
       onAdvance={onAdvance}
       onDismiss={onDismiss}
+      keyboardShortcuts={keyboardShortcuts}
     />
   );
 });
@@ -74,6 +78,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onChangeNote,
   onAdvance,
   onDismiss,
+  keyboardShortcuts,
 }: {
   prompt: PendingUserInput;
   cwd: string | undefined;
@@ -86,6 +91,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onChangeNote: (questionId: string, note: string) => void;
   onAdvance: () => void;
   onDismiss: (requestId: RuntimeRequestId) => void;
+  keyboardShortcuts: boolean;
 }) {
   // Message-mode requests remain answerable after their provider turn ends.
   const canRespond = prompt.responseCapability !== "not_resumable";
@@ -181,7 +187,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   const selectOptionFromShortcut = useEffectEvent(handleOptionSelection);
 
   useEffect(() => {
-    if (!activeQuestion || responseDisabled || isCollapsed) return;
+    if (!keyboardShortcuts || !activeQuestion || responseDisabled || isCollapsed) return;
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
@@ -205,7 +211,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [activeQuestion, isCollapsed, responseDisabled]);
+  }, [activeQuestion, isCollapsed, keyboardShortcuts, responseDisabled]);
 
   if (!activeQuestion) {
     return null;
@@ -285,7 +291,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                   optimisticSingleSelect.optionValue === optionValue;
                 const isSelected =
                   isOptimisticallySelected || draftSelectedOptions?.[index] === true;
-                const shortcutKey = index < 9 ? index + 1 : null;
+                const shortcutKey = keyboardShortcuts && index < 9 ? index + 1 : null;
                 const className = cn(
                   "group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/25",
                   isSelected

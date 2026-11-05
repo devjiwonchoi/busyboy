@@ -161,7 +161,11 @@ describe("ProjectAttentionItem", () => {
       batchId: "batch-1",
       createdAt: "2026-11-04T00:00:00.000Z",
     };
-    expect(Schema.decodeUnknownSync(ProjectAttentionItem)(item)).toEqual(item);
+    // Items stored before cards could be replaced decode as never replaced.
+    expect(Schema.decodeUnknownSync(ProjectAttentionItem)(item)).toEqual({
+      ...item,
+      supersededAt: null,
+    });
   });
 });
 
@@ -284,10 +288,11 @@ describe("ProjectManagerPresence", () => {
 });
 
 describe("project team RPCs", () => {
-  it("registers the three client RPCs", () => {
+  it("registers the client RPCs", () => {
     for (const method of [
       WS_METHODS.projectTeamSubscribeAttention,
       WS_METHODS.projectTeamRequestSitrep,
+      WS_METHODS.projectTeamAnswerDecision,
       WS_METHODS.projectTeamUpdateSettings,
     ]) {
       expect(WsRpcGroup.requests.has(method)).toBe(true);

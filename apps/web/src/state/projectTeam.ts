@@ -13,6 +13,7 @@ import {
 } from "@t3tools/client-runtime/state/project-team";
 import type {
   EnvironmentId,
+  ProjectTeamAnswerDecisionInput,
   ProjectTeamAttentionSummary,
   ProjectTeamUpdateSettingsInput,
   ScopedProjectRef,
@@ -149,6 +150,13 @@ export function useRequestSitrep() {
   const requestSitrep = useAtomCommand(projectTeamEnvironment.requestSitrep);
   return (ref: ScopedProjectRef) =>
     requestSitrep({ environmentId: ref.environmentId, input: { projectId: ref.projectId } });
+}
+
+/** Answers a decision card; the server sends it straight to the task lead that asked. */
+export function useAnswerDecision() {
+  const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
+    answerDecision({ environmentId, input });
 }
 
 export type ProjectTeamSettingsPatch = Omit<ProjectTeamUpdateSettingsInput, "projectId">;
