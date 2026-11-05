@@ -34,15 +34,20 @@ function cardOptions(card: ProjectDecisionCard): ReadonlyArray<string> {
   return card.item.kind === "approval" ? ["Approve", "Request changes"] : ["Give feedback"];
 }
 
-export function decisionCardHeader(card: ProjectDecisionCard): string {
-  return `${KIND_LABEL[card.item.kind]} · ${card.taskTitle}`;
+/** "Plan approval · Fix login", or "Plan approval · BB-7 Fix login" where the task isn't obvious. */
+export function decisionCardHeader(card: ProjectDecisionCard, taskKey?: string): string {
+  const task = taskKey === undefined ? card.taskTitle : `${taskKey} ${card.taskTitle}`;
+  return `${KIND_LABEL[card.item.kind]} · ${task}`;
 }
 
 /** The card's question in the shape the shared question card renders. */
-export function decisionCardQuestion(card: ProjectDecisionCard): OrchestrationV2UserInputQuestion {
+export function decisionCardQuestion(
+  card: ProjectDecisionCard,
+  taskKey?: string,
+): OrchestrationV2UserInputQuestion {
   return {
     id: QUESTION_ID,
-    header: decisionCardHeader(card),
+    header: decisionCardHeader(card, taskKey),
     question: card.item.question,
     options: cardOptions(card).map((label) => ({ label, description: label })),
     multiSelect: false,
@@ -105,18 +110,24 @@ export function DecisionCard({
   );
 }
 
-function OpenDecisionCard({
+/**
+ * The answerable card. Inline it draws its own border; docked above a composer it sits in
+ * the composer's banner surface, like a pending question.
+ */
+export function OpenDecisionCard({
   card,
   question,
   environmentId,
   threadRef,
   cwd,
+  docked = false,
 }: {
   card: ProjectDecisionCard;
   question: OrchestrationV2UserInputQuestion;
   environmentId: EnvironmentId;
   threadRef: ScopedThreadRef;
   cwd: string | undefined;
+  docked?: boolean;
 }) {
   const answerDecision = useAnswerDecision();
   const [draft, setDraft] = useState<PendingUserInputDraftAnswer | undefined>(undefined);
@@ -177,7 +188,7 @@ function OpenDecisionCard({
     <div
       data-decision-card={card.item.id}
       data-decision-card-state="open"
-      className="rounded-xl border border-border/70 bg-card/60 py-1"
+      className={docked ? undefined : "rounded-xl border border-border/70 bg-card/60 py-1"}
     >
       {panel(false)}
       {/* Once answered, the card leaves the open state and this view closes with it. */}
@@ -188,7 +199,7 @@ function OpenDecisionCard({
           className="max-h-[90dvh] w-[min(92vw,64rem)] max-w-none py-1"
           data-decision-card-expanded={card.item.id}
         >
-          <DialogTitle className="sr-only">{decisionCardHeader(card)}</DialogTitle>
+          <DialogTitle className="sr-only">{question.header}</DialogTitle>
           {panel(true)}
         </DialogPopup>
       </Dialog>

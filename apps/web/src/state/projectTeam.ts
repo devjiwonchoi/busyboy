@@ -33,6 +33,8 @@ import { AsyncResult, Atom } from "effect/reactivity";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useThreadShell } from "./entities";
 import {
+  type DockedDecisionCard,
+  dockedDecisionCardsForThread,
   type LeadThreadTask,
   taskForLeadThread,
   taskReferencesForThread,
@@ -46,6 +48,10 @@ export const projectTeamEnvironment = createProjectTeamEnvironmentAtoms(connecti
 const EMPTY_SUMMARY_ATOM = Atom.make<ProjectTeamAttentionSummary | null>(null).pipe(
   Atom.withLabel("web-project-team:empty"),
 );
+
+const EMPTY_ATTENTION_INDEX_ATOM = Atom.make<ProjectTeamAttentionIndex>(
+  EMPTY_PROJECT_TEAM_ATTENTION_INDEX,
+).pipe(Atom.withLabel("web-project-team:empty-index"));
 
 /** Every project manager in one environment, keyed by project and by PM thread. */
 export const environmentProjectTeamAttentionAtom = Atom.family((environmentId: EnvironmentId) =>
@@ -155,6 +161,19 @@ export function useProjectManagerForThread(
   return useAtomValue(
     ref === null ? EMPTY_SUMMARY_ATOM : projectManagerByThreadAtom(scopedThreadKey(ref)),
   );
+}
+
+/** Open decision cards to dock above this thread's composer. */
+export function useDockedDecisionCards(
+  ref: ScopedThreadRef | null,
+): ReadonlyArray<DockedDecisionCard> {
+  const index = useAtomValue(
+    ref === null
+      ? EMPTY_ATTENTION_INDEX_ATOM
+      : environmentProjectTeamAttentionAtom(ref.environmentId),
+  );
+  if (ref === null) return [];
+  return dockedDecisionCardsForThread(index.byProjectId.values(), ref.threadId);
 }
 
 export function useIsProjectManagerThread(ref: ScopedThreadRef | null): boolean {
