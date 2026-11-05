@@ -239,9 +239,12 @@ function renderSidebarApp() {
       </SidebarProvider>
     ),
   });
-  const routes = ["/", "/$environmentId/$threadId", "/tasks/$environmentId/$projectId/$taskId"].map(
-    (path) => createRoute({ getParentRoute: () => rootRoute, path, component: () => null }),
-  );
+  const routes = [
+    "/",
+    "/$environmentId/$threadId",
+    "/tasks/$environmentId/$projectId/$taskId",
+    "/inbox",
+  ].map((path) => createRoute({ getParentRoute: () => rootRoute, path, component: () => null }));
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
     history: createMemoryHistory({ initialEntries: ["/"] }),
@@ -276,6 +279,8 @@ describe("sidebar tasks", () => {
       "BB-3 Clean up build warnings, Inbox",
     );
     expect(taskRowButton("BB-4")?.closest("li")?.className).toContain("pl-10");
+    // Nothing waits on the user, so there is no "Waiting on you" entry.
+    expect(container.textContent).not.toContain("Waiting on you");
     // Done tasks and a task's earlier sessions stay out of the list.
     expect(taskRowButton("BB-1")).toBeNull();
     expect(threadRow("BB-2 Fix drag scroll (first try)")).toBeNull();
@@ -335,5 +340,50 @@ describe("sidebar tasks", () => {
     await vi.waitFor(() =>
       expect(document.querySelector('input[aria-label="Task title"]')).toBeNull(),
     );
+  });
+  it("shows how many questions wait on the user and opens Waiting on you", async () => {
+    // The planner of BB-2 asks for plan approval.
+    const summary = state.managers[0]!.summary;
+    state.managers = [
+      {
+        environmentId: "env-1",
+        summary: {
+          ...summary,
+          decisionCards: [
+            {
+              taskNumber: 2,
+              taskTitle: "Fix drag scroll",
+              item: {
+                id: "attention-2" as never,
+                projectId: "busyboy" as never,
+                taskId: "task-2" as never,
+                kind: "approval",
+                question: "Approve the plan in the spec?",
+                options: ["Approve and start", "Approve only"],
+                answer: null,
+                answeredAt: null,
+                askerThreadId: "lead-2" as never,
+                batchId: "batch-1" as never,
+                createdAt: NOW as never,
+                supersededAt: null,
+              },
+            },
+          ],
+        },
+      },
+    ];
+    const app = renderSidebarApp();
+    await app.render();
+    const entry = await vi.waitFor(() => {
+      const button = [...container.querySelectorAll<HTMLElement>("button")].find((candidate) =>
+        candidate.textContent?.startsWith("Waiting on you"),
+      );
+      expect(button).toBeDefined();
+      return button!;
+    });
+    expect(entry.textContent).toBe("Waiting on you1");
+    await userEvent.click(entry);
+    await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/inbox"));
+    expect(entry.getAttribute("aria-current")).toBe("page");
   });
 });
