@@ -116,6 +116,8 @@ export const ProjectTaskEventKind = Schema.Literals([
   "note",
   "summary",
   "preference_changed",
+  /** The user wrote to the task's lead from its card in the PM thread. */
+  "direct_message",
 ]);
 export type ProjectTaskEventKind = typeof ProjectTaskEventKind.Type;
 
@@ -268,7 +270,13 @@ export const ProjectTeamTasksByStage = Schema.Struct({
 });
 export type ProjectTeamTasksByStage = typeof ProjectTeamTasksByStage.Type;
 
-export const ProjectTeamJournalKind = Schema.Literals(["done", "failed", "decision", "sitrep"]);
+export const ProjectTeamJournalKind = Schema.Literals([
+  "done",
+  "failed",
+  "decision",
+  "sitrep",
+  "message",
+]);
 export type ProjectTeamJournalKind = typeof ProjectTeamJournalKind.Type;
 
 /** One line of the team's recent history, so a PM can catch up after its context is tidied. */
@@ -609,6 +617,27 @@ export const ProjectTaskReference = Schema.Struct({
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 
+/** A dated line shown on a task card. */
+export const ProjectTaskCardLine = Schema.Struct({
+  text: Schema.String,
+  at: IsoDateTime,
+});
+export type ProjectTaskCardLine = typeof ProjectTaskCardLine.Type;
+
+/** An active task as a card in the PM thread, where the user can message its lead directly. */
+export const ProjectTaskCard = Schema.Struct({
+  id: ProjectTaskId,
+  number: PositiveInt,
+  title: Schema.String,
+  stage: ProjectTaskStage,
+  leadThreadId: Schema.NullOr(ThreadId),
+  /** Newest note, outcome, or stage change from the task's log. */
+  latestUpdate: Schema.NullOr(ProjectTaskCardLine),
+  /** The last message the user sent the lead from this card. */
+  lastDirectMessage: Schema.NullOr(ProjectTaskCardLine),
+});
+export type ProjectTaskCard = typeof ProjectTaskCard.Type;
+
 export const ProjectTeamAttentionSummary = Schema.Struct({
   projectId: ProjectId,
   pmThreadId: ThreadId,
@@ -629,6 +658,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   ),
   /** Every task in the project, so "#N" in PM text can be resolved per project. */
   tasks: Schema.Array(ProjectTaskReference),
+  /** Active tasks (planning, running, in review, blocked), oldest first, shown as cards. */
+  taskCards: Schema.Array(ProjectTaskCard).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
@@ -656,6 +687,18 @@ export const ProjectTeamAnswerDecisionInput = Schema.Struct({
   answer: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
 });
 export type ProjectTeamAnswerDecisionInput = typeof ProjectTeamAnswerDecisionInput.Type;
+
+export const ProjectTeamMessageTaskInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  text: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
+});
+export type ProjectTeamMessageTaskInput = typeof ProjectTeamMessageTaskInput.Type;
+
+export const ProjectTeamMessageTaskResult = Schema.Struct({
+  event: ProjectTaskEvent,
+});
+export type ProjectTeamMessageTaskResult = typeof ProjectTeamMessageTaskResult.Type;
 
 export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   projectId: ProjectId,

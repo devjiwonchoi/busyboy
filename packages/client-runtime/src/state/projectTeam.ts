@@ -69,6 +69,16 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
       },
     }),
+    // The text goes straight to the task's lead; the attention stream then shows it on the card.
+    messageTask: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:message-task",
+      tag: WS_METHODS.projectTeamMessageTask,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.taskId]),
+      },
+    }),
     updateSettings: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:update-settings",
       tag: WS_METHODS.projectTeamUpdateSettings,

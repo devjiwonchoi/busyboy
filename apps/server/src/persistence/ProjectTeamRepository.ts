@@ -182,6 +182,11 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly limit: number;
     }) => Result<ReadonlyArray<ProjectTaskEvent>>;
+    /** The newest messages the user sent task leads from task cards, newest first. */
+    readonly listRecentDirectMessages: (input: {
+      readonly projectId: ProjectId;
+      readonly limit: number;
+    }) => Result<ReadonlyArray<ProjectTaskEvent>>;
 
     readonly createAttentionItem: (
       input: CreateProjectAttentionItemInput,
@@ -630,6 +635,18 @@ export const make = Effect.gen(function* () {
     `,
   });
 
+  const findRecentDirectMessages = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId, limit: Schema.Int }),
+    Result: ProjectTaskEvent,
+    execute: ({ projectId, limit }) => sql`
+      SELECT ${eventColumns}
+      FROM project_task_events
+      WHERE project_id = ${projectId} AND kind = 'direct_message'
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT ${limit}
+    `,
+  });
+
   // Attention items
 
   const insertAttention = SqlSchema.findOne({
@@ -915,6 +932,10 @@ export const make = Effect.gen(function* () {
     listProjectEventsSince: (input) =>
       findProjectEventsSince(input).pipe(
         Effect.mapError(toRepositoryError("listProjectEventsSince")),
+      ),
+    listRecentDirectMessages: (input) =>
+      findRecentDirectMessages(input).pipe(
+        Effect.mapError(toRepositoryError("listRecentDirectMessages")),
       ),
     listRecentTaskEndings: (input) =>
       findRecentTaskEndings(input).pipe(

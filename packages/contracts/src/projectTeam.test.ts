@@ -292,6 +292,7 @@ describe("project team RPCs", () => {
       WS_METHODS.projectTeamSubscribeAttention,
       WS_METHODS.projectTeamRequestSitrep,
       WS_METHODS.projectTeamAnswerDecision,
+      WS_METHODS.projectTeamMessageTask,
       WS_METHODS.projectTeamUpdateSettings,
     ]) {
       expect(WsRpcGroup.requests.has(method)).toBe(true);

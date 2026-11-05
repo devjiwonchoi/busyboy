@@ -43,6 +43,10 @@ import {
   type ProjectTeamMemoryWriteInput,
   type ProjectTeamMemoryWriteResult,
   type ProjectTeamAnswerDecisionInput,
+  type ProjectTeamMessageTaskInput,
+  type ProjectTeamMessageTaskResult,
+  type ProjectTaskCard,
+  type ProjectTaskCardLine,
   type ProjectTeamRequestSitrepInput,
   type ProjectTeamRequestSitrepResult,
   type ProjectTeamSettings,
@@ -121,6 +125,48 @@ const JOURNAL_TEXT_MAX_CHARS = 200;
 /** Answered or replaced cards kept in the PM thread after they close. */
 const CLOSED_DECISION_CARD_LIMIT = 30;
 const CARD_WAKE_QUESTION_MAX_CHARS = 600;
+/** Stages that get a task card in the PM thread. */
+const TASK_CARD_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
+  "planning",
+  "running",
+  "in_review",
+  "blocked",
+]);
+/** Log entries scanned per task card for its latest update and direct message. */
+const TASK_CARD_EVENT_SCAN = 40;
+const TASK_CARD_LINE_MAX_CHARS = 280;
+/** Event kinds that count as a task's "latest update" on its card. */
+const TASK_CARD_UPDATE_KINDS: ReadonlySet<ProjectTaskEventKind> = new Set([
+  "created",
+  "stage_changed",
+  "outcome",
+  "note",
+  "summary",
+]);
+
+/** What the task lead receives when the user writes from the task's card. */
+export function directMessageText(text: string): string {
+  return `[Direct message from the user via BusyBoy] ${text}`;
+}
+
+/** The newest update and direct message from a task's log, oldest-first input. */
+export function taskCardLines(
+  events: ReadonlyArray<Pick<ProjectTaskEvent, "kind" | "body" | "createdAt">>,
+): {
+  readonly latestUpdate: ProjectTaskCardLine | null;
+  readonly lastDirectMessage: ProjectTaskCardLine | null;
+} {
+  const line = (event: Pick<ProjectTaskEvent, "body" | "createdAt">): ProjectTaskCardLine => ({
+    text: clip(event.body, TASK_CARD_LINE_MAX_CHARS),
+    at: event.createdAt,
+  });
+  const update = events.findLast((event) => TASK_CARD_UPDATE_KINDS.has(event.kind));
+  const message = events.findLast((event) => event.kind === "direct_message");
+  return {
+    latestUpdate: update === undefined ? null : line(update),
+    lastDirectMessage: message === undefined ? null : line(message),
+  };
+}
 
 const ATTENTION_KIND_LABEL: Record<ProjectAttentionItem["kind"], string> = {
   approval: "plan approval",
@@ -158,7 +204,8 @@ const trimJournalText = (text: string): string =>
 
 /**
  * The team's recent history for team_status, newest first: tasks that finished or
- * failed, the user's answered questions, and posted sitreps.
+ * failed, the user's answered questions, posted sitreps, and messages the user sent
+ * task leads directly from their cards.
  */
 export function buildJournal(input: {
   readonly tasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "title">>;
@@ -167,6 +214,7 @@ export function buildJournal(input: {
     Pick<ProjectAttentionItem, "taskId" | "question" | "answer" | "answeredAt">
   >;
   readonly sitreps: ReadonlyArray<Pick<ProjectSitrep, "body" | "createdAt">>;
+  readonly directMessages?: ReadonlyArray<Pick<ProjectTaskEvent, "taskId" | "body" | "createdAt">>;
   readonly limit?: number;
 }): Array<ProjectTeamJournalEntry> {
   const taskById = new Map(input.tasks.map((task) => [task.id as string, task]));
@@ -214,6 +262,13 @@ export function buildJournal(input: {
       ?.trim();
     if (firstLine === undefined) continue;
     entries.push({ at: sitrep.createdAt, kind: "sitrep", text: trimJournalText(firstLine) });
+  }
+  for (const message of input.directMessages ?? []) {
+    entries.push({
+      at: message.createdAt,
+      kind: "message",
+      text: trimJournalText(`The user messaged ${label(message.taskId)}'s lead: ${message.body}`),
+    });
   }
   return entries
     .toSorted((a, b) => isoMillis(b.at) - isoMillis(a.at))
@@ -325,6 +380,8 @@ export function describeManagerAction(
       return `recorded an outcome for ${task}`;
     case "preference_changed":
       return "changed the sitrep interval";
+    case "direct_message":
+      return `passed on a message to ${task}`;
   }
 }
 
@@ -442,6 +499,13 @@ export class ProjectTeamService extends Context.Service<
     readonly answerDecision: (
       input: ProjectTeamAnswerDecisionInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+    /**
+     * projectTeam.messageTask RPC: the user wrote on a task card. Goes straight to the lead,
+     * steering its running turn, and never waits on or wakes the PM.
+     */
+    readonly messageTask: (
+      input: ProjectTeamMessageTaskInput,
+    ) => Effect.Effect<ProjectTeamMessageTaskResult, ProjectTeamError>;
 
     readonly listMemory: (
       callerThreadId: ThreadId,
@@ -977,6 +1041,10 @@ const make = Effect.gen(function* () {
           limit: JOURNAL_LIMIT,
         }),
         sitreps: yield* repository.listRecentPostedSitreps({ projectId, limit: JOURNAL_LIMIT }),
+        directMessages: yield* repository.listRecentDirectMessages({
+          projectId,
+          limit: JOURNAL_LIMIT,
+        }),
       });
       const memoryTopics = (yield* repository.listMemory(projectId)).map((entry) => entry.topic);
       if (role.type === "pm") yield* sitreps.noteStatusRead(projectId);
@@ -1214,6 +1282,35 @@ const make = Effect.gen(function* () {
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
 
+  const messageTask: ProjectTeamService["Service"]["messageTask"] = (input) =>
+    Effect.gen(function* () {
+      yield* requireManager(input.projectId);
+      const task = yield* requireTask(input.taskId, input.projectId);
+      if (task.leadThreadId === null || !TASK_CARD_STAGES.has(task.stage)) {
+        return yield* teamError(
+          `"${task.title}" has no active task lead to message.`,
+          input.projectId,
+        );
+      }
+      const key = `project-team:direct-message:${yield* newId(task.id)}`;
+      // "auto" steers into the lead's running turn, or starts one when it is idle.
+      yield* threads.sendToThread({
+        projectId: input.projectId,
+        commandId: CommandId.make(key),
+        threadId: task.leadThreadId,
+        messageId: MessageId.make(key),
+        text: directMessageText(input.text),
+        attachments: [],
+        mode: "auto",
+        createdBy: "user",
+        creationSource: "server",
+      });
+      // Logged for team_status, without waking the PM: it stays free for the user.
+      const event = yield* appendEvent(task, "direct_message", input.text, null);
+      yield* router.publish(input.projectId);
+      return { event };
+    }).pipe(orTeamError("Could not message the task lead.", input.projectId));
+
   /** Queues a short server message for the PM, once per key; skipped when the PM is off or gone. */
   const wakeManagerWith = (projectId: ProjectId, key: string, text: string) =>
     Effect.gen(function* () {
@@ -1375,14 +1472,26 @@ const make = Effect.gen(function* () {
               }).pipe(Effect.as([])),
             ),
           )).filter(isWaitingOnUser).length;
-          const presence = yield* managerPresence(
-            manager,
-            open,
-            latestSitrep,
-            otherThreadsWaiting,
-          );
+          const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
           const decisionCards = yield* listDecisionCards(projectId, open);
           const tasks = yield* repository.listTasks({ projectId });
+          const taskCards = yield* Effect.forEach(
+            tasks
+              .filter((task) => TASK_CARD_STAGES.has(task.stage))
+              .toSorted((a, b) => a.number - b.number),
+            (task) =>
+              Effect.map(
+                repository.listTaskEvents({ taskId: task.id, limit: TASK_CARD_EVENT_SCAN }),
+                (events): ProjectTaskCard => ({
+                  id: task.id,
+                  number: task.number,
+                  title: task.title,
+                  stage: task.stage,
+                  leadThreadId: task.leadThreadId,
+                  ...taskCardLines(events),
+                }),
+              ),
+          );
           return {
             projectId,
             pmThreadId: manager.threadId,
@@ -1402,6 +1511,7 @@ const make = Effect.gen(function* () {
               stage: task.stage,
               leadThreadId: task.leadThreadId,
             })),
+            taskCards,
           } satisfies ProjectTeamAttentionSummary;
         }),
       );
@@ -1467,6 +1577,7 @@ const make = Effect.gen(function* () {
     updateSettings,
     askUser,
     answerDecision,
+    messageTask,
     answerAttention,
     listMemory,
     writeMemory,

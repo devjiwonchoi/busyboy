@@ -47,6 +47,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamRequestSitrep]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamAnswerDecision]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamMessageTask]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamUpdateSettings]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
 } as const;

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   alternateComposerDispatchAction,
   resolveComposerDispatchMode,
+  threadFollowUpBehavior,
 } from "./composerDispatch.ts";
 
 describe("resolveComposerDispatchMode", () => {
@@ -81,5 +82,17 @@ describe("resolveComposerDispatchMode", () => {
     expect(alternateComposerDispatchAction("queue")).toBe("steer");
     expect(alternateComposerDispatchAction("steer")).toBe("queue");
     expect(alternateComposerDispatchAction()).toBe("queue");
+  });
+});
+
+describe("threadFollowUpBehavior", () => {
+  it("steers in the project manager thread whatever the setting", () => {
+    expect(threadFollowUpBehavior(true, "queue")).toBe("steer");
+    expect(threadFollowUpBehavior(true, "steer")).toBe("steer");
+  });
+
+  it("follows the setting in every other thread", () => {
+    expect(threadFollowUpBehavior(false, "queue")).toBe("queue");
+    expect(threadFollowUpBehavior(false, "steer")).toBe("steer");
   });
 });

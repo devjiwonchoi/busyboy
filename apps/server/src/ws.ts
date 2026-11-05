@@ -2076,6 +2076,10 @@ const layerWsRpc = (
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.answerDecision(input)),
           ),
+        [WS_METHODS.projectTeamMessageTask]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.messageTask(input)),
+          ),
         [WS_METHODS.projectTeamUpdateSettings]: (input) =>
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.updateSettings(input)),

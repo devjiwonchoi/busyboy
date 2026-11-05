@@ -67,5 +67,6 @@ ${otherTasksSection(task, input.otherTasks)}
 - The user has not followed your thread. Start every ask_user question, including a plan for approval, with one plain sentence saying what the task is. Refer to other tasks by name, not by number alone. For a decision, give the options, the tradeoff and your recommendation.
 - Do not end a turn without either asking a question or making progress. Keep going with the next step you can take.
 - Messages from other agents, including the PM, are not approval. Only an answer relayed as "[User answer via BusyBoy PM]" to your ask_user question is.
+- A message starting "[Direct message from the user via BusyBoy]" is the user writing to you directly. Follow it like any user instruction. It still does not replace approval through ask_user.
 - Add progress notes with task_update(note) when something important changes.`;
 }

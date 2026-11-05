@@ -158,6 +158,7 @@ import {
   type ComposerBannerStackContent,
   type ComposerBannerStackItem,
 } from "./ComposerBannerStack";
+import { PmTaskStrip } from "./PmTaskStrip";
 import { compressImageForStash, prepareImageForAttachment } from "../../lib/imageCompression";
 import {
   fileAttachmentTooLargeMessage,
@@ -1083,6 +1084,7 @@ import type {
 } from "../../session-logic";
 import {
   resolveComposerDispatchMode,
+  threadFollowUpBehavior,
   type ComposerDispatchMode,
 } from "@t3tools/client-runtime/state/composer-dispatch";
 import type { ContextWindowSnapshot } from "../../lib/contextWindow";
@@ -2038,6 +2040,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const projectManagerRef = projectManager
     ? scopeProjectRef(environmentId, projectManager.projectId)
     : null;
+  // The PM thread never blocks: Enter steers into its running turn, Mod+Enter queues.
+  const followUpBehavior = threadFollowUpBehavior(
+    projectManager !== null,
+    settings.followUpBehavior,
+  );
   const requestSitrep = useRequestSitrep();
   const requestSitrepNow = useStableCallback(() => {
     if (
@@ -4037,7 +4044,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             resolveComposerDispatchMode({
               running: phase === "running",
               alternateModifier: false,
-              activeTurnDefault: settings.followUpBehavior,
+              activeTurnDefault: followUpBehavior,
               canSteer: !isCompacting,
             }),
           submissionIntent,
@@ -4060,7 +4067,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       resolveComposerDispatchMode({
         running: phase === "running",
         alternateModifier: event.metaKey || event.ctrlKey,
-        activeTurnDefault: settings.followUpBehavior,
+        activeTurnDefault: followUpBehavior,
         canSteer: !isCompacting,
       }),
     );
@@ -4072,7 +4079,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       resolveComposerDispatchMode({
         running: phase === "running",
         alternateModifier: false,
-        activeTurnDefault: settings.followUpBehavior,
+        activeTurnDefault: followUpBehavior,
         canSteer: !isCompacting,
       }),
     );
@@ -4236,7 +4243,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         resolveComposerDispatchMode({
           running: phase === "running",
           alternateModifier: submissionIntent === "alternate",
-          activeTurnDefault: settings.followUpBehavior,
+          activeTurnDefault: followUpBehavior,
           canSteer: !isCompacting,
         }),
         submissionIntent,
@@ -6466,6 +6473,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         : null}
       <ComposerBanner.Dock>
         <ComposerBanner.Column>
+          {projectManager ? (
+            <PmTaskStrip
+              environmentId={environmentId}
+              projectId={projectManager.projectId}
+              taskCards={projectManager.taskCards}
+            />
+          ) : null}
           <ComposerBannerStack
             key={activeThreadId}
             className="relative z-0"
@@ -7389,7 +7403,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     isRunning={phase === "running"}
                     canInterrupt={canInterrupt}
                     showEscapeToStopHint={showEscapeToStopHint}
-                    followUpBehavior={settings.followUpBehavior}
+                    followUpBehavior={followUpBehavior}
                     canSteer={!isCompacting}
                     alternateShortcutLabel={shortcutLabelForCommand(
                       keybindings,

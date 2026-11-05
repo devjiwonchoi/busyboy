@@ -101,6 +101,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.projectTeamSubscribeAttention]: "projectTeam",
   [WS_METHODS.projectTeamRequestSitrep]: "projectTeam",
   [WS_METHODS.projectTeamAnswerDecision]: "projectTeam",
+  [WS_METHODS.projectTeamMessageTask]: "projectTeam",
   [WS_METHODS.projectTeamUpdateSettings]: "projectTeam",
   [WS_METHODS.secretsAnswerRequest]: "secrets",
   [WS_METHODS.browserRequestsAnswer]: "browser",

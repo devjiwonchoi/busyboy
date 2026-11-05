@@ -15,6 +15,7 @@ import {
 import type {
   EnvironmentId,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamMessageTaskInput,
   ProjectTaskReference,
   ProjectTeamAttentionSummary,
   ProjectTeamUpdateSettingsInput,
@@ -161,6 +162,13 @@ export function useAnswerDecision() {
   const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
   return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision({ environmentId, input });
+}
+
+/** Sends the user's text from a task card straight to that task's lead. */
+export function useMessageTask() {
+  const messageTask = useAtomCommand(projectTeamEnvironment.messageTask);
+  return (environmentId: EnvironmentId, input: ProjectTeamMessageTaskInput) =>
+    messageTask({ environmentId, input });
 }
 
 export type ProjectTeamSettingsPatch = Omit<ProjectTeamUpdateSettingsInput, "projectId">;

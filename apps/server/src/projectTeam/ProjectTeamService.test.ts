@@ -579,14 +579,14 @@ describe("ProjectTeamService", () => {
           (yield* team.attentionSnapshot).projects[0]!.openCount,
         );
         assert.deepStrictEqual(presence.lastAction, {
-          text: `nudged #${second.task.number}`,
+          text: `nudged #${second.task.number} ${second.task.title}`,
           at: "2026-11-04T00:01:00.000Z",
         });
 
         yield* TestClock.adjust("1 minute");
         yield* team.updateTask(pm, { taskId: third.task.id, stage: "cancelled" });
         const after = (yield* team.attentionSnapshot).projects[0]!.presence;
-        assert.strictEqual(after.lastAction?.text, `cancelled #${third.task.number}`);
+        assert.strictEqual(after.lastAction?.text, `cancelled #${third.task.number} ${third.task.title}`);
         assert.strictEqual(after.running, 0);
       }),
     ),
@@ -607,7 +607,7 @@ describe("ProjectTeamService", () => {
         const snapshots = Array.from(yield* Fiber.join(fiber));
         assert.strictEqual(snapshots[0]?.projects[0]?.presence.inbox, 0);
         assert.strictEqual(snapshots[1]?.projects[0]?.presence.inbox, 1);
-        assert.strictEqual(snapshots[1]?.projects[0]?.presence.lastAction?.text, "created #1");
+        assert.strictEqual(snapshots[1]?.projects[0]?.presence.lastAction?.text, "created #1 Later");
       }),
     ),
   );

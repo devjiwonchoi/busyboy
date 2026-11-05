@@ -24,3 +24,15 @@ export function alternateComposerDispatchAction(
     ...(activeTurnDefault === undefined ? {} : { activeTurnDefault }),
   }) as ActiveTurnComposerAction;
 }
+
+/**
+ * What Enter does while a turn runs. The project manager thread always steers, so the user is
+ * never stuck waiting behind the PM's turn; Mod+Enter still queues. Other threads follow the
+ * user's setting.
+ */
+export function threadFollowUpBehavior(
+  isProjectManagerThread: boolean,
+  setting: "queue" | "steer",
+): "queue" | "steer" {
+  return isProjectManagerThread ? "steer" : setting;
+}

@@ -71,6 +71,7 @@ function summary(
     },
     decisionCards: [],
     tasks: [],
+    taskCards: [],
     ...overrides,
   };
 }
