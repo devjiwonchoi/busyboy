@@ -1298,6 +1298,7 @@ const make = Effect.gen(function* () {
                   : { kind: "emoji", emoji: input.avatarEmoji },
               voice: input.voice,
             },
+            taskKeyPrefix: input.taskKeyPrefix,
           },
           callerThreadId,
         ),
