@@ -236,6 +236,12 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "browser",
     "browser",
   ),
+  preview_sign_in: tool(["Ask", "Asking", "Asked", "to sign in to a site"], "browser", "browser"),
+  preview_history: tool(
+    ["Ask for", "Asking for", "Asked for", "browsing history"],
+    "browser",
+    "browser",
+  ),
   preview_evaluate: tool(
     ["Evaluate", "Evaluating", "Evaluated", "script in the preview browser"],
     "browser",

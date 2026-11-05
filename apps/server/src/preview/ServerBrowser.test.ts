@@ -59,6 +59,11 @@ vi.mock("./ServerBrowserContexts.ts", () => ({
   },
 }));
 
+/** The agent's own expression; protected-field reads run in an isolated world (contextId). */
+const isAgentExpression = (method: string, input: unknown) =>
+  method === "Runtime.evaluate" &&
+  (input as { contextId?: number } | undefined)?.contextId === undefined;
+
 function makeFrame() {
   const frame = {
     copy: "",
@@ -381,7 +386,7 @@ it.live.each([
       const cdp = contexts[0]!.sessions[0]!;
       const send = cdp.send.getMockImplementation()!;
       cdp.send.mockImplementation(async (operation, input) => {
-        if (operation === "Runtime.evaluate") events.push("agent acted");
+        if (isAgentExpression(operation, input)) events.push("agent acted");
         return send(operation, input);
       });
       const resumed = yield* broker
@@ -568,7 +573,11 @@ it.live(
         const started = Promise.withResolvers<void>();
         const finish = Promise.withResolvers<Record<string, unknown>>();
         const session = contexts[0]!.sessions[0]!;
-        session.send.mockImplementationOnce(async () => {
+        const send = session.send.getMockImplementation()!;
+        let blocked = false;
+        session.send.mockImplementation(async (method, input) => {
+          if (blocked || !isAgentExpression(method, input)) return send(method, input);
+          blocked = true;
           started.resolve();
           return finish.promise;
         });
@@ -628,7 +637,7 @@ it.live("reports a pending dialog without evaluating the page and resolves it ex
       const session = contexts[0]!.sessions[0]!;
       const send = session.send.getMockImplementation()!;
       session.send.mockImplementation(async (method, input) => {
-        if (method !== "Runtime.evaluate") return send(method, input);
+        if (!isAgentExpression(method, input)) return send(method, input);
         started.resolve();
         return resolvedEvaluation.promise;
       });
@@ -698,7 +707,10 @@ it.live("the owner can close a tab while an agent action waits on its dialog", (
       const page = contexts[0]!.page;
       const started = Promise.withResolvers<void>();
       const finish = Promise.withResolvers<Record<string, unknown>>();
-      contexts[0]!.sessions[0]!.send.mockImplementationOnce(async () => {
+      const session = contexts[0]!.sessions[0]!;
+      const send = session.send.getMockImplementation()!;
+      session.send.mockImplementation(async (method, input) => {
+        if (!isAgentExpression(method, input)) return send(method, input);
         started.resolve();
         return finish.promise;
       });
