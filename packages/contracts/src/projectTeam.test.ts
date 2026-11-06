@@ -2,7 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
-  autoApprovePlansActive,
+  afkActive,
+  afkPickOption,
+  afkSetting,
   DEFAULT_PROJECT_TEAM_SETTINGS,
   ProjectAttentionItem,
   ProjectManagerPresence,
@@ -348,40 +350,45 @@ describe("project team RPCs", () => {
   });
 });
 
-describe("Auto-approve plans", () => {
+describe("AFK", () => {
   const now = Date.parse("2026-11-07T10:00:00.000Z");
 
   it("is on until the end of its window and off without a setting", () => {
-    expect(autoApprovePlansActive(undefined, now)).toBe(false);
-    expect(autoApprovePlansActive({ since: "2026-11-07T09:00:00.000Z", until: null }, now)).toBe(
-      true,
-    );
+    expect(afkActive(undefined, now)).toBe(false);
+    expect(afkActive({ since: "2026-11-07T09:00:00.000Z", until: null }, now)).toBe(true);
     expect(
-      autoApprovePlansActive(
-        { since: "2026-11-07T09:00:00.000Z", until: "2026-11-07T11:00:00.000Z" },
-        now,
-      ),
+      afkActive({ since: "2026-11-07T09:00:00.000Z", until: "2026-11-07T11:00:00.000Z" }, now),
     ).toBe(true);
     expect(
-      autoApprovePlansActive(
-        { since: "2026-11-07T01:00:00.000Z", until: "2026-11-07T09:00:00.000Z" },
-        now,
-      ),
+      afkActive({ since: "2026-11-07T01:00:00.000Z", until: "2026-11-07T09:00:00.000Z" }, now),
     ).toBe(false);
+  });
+
+  it("carries a saved Auto-approve plans setting over as AFK", () => {
+    const settings = Schema.decodeUnknownSync(ProjectTeamSettings)({
+      autoApprovePlans: { since: "2026-11-07T09:00:00.000Z", until: null },
+    });
+    expect(afkSetting(settings)).toEqual({ since: "2026-11-07T09:00:00.000Z", until: null });
+  });
+
+  it("picks the recommended option, else the first, else none", () => {
+    expect(afkPickOption(["Keep it", "Split it (Recommended)"])).toBe("Split it (Recommended)");
+    expect(afkPickOption(["Keep it", "Split it"])).toBe("Keep it");
+    expect(afkPickOption([])).toBeNull();
   });
 
   it("can be set by the app but not by the PM's team_settings_update", () => {
     expect(
       Schema.decodeUnknownSync(ProjectTeamUpdateSettingsInput)({
         projectId: "project-1",
-        autoApprovePlans: { hours: 8 },
-      }).autoApprovePlans,
+        afk: { hours: 8 },
+      }).afk,
     ).toEqual({ hours: 8 });
     const pmInput = Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput)({
       sitrepNotify: true,
-      autoApprovePlans: { hours: null },
+      afk: { hours: null },
     });
-    expect("autoApprovePlans" in pmInput).toBe(false);
+    expect("afk" in pmInput).toBe(false);
   });
 });
 

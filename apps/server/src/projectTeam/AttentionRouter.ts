@@ -33,10 +33,13 @@ export const PM_RELAY_ANSWER_PREFIX = "[User's chat answer, relayed by BusyBoy P
 
 /**
  * Prefix of the message a lead gets when the server approved its plan because the user
- * turned on "Auto-approve plans". Only the server sends it; no agent tool can.
+ * is AFK. Only the server sends it; no agent tool can.
  */
-export const AUTO_APPROVED_PLAN_PREFIX =
-  '[Plan auto-approved by the user\'s "Auto-approve plans" setting]';
+export const AUTO_APPROVED_PLAN_PREFIX = "[Plan auto-approved (AFK): the user is away]";
+/** Prefix of an answer the server gave for the user while AFK was on. */
+export const AFK_ANSWER_PREFIX = "[Auto-answered (AFK): the user is away]";
+/** Prefix of the note the PM and leads get when the user turns AFK on or off. */
+export const AFK_NOTICE_PREFIX = "[AFK]";
 
 /** Prefix of the note a lead gets when the PM closes its question without an answer. */
 export const PM_DISMISS_PREFIX = "[Question closed by BusyBoy PM]";
@@ -57,7 +60,12 @@ export function relayedAnswerText(
   answeredBy: ProjectAttentionAnsweredBy,
 ): string {
   const trimmed = trimQuestion(question);
-  const prefix = answeredBy === "user" ? USER_ANSWER_PREFIX : PM_RELAY_ANSWER_PREFIX;
+  const prefix =
+    answeredBy === "user"
+      ? USER_ANSWER_PREFIX
+      : answeredBy === "afk"
+        ? AFK_ANSWER_PREFIX
+        : PM_RELAY_ANSWER_PREFIX;
   return `${prefix} ${trimmed} → ${answer}`;
 }
 
@@ -78,7 +86,7 @@ export class AttentionRouter extends Context.Service<
       readonly item: ProjectAttentionItem;
       readonly answer: string;
       readonly senderThreadId: ThreadId;
-      /** "user" for a card click; "pm" for a relay the caller already checked. */
+      /** "user" for a card click; "pm" for a relay the caller already checked; "afk" for the AFK sweep. */
       readonly answeredBy: ProjectAttentionAnsweredBy;
     }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /**

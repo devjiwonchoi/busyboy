@@ -282,7 +282,7 @@ import {
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { SitrepIntervalPicker, SitrepSettingsContent } from "./SitrepIntervalPicker";
-import { AutoApprovePlansBanner } from "./AutoApprovePlans";
+import { AfkBanner } from "./Afk";
 import { CollapsedComposerAction } from "./CollapsedComposerAction";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
@@ -6480,7 +6480,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       {...threadContextDropTargetProps()}
     >
       {projectManager && projectManagerRef ? (
-        <AutoApprovePlansBanner projectRef={projectManagerRef} summary={projectManager} />
+        <AfkBanner projectRef={projectManagerRef} summary={projectManager} />
       ) : null}
       {composerControlsCollapsed && restingControlsHost
         ? createPortal(

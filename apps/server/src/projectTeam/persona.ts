@@ -109,13 +109,21 @@ The project's memory when this session started. Your own memory_write and memory
 ${memoryPromptSection(memory)}
 `;
 
-/** The PM instructions for a persona, followed by the project memory when it is given. */
+/** The rule agents follow while the user is AFK; also part of the lead and PM prompts. */
+export const AFK_AGENT_RULE =
+  'The user is away (AFK). Do not wait on the user: take your recommended option and record the assumption in a task note. Questions and plan approvals you still raise are answered for the user after a minute with the "(Recommended)" option, or the first one. Anything irreversible or that only a person can do (merging, secrets, payments, deleting data) still waits: raise it as kind "blocker", which AFK never answers.';
+
+/** The PM instructions for a persona, then the project memory and the AFK rule when given. */
 export const personaInstructions = (
   persona: ProjectManagerPersona,
   memory?: ReadonlyArray<ProjectMemoryEntry>,
+  /** The AFK rule while the user is away when the session opens. */
+  afkRule?: string,
 ): string =>
   projectManagerInstructions({
     name: persona.name,
     voice: voiceText(persona.voice, persona.voiceCustom),
     voiceIsUserWords: isUserWordsVoice(persona.voice, persona.voiceCustom),
-  }) + (memory === undefined ? "" : pmMemorySection(memory));
+  }) +
+  (memory === undefined ? "" : pmMemorySection(memory)) +
+  (afkRule === undefined ? "" : `\n### The user is AFK\n\n${afkRule}\n`);

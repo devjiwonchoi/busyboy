@@ -7,6 +7,7 @@ import {
 import { useState } from "react";
 
 import { Button } from "../ui/button";
+import { AFK_ANSWERED_LABEL } from "./Afk";
 import { PlanApprovalModal } from "./PlanApprovalModal";
 
 const OUTCOME_LABEL: Record<PlanApprovalOutcome, string> = {
@@ -67,6 +68,9 @@ export function PlanApprovalCard({
             ·
           </span>
           <span data-plan-outcome={outcome}>{OUTCOME_LABEL[outcome]}</span>
+          {card.item.answeredBy === "afk" ? (
+            <span className="text-muted-foreground text-xs">{AFK_ANSWERED_LABEL}</span>
+          ) : null}
           <Button
             size="xs"
             variant="ghost-muted"

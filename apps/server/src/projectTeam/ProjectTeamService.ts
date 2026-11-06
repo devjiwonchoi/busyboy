@@ -90,7 +90,13 @@ import {
   formatTaskKey,
   ProviderInstanceId,
   ThreadId,
-  autoApprovePlansActive,
+  AFK_FREE_FORM_ANSWER,
+  AFK_GRACE_MS,
+  MAX_AFK_ANSWERS_IN_SUMMARY,
+  afkActive,
+  afkAnswerEventBody,
+  afkPickOption,
+  afkSetting,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -114,6 +120,7 @@ import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.t
 import type { ProjectTeamRepositoryError } from "../persistence/Errors.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
@@ -123,11 +130,12 @@ import {
   isoFromMillis,
   isoMillis,
   makeIdGenerator,
+  makePeriodicGate,
   nowIso,
   orTeamError,
   teamError,
 } from "./common.ts";
-import { isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
+import { AFK_AGENT_RULE, isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
@@ -424,26 +432,38 @@ export function describeManagerAction(
     case "outcome":
       return `recorded an outcome for ${task}`;
     case "preference_changed":
-      return event.body.startsWith(AUTO_APPROVE_PLANS_EVENT_PREFIX)
-        ? "changed auto-approve plans"
+      return event.body.startsWith(AFK_EVENT_PREFIX) ||
+        event.body.startsWith(LEGACY_AUTO_APPROVE_PLANS_EVENT_PREFIX)
+        ? "changed AFK"
         : "changed the sitrep interval";
+    case "afk_answer":
+      return `auto-answered a question for ${task} (AFK)`;
   }
 }
 
-/** Journal text for turning "Auto-approve plans" on or off. */
-export const AUTO_APPROVE_PLANS_EVENT_PREFIX = "Auto-approve plans";
+/** Journal text for turning AFK on or off. */
+export const AFK_EVENT_PREFIX = "AFK";
+/** Journal prefix used before AFK replaced "Auto-approve plans". */
+const LEGACY_AUTO_APPROVE_PLANS_EVENT_PREFIX = "Auto-approve plans";
 
-export function autoApprovePlansEventBody(
-  setting: ProjectTeamSettings["autoApprovePlans"],
-): string {
-  if (setting === undefined) return `${AUTO_APPROVE_PLANS_EVENT_PREFIX} turned off by you`;
+export function afkEventBody(setting: ProjectTeamSettings["afk"]): string {
+  if (setting === undefined) return `${AFK_EVENT_PREFIX} turned off by you`;
   return setting.until === null
-    ? `${AUTO_APPROVE_PLANS_EVENT_PREFIX} turned on by you until you turn it off`
-    : `${AUTO_APPROVE_PLANS_EVENT_PREFIX} turned on by you until ${setting.until}`;
+    ? `${AFK_EVENT_PREFIX} turned on by you until you turn it off`
+    : `${AFK_EVENT_PREFIX} turned on by you until ${setting.until}`;
 }
 
 export function autoApprovedPlanText(task: Pick<ProjectTask, "number" | "title">): string {
-  return `${AttentionRouter.AUTO_APPROVED_PLAN_PREFIX} Your plan for #${task.number} ${task.title} → Approve and start. The task is now running; go on with the todos.`;
+  return `${AttentionRouter.AUTO_APPROVED_PLAN_PREFIX} Your plan for #${task.number} ${task.title} → Approve and start. The task is now running; go on with the todos, and record the assumptions you make.`;
+}
+
+/** What the PM and running leads hear when the user turns AFK on or off. */
+export function afkChangedText(setting: ProjectTeamSettings["afk"]): string {
+  if (setting === undefined) {
+    return `${AttentionRouter.AFK_NOTICE_PREFIX} The user turned AFK off and is back. Questions wait for the user again.`;
+  }
+  const until = setting.until === null ? "until they turn it off" : `until ${setting.until}`;
+  return `${AttentionRouter.AFK_NOTICE_PREFIX} The user turned AFK on ${until}. ${AFK_AGENT_RULE}`;
 }
 
 export interface PersonaPatch {
@@ -619,6 +639,8 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamRequestSitrepInput,
     ) => Effect.Effect<ProjectTeamRequestSitrepResult, ProjectTeamError>;
     readonly attentionSnapshot: Effect.Effect<ProjectTeamAttentionSnapshot, ProjectTeamError>;
+    /** One pass over every project: answers what waited past the grace period while AFK is on. */
+    readonly afkSweep: Effect.Effect<void>;
     /** The current snapshot, then a fresh one after every change. */
     readonly streamAttention: Stream.Stream<ProjectTeamAttentionSnapshot, ProjectTeamError>;
 
@@ -798,8 +820,8 @@ const make = Effect.gen(function* () {
     });
 
   /**
-   * Approves a plan that waits for approval, as the user's "Auto-approve plans" setting
-   * allows: the task moves to running, the lead hears it, and the journal records it.
+   * Approves a plan that waits for approval while the user is AFK: the task moves to
+   * running, the lead hears it, and the journal records it.
    */
   const autoApprovePlan = (task: ProjectTask) =>
     Effect.gen(function* () {
@@ -817,15 +839,18 @@ const make = Effect.gen(function* () {
           id: item.id,
           answer: PLAN_APPROVAL_START,
           answeredAt: now,
-          answeredBy: "user",
+          answeredBy: "afk",
         });
       }
       yield* appendEvent(running, "stage_changed", "awaiting_approval → running", null);
       yield* appendEvent(
         running,
-        "note",
-        `Plan for #${running.number} auto-approved ("Approve and start") by the user's Auto-approve plans setting.`,
-        null,
+        "afk_answer",
+        afkAnswerEventBody(
+          `Approve the plan for #${running.number} ${running.title}?`,
+          PLAN_APPROVAL_START,
+        ),
+        running.leadThreadId,
       );
       if (running.leadThreadId !== null) {
         const key = `project-team:auto-approve:${yield* newId(running.id)}`;
@@ -844,16 +869,108 @@ const make = Effect.gen(function* () {
       return running;
     });
 
-  /** Returns the approved task, or null when the setting is off or has expired. */
-  const autoApprovePlanIfOn = (task: ProjectTask) =>
+  /** The project's AFK setting when it is on now, else null. */
+  const activeAfk = (settings: ProjectTeamSettings) =>
+    Effect.map(nowIso, (now) => {
+      const setting = afkSetting(settings);
+      return afkActive(setting, Date.parse(now)) ? (setting ?? null) : null;
+    });
+
+  /**
+   * While the user is AFK, answers what has waited longer than the grace period: plan
+   * approvals ("Approve and start") and decision cards (the recommended option, else the
+   * first, else the AFK free-form reply). Blockers always wait for the user.
+   */
+  const afkSweepProject = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
     Effect.gen(function* () {
-      const manager = yield* repository.getManager(task.projectId);
-      if (Option.isNone(manager)) return null;
-      const now = yield* nowIso;
-      if (!autoApprovePlansActive(manager.value.settings.autoApprovePlans, Date.parse(now))) {
-        return null;
+      if ((yield* activeAfk(manager.settings)) === null) return;
+      const projectId = manager.projectId;
+      const nowMs = isoMillis(yield* nowIso);
+      const due = (at: string) => nowMs - isoMillis(at) >= AFK_GRACE_MS;
+      let changed = false;
+      const waitingPlans = yield* repository.listTasks({
+        projectId,
+        stages: ["awaiting_approval"],
+      });
+      for (const task of waitingPlans) {
+        if (!due(task.stageChangedAt)) continue;
+        yield* autoApprovePlan(task);
+        changed = true;
       }
-      return yield* autoApprovePlan(task);
+      const open = yield* repository.listOpenAttentionItems({ projectId });
+      // Plan cards were answered with their tasks above; blockers wait for the user.
+      for (const item of open) {
+        if (item.kind !== "decision" || !due(item.createdAt)) continue;
+        const answer = afkPickOption(item.options) ?? AFK_FREE_FORM_ANSWER;
+        yield* router.answer({
+          item,
+          answer,
+          senderThreadId: manager.threadId,
+          answeredBy: "afk",
+        });
+        yield* repository.appendTaskEvent({
+          id: ProjectTaskEventId.make(yield* newId("project-event")),
+          projectId,
+          taskId: item.taskId,
+          kind: "afk_answer",
+          body: afkAnswerEventBody(item.question, answer),
+          actorThreadId: item.askerThreadId,
+          createdAt: yield* nowIso,
+        });
+        changed = true;
+      }
+      if (changed) yield* router.publish(projectId);
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("project team AFK sweep failed", {
+          projectId: manager.projectId,
+          cause,
+        }),
+      ),
+    );
+
+  const afkSweep: ProjectTeamService["Service"]["afkSweep"] = repository.listManagers().pipe(
+    Effect.flatMap((managers) => Effect.forEach(managers, afkSweepProject, { discard: true })),
+    Effect.catchCause((cause) => Effect.logWarning("project team AFK sweep failed", { cause })),
+  );
+
+  /** Tells the live PM and every running lead that AFK changed; their prompts predate it. */
+  const announceAfk = (
+    projectId: ProjectId,
+    managerThreadId: ThreadId,
+    setting: ProjectTeamSettings["afk"],
+    now: string,
+  ) =>
+    Effect.gen(function* () {
+      const text = afkChangedText(setting);
+      const tasks = yield* repository.listTasks({
+        projectId,
+        stages: SitrepScheduler.ACTIVE_TASK_STAGES,
+      });
+      const targets = [
+        managerThreadId,
+        ...tasks.flatMap((task) => (task.leadThreadId === null ? [] : [task.leadThreadId])),
+      ];
+      for (const threadId of targets) {
+        const key = `project-team:afk:${threadId}:${now}`;
+        yield* threads
+          .dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make(key),
+            threadId,
+            messageId: MessageId.make(key),
+            text,
+            attachments: [],
+            dispatchMode: { type: "queue_after_active" },
+            createdBy: "system",
+            creationSource: "server",
+          })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("could not tell a thread that AFK changed", { threadId, cause }),
+            ),
+          );
+      }
     });
 
   const activeTasks = (projectId: ProjectId) =>
@@ -1058,7 +1175,15 @@ const make = Effect.gen(function* () {
           // A restart must not reuse the first lead's request id, or it gets that lead back.
           const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
           const lead = yield* delegate({
-            task: buildTaskLeadPrompt({ task, key, spec, resume, memory, otherTasks: active }),
+            task: buildTaskLeadPrompt({
+              task,
+              key,
+              spec,
+              resume,
+              memory,
+              otherTasks: active,
+              ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
+            }),
             title: `${key} ${task.title}`,
             role: "implementation",
             isolation: "worktree",
@@ -1240,13 +1365,6 @@ const make = Effect.gen(function* () {
         yield* sitreps.noteMilestone(role.projectId);
       }
       if (stageChanged) yield* noteIdleMilestone(role.projectId, task.stage);
-      if (stageChanged && updated.stage === "awaiting_approval") {
-        const approved = yield* autoApprovePlanIfOn(updated);
-        if (approved !== null) {
-          yield* router.publish(role.projectId);
-          return { task: approved };
-        }
-      }
       if (stageChanged && FinishedTaskCleanup.isFinishedStage(updated.stage)) {
         // A PM cancel stops the lead now; otherwise the lead's turn ends first.
         yield* finishedTasks.archiveLead(updated, {
@@ -1462,7 +1580,7 @@ const make = Effect.gen(function* () {
       readonly enabled?: boolean | undefined;
       readonly taskKeyPrefix?: string | undefined;
       /** User-only; updateSettingsAsManager never passes it. */
-      readonly autoApprovePlans?: { readonly hours: number | null } | null | undefined;
+      readonly afk?: { readonly hours: number | null } | null | undefined;
     },
     actorThreadId: ThreadId | null,
   ) =>
@@ -1483,25 +1601,25 @@ const make = Effect.gen(function* () {
           const persona = hasPersonaChange(personaPatch)
             ? mergePersona(previousPersona, personaPatch)
             : previousPersona;
+          // The legacy "Auto-approve plans" key is read as AFK and never written back.
           const {
             quietHours: _previousQuietHours,
-            autoApprovePlans: previousAutoApprove,
+            afk: _previousAfk,
+            autoApprovePlans: _legacyAutoApprove,
             ...current
           } = manager.settings;
-          const autoApprovePlans =
-            patch.autoApprovePlans === undefined
-              ? previousAutoApprove
-              : patch.autoApprovePlans === null
+          const afk =
+            patch.afk === undefined
+              ? afkSetting(manager.settings)
+              : patch.afk === null
                 ? undefined
                 : {
                     since: now,
                     until:
-                      patch.autoApprovePlans.hours === null
+                      patch.afk.hours === null
                         ? null
                         : DateTime.formatIso(
-                            DateTime.add(DateTime.makeUnsafe(now), {
-                              hours: patch.autoApprovePlans.hours,
-                            }),
+                            DateTime.add(DateTime.makeUnsafe(now), { hours: patch.afk.hours }),
                           ),
                   };
           const quietHours =
@@ -1521,7 +1639,7 @@ const make = Effect.gen(function* () {
             persona,
             ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
             ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
-            ...(autoApprovePlans === undefined ? {} : { autoApprovePlans }),
+            ...(afk === undefined ? {} : { afk }),
             // Only setting the interval by hand stops it adapting, for good; other fields
             // keep the pin as is.
             ...(patch.sitrepIntervalMinutes === undefined ? {} : { intervalPinnedAt: now }),
@@ -1562,24 +1680,19 @@ const make = Effect.gen(function* () {
           createdAt: now,
         });
       }
-      if (patch.autoApprovePlans !== undefined) {
+      if (patch.afk !== undefined) {
         yield* repository.appendTaskEvent({
           id: ProjectTaskEventId.make(yield* newId("project-event")),
           projectId,
           taskId: null,
           kind: "preference_changed",
-          body: autoApprovePlansEventBody(settings.autoApprovePlans),
+          body: afkEventBody(settings.afk),
           actorThreadId,
           createdAt: now,
         });
-        // Plans that were already waiting go ahead too.
-        if (autoApprovePlansActive(settings.autoApprovePlans, Date.parse(now))) {
-          const waiting = yield* repository.listTasks({
-            projectId,
-            stages: ["awaiting_approval"],
-          });
-          for (const task of waiting) yield* autoApprovePlan(task);
-        }
+        yield* announceAfk(projectId, manager.threadId, settings.afk, now);
+        // Questions that already waited past the grace period are answered now.
+        if (settings.afk !== undefined) yield* afkSweepProject({ ...manager, settings });
       }
       yield* router.publish(projectId);
       return { projectId, settings };
@@ -1647,19 +1760,15 @@ const make = Effect.gen(function* () {
         askerThreadId: callerThreadId,
         specVersion: spec.version,
       });
-      const waiting = yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
+      yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
       yield* appendEvent(
         task,
         "note",
         `Asked the user to approve the plan (spec v${spec.version}).`,
         callerThreadId,
       );
-      // With "Auto-approve plans" on, the card is answered and the task runs right away.
-      const approved = yield* autoApprovePlanIfOn(waiting);
-      if (approved === null) return { item };
-      yield* router.publish(task.projectId);
-      const answered = yield* repository.getAttentionItem(item.id);
-      return { item: Option.getOrElse(answered, () => item) };
+      // While the user is AFK, the AFK sweep approves it after the grace period.
+      return { item };
     });
 
   /** Moves a task to a new stage and logs it; no-op when it is already there. */
@@ -2182,6 +2291,20 @@ const make = Effect.gen(function* () {
           const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
           const decisionCards = yield* listDecisionCards(projectId, open);
           const tasks = yield* repository.listTasks({ projectId });
+          const afk = yield* activeAfk(manager.settings);
+          const afkAnswers =
+            afk === null
+              ? []
+              : (yield* repository.listProjectEventsSince({ projectId, since: afk.since }))
+                  .filter((event) => event.kind === "afk_answer")
+                  .slice(-MAX_AFK_ANSWERS_IN_SUMMARY)
+                  .map((event) => ({
+                    id: event.id,
+                    at: event.createdAt,
+                    threadId: event.actorThreadId,
+                    taskId: event.taskId,
+                    text: event.body,
+                  }));
           return {
             projectId,
             pmThreadId: manager.threadId,
@@ -2197,6 +2320,7 @@ const make = Effect.gen(function* () {
             decisionCards,
             taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
             lastMessage: yield* readManagerLastMessage(manager.threadId),
+            afkAnswers,
             tasks: tasks.map((task) => ({
               id: task.id,
               number: task.number,
@@ -2289,6 +2413,7 @@ const make = Effect.gen(function* () {
     deleteMemory,
     requestSitrep,
     attentionSnapshot,
+    afkSweep,
     streamAttention,
     recordOutcome,
   } satisfies ProjectTeamService["Service"];
@@ -2301,4 +2426,14 @@ export const layerWithDependencies = layer.pipe(
   Layer.provideMerge(FinishedTaskCleanup.layer),
   Layer.provideMerge(SitrepScheduler.layer),
   Layer.provideMerge(AttentionRouter.layer),
+);
+
+/** Answers questions for an AFK user a little after their grace period ends. */
+export const layerAfkWorker = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService;
+    const scheduler = yield* Scheduler.Scheduler;
+    const every10Seconds = yield* makePeriodicGate(10_000);
+    yield* scheduler.register("project-team-afk-sweep", every10Seconds(team.afkSweep));
+  }),
 );

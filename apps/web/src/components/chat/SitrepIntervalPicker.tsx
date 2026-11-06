@@ -20,7 +20,7 @@ import {
   ComposerControlIcon,
   type ComposerControlSize,
 } from "./ComposerControl";
-import { AutoApprovePlansSettings } from "./AutoApprovePlans";
+import { AfkSettings } from "./Afk";
 import { useComposerMenuProps } from "./composerEventScope";
 import { useComposerMenuState } from "./useComposerMenuState";
 
@@ -120,7 +120,7 @@ export function SitrepSettingsContent({ projectRef, summary }: SitrepControlProp
         />
       </label>
       <Separator className="my-1" />
-      <AutoApprovePlansSettings projectRef={projectRef} summary={summary} />
+      <AfkSettings projectRef={projectRef} summary={summary} />
     </div>
   );
 }

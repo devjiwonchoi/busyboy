@@ -3,6 +3,7 @@ import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
 import * as PullRequestWatchReactor from "./orchestration-v2/PullRequestWatchReactor.ts";
+import * as AfkReactor from "./orchestration-v2/AfkReactor.ts";
 import * as DelegatedTaskQuestionReactor from "./orchestration-v2/DelegatedTaskQuestionReactor.ts";
 import * as ProjectTeamRepository from "./persistence/ProjectTeamRepository.ts";
 import * as ContextCare from "./projectTeam/ContextCare.ts";
@@ -458,6 +459,9 @@ const layerProjectTeam = Layer.mergeAll(
   SitrepScheduler.layerWorker,
   TaskOutcomeReactor.layerWorker,
   StalledTaskSweep.layerWorker,
+  ProjectTeamService.layerAfkWorker,
+  // Needs the team's AttentionRouter, so it starts here rather than beside DelegatedTaskQuestionReactor.
+  AfkReactor.layerWorker,
   DefaultManagerReactor.layerWorker,
   ContextCare.layerWorker,
   FinishedTaskCleanup.layerWorker,
