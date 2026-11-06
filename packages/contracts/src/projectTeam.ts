@@ -396,6 +396,31 @@ export const ProjectManagerPersona = Schema.Struct({
 });
 export type ProjectManagerPersona = typeof ProjectManagerPersona.Type;
 
+/**
+ * "Auto-approve plans": while on, the server approves any plan that waits for approval.
+ * Only the user can set it, through the app; agent tools never accept it.
+ */
+export const ProjectTeamAutoApprovePlans = Schema.Struct({
+  since: IsoDateTime,
+  /** null: on until the user turns it off. */
+  until: Schema.NullOr(IsoDateTime),
+});
+export type ProjectTeamAutoApprovePlans = typeof ProjectTeamAutoApprovePlans.Type;
+
+/** Longest auto-approve window the app offers, in hours. */
+export const MAX_AUTO_APPROVE_PLANS_HOURS = 24 * 7;
+
+/** Whether auto-approve is on at `nowMs`. An expired window counts as off. */
+export function autoApprovePlansActive(
+  setting: ProjectTeamAutoApprovePlans | undefined,
+  nowMs: number,
+): boolean {
+  if (setting === undefined) return false;
+  if (setting.until === null) return true;
+  const until = Date.parse(setting.until);
+  return Number.isFinite(until) && until > nowMs;
+}
+
 export const ProjectTeamSettings = Schema.Struct({
   maxConcurrentTasks: ProjectTeamMaxConcurrentTasks.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS)),
@@ -412,6 +437,8 @@ export const ProjectTeamSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /** Absent until the user picks one; the server derives it from the project's name. */
   taskKeyPrefix: Schema.optionalKey(ProjectTaskKeyPrefix),
+  /** Absent when off. Only the user can set it, through the app. */
+  autoApprovePlans: Schema.optionalKey(ProjectTeamAutoApprovePlans),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -933,6 +960,19 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   ),
   enabled: Schema.optional(Schema.Boolean),
   taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
+  /**
+   * User-only: turns "Auto-approve plans" on for `hours` (null = until turned off), or off
+   * with null. Deliberately absent from team_settings_update so no agent can set it.
+   */
+  autoApprovePlans: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        hours: Schema.NullOr(
+          Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_AUTO_APPROVE_PLANS_HOURS })),
+        ),
+      }),
+    ),
+  ),
 });
 export type ProjectTeamUpdateSettingsInput = typeof ProjectTeamUpdateSettingsInput.Type;
 

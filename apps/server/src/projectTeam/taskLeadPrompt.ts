@@ -13,7 +13,7 @@ export function nextStepHint(stage: ProjectTaskStage): string {
     case "planning":
       return 'Write the plan into the spec with task_spec_write, then call task_update(stage: "running", planSummary) and start implementing.';
     case "awaiting_approval":
-      return "Wait for the user's plan approval; change the plan if they leave feedback.";
+      return "Wait for the user's plan approval, or the server's auto-approval if the user turned it on; change the plan if they leave feedback.";
     case "running":
       return "Implement the plan, checking off todos with task_todo_set and fanning out independent parts with delegate_task, then run the tests for what changed.";
     case "in_review":

@@ -31,6 +31,13 @@ export const USER_ANSWER_PREFIX = "[User answer via BusyBoy]";
 /** Prefix of an answer the PM relayed from the user's chat after the server checked it. */
 export const PM_RELAY_ANSWER_PREFIX = "[User's chat answer, relayed by BusyBoy PM]";
 
+/**
+ * Prefix of the message a lead gets when the server approved its plan because the user
+ * turned on "Auto-approve plans". Only the server sends it; no agent tool can.
+ */
+export const AUTO_APPROVED_PLAN_PREFIX =
+  '[Plan auto-approved by the user\'s "Auto-approve plans" setting]';
+
 /** Prefix of the note a lead gets when the PM closes its question without an answer. */
 export const PM_DISMISS_PREFIX = "[Question closed by BusyBoy PM]";
 

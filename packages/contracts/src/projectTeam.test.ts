@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  autoApprovePlansActive,
   DEFAULT_PROJECT_TEAM_SETTINGS,
   ProjectAttentionItem,
   ProjectManagerPresence,
@@ -326,5 +327,42 @@ describe("project team RPCs", () => {
     ]) {
       expect(WsRpcGroup.requests.has(method)).toBe(true);
     }
+  });
+});
+
+describe("Auto-approve plans", () => {
+  const now = Date.parse("2026-11-07T10:00:00.000Z");
+
+  it("is on until the end of its window and off without a setting", () => {
+    expect(autoApprovePlansActive(undefined, now)).toBe(false);
+    expect(autoApprovePlansActive({ since: "2026-11-07T09:00:00.000Z", until: null }, now)).toBe(
+      true,
+    );
+    expect(
+      autoApprovePlansActive(
+        { since: "2026-11-07T09:00:00.000Z", until: "2026-11-07T11:00:00.000Z" },
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      autoApprovePlansActive(
+        { since: "2026-11-07T01:00:00.000Z", until: "2026-11-07T09:00:00.000Z" },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("can be set by the app but not by the PM's team_settings_update", () => {
+    expect(
+      Schema.decodeUnknownSync(ProjectTeamUpdateSettingsInput)({
+        projectId: "project-1",
+        autoApprovePlans: { hours: 8 },
+      }).autoApprovePlans,
+    ).toEqual({ hours: 8 });
+    const pmInput = Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput)({
+      sitrepNotify: true,
+      autoApprovePlans: { hours: null },
+    });
+    expect("autoApprovePlans" in pmInput).toBe(false);
   });
 });

@@ -87,6 +87,7 @@ import {
   formatTaskKey,
   ProviderInstanceId,
   ThreadId,
+  autoApprovePlansActive,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -419,8 +420,26 @@ export function describeManagerAction(
     case "outcome":
       return `recorded an outcome for ${task}`;
     case "preference_changed":
-      return "changed the sitrep interval";
+      return event.body.startsWith(AUTO_APPROVE_PLANS_EVENT_PREFIX)
+        ? "changed auto-approve plans"
+        : "changed the sitrep interval";
   }
+}
+
+/** Journal text for turning "Auto-approve plans" on or off. */
+export const AUTO_APPROVE_PLANS_EVENT_PREFIX = "Auto-approve plans";
+
+export function autoApprovePlansEventBody(
+  setting: ProjectTeamSettings["autoApprovePlans"],
+): string {
+  if (setting === undefined) return `${AUTO_APPROVE_PLANS_EVENT_PREFIX} turned off by you`;
+  return setting.until === null
+    ? `${AUTO_APPROVE_PLANS_EVENT_PREFIX} turned on by you until you turn it off`
+    : `${AUTO_APPROVE_PLANS_EVENT_PREFIX} turned on by you until ${setting.until}`;
+}
+
+export function autoApprovedPlanText(task: Pick<ProjectTask, "number" | "title">): string {
+  return `${AttentionRouter.AUTO_APPROVED_PLAN_PREFIX} Your plan for #${task.number} ${task.title} → Approve and start. The task is now running; go on with the todos.`;
 }
 
 export interface PersonaPatch {
@@ -772,6 +791,50 @@ const make = Effect.gen(function* () {
         });
       }
       return updated.value;
+    });
+
+  /**
+   * Approves a plan that waits for approval, as the user's "Auto-approve plans" setting
+   * allows: the task moves to running, the lead hears it, and the journal records it.
+   */
+  const autoApprovePlan = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      if (task.stage !== "awaiting_approval") return task;
+      const running = yield* setTask({ id: task.id, stage: "running" });
+      yield* appendEvent(running, "stage_changed", "awaiting_approval → running", null);
+      yield* appendEvent(
+        running,
+        "note",
+        `Plan for #${running.number} auto-approved ("Approve and start") by the user's Auto-approve plans setting.`,
+        null,
+      );
+      if (running.leadThreadId !== null) {
+        const key = `project-team:auto-approve:${yield* newId(running.id)}`;
+        yield* threads.sendToThread({
+          projectId: running.projectId,
+          commandId: CommandId.make(key),
+          threadId: running.leadThreadId,
+          messageId: MessageId.make(key),
+          text: autoApprovedPlanText(running),
+          attachments: [],
+          mode: "auto",
+          createdBy: "agent",
+          creationSource: "server",
+        });
+      }
+      return running;
+    });
+
+  /** Returns the approved task, or null when the setting is off or has expired. */
+  const autoApprovePlanIfOn = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      const manager = yield* repository.getManager(task.projectId);
+      if (Option.isNone(manager)) return null;
+      const now = yield* nowIso;
+      if (!autoApprovePlansActive(manager.value.settings.autoApprovePlans, Date.parse(now))) {
+        return null;
+      }
+      return yield* autoApprovePlan(task);
     });
 
   const activeTasks = (projectId: ProjectId) =>
@@ -1158,6 +1221,13 @@ const make = Effect.gen(function* () {
         yield* sitreps.noteMilestone(role.projectId);
       }
       if (stageChanged) yield* noteIdleMilestone(role.projectId, task.stage);
+      if (stageChanged && updated.stage === "awaiting_approval") {
+        const approved = yield* autoApprovePlanIfOn(updated);
+        if (approved !== null) {
+          yield* router.publish(role.projectId);
+          return { task: approved };
+        }
+      }
       if (stageChanged && FinishedTaskCleanup.isFinishedStage(updated.stage)) {
         // A PM cancel stops the lead now; otherwise the lead's turn ends first.
         yield* finishedTasks.archiveLead(updated, {
@@ -1372,6 +1442,8 @@ const make = Effect.gen(function* () {
       readonly persona?: PersonaPatch | undefined;
       readonly enabled?: boolean | undefined;
       readonly taskKeyPrefix?: string | undefined;
+      /** User-only; updateSettingsAsManager never passes it. */
+      readonly autoApprovePlans?: { readonly hours: number | null } | null | undefined;
     },
     actorThreadId: ThreadId | null,
   ) =>
@@ -1392,7 +1464,27 @@ const make = Effect.gen(function* () {
           const persona = hasPersonaChange(personaPatch)
             ? mergePersona(previousPersona, personaPatch)
             : previousPersona;
-          const { quietHours: _previousQuietHours, ...current } = manager.settings;
+          const {
+            quietHours: _previousQuietHours,
+            autoApprovePlans: previousAutoApprove,
+            ...current
+          } = manager.settings;
+          const autoApprovePlans =
+            patch.autoApprovePlans === undefined
+              ? previousAutoApprove
+              : patch.autoApprovePlans === null
+                ? undefined
+                : {
+                    since: now,
+                    until:
+                      patch.autoApprovePlans.hours === null
+                        ? null
+                        : DateTime.formatIso(
+                            DateTime.add(DateTime.makeUnsafe(now), {
+                              hours: patch.autoApprovePlans.hours,
+                            }),
+                          ),
+                  };
           const quietHours =
             patch.quietHours === undefined
               ? manager.settings.quietHours
@@ -1410,6 +1502,7 @@ const make = Effect.gen(function* () {
             persona,
             ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
             ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
+            ...(autoApprovePlans === undefined ? {} : { autoApprovePlans }),
             // Only setting the interval by hand stops it adapting, for good; other fields
             // keep the pin as is.
             ...(patch.sitrepIntervalMinutes === undefined ? {} : { intervalPinnedAt: now }),
@@ -1449,6 +1542,25 @@ const make = Effect.gen(function* () {
           actorThreadId,
           createdAt: now,
         });
+      }
+      if (patch.autoApprovePlans !== undefined) {
+        yield* repository.appendTaskEvent({
+          id: ProjectTaskEventId.make(yield* newId("project-event")),
+          projectId,
+          taskId: null,
+          kind: "preference_changed",
+          body: autoApprovePlansEventBody(settings.autoApprovePlans),
+          actorThreadId,
+          createdAt: now,
+        });
+        // Plans that were already waiting go ahead too.
+        if (autoApprovePlansActive(settings.autoApprovePlans, Date.parse(now))) {
+          const waiting = yield* repository.listTasks({
+            projectId,
+            stages: ["awaiting_approval"],
+          });
+          for (const task of waiting) yield* autoApprovePlan(task);
+        }
       }
       yield* router.publish(projectId);
       return { projectId, settings };

@@ -282,6 +282,7 @@ import {
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { SitrepIntervalPicker, SitrepSettingsContent } from "./SitrepIntervalPicker";
+import { AutoApprovePlansBanner } from "./AutoApprovePlans";
 import { CollapsedComposerAction } from "./CollapsedComposerAction";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
@@ -6462,6 +6463,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
+      {projectManager && projectManagerRef ? (
+        <AutoApprovePlansBanner projectRef={projectManagerRef} summary={projectManager} />
+      ) : null}
       {composerControlsCollapsed && restingControlsHost
         ? createPortal(
             <div
