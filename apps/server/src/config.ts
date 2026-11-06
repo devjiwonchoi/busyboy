@@ -75,6 +75,9 @@ export class ServerConfig extends Context.Service<
     readonly startupPresentation: StartupPresentation;
     readonly desktopBootstrapToken: string | undefined;
     readonly desktopBootstrapSecret?: string | undefined;
+    // 32-byte key from the desktop's OS keychain. When present, the secret
+    // store encrypts every secret at rest with it.
+    readonly secretStoreKey?: Redacted.Redacted<Uint8Array> | undefined;
     readonly shellEnvironmentPrepared?: boolean | undefined;
     readonly desktopTelemetryFd?: number | undefined;
     readonly desktopTelemetryControlFd?: number | undefined;
@@ -92,7 +95,8 @@ export class ServerConfig extends Context.Service<
   static readonly layerTest = (
     cwd: string,
     baseDirOrPrefix: string | { readonly prefix: string },
-  ) => layerTest(cwd, baseDirOrPrefix);
+    options?: TestConfigOptions,
+  ) => layerTest(cwd, baseDirOrPrefix, options);
 }
 
 export const make = (config: ServerConfig["Service"]) => ServerConfig.of(config);
@@ -180,9 +184,14 @@ export const ensureServerDirectories = Effect.fn(function* (derivedPaths: Server
   }
 });
 
+interface TestConfigOptions {
+  readonly secretStoreKey?: Redacted.Redacted<Uint8Array>;
+}
+
 const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
   cwd: string,
   baseDirOrPrefix: string | { readonly prefix: string },
+  options?: TestConfigOptions,
 ) {
   const devUrl = undefined;
   const fs = yield* FileSystem.FileSystem;
@@ -230,11 +239,15 @@ const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
     devAllowedOrigins: [],
     noBrowser: false,
     startupPresentation: "browser",
+    ...(options?.secretStoreKey === undefined ? {} : { secretStoreKey: options.secretStoreKey }),
   });
 });
 
-export const layerTest = (cwd: string, baseDirOrPrefix: string | { readonly prefix: string }) =>
-  Layer.effect(ServerConfig, makeTest(cwd, baseDirOrPrefix));
+export const layerTest = (
+  cwd: string,
+  baseDirOrPrefix: string | { readonly prefix: string },
+  options?: TestConfigOptions,
+) => Layer.effect(ServerConfig, makeTest(cwd, baseDirOrPrefix, options));
 
 export const resolveStaticDir = Effect.fn(function* () {
   const { join, resolve } = yield* Path.Path;

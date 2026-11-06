@@ -20,7 +20,7 @@ import {
 import {
   ScheduledTaskRunStatus,
   ScheduledTaskSchedule,
-  ScheduledTaskUpsertSchedule,
+  ScheduledTaskAgentUpsertSchedule,
 } from "./scheduledTask.ts";
 import { ProviderInteractionMode, RuntimeMode } from "./providerPolicy.ts";
 import { ThreadLinkedPullRequest } from "./threadPullRequest.ts";
@@ -54,14 +54,14 @@ const OrchestratorMcpClientRequestId = TrimmedNonEmptyString.check(
  * that compatibility shape at the tool boundary and decoding it immediately.
  */
 const OrchestratorMcpScheduleFromJsonString = Schema.fromJsonString(
-  ScheduledTaskUpsertSchedule,
+  ScheduledTaskAgentUpsertSchedule,
 ).annotate({
   description:
     "Compatibility-only JSON encoding of the schedule object. Prefer a structured object.",
 });
 
 const OrchestratorMcpSchedule = Schema.Union([
-  ScheduledTaskUpsertSchedule,
+  ScheduledTaskAgentUpsertSchedule,
   OrchestratorMcpScheduleFromJsonString,
 ]).annotate({
   description:

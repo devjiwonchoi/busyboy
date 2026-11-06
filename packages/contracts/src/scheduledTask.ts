@@ -87,35 +87,51 @@ const ScheduledTaskWebhookSchedule = Schema.Struct({
     "Run on each request to the task's webhook URL. The prompt may use {{body.path}}, {{headers.name}}, {{query.name}}, {{body}} and {{request}} placeholders.",
 });
 
-const ScheduledTaskUpsertWebhookSchedule = Schema.Struct({
-  type: Schema.Literal("webhook").annotate({
-    description: "Run when the task's webhook URL receives a request.",
-  }),
-  signature: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        ...ScheduledTaskWebhookSignatureFields,
-        secret: Schema.optional(TrimmedNonEmptyString).annotate({
-          description: "Shared signing secret. Omit to keep the stored secret.",
-        }),
-        secretRef: Schema.optional(SecretRef).annotate({
-          description:
-            "A secret the user entered through request_secret, used instead of secret. It is consumed by this save.",
-        }),
-      }),
-    ),
-  ).annotate({
+const makeUpsertWebhookSchedule = <Signature extends Schema.Top>(signature: Signature) =>
+  Schema.Struct({
+    type: Schema.Literal("webhook").annotate({
+      description: "Run when the task's webhook URL receives a request.",
+    }),
+    signature: Schema.optional(Schema.NullOr(signature)).annotate({
+      description:
+        "Signature check. Required unless allowUnsigned is true. Use request_secret for the secret.",
+    }),
+    allowUnsigned: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "Dangerous. Set true only to save a webhook without a signature. Without a signature, anyone who learns the URL can make an agent run with text they choose. Use only when the user explicitly accepts that.",
+    }),
+  }).annotate({
     description:
-      "Signature check. Required unless allowUnsigned is true. Use request_secret for the secret.",
+      "Run on each request to the task's webhook URL. The prompt may use {{body.path}}, {{headers.name}}, {{query.name}}, {{body}} and {{request}} placeholders.",
+  });
+
+const ScheduledTaskUpsertWebhookSchedule = makeUpsertWebhookSchedule(
+  Schema.Struct({
+    ...ScheduledTaskWebhookSignatureFields,
+    secret: Schema.optional(TrimmedNonEmptyString).annotate({
+      description: "Shared signing secret. Omit to keep the stored secret.",
+    }),
+    secretRef: Schema.optional(SecretRef).annotate({
+      description:
+        "A secret the user entered through request_secret, used instead of secret. It is consumed by this save.",
+    }),
   }),
-  allowUnsigned: Schema.optional(Schema.Boolean).annotate({
-    description:
-      "Dangerous. Set true only to save a webhook without a signature. Without a signature, anyone who learns the URL can make an agent run with text they choose. Use only when the user explicitly accepts that.",
+);
+
+/**
+ * Agents pass the signing secret only as a request_secret reference, so the raw
+ * secret never lands in tool arguments, the thread timeline, or model context.
+ * The tools decode strictly, so a raw `secret` key is rejected, not dropped.
+ */
+const ScheduledTaskAgentUpsertWebhookSchedule = makeUpsertWebhookSchedule(
+  Schema.Struct({
+    ...ScheduledTaskWebhookSignatureFields,
+    secretRef: Schema.optional(SecretRef).annotate({
+      description:
+        "The secretRef returned by request_secret. Omit to keep the stored secret. Raw secrets are not accepted.",
+    }),
   }),
-}).annotate({
-  description:
-    "Run on each request to the task's webhook URL. The prompt may use {{body.path}}, {{headers.name}}, {{query.name}}, {{body}} and {{request}} placeholders.",
-});
+);
 
 /**
  * Read model for persisted schedules. Keep accepting legacy sub-minute rows so
@@ -131,25 +147,37 @@ export const ScheduledTaskSchedule = Schema.Union([
 });
 export type ScheduledTaskSchedule = typeof ScheduledTaskSchedule.Type;
 
-export const ScheduledTaskUpsertSchedule = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("interval").annotate({
-      description: "Select interval scheduling.",
-    }),
-    everyMs: ScheduledTaskIntervalMs.check(
-      Schema.isGreaterThanOrEqualTo(MIN_SCHEDULED_TASK_INTERVAL_MS),
-    ).annotate({
-      description: "Interval in milliseconds, with a minimum of 60000 (one minute).",
-    }),
-  }).annotate({
-    description: "Run repeatedly after a fixed number of milliseconds.",
+const ScheduledTaskUpsertIntervalSchedule = Schema.Struct({
+  type: Schema.Literal("interval").annotate({
+    description: "Select interval scheduling.",
   }),
+  everyMs: ScheduledTaskIntervalMs.check(
+    Schema.isGreaterThanOrEqualTo(MIN_SCHEDULED_TASK_INTERVAL_MS),
+  ).annotate({
+    description: "Interval in milliseconds, with a minimum of 60000 (one minute).",
+  }),
+}).annotate({
+  description: "Run repeatedly after a fixed number of milliseconds.",
+});
+
+export const ScheduledTaskUpsertSchedule = Schema.Union([
+  ScheduledTaskUpsertIntervalSchedule,
   ScheduledTaskFixedTimeSchedule,
   ScheduledTaskUpsertWebhookSchedule,
 ]).annotate({
   description: "Writable trigger. Pass an object with type 'interval', 'fixed_time' or 'webhook'.",
 });
 export type ScheduledTaskUpsertSchedule = typeof ScheduledTaskUpsertSchedule.Type;
+
+/** Writable trigger for agent tools; webhook signatures take only a secretRef. */
+export const ScheduledTaskAgentUpsertSchedule = Schema.Union([
+  ScheduledTaskUpsertIntervalSchedule,
+  ScheduledTaskFixedTimeSchedule,
+  ScheduledTaskAgentUpsertWebhookSchedule,
+]).annotate({
+  description: "Writable trigger. Pass an object with type 'interval', 'fixed_time' or 'webhook'.",
+});
+export type ScheduledTaskAgentUpsertSchedule = typeof ScheduledTaskAgentUpsertSchedule.Type;
 
 export const ScheduledTaskRunStatus = Schema.Literals(["never", "running", "succeeded", "failed"]);
 export type ScheduledTaskRunStatus = typeof ScheduledTaskRunStatus.Type;

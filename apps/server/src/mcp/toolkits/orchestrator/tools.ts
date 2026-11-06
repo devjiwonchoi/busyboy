@@ -124,6 +124,8 @@ export const ScheduleTaskTool = Tool.make("schedule_task", {
   dependencies,
 })
   .annotate(Tool.Title, "Schedule a recurring task")
+  // Strict rejects unknown keys such as a raw signature secret instead of dropping them.
+  .annotate(Tool.Strict, true)
   .annotate(Tool.Destructive, true)
   .annotate(Tool.OpenWorld, true);
 
@@ -151,6 +153,7 @@ const UpdateScheduledTaskTool = Tool.make("update_scheduled_task", {
   dependencies,
 })
   .annotate(Tool.Title, "Update a scheduled task")
+  .annotate(Tool.Strict, true)
   .annotate(Tool.Destructive, true);
 
 const DeleteScheduledTaskTool = Tool.make("delete_scheduled_task", {
