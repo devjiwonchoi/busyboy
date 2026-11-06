@@ -869,6 +869,14 @@ export const ProjectTaskReference = Schema.Struct({
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 
+/** One-line preview of the PM chat's latest message, shown on the sidebar manager row. */
+export const ProjectManagerLastMessage = Schema.Struct({
+  role: Schema.Literals(["assistant", "user"]),
+  text: Schema.String,
+  at: IsoDateTime,
+});
+export type ProjectManagerLastMessage = typeof ProjectManagerLastMessage.Type;
+
 export const ProjectTeamAttentionSummary = Schema.Struct({
   projectId: ProjectId,
   pmThreadId: ThreadId,
@@ -891,6 +899,10 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   tasks: Schema.Array(ProjectTaskReference),
   /** Resolved task ID prefix, such as BB for BB-7. */
   taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
+  /** The PM chat's latest message the user would see, or null before the first one. */
+  lastMessage: Schema.NullOr(ProjectManagerLastMessage).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
