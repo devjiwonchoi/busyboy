@@ -20,7 +20,8 @@ import {
 } from "react";
 import { isTrailingDoubleClick, resolveSidebarThreadStatus } from "../Sidebar.logic";
 import { useThreadShell } from "../../state/entities";
-import { useProjectManagerForThread } from "../../state/projectTeam";
+import { useLeadThreadTask, useProjectManagerForThread } from "../../state/projectTeam";
+import { TaskPlanToggle } from "../task/TaskPlanPanel";
 import { ProjectManagerHeaderIdentity } from "./ProjectManagerHeaderIdentity";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
@@ -91,6 +92,11 @@ export const ChatHeader = memo(function ChatHeader({
   const activeThreadRef = scopeThreadRef(activeThreadEnvironmentId, activeThreadId);
   const projectManager = useProjectManagerForThread(isServerThread ? activeThreadRef : null);
   const projectManagerThread = useThreadShell(projectManager ? activeThreadRef : null);
+  const activeThreadShell = useThreadShell(isServerThread ? activeThreadRef : null);
+  const leadTask = useLeadThreadTask(
+    isServerThread ? activeThreadRef : null,
+    activeThreadShell?.projectId ?? null,
+  );
   const canOperateThread = useEnvironmentScope(
     activeThreadEnvironmentId,
     AuthOrchestrationOperateScope,
@@ -282,6 +288,7 @@ export const ChatHeader = memo(function ChatHeader({
       )}
       onContextMenu={handleHeaderContextMenu}
     >
+      {leadTask === null ? null : <TaskPlanToggle />}
       <WorkspaceBreadcrumb
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"

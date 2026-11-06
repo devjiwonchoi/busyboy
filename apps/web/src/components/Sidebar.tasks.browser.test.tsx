@@ -294,11 +294,9 @@ describe("sidebar tasks", () => {
     );
     expect(taskRowButton("BB-3")?.getAttribute("aria-current")).toBe("page");
 
-    // The current lead's row stands for its task, so it opens the task page too.
+    // The current lead's row opens the lead's chat, which shows the task's plan beside it.
     await userEvent.click(threadRow("BB-2 Fix drag scroll")!);
-    await vi.waitFor(() =>
-      expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-2"),
-    );
+    await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/lead-2"));
     expect(threadRow("BB-2 Fix drag scroll")?.getAttribute("aria-current")).toBe("page");
 
     // The PM heading's "New task" opens the quick task modal on that project.
@@ -335,7 +333,7 @@ describe("sidebar tasks", () => {
     await vi.waitFor(() =>
       expect(document.querySelector('textarea[aria-label="Task context"]')).toBeNull(),
     );
-    expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-2");
+    expect(app.router.state.location.pathname).toBe("/env-1/lead-2");
   });
   it("folds the PM section from its heading and opens the PM chat from the avatar", async () => {
     const app = renderSidebarApp();
