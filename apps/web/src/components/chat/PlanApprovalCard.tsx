@@ -1,6 +1,5 @@
 import {
   type EnvironmentId,
-  PLAN_APPROVAL_ONLY,
   PLAN_APPROVAL_START,
   planApprovalOutcome,
   type PlanApprovalOutcome,
@@ -14,9 +13,11 @@ import { useAnswerDecision } from "~/state/projectTeam";
 import { Button } from "../ui/button";
 import { AFK_ANSWERED_LABEL } from "./Afk";
 import { PlanApprovalModal } from "./PlanApprovalModal";
+import { PlanApprovalSections } from "./PlanMarkdown";
 
 const OUTCOME_LABEL: Record<PlanApprovalOutcome, string> = {
   start: "Approved and started",
+  // Older cards could be approved without starting.
   approve_only: "Approved",
   changes: "Changes requested",
 };
@@ -28,9 +29,9 @@ export function planApprovalHeader(card: ProjectDecisionCard): string {
 }
 
 /**
- * A task lead's plan, waiting for the user's go-ahead. Open: the lead's summary, the approve
- * buttons (same answer call as the modal, so it counts as the user's click) and "Review
- * plan" for the full plan, comments and requested changes. Answered: the outcome, with the plan still viewable. Closed unanswered: muted.
+ * A task lead's plan, waiting for the user's go-ahead. Open: the lead's Goal and Verification,
+ * the Approve button (same answer call as the modal, so it counts as the user's click; it
+ * always starts the work) and "Review plan" for the full plan, comments and requested changes. Answered: the outcome, with the plan still viewable. Closed unanswered: muted.
  */
 export function PlanApprovalCard({
   card,
@@ -133,20 +134,10 @@ export function PlanApprovalCard({
       className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5"
     >
       <p className="truncate font-medium text-muted-foreground text-xs">{header}</p>
-      <p data-plan-summary className="whitespace-pre-wrap text-sm">
-        {card.item.summary ?? card.item.question}
-      </p>
+      <PlanApprovalSections item={card.item} />
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={sending} onClick={() => approve(PLAN_APPROVAL_START)}>
-          {PLAN_APPROVAL_START}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={sending}
-          onClick={() => approve(PLAN_APPROVAL_ONLY)}
-        >
-          {PLAN_APPROVAL_ONLY}
+          Approve
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setReviewing(true)}>
           Review plan

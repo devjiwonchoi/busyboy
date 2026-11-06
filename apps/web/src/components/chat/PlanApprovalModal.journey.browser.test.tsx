@@ -75,7 +75,7 @@ function version(n: number, goal: string, todos: ReturnType<typeof todo>[]) {
     spec: {
       background: "Plan approval was removed in #103.",
       goal,
-      successCriteria: "The user can approve from the PM chat.",
+      successCriteria: "- The user can approve from the **PM chat**.",
       nonGoals: "Changing how tasks are created.",
       todos,
     },
@@ -140,7 +140,8 @@ function makeCard(): ProjectDecisionCard {
       supersededAt: null,
       answeredBy: null,
       specVersion: 2,
-      summary: null,
+      summary: "- A card in the PM chat\n- It opens a review modal",
+      verification: "- A journey test approves from the modal",
     },
   };
 }
@@ -189,7 +190,7 @@ async function openReview() {
   await act(async () => root.render(<LiveCard />));
   const card = container.querySelector('[data-decision-card-state="open"]')!;
   expect(card.textContent).toContain("Plan approval · Plan approval modal · v2");
-  expect(card.textContent).toContain("Plan ready: a card in the PM chat");
+  expect(card.textContent).toContain("A card in the PM chat");
   await userEvent.click(button("Review plan"));
   await vi.waitFor(() => expect(section("End result")).toBeTruthy());
 }
@@ -242,7 +243,19 @@ describe.each([
     expect(review.textContent).toContain("BU-32");
     expect(review.textContent).toContain("Waiting for approval");
     expect(section("End result").textContent).toBe("Keep the cursor position steady after review.");
-    expect(section("Success criteria").textContent).toBe("The user can approve from the PM chat.");
+    // The card's Goal and Verification sit at the top, as markdown lists.
+    const sections = [...review.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
+    expect(sections.map((entry) => entry.dataset.planSummarySection)).toEqual([
+      "Goal",
+      "Verification",
+    ]);
+    expect(sections[0]!.querySelectorAll("li")).toHaveLength(2);
+    expect(sections[1]!.querySelector("li")?.textContent).toBe(
+      "A journey test approves from the modal",
+    );
+    // Plan sections render as markdown too.
+    expect(section("Success criteria").textContent?.trim()).toBe("The user can approve from the PM chat.");
+    expect(section("Success criteria").querySelector("li strong")?.textContent).toBe("PM chat");
     expect(section("Non-goals").textContent).toBe("Changing how tasks are created.");
     expect(section("Steps").querySelectorAll("li")).toHaveLength(2);
     // Full screen on phones, once the open animation settles.
@@ -260,9 +273,9 @@ describe.each([
     await userEvent.tripleClick(section("Non-goals"));
     await expectCommentButtonOnTop(section("Non-goals"), width < 768 ? "footer" : "above");
 
-    // At the top of the plan there is no room above, so it goes below.
+    // End result sits under the Goal/Verification box, so there is room above it too.
     await userEvent.tripleClick(section("End result"));
-    await expectCommentButtonOnTop(section("End result"), width < 768 ? "footer" : "below");
+    await expectCommentButtonOnTop(section("End result"), width < 768 ? "footer" : "above");
     await userEvent.click(button("Comment"));
     await userEvent.type(
       review.querySelector<HTMLTextAreaElement>('textarea[aria-label="Comment"]')!,
@@ -300,7 +313,8 @@ describe.each([
 
   it("approves and starts", async () => {
     await openReview();
-    await userEvent.click(button("Approve and start", modal()));
+    expect(() => button("Approve only", modal())).toThrow();
+    await userEvent.click(button("Approve", modal()));
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
     expect(server.answers[0]!.answer).toBe(PLAN_APPROVAL_START);
     await vi.waitFor(() => expect(document.querySelector("[data-plan-review]")).toBeNull());
@@ -311,7 +325,7 @@ describe.each([
     await userEvent.click(button("View plan"));
     await vi.waitFor(() => expect(section("End result")).toBeTruthy());
     expect(modal().textContent).toContain("Approved and started");
-    expect(() => button("Approve and start", modal())).toThrow();
+    expect(() => button("Approve", modal())).toThrow();
     expect(modal().querySelector('textarea[aria-label="Overall comment"]')).toBeNull();
   });
 

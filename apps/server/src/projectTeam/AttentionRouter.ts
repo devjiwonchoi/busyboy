@@ -80,8 +80,10 @@ export class AttentionRouter extends Context.Service<
       readonly askerThreadId: ThreadId | null;
       /** For a plan approval: the spec version under review. */
       readonly specVersion?: number;
-      /** For a plan approval: the summary the card shows. */
+      /** For a plan approval: the card's Goal section. */
       readonly summary?: string;
+      /** For a plan approval: the card's Verification section. */
+      readonly verification?: string;
     }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /** Saves the answer and relays it to the thread that asked. */
     readonly answer: (input: {
@@ -138,6 +140,7 @@ const make = Effect.gen(function* () {
         createdAt: now,
         specVersion: input.specVersion ?? null,
         summary: input.summary ?? null,
+        verification: input.verification ?? null,
       });
       yield* publish(projectId);
       return item;

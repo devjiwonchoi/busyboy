@@ -13,7 +13,6 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
-  PLAN_APPROVAL_ONLY,
   PLAN_APPROVAL_START,
   planApprovalOutcome,
   type ProjectDecisionCard,
@@ -1749,9 +1748,9 @@ const make = Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
         return yield* teamError(`#${task.number} is finished; it needs no plan approval.`);
       }
-      if (input.summary === undefined) {
+      if (input.goal === undefined || input.verification === undefined) {
         return yield* teamError(
-          "ask_user(kind: approval) needs a summary: 3-5 short lines the user reads on the card to approve without opening the plan (what changes, the end result, done when, anything risky or cut).",
+          "ask_user(kind: approval) needs goal and verification: 2-4 short markdown bullets each, shown on the card so the user can approve without opening the plan. goal: what changes and the end result (note risky steps or scope cuts). verification: how we'll know it's done (tests, checks, screenshots).",
         );
       }
       const spec = yield* latestSpec(task);
@@ -1765,10 +1764,12 @@ const make = Effect.gen(function* () {
         task,
         kind: "approval",
         question: input.question,
-        options: input.options ?? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY],
+        // One way to approve: approving always starts the work.
+        options: [PLAN_APPROVAL_START],
         askerThreadId: callerThreadId,
         specVersion: spec.version,
-        summary: input.summary,
+        summary: input.goal,
+        verification: input.verification,
       });
       yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
       yield* appendEvent(

@@ -340,22 +340,26 @@ describe("ProjectTeamService tasks as specs", () => {
           note: "Plan",
         });
 
-        // An approval needs a summary for the card.
-        const noSummary = yield* team
-          .askUser(lead, { kind: "approval", question: "Plan: keep it." })
+        // An approval needs both card sections: goal and verification.
+        const noSections = yield* team
+          .askUser(lead, { kind: "approval", question: "Plan: keep it.", goal: "- Keep it." })
           .pipe(Effect.flip);
-        assert.include(noSummary.message, "needs a summary");
+        assert.include(noSections.message, "needs goal and verification");
 
         // Asking for approval pins spec v2 and shows the task as Waiting for approval.
         const first = yield* team.askUser(lead, {
           kind: "approval",
           question: "Plan: keep it.",
-          summary: "Keep the scroll position while dragging.",
+          goal: "- Keep the scroll position while dragging.",
+          verification: "- A journey test drags and checks scrollTop.",
+          // Leads can't bring back "Approve only": approving always starts the work.
+          options: ["Approve and start", "Approve only"],
         });
         assert.strictEqual(first.item.kind, "approval");
-        assert.strictEqual(first.item.summary, "Keep the scroll position while dragging.");
+        assert.strictEqual(first.item.summary, "- Keep the scroll position while dragging.");
+        assert.strictEqual(first.item.verification, "- A journey test drags and checks scrollTop.");
         assert.strictEqual(first.item.specVersion, 2);
-        assert.deepStrictEqual(first.item.options, ["Approve and start", "Approve only"]);
+        assert.deepStrictEqual(first.item.options, ["Approve and start"]);
         const waiting = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.strictEqual(waiting.task.stage, "awaiting_approval");
 
@@ -384,12 +388,14 @@ describe("ProjectTeamService tasks as specs", () => {
         const second = yield* team.askUser(lead, {
           kind: "approval",
           question: "Plan v3.",
-          summary: "Short plan.",
+          goal: "- Short plan.",
+          verification: "- A test.",
         });
         const third = yield* team.askUser(lead, {
           kind: "approval",
           question: "Plan v3 again.",
-          summary: "Short plan.",
+          goal: "- Short plan.",
+          verification: "- A test.",
         });
         const replaced = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.deepStrictEqual(
@@ -438,7 +444,8 @@ describe("ProjectTeamService tasks as specs", () => {
         const waiting = yield* team.askUser(leadA, {
           kind: "approval",
           question: "Plan A.",
-          summary: "Short plan.",
+          goal: "- Short plan.",
+          verification: "- A test.",
         });
         yield* TestClock.adjust("2 minutes");
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
@@ -454,7 +461,8 @@ describe("ProjectTeamService tasks as specs", () => {
         const asked = yield* team.askUser(leadB, {
           kind: "approval",
           question: "Plan B.",
-          summary: "Short plan.",
+          goal: "- Short plan.",
+          verification: "- A test.",
         });
         assert.isNull(asked.item.answer);
         yield* team.afkSweep;

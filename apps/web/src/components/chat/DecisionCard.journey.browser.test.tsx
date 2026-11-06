@@ -96,6 +96,7 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
       answeredBy: null,
       specVersion: null,
       summary: null,
+      verification: null,
       ...overrides,
     },
   };
