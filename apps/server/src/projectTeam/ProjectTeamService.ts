@@ -1,4 +1,5 @@
 import {
+  type ChatAttachment,
   CommandId,
   DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
@@ -87,10 +88,18 @@ import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
+import { resolveAttachmentPath } from "../attachmentStore.ts";
+import * as ServerConfig from "../config.ts";
+import {
+  type AttachmentClaimError,
+  claimPendingAttachments,
+  releaseClaimedAttachments,
+} from "../orchestration-v2/AttachmentClaims.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import type { ProjectTeamRepositoryError } from "../persistence/Errors.ts";
@@ -189,6 +198,23 @@ export function planRequestedWakeText(
     `[Task added by the user] ${key} ${task.title}`,
     `The user wants a plan for it. Start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user if it has to wait.`,
   ].join("\n");
+}
+
+/** The spec background for a user-created task: their context, then the files they attached. */
+export function userTaskBackground(
+  context: string,
+  attachments: ReadonlyArray<{
+    readonly name: string;
+    readonly mimeType: string;
+    readonly path: string;
+  }>,
+): string {
+  if (attachments.length === 0) return context;
+  const list = [
+    "Attachments (read these files):",
+    ...attachments.map((file) => `- ${file.name} (${file.mimeType}): ${file.path}`),
+  ].join("\n");
+  return context.length > 0 ? `${context}\n\n${list}` : list;
 }
 
 const trimJournalText = (text: string): string =>
@@ -568,6 +594,35 @@ const make = Effect.gen(function* () {
   const finishedTasks = yield* FinishedTaskCleanup.FinishedTaskCleanup;
   const newId = yield* makeIdGenerator;
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
+  const serverConfig = yield* ServerConfig.ServerConfig;
+  const fileSystem = yield* FileSystem.FileSystem;
+
+  /** Copies the user's pending uploads under the task so the pending sweep keeps them. */
+  const claimTaskAttachments = (
+    taskId: ProjectTaskId,
+    projectId: ProjectId,
+    attachments: ReadonlyArray<ChatAttachment>,
+  ) =>
+    claimPendingAttachments({ threadId: taskId, attachments }).pipe(
+      Effect.flatMap((claimed) =>
+        Effect.forEach(claimed.attachments, (attachment) => {
+          const path = resolveAttachmentPath({
+            attachmentsDir: serverConfig.attachmentsDir,
+            attachment,
+          });
+          return path === null
+            ? Effect.fail(
+                teamError(`Attachment '${attachment.name}' has no stored file.`, projectId),
+              )
+            : Effect.succeed({ name: attachment.name, mimeType: attachment.mimeType, path });
+        }).pipe(Effect.onError(() => releaseClaimedAttachments(claimed.claimedPaths))),
+      ),
+      Effect.catchTag("AttachmentClaimError", (error: AttachmentClaimError) =>
+        Effect.fail(teamError(error.message, projectId)),
+      ),
+      Effect.provideService(ServerConfig.ServerConfig, serverConfig),
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+    );
 
   // At boot the provider cache may still be empty, so probe once before giving up.
   const availableModelSelection = Effect.gen(function* () {
@@ -1472,14 +1527,24 @@ const make = Effect.gen(function* () {
         yield* requireTask(input.parentTaskId, input.projectId);
       }
       const context = input.context.trim();
+      const taskId = ProjectTaskId.make(yield* newId("task"));
+      const attachments =
+        input.attachments === undefined || input.attachments.length === 0
+          ? []
+          : yield* claimTaskAttachments(taskId, input.projectId, input.attachments);
       const task = yield* repository.createTask({
-        id: ProjectTaskId.make(yield* newId("task")),
+        id: taskId,
         projectId: input.projectId,
         title: input.title,
         request: context.length > 0 ? context : input.title,
         waitsOn: [],
         parentTaskId: input.parentTaskId,
-        spec: { background: context, goal: "", nonGoals: "", todos: [] },
+        spec: {
+          background: userTaskBackground(context, attachments),
+          goal: "",
+          nonGoals: "",
+          todos: [],
+        },
         now: yield* nowIso,
         author: "user",
         authorThreadId: null,
