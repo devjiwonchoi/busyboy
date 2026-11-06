@@ -1,3 +1,4 @@
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
@@ -7,7 +8,17 @@ import {
   type ProjectTeamTaskDetail,
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
-import { FileIcon, PaperclipIcon, XIcon } from "lucide-react";
+import {
+  BoxIcon,
+  ChevronRightIcon,
+  CircleEllipsisIcon,
+  CircleIcon,
+  FileIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+  PaperclipIcon,
+  XIcon,
+} from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -15,6 +26,7 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 
 import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
@@ -26,7 +38,7 @@ import {
   useAttachmentUploadStore,
 } from "~/lib/attachmentUploadQueue";
 import { prepareImageForAttachment } from "~/lib/imageCompression";
-import { isMacPlatform, randomUUID } from "~/lib/utils";
+import { cn, isMacPlatform, randomUUID } from "~/lib/utils";
 import { useCreateTask } from "~/state/projectTeam";
 import {
   classifyComposerAttachmentFile,
@@ -34,17 +46,14 @@ import {
 } from "../chat/composerAttachmentFiles";
 import { Button } from "../ui/button";
 import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "../ui/dialog";
-import { Input } from "../ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { Textarea } from "../ui/textarea";
+  Menu,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuRadioItemIndicator,
+  MenuTrigger,
+} from "../ui/menu";
+import { Switch } from "../ui/switch";
 import { deriveTaskTitle, quickTaskProjectKey } from "./quickTask.logic";
 
 export interface QuickTaskProject {
@@ -55,10 +64,28 @@ export interface QuickTaskProject {
 
 type QuickTaskAttachment = ComposerImageAttachment | ComposerFileAttachment;
 
+/** "plan": the PM starts planning right away. "todo": the task waits in Todo. */
+type StartMode = "plan" | "todo";
+
+const START_MODES: ReadonlyArray<{ value: StartMode; label: string; icon: ReactNode }> = [
+  {
+    value: "plan",
+    label: "Plan now",
+    icon: <CircleEllipsisIcon className="text-orange-600 dark:text-orange-300" />,
+  },
+  { value: "todo", label: "Save as Todo", icon: <CircleIcon className="text-muted-foreground" /> },
+];
+
+const PILL_CLASS =
+  "inline-flex h-7 items-center gap-1.5 rounded-full border border-border/70 bg-transparent px-2.5 text-xs text-foreground/80 outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60 data-popup-open:bg-accent [&_svg]:size-3.5 [&_svg]:shrink-0";
+
+const ICON_BUTTON_CLASS =
+  "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4";
+
 /**
- * Linear-style quick capture: dump context (text, pasted or dropped images and
- * files), keep or change the project, submit. The task is created and the PM
- * starts planning it right away.
+ * Linear-style quick capture: a title, a description (text, pasted or dropped
+ * images and files), a project and whether to plan now. Creates the task and,
+ * with "Plan now", the PM starts planning it right away.
  */
 export function QuickTaskModal(props: {
   open: boolean;
@@ -66,17 +93,26 @@ export function QuickTaskModal(props: {
   /** Preselected project key (see quickTaskProjectKey). */
   initialProjectKey: string | null;
   onClose: () => void;
-  onCreated: (detail: ProjectTeamTaskDetail, project: QuickTaskProject) => void;
+  /** `keepOpen` is true when "Create more" is on: the composer stays for the next task. */
+  onCreated: (
+    detail: ProjectTeamTaskDetail,
+    project: QuickTaskProject,
+    options: { keepOpen: boolean; startPlanning: boolean },
+  ) => void;
 }) {
   const createTask = useCreateTask();
   const [title, setTitle] = useState("");
   const [context, setContext] = useState("");
   const [projectKey, setProjectKey] = useState<string | null>(null);
+  const [startMode, setStartMode] = useState<StartMode>("plan");
+  const [createMore, setCreateMore] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [attachments, setAttachments] = useState<QuickTaskAttachment[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
   const uploads = useAttachmentUploadStore((state) => state.uploadsByImageId);
 
   const { open, projects, initialProjectKey } = props;
@@ -104,6 +140,7 @@ export function QuickTaskModal(props: {
   const close = () => {
     if (sending) return;
     reset();
+    setExpanded(false);
     props.onClose();
   };
 
@@ -172,6 +209,7 @@ export function QuickTaskModal(props: {
     const taskTitle = title.trim() || deriveTaskTitle(context);
     if (taskTitle.length === 0) {
       setError("Describe the task first.");
+      titleRef.current?.focus();
       return;
     }
     setSending(true);
@@ -190,11 +228,12 @@ export function QuickTaskModal(props: {
       setError("An attachment did not upload. Remove it or try again.");
       return;
     }
+    const startPlanning = startMode === "plan";
     const result = await createTask(project.environmentId, {
       projectId: project.projectId,
       title: taskTitle,
       context,
-      startPlanning: true,
+      startPlanning,
       ...(uploaded.length > 0 ? { attachments: uploaded } : {}),
     });
     setSending(false);
@@ -203,7 +242,12 @@ export function QuickTaskModal(props: {
       return;
     }
     reset();
-    props.onCreated(result.value, project);
+    if (createMore) {
+      titleRef.current?.focus();
+    } else {
+      setExpanded(false);
+    }
+    props.onCreated(result.value, project, { keepOpen: createMore, startPlanning });
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
@@ -228,148 +272,238 @@ export function QuickTaskModal(props: {
   };
 
   const submitHint = isMacPlatform(navigator.platform) ? "⌘↵" : "Ctrl+↵";
+  const disabled = sending || project === null;
+  const mode = START_MODES.find((candidate) => candidate.value === startMode) ?? START_MODES[0]!;
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
-      <DialogPopup
-        className="max-w-xl"
-        onDragOver={(event) => {
-          if (!event.dataTransfer.types.includes("Files")) return;
-          event.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={(event) => {
-          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-          setDragging(false);
-        }}
-        onDrop={handleDrop}
-      >
-        <DialogHeader>
-          <DialogTitle>New task</DialogTitle>
-          <DialogDescription>
-            Dump the context. The project manager starts planning it right away.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogPanel>
-          <div className="flex flex-col gap-3" onKeyDown={handleKeyDown}>
-            {projects.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                No project has a project manager yet. Set one up in a project first.
-              </p>
-            ) : (
-              <Select
-                value={project === null ? null : quickTaskProjectKey(project)}
-                onValueChange={(value) => {
-                  if (typeof value === "string") setProjectKey(value);
-                }}
-              >
-                <SelectTrigger size="sm" aria-label="Project" className="w-fit min-w-40">
-                  <SelectValue>{project?.name}</SelectValue>
-                </SelectTrigger>
-                <SelectPopup>
-                  {projects.map((candidate) => (
-                    <SelectItem
-                      key={quickTaskProjectKey(candidate)}
-                      value={quickTaskProjectKey(candidate)}
-                      label={candidate.name}
-                    >
-                      {candidate.name}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
+    <DialogPrimitive.Root open={open} onOpenChange={(next) => (next ? undefined : close())}>
+      <DialogPrimitive.Portal>
+        {/* A light dim, not a blur: the app stays readable behind the composer. */}
+        <DialogPrimitive.Backdrop
+          data-slot="quick-task-backdrop"
+          className="fixed inset-0 z-50 bg-black/25 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-black/45"
+        />
+        <DialogPrimitive.Viewport
+          className={cn(
+            "fixed inset-0 z-50 flex justify-center [-webkit-app-region:no-drag]",
+            expanded ? "items-center p-6" : "items-start px-4 pt-[12vh]",
+            "max-sm:items-end max-sm:p-0 max-sm:pt-12",
+          )}
+        >
+          <DialogPrimitive.Popup
+            data-slot="quick-task-composer"
+            data-expanded={expanded ? "" : undefined}
+            className={cn(
+              "relative flex w-full flex-col rounded-2xl border border-border/80 bg-popover text-popover-foreground shadow-[0_24px_60px_-20px_rgb(0_0_0/45%)] outline-none transition-[opacity,scale,translate] duration-150 data-ending-style:scale-98 data-ending-style:opacity-0 data-starting-style:scale-98 data-starting-style:opacity-0 dark:border-white/10 dark:shadow-[0_24px_60px_-16px_rgb(0_0_0/80%)]",
+              expanded ? "h-full max-h-[880px] max-w-[1080px]" : "max-h-[76vh] max-w-[720px]",
+              "max-sm:max-h-[calc(100dvh-3rem)] max-sm:max-w-none max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[env(safe-area-inset-bottom)] max-sm:data-ending-style:translate-y-4 max-sm:data-starting-style:translate-y-4",
+              dragging && "ring-2 ring-primary/60",
             )}
-            <Input
-              aria-label="Task title"
-              placeholder="Title (optional, first line is used)"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-            <Textarea
-              autoFocus
-              aria-label="Task context"
-              placeholder="What needs doing? Paste logs, links, screenshots, files…"
-              value={context}
-              onChange={(event) => setContext(event.target.value)}
-              onPaste={handlePaste}
-              className={dragging ? "min-h-40 border-primary" : "min-h-40"}
-            />
-            {attachments.length > 0 ? (
-              <ul aria-label="Attachments" className="flex flex-wrap gap-2">
-                {attachments.map((attachment) => {
-                  const upload = uploads[attachment.id];
-                  return (
-                    <li
-                      key={attachment.id}
-                      className="flex items-center gap-1.5 rounded-md border px-1.5 py-1 text-xs"
-                    >
-                      {attachment.type === "image" ? (
-                        <img
-                          src={attachment.previewUrl}
-                          alt=""
-                          className="size-6 rounded object-cover"
-                        />
-                      ) : (
-                        <FileIcon className="size-4 text-muted-foreground" />
-                      )}
-                      <span className="max-w-40 truncate">{attachment.name}</span>
-                      {upload?.status === "uploading" ? (
-                        <span className="text-muted-foreground">
-                          {Math.round(upload.progress * 100)}%
-                        </span>
-                      ) : upload?.status === "failed" ? (
-                        <span className="text-destructive">failed</span>
-                      ) : null}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${attachment.name}`}
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => removeAttachment(attachment)}
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-            {error ? <p className="text-destructive text-xs">{error}</p> : null}
-          </div>
-        </DialogPanel>
-        <DialogFooter className="sm:justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={sending || project === null}
-          >
-            <PaperclipIcon />
-            Attach
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            aria-label="Attach files"
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-              event.target.value = "";
-              void addFiles(files);
+            onKeyDown={handleKeyDown}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              setDragging(true);
             }}
-          />
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void submit()}
-            disabled={sending || project === null}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+              setDragging(false);
+            }}
+            onDrop={handleDrop}
           >
-            {sending ? "Creating…" : `Create task`}
-            {sending ? null : <span className="opacity-60 max-md:hidden">{submitHint}</span>}
-          </Button>
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
+            {/* Header: project › New task, then expand and close. */}
+            <div className="flex items-center gap-1.5 py-2.5 ps-3.5 pe-2.5">
+              <span
+                data-testid="quick-task-project-chip"
+                className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border/70 bg-muted/50 px-2 font-medium text-foreground/80 text-xs"
+              >
+                <BoxIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="max-w-48 truncate">{project?.name ?? "No project"}</span>
+              </span>
+              <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+              <DialogPrimitive.Title className="font-normal text-foreground text-sm">
+                New task
+              </DialogPrimitive.Title>
+              <span className="flex-1" />
+              <button
+                type="button"
+                aria-label={expanded ? "Collapse" : "Expand"}
+                aria-pressed={expanded}
+                className={cn(ICON_BUTTON_CLASS, "max-sm:hidden [&_svg]:size-3.5")}
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? <Minimize2Icon /> : <Maximize2Icon />}
+              </button>
+              <DialogPrimitive.Close aria-label="Close" className={ICON_BUTTON_CLASS}>
+                <XIcon />
+              </DialogPrimitive.Close>
+            </div>
+
+            {/* Body: borderless title and a description that grows with its content. */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
+              {projects.length === 0 ? (
+                <p className="pb-2 text-muted-foreground text-sm">
+                  No project has a project manager yet. Set one up in a project first.
+                </p>
+              ) : null}
+              <input
+                ref={titleRef}
+                autoFocus
+                aria-label="Task title"
+                placeholder="Task title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                onPaste={handlePaste}
+                className="w-full bg-transparent py-1 font-medium text-foreground text-lg leading-7 outline-none placeholder:text-muted-foreground/60"
+              />
+              <textarea
+                aria-label="Task description"
+                placeholder="Add description…"
+                value={context}
+                onChange={(event) => setContext(event.target.value)}
+                onPaste={handlePaste}
+                className={cn(
+                  "field-sizing-content w-full resize-none bg-transparent py-1.5 text-[15px] text-foreground leading-6 outline-none placeholder:text-muted-foreground/60",
+                  expanded ? "min-h-48 flex-1" : "min-h-16",
+                )}
+              />
+              {attachments.length > 0 ? (
+                <ul aria-label="Attachments" className="flex flex-wrap gap-1.5 pt-1 pb-2">
+                  {attachments.map((attachment) => {
+                    const upload = uploads[attachment.id];
+                    return (
+                      <li
+                        key={attachment.id}
+                        className="flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 ps-1 pe-1.5 text-xs"
+                      >
+                        {attachment.type === "image" ? (
+                          <img
+                            src={attachment.previewUrl}
+                            alt=""
+                            className="size-5 rounded-sm object-cover"
+                          />
+                        ) : (
+                          <FileIcon className="size-4 text-muted-foreground" />
+                        )}
+                        <span className="max-w-40 truncate">{attachment.name}</span>
+                        {upload?.status === "uploading" ? (
+                          <span className="text-muted-foreground">
+                            {Math.round(upload.progress * 100)}%
+                          </span>
+                        ) : upload?.status === "failed" ? (
+                          <span className="text-destructive">failed</span>
+                        ) : null}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${attachment.name}`}
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => removeAttachment(attachment)}
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
+
+            {/* Properties that map to real task fields. */}
+            <div className="flex flex-wrap items-center gap-1.5 px-3.5 pt-2 pb-1">
+              <Menu>
+                <MenuTrigger
+                  aria-label={`Project: ${project?.name ?? "none"}`}
+                  disabled={projects.length === 0}
+                  className={PILL_CLASS}
+                >
+                  <BoxIcon className="text-muted-foreground" />
+                  <span className="max-w-40 truncate">{project?.name ?? "Project"}</span>
+                </MenuTrigger>
+                <MenuPopup align="start">
+                  <MenuRadioGroup
+                    value={project === null ? null : quickTaskProjectKey(project)}
+                    onValueChange={(value) => {
+                      if (typeof value === "string") setProjectKey(value);
+                    }}
+                  >
+                    {projects.map((candidate) => (
+                      <MenuRadioItem
+                        key={quickTaskProjectKey(candidate)}
+                        value={quickTaskProjectKey(candidate)}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="flex-1 truncate">{candidate.name}</span>
+                          <MenuRadioItemIndicator />
+                        </span>
+                      </MenuRadioItem>
+                    ))}
+                  </MenuRadioGroup>
+                </MenuPopup>
+              </Menu>
+              <Menu>
+                <MenuTrigger aria-label={`Start: ${mode.label}`} className={PILL_CLASS}>
+                  {mode.icon}
+                  {mode.label}
+                </MenuTrigger>
+                <MenuPopup align="start">
+                  <MenuRadioGroup
+                    value={startMode}
+                    onValueChange={(value) => {
+                      if (value === "plan" || value === "todo") setStartMode(value);
+                    }}
+                  >
+                    {START_MODES.map((candidate) => (
+                      <MenuRadioItem key={candidate.value} value={candidate.value}>
+                        <span className="flex items-center gap-2">
+                          {candidate.icon}
+                          <span className="flex-1">{candidate.label}</span>
+                          <MenuRadioItemIndicator />
+                        </span>
+                      </MenuRadioItem>
+                    ))}
+                  </MenuRadioGroup>
+                </MenuPopup>
+              </Menu>
+            </div>
+
+            {error ? <p className="px-4 pt-1 text-destructive text-xs">{error}</p> : null}
+
+            {/* Footer: attach on the left; Create more and Create task on the right. */}
+            <div className="flex items-center gap-3 px-3.5 pt-2 pb-3">
+              <button
+                type="button"
+                aria-label="Attach files"
+                disabled={disabled}
+                className="inline-flex size-8 items-center justify-center rounded-full border border-border/70 text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 [&_svg]:size-4"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <PaperclipIcon />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                tabIndex={-1}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  void addFiles(files);
+                }}
+              />
+              <span className="flex-1" />
+              <label className="flex cursor-pointer select-none items-center gap-2 text-muted-foreground text-sm">
+                <Switch size="sm" checked={createMore} onCheckedChange={setCreateMore} />
+                Create more
+              </label>
+              <Button type="button" size="sm" onClick={() => void submit()} disabled={disabled}>
+                {sending ? "Creating…" : "Create task"}
+                {sending ? null : <span className="opacity-60 max-md:hidden">{submitHint}</span>}
+              </Button>
+            </div>
+          </DialogPrimitive.Popup>
+        </DialogPrimitive.Viewport>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

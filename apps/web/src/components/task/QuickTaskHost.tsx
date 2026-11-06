@@ -94,14 +94,14 @@ export function QuickTaskHost() {
       projects={projects}
       initialProjectKey={preferred === null ? null : quickTaskProjectKey(preferred)}
       onClose={closeQuickTask}
-      onCreated={(detail, project) => {
+      onCreated={(detail, project, { keepOpen, startPlanning }) => {
         rememberQuickTaskProject(project);
-        closeQuickTask();
+        if (!keepOpen) closeQuickTask();
         const route = taskRouteParams(project.environmentId, project.projectId, detail.task.id);
         toastManager.add({
           type: "success",
           title: `${detail.key} created`,
-          description: `${detail.task.title} · planning started in ${project.name}`,
+          description: `${detail.task.title} · ${startPlanning ? "planning started" : "saved as Todo"} in ${project.name}`,
           actionProps: {
             children: "Open",
             onClick: () => void router.navigate(route),
