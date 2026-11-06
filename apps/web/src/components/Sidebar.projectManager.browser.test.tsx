@@ -159,6 +159,8 @@ async function renderHeading(
     pmThreadRef,
     pmThreadWorking: false,
     isActive: false,
+    expanded: true,
+    onToggle: vi.fn(),
     onOpenThread: vi.fn(),
     onNewThread: vi.fn(),
     ...overrides,
@@ -174,7 +176,7 @@ const button = (name: string) =>
   );
 
 describe("project manager sidebar heading", () => {
-  it("shows the PM avatar, project and PM name, and opens the PM thread on click", async () => {
+  it("shows the PM avatar, project and PM name; the row folds and the avatar opens the PM", async () => {
     const props = await renderHeading({
       summary: summary({ openCount: 2, unreadSitrepCount: 1, presence: { running: 1 } }),
     });
@@ -185,16 +187,21 @@ describe("project manager sidebar heading", () => {
     expect(heading.querySelector('[aria-label="Needs you: 2"]')?.textContent).toBe("2");
     expect(heading.querySelector('[aria-label="Unread sitrep"]')).not.toBeNull();
 
-    await act(async () => button("🦝busyboyRemy")!.click());
+    await act(async () => button("busyboyRemy")!.click());
+    expect(props.onToggle).toHaveBeenCalledOnce();
+    expect(props.onOpenThread).not.toHaveBeenCalled();
+    expect(heading.querySelector("[aria-expanded]")?.getAttribute("aria-expanded")).toBe("true");
+    await act(async () => button("Open Remy chat")!.click());
     expect(props.onOpenThread).toHaveBeenCalledExactlyOnceWith(pmThreadRef);
+    expect(props.onToggle).toHaveBeenCalledOnce();
     expect(button("New thread in busyboy")).toBeDefined();
-    // The section is always open, so the heading has no collapse control.
-    expect(heading.querySelector("[aria-expanded]")).toBeNull();
   });
 
   it("marks the heading current while the PM thread is open and shows a working avatar", async () => {
     await renderHeading({ isActive: true, pmThreadWorking: true });
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain("Remy");
+    expect(container.querySelector('[aria-current="page"]')?.getAttribute("aria-label")).toBe(
+      "Open Remy chat",
+    );
     expect(container.querySelector('[aria-label="Remy, working"]')).not.toBeNull();
   });
 
@@ -202,7 +209,7 @@ describe("project manager sidebar heading", () => {
     await renderHeading();
     expect(container.textContent).not.toMatch(/\btasks?\b/);
     expect(container.querySelector("ul")).toBeNull();
-    expect(container.querySelectorAll("button").length).toBe(3);
+    expect(container.querySelectorAll("button").length).toBe(4);
   });
 
   it("asks for a sitrep and opens the PM thread from the heading's Sitrep button", async () => {
