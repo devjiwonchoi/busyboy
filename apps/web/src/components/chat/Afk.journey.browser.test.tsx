@@ -74,6 +74,7 @@ function afkAnsweredCard(answeredAt: string): ProjectDecisionCard {
       answeredBy: "afk",
       specVersion: null,
       summary: null,
+      verification: null,
     },
   };
 }

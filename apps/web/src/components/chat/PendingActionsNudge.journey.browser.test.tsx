@@ -104,6 +104,7 @@ function card(
       answeredBy: null,
       specVersion: null,
       summary: null,
+      verification: null,
     },
   };
 }

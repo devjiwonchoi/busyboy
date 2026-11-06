@@ -183,7 +183,7 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
   description:
-    'Task lead only. The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. For approval, write the plan into the spec first and pass a summary the user can approve from; the user reviews that spec version in a card and answers "Approve and start", "Approve only", or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.',
+    'Task lead only. The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers "Approve and start" or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.',
   parameters: ProjectTeamAskUserInput,
   success: ProjectTeamAttentionItemResult,
 })

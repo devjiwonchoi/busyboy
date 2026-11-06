@@ -1,7 +1,6 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import {
   type EnvironmentId,
-  PLAN_APPROVAL_ONLY,
   PLAN_APPROVAL_START,
   formatPlanReviewFeedback,
   planApprovalOutcome,
@@ -22,6 +21,7 @@ import { DIALOG_POPUP_CLASS } from "../ui/dialog-styles";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { diffWords } from "./planDiff";
+import { PlanApprovalSections, PlanMarkdown } from "./PlanMarkdown";
 
 /** A text selection in the plan, waiting for its comment. */
 interface PendingSelection {
@@ -297,7 +297,8 @@ function PlanReview({
         <div
           data-plan-section={label}
           className={cn(
-            "whitespace-pre-wrap text-sm leading-relaxed",
+            "text-sm leading-relaxed",
+            diffing && "whitespace-pre-wrap",
             text.length === 0 && !diffing && "text-muted-foreground",
           )}
         >
@@ -305,10 +306,8 @@ function PlanReview({
             <DiffText before={before} after={text} />
           ) : text.length === 0 ? (
             "—"
-          ) : canComment ? (
-            withHighlights(text, quotesFor(label))
           ) : (
-            text
+            <PlanMarkdown text={text} highlights={canComment ? quotesFor(label) : undefined} />
           )}
         </div>
       </section>
@@ -504,6 +503,10 @@ function PlanReview({
             onMouseUp={captureSelection}
             onTouchEnd={captureSelection}
           >
+            <PlanApprovalSections
+              item={card.item}
+              className="rounded-lg border bg-muted/30 px-3 py-2.5"
+            />
             {textSection("End result", "goal")}
             {textSection("Success criteria", "successCriteria")}
             {textSection("Non-goals", "nonGoals")}
@@ -513,9 +516,7 @@ function PlanReview({
                 <summary className="cursor-pointer select-none font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
                   Background
                 </summary>
-                <p className="mt-1.5 whitespace-pre-wrap text-muted-foreground leading-relaxed">
-                  {spec.background}
-                </p>
+                <PlanMarkdown text={spec.background} className="mt-1.5 text-muted-foreground" />
               </details>
             ) : null}
             {canComment && !isMobile && commentEditor !== null ? (
@@ -561,16 +562,8 @@ function PlanReview({
             >
               Request changes
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={sending}
-              onClick={() => send(PLAN_APPROVAL_ONLY)}
-            >
-              Approve only
-            </Button>
             <Button size="sm" disabled={sending} onClick={() => send(PLAN_APPROVAL_START)}>
-              Approve and start
+              Approve
             </Button>
           </div>
         </footer>

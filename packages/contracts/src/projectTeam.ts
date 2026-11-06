@@ -341,8 +341,13 @@ export const ProjectAttentionItem = Schema.Struct({
   ),
   /** For a plan approval: the spec version the user reviews. Null for other kinds. */
   specVersion: Schema.NullOr(PositiveInt).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
-  /** For a plan approval: the short summary the card shows. Null for other kinds and older cards. */
+  /**
+   * For a plan approval: the card's Goal section (markdown). Older cards hold a single
+   * free-form summary here, shown as Goal only. Null for other kinds.
+   */
   summary: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** For a plan approval: the card's Verification section (markdown). Null for other kinds and older cards. */
+  verification: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
@@ -787,11 +792,15 @@ export const ProjectTeamAskUserInput = Schema.Struct({
       "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card. blocker: something only a person can unblock.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
-    description: "Self-contained question. For approval, a short summary of the plan.",
+    description: "Self-contained question. For approval, one line saying what the task is.",
   }),
-  summary: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
+  goal: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
     description:
-      "Required for approval: what the user reads on the card to approve without opening the plan. 3-5 short lines: what changes, the end result, done when (1-2 lines), and anything notable such as risky steps or scope cuts.",
+      "Required for approval: the card's Goal section. 2-4 short markdown bullets: what changes and what the end result looks like, plus anything notable such as risky steps or scope cuts.",
+  }),
+  verification: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
+    description:
+      "Required for approval: the card's Verification section. 2-4 short markdown bullets: how we'll know it's done (tests, checks, screenshots).",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -803,6 +812,7 @@ export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
 
 /** Plan approval answers. Anything else is feedback on the plan. */
 export const PLAN_APPROVAL_START = "Approve and start";
+/** No longer offered; older cards may still carry this answer. */
 export const PLAN_APPROVAL_ONLY = "Approve only";
 /** First line of feedback sent from the plan review; comments follow. */
 export const PLAN_CHANGES_REQUESTED = "Request changes";

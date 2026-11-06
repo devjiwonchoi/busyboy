@@ -1,7 +1,6 @@
 import {
   EnvironmentId,
   MessageId,
-  PLAN_APPROVAL_ONLY,
   PLAN_APPROVAL_START,
   PROJECT_TASK_STATUS_LABELS,
   ProjectAttentionBatchId,
@@ -28,6 +27,7 @@ import "~/index.css";
 import { decisionCardsForThread } from "../../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { MessagesTimeline } from "./MessagesTimeline";
+import { PlanApprovalCard } from "./PlanApprovalCard";
 import { PendingActionsNudge } from "./PendingActionsNudge";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
@@ -60,7 +60,7 @@ function useServerSummary() {
 
 /**
  * Mirrors ProjectTeamService.answerDecision for a plan: the card is answered as the user's
- * click and the task moves on (start → running, approve only → inbox).
+ * click and the task moves on (approve → running).
  */
 async function answerDecision(input: ProjectTeamAnswerDecisionInput) {
   server.answers.push(input);
@@ -94,7 +94,13 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
     answerDecision(input)) as never,
 }));
 
-function planCard(id: string, taskNumber: number, title: string, summary: string, at: string) {
+function planCard(
+  id: string,
+  taskNumber: number,
+  title: string,
+  sections: { goal: string; verification: string | null },
+  at: string,
+) {
   return {
     taskNumber,
     taskTitle: title,
@@ -104,7 +110,7 @@ function planCard(id: string, taskNumber: number, title: string, summary: string
       taskId: ProjectTaskId.make(`task-${taskNumber}`),
       kind: "approval",
       question: `This task fixes ${title.toLowerCase()}.`,
-      options: [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY],
+      options: [PLAN_APPROVAL_START],
       answer: null,
       answeredAt: null,
       askerThreadId: ThreadId.make(`lead-${taskNumber}`),
@@ -113,7 +119,8 @@ function planCard(id: string, taskNumber: number, title: string, summary: string
       supersededAt: null,
       answeredBy: null,
       specVersion: 2,
-      summary,
+      summary: sections.goal,
+      verification: sections.verification,
     },
   } satisfies ProjectDecisionCard;
 }
@@ -143,18 +150,28 @@ function message(index: number): Entry {
 }
 
 const ENTRIES = Array.from({ length: 80 }, (_, index) => message(index));
-const LOGIN_SUMMARY = [
-  "What changes: the login redirect moves into the auth guard.",
-  "End result: signing in always lands on the page you asked for.",
-  "Done when: a regression test covers the redirect.",
-  "Notable: the old /next query param is dropped.",
+const LOGIN_GOAL = [
+  "- The login redirect moves into the **auth guard**",
+  "- Signing in always lands on the page you asked for",
+  "- The old `/next` query param is dropped",
 ].join("\n");
-const loginPlan = planCard("attention-login", 3, "Login redirect", LOGIN_SUMMARY, minute(10, 30));
+const LOGIN_VERIFICATION = [
+  "- A regression test covers the redirect",
+  "- Desktop and phone screenshots in the PR",
+].join("\n");
+const loginPlan = planCard(
+  "attention-login",
+  3,
+  "Login redirect",
+  { goal: LOGIN_GOAL, verification: LOGIN_VERIFICATION },
+  minute(10, 30),
+);
+/** A card from before Goal/Verification: one free-form summary. */
 const cachePlan = planCard(
   "attention-cache",
   9,
   "Task page cache",
-  "What changes: keep the last 5 task pages in memory.",
+  { goal: "What changes: keep the last 5 task pages in memory.", verification: null },
   minute(60, 30),
 );
 
@@ -270,20 +287,39 @@ for (const viewport of [
 
     const login = await jumpTo("attention-login");
     expect(login.dataset.decisionCardState).toBe("open");
-    // The lead's summary shows in full, not the question.
-    const summary = login.querySelector<HTMLElement>("[data-plan-summary]")!;
-    expect(summary.textContent).toBe(LOGIN_SUMMARY);
+    // Goal and Verification show as labelled sections, the bullets as real lists.
+    const sections = [...login.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
+    expect(sections.map((section) => section.querySelector("h4")?.textContent)).toEqual([
+      "Goal",
+      "Verification",
+    ]);
+    const [goal, verification] = sections;
+    expect([...goal!.querySelectorAll("ul > li")].map((item) => item.textContent)).toEqual([
+      "The login redirect moves into the auth guard",
+      "Signing in always lands on the page you asked for",
+      "The old /next query param is dropped",
+    ]);
+    expect(goal!.querySelector("strong")?.textContent).toBe("auth guard");
+    expect(goal!.querySelector("code")?.textContent).toBe("/next");
+    expect(goal!.textContent).not.toContain("- ");
+    expect(verification!.querySelectorAll("ul > li")).toHaveLength(2);
+    // Each bullet sits on its own line.
+    const items = goal!.querySelectorAll("li");
+    expect(items[1]!.getBoundingClientRect().top).toBeGreaterThan(
+      items[0]!.getBoundingClientRect().bottom - 1,
+    );
     expect(login.textContent).not.toContain("This task fixes");
 
-    // The three buttons fit inside the card at this width.
+    // One way to approve; the buttons fit inside the card at this width.
+    expect(login.textContent).not.toContain("Approve only");
     const cardRect = login.getBoundingClientRect();
-    for (const name of [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY, "Review plan"]) {
+    for (const name of ["Approve", "Review plan"]) {
       const rect = buttonIn(login, name).getBoundingClientRect();
       expect(rect.left).toBeGreaterThanOrEqual(cardRect.left);
       expect(rect.right).toBeLessThanOrEqual(cardRect.right);
     }
 
-    await userEvent.click(buttonIn(login, PLAN_APPROVAL_START));
+    await userEvent.click(buttonIn(login, "Approve"));
 
     // Same answer the review modal sends, and the modal never opened.
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
@@ -303,15 +339,38 @@ for (const viewport of [
       expect(nudge()?.textContent).toBe("1 action waiting");
     });
 
-    // "Approve only" parks the other plan for later.
+    // An older card's single summary shows as Goal only, and approving it starts too.
     const cache = await jumpTo("attention-cache");
-    await userEvent.click(buttonIn(cache, PLAN_APPROVAL_ONLY));
+    const oldSections = [...cache.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
+    expect(oldSections.map((section) => section.dataset.planSummarySection)).toEqual(["Goal"]);
+    expect(oldSections[0]!.textContent).toContain("keep the last 5 task pages in memory");
+    await userEvent.click(buttonIn(cache, "Approve"));
     await vi.waitFor(() => expect(server.answers).toHaveLength(2));
-    expect(server.answers[1]!.answer).toBe(PLAN_APPROVAL_ONLY);
-    expect(taskStatus("task-9")).toBe("Todo");
+    expect(server.answers[1]!.answer).toBe(PLAN_APPROVAL_START);
+    expect(taskStatus("task-9")).toBe("In Progress");
     await vi.waitFor(() => {
-      expect(cardIn("attention-cache")?.textContent).toContain("Approved");
+      expect(cardIn("attention-cache")?.textContent).toContain("Approved and started");
       expect(nudge()).toBeNull();
     });
   });
 }
+
+it("still shows an older card answered with Approve only as Approved", async () => {
+  const legacy = planCard(
+    "attention-legacy",
+    4,
+    "Legacy plan",
+    { goal: "Old summary.", verification: null },
+    minute(5),
+  );
+  const answered = {
+    ...legacy,
+    item: { ...legacy.item, answer: "Approve only", answeredAt: AT, answeredBy: "user" as const },
+  };
+  await act(async () =>
+    root.render(<PlanApprovalCard card={answered} environmentId={ENVIRONMENT_ID} />),
+  );
+  const card = cardIn("attention-legacy")!;
+  expect(card.dataset.decisionCardState).toBe("answered");
+  expect(card.querySelector("[data-plan-outcome]")?.textContent).toBe("Approved");
+});

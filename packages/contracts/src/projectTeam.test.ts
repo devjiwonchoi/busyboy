@@ -212,6 +212,8 @@ describe("ProjectAttentionItem", () => {
       supersededAt: null,
       answeredBy: null,
       specVersion: null,
+      summary: null,
+      verification: null,
     });
   });
 });

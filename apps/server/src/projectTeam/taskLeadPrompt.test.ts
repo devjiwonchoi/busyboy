@@ -83,9 +83,12 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("### Success criteria\n- hello.sh prints hello.");
     // Leads ask the user to approve the plan and read inline review comments.
     expect(prompt).toContain('ask_user(kind: "approval")');
-    expect(prompt).toContain("a summary: 3-5 short lines the user reads on the card");
+    expect(prompt).toContain(
+      "plus goal and verification, the two sections the user reads on the card",
+    );
+    expect(prompt).toContain("2-4 short markdown bullets");
     expect(prompt).toContain('"Approve and start": go on to running.');
-    expect(prompt).toContain('"Approve only": call task_update(stage: "inbox", planSummary)');
+    expect(prompt).not.toContain("Approve only");
     expect(prompt).toContain('"Request changes" or anything else is feedback');
     expect(prompt).toContain("### testing\nUse vp test for changed files only.");
     expect(prompt).toContain("- #2 Add goodbye.sh (running)");
