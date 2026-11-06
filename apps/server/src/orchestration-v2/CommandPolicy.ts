@@ -11,6 +11,7 @@ import {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
+import { modelSelectionsEqual } from "@t3tools/shared/model";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -142,6 +143,61 @@ export function resolveMessageDispatchIntent(
   return targetMessage !== undefined && isNativeMaintenanceCommand(targetMessage)
     ? { type: "queue_after_active" }
     : mode;
+}
+
+/**
+ * A person's message to a busy project manager never cuts its turn off. It
+ * joins the running turn at the next step (a gentle steer) whatever mode the
+ * client asked for, so old clients get it too. When the turn cannot take a
+ * steer without cancelling work, the message waits in the queue instead.
+ * Call it only for user-created messages in a PM thread.
+ */
+export function resolveProjectManagerUserDispatch(
+  projection: OrchestrationV2ThreadProjection,
+  mode: MessageDispatchMode,
+  modelSelection: ModelSelection,
+): { readonly mode: MessageDispatchMode; readonly gentle: boolean } {
+  const activeRun = projection.runs.findLast(
+    (run) =>
+      run.status === "preparing" ||
+      run.status === "starting" ||
+      run.status === "running" ||
+      run.status === "waiting",
+  );
+  if (activeRun === undefined) return { mode, gentle: false };
+  const queued = { mode: { type: "queue_after_active" } as const, gentle: false };
+  if (activeRun.status !== "running") {
+    return mode.type === "steer_active" || mode.type === "restart_active"
+      ? queued
+      : { mode, gentle: false };
+  }
+  const targetMessage = projection.messages.find(
+    (message) => message.id === activeRun.userMessageId,
+  );
+  if (targetMessage !== undefined && isNativeMaintenanceCommand(targetMessage)) return queued;
+  // Between turns (one starting or one just ended) there is nothing to join.
+  const runningTurn = projection.providerTurns.some(
+    (turn) => turn.runAttemptId === activeRun.activeAttemptId && turn.status === "running",
+  );
+  if (!runningTurn) return queued;
+  const providerThread = projection.providerThreads.find(
+    (candidate) => candidate.id === activeRun.providerThreadId,
+  );
+  const providerSession =
+    providerThread?.providerSessionId == null
+      ? undefined
+      : projection.providerSessions.find(
+          (candidate) => candidate.id === providerThread.providerSessionId,
+        );
+  // A steer the provider cannot take actively would restart the turn, and a
+  // new model can force a restart too.
+  if (
+    providerSession?.capabilities.turns.supportsActiveSteering !== true ||
+    !modelSelectionsEqual(activeRun.modelSelection, modelSelection)
+  ) {
+    return queued;
+  }
+  return { mode: { type: "steer_active", targetRunId: activeRun.id }, gentle: true };
 }
 
 function resolveDeliveryIntent(

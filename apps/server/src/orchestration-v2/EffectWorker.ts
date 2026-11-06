@@ -229,6 +229,7 @@ export const layerExecutor: Layer.Layer<
                 providerThreadId: effect.request.providerThreadId,
                 providerTurnId: effect.request.providerTurnId,
                 messageId: effect.request.messageId,
+                ...(effect.request.gentle === true ? { gentle: true } : {}),
               })
               .pipe(
                 Effect.tap(() =>

@@ -677,6 +677,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
   const citationThreadRef = parseScopedThreadKey(routeThreadKey);
   const openPullRequest = useOpenPrLink(citationThreadRef ?? undefined);
   const projectManager = useProjectManagerForThread(citationThreadRef);
+  // The PM chat reads as one uninterrupted agent: no steer folds, no compaction markers.
+  const seamless = projectManager !== null;
   const expandCitedRun = (runId: RunId) => {
     setExpandedRunIds((current) => (current.has(runId) ? current : new Set([...current, runId])));
   };
@@ -883,6 +885,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     turnDiffSummaries,
     supportsConversationRollback,
     worktreeSetup,
+    seamless,
   });
   const stableRows = useStableRows(rawRows, listIdentityKey);
   // Question cards stay where they were asked: open ones wait there, closed ones are the record.
@@ -1286,7 +1289,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
     workGroupViewState,
   };
   const compactionAwaitingRow =
-    isCompacting && !rows.some((row) => row.kind === "context-compaction" && row.active);
+    !seamless &&
+    isCompacting &&
+    !rows.some((row) => row.kind === "context-compaction" && row.active);
   const backgroundWorktreeSetup =
     worktreeSetup !== null &&
     worktreeSetup.phase === "running" &&
@@ -2155,6 +2160,8 @@ function UserOrPmEventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
 
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
+  // The PM chat shows follow-ups as plain bubbles, without a steer/queue badge.
+  const pm = use(PmTimelineCtx);
   const { onImageExpand, onFileOpen } = ctx;
   const senderThreadId = row.message.senderThreadId;
   const resources = selectMessageImageResources(row.message.attachments);
@@ -2324,7 +2331,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           )}
         </p>
       ) : null}
-      {row.message.inputIntent && row.message.inputIntent !== "turn_start" ? (
+      {pm === null && row.message.inputIntent && row.message.inputIntent !== "turn_start" ? (
         <UserMessageIntentMarker intent={row.message.inputIntent} />
       ) : null}
       <div className="relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
