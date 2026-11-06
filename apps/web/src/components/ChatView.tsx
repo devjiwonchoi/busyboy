@@ -3558,7 +3558,8 @@ export default function ChatView(props: ChatViewProps) {
       {
         id: "chat-code-block",
         name: "Chat code block",
-        command,
+        // Enter after each line runs a multi-line block line by line.
+        command: command.replaceAll("\n", "\r"),
         icon: "play",
         runOnWorktreeCreate: false,
       },

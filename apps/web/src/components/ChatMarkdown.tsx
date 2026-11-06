@@ -210,6 +210,7 @@ import {
 } from "~/lib/openPullRequestLink";
 import { useOpenLink } from "../browser/useOpenLink";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { runnableShellCommand } from "../markdownShellCommand";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import {
   isBrowserPreviewFile,
@@ -836,17 +837,10 @@ function MarkdownCodeBlock({
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapLabel = wrapped ? "Disable line wrap" : "Wrap lines";
   const copyLabel = copied ? "Copied" : "Copy code";
-  const command = code.trim();
-  const canRun =
-    onRunShellCommand !== undefined &&
-    !isStreaming &&
-    /^(?:sh|bash|zsh|fish|shell|powershell|pwsh)$/.test(language) &&
-    code.endsWith("\n") &&
-    command.length > 0 &&
-    !command.endsWith("\\") &&
-    // Control and invisible format characters (bidi overrides, zero-width) can
-    // make the rendered command differ from what the terminal would receive.
-    !/[\p{Cc}\p{Cf}]/u.test(code.slice(0, -1));
+  const command =
+    onRunShellCommand !== undefined && !isStreaming && code.endsWith("\n")
+      ? runnableShellCommand(code, language)
+      : null;
 
   const handleCopy = () => {
     if (typeof navigator === "undefined" || navigator.clipboard == null) {
@@ -945,7 +939,7 @@ function MarkdownCodeBlock({
               <TooltipPopup side="top">{wrapLabel}</TooltipPopup>
             </Tooltip>
           ) : null}
-          {canRun ? (
+          {onRunShellCommand && command !== null ? (
             <Tooltip>
               <TooltipTrigger
                 render={
