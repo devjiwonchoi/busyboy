@@ -262,6 +262,7 @@ import {
   useComboboxFilter,
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
+import { SidebarRowSwipe, type SidebarRowSwipeAction } from "./sidebar/SidebarRowSwipe";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
 import { openQuickTask } from "./task/quickTaskStore";
 import { selectSidebarTasksWithoutSession, SidebarTaskRow } from "./sidebar/SidebarTaskRows";
@@ -1587,6 +1588,15 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     event.stopPropagation();
     onArchive(threadRef);
   };
+  // Phones have no hover, so a left swipe uncovers the same actions.
+  const { isMobile } = useSidebar();
+  const swipeActions: SidebarRowSwipeAction[] = [];
+  if (showPinButton) swipeActions.push({ kind: "pin", onSelect: () => onPin(threadRef) });
+  if (props.isPinned && props.pinningSupported && canOperateThread) {
+    swipeActions.push({ kind: "unpin", onSelect: () => onUnpin(threadRef) });
+  }
+  if (showArchiveButton)
+    swipeActions.push({ kind: "archive", onSelect: () => onArchive(threadRef) });
 
   const rowSurfaceClassName = cn(
     "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -1762,45 +1772,51 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         sortable?.isDragging && "relative z-20",
       )}
     >
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={accessibility.label}
-        aria-current={accessibility.current}
-        data-testid="sidebar-row-card"
-        aria-busy={isRegeneratingTitle || undefined}
-        className={rowSurfaceClassName}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-        onKeyDown={handleKeyDown}
-        onContextMenu={handleContextMenu}
+      <SidebarRowSwipe
+        enabled={isMobile}
+        paused={isRenaming || sortable?.isDragging}
+        actions={swipeActions}
       >
-        {accessibleTitle}
-        <SidebarRowLine
-          title={
-            <>
-              {title}
-              {isRegeneratingTitle ? (
-                <span role="status" className="sr-only">
-                  Regenerating title
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={accessibility.label}
+          aria-current={accessibility.current}
+          data-testid="sidebar-row-card"
+          aria-busy={isRegeneratingTitle || undefined}
+          className={rowSurfaceClassName}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+          onKeyDown={handleKeyDown}
+          onContextMenu={handleContextMenu}
+        >
+          {accessibleTitle}
+          <SidebarRowLine
+            title={
+              <>
+                {title}
+                {isRegeneratingTitle ? (
+                  <span role="status" className="sr-only">
+                    Regenerating title
+                  </span>
+                ) : null}
+              </>
+            }
+            status={topStatus}
+            indicators={indicators}
+            actions={actions}
+            trailingOverride={
+              sortable?.isDragging ? (
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {pinIndicator}
+                  {dragDestination}
                 </span>
-              ) : null}
-            </>
-          }
-          status={topStatus}
-          indicators={indicators}
-          actions={actions}
-          trailingOverride={
-            sortable?.isDragging ? (
-              <span className="flex shrink-0 items-center gap-1.5">
-                {pinIndicator}
-                {dragDestination}
-              </span>
-            ) : undefined
-          }
-        />
-        {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
-      </div>
+              ) : undefined
+            }
+          />
+          {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
+        </div>
+      </SidebarRowSwipe>
     </li>
   );
 });
