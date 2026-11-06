@@ -301,12 +301,21 @@ describe("sidebar tasks", () => {
     );
     expect(threadRow("BB-2 Fix drag scroll")?.getAttribute("aria-current")).toBe("page");
 
-    // The PM heading's "New task" opens the quick task modal on that project.
+    // The PM heading's "+" menu has "New task", which opens the quick task modal on that project.
     await userEvent.hover(
       container.querySelector('[data-testid="sidebar-project-manager-heading"]')!,
     );
     await userEvent.click(
-      container.querySelector<HTMLElement>('button[aria-label="New task in busyboy"]')!,
+      container.querySelector<HTMLElement>('button[aria-label="Add to busyboy"]')!,
+    );
+    await userEvent.click(
+      await vi.waitFor(() => {
+        const item = [...document.querySelectorAll<HTMLElement>('[data-slot="menu-item"]')].find(
+          (candidate) => candidate.textContent === "New task",
+        );
+        expect(item).toBeDefined();
+        return item!;
+      }),
     );
     const context = await vi.waitFor(() => {
       const textarea = document.querySelector<HTMLTextAreaElement>(
@@ -337,7 +346,7 @@ describe("sidebar tasks", () => {
     );
     expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-2");
   });
-  it("folds the PM section from its heading and opens the PM chat from the avatar", async () => {
+  it("opens the PM chat from its heading, then folds the PM section from it", async () => {
     const app = renderSidebarApp();
     await app.render();
     await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
@@ -345,14 +354,18 @@ describe("sidebar tasks", () => {
       container.querySelector<HTMLElement>('[data-testid="sidebar-project-manager-heading"]')!;
     const toggle = () => heading().querySelector<HTMLElement>("button[aria-expanded]")!;
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
-    expect(threadRow("BB-2 Fix drag scroll")).not.toBeNull();
 
-    // Clicking the row folds the tasks and threads under it, without opening the PM chat.
+    // From elsewhere, the heading opens the PM chat and leaves the section open.
+    await userEvent.click(toggle());
+    await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+
+    // On the PM chat, clicking it folds the tasks and threads under it.
     await userEvent.click(toggle());
     await vi.waitFor(() => expect(taskRowButton("BB-3")).toBeNull());
     expect(threadRow("BB-2 Fix drag scroll")).toBeNull();
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
-    expect(app.router.state.location.pathname).toBe("/");
+    expect(app.router.state.location.pathname).toBe("/env-1/pm-thread");
     // No chevron: the heading keeps the same look.
     expect(heading().querySelector("svg.lucide-chevron-right")).toBeNull();
 
@@ -364,17 +377,11 @@ describe("sidebar tasks", () => {
     await vi.waitFor(() => expect(toggle().getAttribute("aria-expanded")).toBe("false"));
     expect(taskRowButton("BB-3")).toBeNull();
 
-    // The avatar opens the PM chat and leaves the fold alone.
-    await userEvent.click(
-      heading().querySelector<HTMLElement>('button[aria-label="Open Remy chat"]')!,
-    );
+    // From elsewhere again, the folded heading opens the PM chat and unfolds.
+    await userEvent.click(toggle());
     await vi.waitFor(() =>
       expect(reloaded.router.state.location.pathname).toBe("/env-1/pm-thread"),
     );
-    expect(toggle().getAttribute("aria-expanded")).toBe("false");
-
-    // Clicking the row again unfolds it.
-    await userEvent.click(toggle());
     await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
     expect(threadRow("BB-2 Fix drag scroll")).not.toBeNull();
   });

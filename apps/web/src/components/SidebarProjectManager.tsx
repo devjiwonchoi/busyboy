@@ -4,8 +4,8 @@ import {
   type ProjectTeamAttentionSummary,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { ListPlusIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { ListPlusIcon, MessageSquarePlusIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { useId, type MouseEvent as ReactMouseEvent } from "react";
 
 import { cn } from "~/lib/utils";
 import { useNowMinute } from "../hooks/useNowMinute";
@@ -17,6 +17,7 @@ import {
 import { useEnvironmentScope } from "../state/session";
 import { PmAvatar } from "./PmAvatar";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export function SidebarProjectManagerBadges(props: { summary: ProjectTeamAttentionSummary }) {
@@ -74,9 +75,6 @@ export function SidebarSitrepButton(props: {
   );
 }
 
-const hoverOnlyClassName =
-  "opacity-0 transition-opacity focus-visible:opacity-100 group-hover/project:opacity-100 group-focus-within/project:opacity-100";
-
 /** The second line of a manager row: the PM chat's latest message, or a hint before the first one. */
 export function projectManagerPreview(summary: ProjectTeamAttentionSummary): string {
   const last = summary.lastMessage;
@@ -87,8 +85,12 @@ export function projectManagerPreview(summary: ProjectTeamAttentionSummary): str
 /**
  * A project's section heading while its manager is on, shaped like a chat list
  * row: a large PM avatar, the PM and project names, and a one-line preview of
- * the PM chat's latest message. Clicking the row folds the section like a
- * project folder; clicking the avatar opens the PM thread.
+ * the PM chat's latest message.
+ *
+ * The whole row, avatar included, is one button. From anywhere else it opens
+ * the PM chat and unfolds the section; on the PM chat it folds and unfolds.
+ * The row's own buttons sit at the end of the name line so they never cover
+ * the preview.
  */
 export function SidebarProjectManagerHeading(props: {
   projectName: string;
@@ -110,12 +112,23 @@ export function SidebarProjectManagerHeading(props: {
   const presence = formatProjectManagerPresence(summary, Date.parse(`${nowMinute}:00.000Z`));
   const status = resolveProjectManagerStatus({ summary, pmThreadWorking: props.pmThreadWorking });
   const preview = props.pmThreadWorking ? "Working…" : projectManagerPreview(summary);
+  const nameId = useId();
+  const previewId = useId();
+  const onNewTask = canOperate ? (props.onNewTask ?? null) : null;
+  const handleClick = () => {
+    if (props.isActive) {
+      props.onToggle();
+      return;
+    }
+    props.onOpenThread(pmThreadRef);
+    if (!props.expanded) props.onToggle();
+  };
   return (
     <div className="group/project">
       <div
         data-testid="sidebar-project-manager-heading"
         className={cn(
-          "relative flex min-h-12 items-center gap-0.5 rounded-lg py-1 pr-1 transition-colors",
+          "relative flex min-h-12 items-center gap-2 rounded-lg py-1 pr-1 pl-1.5 transition-colors",
           props.isActive ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
         )}
       >
@@ -124,29 +137,23 @@ export function SidebarProjectManagerHeading(props: {
             render={
               <button
                 type="button"
-                aria-label={`Open ${summary.persona.name} chat`}
-                aria-current={props.isActive ? "page" : undefined}
-                onClick={() => props.onOpenThread(pmThreadRef)}
-                className="ml-1 flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-              />
-            }
-          >
-            <PmAvatar persona={summary.persona} status={status} size="lg" />
-          </TooltipTrigger>
-          <TooltipPopup side="right">Open PM chat</TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
+                data-testid="sidebar-project-manager-toggle"
+                aria-labelledby={`${nameId} ${previewId}`}
                 aria-expanded={props.expanded}
-                onClick={props.onToggle}
-                className="flex min-w-0 flex-1 cursor-pointer flex-col justify-center gap-0.5 self-stretch rounded-md px-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+                aria-current={props.isActive ? "page" : undefined}
+                onClick={handleClick}
+                className="absolute inset-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
               />
             }
-          >
-            <span className="flex min-w-0 items-baseline gap-1.5 text-xs">
+          />
+          <TooltipPopup side="right">{presence}</TooltipPopup>
+        </Tooltip>
+        <span className="pointer-events-none shrink-0">
+          <PmAvatar persona={summary.persona} status={status} size="lg" />
+        </span>
+        <span className="pointer-events-none flex min-w-0 flex-1 flex-col">
+          <span className="flex h-6 min-w-0 items-center gap-1.5 text-xs">
+            <span id={nameId} className="flex min-w-0 flex-1 items-baseline gap-1.5">
               <span className="min-w-0 shrink-0 truncate font-semibold text-sidebar-foreground">
                 {summary.persona.name}
               </span>
@@ -154,72 +161,82 @@ export function SidebarProjectManagerHeading(props: {
                 {projectName}
               </span>
             </span>
+            <SidebarProjectManagerBadges summary={summary} />
             <span
-              data-testid="sidebar-project-manager-preview"
-              className={cn(
-                "block min-w-0 truncate text-xs",
-                summary.lastMessage === null && !props.pmThreadWorking
-                  ? "text-sidebar-muted-foreground/70"
-                  : "text-sidebar-muted-foreground",
-              )}
+              data-testid="sidebar-project-manager-actions"
+              className="pointer-events-auto relative flex shrink-0 items-center"
             >
-              {preview}
+              {onNewTask || props.onNewThread ? (
+                <SidebarProjectAddMenu
+                  projectName={projectName}
+                  onNewTask={onNewTask}
+                  onNewThread={props.onNewThread}
+                />
+              ) : null}
+              {/* Always visible: touch screens cannot hover to reveal it. */}
+              {canOperate ? (
+                <SidebarSitrepButton
+                  threadRef={pmThreadRef}
+                  summary={summary}
+                  onThreadActivate={props.onOpenThread}
+                />
+              ) : null}
             </span>
-          </TooltipTrigger>
-          <TooltipPopup side="right">{presence}</TooltipPopup>
-        </Tooltip>
-        <SidebarProjectManagerBadges summary={summary} />
-        {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
-        {/*
-          With a mouse these float over the end of the preview on hover, so they
-          take no room from it; touch screens cannot hover, so they stay in the row.
-        */}
-        <span
-          className={cn(
-            "flex shrink-0 items-center",
-            "absolute top-1/2 right-8 -translate-y-1/2 rounded-md bg-inherit",
-            "pointer-events-none group-hover/project:pointer-events-auto group-focus-within/project:pointer-events-auto",
-            hoverOnlyClassName,
-            "pointer-coarse:pointer-events-auto pointer-coarse:static pointer-coarse:translate-y-0 pointer-coarse:bg-transparent pointer-coarse:opacity-100",
-          )}
-        >
-          {canOperate && props.onNewTask ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={`New task in ${projectName}`}
-                    onClick={props.onNewTask}
-                    className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-                  />
-                }
-              >
-                <ListPlusIcon className="size-3.5" />
-              </TooltipTrigger>
-              <TooltipPopup side="top">New task</TooltipPopup>
-            </Tooltip>
-          ) : null}
-          {props.onNewThread ? (
-            <button
-              type="button"
-              aria-label={`New thread in ${projectName}`}
-              onClick={props.onNewThread}
-              className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-            >
-              <PlusIcon className="size-3.5" />
-            </button>
-          ) : null}
+          </span>
+          <span
+            id={previewId}
+            data-testid="sidebar-project-manager-preview"
+            className={cn(
+              "block min-w-0 truncate text-xs",
+              summary.lastMessage === null && !props.pmThreadWorking
+                ? "text-sidebar-muted-foreground/70"
+                : "text-sidebar-muted-foreground",
+            )}
+          >
+            {preview}
+          </span>
         </span>
-        {/* Always visible: touch screens cannot hover to reveal it. */}
-        {canOperate ? (
-          <SidebarSitrepButton
-            threadRef={pmThreadRef}
-            summary={summary}
-            onThreadActivate={props.onOpenThread}
-          />
-        ) : null}
+        {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * One "+" for everything a project can add, so the row never shows two
+ * look-alike add icons. Hover-only with a mouse; always shown on touch screens
+ * and at phone width, where the sidebar is a sheet.
+ */
+function SidebarProjectAddMenu(props: {
+  projectName: string;
+  onNewTask: (() => void) | null;
+  onNewThread: (() => void) | null;
+}) {
+  return (
+    <Menu>
+      <MenuTrigger
+        aria-label={`Add to ${props.projectName}`}
+        className={cn(
+          "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 data-popup-open:opacity-100",
+          "opacity-0 transition-opacity focus-visible:opacity-100 group-hover/project:opacity-100 group-focus-within/project:opacity-100 pointer-coarse:opacity-100 max-md:opacity-100",
+        )}
+      >
+        <PlusIcon aria-hidden className="size-3.5" />
+      </MenuTrigger>
+      <MenuPopup align="end">
+        {props.onNewTask ? (
+          <MenuItem onClick={props.onNewTask}>
+            <ListPlusIcon aria-hidden />
+            New task
+          </MenuItem>
+        ) : null}
+        {props.onNewThread ? (
+          <MenuItem onClick={props.onNewThread}>
+            <MessageSquarePlusIcon aria-hidden />
+            New thread
+          </MenuItem>
+        ) : null}
+      </MenuPopup>
+    </Menu>
   );
 }

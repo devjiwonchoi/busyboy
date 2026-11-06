@@ -191,6 +191,7 @@ function manager(patch: Parameters<typeof makeProjectManagerSummaryFixture>[0] =
         prUrl: null,
         lastOutcome: null,
         openQuestion: false,
+        updatedAt: null,
       })),
       ...patch,
     }),
@@ -265,6 +266,29 @@ const rowTitles = () =>
   [...container.querySelectorAll<HTMLElement>('[data-testid="sidebar-row-card"]')].map(
     (card) => card.querySelector("span.sr-only")?.textContent ?? "",
   );
+const rowToggle = () =>
+  managerRow()?.querySelector<HTMLButtonElement>(
+    '[data-testid="sidebar-project-manager-toggle"]',
+  ) ?? null;
+/** Clicks where the avatar is drawn; the row's one button sits under it. */
+async function clickAvatar() {
+  const avatar = managerRow()!.querySelector<HTMLElement>('[role="img"][aria-label^="Remy"]')!;
+  const toggle = rowToggle()!;
+  const a = avatar.getBoundingClientRect();
+  const t = toggle.getBoundingClientRect();
+  expect(document.elementFromPoint(a.x + a.width / 2, a.y + a.height / 2)).toBe(toggle);
+  await userEvent.click(toggle, {
+    position: { x: a.x - t.x + a.width / 2, y: a.y - t.y + a.height / 2 },
+  });
+}
+/** Vitest's toBeVisible ignores a parent's opacity, so multiply it up the tree. */
+function effectiveOpacity(element: Element): number {
+  let opacity = 1;
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    opacity *= Number(getComputedStyle(node).opacity);
+  }
+  return opacity;
+}
 const buttonNamed = (name: string) =>
   [...container.querySelectorAll<HTMLButtonElement>("button")].find(
     (candidate) => candidate.getAttribute("aria-label") === name,
@@ -289,19 +313,9 @@ async function expectChatListRow() {
 }
 
 describe("sidebar manager row", () => {
-  it("shows the manager like a chat list row and folds the project's tasks and threads", async () => {
+  it("shows the manager like a chat list row", async () => {
     await renderSidebarApp().render();
     await expectChatListRow();
-    await vi.waitFor(() =>
-      expect(rowTitles()).toEqual(expect.arrayContaining(["Task 1", "Task 2", "My own thread"])),
-    );
-
-    const toggle = managerRow()!.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    await userEvent.click(toggle);
-    await vi.waitFor(() => expect(rowTitles()).toEqual([]));
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-
-    await userEvent.click(toggle);
     await vi.waitFor(() =>
       expect(rowTitles()).toEqual(expect.arrayContaining(["Task 1", "Task 2", "My own thread"])),
     );
@@ -313,13 +327,79 @@ describe("sidebar manager row", () => {
     await expectChatListRow();
   });
 
-  it("opens the PM chat from the avatar", async () => {
-    const app = renderSidebarApp();
-    await app.render();
-    await vi.waitFor(() => expect(buttonNamed("Open Remy chat")).toBeDefined());
-    await userEvent.click(buttonNamed("Open Remy chat")!);
-    await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
-  });
+  for (const [label, width, height] of [
+    ["desktop", 1280, 800],
+    ["phone", 390, 844],
+  ] as const) {
+    it(`opens the PM chat from anywhere on the row, then folds and unfolds it (${label})`, async () => {
+      await page.viewport(width, height);
+      const app = renderSidebarApp();
+      await app.render();
+      await vi.waitFor(() => expect(preview()?.textContent).toBe(LAST_REPLY));
+      const toggle = rowToggle()!;
+
+      // Coming from another session, the avatar opens the PM chat and keeps the list open.
+      await clickAvatar();
+      await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(toggle.getAttribute("aria-current")).toBe("page");
+      expect(rowTitles()).toEqual(expect.arrayContaining(["Task 1", "My own thread"]));
+
+      // On the PM chat, the avatar and the rest of the row fold and unfold.
+      await clickAvatar();
+      await vi.waitFor(() => expect(rowTitles()).toEqual([]));
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      await userEvent.click(toggle);
+      await vi.waitFor(() =>
+        expect(rowTitles()).toEqual(expect.arrayContaining(["Task 1", "My own thread"])),
+      );
+
+      // Fold it, go to another session, then click the row: it opens the PM chat and unfolds.
+      await userEvent.click(toggle);
+      await vi.waitFor(() => expect(rowTitles()).toEqual([]));
+      await act(() => app.router.navigate({ to: "/" }));
+      await userEvent.click(toggle);
+      await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
+      await vi.waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
+      expect(rowTitles()).toEqual(expect.arrayContaining(["Task 1", "My own thread"]));
+    });
+
+    it(`keeps one + menu and Sitrep clear of the preview (${label})`, async () => {
+      await page.viewport(width, height);
+      await renderSidebarApp().render();
+      await vi.waitFor(() => expect(preview()?.textContent).toBe(LAST_REPLY));
+      const add = buttonNamed("Add to busyboy")!;
+      const sitrep = buttonNamed("Sitrep")!;
+      if (label === "phone") {
+        // Phones cannot hover: both buttons show without it.
+        expect(effectiveOpacity(add)).toBe(1);
+      } else {
+        expect(effectiveOpacity(add)).toBe(0);
+        await userEvent.hover(managerRow()!);
+        await vi.waitFor(() => expect(effectiveOpacity(add)).toBe(1));
+      }
+      expect(effectiveOpacity(sitrep)).toBe(1);
+      // The old look-alike buttons are gone.
+      expect(buttonNamed("New task in busyboy")).toBeUndefined();
+      expect(buttonNamed("New thread in busyboy")).toBeUndefined();
+      // Neither button covers the preview line.
+      const line = preview()!.getBoundingClientRect();
+      for (const button of [add, sitrep]) {
+        const box = button.getBoundingClientRect();
+        expect(box.bottom <= line.top || box.top >= line.bottom).toBe(true);
+      }
+
+      await userEvent.click(add);
+      const items = await vi.waitFor(() => {
+        const found = [...document.querySelectorAll('[data-slot="menu-item"]')].map(
+          (item) => item.textContent,
+        );
+        expect(found.length).toBeGreaterThan(0);
+        return found;
+      });
+      expect(items).toEqual(["New task", "New thread"]);
+    });
+  }
 
   it("follows the PM chat as new messages arrive", async () => {
     await renderSidebarApp().render();

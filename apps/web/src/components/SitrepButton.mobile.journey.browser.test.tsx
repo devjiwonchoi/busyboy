@@ -119,9 +119,9 @@ describe("Sitrep on a phone-sized screen", () => {
       ),
     );
 
-    // New thread stays a hover-only control; Sitrep is always shown.
-    const newThread = page.getByRole("button", { name: "New thread in busyboy" });
-    expect(effectiveOpacity(newThread.element())).toBe(0);
+    // At phone width the "+" menu and Sitrep both show without hovering.
+    const add = page.getByRole("button", { name: "Add to busyboy" });
+    expect(effectiveOpacity(add.element())).toBe(1);
     const sitrep = page.getByRole("button", { name: "Sitrep" });
     await expect.element(sitrep).toBeVisible();
     expect(effectiveOpacity(sitrep.element())).toBe(1);
