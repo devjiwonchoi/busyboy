@@ -1893,6 +1893,7 @@ const make = Effect.gen(function* () {
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),
+              updatedAt: task.updatedAt,
             })),
           } satisfies ProjectTeamAttentionSummary;
         }),

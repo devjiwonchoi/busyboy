@@ -26,6 +26,7 @@ const PROJECT_TASKS = {
       prUrl: null,
       lastOutcome: null,
       openQuestion: false,
+      updatedAt: null,
     },
     {
       id: "task-7" as never,
@@ -37,6 +38,7 @@ const PROJECT_TASKS = {
       prUrl: null,
       lastOutcome: null,
       openQuestion: false,
+      updatedAt: null,
     },
   ],
 };

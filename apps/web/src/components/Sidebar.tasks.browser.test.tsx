@@ -174,6 +174,7 @@ function task(
     prUrl: null,
     lastOutcome: null,
     openQuestion: false,
+    updatedAt: null,
     ...overrides,
   };
 }
