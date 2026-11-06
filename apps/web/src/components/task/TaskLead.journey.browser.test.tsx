@@ -48,6 +48,15 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
   };
 });
 
+vi.mock(import("~/hooks/useTheme"), async (original) => ({
+  ...(await original()),
+  useTheme: () => ({ theme: "light", resolvedTheme: "light", themeHalves: null }) as never,
+}));
+vi.mock(import("~/browser/browserDefaults"), async (original) => ({
+  ...(await original()),
+  useBrowserDefaults: () => ({ profiles: [] }) as never,
+}));
+
 vi.mock(import("../../state/entities"), async (original) => ({
   ...(await original()),
   useThreadShell: ((ref: { threadId: string } | null) =>
@@ -73,26 +82,37 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { useTaskPlanPanelStore } from "~/taskPlanPanelStore";
-import { TaskLeadLayout } from "./TaskLeadLayout";
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import type { ScopedThreadRef } from "@t3tools/contracts";
+
+import { useMediaQuery } from "~/hooks/useMediaQuery";
+import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "~/rightPanelLayout";
+import { selectThreadRightPanelState, useRightPanelStore } from "~/rightPanelStore";
+import { useLeadThreadTask } from "~/state/projectTeam";
+import { RightPanelSheet } from "../RightPanelSheet";
+import { RightPanelTabs } from "../RightPanelTabs";
 import { TaskPage } from "./TaskPage";
-import { TaskPlanToggle } from "./TaskPlanPanel";
+import { TaskPlanSurface, TaskPlanToggle, useOpenTaskPlanOnEntry } from "./TaskPlanSurface";
 
 let container: HTMLDivElement;
 let root: Root;
 
+const LEAD = { environmentId: "env-1", threadId: "lead-1" } as unknown as ScopedThreadRef;
+const OTHER = { environmentId: "env-1", threadId: "other" } as unknown as ScopedThreadRef;
+
 beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   localStorage.clear();
-  useTaskPlanPanelStore.setState({ open: true, width: 360, mobileOpen: false });
+  useRightPanelStore.setState({ byThreadKey: {}, userActionRevisionByThreadKey: {} });
   state.updates = [];
   state.leadShellExists = true;
   state.detail = {
-    key: "BU-45",
+    key: "BU-49",
     task: {
-      id: "task-45",
+      id: "task-49",
       projectId: "project-1",
-      number: 45,
-      title: "Task page = the lead's session",
+      number: 49,
+      title: "Plan in the right sidebar",
       request: "",
       stage: "running",
       waitsOn: [],
@@ -109,12 +129,12 @@ beforeEach(() => {
     },
     versions: [
       {
-        taskId: "task-45",
+        taskId: "task-49",
         version: 1,
         spec: {
-          background: "Plan on the left.",
-          goal: "The lead's chat with the plan beside it.",
-          successCriteria: "Right panel works.",
+          background: "Plan was on the left.",
+          goal: "The plan is a tab in the right sidebar.",
+          successCriteria: "Plan, Browser and back.",
           nonGoals: "",
           todos: [{ id: "t1", text: "Move the plan", done: false, subtaskId: null }],
         },
@@ -124,7 +144,7 @@ beforeEach(() => {
         createdAt: AT,
       },
     ],
-    sessions: [{ taskId: "task-45", threadId: "lead-1", role: "lead", createdAt: AT }],
+    sessions: [{ taskId: "task-49", threadId: "lead-1", role: "lead", createdAt: AT }],
     children: [],
     openAttention: [],
   } as unknown as ProjectTeamTaskDetail;
@@ -136,100 +156,202 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
+  vi.unstubAllGlobals();
   await page.viewport(1280, 800);
 });
 
-/** The lead's thread view: the layout around a stand-in chat whose header has the Plan button. */
-function renderLeadThread() {
-  return act(async () =>
-    root.render(
-      <div style={{ display: "flex", height: 800, width: "100%" }}>
-        <TaskLeadLayout
-          threadRef={{ environmentId: "env-1", threadId: "lead-1" } as never}
-          projectId={"project-1" as never}
+const noop = () => undefined;
+
+/**
+ * A thread view wired like ChatView: a stand-in chat whose header has the Plan button, and the
+ * real right panel (inline on desktop, a sheet on phones) on the real panel store.
+ */
+function ThreadView(props: { threadRef: ScopedThreadRef }) {
+  const ref = props.threadRef;
+  const leadTask = useLeadThreadTask(ref, "project-1" as never);
+  useOpenTaskPlanOnEntry(ref, leadTask !== null);
+  const panel = useRightPanelStore((store) => selectThreadRightPanelState(store.byThreadKey, ref));
+  const sheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const active = panel.surfaces.find((surface) => surface.id === panel.activeSurfaceId) ?? null;
+  const store = useRightPanelStore.getState;
+  const tabs = (
+    <RightPanelTabs
+      mode={sheet ? "sheet" : "inline"}
+      open={panel.isOpen}
+      keybindings={DEFAULT_RESOLVED_KEYBINDINGS}
+      getShortcutContext={() => ({
+        terminalFocus: false,
+        terminalOpen: false,
+        previewFocus: false,
+        previewOpen: false,
+        isWeb: true,
+        isDesktop: false,
+      })}
+      surfaces={panel.surfaces}
+      environmentId={null}
+      activeSurfaceId={active?.id ?? null}
+      pendingSurfaceIds={new Set()}
+      previewSessions={{}}
+      desktopByTabId={{}}
+      terminalLabelsById={new Map()}
+      onActivate={(surface) => store().activateSurface(ref, surface.id)}
+      onCloseSurface={(surface) => store().closeSurface(ref, surface.id)}
+      onCloseOtherSurfaces={noop}
+      onCloseSurfacesToRight={noop}
+      onCloseAllSurfaces={noop}
+      onCopyFilePath={noop}
+      onAddBrowser={() => store().openBrowser(ref, null)}
+      onAddBrowserInProfile={noop}
+      onAddTerminal={noop}
+      onAddDiff={noop}
+      onAddFiles={noop}
+      onAddPullRequest={noop}
+      onAddPullRequests={noop}
+      onAddSideChat={noop}
+      onAddTaskPlan={leadTask === null ? undefined : () => store().open(ref, "task-plan")}
+      browserAvailable
+      terminalAvailable={false}
+      diffAvailable={false}
+      filesAvailable={false}
+      pullRequestAvailable={false}
+      pullRequestsAvailable={false}
+      sideChatAvailable={false}
+    >
+      {active?.kind === "task-plan" ? <TaskPlanSurface threadRef={ref} /> : null}
+      {active?.kind === "preview" ? <div data-testid="browser-body">browser</div> : null}
+    </RightPanelTabs>
+  );
+  return (
+    <div style={{ display: "flex", height: "100vh", width: "100%" }}>
+      <div data-testid="chat" style={{ flex: 1, minWidth: 0 }}>
+        <header>{leadTask === null ? null : <TaskPlanToggle threadRef={ref} />}</header>
+        chat {ref.threadId}
+      </div>
+      {sheet ? (
+        <RightPanelSheet
+          animationDurationMs={0}
+          open={panel.isOpen}
+          onClose={() => store().close(ref)}
         >
-          <div data-testid="chat">
-            <header>
-              <TaskPlanToggle />
-            </header>
-            chat lead-1
-          </div>
-        </TaskLeadLayout>
-      </div>,
-    ),
+          {tabs}
+        </RightPanelSheet>
+      ) : panel.isOpen ? (
+        tabs
+      ) : null}
+    </div>
   );
 }
 
-const panel = () => container.querySelector<HTMLElement>('[data-testid="task-plan-panel"]');
+const renderThread = (threadRef: ScopedThreadRef) =>
+  act(async () => root.render(<ThreadView threadRef={threadRef} />));
+
 const chat = () => container.querySelector<HTMLElement>('[data-testid="chat"]')!;
+const planBody = () => document.querySelector<HTMLElement>('[data-testid="task-plan-surface"]');
+const browserBody = () => document.querySelector<HTMLElement>('[data-testid="browser-body"]');
 const showPlan = () => container.querySelector<HTMLElement>('[aria-label="Show plan"]');
+const tab = (title: string) =>
+  [...document.querySelectorAll<HTMLElement>("[data-active-tab]")].find(
+    (element) => element.textContent === title,
+  ) ?? null;
+
+async function addFromMenu(label: string) {
+  await userEvent.click(document.querySelector<HTMLElement>('[aria-label="Add panel surface"]')!);
+  const item = await vi.waitFor(() => {
+    const found = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((element) =>
+      element.textContent?.startsWith(label),
+    );
+    if (!found) throw new Error(`no ${label} item`);
+    return found;
+  });
+  await userEvent.click(item);
+}
+
+async function switchToBrowserAndBack() {
+  await addFromMenu("Browser");
+  await vi.waitFor(() => expect(browserBody()).not.toBeNull());
+  expect(planBody()).toBeNull();
+  expect(tab("Plan")?.dataset.activeTab).toBe("false");
+
+  await userEvent.click(tab("Plan")!.querySelector("button:last-of-type")!);
+  await vi.waitFor(() => expect(planBody()?.textContent).toContain("The plan is a tab"));
+  expect(browserBody()).toBeNull();
+}
 
 describe("task lead thread on desktop", () => {
-  it("shows the plan left of the chat, saves todos, resizes and remembers being hidden", async () => {
+  it("opens on the Plan tab in the right panel, switches to Browser and back", async () => {
     await page.viewport(1280, 800);
-    await renderLeadThread();
+    await renderThread(LEAD);
 
-    // The plan sits to the left of the chat and shows the spec.
-    expect(panel()?.textContent).toContain("The lead's chat with the plan beside it.");
-    expect(panel()?.textContent).toContain("Right panel works.");
-    expect(panel()!.getBoundingClientRect().right).toBeLessThanOrEqual(
-      chat().getBoundingClientRect().left + 1,
+    // Entering the task opens the right panel on Plan, to the right of the chat.
+    await vi.waitFor(() =>
+      expect(planBody()?.textContent).toContain("The plan is a tab in the right sidebar."),
+    );
+    expect(planBody()!.textContent).toContain("Plan, Browser and back.");
+    expect(tab("Plan")?.dataset.activeTab).toBe("true");
+    expect(planBody()!.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      chat().getBoundingClientRect().right - 1,
     );
     expect(showPlan()).toBeNull();
 
     // Checking a todo still saves a new spec version.
-    await userEvent.click(panel()!.querySelector('[aria-label="Move the plan"]')!);
+    await userEvent.click(planBody()!.querySelector('[aria-label="Move the plan"]')!);
     await vi.waitFor(() => expect(state.updates).toHaveLength(1));
     expect(state.updates[0]?.spec.todos[0]?.done).toBe(true);
 
-    // Resize with the keyboard on the handle; the width is remembered.
-    const handle = panel()!.querySelector<HTMLElement>('[aria-label="Resize plan"]')!;
-    handle.focus();
-    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
-    await vi.waitFor(() => expect(panel()!.getBoundingClientRect().width).toBe(392));
-    expect(JSON.parse(localStorage.getItem("busyboy:task-plan-panel:v1")!).state.width).toBe(392);
+    await switchToBrowserAndBack();
 
-    // Hide it: the chat takes the room and the header offers the plan back.
-    await userEvent.click(panel()!.querySelector('[aria-label="Hide plan"]')!);
-    await vi.waitFor(() => expect(panel()).toBeNull());
-    expect(JSON.parse(localStorage.getItem("busyboy:task-plan-panel:v1")!).state.open).toBe(false);
+    // On another tab the header offers the plan back.
+    await userEvent.click(tab("Browser")!.querySelector("button:last-of-type")!);
+    await vi.waitFor(() => expect(browserBody()).not.toBeNull());
     await userEvent.click(showPlan()!);
-    await vi.waitFor(() => expect(panel()).not.toBeNull());
-    expect(panel()!.getBoundingClientRect().width).toBe(392);
+    await vi.waitFor(() => expect(planBody()).not.toBeNull());
+
+    // Leaving on Browser and coming back lands on the plan again.
+    await userEvent.click(tab("Browser")!.querySelector("button:last-of-type")!);
+    await renderThread(OTHER);
+    await renderThread(LEAD);
+    await vi.waitFor(() => expect(tab("Plan")?.dataset.activeTab).toBe("true"));
+    expect(planBody()).not.toBeNull();
   });
 
-  it("shows no plan for a thread that leads no task", async () => {
-    await act(async () =>
-      root.render(
-        <TaskLeadLayout
-          threadRef={{ environmentId: "env-1", threadId: "other" } as never}
-          projectId={"project-1" as never}
-        >
-          <div data-testid="chat">chat other</div>
-        </TaskLeadLayout>,
-      ),
-    );
-    expect(panel()).toBeNull();
-    expect(chat().textContent).toBe("chat other");
+  it("offers no plan on a thread that leads no task", async () => {
+    await page.viewport(1280, 800);
+    useRightPanelStore.getState().openBrowser(OTHER, null);
+    await renderThread(OTHER);
+    expect(tab("Plan")).toBeNull();
+    expect(showPlan()).toBeNull();
+    await userEvent.click(document.querySelector<HTMLElement>('[aria-label="Add panel surface"]')!);
+    await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent);
+    expect(labels.some((label) => label?.startsWith("Plan"))).toBe(false);
   });
 });
 
 describe("task lead thread on a phone", () => {
-  it("keeps the chat full width and opens the plan as a sheet from the header", async () => {
+  it("opens the panel sheet on Plan, switches to Browser and back, and reopens from the header", async () => {
     await page.viewport(390, 844);
-    await renderLeadThread();
-    expect(panel()).toBeNull();
-    expect(chat().getBoundingClientRect().width).toBeGreaterThan(380);
+    await renderThread(LEAD);
 
-    await userEvent.click(showPlan()!);
-    const sheet = await vi.waitFor(() => {
-      const element = document.querySelector<HTMLElement>('[data-testid="task-plan-sheet"]');
-      if (element === null) throw new Error("plan sheet not open");
-      return element;
-    });
-    expect(sheet.textContent).toContain("The lead's chat with the plan beside it.");
-    await userEvent.click(sheet.querySelector('[aria-label="Move the plan"]')!);
+    await vi.waitFor(() =>
+      expect(planBody()?.textContent).toContain("The plan is a tab in the right sidebar."),
+    );
+    expect(tab("Plan")?.dataset.activeTab).toBe("true");
+    await userEvent.click(planBody()!.querySelector('[aria-label="Move the plan"]')!);
     await vi.waitFor(() => expect(state.updates).toHaveLength(1));
+
+    await switchToBrowserAndBack();
+
+    // Closing the sheet shows the chat; the header's Plan button opens the sheet on Plan.
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(showPlan()).not.toBeNull());
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, LEAD).isOpen,
+    ).toBe(false);
+    expect(chat().getBoundingClientRect().width).toBeGreaterThan(380);
+    await userEvent.click(showPlan()!);
+    await vi.waitFor(() => expect(showPlan()).toBeNull());
+    expect(tab("Plan")?.dataset.activeTab).toBe("true");
+    expect(planBody()?.textContent).toContain("The plan is a tab in the right sidebar.");
   });
 });
 
@@ -243,7 +365,7 @@ describe("opening a task", () => {
         <TaskPage
           environmentId={"env-1" as never}
           projectId={"project-1" as never}
-          taskId={"task-45" as never}
+          taskId={"task-49" as never}
         />
       ),
     });
@@ -254,7 +376,7 @@ describe("opening a task", () => {
     });
     const router = createRouter({
       routeTree: rootRoute.addChildren([taskRoute, threadRoute]),
-      history: createMemoryHistory({ initialEntries: ["/tasks/env-1/project-1/task-45"] }),
+      history: createMemoryHistory({ initialEntries: ["/tasks/env-1/project-1/task-49"] }),
     });
     return {
       router,
@@ -283,6 +405,6 @@ describe("opening a task", () => {
         "Saved without an agent.",
       ),
     );
-    expect(app.router.state.location.pathname).toBe("/tasks/env-1/project-1/task-45");
+    expect(app.router.state.location.pathname).toBe("/tasks/env-1/project-1/task-49");
   });
 });

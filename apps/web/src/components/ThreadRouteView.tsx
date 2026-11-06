@@ -7,7 +7,6 @@ import ChatView from "./ChatView";
 import { resolveDraftPromotionNavigationTarget, threadHasStarted } from "./ChatView.logic";
 import { waitForDraftHeroTransition } from "./chat/draftHeroTransition";
 import { SidebarInset } from "./ui/sidebar";
-import { TaskLeadLayout } from "./task/TaskLeadLayout";
 import {
   finalizePromotedDraftThreadByRef,
   markPromotedDraftThreadByRef,
@@ -177,9 +176,7 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
 
   return (
     <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none md:h-dvh">
-      <TaskLeadLayout threadRef={serverThreadRef} projectId={serverThreadShell?.projectId ?? null}>
-        {view}
-      </TaskLeadLayout>
+      {view}
     </SidebarInset>
   );
 }
