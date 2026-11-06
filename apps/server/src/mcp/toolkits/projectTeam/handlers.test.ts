@@ -209,6 +209,36 @@ describe("projectTeam MCP toolkit", () => {
           answer: "Approved.",
         });
         assert.isTrue(crossProjectAnswer.isError);
+        const crossProjectDismiss = yield* call(otherPm, "attention_dismiss", {
+          attentionItemId: content(asked).item.id,
+          reason: "Moot.",
+        });
+        assert.isTrue(crossProjectDismiss.isError);
+        const otherLeadDismiss = yield* call(second.lead, "attention_dismiss", {
+          attentionItemId: content(asked).item.id,
+          reason: "Moot.",
+        });
+        assert.isTrue(otherLeadDismiss.isError);
+        assert.include(JSON.stringify(otherLeadDismiss.content), "only close its own questions");
+        const outsiderDismiss = yield* call(ThreadId.make("not-on-the-team"), "attention_dismiss", {
+          attentionItemId: content(asked).item.id,
+          reason: "Moot.",
+        });
+        assert.isTrue(outsiderDismiss.isError);
+
+        const dismissed = yield* call(pm, "attention_dismiss", {
+          attentionItemId: content(asked).item.id,
+          reason: "The user picked bash in chat",
+        });
+        assert.isFalse(dismissed.isError);
+        assert.isNotNull(content(dismissed).item.supersededAt);
+        assert.isNull(content(dismissed).item.answer);
+        const notices = (yield* Ref.get(harness.sent)).filter(
+          (sent) => sent.threadId === first.lead,
+        );
+        assert.strictEqual(notices.length, 1);
+        assert.isTrue(notices[0]!.text.startsWith("[Question closed by BusyBoy PM]"));
+        assert.include(notices[0]!.text, "The user picked bash in chat");
       }).pipe(
         Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
       ),

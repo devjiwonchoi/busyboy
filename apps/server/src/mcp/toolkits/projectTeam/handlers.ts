@@ -83,6 +83,9 @@ const handlers = {
   attention_answer: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.answerAttention(caller, input)),
   ),
+  attention_dismiss: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.dismissAttention(caller, input)),
+  ),
   memory_list: McpToolAccess.readsAsCaller(() =>
     withTeam((team, caller) => team.listMemory(caller)),
   ),

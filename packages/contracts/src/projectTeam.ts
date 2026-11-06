@@ -234,7 +234,10 @@ export const ProjectAttentionItem = Schema.Struct({
   askerThreadId: Schema.NullOr(ThreadId),
   batchId: ProjectAttentionBatchId,
   createdAt: IsoDateTime,
-  /** Set when a newer question from the same task replaced this one before it was answered. */
+  /**
+   * Set when the item closed without an answer: a newer question replaced it, its task
+   * ended, or the PM or asking lead dismissed it with attention_dismiss.
+   */
   supersededAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /**
    * Who answered: "user" clicked the card, "pm" relayed the user's chat words after the
@@ -682,6 +685,15 @@ export const ProjectTeamAttentionAnswerInput = Schema.Struct({
   }),
 });
 export type ProjectTeamAttentionAnswerInput = typeof ProjectTeamAttentionAnswerInput.Type;
+
+export const ProjectTeamAttentionDismissInput = Schema.Struct({
+  attentionItemId: ProjectAttentionItemId,
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(500)).annotate({
+    description:
+      'Why the question no longer needs an answer, such as "The user chose option B in chat".',
+  }),
+});
+export type ProjectTeamAttentionDismissInput = typeof ProjectTeamAttentionDismissInput.Type;
 
 export const ProjectTeamMemoryListInput = Schema.Struct({});
 export type ProjectTeamMemoryListInput = typeof ProjectTeamMemoryListInput.Type;

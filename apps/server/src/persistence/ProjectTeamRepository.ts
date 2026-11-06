@@ -240,6 +240,11 @@ export class ProjectTeamRepository extends Context.Service<
       readonly answeredAt: IsoDateTime;
       readonly answeredBy: ProjectAttentionAnsweredBy;
     }) => Result<Option.Option<ProjectAttentionItem>>;
+    /** Closes one item without an answer. None when it does not exist or is already closed. */
+    readonly supersedeAttentionItem: (input: {
+      readonly id: ProjectAttentionItemId;
+      readonly supersededAt: IsoDateTime;
+    }) => Result<Option.Option<ProjectAttentionItem>>;
     /** Closes the task's open items (of one kind, or all) without an answer; returns the closed items. */
     readonly supersedeOpenAttentionItems: (input: {
       readonly taskId: ProjectTaskId;
@@ -839,6 +844,16 @@ export const make = Effect.gen(function* () {
       RETURNING ${attentionColumns}
     `,
   });
+  const supersedeAttentionRow = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectAttentionItemId, supersededAt: IsoDateTime }),
+    Result: AttentionRow,
+    execute: ({ id, supersededAt }) => sql`
+      UPDATE project_attention_items
+      SET superseded_at = ${supersededAt}
+      WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
+      RETURNING ${attentionColumns}
+    `,
+  });
   const supersedeAttentionRows = SqlSchema.findAll({
     Request: Schema.Struct({
       taskId: ProjectTaskId,
@@ -1137,6 +1152,10 @@ export const make = Effect.gen(function* () {
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),
     answerAttentionItem: (input) =>
       answerAttentionRow(input).pipe(Effect.mapError(toRepositoryError("answerAttentionItem"))),
+    supersedeAttentionItem: (input) =>
+      supersedeAttentionRow(input).pipe(
+        Effect.mapError(toRepositoryError("supersedeAttentionItem")),
+      ),
     supersedeOpenAttentionItems: (input) =>
       supersedeAttentionRows(input).pipe(
         Effect.mapError(toRepositoryError("supersedeOpenAttentionItems")),

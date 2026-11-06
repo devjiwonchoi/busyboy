@@ -73,6 +73,7 @@ export type T3McpToolSummaryAction =
   | "team-settings"
   | "team-ask-user"
   | "team-answer"
+  | "team-dismiss"
   | "team-memory-read"
   | "team-memory-write";
 
@@ -349,6 +350,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   team_settings_update: tool(["Update", "Updating", "Updated", "team settings"], "team-settings"),
   ask_user: tool(["Ask", "Asking", "Asked", "the user"], "team-ask-user"),
   attention_answer: tool(["Relay", "Relaying", "Relayed", "the user's answer"], "team-answer"),
+  attention_dismiss: tool(["Close", "Closing", "Closed", "a question"], "team-dismiss"),
   memory_list: tool(["List", "Listing", "Listed", "team memory"], "team-memory-read"),
   memory_write: tool(["Save", "Saving", "Saved", "team memory"], "team-memory-write"),
   memory_delete: tool(["Delete", "Deleting", "Deleted", "team memory"], "team-memory-write"),

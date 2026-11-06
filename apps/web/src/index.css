@@ -2374,3 +2374,17 @@ code {
     padding-inline: calc(0.75rem - var(--chat-timeline-gutter, 0px));
   }
 }
+
+/* The question card the "N actions waiting" pill just scrolled to. */
+[data-decision-card-highlighted] {
+  animation: decision-card-highlight 1.8s ease-out;
+}
+@keyframes decision-card-highlight {
+  0%,
+  45% {
+    box-shadow: 0 0 0 2px var(--primary);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}

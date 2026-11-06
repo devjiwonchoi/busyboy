@@ -185,7 +185,6 @@ import { ChangedFilesCard } from "./ChangedFilesTree";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
 import { useProjectManagerForThread } from "../../state/projectTeam";
-import { isOpenDecisionCard } from "../../state/projectTeam.logic";
 import {
   PmAuthorHeader,
   PmEventLine,
@@ -488,6 +487,8 @@ interface MessagesTimelineProps {
 
   listRef: React.RefObject<LegendListRef | null>;
   timelineEntries: ReadonlyArray<TimelineEntry>;
+  /** Question cards placed inline by when they were asked, open or closed. */
+  decisionCards?: ReadonlyArray<ProjectDecisionCard> | undefined;
   latestRun: TimelineLatestRun | null;
   runningRunId?: RunId | null;
   turnDiffSummaries: ReadonlyArray<TurnDiffSummary>;
@@ -588,6 +589,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   awaitingUser = false,
   listRef,
   timelineEntries,
+  decisionCards,
   findExpanded = false,
   findQuery = "",
   activeFindMatch = null,
@@ -883,12 +885,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
     worktreeSetup,
   });
   const stableRows = useStableRows(rawRows, listIdentityKey);
-  // Open questions dock above the composer; answered ones stay here as the record, placed
-  // by when they were asked.
-  const rows = mergeDecisionCardRows(
-    stableRows,
-    closedDecisionCards(projectManager?.decisionCards),
-  );
+  // Question cards stay where they were asked: open ones wait there, closed ones are the record.
+  const rows = mergeDecisionCardRows(stableRows, decisionCards);
   const pmTimelineState = useStablePmTimelineState(
     projectManager?.persona ?? null,
     rows,
@@ -5738,24 +5736,6 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ) : null}
     </WorkLogRow>
   );
-}
-
-const closedDecisionCardsCache = new WeakMap<
-  ReadonlyArray<ProjectDecisionCard>,
-  ReadonlyArray<ProjectDecisionCard>
->();
-
-/** Cards no longer waiting on the user; the same input array keeps the same result. */
-function closedDecisionCards(
-  cards: ReadonlyArray<ProjectDecisionCard> | undefined,
-): ReadonlyArray<ProjectDecisionCard> | undefined {
-  if (cards === undefined) return undefined;
-  let closed = closedDecisionCardsCache.get(cards);
-  if (closed === undefined) {
-    closed = cards.filter((card) => !isOpenDecisionCard(card));
-    closedDecisionCardsCache.set(cards, closed);
-  }
-  return closed;
 }
 
 function DecisionCardTimelineRow({

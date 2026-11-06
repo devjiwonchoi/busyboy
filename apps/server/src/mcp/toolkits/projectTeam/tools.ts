@@ -2,6 +2,7 @@ import {
   OrchestratorMcpFailure,
   ProjectTeamAskUserInput,
   ProjectTeamAttentionAnswerInput,
+  ProjectTeamAttentionDismissInput,
   ProjectTeamAttentionItemResult,
   ProjectTeamMemoryDeleteInput,
   ProjectTeamMemoryDeleteResult,
@@ -199,6 +200,16 @@ const AttentionAnswerTool = Tool.make("attention_answer", {
   .annotate(Tool.Title, "Answer a question for the user")
   .annotate(Tool.Destructive, false);
 
+const AttentionDismissTool = Tool.make("attention_dismiss", {
+  ...shared,
+  description:
+    "Close an open question that no longer needs an answer, with a short reason: the user decided it another way, or it no longer applies. It stops counting as waiting. The PM can close any question in its project, and the task lead that asked is told why. A task lead can close only its own questions.",
+  parameters: ProjectTeamAttentionDismissInput,
+  success: ProjectTeamAttentionItemResult,
+})
+  .annotate(Tool.Title, "Close a question")
+  .annotate(Tool.Destructive, false);
+
 const MemoryListTool = Tool.make("memory_list", {
   ...shared,
   description: "List the project's core memory. Every task lead already sees it in its prompt.",
@@ -245,6 +256,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TeamSettingsUpdateTool,
   AskUserTool,
   AttentionAnswerTool,
+  AttentionDismissTool,
   MemoryListTool,
   MemoryWriteTool,
   MemoryDeleteTool,

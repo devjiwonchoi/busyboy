@@ -135,7 +135,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function cardElement(state: "open" | "answered" | "superseded") {
+function cardElement(state: "open" | "answered" | "resolved") {
   return container.querySelector<HTMLElement>(`[data-decision-card-state="${state}"]`);
 }
 
@@ -191,7 +191,7 @@ it("shows a task lead's question, and a pick goes straight to the lead", async (
   expect(picked).toEqual([expect.stringContaining("Approve")]);
 });
 
-it("sends a note with the choice and shows a closed card as one quiet line", async () => {
+it("sends a note with the choice and shows a closed card as no longer needed", async () => {
   const stale = card({
     id: ProjectAttentionItemId.make("attention-old-plan"),
     question: "Plan v1: rewrite the whole router.",
@@ -202,11 +202,12 @@ it("sends a note with the choice and shows a closed card as one quiet line", asy
   await renderCards();
 
   const replaced = await vi.waitFor(() => {
-    const element = cardElement("superseded");
+    const element = cardElement("resolved");
     expect(element).not.toBeNull();
     return element!;
   });
-  expect(replaced.textContent).toContain("closed without an answer");
+  expect(replaced.textContent).toContain("No longer needed");
+  expect(replaced.textContent).toContain("Plan v1: rewrite the whole router.");
   expect(replaced.querySelector("button")).toBeNull();
 
   const open = cardElement("open")!;
