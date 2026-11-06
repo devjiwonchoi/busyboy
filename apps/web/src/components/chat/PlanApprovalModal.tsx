@@ -27,11 +27,20 @@ import { diffWords } from "./planDiff";
 interface PendingSelection {
   readonly section: string;
   readonly quote: string;
-  /** Position under the selection, relative to the plan body. */
+  /** The selection's box, relative to the plan body. */
   readonly top: number;
+  readonly bottom: number;
   readonly left: number;
+  readonly bodyWidth: number;
+  /** True when the Comment button fits above the selection inside the visible plan. */
+  readonly roomAbove: boolean;
   readonly editing: boolean;
 }
+
+/** Height of the floating Comment button plus its gap to the selection. */
+const COMMENT_BUTTON_OFFSET = 34;
+const COMMENT_BUTTON_WIDTH = 96;
+const COMMENT_EDITOR_WIDTH = 288;
 
 const OUTCOME_STATUS = {
   start: "Approved and started",
@@ -58,12 +67,29 @@ function readPlanSelection(body: HTMLElement): PendingSelection | null {
   if (quote.length === 0) return null;
   const rect = range.getBoundingClientRect();
   const bodyRect = body.getBoundingClientRect();
+  const visibleTop = Math.max(
+    bodyRect.top,
+    body.closest("[data-plan-scroll]")?.getBoundingClientRect().top ?? bodyRect.top,
+  );
   return {
     section: sectionElement.dataset.planSection ?? "",
     quote,
-    top: rect.bottom - bodyRect.top + 6,
-    left: Math.max(0, Math.min(rect.left - bodyRect.left, bodyRect.width - 120)),
+    top: rect.top - bodyRect.top,
+    bottom: rect.bottom - bodyRect.top,
+    left: rect.left - bodyRect.left,
+    bodyWidth: bodyRect.width,
+    roomAbove: rect.top - visibleTop >= COMMENT_BUTTON_OFFSET,
     editing: false,
+  };
+}
+
+/** Button above the selection (below without room); the editor below. Both stay inside the body. */
+function floatingCommentPosition(pending: PendingSelection) {
+  const width = pending.editing ? COMMENT_EDITOR_WIDTH : COMMENT_BUTTON_WIDTH;
+  const above = !pending.editing && pending.roomAbove;
+  return {
+    top: above ? pending.top - COMMENT_BUTTON_OFFSET : pending.bottom + 6,
+    left: Math.max(0, Math.min(pending.left, pending.bodyWidth - width)),
   };
 }
 
@@ -347,7 +373,8 @@ function PlanReview({
       <Button
         size="xs"
         variant="outline"
-        className="shadow-md"
+        // Solid even on hover: the outline style is see-through in dark mode, and this sits on text.
+        className="bg-popover shadow-lg dark:bg-popover [:hover,[data-pressed]]:bg-popover dark:[:hover,[data-pressed]]:bg-popover"
         // Keep the selection when the button takes the press.
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setPending({ ...pending, editing: true })}
@@ -462,7 +489,7 @@ function PlanReview({
         </DialogPrimitive.Close>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div data-plan-scroll className="min-h-0 flex-1 overflow-y-auto">
         <div
           className={cn(
             "grid gap-6 px-5 py-5 md:px-7",
@@ -493,8 +520,8 @@ function PlanReview({
             ) : null}
             {canComment && !isMobile && commentEditor !== null ? (
               <div
-                className="absolute z-10 w-72 max-w-full"
-                style={{ top: pending!.top, left: pending!.left }}
+                className={cn("absolute z-20", pending!.editing && "w-72 max-w-full")}
+                style={floatingCommentPosition(pending!)}
               >
                 {commentEditor}
               </div>

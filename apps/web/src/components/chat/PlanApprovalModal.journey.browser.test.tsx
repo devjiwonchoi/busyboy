@@ -193,6 +193,34 @@ async function openReview() {
   await vi.waitFor(() => expect(section("End result")).toBeTruthy());
 }
 
+/** The Comment button is the top element at its center and, when floating, clears the selection. */
+async function expectCommentButtonOnTop(
+  selected: HTMLElement,
+  placement: "above" | "below" | "footer",
+) {
+  const comment = await vi.waitFor(() => button("Comment"));
+  const box = comment.getBoundingClientRect();
+  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+  expect(comment.contains(hit)).toBe(true);
+  // Opaque background: no alpha below 1 in rgba(…, a) or oklch(… / a).
+  expect(getComputedStyle(comment).backgroundColor).not.toMatch(
+    /(,|\/)\s*0?\.\d+\)$|(,|\/)\s*0\)$/,
+  );
+  if (placement === "footer") {
+    expect(comment.closest("footer")).not.toBeNull();
+    return;
+  }
+  // A triple click selects the whole section; the app trims the selection to its text.
+  const text = document.createRange();
+  text.selectNodeContents(selected);
+  const words = text.getBoundingClientRect();
+  if (placement === "above") expect(box.bottom).toBeLessThanOrEqual(words.top);
+  else expect(box.top).toBeGreaterThanOrEqual(words.bottom);
+  const body = modal().querySelector("[data-plan-body]")!.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(body.left);
+  expect(box.right).toBeLessThanOrEqual(body.right);
+}
+
 describe.each([
   { name: "desktop", width: 1280, height: 900 },
   { name: "mobile", width: 390, height: 844 },
@@ -227,8 +255,14 @@ describe.each([
     // Nothing to send yet.
     expect(button("Request changes").disabled).toBe(true);
 
+    // A selection lower in the plan gets the button above it.
+    await userEvent.tripleClick(section("Non-goals"));
+    await expectCommentButtonOnTop(section("Non-goals"), width < 768 ? "footer" : "above");
+
+    // At the top of the plan there is no room above, so it goes below.
     await userEvent.tripleClick(section("End result"));
-    await userEvent.click(await vi.waitFor(() => button("Comment")));
+    await expectCommentButtonOnTop(section("End result"), width < 768 ? "footer" : "below");
+    await userEvent.click(button("Comment"));
     await userEvent.type(
       review.querySelector<HTMLTextAreaElement>('textarea[aria-label="Comment"]')!,
       "Say which cursor.",
