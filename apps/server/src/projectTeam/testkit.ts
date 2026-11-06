@@ -21,6 +21,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
+import type * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
@@ -103,7 +104,8 @@ export type TeamServices =
   | StalledTaskSweep.StalledTaskSweep
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
-  | FinishedTaskCleanup.FinishedTaskCleanup;
+  | FinishedTaskCleanup.FinishedTaskCleanup
+  | SqlClient.SqlClient;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -352,7 +354,7 @@ export const withTeam = <A, E>(
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
-      Layer.provide(SqlitePersistence.layerMemory),
+      Layer.provideMerge(SqlitePersistence.layerMemory),
       Layer.provide(
         Layer.mergeAll(
           threadManagement,

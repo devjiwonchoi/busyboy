@@ -23,7 +23,6 @@ import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 const QUESTION_ID = "answer";
 
 const KIND_LABEL: Record<ProjectDecisionCard["item"]["kind"], string> = {
-  approval: "Plan approval",
   decision: "Decision",
   blocker: "Blocker",
 };
@@ -31,10 +30,10 @@ const KIND_LABEL: Record<ProjectDecisionCard["item"]["kind"], string> = {
 /** Questions asked without options still need something to pick; the note carries the detail. */
 function cardOptions(card: ProjectDecisionCard): ReadonlyArray<string> {
   if (card.item.options.length > 0) return card.item.options;
-  return card.item.kind === "approval" ? ["Approve", "Request changes"] : ["Give feedback"];
+  return ["Give feedback"];
 }
 
-/** "Plan approval · Fix login", or "Plan approval · BB-7 Fix login" where the task isn't obvious. */
+/** "Decision · Fix login", or "Decision · BB-7 Fix login" where the task isn't obvious. */
 export function decisionCardHeader(card: ProjectDecisionCard, taskKey?: string): string {
   const task = taskKey === undefined ? card.taskTitle : `${taskKey} ${card.taskTitle}`;
   return `${KIND_LABEL[card.item.kind]} · ${task}`;
@@ -67,7 +66,7 @@ function answeredPayload(card: ProjectDecisionCard): UserInputAttachmentAnswerPa
 /**
  * A task lead's question in the PM thread. Open: the question card with its options and a
  * note field; the answer goes straight to the lead. Answered: the question and the choice.
- * Replaced by a newer plan: one muted line.
+ * Closed unanswered (its task ended): one muted line.
  */
 export function DecisionCard({
   card,
@@ -95,7 +94,7 @@ export function DecisionCard({
         data-decision-card-state="superseded"
         className="px-1 text-muted-foreground text-xs"
       >
-        {decisionCardHeader(card)}: replaced by a newer plan.
+        {decisionCardHeader(card)}: closed without an answer.
       </p>
     );
   }

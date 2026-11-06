@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 
@@ -220,7 +221,7 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly since: IsoDateTime;
     }) => Result<ReadonlyArray<ProjectTaskEvent>>;
-    /** The newest stage changes to done and failed outcomes, newest first. */
+    /** The newest stage changes to done, failed outcomes and leads' plans, newest first. */
     readonly listRecentTaskEndings: (input: {
       readonly projectId: ProjectId;
       readonly limit: number;
@@ -263,10 +264,10 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly limit: number;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
-    /** The task's newest approval item that a newer one did not replace, answered or not. */
-    readonly getLatestApprovalItem: (
-      taskId: ProjectTaskId,
-    ) => Result<Option.Option<ProjectAttentionItem>>;
+    /** Plan approval cards saved before they were removed and still open, oldest first. */
+    readonly listOpenPlanApprovals: () => Result<ReadonlyArray<ProjectAttentionItem>>;
+    /** Turns closed plan approval cards into plain decisions; open ones stay for a retry. */
+    readonly retireClosedPlanApprovals: () => Result<void>;
     /** The newest item, answered or not, for batching. */
     readonly getLatestAttentionItem: (
       projectId: ProjectId,
@@ -317,8 +318,22 @@ const TaskRow = Schema.Struct({
   ...ProjectTask.fields,
   waitsOn: Schema.fromJsonString(Schema.Array(ProjectTaskId)),
 });
+/**
+ * Plan approval cards were removed. Rows saved before then may still say "approval"
+ * until the startup cleanup retires them; they read as decisions.
+ */
+const StoredAttentionKind = Schema.Literals(["decision", "approval", "blocker"]).pipe(
+  Schema.decodeTo(
+    ProjectAttentionKind,
+    SchemaTransformation.transform({
+      decode: (kind): ProjectAttentionKind => (kind === "approval" ? "decision" : kind),
+      encode: (kind) => kind,
+    }),
+  ),
+);
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
+  kind: StoredAttentionKind,
   supersededAt: Schema.NullOr(IsoDateTime),
   answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
@@ -769,6 +784,7 @@ export const make = Effect.gen(function* () {
         AND (
           (kind = 'stage_changed' AND body LIKE '% → done')
           OR (kind = 'outcome' AND body LIKE 'failed%')
+          OR (kind = 'summary' AND body LIKE 'Plan: %')
         )
       ORDER BY created_at DESC, rowid DESC
       LIMIT ${limit}
@@ -890,15 +906,14 @@ export const make = Effect.gen(function* () {
       LIMIT ${limit}
     `,
   });
-  const findLatestApproval = SqlSchema.findOneOption({
-    Request: Schema.Struct({ taskId: ProjectTaskId }),
+  const findOpenPlanApprovals = SqlSchema.findAll({
+    Request: Schema.Struct({}),
     Result: AttentionRow,
-    execute: ({ taskId }) => sql`
+    execute: () => sql`
       SELECT ${attentionColumns}
       FROM project_attention_items
-      WHERE task_id = ${taskId} AND kind = 'approval' AND superseded_at IS NULL
-      ORDER BY created_at DESC, rowid DESC
-      LIMIT 1
+      WHERE kind = 'approval' AND answered_at IS NULL AND superseded_at IS NULL
+      ORDER BY created_at ASC, rowid ASC
     `,
   });
   const findLatestAttention = SqlSchema.findOneOption({
@@ -1138,10 +1153,14 @@ export const make = Effect.gen(function* () {
       findRecentlyAnswered(input).pipe(
         Effect.mapError(toRepositoryError("listRecentlyAnsweredAttentionItems")),
       ),
-    getLatestApprovalItem: (taskId) =>
-      findLatestApproval({ taskId }).pipe(
-        Effect.mapError(toRepositoryError("getLatestApprovalItem")),
-      ),
+    listOpenPlanApprovals: () =>
+      findOpenPlanApprovals({}).pipe(Effect.mapError(toRepositoryError("listOpenPlanApprovals"))),
+    retireClosedPlanApprovals: () =>
+      sql`
+        UPDATE project_attention_items
+        SET kind = 'decision'
+        WHERE kind = 'approval' AND (answered_at IS NOT NULL OR superseded_at IS NOT NULL)
+      `.pipe(Effect.asVoid, Effect.mapError(toRepositoryError("retireClosedPlanApprovals"))),
     getLatestAttentionItem: (projectId) =>
       findLatestAttention({ projectId }).pipe(
         Effect.mapError(toRepositoryError("getLatestAttentionItem")),

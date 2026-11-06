@@ -87,14 +87,6 @@ const make = Effect.gen(function* () {
         isoMillis(now) - isoMillis(latest.value.createdAt) <= ATTENTION_BATCH_WINDOW_MS
           ? latest.value.batchId
           : ProjectAttentionBatchId.make(yield* newId("attention-batch"));
-      // A newer plan replaces any approval the user has not answered yet.
-      if (input.kind === "approval") {
-        yield* repository.supersedeOpenAttentionItems({
-          taskId: input.task.id,
-          kind: "approval",
-          supersededAt: now,
-        });
-      }
       const item = yield* repository.createAttentionItem({
         id: ProjectAttentionItemId.make(yield* newId("attention")),
         projectId,

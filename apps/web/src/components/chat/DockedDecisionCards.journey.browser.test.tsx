@@ -100,7 +100,7 @@ function card(
       id: ProjectAttentionItemId.make(id),
       projectId: PROJECT_ID,
       taskId: ProjectTaskId.make(`task-${taskNumber}`),
-      kind: "approval",
+      kind: "decision",
       question,
       options: ["Approve", "Request changes"],
       answer: null,
@@ -247,7 +247,7 @@ it("docks an open card above the PM composer and keeps it there as messages arri
   await render(entries);
   expect(dock()).toBeNull();
 
-  // A task lead asks for plan approval: it docks right above the composer, not in the history.
+  // A task lead asks the user: it docks right above the composer, not in the history.
   await act(async () => publish({ ...server.summary!, openCount: 1, decisionCards: [loginPlan] }));
   const docked = await vi.waitFor(() => {
     expect(dock()).not.toBeNull();
@@ -256,7 +256,7 @@ it("docks an open card above the PM composer and keeps it there as messages arri
   expect(composer().contains(docked)).toBe(true);
   expect(timeline().querySelector("[data-decision-card]")).toBeNull();
   // The card says which task asked, by key and title. One card needs no pager.
-  expect(docked.textContent).toContain("Plan approval · BB-3 Fix the login redirect");
+  expect(docked.textContent).toContain("Decision · BB-3 Fix the login redirect");
   expect(docked.textContent).toContain("move the redirect into the auth guard");
   expect(docked.querySelector("[data-docked-decision-pager]")).toBeNull();
   // Like a pending question, it sits on the composer's top edge.
@@ -300,7 +300,7 @@ it("answers a docked card in place: it leaves the dock and stays in the history 
     expect(element).not.toBeNull();
     return element!;
   });
-  expect(answered.textContent).toContain("Plan approval · Fix the login redirect");
+  expect(answered.textContent).toContain("Decision · Fix the login redirect");
   const picked = [...answered.querySelectorAll("[data-selected=true]")].map(
     (element) => element.textContent,
   );
