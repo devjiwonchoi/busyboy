@@ -19,7 +19,7 @@ import { useEnvironmentIds } from "~/state/environments";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { formatTaskPullRequestLabel, StatusGlyph } from "../sidebar/SidebarRowLine";
+import { formatTaskPullRequestLabel, StatusGlyphWithLabel } from "../sidebar/SidebarRowLine";
 import { useLiveTaskStatus } from "../task/taskStatus";
 import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
@@ -145,8 +145,8 @@ function TaskListRow(props: {
         className={cn("flex min-w-0 basis-full items-center gap-2 sm:flex-1 sm:basis-auto")}
         style={{ paddingLeft: `${props.depth * 1.25}rem` }}
       >
-        <span className={cn("inline-flex shrink-0", status.className)}>
-          <StatusGlyph icon={status.icon} />
+        <span className={cn("relative z-10 inline-flex shrink-0", status.className)}>
+          <StatusGlyphWithLabel status={status} />
         </span>
         <span className="shrink-0 font-mono text-muted-foreground text-xs">{key}</span>
         {/* The title link covers the whole row; the PR link sits above it. */}

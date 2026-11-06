@@ -11,14 +11,19 @@ import {
   CircleEllipsisIcon,
   CircleIcon,
   ClipboardCheckIcon,
-  ContrastIcon,
   GitMergeIcon,
   GitPullRequestArrowIcon,
   MessageCircleQuestionIcon,
   OctagonAlertIcon,
   ShieldQuestionIcon,
 } from "lucide-react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 
 import { cn } from "~/lib/utils";
 import type { SidebarThreadStatus } from "../Sidebar.logic";
@@ -79,7 +84,7 @@ export function formatTaskPullRequestLabel(prUrl: string): string {
 
 const TASK_STATUS_CLASS_NAMES: Record<ProjectTaskStatus, string> = {
   todo: "text-muted-foreground",
-  planning: "text-info",
+  planning: "text-orange-600 dark:text-orange-300",
   waiting_for_approval: "text-warning-foreground",
   in_progress: "text-info",
   in_review: "text-violet-600 dark:text-violet-300",
@@ -110,7 +115,9 @@ const statusIconClassName = "size-4 shrink-0";
 
 export function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
   switch (props.icon) {
+    // An in-progress task spins like a working thread: both mean an agent is at work.
     case "working":
+    case "task-in_progress":
       return (
         <CircleDashedIcon
           aria-hidden
@@ -136,8 +143,6 @@ export function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
       return <CircleEllipsisIcon aria-hidden className={statusIconClassName} />;
     case "task-waiting_for_approval":
       return <ClipboardCheckIcon aria-hidden className={statusIconClassName} />;
-    case "task-in_progress":
-      return <ContrastIcon aria-hidden className={statusIconClassName} />;
     case "task-in_review":
       return <GitPullRequestArrowIcon aria-hidden className={statusIconClassName} />;
     case "task-ready":
@@ -151,8 +156,77 @@ export function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
   }
 }
 
+const LONG_PRESS_MS = 500;
+const TOUCH_LABEL_MS = 2000;
+
+/**
+ * A status icon that names itself: the label shows on hover, and on a phone on
+ * long-press. A long-press only shows the label; it doesn't click the row.
+ */
+export function StatusGlyphWithLabel(props: { status: SidebarRowStatus }) {
+  const [open, setOpen] = useState(false);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  const clearPress = () => {
+    if (pressTimer.current !== null) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  };
+  useEffect(
+    () => () => {
+      clearPress();
+      if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+    },
+    [],
+  );
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger
+        render={
+          <span
+            data-testid="status-glyph-trigger"
+            className="pointer-events-auto inline-flex select-none [-webkit-touch-callout:none]"
+            onPointerDown={(event) => {
+              longPressed.current = false;
+              if (event.pointerType === "mouse") return;
+              clearPress();
+              pressTimer.current = setTimeout(() => {
+                longPressed.current = true;
+                setOpen(true);
+                if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+                hideTimer.current = setTimeout(() => setOpen(false), TOUCH_LABEL_MS);
+              }, LONG_PRESS_MS);
+            }}
+            onPointerUp={clearPress}
+            onPointerCancel={clearPress}
+            onPointerLeave={clearPress}
+            // Phones open a context menu on long-press; the label replaces it.
+            onContextMenu={(event) => {
+              if (pressTimer.current !== null || longPressed.current) event.preventDefault();
+            }}
+            onClick={(event) => {
+              if (!longPressed.current) return;
+              longPressed.current = false;
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+          />
+        }
+      >
+        <StatusGlyph icon={props.status.icon} />
+      </TooltipTrigger>
+      <TooltipPopup side="top">{props.status.label}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+function isTaskStatus(status: SidebarRowStatus): boolean {
+  return status.icon.startsWith("task-");
+}
+
 // A fixed-width slot at the row's far right so titles align whether or not a
 // row has a status. The label stays in the accessibility tree as the live region.
+// A task's icon also names its status on hover and long-press.
 export function SidebarRowStatusSlot(props: { status: SidebarRowStatus | null }) {
   const { status } = props;
   return (
@@ -163,7 +237,11 @@ export function SidebarRowStatusSlot(props: { status: SidebarRowStatus | null })
     >
       {status ? (
         <>
-          <StatusGlyph icon={status.icon} />
+          {isTaskStatus(status) ? (
+            <StatusGlyphWithLabel status={status} />
+          ) : (
+            <StatusGlyph icon={status.icon} />
+          )}
           <span role="status" className="sr-only">
             {status.label}
           </span>
@@ -223,6 +301,17 @@ export function SidebarRowLine(props: {
               )}
             >
               {props.actions}
+              {/* A task's status stays in place on hover, so its label is still one hover away. */}
+              {props.status !== null && isTaskStatus(props.status) ? (
+                <span
+                  className={cn(
+                    "ml-0.5 inline-flex size-4 shrink-0 items-center justify-center self-center",
+                    props.status.className,
+                  )}
+                >
+                  <StatusGlyphWithLabel status={props.status} />
+                </span>
+              ) : null}
             </span>
           ) : null}
         </span>
