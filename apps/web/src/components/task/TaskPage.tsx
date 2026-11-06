@@ -87,7 +87,11 @@ export function TaskPage(props: TaskPageProps) {
     );
   }
   return (
-    <div className="flex min-h-0 flex-1" data-testid="task-page">
+    // Side by side on wide screens; stacked and scrolling as one page on phones.
+    <div
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-visible"
+      data-testid="task-page"
+    >
       <SpecPane
         detail={detail}
         environmentId={environmentId}
@@ -200,7 +204,7 @@ function SpecPane(props: {
   );
 
   return (
-    <div className="min-w-0 flex-[1.2] overflow-y-auto border-r px-7 py-6">
+    <div className="min-w-0 shrink-0 border-b px-5 pt-14 pb-6 md:flex-[1.2] md:shrink md:overflow-y-auto md:border-r md:border-b-0 md:px-7 md:pt-6">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-muted-foreground text-sm">{detail.key}</span>
         <span
@@ -425,7 +429,7 @@ function SessionPane(props: {
   const activeTab = selected === null ? HISTORY_TAB : tab;
 
   return (
-    <div className="flex min-w-80 flex-1 flex-col">
+    <div className="flex min-h-[70vh] flex-1 flex-col md:min-h-0 md:min-w-80">
       <div className="border-b px-3 py-2">
         <ToggleGroup
           aria-label="Task sessions"
