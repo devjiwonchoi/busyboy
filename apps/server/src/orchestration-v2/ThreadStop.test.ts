@@ -4,6 +4,7 @@ import {
   EventId,
   MessageId,
   NodeId,
+  type ProjectTask,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -16,6 +17,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -23,6 +25,7 @@ import * as Stream from "effect/Stream";
 import * as EventStore from "./EventStore.ts";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { CLAUDE_PROVIDER } from "./Adapters/ClaudeAdapterV2.ts";
@@ -48,7 +51,7 @@ const adapter = {
   openSession: () => Effect.die("Runs here never reach a provider"),
 } as ProviderAdapter.ProviderAdapterV2["Service"];
 const layerDatabase = SqlitePersistence.layerMemory;
-const layerTest = ThreadManagementService.layer.pipe(
+const layerBase = ThreadManagementService.layer.pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       layerDatabase,
@@ -64,6 +67,23 @@ const layerTest = ThreadManagementService.layer.pipe(
   ),
   Layer.provideMerge(ServerSettings.layerTest()),
   Layer.provideMerge(CommandReceiptStore.layer.pipe(Layer.provide(layerDatabase))),
+);
+const layerTest = layerBase;
+
+// Child threads that a project task names as its lead.
+const taskLeadThreadIds = new Set<ThreadId>();
+const layerWithTaskLeads = layerBase.pipe(
+  Layer.provideMerge(
+    Layer.succeed(ProjectTeamRepository.ProjectTeamRepository, {
+      getManagerByThreadId: () => Effect.succeed(Option.none()),
+      findTaskByLeadThreadId: (threadId: ThreadId) =>
+        Effect.succeed(
+          taskLeadThreadIds.has(threadId)
+            ? Option.some({ id: "task:lead" } as unknown as ProjectTask)
+            : Option.none(),
+        ),
+    } as unknown as ProjectTeamRepository.ProjectTeamRepository["Service"]),
+  ),
 );
 
 const encodeEffectRequest = Schema.encodeSync(Schema.fromJsonString(OrchestrationEffectRequestV2));
@@ -217,6 +237,35 @@ it.effect("Stop ends watches, holds queues, and stops the delegated tasks under 
     yield* threads.stopDelegatedTasks({ threadId: parentThreadId, commandId: stopCommandId });
     assert.deepEqual((yield* threadState(childThreadId)).runs, ["interrupted", "queued:held"]);
   }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("Stop on the PM leaves its task leads running and stops its other delegated tasks", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const threads = yield* ThreadManagementService.ThreadManagementService;
+    const pmThreadId = ThreadId.make("thread:stop-pm");
+    yield* createWatchingThread(pmThreadId, 3);
+    yield* send(pmThreadId, "start a task", "start_immediately");
+    const leadThreadId = yield* delegate(pmThreadId, "task lead");
+    taskLeadThreadIds.add(leadThreadId);
+    const helperThreadId = yield* delegate(pmThreadId, "research helper");
+    const pmRun = (yield* orchestrator.getThreadProjection(pmThreadId)).runs.at(-1)!;
+
+    // The composer's Stop button: an interrupt that holds the queue.
+    const stopCommandId = CommandId.make("stop-pm");
+    yield* orchestrator.dispatch({
+      type: "run.interrupt",
+      commandId: stopCommandId,
+      threadId: pmThreadId,
+      runId: pmRun.id,
+      holdQueue: true,
+    });
+    yield* threads.stopDelegatedTasks({ threadId: pmThreadId, commandId: stopCommandId });
+
+    assert.deepEqual((yield* threadState(pmThreadId)).runs, ["interrupted"]);
+    assert.notInclude((yield* threadState(leadThreadId)).runs, "interrupted");
+    assert.deepEqual((yield* threadState(helperThreadId)).runs, ["interrupted"]);
+  }).pipe(Effect.provide(layerWithTaskLeads)),
 );
 
 it.effect.each(["thread.stop", "run.interrupt"] as const)(
