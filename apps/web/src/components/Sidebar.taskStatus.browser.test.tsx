@@ -217,6 +217,7 @@ beforeEach(() => {
           prUrl: task.prUrl ?? null,
           lastOutcome: task.lastOutcome ?? null,
           openQuestion: task.openQuestion ?? false,
+          updatedAt: null,
         })),
         // Task 7 asked the user a question.
         decisionCards: [

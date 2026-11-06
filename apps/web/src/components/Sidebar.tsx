@@ -1966,7 +1966,8 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
-export default function Sidebar() {
+/** `withChromeHeader={false}` when the caller draws the header, as the view rail layout does. */
+export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?: boolean } = {}) {
   const {
     projects,
     serverConfigs,
@@ -3539,7 +3540,7 @@ export default function Sidebar() {
   return (
     <>
       <ThreadContextDragGhost />
-      <SidebarChromeHeader isElectron={isElectron} />
+      {withChromeHeader ? <SidebarChromeHeader isElectron={isElectron} /> : null}
       <SidebarContent
         className="min-h-full"
         fixedHeader={

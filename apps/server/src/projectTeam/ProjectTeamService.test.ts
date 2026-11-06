@@ -657,6 +657,23 @@ describe("ProjectTeamService", () => {
     ),
   );
 
+  it.effect("sends each task's last-update time in the snapshot", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const created = yield* team.createTask(pm, { title: "Later", request: "Later." });
+        const before = (yield* team.attentionSnapshot).projects[0]!.tasks[0]!;
+        assert.strictEqual(before.updatedAt, created.task.updatedAt);
+
+        yield* TestClock.adjust("5 minutes");
+        yield* team.updateTask(pm, { taskId: created.task.id, stage: "cancelled" });
+        const after = (yield* team.attentionSnapshot).projects[0]!.tasks[0]!;
+        assert.strictEqual(after.updatedAt, "2026-11-04T00:05:00.000Z");
+      }),
+    ),
+  );
+
   it.effect("streams a fresh snapshot when the PM creates a task", () =>
     withTeam(() =>
       Effect.gen(function* () {

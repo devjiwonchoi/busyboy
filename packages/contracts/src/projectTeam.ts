@@ -893,6 +893,8 @@ export const ProjectTaskReference = Schema.Struct({
   ),
   /** An open question or blocker from this task waits on the user. */
   openQuestion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** When the task last changed; null from servers that predate the field. */
+  updatedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 

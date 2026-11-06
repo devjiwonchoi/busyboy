@@ -84,6 +84,7 @@ describe("taskReferencesForThread", () => {
         prUrl: null,
         lastOutcome: null,
         openQuestion: false,
+        updatedAt: null,
       },
       {
         id: "task-2" as never,
@@ -95,6 +96,7 @@ describe("taskReferencesForThread", () => {
         prUrl: null,
         lastOutcome: null,
         openQuestion: false,
+        updatedAt: null,
       },
     ],
   };
