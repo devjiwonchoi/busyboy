@@ -18,3 +18,10 @@ export function stripDisplayedPlanMarkdown(planMarkdown: string): string {
   }
   return sourceLines.join("\n");
 }
+
+/** Same text the app sends when the user clicks Implement on a proposed plan. */
+export const PLAN_IMPLEMENTATION_PROMPT_PREFIX = "PLEASE IMPLEMENT THIS PLAN:\n";
+
+export function buildPlanImplementationPrompt(planMarkdown: string): string {
+  return `${PLAN_IMPLEMENTATION_PROMPT_PREFIX}${planMarkdown.trim()}`;
+}

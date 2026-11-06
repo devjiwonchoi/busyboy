@@ -19,6 +19,7 @@ import { useAnswerDecision } from "../../state/projectTeam";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
+import { AFK_ANSWERED_LABEL } from "./Afk";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 
 const QUESTION_ID = "answer";
@@ -89,7 +90,11 @@ export function DecisionCard({
   if (card.item.answeredAt !== null) {
     return (
       <div data-decision-card={card.item.id} data-decision-card-state="answered">
-        <AnsweredQuestionSection questions={[question]} answer={answeredPayload(card)} />
+        <AnsweredQuestionSection
+          questions={[question]}
+          answer={answeredPayload(card)}
+          answeredLabel={card.item.answeredBy === "afk" ? AFK_ANSWERED_LABEL : "Answered"}
+        />
       </div>
     );
   }

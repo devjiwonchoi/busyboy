@@ -1,4 +1,9 @@
-import { stripDisplayedPlanMarkdown, proposedPlanTitle } from "@t3tools/shared/proposedPlanText";
+import {
+  PLAN_IMPLEMENTATION_PROMPT_PREFIX,
+  buildPlanImplementationPrompt,
+  proposedPlanTitle,
+  stripDisplayedPlanMarkdown,
+} from "@t3tools/shared/proposedPlanText";
 
 export function buildCollapsedProposedPlanPreviewMarkdown(
   planMarkdown: string,
@@ -51,11 +56,8 @@ function sanitizePlanFileSegment(input: string): string {
   return sanitized.length > 0 ? sanitized : "plan";
 }
 
-export const PLAN_IMPLEMENTATION_PROMPT_PREFIX = "PLEASE IMPLEMENT THIS PLAN:\n";
-
-export function buildPlanImplementationPrompt(planMarkdown: string): string {
-  return `${PLAN_IMPLEMENTATION_PROMPT_PREFIX}${planMarkdown.trim()}`;
-}
+// Shared with the server, which sends the same text when AFK implements a plan.
+export { PLAN_IMPLEMENTATION_PROMPT_PREFIX, buildPlanImplementationPrompt };
 
 export function resolvePlanFollowUpSubmission(input: { draftText: string; planMarkdown: string }): {
   text: string;

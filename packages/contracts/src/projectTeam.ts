@@ -205,6 +205,8 @@ export const ProjectTaskEventKind = Schema.Literals([
   "note",
   "summary",
   "preference_changed",
+  /** The server answered a question for the user while AFK was on. */
+  "afk_answer",
 ]);
 export type ProjectTaskEventKind = typeof ProjectTaskEventKind.Type;
 
@@ -308,7 +310,8 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
 export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
-export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm"]);
+/** "afk": the server answered for the user while AFK was on. */
+export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm", "afk"]);
 export type ProjectAttentionAnsweredBy = typeof ProjectAttentionAnsweredBy.Type;
 
 export const ProjectAttentionItem = Schema.Struct({
@@ -331,7 +334,7 @@ export const ProjectAttentionItem = Schema.Struct({
   supersededAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /**
    * Who answered: "user" clicked the card, "pm" relayed the user's chat words after the
-   * server checked them. Null while open and for items answered before this was recorded.
+   * server checked them, "afk" the server answered while the user's AFK setting was on. Null while open and for items answered before this was recorded.
    */
   answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -402,28 +405,48 @@ export const ProjectManagerPersona = Schema.Struct({
 export type ProjectManagerPersona = typeof ProjectManagerPersona.Type;
 
 /**
- * "Auto-approve plans": while on, the server approves any plan that waits for approval.
+ * AFK: while on, the server answers questions and approves plans on the user's behalf
+ * with the recommended option, so agents keep working. It replaced "Auto-approve plans".
  * Only the user can set it, through the app; agent tools never accept it.
  */
-export const ProjectTeamAutoApprovePlans = Schema.Struct({
+export const ProjectTeamAfk = Schema.Struct({
   since: IsoDateTime,
   /** null: on until the user turns it off. */
   until: Schema.NullOr(IsoDateTime),
 });
-export type ProjectTeamAutoApprovePlans = typeof ProjectTeamAutoApprovePlans.Type;
+export type ProjectTeamAfk = typeof ProjectTeamAfk.Type;
 
-/** Longest auto-approve window the app offers, in hours. */
-export const MAX_AUTO_APPROVE_PLANS_HOURS = 24 * 7;
+/** Longest AFK window the app offers, in hours. */
+export const MAX_AFK_HOURS = 24 * 7;
 
-/** Whether auto-approve is on at `nowMs`. An expired window counts as off. */
-export function autoApprovePlansActive(
-  setting: ProjectTeamAutoApprovePlans | undefined,
-  nowMs: number,
-): boolean {
+/** How long a question waits for the user before AFK answers it. */
+export const AFK_GRACE_MS = 60_000;
+
+/** The answer AFK gives a question that offers no options. */
+export const AFK_FREE_FORM_ANSWER =
+  "User is AFK: proceed with your recommended option and record the assumption.";
+
+/** The project's AFK setting; settings saved before AFK carry "Auto-approve plans" over. */
+export function afkSetting(
+  settings: Pick<ProjectTeamSettings, "afk" | "autoApprovePlans">,
+): ProjectTeamAfk | undefined {
+  return settings.afk ?? settings.autoApprovePlans;
+}
+
+/** Whether AFK is on at `nowMs`. An expired window counts as off. */
+export function afkActive(setting: ProjectTeamAfk | undefined, nowMs: number): boolean {
   if (setting === undefined) return false;
   if (setting.until === null) return true;
   const until = Date.parse(setting.until);
   return Number.isFinite(until) && until > nowMs;
+}
+
+/**
+ * The option AFK picks: the one labelled "(Recommended)", else the first. Null when
+ * there are no options, so the caller sends AFK_FREE_FORM_ANSWER.
+ */
+export function afkPickOption(options: ReadonlyArray<string>): string | null {
+  return options.find((option) => /\(recommended\)/i.test(option)) ?? options[0] ?? null;
 }
 
 export const ProjectTeamSettings = Schema.Struct({
@@ -443,7 +466,9 @@ export const ProjectTeamSettings = Schema.Struct({
   /** Absent until the user picks one; the server derives it from the project's name. */
   taskKeyPrefix: Schema.optionalKey(ProjectTaskKeyPrefix),
   /** Absent when off. Only the user can set it, through the app. */
-  autoApprovePlans: Schema.optionalKey(ProjectTeamAutoApprovePlans),
+  afk: Schema.optionalKey(ProjectTeamAfk),
+  /** Before AFK: "Auto-approve plans". Read as AFK by afkSetting; never written again. */
+  autoApprovePlans: Schema.optionalKey(ProjectTeamAfk),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -959,6 +984,29 @@ export const ProjectManagerLastMessage = Schema.Struct({
 });
 export type ProjectManagerLastMessage = typeof ProjectManagerLastMessage.Type;
 
+/**
+ * One question AFK answered for the user. `threadId` is the thread that asked, `taskId`
+ * the task it belongs to (null for a thread outside any task).
+ */
+export const ProjectAfkAnswer = Schema.Struct({
+  id: ProjectTaskEventId,
+  at: IsoDateTime,
+  threadId: Schema.NullOr(ThreadId),
+  taskId: Schema.NullOr(ProjectTaskId),
+  /** "question → answer", as logged. */
+  text: Schema.String,
+});
+export type ProjectAfkAnswer = typeof ProjectAfkAnswer.Type;
+
+/** Most AFK answers a summary carries; the newest are kept. */
+export const MAX_AFK_ANSWERS_IN_SUMMARY = 50;
+
+/** Log body of an AFK answer. */
+export function afkAnswerEventBody(question: string, answer: string): string {
+  const trimmed = question.length > 300 ? `${question.slice(0, 300)}…` : question;
+  return `${trimmed} → ${answer}`;
+}
+
 export const ProjectTeamAttentionSummary = Schema.Struct({
   projectId: ProjectId,
   pmThreadId: ThreadId,
@@ -985,6 +1033,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   lastMessage: Schema.NullOr(ProjectManagerLastMessage).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /** Questions AFK answered since it was last turned on, oldest first. Empty while off. */
+  afkAnswers: Schema.Array(ProjectAfkAnswer).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
@@ -1028,14 +1078,14 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
   /**
-   * User-only: turns "Auto-approve plans" on for `hours` (null = until turned off), or off
-   * with null. Deliberately absent from team_settings_update so no agent can set it.
+   * User-only: turns AFK on for `hours` (null = until turned off), or off with null.
+   * Deliberately absent from team_settings_update so no agent can set it.
    */
-  autoApprovePlans: Schema.optional(
+  afk: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
         hours: Schema.NullOr(
-          Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_AUTO_APPROVE_PLANS_HOURS })),
+          Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_AFK_HOURS })),
         ),
       }),
     ),

@@ -397,7 +397,7 @@ describe("ProjectTeamService tasks as specs", () => {
     ),
   );
 
-  it.effect("answers approval cards for the user while Auto-approve plans is on", () =>
+  it.effect("approves plan cards for the user a minute after they ask while AFK is on", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* service;
@@ -415,26 +415,31 @@ describe("ProjectTeamService tasks as specs", () => {
           harness.delegate,
         );
 
-        // A card that was already waiting is answered when the user turns the setting on.
+        // A card that already waited past the grace period is answered when AFK comes on.
         const waiting = yield* team.askUser(leadA, { kind: "approval", question: "Plan A." });
-        yield* team.updateSettings({ projectId: PROJECT_ID, autoApprovePlans: { hours: null } });
+        yield* TestClock.adjust("2 minutes");
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
         const a = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: first.task.id });
         assert.strictEqual(a.task.stage, "running");
         assert.deepStrictEqual(a.openAttention, []);
         const cards = (yield* team.attentionSnapshot).projects[0]?.decisionCards ?? [];
-        assert.strictEqual(
-          cards.find((card) => card.item.id === waiting.item.id)?.item.answer ?? null,
-          PLAN_APPROVAL_START,
-        );
+        const answeredA = cards.find((card) => card.item.id === waiting.item.id)?.item;
+        assert.strictEqual(answeredA?.answer ?? null, PLAN_APPROVAL_START);
+        assert.strictEqual(answeredA?.answeredBy ?? null, "afk");
 
-        // A new card while it is on comes back already answered, and the task runs.
+        // A new card waits through the grace period, then the sweep approves it.
         const asked = yield* team.askUser(leadB, { kind: "approval", question: "Plan B." });
-        assert.strictEqual(asked.item.answer, PLAN_APPROVAL_START);
+        assert.isNull(asked.item.answer);
+        yield* team.afkSweep;
+        const early = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: second.task.id });
+        assert.strictEqual(early.task.stage, "awaiting_approval");
+        yield* TestClock.adjust("61 seconds");
+        yield* team.afkSweep;
         const b = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: second.task.id });
         assert.strictEqual(b.task.stage, "running");
         assert.deepStrictEqual(b.openAttention, []);
         const toLeadB = (yield* Ref.get(harness.sent)).filter((input) => input.threadId === leadB);
-        assert.include(toLeadB.map((input) => input.text).join("\n"), "auto-approved");
+        assert.include(toLeadB.map((input) => input.text).join("\n"), "auto-approved (AFK)");
       }),
     ),
   );
@@ -474,7 +479,7 @@ describe("ProjectTeamService tasks as specs", () => {
   );
 });
 
-describe("Auto-approve plans", () => {
+describe("AFK", () => {
   const journal = Effect.gen(function* () {
     const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
     const events = yield* repository.listProjectEventsSince({
@@ -484,118 +489,167 @@ describe("Auto-approve plans", () => {
     return events.map((event) => event.body);
   });
 
-  it.effect("approves a waiting plan while the user's setting is on, and not after it ends", () =>
+  it.effect("answers a decision card with the recommended option after the grace period", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const first = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
-        const { leadThreadId: firstLead } = yield* team.startTask(
-          pm,
-          { taskId: first.task.id },
-          harness.delegate,
-        );
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
 
-        // Off: the plan waits for the user.
-        const waiting = yield* team.updateTask(firstLead, {
-          stage: "awaiting_approval",
-          planSummary: "Keep scrollTop.",
-        });
-        assert.strictEqual(waiting.task.stage, "awaiting_approval");
-
-        // Turning it on approves the plan that was already waiting.
-        const on = yield* team.updateSettings({
-          projectId: PROJECT_ID,
-          autoApprovePlans: { hours: 8 },
-        });
-        assert.strictEqual(on.settings.autoApprovePlans?.until, "2026-11-04T08:00:00.000Z");
-        const approved = yield* team.getTaskDetail({
-          projectId: PROJECT_ID,
-          taskId: first.task.id,
-        });
-        assert.strictEqual(approved.task.stage, "running");
-        const toLead = (yield* Ref.get(harness.sent))
-          .filter((input) => input.threadId === firstLead)
-          .map((input) => input.text);
+        const on = yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 8 } });
+        assert.strictEqual(on.settings.afk?.until, "2026-11-04T08:00:00.000Z");
+        // The PM and the running lead hear that the user is away.
+        assert.isTrue((yield* harness.messagesTo(pm)).some((text) => text.startsWith("[AFK]")));
         assert.isTrue(
-          toLead.some((text) =>
-            text.startsWith(
-              `[Plan auto-approved by the user's "Auto-approve plans" setting] Your plan for #1 Fix drag → Approve and start.`,
-            ),
-          ),
+          (yield* harness.messagesTo(leadThreadId)).some((text) => text.startsWith("[AFK]")),
         );
 
-        // A plan that asks for approval while it's on goes straight to running.
-        const second = yield* team.createTask(pm, { title: "Docs", request: "Docs." });
-        const { leadThreadId: secondLead } = yield* team.startTask(
-          pm,
-          { taskId: second.task.id },
-          harness.delegate,
-        );
-        const instant = yield* team.updateTask(secondLead, { stage: "awaiting_approval" });
-        assert.strictEqual(instant.task.stage, "running");
-
-        // Decision questions still go to the user.
-        const question = yield* team.askUser(secondLead, {
+        yield* team.askUser(leadThreadId, {
           kind: "decision",
-          question: "Which color?",
-          options: ["Red", "Blue"],
+          question: "Which list?",
+          options: ["Flat", "Grouped (Recommended)"],
         });
-        assert.isNull(question.item.answeredAt);
+        const blocker = yield* team.askUser(leadThreadId, {
+          kind: "blocker",
+          question: "Merge PR #9?",
+        });
+        yield* team.askUser(leadThreadId, {
+          kind: "decision",
+          question: "Any naming preference?",
+        });
 
-        // After the window ends, plans wait again.
-        yield* TestClock.adjust("9 hours");
-        const third = yield* team.createTask(pm, { title: "Lint", request: "Lint." });
-        const { leadThreadId: thirdLead } = yield* team.startTask(
-          pm,
-          { taskId: third.task.id },
-          harness.delegate,
-        );
-        const later = yield* team.updateTask(thirdLead, { stage: "awaiting_approval" });
-        assert.strictEqual(later.task.stage, "awaiting_approval");
+        // The user gets a minute to answer first.
+        yield* TestClock.adjust("30 seconds");
+        yield* team.afkSweep;
+        let open = (yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id }))
+          .openAttention;
+        assert.strictEqual(open.length, 3);
 
-        const bodies = yield* journal;
+        yield* TestClock.adjust("31 seconds");
+        yield* team.afkSweep;
+        open = (yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id }))
+          .openAttention;
+        // Blockers wait for the user even while AFK.
+        assert.deepStrictEqual(
+          open.map((item) => item.id),
+          [blocker.item.id],
+        );
+        const toLead = (yield* Ref.get(harness.sent))
+          .filter((input) => input.threadId === leadThreadId)
+          .map((input) => input.text);
         assert.include(
-          bodies,
-          "Auto-approve plans turned on by you until 2026-11-04T08:00:00.000Z",
+          toLead,
+          "[Auto-answered (AFK): the user is away] Which list? → Grouped (Recommended)",
         );
         assert.include(
-          bodies,
-          'Plan for #1 auto-approved ("Approve and start") by the user\'s Auto-approve plans setting.',
+          toLead,
+          "[Auto-answered (AFK): the user is away] Any naming preference? → User is AFK: proceed with your recommended option and record the assumption.",
         );
-        assert.include(
-          bodies,
-          'Plan for #2 auto-approved ("Approve and start") by the user\'s Auto-approve plans setting.',
+
+        // The banner's list shows both answers.
+        const summary = (yield* team.attentionSnapshot).projects[0];
+        assert.deepStrictEqual(
+          summary?.afkAnswers.map((answer) => answer.text),
+          [
+            "Which list? → Grouped (Recommended)",
+            "Any naming preference? → User is AFK: proceed with your recommended option and record the assumption.",
+          ],
         );
-        assert.notInclude(
-          bodies,
-          'Plan for #3 auto-approved ("Approve and start") by the user\'s Auto-approve plans setting.',
-        );
+        assert.strictEqual(summary?.afkAnswers[0]?.threadId, leadThreadId);
       }),
     ),
   );
 
-  it.effect("stays off when turned off, and the PM's settings tool cannot turn it on", () =>
+  it.effect("lets the user's own answer win inside the grace period", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        yield* team.updateSettings({ projectId: PROJECT_ID, autoApprovePlans: { hours: null } });
-        const off = yield* team.updateSettings({ projectId: PROJECT_ID, autoApprovePlans: null });
-        assert.isUndefined(off.settings.autoApprovePlans);
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
+        const asked = yield* team.askUser(leadThreadId, {
+          kind: "decision",
+          question: "Which list?",
+          options: ["Flat", "Grouped (Recommended)"],
+        });
+        yield* TestClock.adjust("20 seconds");
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: asked.item.id,
+          answer: "Flat",
+        });
+        yield* TestClock.adjust("2 minutes");
+        yield* team.afkSweep;
+        const card = (yield* team.attentionSnapshot).projects[0]?.decisionCards.find(
+          (entry) => entry.item.id === asked.item.id,
+        );
+        assert.strictEqual(card?.item.answer, "Flat");
+        assert.strictEqual(card?.item.answeredBy, "user");
+        assert.deepStrictEqual((yield* team.attentionSnapshot).projects[0]?.afkAnswers, []);
+      }),
+    ),
+  );
 
+  it.effect("stops answering when its window ends or the user turns it off", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 1 } });
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* TestClock.adjust("2 hours");
+        yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
+        yield* TestClock.adjust("2 minutes");
+        yield* team.afkSweep;
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.task.stage, "awaiting_approval");
+
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
+        const off = yield* team.updateSettings({ projectId: PROJECT_ID, afk: null });
+        assert.isUndefined(off.settings.afk);
+        const bodies = yield* journal;
+        assert.include(bodies, "AFK turned on by you until 2026-11-04T01:00:00.000Z");
+        assert.include(bodies, "AFK turned off by you");
+      }),
+    ),
+  );
+
+  it.effect("carries Auto-approve plans over as AFK, and the PM's tool cannot turn it on", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
         // Extra keys are dropped by the tool's schema; even passed through, the PM path ignores them.
         const asPm = yield* team.updateSettingsAsManager(pm, {
           sitrepNotify: true,
+          afk: { hours: null },
           autoApprovePlans: { hours: null },
         } as never);
-        assert.isUndefined(asPm.settings.autoApprovePlans);
+        assert.isUndefined(asPm.settings.afk);
 
+        // A setting saved before AFK still counts as AFK.
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const manager = yield* repository.getManager(PROJECT_ID);
+        assert.isTrue(manager._tag === "Some");
+        if (manager._tag !== "Some") return;
+        yield* repository.updateManagerSettings({
+          projectId: PROJECT_ID,
+          settings: {
+            ...manager.value.settings,
+            autoApprovePlans: { since: "2026-11-04T00:00:00.000Z", until: null },
+          },
+          now: "2026-11-04T00:00:00.000Z",
+        });
         const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
-        const waiting = yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
-        assert.strictEqual(waiting.task.stage, "awaiting_approval");
-        assert.include(yield* journal, "Auto-approve plans turned off by you");
+        yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
+        yield* TestClock.adjust("61 seconds");
+        yield* team.afkSweep;
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.task.stage, "running");
       }),
     ),
   );
