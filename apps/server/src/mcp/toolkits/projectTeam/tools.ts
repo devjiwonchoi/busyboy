@@ -223,7 +223,7 @@ const MemoryListTool = Tool.make("memory_list", {
 const MemoryWriteTool = Tool.make("memory_write", {
   ...shared,
   description:
-    "Save or replace a core memory topic, such as when the user says to remember something. Every future task lead sees it.",
+    "Save or replace a whole core memory topic, such as when the user says to remember something. The PM and every future task lead see it in their prompt.",
   parameters: ProjectTeamMemoryWriteInput,
   success: ProjectTeamMemoryWriteResult,
 })

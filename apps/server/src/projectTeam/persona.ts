@@ -1,7 +1,13 @@
 /** Default names, avatars, and voices for a project's PM. */
 
-import type { ProjectManagerPersona, ProjectTeamSettings } from "@t3tools/contracts";
+import type {
+  ProjectManagerPersona,
+  ProjectMemoryEntry,
+  ProjectTeamSettings,
+} from "@t3tools/contracts";
 import { projectManagerInstructions } from "@t3tools/provider-core/server/orchestrationInstructions";
+
+import { memoryPromptSection } from "./memoryPrompt.ts";
 
 const DEFAULT_NAMES = [
   "Remy",
@@ -91,10 +97,25 @@ export const resolvePersona = (
   settings: Pick<ProjectTeamSettings, "persona">,
 ): ProjectManagerPersona => settings.persona ?? defaultPersona(projectId);
 
-/** The PM instructions for a persona. */
-export const personaInstructions = (persona: ProjectManagerPersona): string =>
+/**
+ * The PM's copy of the project memory, taken when its session opens. It is part of the
+ * system prompt, so it survives context compaction.
+ */
+export const pmMemorySection = (memory: ReadonlyArray<ProjectMemoryEntry>): string => `
+### Project memory
+
+The project's memory when this session started. Your own memory_write and memory_delete calls since then are newer than this copy.
+
+${memoryPromptSection(memory)}
+`;
+
+/** The PM instructions for a persona, followed by the project memory when it is given. */
+export const personaInstructions = (
+  persona: ProjectManagerPersona,
+  memory?: ReadonlyArray<ProjectMemoryEntry>,
+): string =>
   projectManagerInstructions({
     name: persona.name,
     voice: voiceText(persona.voice, persona.voiceCustom),
     voiceIsUserWords: isUserWordsVoice(persona.voice, persona.voiceCustom),
-  });
+  }) + (memory === undefined ? "" : pmMemorySection(memory));
