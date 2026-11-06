@@ -59,6 +59,84 @@ export function closeServerPictureInPicture(): void {
   emit();
 }
 
+/** A hidden video fed by a canvas stream. Safari only floats a video that is in the document. */
+interface PictureInPictureMedia {
+  readonly canvas: HTMLCanvasElement;
+  readonly stream: MediaStream;
+  readonly video: HTMLVideoElement & WebKitVideo;
+}
+
+function createMedia(seed: HTMLCanvasElement | null): PictureInPictureMedia {
+  const canvas = document.createElement("canvas");
+  const stream = canvas.captureStream();
+  const video = document.createElement("video") as HTMLVideoElement & WebKitVideo;
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = stream;
+  video.style.cssText =
+    "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none";
+  document.body.append(video);
+  drawSeed(canvas, seed);
+  void video.play().catch(() => undefined);
+  return { canvas, stream, video };
+}
+
+// The capture emits a frame per draw, so the seed is drawn after the capture starts.
+function drawSeed(canvas: HTMLCanvasElement, seed: HTMLCanvasElement | null) {
+  const usable = seed && seed.width > 0 && seed.height > 0 ? seed : null;
+  const width = usable?.width ?? 640;
+  const height = usable?.height ?? 400;
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (usable) context?.drawImage(usable, 0, 0);
+  else context?.fillRect(0, 0, width, height);
+}
+
+function disposeMedia(media: PictureInPictureMedia) {
+  for (const track of media.stream.getTracks()) track.stop();
+  media.video.srcObject = null;
+  media.video.remove();
+}
+
+// iOS Safari refuses picture in picture unless it is requested inside the tap, and a
+// video can only float once it has a frame. So a mounted player keeps one loaded video
+// ready, and a tap floats it without awaiting anything first.
+let prepared: PictureInPictureMedia | null = null;
+let preparers = 0;
+
+const replenish = () => {
+  if (preparers > 0 && prepared === null) prepared = createMedia(null);
+};
+
+/** Keep a loaded video ready for the next tap. Returns the release function. */
+export function prepareServerPictureInPicture(): () => void {
+  if (!supportsServerPictureInPicture()) return () => undefined;
+  preparers++;
+  replenish();
+  return () => {
+    preparers--;
+    if (preparers > 0 || prepared === null) return;
+    disposeMedia(prepared);
+    prepared = null;
+  };
+}
+
+/** Start floating `video`. Call synchronously from the tap; the result may settle later. */
+function requestFloat(video: HTMLVideoElement & WebKitVideo, onLeave: () => void): Promise<void> {
+  const play = video.play();
+  if (document.pictureInPictureEnabled && typeof video.requestPictureInPicture === "function") {
+    video.addEventListener("leavepictureinpicture", onLeave);
+    return Promise.all([video.requestPictureInPicture(), play]).then(() => undefined);
+  }
+  const onPresentationMode = () => {
+    if (video.webkitPresentationMode !== "picture-in-picture") onLeave();
+  };
+  video.addEventListener("webkitpresentationmodechanged", onPresentationMode);
+  video.webkitSetPresentationMode?.("picture-in-picture");
+  return play;
+}
+
 /** Open during user activation, seeding the video with the currently visible frame. */
 export async function openServerPictureInPicture(input: {
   readonly environmentId: EnvironmentId;
@@ -67,25 +145,16 @@ export async function openServerPictureInPicture(input: {
   readonly seed: HTMLCanvasElement | null;
 }): Promise<void> {
   closeServerPictureInPicture();
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d");
-  const seed = input.seed && input.seed.width > 0 && input.seed.height > 0 ? input.seed : null;
-  canvas.width = seed?.width ?? 640;
-  canvas.height = seed?.height ?? 400;
-  // The capture emits a frame per draw, so the seed is drawn after it starts.
-  const stream = canvas.captureStream();
-  if (seed) context?.drawImage(seed, 0, 0);
-  else context?.fillRect(0, 0, canvas.width, canvas.height);
-  const video = document.createElement("video") as HTMLVideoElement & WebKitVideo;
-  video.muted = true;
-  video.playsInline = true;
-  video.srcObject = stream;
-  // Safari only floats a video that is in the document.
-  video.style.cssText =
-    "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none";
-  document.body.append(video);
+  const ready =
+    prepared !== null && prepared.video.readyState >= HTMLMediaElement.HAVE_METADATA
+      ? prepared
+      : null;
+  if (ready) prepared = null;
+  const media = ready ?? createMedia(input.seed);
+  if (ready) drawSeed(media.canvas, input.seed);
+  const { video } = media;
 
-  const painter = createPreviewFramePainter(canvas);
+  const painter = createPreviewFramePainter(media.canvas);
   let client: PreviewStreamClient | null = null;
   let stopped = false;
   let refusals = 0;
@@ -129,9 +198,6 @@ export async function openServerPictureInPicture(input: {
     );
   };
 
-  const onPresentationMode = () => {
-    if (video.webkitPresentationMode !== "picture-in-picture") onLeave();
-  };
   const current: ActivePictureInPicture = {
     key: serverPictureInPictureKey(input.threadId, input.tabId),
     stop: () => {
@@ -140,33 +206,31 @@ export async function openServerPictureInPicture(input: {
       client?.stop();
       painter.stop();
       video.removeEventListener("leavepictureinpicture", onLeave);
-      video.removeEventListener("webkitpresentationmodechanged", onPresentationMode);
       if (document.pictureInPictureElement === video) {
         void document.exitPictureInPicture().catch(() => undefined);
       } else if (video.webkitPresentationMode === "picture-in-picture") {
         video.webkitSetPresentationMode?.("inline");
       }
-      for (const track of stream.getTracks()) track.stop();
-      video.srcObject = null;
-      video.remove();
+      disposeMedia(media);
+      replenish();
     },
   };
   active = current;
   emit();
 
   try {
-    await video.play();
-    if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
-      await new Promise((resolve) =>
-        video.addEventListener("loadedmetadata", resolve, { once: true }),
-      );
-    }
-    if (document.pictureInPictureEnabled && typeof video.requestPictureInPicture === "function") {
-      video.addEventListener("leavepictureinpicture", onLeave);
-      await video.requestPictureInPicture();
+    if (ready) {
+      await requestFloat(video, onLeave);
     } else {
-      video.addEventListener("webkitpresentationmodechanged", onPresentationMode);
-      video.webkitSetPresentationMode?.("picture-in-picture");
+      // Nothing was prepared (or it has no frame yet): wait for a frame. Browsers with a
+      // longer activation window (Chrome, desktop Safari) still accept the late request.
+      await video.play();
+      if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+        await new Promise((resolve) =>
+          video.addEventListener("loadedmetadata", resolve, { once: true }),
+        );
+      }
+      await requestFloat(video, onLeave);
     }
   } catch (error) {
     onLeave();

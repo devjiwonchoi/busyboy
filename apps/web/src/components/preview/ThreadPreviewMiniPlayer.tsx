@@ -25,6 +25,7 @@ import { type ServerBrowserHandle, ServerBrowserSurface } from "~/browser/Server
 import {
   closeServerPictureInPicture,
   openServerPictureInPicture,
+  prepareServerPictureInPicture,
   serverPictureInPictureKey,
   supportsServerPictureInPicture,
   useServerPictureInPictureKey,
@@ -119,6 +120,8 @@ function BrowserMiniPlayer({ threadRef, tabId, miniPlayer }: Props & { readonly 
   const serverSurfaceRef = useRef<ServerBrowserHandle | null>(null);
   const serverPictureInPicture =
     useServerPictureInPictureKey() === serverPictureInPictureKey(threadRef.threadId, tabId);
+  // iOS Safari only floats a video that is already loaded when the tap lands.
+  useEffect(() => (serverTab ? prepareServerPictureInPicture() : undefined), [serverTab]);
   const sourceSize =
     serverTab && streamViewport
       ? streamViewport
