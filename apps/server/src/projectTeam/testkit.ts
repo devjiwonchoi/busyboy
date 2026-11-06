@@ -1,4 +1,5 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   MessageId,
   NodeId,
@@ -24,6 +25,7 @@ import * as Ref from "effect/Ref";
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as ServerConfig from "../config.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
@@ -105,7 +107,8 @@ export type TeamServices =
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
   | FinishedTaskCleanup.FinishedTaskCleanup
-  | SqlClient.SqlClient;
+  | SqlClient.SqlClient
+  | ServerConfig.ServerConfig;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -365,6 +368,11 @@ export const withTeam = <A, E>(
           NodeCrypto.layer,
           managedProjectFolders,
           Path.layer,
+        ),
+      ),
+      Layer.provideMerge(
+        ServerConfig.layerTest(process.cwd(), { prefix: "t3-project-team-" }).pipe(
+          Layer.provideMerge(NodeServices.layer),
         ),
       ),
     );

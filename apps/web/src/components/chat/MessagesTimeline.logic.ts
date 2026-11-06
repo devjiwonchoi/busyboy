@@ -1381,6 +1381,11 @@ export function deriveMessagesTimelineRows(input: {
   supportsConversationRollback: boolean;
   liveAgentTaskIds?: ReadonlySet<string> | undefined;
   worktreeSetup?: WorktreeSetupSnapshot | null;
+  /**
+   * One uninterrupted conversation (the PM chat): no "cut off by a steer" folds and no
+   * context compaction markers.
+   */
+  seamless?: boolean;
 }): MessagesTimelineRow[] {
   const timelineEntries = timelineRowEntries(input.timelineEntries);
   const turnDiffSummaryByAssistantMessageId = new Map<MessageId, TurnDiffSummary>();
@@ -1404,12 +1409,14 @@ export function deriveMessagesTimelineRows(input: {
   const failedRunIds = failedTimelineRunIds(timelineEntries, input.latestRun ?? null);
   const liveSubagentEntryIds = liveSubagentCardEntryIds(timelineEntries);
   const completeSupersededReplyIds = completeSupersededReplyEntryIds(timelineEntries);
-  const supersededFoldsByAnchorEntryId = deriveSupersededAttemptFolds(
-    timelineEntries,
-    failedRunIds,
-    liveSubagentEntryIds,
-    completeSupersededReplyIds,
-  );
+  const supersededFoldsByAnchorEntryId = input.seamless
+    ? new Map<string, SupersededAttemptFold>()
+    : deriveSupersededAttemptFolds(
+        timelineEntries,
+        failedRunIds,
+        liveSubagentEntryIds,
+        completeSupersededReplyIds,
+      );
   const activeVisualResponseRunIds = deriveActiveVisualResponseRunIds({
     timelineEntries: timelineEntries,
     unsettledRunId,
@@ -1613,6 +1620,7 @@ export function deriveMessagesTimelineRows(input: {
     ) {
       const active = workEntryIsInActiveRun(timelineEntry.entry);
       hasActiveCompaction ||= active;
+      if (input.seamless) continue;
       nextRows.push({
         kind: "context-compaction",
         id: timelineEntry.id,

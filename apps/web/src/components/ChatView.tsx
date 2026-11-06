@@ -228,7 +228,7 @@ import {
   useRightPanelStore,
 } from "../rightPanelStore";
 import { useSideChatStore } from "../sideChatStore";
-import { useThreadDecisionCards } from "../state/projectTeam";
+import { useIsProjectManagerThread, useThreadDecisionCards } from "../state/projectTeam";
 import { PendingActionsNudge } from "./chat/PendingActionsNudge";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import {
@@ -473,6 +473,7 @@ import {
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
   deriveCommittedServerUserMessageIds,
+  deriveSeamlessPendingUserMessages,
   deriveComposerSendState,
   dismissBranchMismatchForSession,
   hasEnvironmentReconnectWarningGraceElapsed,
@@ -1486,6 +1487,9 @@ export default function ChatView(props: ChatViewProps) {
     : undefined;
   const isServerThread = serverThread !== null;
   const activeThread = isServerThread ? serverThread : localDraftThread;
+  // The PM chat reads as one uninterrupted agent: follow-ups sent while it works join the
+  // running turn and show as plain bubbles, with no steer/queue/compaction UI.
+  const seamlessChat = useIsProjectManagerThread(isServerThread ? routeThreadRef : null);
   const serverLatestRun =
     serverProjection === null ? null : deriveLatestThreadRun(serverProjection);
   const serverActivityRun =
@@ -2810,14 +2814,17 @@ export default function ChatView(props: ChatViewProps) {
     }
     return urls;
   })();
-  const anchoredTimelineMessages = feedbackSubmissions.flatMap((submission) =>
-    submission.status === "interrupted"
-      ? []
-      : [
-          { ...codexFeedbackMessage(submission), runId: null },
-          { ...codexFeedbackMessage(submission, "assistant"), runId: null },
-        ],
-  );
+  const anchoredTimelineMessages = [
+    ...feedbackSubmissions.flatMap((submission) =>
+      submission.status === "interrupted"
+        ? []
+        : [
+            { ...codexFeedbackMessage(submission), runId: null },
+            { ...codexFeedbackMessage(submission, "assistant"), runId: null },
+          ],
+    ),
+    ...(seamlessChat ? deriveSeamlessPendingUserMessages(serverProjection) : []),
+  ];
   const serverTimelineEntries = useIncrementalTimelineEntries(activeThreadKey, {
     visibleTurnItems: serverVisibleTurnItems,
     optimisticMessages: optimisticUserMessages,
@@ -6735,7 +6742,7 @@ export default function ChatView(props: ChatViewProps) {
             ...(attachment.source ? { source: attachment.source } : {}),
           },
     );
-    if (!shouldQueueBehindActiveRun) {
+    if (!shouldQueueBehindActiveRun || seamlessChat) {
       isAtEndRef.current = true;
       timelineScrollModeRef.current = "anchoring-new-turn";
       liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
@@ -6761,8 +6768,11 @@ export default function ChatView(props: ChatViewProps) {
         createdAt: messageCreatedAt,
         updatedAt: messageCreatedAt,
         streaming: false,
+        // The PM chat has no queue UI, so a held-back message stays a timeline bubble.
         ...(shouldQueueBehindActiveRun
-          ? { inputIntent: "queued_turn" as const }
+          ? seamlessChat
+            ? {}
+            : { inputIntent: "queued_turn" as const }
           : phase === "running" && dispatchMode === "steer"
             ? { inputIntent: "steer" as const }
             : {}),
@@ -7525,8 +7535,9 @@ export default function ChatView(props: ChatViewProps) {
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
   // The task page pins a task's open questions under its spec, so its chat doesn't repeat them.
   const decisionCards = useThreadDecisionCards(isServerThread && !sideChat ? routeThreadRef : null);
+  // The PM chat has no queue UI: a message the server holds back still shows as a bubble.
   const queuedRunsControl =
-    isServerThread && activeThread ? (
+    isServerThread && activeThread && !seamlessChat ? (
       <QueuedRunsControl
         ref={queuedRunsControlRef}
         steerShortcutLabel={shortcutLabelForCommand(keybindings, "thread.steerQueuedMessage", {
@@ -7757,6 +7768,7 @@ export default function ChatView(props: ChatViewProps) {
   const panelToggleControls = (
     <PanelLayoutControls
       {...panelToggleControlProps}
+      showNewTaskControl
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
     />
   );

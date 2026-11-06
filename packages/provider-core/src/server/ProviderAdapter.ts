@@ -429,6 +429,13 @@ export interface ProviderAdapterV2SteerInput {
   readonly providerThread: OrchestrationV2ProviderThread;
   readonly providerTurnId: ProviderTurnId;
   readonly message: ProviderAdapterV2TurnMessage;
+  /**
+   * The message joins the turn at its next step and cancels nothing: no
+   * running tool or subagent is cut off. A message the turn ends without
+   * reading is still answered before the turn ends. Providers whose steer
+   * never cancels work can ignore it.
+   */
+  readonly gentle?: boolean;
 }
 
 export interface ProviderAdapterV2InterruptInput {

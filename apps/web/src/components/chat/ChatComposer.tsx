@@ -1356,6 +1356,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   showEscapeToStopHint: boolean;
   followUpBehavior: "queue" | "steer";
   canSteer: boolean;
+  seamless: boolean;
   alternateShortcutLabel: string | null;
   showPlanFollowUpPrompt: boolean;
   promptHasText: boolean;
@@ -1407,6 +1408,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         canInterrupt={props.canInterrupt}
         followUpBehavior={props.followUpBehavior}
         canSteer={props.canSteer}
+        seamless={props.seamless}
         alternateShortcutLabel={props.alternateShortcutLabel}
         showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
         promptHasText={props.promptHasText}
@@ -2039,6 +2041,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const projectManagerRef = projectManager
     ? scopeProjectRef(environmentId, projectManager.projectId)
     : null;
+  // The PM chat reads as one uninterrupted conversation: follow-ups sent while it works join
+  // the running turn, with no steer/queue choice or compaction prompt in the composer.
+  const seamless = projectManager !== null;
   const requestSitrep = useRequestSitrep();
   const requestSitrepNow = useStableCallback(() => {
     if (
@@ -2942,7 +2947,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const showResumeAction =
     canResume && !composerDraftHasUserContent(composerDraft) && !isEditingQueuedMessage;
   const collapsedComposerPrimaryActionDisabled =
-    phase === "running" ||
+    (phase === "running" && !seamless) ||
     isSendBusy ||
     isSendDisabled ||
     isConnecting ||
@@ -2952,7 +2957,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (!composerSendState.hasSendableContent && !showResumeAction);
   const collapsedComposerPrimaryActionLabel = showResumeAction
     ? "Resume thread"
-    : props.resumeCompactionTokens !== null && !props.keepFullHistory
+    : !seamless && props.resumeCompactionTokens !== null && !props.keepFullHistory
       ? "Open composer to compact and send"
       : "Send message";
   // Sitrep can take the collapsed mobile row's arrow in the PM chat when
@@ -4054,6 +4059,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               alternateModifier: false,
               activeTurnDefault: settings.followUpBehavior,
               canSteer: !isCompacting,
+              seamless,
             }),
           submissionIntent,
         );
@@ -4077,6 +4083,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         alternateModifier: event.metaKey || event.ctrlKey,
         activeTurnDefault: settings.followUpBehavior,
         canSteer: !isCompacting,
+        seamless,
       }),
     );
   };
@@ -4089,6 +4096,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         alternateModifier: false,
         activeTurnDefault: settings.followUpBehavior,
         canSteer: !isCompacting,
+        seamless,
       }),
     );
   };
@@ -4253,6 +4261,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           alternateModifier: submissionIntent === "alternate",
           activeTurnDefault: settings.followUpBehavior,
           canSteer: !isCompacting,
+          seamless,
         }),
         submissionIntent,
       );
@@ -6720,7 +6729,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   label={collapsedComposerPrimaryActionLabel}
                   onPrimary={() => {
                     if (showResumeAction) onResume();
-                    else if (props.resumeCompactionTokens !== null && !props.keepFullHistory)
+                    else if (
+                      !seamless &&
+                      props.resumeCompactionTokens !== null &&
+                      !props.keepFullHistory
+                    )
                       expandMobileComposer();
                     else submitComposer();
                   }}
@@ -7390,6 +7403,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     showEscapeToStopHint={showEscapeToStopHint}
                     followUpBehavior={settings.followUpBehavior}
                     canSteer={!isCompacting}
+                    seamless={seamless}
                     alternateShortcutLabel={shortcutLabelForCommand(
                       keybindings,
                       "composer.sendAlternate",
@@ -7423,7 +7437,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                     onInterrupt={handleInterruptPrimaryActionStable}
                     onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryActionStable}
-                    compactBeforeSendTokens={props.resumeCompactionTokens}
+                    compactBeforeSendTokens={seamless ? null : props.resumeCompactionTokens}
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
                     {...(projectManager

@@ -88,6 +88,7 @@ import {
   CommandPolicyV2,
   isNativeMaintenanceCommand,
   resolveMessageDispatchIntent,
+  resolveProjectManagerUserDispatch,
 } from "./CommandPolicy.ts";
 import { CommandReceiptStoreV2 } from "./CommandReceiptStore.ts";
 import { ContextHandoffServiceV2 } from "./ContextHandoffService.ts";
@@ -144,6 +145,7 @@ import {
 import { planThreadDeletion } from "./ThreadDeletion.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 
 export class OrchestratorDispatchError extends Schema.TaggedError<OrchestratorDispatchError>()(
   "OrchestratorDispatchError",
@@ -821,6 +823,24 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   const runtimePolicy = yield* RuntimePolicyV2;
   const threadForkService = yield* ThreadForkServiceV2;
   const threadDispatch = yield* ThreadCommandExecutor.ThreadCommandExecutor;
+  // Optional: the repository sits above orchestration, so a runtime without
+  // project teams has no PM threads.
+  const projectTeamRepository = yield* Effect.serviceOption(
+    ProjectTeamRepository.ProjectTeamRepository,
+  );
+  /** Whether the thread is a project manager's. An unreadable role reads as no. */
+  const isProjectManagerThread = (threadId: ThreadId) =>
+    Option.isNone(projectTeamRepository)
+      ? Effect.succeed(false)
+      : projectTeamRepository.value.getManagerByThreadId(threadId).pipe(
+          Effect.map(Option.isSome),
+          Effect.catch((cause) =>
+            Effect.logWarning("Could not read the thread's team role.", {
+              threadId,
+              cause,
+            }).pipe(Effect.as(false)),
+          ),
+        );
 
   const mapDispatchError =
     (command: OrchestrationV2ServerCommand) =>
@@ -3562,6 +3582,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     readonly senderThreadId?: OrchestrationV2ConversationMessage["senderThreadId"];
     readonly delegatedCompletion?: OrchestrationV2ConversationMessage["delegatedCompletion"];
     readonly forceRestart: boolean;
+    /** Join the turn at its next step and cancel nothing (a person's message to a PM). */
+    readonly gentle?: boolean;
   }) =>
     Effect.gen(function* () {
       const targetRun = input.projection.runs.find(
@@ -3792,6 +3814,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           forceRestart: input.forceRestart || selectionMustApplyNow,
         }),
       );
+      if (input.gentle === true && steeringPolicy !== "active_steering") {
+        return yield* new OrchestratorDispatchError({
+          commandId: input.command.commandId,
+          commandType: input.command.type,
+          cause:
+            "This message would restart the project manager's turn. It waits in the queue until the turn ends.",
+        });
+      }
 
       if (steeringPolicy === "active_steering") {
         const instanceChanged =
@@ -3833,6 +3863,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               providerThreadId: providerThread.id,
               providerTurnId: providerTurn.id,
               messageId: input.messageId,
+              ...(input.gentle === true ? { gentle: true } : {}),
             },
           } satisfies PendingOrchestrationEffectV2,
         ]);
@@ -4391,6 +4422,24 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         command.dispatchMode,
         command.deliveryIntent,
       );
+      let gentleSteer = false;
+      if (
+        command.createdBy === "user" &&
+        command.sourcePlanRef === undefined &&
+        command.restartContinuationOfRunId === undefined &&
+        !isNativeMaintenanceCommand(command) &&
+        !isGoalCommand(command) &&
+        projection.runs.some(isBlockingRun) &&
+        (yield* isProjectManagerThread(command.threadId))
+      ) {
+        const decision = resolveProjectManagerUserDispatch(
+          projection,
+          dispatchMode,
+          modelSelection,
+        );
+        dispatchMode = decision.mode;
+        gentleSteer = decision.gentle;
+      }
       if (dispatchMode.type === "steer_active") {
         const targetRunId = dispatchMode.targetRunId;
         const target = projection.runs.find((run) => run.id === targetRunId);
@@ -4583,6 +4632,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             ? {}
             : { senderThreadId: command.senderThreadId }),
           forceRestart: dispatchMode.type === "restart_active",
+          ...(gentleSteer && dispatchMode.type === "steer_active" ? { gentle: true } : {}),
         });
         return;
       }
@@ -7553,6 +7603,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           ? {}
           : { senderThreadId: queuedMessage.senderThreadId }),
         forceRestart: false,
+        // A project manager's turn is never cut off, even by a promoted message.
+        ...((yield* isProjectManagerThread(command.threadId)) ? { gentle: true } : {}),
       });
     });
 

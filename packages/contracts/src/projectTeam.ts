@@ -10,6 +10,7 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
+import { ChatAttachment } from "./chatAttachment.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
 import { ProjectIconOverride } from "./project.ts";
 
@@ -957,6 +958,11 @@ export const ProjectTeamCreateTaskInput = Schema.Struct({
   parentTaskId: Schema.optional(ProjectTaskId),
   /** True asks the PM to start a planner on the task right away. */
   startPlanning: Schema.Boolean,
+  /**
+   * Images and files the user dropped in, already uploaded as pending attachments.
+   * The server keeps them under the task and lists their paths in the spec.
+   */
+  attachments: Schema.optional(Schema.Array(ChatAttachment)),
 });
 export type ProjectTeamCreateTaskInput = typeof ProjectTeamCreateTaskInput.Type;
 

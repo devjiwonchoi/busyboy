@@ -12,6 +12,7 @@ import {
   type MessageId,
   type ModelSelection,
   type OrchestrationV2ProjectedTurnItem,
+  type OrchestrationV2ThreadProjection,
   type PreviewAnnotationPayload,
   type ProviderInteractionMode,
   ProviderDriverKind,
@@ -1121,6 +1122,67 @@ export function deriveCommittedServerUserMessageIds(
       row.item.type === "user_message" ? [row.item.messageId] : [],
     ),
   );
+}
+
+const UNFINISHED_RUN_STATUSES: ReadonlySet<string> = new Set([
+  "preparing",
+  "queued",
+  "starting",
+  "running",
+  "waiting",
+]);
+
+/**
+ * The user's own messages the server holds for an unfinished run but has not put in the
+ * transcript yet (a message queued behind a compaction, or a steer awaiting the next tool
+ * step). The PM chat shows these as ordinary bubbles in send order instead of queue chips.
+ * Server-created wakes stay out: they appear once their run starts.
+ */
+type ConversationMessage = OrchestrationV2ThreadProjection["messages"][number];
+// Same server message → same row object, so the timeline can reuse rows across stream events.
+const seamlessPendingMessageCache = new WeakMap<ConversationMessage, ChatMessage>();
+
+function seamlessPendingMessage(
+  message: ConversationMessage,
+  runId: RunId,
+  steer: boolean,
+): ChatMessage {
+  const cached = seamlessPendingMessageCache.get(message);
+  if (cached) return cached;
+  const chatMessage: ChatMessage = {
+    id: message.id,
+    role: "user",
+    text: message.text,
+    ...(message.attachments.length > 0 ? { attachments: message.attachments } : {}),
+    ...(message.context ? { context: message.context } : {}),
+    runId,
+    streaming: false,
+    createdBy: message.createdBy,
+    creationSource: message.creationSource,
+    createdAt: DateTime.formatIso(message.createdAt),
+    updatedAt: DateTime.formatIso(message.updatedAt),
+    // Joining a run that already started keeps it one response in the timeline.
+    ...(steer ? { inputIntent: "steer" as const } : {}),
+  };
+  seamlessPendingMessageCache.set(message, chatMessage);
+  return chatMessage;
+}
+
+export function deriveSeamlessPendingUserMessages(
+  projection: Pick<OrchestrationV2ThreadProjection, "messages" | "runs"> | null,
+): ReadonlyArray<ChatMessage> {
+  if (projection === null) return [];
+  const unfinishedRuns = new Map(
+    projection.runs.flatMap((run) =>
+      UNFINISHED_RUN_STATUSES.has(run.status) ? [[run.id, run] as const] : [],
+    ),
+  );
+  return projection.messages.flatMap((message) => {
+    const run = message.runId === null ? undefined : unfinishedRuns.get(message.runId);
+    return message.role === "user" && message.createdBy === "user" && run !== undefined
+      ? [seamlessPendingMessage(message, run.id, run.userMessageId !== message.id)]
+      : [];
+  });
 }
 
 export function hasServerAcknowledgedLocalDispatch(input: {
