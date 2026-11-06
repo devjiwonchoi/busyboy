@@ -15,6 +15,10 @@ const syncMethod: DesktopIpc.DesktopSyncIpcMethod<never, never> = {
   handler: () => Effect.void,
 };
 
+const trustAll: DesktopIpc.DesktopIpcSenderPolicy = () => true;
+const APP_URL = "busyboy://app/";
+const appPolicy = DesktopIpc.appWindowSenderPolicy(APP_URL);
+
 function makeIpcMain(
   overrides: Partial<DesktopIpc.DesktopIpcMain> = {},
 ): DesktopIpc.DesktopIpcMain {
@@ -36,7 +40,7 @@ describe("DesktopIpc", () => {
           throw cause;
         },
       });
-      const ipc = DesktopIpc.make(ipcMain);
+      const ipc = DesktopIpc.make(ipcMain, trustAll);
 
       const error = yield* Effect.flip(Effect.scoped(ipc.handle(invokeMethod)));
 
@@ -59,6 +63,7 @@ describe("DesktopIpc", () => {
             listener = registered;
           },
         }),
+        trustAll,
       );
       const sender = { sender: { id: 7 } };
       let received: DesktopIpc.DesktopIpcInvokeEvent | undefined;
@@ -90,7 +95,7 @@ describe("DesktopIpc", () => {
           if (removeCount === 2) throw cause;
         },
       });
-      const ipc = DesktopIpc.make(ipcMain);
+      const ipc = DesktopIpc.make(ipcMain, trustAll);
 
       const exit = yield* Effect.exit(Effect.scoped(ipc.handleSync(syncMethod)));
 
@@ -115,6 +120,7 @@ describe("DesktopIpc", () => {
             listener = registered;
           },
         }),
+        appPolicy,
       );
 
       yield* Effect.scoped(
@@ -130,6 +136,7 @@ describe("DesktopIpc", () => {
           const guest: DesktopIpc.DesktopIpcSyncEvent = {
             returnValue: undefined,
             sender: { getType: () => "webview" },
+            senderFrame: { url: APP_URL, parent: null },
           };
           listener!(guest);
           assert.isNull(guest.returnValue);
@@ -138,9 +145,134 @@ describe("DesktopIpc", () => {
           const app: DesktopIpc.DesktopIpcSyncEvent = {
             returnValue: undefined,
             sender: { getType: () => "window" },
+            senderFrame: { url: APP_URL, parent: null },
           };
           listener!(app);
           assert.strictEqual(app.returnValue, "secret");
+        }),
+      );
+    }),
+  );
+
+  describe("appWindowSenderPolicy", () => {
+    const appFrame = { url: "busyboy://app/threads/1", parent: null };
+    const cases: ReadonlyArray<{
+      readonly name: string;
+      readonly event: Parameters<DesktopIpc.DesktopIpcSenderPolicy>[0];
+      readonly trusted: boolean;
+    }> = [
+      {
+        name: "the app window's top frame",
+        event: { sender: { getType: () => "window" }, senderFrame: appFrame },
+        trusted: true,
+      },
+      {
+        name: "a preview guest, even at the app URL",
+        event: { sender: { getType: () => "webview" }, senderFrame: appFrame },
+        trusted: false,
+      },
+      {
+        name: "an iframe inside the app window",
+        event: {
+          sender: { getType: () => "window" },
+          senderFrame: { url: "busyboy://app/frame", parent: appFrame },
+        },
+        trusted: false,
+      },
+      {
+        name: "a window showing a web page",
+        event: {
+          sender: { getType: () => "window" },
+          senderFrame: { url: "https://evil.example/", parent: null },
+        },
+        trusted: false,
+      },
+      {
+        name: "the development scheme in a production build",
+        event: {
+          sender: { getType: () => "window" },
+          senderFrame: { url: "busyboy-dev://app/", parent: null },
+        },
+        trusted: false,
+      },
+      {
+        name: "another host on the app scheme",
+        event: {
+          sender: { getType: () => "window" },
+          senderFrame: { url: "busyboy://evil/", parent: null },
+        },
+        trusted: false,
+      },
+      {
+        name: "a sender whose frame is gone",
+        event: { sender: { getType: () => "window" }, senderFrame: null },
+        trusted: false,
+      },
+      {
+        name: "a sender without a type",
+        event: { sender: {}, senderFrame: appFrame },
+        trusted: false,
+      },
+    ];
+    for (const { name, event, trusted } of cases) {
+      it(`${trusted ? "accepts" : "refuses"} ${name}`, () => {
+        assert.strictEqual(appPolicy(event), trusted);
+      });
+    }
+  });
+
+  it.effect("refuses invoke calls from untrusted senders before the handler runs", () =>
+    Effect.gen(function* () {
+      let listener: DesktopIpc.DesktopIpcHandleListener | undefined;
+      let handled = 0;
+      const ipc = DesktopIpc.make(
+        makeIpcMain({
+          handle: (_channel, registered) => {
+            listener = registered;
+          },
+        }),
+        appPolicy,
+      );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* ipc.handle({
+            channel: "desktop.test.bearerToken",
+            handler: () =>
+              Effect.sync(() => {
+                handled += 1;
+                return "token";
+              }),
+          });
+
+          const guest = yield* Effect.promise(() =>
+            Promise.resolve(
+              listener!(
+                {
+                  sender: { id: 2, getType: () => "webview" },
+                  senderFrame: { url: "https://evil.example/", parent: null },
+                },
+                undefined,
+              ),
+            ).then(
+              () => undefined,
+              (error: unknown) => error,
+            ),
+          );
+          assert.instanceOf(guest, DesktopIpc.DesktopIpcUntrustedSenderRejection);
+          assert.strictEqual(handled, 0);
+
+          const app = yield* Effect.promise(async () =>
+            listener!(
+              {
+                sender: { id: 1, getType: () => "window" },
+                senderFrame: { url: APP_URL, parent: null },
+              },
+              undefined,
+            ),
+          );
+          assert.strictEqual(app, "token");
+          assert.strictEqual(handled, 1);
         }),
       );
     }),

@@ -186,6 +186,11 @@ it.effect("launches a scratch thread into the Scratch project", () =>
     });
     expect(rejected.at(-1)?.result).toMatchObject({ code: "invalid_request" });
     expect(launched).toHaveLength(1);
+
+    // A full-access caller's launch starts in auto unless it asks for full access.
+    expect(launched[0]?.runtimeMode).toBe("auto");
+    yield* handle({ title: "Notes", scratch: true, runtimeMode: "full-access" });
+    expect(launched[1]?.runtimeMode).toBe("full-access");
   }),
 );
 

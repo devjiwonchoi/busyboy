@@ -4,14 +4,58 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
+/** The parts of Electron's WebFrameMain the sender policy reads. */
+export interface DesktopIpcSenderFrame {
+  readonly url: string;
+  readonly parent: unknown;
+}
+
 export interface DesktopIpcInvokeEvent {
-  readonly sender: { readonly id: number };
+  /** Electron's WebContents; `"webview"` marks an in-app browser guest. */
+  readonly sender: { readonly id: number; readonly getType?: () => string };
+  readonly senderFrame?: DesktopIpcSenderFrame | null;
 }
 
 export interface DesktopIpcSyncEvent {
   returnValue: unknown;
   /** Electron's WebContents; `"webview"` marks an in-app browser guest. */
   readonly sender?: { readonly getType?: () => string };
+  readonly senderFrame?: DesktopIpcSenderFrame | null;
+}
+
+/** Decides whether an IPC call may reach a handler at all. */
+export type DesktopIpcSenderPolicy = (
+  event: Pick<DesktopIpcSyncEvent, "sender" | "senderFrame">,
+) => boolean;
+
+/**
+ * Every desktop IPC method serves only the app's own renderer: the top frame of an app window
+ * showing the app URL. Preview guests, iframes inside the app and windows showing anything else
+ * share ipcMain with it, so they are refused before any handler runs.
+ */
+export const appWindowSenderPolicy = (applicationUrl: string): DesktopIpcSenderPolicy => {
+  const app = new URL(applicationUrl);
+  return (event) => {
+    if (event.sender?.getType?.() !== "window") return false;
+    const frame = event.senderFrame;
+    if (frame === undefined || frame === null || frame.parent !== null) return false;
+    try {
+      // Custom schemes have an opaque `origin`, so compare scheme and host directly.
+      const url = new URL(frame.url);
+      return url.protocol === app.protocol && url.host === app.host;
+    } catch {
+      return false;
+    }
+  };
+};
+
+export class DesktopIpcUntrustedSenderRejection extends Error {
+  readonly channel: string;
+  constructor(channel: string) {
+    super(`${channel} is only available to the app window.`);
+    this.name = "DesktopIpcUntrustedSenderRejection";
+    this.channel = channel;
+  }
 }
 
 export type DesktopIpcHandleListener = (
@@ -82,7 +126,10 @@ export class DesktopIpc extends Context.Service<
   }
 >()("@t3tools/desktop/ipc/DesktopIpc") {}
 
-export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
+export const make = (
+  ipcMain: DesktopIpcMain,
+  isTrustedSender: DesktopIpcSenderPolicy,
+): DesktopIpc["Service"] =>
   DesktopIpc.of({
     handle: Effect.fn("desktop.ipc.registerInvoke")(function* <E, R>({
       channel,
@@ -96,14 +143,17 @@ export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
         Effect.try({
           try: () => {
             ipcMain.removeHandler(channel);
-            ipcMain.handle(channel, (event, raw) =>
-              runPromise(
+            ipcMain.handle(channel, (event, raw) => {
+              if (!isTrustedSender(event)) {
+                return Promise.reject(new DesktopIpcUntrustedSenderRejection(channel));
+              }
+              return runPromise(
                 Effect.gen(function* () {
                   yield* Effect.annotateCurrentSpan({ channel });
                   return yield* handler(raw, event);
                 }).pipe(Effect.annotateLogs({ channel }), Effect.withSpan("desktop.ipc.invoke")),
-              ),
-            );
+              );
+            });
           },
           catch: (cause) =>
             new DesktopIpcRegistrationError({ handlerKind: "invoke", channel, cause }),
@@ -130,9 +180,9 @@ export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
           try: () => {
             ipcMain.removeAllListeners(channel);
             ipcMain.on(channel, (event) => {
-              // Sync methods serve only the app window's preload. One of them returns the
-              // backend's bootstrap token, so a browser guest page must never get an answer.
-              if (event.sender?.getType?.() === "webview") {
+              // One sync method returns the backend's bootstrap token, so anything but the
+              // app window's own renderer gets no answer.
+              if (!isTrustedSender(event)) {
                 event.returnValue = null;
                 return;
               }
@@ -160,7 +210,8 @@ export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
     }),
   });
 
-export const layer = (ipcMain: DesktopIpcMain) => Layer.succeed(DesktopIpc, make(ipcMain));
+export const layer = (ipcMain: DesktopIpcMain, isTrustedSender: DesktopIpcSenderPolicy) =>
+  Layer.succeed(DesktopIpc, make(ipcMain, isTrustedSender));
 
 export interface DesktopIpcMethodRegistration<
   Payload,

@@ -260,4 +260,17 @@ describe("ProjectTeamService tasks as specs", () => {
       }),
     ),
   );
+  it.effect("lets the PM change the task key prefix on the user's word", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, { title: "Docs", request: "Docs." });
+        yield* team.updateSettingsAsManager(pm, { taskKeyPrefix: "BB" });
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.key, "BB-1");
+        assert.strictEqual((yield* team.teamStatus(pm, {})).taskKeyPrefix, "BB");
+      }),
+    ),
+  );
 });

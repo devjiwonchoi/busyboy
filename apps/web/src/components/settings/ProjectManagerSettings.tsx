@@ -32,6 +32,8 @@ const VOICES: ReadonlyArray<{ value: ProjectManagerVoice; label: string }> = [
   { value: "custom", label: "Custom" },
 ];
 
+const TASK_KEY_PREFIX_PATTERN = /^[A-Z][A-Z0-9]{0,5}$/;
+
 function isVoice(value: unknown): value is ProjectManagerVoice {
   return VOICES.some((voice) => voice.value === value);
 }
@@ -68,6 +70,22 @@ export function ProjectManagerSettingsSection(props: {
       return;
     }
     void updateSettings(projectRef, { persona: { name } });
+  };
+  const saveTaskKeyPrefix = (input: HTMLInputElement) => {
+    const prefix = input.value.trim().toUpperCase();
+    if (prefix === summary.taskKeyPrefix) {
+      input.value = prefix;
+      return;
+    }
+    if (!TASK_KEY_PREFIX_PATTERN.test(prefix)) {
+      toastManager.add({
+        type: "warning",
+        title: "Use 1 to 6 capital letters or digits, starting with a letter",
+      });
+      input.value = summary.taskKeyPrefix;
+      return;
+    }
+    void updateSettings(projectRef, { taskKeyPrefix: prefix });
   };
   const saveVoice = (next: ProjectManagerVoice) => {
     if (next === voice) return;
@@ -110,6 +128,25 @@ export function ProjectManagerSettingsSection(props: {
                 disabled={!canOperate}
                 defaultValue={persona.name}
                 onBlur={(event) => saveName(event.currentTarget)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
+            }
+          />
+          <SettingsRow
+            title="Task key prefix"
+            description={`Tasks are named like ${summary.taskKeyPrefix}-7. It comes from the project name until you change it.`}
+            control={
+              <Input
+                key={summary.taskKeyPrefix}
+                size="sm"
+                className="w-full font-mono uppercase sm:w-28"
+                aria-label="Task key prefix"
+                maxLength={6}
+                disabled={!canOperate}
+                defaultValue={summary.taskKeyPrefix}
+                onBlur={(event) => saveTaskKeyPrefix(event.currentTarget)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") event.currentTarget.blur();
                 }}

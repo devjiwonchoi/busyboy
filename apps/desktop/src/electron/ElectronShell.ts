@@ -59,6 +59,58 @@ export function parseSafeExternalUrl(rawUrl: unknown): Option.Option<string> {
   }
 }
 
+const decodeHost = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+/** The SSH host a safe remote-editor link connects to, or `null` for any other link. */
+export function remoteEditorHost(safeUrl: string): string | null {
+  const url = new URL(safeUrl);
+  if (!isRemoteEditorUrl(url)) return null;
+  if (url.protocol === "jetbrains:") return url.searchParams.get("h");
+  if (url.protocol === "zed:") return decodeHost(url.pathname.split("/")[1] ?? "");
+  const authority = url.pathname.slice("/ssh-remote+".length).split("/")[0] ?? "";
+  return decodeHost(authority);
+}
+
+const MAX_CONFIRM_URL_LENGTH = 300;
+
+/**
+ * A remote-editor link makes the user's editor connect over SSH to whatever host it names, and
+ * such links can come from untrusted chat content. Nothing opens until the user has seen the host.
+ */
+const confirmRemoteEditorLink = (url: string, host: string): Promise<boolean> => {
+  const shownUrl =
+    url.length > MAX_CONFIRM_URL_LENGTH ? `${url.slice(0, MAX_CONFIRM_URL_LENGTH)}…` : url;
+  const options: Electron.MessageBoxOptions = {
+    type: "warning",
+    buttons: ["Connect", "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+    message: `Connect your editor to ${host}?`,
+    detail: `This link opens your editor and connects it over SSH to ${host}. Only continue if you trust this host.\n\n${shownUrl}`,
+  };
+  const owner = Electron.BrowserWindow.getFocusedWindow();
+  return (
+    owner === null
+      ? Electron.dialog.showMessageBox(options)
+      : Electron.dialog.showMessageBox(owner, options)
+  ).then(
+    ({ response }) => response === 0,
+    () => false,
+  );
+};
+
+const openUrl = (externalUrl: string): Promise<boolean> =>
+  Electron.shell.openExternal(externalUrl).then(
+    () => true,
+    () => false,
+  );
+
 export class ElectronShell extends Context.Service<
   ElectronShell,
   {
@@ -74,12 +126,14 @@ export const make = ElectronShell.of({
     Option.match(parseSafeExternalUrl(rawUrl), {
       onNone: () => Effect.succeed(false),
       onSome: (externalUrl) =>
-        Effect.promise(() =>
-          Electron.shell.openExternal(externalUrl).then(
-            () => true,
-            () => false,
-          ),
-        ),
+        Effect.promise(() => {
+          const host = remoteEditorHost(externalUrl);
+          return host === null
+            ? openUrl(externalUrl)
+            : confirmRemoteEditorLink(externalUrl, host).then((confirmed) =>
+                confirmed ? openUrl(externalUrl) : false,
+              );
+        }),
     }),
   openSystemSettings: (pane) =>
     Effect.promise(() =>

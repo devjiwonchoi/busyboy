@@ -37,6 +37,7 @@ import { isGitHubReleaseUpdaterFailure } from "./GitHubReleaseUpdater.ts";
 import { isLocalAppUpdateError } from "./LocalAppUpdater.ts";
 import { normalizeDesktopUpdateReleaseNotes } from "./releaseNotes.ts";
 import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
+import { isUpdateVerificationError } from "./updateSignature.ts";
 import {
   createInitialDesktopUpdateState,
   reduceDesktopUpdateStateOnCheckFailure,
@@ -286,9 +287,11 @@ function createBaseUpdateState(
   };
 }
 
-// Local-app and GitHub release failures carry a reason written for the user.
+// Local-app, GitHub release, and verification failures carry a reason written for the user.
 function updateErrorMessage(error: { readonly message: string; readonly cause: unknown }): string {
-  return isLocalAppUpdateError(error.cause) || isGitHubReleaseUpdaterFailure(error.cause)
+  return isLocalAppUpdateError(error.cause) ||
+    isGitHubReleaseUpdaterFailure(error.cause) ||
+    isUpdateVerificationError(error.cause)
     ? error.cause.message
     : error.message;
 }

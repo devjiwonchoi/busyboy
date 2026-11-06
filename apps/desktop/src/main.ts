@@ -159,7 +159,13 @@ const layerElectron = Layer.mergeAll(
   ElectronTheme.layer,
   ElectronUpdater.layer,
   ElectronWindow.layer,
-  DesktopIpc.layer(Electron.ipcMain),
+  DesktopIpc.layer(
+    Electron.ipcMain,
+    // Same development switch as DesktopConfig's VITE_DEV_SERVER_URL.
+    DesktopIpc.appWindowSenderPolicy(
+      ElectronProtocol.getDesktopUrl(Boolean(process.env.VITE_DEV_SERVER_URL?.trim())),
+    ),
+  ),
 );
 
 const layerDesktopFoundation = Layer.mergeAll(
