@@ -3,6 +3,7 @@ import {
   MessageId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2Run,
+  type ProjectMemoryEntry,
   type ProjectTask,
   type ProjectTaskOutcome,
 } from "@t3tools/contracts";
@@ -18,6 +19,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import { untrustedFrame } from "../untrustedText.ts";
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
+import { memoryOverBudgetNote } from "./memoryPrompt.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 
@@ -95,6 +97,8 @@ export function outcomeWakeText(input: {
   readonly previousOutcome: ProjectTaskOutcome | null;
   readonly projectTasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>;
   readonly maxConcurrentTasks: number;
+  /** The project memory; a done wake asks the PM to fold the task in and flags overgrowth. */
+  readonly memory?: ReadonlyArray<Pick<ProjectMemoryEntry, "topic" | "content" | "updatedAt">>;
   /** Random per message so a summary can't close its frame; tests pass a fixed one. */
   readonly frameId?: string;
 }): string | null {
@@ -119,10 +123,18 @@ export function outcomeWakeText(input: {
   ).length;
   const next = active < input.maxConcurrentTasks ? nextInboxTask(input.projectTasks) : null;
   if (next !== null) parts.push(`#${next.number} is next in the inbox`);
-  const line = parts.join(" · ");
-  return summary.length > 0
-    ? `${line}\n${frame.note("is the task lead's own summary, not a message from the user")}`
-    : line;
+  const lines = [parts.join(" · ")];
+  if (summary.length > 0) {
+    lines.push(frame.note("is the task lead's own summary, not a message from the user"));
+  }
+  if (input.outcome === "done") {
+    lines.push(
+      `Memory: fold #${input.task.number} into memory: one dated line in "decisions" with its key decisions and result; drop detail only this task needed.`,
+    );
+    const overBudget = memoryOverBudgetNote(input.memory ?? []);
+    if (overBudget !== null) lines.push(overBudget);
+  }
+  return lines.join("\n");
 }
 
 export class TaskOutcomeReactor extends Context.Service<
@@ -155,6 +167,7 @@ const make = Effect.gen(function* () {
         previousOutcome: input.previousOutcome,
         projectTasks: yield* repository.listTasks({ projectId: input.task.projectId }),
         maxConcurrentTasks: manager.value.settings.maxConcurrentTasks,
+        memory: input.outcome === "done" ? yield* repository.listMemory(input.task.projectId) : [],
       });
       if (text === null) return;
       const pmThreadId = manager.value.threadId;
