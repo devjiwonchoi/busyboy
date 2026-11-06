@@ -239,10 +239,10 @@ export class ProjectTeamRepository extends Context.Service<
       readonly answeredAt: IsoDateTime;
       readonly answeredBy: ProjectAttentionAnsweredBy;
     }) => Result<Option.Option<ProjectAttentionItem>>;
-    /** Closes the task's open items of this kind without an answer; returns the closed items. */
+    /** Closes the task's open items (of one kind, or all) without an answer; returns the closed items. */
     readonly supersedeOpenAttentionItems: (input: {
       readonly taskId: ProjectTaskId;
-      readonly kind: ProjectAttentionKind;
+      readonly kind?: ProjectAttentionKind;
       readonly supersededAt: IsoDateTime;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
     /** The newest answered or replaced items, newest first. */
@@ -826,15 +826,19 @@ export const make = Effect.gen(function* () {
   const supersedeAttentionRows = SqlSchema.findAll({
     Request: Schema.Struct({
       taskId: ProjectTaskId,
-      kind: ProjectAttentionKind,
+      kind: Schema.optional(ProjectAttentionKind),
       supersededAt: IsoDateTime,
     }),
     Result: AttentionRow,
     execute: ({ taskId, kind, supersededAt }) => sql`
       UPDATE project_attention_items
       SET superseded_at = ${supersededAt}
-      WHERE task_id = ${taskId} AND kind = ${kind}
-        AND answered_at IS NULL AND superseded_at IS NULL
+      WHERE ${sql.and([
+        sql`task_id = ${taskId}`,
+        ...(kind === undefined ? [] : [sql`kind = ${kind}`]),
+        sql`answered_at IS NULL`,
+        sql`superseded_at IS NULL`,
+      ])}
       RETURNING ${attentionColumns}
     `,
   });

@@ -596,6 +596,7 @@ export const ProjectTeamSettingsUpdateInput = Schema.Struct({
     description:
       "chill: relaxed and brief. dry: terse and matter-of-fact. chatty: warm and talkative.",
   }),
+  taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
 }).check(
   Schema.makeFilter((input) =>
     input.maxConcurrentTasks !== undefined ||
@@ -604,7 +605,8 @@ export const ProjectTeamSettingsUpdateInput = Schema.Struct({
     input.quietHours !== undefined ||
     input.name !== undefined ||
     input.avatarEmoji !== undefined ||
-    input.voice !== undefined
+    input.voice !== undefined ||
+    input.taskKeyPrefix !== undefined
       ? true
       : "team_settings_update needs at least one setting.",
   ),

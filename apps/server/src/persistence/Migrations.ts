@@ -7,7 +7,8 @@ import Migration0003 from "./Migrations/003_RewriteThreadSnoozeEvents.ts";
 import Migration0004 from "./Migrations/004_ProjectTeam.ts";
 import Migration0005 from "./Migrations/005_ProjectAttentionSuperseded.ts";
 import Migration0006 from "./Migrations/006_ProjectTaskSpecs.ts";
-import Migration0007 from "./Migrations/007_ProjectAttentionAnsweredBy.ts";
+import Migration0007 from "./Migrations/007_CloseFinishedTaskAttention.ts";
+import Migration0008 from "./Migrations/008_ProjectAttentionAnsweredBy.ts";
 
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
@@ -16,7 +17,8 @@ export const migrationEntries = [
   [4, "ProjectTeam", Migration0004],
   [5, "ProjectAttentionSuperseded", Migration0005],
   [6, "ProjectTaskSpecs", Migration0006],
-  [7, "ProjectAttentionAnsweredBy", Migration0007],
+  [7, "CloseFinishedTaskAttention", Migration0007],
+  [8, "ProjectAttentionAnsweredBy", Migration0008],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

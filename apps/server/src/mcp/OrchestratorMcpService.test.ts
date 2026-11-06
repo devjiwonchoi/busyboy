@@ -2365,7 +2365,7 @@ describe("OrchestratorMcpService provider resolution", () => {
       }),
     );
 
-    it.effect("keeps binding timers to the calling thread at its own mode", () =>
+    it.effect("keeps binding timers to the calling thread", () =>
       Effect.gen(function* () {
         const { result, saved } = yield* scheduleWith({
           prompt: "Check in",
@@ -2373,7 +2373,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         });
         assert.isTrue(Result.isSuccess(result));
         assert.equal(saved[0]?.threadId, callerId);
-        assert.equal(saved[0]?.runtimeMode, "full-access");
+        // Timer modes follow the project default (#96); only webhooks get the extra cap.
       }),
     );
   });
@@ -2408,5 +2408,79 @@ describe("OrchestratorMcpService provider resolution", () => {
         );
       }),
     );
+
+    it.effect("starts an unspecified child at the settings default, never above its parent", () =>
+      Effect.gen(function* () {
+        const resolve = OrchestratorMcpService.resolveRuntimeMode;
+        // A full-access parent's child starts in auto unless asked otherwise.
+        assert.equal(yield* resolve("full-access", undefined, undefined, "auto"), "auto");
+        // The user's own full-access default is kept.
+        assert.equal(
+          yield* resolve("full-access", undefined, undefined, "full-access"),
+          "full-access",
+        );
+        // The default never lifts a child above a narrower parent.
+        assert.equal(
+          yield* resolve("approval-required", undefined, undefined, "auto"),
+          "approval-required",
+        );
+        // An explicit inherit or mode still wins over the default.
+        assert.equal(yield* resolve("full-access", "inherit", undefined, "auto"), "full-access");
+        assert.equal(
+          yield* resolve("full-access", "full-access", undefined, "auto"),
+          "full-access",
+        );
+      }),
+    );
   });
+});
+
+describe("originDefaultWorktreeStrategy", () => {
+  const git = (input: {
+    readonly origin: boolean;
+    readonly defaultBranch: string | null;
+    readonly remoteBranches: ReadonlyArray<string>;
+  }) => ({
+    remoteExists: () => Effect.succeed(input.origin),
+    resolveDefaultBranchName: () => Effect.succeed(input.defaultBranch),
+    remoteBranchExists: ({ refName }: { readonly refName: string }) =>
+      Effect.succeed(input.remoteBranches.includes(refName)),
+  });
+
+  it.effect("starts a task worktree from origin's default branch", () =>
+    Effect.gen(function* () {
+      assert.deepStrictEqual(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: true, defaultBranch: "trunk", remoteBranches: ["trunk"] }),
+          "/repo",
+        ),
+        { type: "worktree", baseRef: "trunk", startFromOrigin: true },
+      );
+      // No origin/HEAD recorded: origin/main is the default.
+      assert.deepStrictEqual(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: true, defaultBranch: null, remoteBranches: ["main"] }),
+          "/repo",
+        ),
+        { type: "worktree", baseRef: "main", startFromOrigin: true },
+      );
+    }),
+  );
+
+  it.effect("falls back to the parent commit without an origin branch", () =>
+    Effect.gen(function* () {
+      assert.isUndefined(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: false, defaultBranch: null, remoteBranches: [] }),
+          "/repo",
+        ),
+      );
+      assert.isUndefined(
+        yield* OrchestratorMcpService.originDefaultWorktreeStrategy(
+          git({ origin: true, defaultBranch: null, remoteBranches: ["master"] }),
+          "/repo",
+        ),
+      );
+    }),
+  );
 });

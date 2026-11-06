@@ -8,6 +8,43 @@ import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { PROJECT_ID, setUpManager, startLead, userSays, withTeam } from "./testkit.ts";
 
 describe("AttentionRouter", () => {
+  it.effect("closes a task's open cards when it is cancelled or done", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const cancelled = yield* startLead(pm, "Group sidebar tasks", harness.delegate);
+        const finished = yield* startLead(pm, "Hello", harness.delegate);
+        const kept = yield* startLead(pm, "Goodbye", harness.delegate);
+        const approval = yield* team.askUser(cancelled.leadThreadId, {
+          kind: "approval",
+          question: "Approve the plan?",
+        });
+        yield* team.askUser(cancelled.leadThreadId, { kind: "decision", question: "Which?" });
+        yield* team.askUser(finished.leadThreadId, { kind: "blocker", question: "Token?" });
+        const open = yield* team.askUser(kept.leadThreadId, { kind: "decision", question: "A?" });
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 4);
+
+        yield* team.updateTask(pm, { taskId: cancelled.task.id, stage: "cancelled" });
+        yield* team.updateTask(finished.leadThreadId, { stage: "done", resultSummary: "Done." });
+
+        const snapshot = (yield* team.attentionSnapshot).projects[0]!;
+        assert.strictEqual(snapshot.openCount, 1);
+        assert.strictEqual(snapshot.presence.waitingOnUser, 1);
+        const status = yield* team.teamStatus(pm, {});
+        assert.deepStrictEqual(
+          status.openAttention.map((item) => item.id),
+          [open.item.id],
+        );
+        // The PM gets a clear refusal instead of a failed relay to a stopped lead.
+        const answer = yield* team
+          .answerAttention(pm, { attentionItemId: approval.item.id, answer: "Yes." })
+          .pipe(Effect.flip);
+        assert.include(answer.message, "its task ended");
+      }),
+    ),
+  );
+
   it.effect("batches questions raised within two minutes into one notification", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -157,10 +194,10 @@ describe("AttentionRouter", () => {
           const stale = yield* team
             .answerDecision({ projectId: PROJECT_ID, attentionItemId: first.item.id, answer: "Ok" })
             .pipe(Effect.flip);
-          assert.include(stale.message, "replaced by a newer question");
+          assert.include(stale.message, "a newer question replaced it");
           assert.strictEqual(second.item.supersededAt, null);
 
-          // Cards show on the task page and in "Waiting on you"; the PM is not woken for them.
+          // Cards show on the task page and above the PM composer; the PM is not woken for them.
           const toPm = yield* harness.messagesTo(pm);
           assert.isFalse(toPm.some((text) => text.includes("Plan v2?")));
         }),

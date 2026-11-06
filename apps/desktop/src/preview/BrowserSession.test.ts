@@ -177,13 +177,7 @@ describe("BrowserSession", () => {
         return granted;
       };
 
-      for (const permission of [
-        "clipboard-read",
-        "clipboard-sanitized-write",
-        "notifications",
-        "geolocation",
-        "fullscreen",
-      ]) {
+      for (const permission of ["clipboard-sanitized-write", "notifications", "fullscreen"]) {
         assert.isTrue(requestAllows(permission), `request handler should allow ${permission}`);
         assert.isTrue(
           checkHandler(null, permission) as boolean,
@@ -193,8 +187,9 @@ describe("BrowserSession", () => {
 
       // `clipboard-write` is not a real Electron permission — the async write API
       // uses `clipboard-sanitized-write` — so the stale name must not be granted,
-      // and unrelated permissions stay denied.
-      for (const permission of ["clipboard-write", "midi"]) {
+      // and unrelated permissions stay denied. Reading the clipboard or the user's
+      // location is never granted to an untrusted preview page.
+      for (const permission of ["clipboard-write", "midi", "clipboard-read", "geolocation"]) {
         assert.isFalse(requestAllows(permission), `request handler should deny ${permission}`);
         assert.isFalse(
           checkHandler(null, permission) as boolean,

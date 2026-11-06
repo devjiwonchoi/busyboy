@@ -28,3 +28,5 @@ export const PASSWORD_CHILD_FRAME_CHANNEL = "preview:password-child-frame";
 export const PASSWORD_FILL_CHANNEL = "preview:password-fill";
 export const PASSWORD_DROPDOWN_STATE_CHANNEL = "preview:password-dropdown-state";
 export const PASSWORD_SUBMIT_FORM_CHANNEL = "preview:password-submit-form";
+// The picker's page-world helper is stored on `globalThis` under `Symbol.for(...)` of this key.
+export const PREVIEW_ELEMENT_CONTEXT_KEY = "busyboy.preview.elementContext";

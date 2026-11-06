@@ -60,6 +60,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -133,7 +134,32 @@ type TerminalTaskStatus = Extract<
 export interface OrchestratorMcpDelegateTaskOptions {
   /** "never": the child's terminal state does not wake the parent; its completion is disposed. */
   readonly completionWake?: "never";
+  /**
+   * "origin-default": an isolated worktree fetches and starts from origin's default
+   * branch instead of the parent's local commit, so it never inherits a stale checkout.
+   */
+  readonly worktreeBase?: "origin-default";
 }
+
+/**
+ * The worktree strategy for a child that should start from origin's default branch,
+ * or undefined when the checkout has no origin branch to start from.
+ */
+export const originDefaultWorktreeStrategy = (
+  git: Pick<
+    GitVcsDriver.GitVcsDriver["Service"],
+    "remoteExists" | "resolveDefaultBranchName" | "remoteBranchExists"
+  >,
+  cwd: string,
+) =>
+  Effect.gen(function* () {
+    if (!(yield* git.remoteExists({ cwd, remoteName: "origin" }))) return undefined;
+    const branch = (yield* git.resolveDefaultBranchName(cwd, "origin")) ?? "main";
+    if (!(yield* git.remoteBranchExists({ cwd, refName: branch, remoteName: "origin" }))) {
+      return undefined;
+    }
+    return { type: "worktree", baseRef: branch, startFromOrigin: true } as const;
+  }).pipe(Effect.orElseSucceed(() => undefined));
 
 export interface OrchestratorMcpServiceShape {
   readonly capabilities: (
@@ -555,13 +581,29 @@ function interactionModeRank(mode: ProviderInteractionMode): number {
   return mode === "plan" ? 0 : 1;
 }
 
+/** The narrower of two runtime modes. */
+export function narrowerRuntimeMode(left: RuntimeMode, right: RuntimeMode): RuntimeMode {
+  return runtimeModeRank(left) <= runtimeModeRank(right) ? left : right;
+}
+
+/**
+ * With no runtimeMode requested, a new thread starts in `defaultMode` (the
+ * settings default), never broader than its parent. An explicit "inherit"
+ * still takes the parent's mode.
+ */
 export function resolveRuntimeMode(
   parentMode: RuntimeMode,
   requested: OrchestratorMcpRuntimeMode | undefined,
   target?: Pick<ResolvedTarget, "modelSelection" | "supportedRuntimeModes">,
+  defaultMode?: RuntimeMode,
 ): Effect.Effect<RuntimeMode, OrchestratorMcpFailure> {
   const inherited = requested === undefined || requested === "inherit";
-  const resolved = inherited ? parentMode : requested;
+  const resolved =
+    requested === undefined && defaultMode !== undefined
+      ? narrowerRuntimeMode(parentMode, defaultMode)
+      : inherited
+        ? parentMode
+        : requested;
   if (runtimeModeRank(resolved) > runtimeModeRank(parentMode)) {
     return Effect.fail(
       failure(
@@ -894,6 +936,14 @@ const make = Effect.gen(function* () {
   const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+
+  const defaultRuntimeModeFor = (projectId: ProjectId) =>
+    serverSettings.getSettings.pipe(
+      Effect.map(
+        (settings) => resolveProjectSettings(settings, projectId).settings.defaultRuntimeMode,
+      ),
+      Effect.mapError(() => failure("orchestration_error", "Unable to read server settings.")),
+    );
 
   const requireProject = (projectId: ProjectId) =>
     projects.getById(projectId).pipe(
@@ -1625,6 +1675,10 @@ const make = Effect.gen(function* () {
         const derivedTitle = input.prompt.split("\n")[0]?.trim() ?? "";
         const title =
           input.title ?? (derivedTitle.length > 0 ? derivedTitle.slice(0, 80) : "Scheduled task");
+        const runtimeMode = narrowerRuntimeMode(
+          limits.runtimeMode,
+          yield* defaultRuntimeModeFor(projectId),
+        );
         const upsertInput: ScheduledTaskUpsertInput = {
           title,
           prompt: input.prompt,
@@ -1634,7 +1688,7 @@ const make = Effect.gen(function* () {
           threadId: bindToCurrentThread && parent !== undefined ? parent.thread.id : null,
           workspaceStrategy: scheduledTaskWorkspaceStrategy(bindToCurrentThread),
           modelSelection,
-          runtimeMode: isWebhook ? capWebhookRuntimeMode(limits.runtimeMode) : limits.runtimeMode,
+          runtimeMode: isWebhook ? capWebhookRuntimeMode(runtimeMode) : runtimeMode,
           interactionMode: limits.interactionMode,
           createdBy: "agent",
           creationSource: "mcp",
@@ -1975,6 +2029,7 @@ const make = Effect.gen(function* () {
           parent.thread.runtimeMode,
           input.runtimeMode,
           target,
+          yield* defaultRuntimeModeFor(parent.thread.projectId),
         );
         const interactionMode = yield* resolveInteractionMode(
           parent.thread.interactionMode,
@@ -1983,17 +2038,29 @@ const make = Effect.gen(function* () {
         let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
         if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
           const project = yield* requireProject(parent.thread.projectId);
-          const base = yield* gitDriver
-            .resolveCommit({
-              cwd: parent.thread.worktreePath ?? project.workspaceRoot,
-              revision: "HEAD",
-            })
-            .pipe(
-              Effect.mapError(() =>
-                failure("invalid_request", "Unable to resolve the parent checkout commit."),
-              ),
+          if (options?.worktreeBase === "origin-default") {
+            workspaceStrategy = yield* originDefaultWorktreeStrategy(
+              gitDriver,
+              project.workspaceRoot,
             );
-          workspaceStrategy = { type: "worktree", baseRef: base.commitSha, startFromOrigin: false };
+          }
+          if (workspaceStrategy === undefined) {
+            const base = yield* gitDriver
+              .resolveCommit({
+                cwd: parent.thread.worktreePath ?? project.workspaceRoot,
+                revision: "HEAD",
+              })
+              .pipe(
+                Effect.mapError(() =>
+                  failure("invalid_request", "Unable to resolve the parent checkout commit."),
+                ),
+              );
+            workspaceStrategy = {
+              type: "worktree",
+              baseRef: base.commitSha,
+              startFromOrigin: false,
+            };
+          }
         }
         // ThreadManagementService.dispatch is the chokepoint for this command
         // type's own enablement check, using the same command id and its
@@ -2283,6 +2350,7 @@ const make = Effect.gen(function* () {
                 parent.thread.runtimeMode,
                 request.runtimeMode,
                 target,
+                yield* defaultRuntimeModeFor(parent.thread.projectId),
               );
               const interactionMode = yield* resolveInteractionMode(
                 parent.thread.interactionMode,

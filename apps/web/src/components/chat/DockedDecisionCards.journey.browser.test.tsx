@@ -307,6 +307,28 @@ it("answers a docked card in place: it leaves the dock and stays in the history 
   expect(picked).toEqual([expect.stringContaining("Approve")]);
 });
 
+it("drops a cancelled task's card from the dock and keeps the rest", async () => {
+  server.summary = { ...server.summary!, openCount: 2, decisionCards: [loginPlan, dragPlan] };
+  await render([message("hello", "How is it going?", "user")]);
+  await vi.waitFor(() => expect(position()).toBe("1/2"));
+
+  // The PM cancels "Fix the login redirect": the server closes its card without an answer.
+  await act(async () =>
+    publish({
+      ...server.summary!,
+      openCount: 1,
+      decisionCards: [
+        { ...loginPlan, item: { ...loginPlan.item, supersededAt: ASKED_AT } },
+        dragPlan,
+      ],
+    }),
+  );
+  await vi.waitFor(() => expect(dock()?.textContent).not.toContain("Fix the login redirect"));
+  expect(dock()?.textContent).toContain("BB-7 Fix drag scroll");
+  expect(dock()?.querySelector("[data-docked-decision-pager]")).toBeNull();
+  expect(server.answers).toEqual([]);
+});
+
 it("pages through several open cards and answers each where it is", async () => {
   server.summary = {
     ...server.summary!,

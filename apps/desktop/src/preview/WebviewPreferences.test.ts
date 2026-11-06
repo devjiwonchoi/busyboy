@@ -35,8 +35,8 @@ describe("PREVIEW_WEBVIEW_PREFERENCES", () => {
     }
   });
 
-  it("disables context isolation (so react-grab can see the page's React DevTools hook)", () => {
-    expect(parsed["contextIsolation"]).toBe("false");
+  it("isolates the guest preload from the previewed page", () => {
+    expect(parsed["contextIsolation"]).toBe("true");
   });
 
   it("keeps the renderer sandbox enabled (so the page cannot reach Node APIs)", () => {

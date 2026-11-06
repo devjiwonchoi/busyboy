@@ -14,6 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
+import CloseFinishedTaskAttention from "./Migrations/007_CloseFinishedTaskAttention.ts";
 import * as ProjectTeamRepository from "./ProjectTeamRepository.ts";
 import * as SqlitePersistence from "./Sqlite.ts";
 
@@ -333,6 +334,55 @@ describe("ProjectTeamRepository", () => {
         since.map((item) => item.id),
         ["item-2"],
       );
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("closes open items left on finished tasks when migrating", () =>
+    Effect.gen(function* () {
+      const team = yield* repo;
+      const ask = (id: string, taskId: ProjectTaskId) =>
+        team.createAttentionItem({
+          id: ProjectAttentionItemId.make(id),
+          projectId,
+          taskId,
+          kind: "approval",
+          question: "Approve the plan?",
+          options: [],
+          askerThreadId: leadThreadId,
+          batchId: ProjectAttentionBatchId.make("batch-1"),
+          createdAt: t0,
+        });
+      const task = (id: string) =>
+        team.createTask({
+          id: ProjectTaskId.make(id),
+          projectId,
+          title: id,
+          request: id,
+          waitsOn: [],
+          now: t0,
+        });
+      const cancelled = yield* task("cancelled");
+      const done = yield* task("done");
+      const running = yield* task("running");
+      yield* ask("orphan-cancelled", cancelled.id);
+      yield* ask("orphan-done", done.id);
+      yield* ask("still-open", running.id);
+      yield* team.updateTask({ id: cancelled.id, stage: "cancelled", now: t1 });
+      yield* team.updateTask({ id: done.id, stage: "done", now: t1 });
+      yield* team.updateTask({ id: running.id, stage: "running", now: t1 });
+
+      yield* CloseFinishedTaskAttention;
+
+      const open = yield* team.listOpenAttentionItems({ projectId });
+      assert.deepStrictEqual(
+        open.map((item) => item.id),
+        ["still-open"],
+      );
+      const orphan = Option.getOrThrow(
+        yield* team.getAttentionItem(ProjectAttentionItemId.make("orphan-cancelled")),
+      );
+      assert.isNotNull(orphan.supersededAt);
+      assert.isNull(orphan.answeredAt);
     }).pipe(Effect.provide(testLayer)),
   );
 

@@ -171,7 +171,7 @@ const TeamStatusTool = Tool.make("team_status", {
 const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
   ...shared,
   description:
-    "PM only. Change team settings only when the user asks: max concurrent tasks, sitrep interval, sitrep notifications, quiet hours, and your name, avatar emoji, or voice (chill, dry, or chatty). A sitrep interval set here is never adjusted automatically.",
+    "PM only. Change team settings only when the user asks: max concurrent tasks, sitrep interval, sitrep notifications, quiet hours, your name, avatar emoji, or voice (chill, dry, or chatty), and the task key prefix (such as BB for BB-7). A sitrep interval set here is never adjusted automatically.",
   parameters: ProjectTeamSettingsUpdateInput,
   success: ProjectTeamSettingsResult,
 })

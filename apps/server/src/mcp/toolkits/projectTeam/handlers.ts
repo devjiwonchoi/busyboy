@@ -38,7 +38,11 @@ const handlers = {
       const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* withTeam((team, caller, scope) =>
         team.startTask(caller, input, (delegateInput) =>
-          orchestrator.delegateTask(scope, delegateInput, { completionWake: "never" }),
+          orchestrator.delegateTask(scope, delegateInput, {
+            completionWake: "never",
+            // A lead starts from the latest upstream, not the PM checkout's local HEAD.
+            worktreeBase: "origin-default",
+          }),
         ),
       );
     }),
