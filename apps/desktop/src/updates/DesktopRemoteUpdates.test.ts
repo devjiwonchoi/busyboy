@@ -14,6 +14,9 @@ import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import { vi } from "vite-plus/test";
+
+vi.mock("electron-updater", () => ({ autoUpdater: {} }));
 
 import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
 import * as DesktopState from "../app/DesktopState.ts";

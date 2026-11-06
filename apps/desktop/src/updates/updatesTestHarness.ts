@@ -17,6 +17,20 @@ import * as DesktopUpdates from "./DesktopUpdates.ts";
 
 export const flushCallbacks = Effect.yieldNow;
 
+/** Yields until the update state matches, for work that runs in the background. */
+export const awaitUpdateState = (
+  getState: Effect.Effect<DesktopUpdateState>,
+  matches: (state: DesktopUpdateState) => boolean,
+) =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = yield* getState;
+      if (matches(state)) return state;
+      yield* Effect.yieldNow;
+    }
+    return yield* Effect.die(new Error("update state never matched"));
+  });
+
 export interface UpdatesHarnessOptions {
   readonly checkForUpdates?: Effect.Effect<
     void,
@@ -25,7 +39,7 @@ export interface UpdatesHarnessOptions {
   readonly beforeSetUpdateChannel?: Effect.Effect<void>;
   readonly setUpdateChannelError?: DesktopAppSettings.DesktopSettingsWriteError;
   readonly setDisableDifferentialDownload?: Effect.Effect<void>;
-  readonly downloadUpdate?: Effect.Effect<void>;
+  readonly downloadUpdate?: Effect.Effect<void, ElectronUpdater.ElectronUpdaterDownloadUpdateError>;
   readonly quitAndInstall?: Effect.Effect<void, ElectronUpdater.ElectronUpdaterQuitAndInstallError>;
   readonly stopBackend?: Effect.Effect<void>;
   readonly startBackend?: Effect.Effect<void>;
@@ -41,6 +55,7 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
   let downloadCount = 0;
   let allowDowngrade = false;
   let fullChangelog = false;
+  const autoInstallOnAppQuit: boolean[] = [];
   const feedUrls: ElectronUpdater.ElectronUpdaterFeedUrl[] = [];
   const listeners = new Map<string, Set<(...args: readonly unknown[]) => void>>();
   const sentStates: DesktopUpdateState[] = [];
@@ -69,7 +84,10 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
         feedUrls.push(options);
       }),
     setAutoDownload: () => Effect.void,
-    setAutoInstallOnAppQuit: () => Effect.void,
+    setAutoInstallOnAppQuit: (value) =>
+      Effect.sync(() => {
+        autoInstallOnAppQuit.push(value);
+      }),
     setChannel: () => Effect.void,
     setAllowPrerelease: () => Effect.void,
     allowDowngrade: Effect.sync(() => allowDowngrade),
@@ -265,6 +283,7 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     downloadCount: () => downloadCount,
     feedUrls: (): ElectronUpdater.ElectronUpdaterFeedUrl[] => feedUrls,
     fullChangelog: () => fullChangelog,
+    autoInstallOnAppQuit,
     listenerCount: () =>
       Array.from(listeners.values()).reduce(
         (total, eventListeners) => total + eventListeners.size,
