@@ -30,6 +30,8 @@ import {
   type WorkLogPresentationEntry,
   type WorkLogToolLifecycleStatus,
 } from "@t3tools/client-runtime/work-log/presentation";
+import { isBackgroundCompactionMessageId } from "@t3tools/shared/claudeCompaction";
+import { formatTokens } from "@t3tools/shared/usageFormat";
 import {
   resolveT3McpToolDefinition,
   resolveT3McpToolPresentation,
@@ -331,6 +333,20 @@ export function isContextCompactionActivityGroup(entry: ThreadFeedActivityGroup)
   return (
     entry.activities.length === 1 && entry.activities[0]?.projectedItem.item.type === "compaction"
   );
+}
+
+/** Spoken and expanded text for the quiet compaction marker in the feed. */
+export function contextCompactionMarkerLabel(
+  item: Pick<
+    Extract<OrchestrationV2TurnItem, { type: "compaction" }>,
+    "status" | "beforeTokenCount" | "afterTokenCount"
+  >,
+): string {
+  if (item.status === "running") return "Compacting context";
+  if (item.beforeTokenCount !== undefined && item.afterTokenCount !== undefined) {
+    return `Context compacted · ${formatTokens(item.beforeTokenCount)} → ${formatTokens(item.afterTokenCount)} tokens`;
+  }
+  return "Context compacted";
 }
 
 export function isContextHandoffActivityGroup(entry: ThreadFeedActivityGroup): boolean {
@@ -1766,6 +1782,8 @@ export function buildThreadFeed(
     if (turnItemIsWorkspacePreparation(item)) continue;
     if (item.type === "todo_list" || item.type === "checkpoint") continue;
     if (item.type === "user_message" && foldedAnswerMessageIds.has(item.messageId)) continue;
+    // The server sends "/compact" on its own to idle threads; that message stays hidden.
+    if (item.type === "user_message" && isBackgroundCompactionMessageId(item.messageId)) continue;
     if (item.type === "run_interrupt_request") {
       continue;
     }

@@ -21,10 +21,12 @@ import {
 } from "@t3tools/contracts";
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import { summarizeToolGroup } from "@t3tools/client-runtime/work-log/presentation";
+import { BACKGROUND_COMPACTION_MESSAGE_PREFIX } from "@t3tools/shared/claudeCompaction";
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  contextCompactionMarkerLabel,
   workEntryRowLabel,
   isContextHandoffActivityGroup,
   buildThreadFeed,
@@ -1747,6 +1749,38 @@ describe("retained v2 feed presentation", () => {
           entry.activities[0]?.projectedItem.item.type === "compaction",
       ),
     ).toMatchObject({ activities: [{ summary: "Context compacted" }] });
+  });
+
+  it("hides the /compact the server sends on its own but keeps one the user typed", () => {
+    const typedCompact = {
+      ...base("item-typed-compact", "2026-06-20T00:00:01.000Z", 0),
+      type: "user_message" as const,
+      messageId: MessageId.make("message-typed-compact"),
+      createdBy: "user" as const,
+      creationSource: "mobile" as const,
+      inputIntent: "turn_start" as const,
+      text: "/compact",
+      attachments: [],
+    };
+    const backgroundCompact = {
+      ...typedCompact,
+      ...base("item-background-compact", "2026-06-20T00:00:02.000Z", 1),
+      messageId: MessageId.make(`${BACKGROUND_COMPACTION_MESSAGE_PREFIX}thread-1:1`),
+    };
+    const feed = buildThreadFeed([projected(typedCompact, 0), projected(backgroundCompact, 1)]);
+    expect(feed.map((entry) => entry.id)).toEqual(["message-typed-compact"]);
+  });
+
+  it("labels the compaction marker with the token counts", () => {
+    expect(
+      contextCompactionMarkerLabel({
+        status: "completed",
+        beforeTokenCount: 182_000,
+        afterTokenCount: 31_000,
+      }),
+    ).toBe("Context compacted · 182K → 31K tokens");
+    expect(contextCompactionMarkerLabel({ status: "completed" })).toBe("Context compacted");
+    expect(contextCompactionMarkerLabel({ status: "running" })).toBe("Compacting context");
   });
 
   it("retains assistant image attachments from the wire", () => {

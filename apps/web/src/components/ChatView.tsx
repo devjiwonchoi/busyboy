@@ -7550,6 +7550,7 @@ export default function ChatView(props: ChatViewProps) {
         threadId={activeThread.id}
         optimisticMessages={optimisticUserMessages}
         editingRunId={queuedRunEdit.editingRunId}
+        compacting={isCompacting}
         onEditQueuedRun={queuedRunEdit.beginEdit}
         onCancelEdit={queuedRunEdit.cancelEdit}
       />

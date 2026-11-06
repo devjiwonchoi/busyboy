@@ -144,6 +144,14 @@ export function ContextWindowMeter(props: {
               </span>
             </div>
           ) : null}
+          {usage.compactionCount ? (
+            <div className="flex items-center justify-between gap-3 text-2xs leading-4">
+              <span className="text-secondary-label">Compacted</span>
+              <span className="font-medium tabular-nums text-secondary-label">
+                {usage.compactionCount === 1 ? "once" : `${usage.compactionCount} times`}
+              </span>
+            </div>
+          ) : null}
           {usage.compactsAutomatically ? (
             <div className="mt-1 text-pretty text-secondary-label text-2xs font-medium">
               {formatContextWindowCompactionMessage(modelDisplayName, usage.autoCompactThreshold)}

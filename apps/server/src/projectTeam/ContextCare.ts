@@ -7,17 +7,25 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
+import {
+  BACKGROUND_COMPACTION_MESSAGE_PREFIX,
+  isBackgroundCompactionMessageId,
+} from "@t3tools/shared/claudeCompaction";
+
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
-import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import { forkParked } from "../serverActivation.ts";
 
-/** The PM's context is tidied once its latest turn uses this share of the window. */
+/**
+ * A thread's context is compacted while it is idle once its latest turn uses
+ * this share of the window, so the provider rarely has to compact mid-turn.
+ * Applies to every thread: the PM, task leads and the user's own threads.
+ */
 export const CONTEXT_CARE_THRESHOLD = 0.75;
-export const CONTEXT_CARE_MESSAGE_PREFIX = "project-team:compact:";
+export const CONTEXT_CARE_MESSAGE_PREFIX = BACKGROUND_COMPACTION_MESSAGE_PREFIX;
 
 /**
  * Returns the provider turn whose usage calls for a compaction, or null.
@@ -40,7 +48,7 @@ export class ContextCare extends Context.Service<
 >()("t3/projectTeam/ContextCare") {}
 
 const make = Effect.gen(function* () {
-  const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+  const providers = yield* ProviderRegistry.ProviderRegistry;
   const threads = yield* ThreadManagement.ThreadManagementService;
   // One compaction per provider turn, even if the run is reported again.
   const compactedTurns = yield* Ref.make<ReadonlySet<string>>(new Set());
@@ -52,19 +60,22 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       if (event.type !== "run.updated") return;
       const run = event.payload;
-      if (run.status === "failed" && run.userMessageId.startsWith(CONTEXT_CARE_MESSAGE_PREFIX)) {
+      if (run.status === "failed" && isBackgroundCompactionMessageId(run.userMessageId)) {
         yield* Ref.update(cannotCompact, (current) => new Set(current).add(run.threadId));
-        yield* Effect.logWarning("project team context care stopped after a failed compaction", {
+        yield* Effect.logWarning("context care stopped after a failed compaction", {
           threadId: run.threadId,
         });
         return;
       }
       if (run.status !== "completed") return;
       if ((yield* Ref.get(cannotCompact)).has(run.threadId)) return;
-      const manager = yield* repository.getManagerByThreadId(run.threadId);
-      if (Option.isNone(manager) || !manager.value.settings.enabled) return;
+      // Only providers that offer /compact; others would just fail the run.
+      const provider = (yield* providers.getProviders).find(
+        (candidate) => candidate.instanceId === run.providerInstanceId,
+      );
+      if (!provider?.slashCommands.some((command) => command.name === "compact")) return;
 
-      // Wait until the PM is idle; the next settled run re-checks.
+      // Wait until the thread is idle; the next settled run re-checks.
       // The shell may still report the run that just ended as active.
       const shell = yield* threads.getThreadShell(run.threadId);
       if (shell === null || shell.deletedAt !== null || shell.archivedAt !== null) return;
@@ -88,7 +99,7 @@ const make = Effect.gen(function* () {
       });
     }).pipe(
       Effect.catchCause((cause) =>
-        Effect.logWarning("project team context care failed", { threadId: event.threadId, cause }),
+        Effect.logWarning("context care failed", { threadId: event.threadId, cause }),
       ),
     );
 
@@ -103,9 +114,7 @@ export const layerWorker = Layer.effectDiscard(
     const threads = yield* ThreadManagement.ThreadManagementService;
     yield* forkParked(
       Stream.runForEach(threads.streamDomainEvents, care.handle).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("project team context care stream failed", { cause }),
-        ),
+        Effect.catchCause((cause) => Effect.logWarning("context care stream failed", { cause })),
       ),
     );
   }),
