@@ -6,10 +6,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { ChatAttachmentId, ProjectTaskId, ThreadId } from "@t3tools/contracts";
 import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 
 import { createPendingAttachmentId } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import { PROJECT_ID, setUpManager, userMessage, withTeam } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
@@ -337,6 +339,133 @@ describe("ProjectTeamService tasks as specs", () => {
           detail.sessions.map((session) => session.role),
           ["lead", "lead"],
         );
+      }),
+    ),
+  );
+});
+
+describe("Auto-approve plans", () => {
+  const journal = Effect.gen(function* () {
+    const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+    const events = yield* repository.listProjectEventsSince({
+      projectId: PROJECT_ID,
+      since: "2000-01-01T00:00:00.000Z",
+    });
+    return events.map((event) => event.body);
+  });
+
+  it.effect("approves a waiting plan while the user's setting is on, and not after it ends", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const first = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId: firstLead } = yield* team.startTask(
+          pm,
+          { taskId: first.task.id },
+          harness.delegate,
+        );
+
+        // Off: the plan waits for the user.
+        const waiting = yield* team.updateTask(firstLead, {
+          stage: "awaiting_approval",
+          planSummary: "Keep scrollTop.",
+        });
+        assert.strictEqual(waiting.task.stage, "awaiting_approval");
+
+        // Turning it on approves the plan that was already waiting.
+        const on = yield* team.updateSettings({
+          projectId: PROJECT_ID,
+          autoApprovePlans: { hours: 8 },
+        });
+        assert.strictEqual(on.settings.autoApprovePlans?.until, "2026-11-04T08:00:00.000Z");
+        const approved = yield* team.getTaskDetail({
+          projectId: PROJECT_ID,
+          taskId: first.task.id,
+        });
+        assert.strictEqual(approved.task.stage, "running");
+        const toLead = (yield* Ref.get(harness.sent))
+          .filter((input) => input.threadId === firstLead)
+          .map((input) => input.text);
+        assert.isTrue(
+          toLead.some((text) =>
+            text.startsWith(
+              `[Plan auto-approved by the user's "Auto-approve plans" setting] Your plan for #1 Fix drag → Approve and start.`,
+            ),
+          ),
+        );
+
+        // A plan that asks for approval while it's on goes straight to running.
+        const second = yield* team.createTask(pm, { title: "Docs", request: "Docs." });
+        const { leadThreadId: secondLead } = yield* team.startTask(
+          pm,
+          { taskId: second.task.id },
+          harness.delegate,
+        );
+        const instant = yield* team.updateTask(secondLead, { stage: "awaiting_approval" });
+        assert.strictEqual(instant.task.stage, "running");
+
+        // Decision questions still go to the user.
+        const question = yield* team.askUser(secondLead, {
+          kind: "decision",
+          question: "Which color?",
+          options: ["Red", "Blue"],
+        });
+        assert.isNull(question.item.answeredAt);
+
+        // After the window ends, plans wait again.
+        yield* TestClock.adjust("9 hours");
+        const third = yield* team.createTask(pm, { title: "Lint", request: "Lint." });
+        const { leadThreadId: thirdLead } = yield* team.startTask(
+          pm,
+          { taskId: third.task.id },
+          harness.delegate,
+        );
+        const later = yield* team.updateTask(thirdLead, { stage: "awaiting_approval" });
+        assert.strictEqual(later.task.stage, "awaiting_approval");
+
+        const bodies = yield* journal;
+        assert.include(
+          bodies,
+          "Auto-approve plans turned on by you until 2026-11-04T08:00:00.000Z",
+        );
+        assert.include(
+          bodies,
+          'Plan for #1 auto-approved ("Approve and start") by the user\'s Auto-approve plans setting.',
+        );
+        assert.include(
+          bodies,
+          'Plan for #2 auto-approved ("Approve and start") by the user\'s Auto-approve plans setting.',
+        );
+        assert.notInclude(
+          bodies,
+          'Plan for #3 auto-approved ("Approve and start") by the user\'s Auto-approve plans setting.',
+        );
+      }),
+    ),
+  );
+
+  it.effect("stays off when turned off, and the PM's settings tool cannot turn it on", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        yield* team.updateSettings({ projectId: PROJECT_ID, autoApprovePlans: { hours: null } });
+        const off = yield* team.updateSettings({ projectId: PROJECT_ID, autoApprovePlans: null });
+        assert.isUndefined(off.settings.autoApprovePlans);
+
+        // Extra keys are dropped by the tool's schema; even passed through, the PM path ignores them.
+        const asPm = yield* team.updateSettingsAsManager(pm, {
+          sitrepNotify: true,
+          autoApprovePlans: { hours: null },
+        } as never);
+        assert.isUndefined(asPm.settings.autoApprovePlans);
+
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        const waiting = yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
+        assert.strictEqual(waiting.task.stage, "awaiting_approval");
+        assert.include(yield* journal, "Auto-approve plans turned off by you");
       }),
     ),
   );

@@ -20,6 +20,7 @@ import {
   ComposerControlIcon,
   type ComposerControlSize,
 } from "./ComposerControl";
+import { AutoApprovePlansSettings } from "./AutoApprovePlans";
 import { useComposerMenuProps } from "./composerEventScope";
 import { useComposerMenuState } from "./useComposerMenuState";
 
@@ -39,7 +40,8 @@ interface SitrepControlProps {
   summary: ProjectTeamAttentionSummary;
 }
 
-export function SitrepSettingsContent({ projectRef, summary: { settings } }: SitrepControlProps) {
+export function SitrepSettingsContent({ projectRef, summary }: SitrepControlProps) {
+  const { settings } = summary;
   const canOperate = useEnvironmentScope(projectRef.environmentId, AuthOrchestrationOperateScope);
   const updateSettings = useUpdateTeamSettings();
   // Null until the user types, so a server-side change shows without wiping a draft.
@@ -117,6 +119,8 @@ export function SitrepSettingsContent({ projectRef, summary: { settings } }: Sit
           }}
         />
       </label>
+      <Separator className="my-1" />
+      <AutoApprovePlansSettings projectRef={projectRef} summary={summary} />
     </div>
   );
 }
