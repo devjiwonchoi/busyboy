@@ -73,6 +73,7 @@ function afkAnsweredCard(answeredAt: string): ProjectDecisionCard {
       supersededAt: null,
       answeredBy: "afk",
       specVersion: null,
+      summary: null,
     },
   };
 }

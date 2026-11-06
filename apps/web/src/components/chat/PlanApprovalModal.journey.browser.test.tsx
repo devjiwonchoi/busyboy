@@ -140,6 +140,7 @@ function makeCard(): ProjectDecisionCard {
       supersededAt: null,
       answeredBy: null,
       specVersion: 2,
+      summary: null,
     },
   };
 }
@@ -164,8 +165,8 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function button(name: string): HTMLButtonElement {
-  const match = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+function button(name: string, scope: ParentNode = document): HTMLButtonElement {
+  const match = [...scope.querySelectorAll<HTMLButtonElement>("button")].find(
     (element) => element.textContent?.trim() === name && element.offsetParent !== null,
   );
   if (match === undefined) throw new Error(`No visible "${name}" button`);
@@ -299,7 +300,7 @@ describe.each([
 
   it("approves and starts", async () => {
     await openReview();
-    await userEvent.click(button("Approve and start"));
+    await userEvent.click(button("Approve and start", modal()));
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
     expect(server.answers[0]!.answer).toBe(PLAN_APPROVAL_START);
     await vi.waitFor(() => expect(document.querySelector("[data-plan-review]")).toBeNull());
@@ -310,7 +311,7 @@ describe.each([
     await userEvent.click(button("View plan"));
     await vi.waitFor(() => expect(section("End result")).toBeTruthy());
     expect(modal().textContent).toContain("Approved and started");
-    expect(() => button("Approve and start")).toThrow();
+    expect(() => button("Approve and start", modal())).toThrow();
     expect(modal().querySelector('textarea[aria-label="Overall comment"]')).toBeNull();
   });
 

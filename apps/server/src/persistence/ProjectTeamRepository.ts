@@ -122,6 +122,8 @@ export interface CreateProjectAttentionItemInput {
   readonly createdAt: IsoDateTime;
   /** For a plan approval: the spec version under review. */
   readonly specVersion?: number | null;
+  /** For a plan approval: the summary the card shows. */
+  readonly summary?: string | null;
 }
 
 export interface CreateProjectSitrepInput {
@@ -326,6 +328,7 @@ const AttentionRow = Schema.Struct({
   supersededAt: Schema.NullOr(IsoDateTime),
   answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy),
   specVersion: Schema.NullOr(PositiveInt),
+  summary: Schema.NullOr(Schema.String),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
 });
 const SpecVersionRow = Schema.Struct({
@@ -410,7 +413,8 @@ export const make = Effect.gen(function* () {
     created_at AS "createdAt",
     superseded_at AS "supersededAt",
     answered_by AS "answeredBy",
-    spec_version AS "specVersion"
+    spec_version AS "specVersion",
+    summary AS "summary"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -796,17 +800,18 @@ export const make = Effect.gen(function* () {
       batchId: ProjectAttentionBatchId,
       createdAt: IsoDateTime,
       specVersion: Schema.NullOr(PositiveInt),
+      summary: Schema.NullOr(Schema.String),
     }),
     Result: AttentionRow,
     execute: (item) => sql`
       INSERT INTO project_attention_items (
         item_id, project_id, task_id, kind, question, options_json,
-        asker_thread_id, batch_id, created_at, spec_version
+        asker_thread_id, batch_id, created_at, spec_version, summary
       )
       VALUES (
         ${item.id}, ${item.projectId}, ${item.taskId}, ${item.kind}, ${item.question},
         ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt},
-        ${item.specVersion}
+        ${item.specVersion}, ${item.summary}
       )
       RETURNING ${attentionColumns}
     `,
@@ -1131,9 +1136,11 @@ export const make = Effect.gen(function* () {
       ),
 
     createAttentionItem: (input) =>
-      insertAttention({ ...input, specVersion: input.specVersion ?? null }).pipe(
-        Effect.mapError(toRepositoryError("createAttentionItem")),
-      ),
+      insertAttention({
+        ...input,
+        specVersion: input.specVersion ?? null,
+        summary: input.summary ?? null,
+      }).pipe(Effect.mapError(toRepositoryError("createAttentionItem"))),
     getAttentionItem: (id) =>
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),
     answerAttentionItem: (input) =>

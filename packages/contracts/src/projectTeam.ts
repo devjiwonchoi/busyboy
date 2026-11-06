@@ -341,6 +341,8 @@ export const ProjectAttentionItem = Schema.Struct({
   ),
   /** For a plan approval: the spec version the user reviews. Null for other kinds. */
   specVersion: Schema.NullOr(PositiveInt).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** For a plan approval: the short summary the card shows. Null for other kinds and older cards. */
+  summary: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
@@ -786,6 +788,10 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description: "Self-contained question. For approval, a short summary of the plan.",
+  }),
+  summary: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
+    description:
+      "Required for approval: what the user reads on the card to approve without opening the plan. 3-5 short lines: what changes, the end result, done when (1-2 lines), and anything notable such as risky steps or scope cuts.",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(

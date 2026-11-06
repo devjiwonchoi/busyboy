@@ -1,10 +1,15 @@
 import {
   type EnvironmentId,
+  PLAN_APPROVAL_ONLY,
+  PLAN_APPROVAL_START,
   planApprovalOutcome,
   type PlanApprovalOutcome,
   type ProjectDecisionCard,
 } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
+
+import { useAnswerDecision } from "~/state/projectTeam";
 
 import { Button } from "../ui/button";
 import { AFK_ANSWERED_LABEL } from "./Afk";
@@ -23,8 +28,9 @@ export function planApprovalHeader(card: ProjectDecisionCard): string {
 }
 
 /**
- * A task lead's plan, waiting for the user's go-ahead. Open: a short summary and "Review
- * plan". Answered: the outcome, with the plan still viewable. Closed unanswered: muted.
+ * A task lead's plan, waiting for the user's go-ahead. Open: the lead's summary, the approve
+ * buttons (same answer call as the modal, so it counts as the user's click) and "Review
+ * plan" for the full plan, comments and requested changes. Answered: the outcome, with the plan still viewable. Closed unanswered: muted.
  */
 export function PlanApprovalCard({
   card,
@@ -34,6 +40,8 @@ export function PlanApprovalCard({
   environmentId: EnvironmentId;
 }) {
   const [reviewing, setReviewing] = useState(false);
+  const [sending, setSending] = useState(false);
+  const answerDecision = useAnswerDecision();
   const header = planApprovalHeader(card);
   const answer = card.item.answer;
   const state =
@@ -52,6 +60,19 @@ export function PlanApprovalCard({
       readOnly={state !== "open"}
     />
   );
+
+  const approve = (answer: string) => {
+    if (sending) return;
+    setSending(true);
+    void answerDecision(environmentId, {
+      projectId: card.item.projectId,
+      attentionItemId: card.item.id,
+      answer,
+    }).then((result) => {
+      // On success the attention stream turns this card into its answered state.
+      if (!AsyncResult.isSuccess(result)) setSending(false);
+    });
+  };
 
   if (state === "answered") {
     const outcome = planApprovalOutcome(answer ?? "");
@@ -112,9 +133,22 @@ export function PlanApprovalCard({
       className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5"
     >
       <p className="truncate font-medium text-muted-foreground text-xs">{header}</p>
-      <p className="line-clamp-3 whitespace-pre-wrap text-sm">{card.item.question}</p>
-      <div>
-        <Button size="sm" onClick={() => setReviewing(true)}>
+      <p data-plan-summary className="whitespace-pre-wrap text-sm">
+        {card.item.summary ?? card.item.question}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={sending} onClick={() => approve(PLAN_APPROVAL_START)}>
+          {PLAN_APPROVAL_START}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={sending}
+          onClick={() => approve(PLAN_APPROVAL_ONLY)}
+        >
+          {PLAN_APPROVAL_ONLY}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setReviewing(true)}>
           Review plan
         </Button>
       </div>
