@@ -23,6 +23,10 @@ import {
   ProjectMemoryEntryId,
   type ProjectTask,
   type ProjectTaskBrief,
+  ProjectTaskStatus,
+  type ProjectTaskStatusSignals,
+  resolveProjectTaskStatus,
+  storedTaskStatusSignals,
   type ProjectTaskEvent,
   ProjectTaskEventId,
   type ProjectTaskEventKind,
@@ -101,6 +105,7 @@ import * as AttentionRouter from "./AttentionRouter.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
+  isLeadBusy,
   isoFromMillis,
   isoMillis,
   makeIdGenerator,
@@ -119,6 +124,7 @@ const DEFAULT_TASK_EVENT_LIMIT = 20;
 const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
   "inbox",
   "planning",
+  "awaiting_approval",
   "running",
   "in_review",
 ];
@@ -324,7 +330,10 @@ export type DelegateTaskLead = (
   input: OrchestratorMcpDelegateTaskInput,
 ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
 
-export function toTaskBrief(task: ProjectTask): ProjectTaskBrief {
+export function toTaskBrief(
+  task: ProjectTask,
+  signals: ProjectTaskStatusSignals = storedTaskStatusSignals(task),
+): ProjectTaskBrief {
   return {
     id: task.id,
     number: task.number,
@@ -336,7 +345,19 @@ export function toTaskBrief(task: ProjectTask): ProjectTaskBrief {
     nudgeCount: task.nudgeCount,
     waitsOn: task.waitsOn,
     stageChangedAt: task.stageChangedAt,
+    status: resolveProjectTaskStatus(task, signals),
   };
+}
+
+/** Counts per user-facing status, every status included. */
+export function countTaskStatuses(
+  briefs: ReadonlyArray<Pick<ProjectTaskBrief, "status">>,
+): Record<ProjectTaskStatus, number> {
+  const counts = Object.fromEntries(
+    ProjectTaskStatus.literals.map((status) => [status, 0]),
+  ) as Record<ProjectTaskStatus, number>;
+  for (const brief of briefs) counts[brief.status] += 1;
+  return counts;
 }
 
 /** The title a PM thread had before PMs had names; such threads take the persona's name. */
@@ -561,6 +582,41 @@ export class ProjectTeamService extends Context.Service<
 const make = Effect.gen(function* () {
   const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
   const threads = yield* ThreadManagement.ThreadManagementService;
+
+  /** Live status signals per task: open questions and the lead thread's state. */
+  const liveTaskSignals = (
+    tasks: ReadonlyArray<ProjectTask>,
+    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId">>,
+  ) =>
+    Effect.gen(function* () {
+      const asking = new Set(openAttention.map((item) => item.taskId));
+      const entries = yield* Effect.forEach(
+        tasks,
+        (task) =>
+          Effect.gen(function* () {
+            const lead = task.leadThreadId;
+            const finished = task.stage === "done" || task.stage === "cancelled";
+            const leadRunning =
+              lead === null || finished ? false : yield* isLeadBusy(threads, lead);
+            const leadFailed =
+              lead === null || finished || leadRunning
+                ? false
+                : yield* threads.getThreadShell(lead).pipe(
+                    Effect.map((shell) => shell?.status === "failed"),
+                    Effect.orElseSucceed(() => false),
+                  );
+            const signals: ProjectTaskStatusSignals = {
+              openQuestion: asking.has(task.id),
+              leadRunning,
+              leadFailed,
+            };
+            return [task.id as string, signals] as const;
+          }),
+        { concurrency: 8 },
+      );
+      const byId = new Map(entries);
+      return (task: ProjectTask) => toTaskBrief(task, byId.get(task.id));
+    });
   const projects = yield* ProjectStore.ProjectStoreV2;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const router = yield* AttentionRouter.AttentionRouter;
@@ -1133,7 +1189,11 @@ const make = Effect.gen(function* () {
         ...(input.stages === undefined ? {} : { stages: input.stages }),
       });
       const limited = input.limit === undefined ? tasks : tasks.slice(0, input.limit);
-      return { tasks: limited.map(toTaskBrief) };
+      const brief = yield* liveTaskSignals(
+        limited,
+        yield* repository.listOpenAttentionItems({ projectId: role.projectId }),
+      );
+      return { tasks: limited.map(brief) };
     }).pipe(orTeamError("Could not list tasks."));
 
   const readTask: ProjectTeamService["Service"]["readTask"] = (callerThreadId, input) =>
@@ -1175,10 +1235,11 @@ const make = Effect.gen(function* () {
         null;
       const sinceMs = since === null ? Number.NEGATIVE_INFINITY : isoMillis(since);
       const tasks = yield* repository.listTasks({ projectId });
-      const briefs = (stage: ProjectTaskStage) =>
-        tasks.filter((task) => task.stage === stage).map(toTaskBrief);
-      const changedSince = (task: ProjectTask) => isoMillis(task.stageChangedAt) > sinceMs;
       const openAttention = yield* repository.listOpenAttentionItems({ projectId });
+      const brief = yield* liveTaskSignals(tasks, openAttention);
+      const briefs = (stage: ProjectTaskStage) =>
+        tasks.filter((task) => task.stage === stage).map(brief);
+      const changedSince = (task: ProjectTask) => isoMillis(task.stageChangedAt) > sinceMs;
       const newAttention: ReadonlyArray<ProjectAttentionItem> =
         since === null
           ? openAttention
@@ -1207,31 +1268,31 @@ const make = Effect.gen(function* () {
         tasks: {
           inbox: briefs("inbox"),
           planning: briefs("planning"),
+          awaiting_approval: briefs("awaiting_approval"),
           running: briefs("running"),
           in_review: briefs("in_review"),
           done: briefs("done"),
           blocked: briefs("blocked"),
           cancelled: briefs("cancelled"),
         },
+        statusCounts: countTaskStatuses(tasks.map(brief)),
         stalled: tasks
           .filter((task) => task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage))
-          .map(toTaskBrief),
+          .map(brief),
         openAttention,
         settings: manager.settings,
         changes: {
           since,
-          done: tasks
-            .filter((task) => task.stage === "done" && changedSince(task))
-            .map(toTaskBrief),
+          done: tasks.filter((task) => task.stage === "done" && changedSince(task)).map(brief),
           prOpened: tasks
             .filter(
               (task) => task.stage === "in_review" && task.prUrl !== null && changedSince(task),
             )
-            .map(toTaskBrief),
+            .map(brief),
           newAttention,
           blocked: tasks
             .filter((task) => task.stage === "blocked" && changedSince(task))
-            .map(toTaskBrief),
+            .map(brief),
           otherThreads: otherThreads.filter((thread) => isoMillis(thread.lastUpdateAt) > sinceMs),
         },
         otherThreads,
@@ -1432,7 +1493,7 @@ const make = Effect.gen(function* () {
         key: formatTaskKey(prefix, task.number),
         versions: yield* repository.listSpecVersions(task.id),
         sessions: yield* repository.listTaskSessions(task.id),
-        children: (yield* repository.listChildTasks(task.id)).map(toTaskBrief),
+        children: (yield* repository.listChildTasks(task.id)).map((child) => toTaskBrief(child)),
         openAttention: yield* repository.listOpenAttentionItems({
           projectId: task.projectId,
           taskId: task.id,
@@ -1791,6 +1852,7 @@ const make = Effect.gen(function* () {
               leadThreadId: task.leadThreadId,
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
+              openQuestion: open.some((item) => item.taskId === task.id),
             })),
           } satisfies ProjectTeamAttentionSummary;
         }),

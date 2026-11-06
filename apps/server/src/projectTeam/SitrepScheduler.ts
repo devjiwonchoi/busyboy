@@ -51,7 +51,8 @@ const SITREP_NOW_REASON = "you asked for a sitrep before the next one was due";
 const SITREP_MESSAGE_PREFIX = "project-team:sitrep:";
 /** Task events that count as a change worth reporting. */
 const REPORTABLE_EVENT_KINDS = new Set(["created", "stage_changed", "summary"]);
-export const ACTIVE_TASK_STAGES = ["planning", "running"] as const;
+/** Stages that hold a lead's slot; an approval wait still counts. */
+export const ACTIVE_TASK_STAGES = ["planning", "awaiting_approval", "running"] as const;
 
 export const THREAD_WAITING_PREFIX = "project-team:thread-waiting:";
 /** Waits older than this when first seen (e.g. right after an upgrade) do not wake the PM. */

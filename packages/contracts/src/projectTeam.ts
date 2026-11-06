@@ -45,6 +45,8 @@ export const MAX_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES = 480;
 export const ProjectTaskStage = Schema.Literals([
   "inbox",
   "planning",
+  /** The plan is written and waits for the user's approval. */
+  "awaiting_approval",
   "running",
   "in_review",
   "done",
@@ -61,6 +63,88 @@ export const ProjectTaskOutcome = Schema.Literals([
   "stalled",
 ]);
 export type ProjectTaskOutcome = typeof ProjectTaskOutcome.Type;
+
+/**
+ * The one status the user sees for a task. Stages are what agents store; the status
+ * also reads live signals (an open question, the lead's turn) so it is derived, never stored.
+ */
+export const ProjectTaskStatus = Schema.Literals([
+  "todo",
+  "planning",
+  "waiting_for_approval",
+  "in_progress",
+  "in_review",
+  "ready",
+  "ask_question",
+  "fatal",
+  "done",
+]);
+export type ProjectTaskStatus = typeof ProjectTaskStatus.Type;
+
+export const PROJECT_TASK_STATUS_LABELS: Record<ProjectTaskStatus, string> = {
+  todo: "Todo",
+  planning: "Planning",
+  waiting_for_approval: "Waiting for approval",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  ready: "Ready",
+  ask_question: "Ask question",
+  fatal: "Fatal",
+  done: "Done",
+};
+
+/** Live signals that refine a task's stage into its status. */
+export interface ProjectTaskStatusSignals {
+  /** An open question or blocker from this task waits on the user. */
+  readonly openQuestion: boolean;
+  /** The lead's current turn is running. */
+  readonly leadRunning: boolean;
+  /** The lead's latest turn failed. */
+  readonly leadFailed: boolean;
+}
+
+/** Signals known from the stored task alone: its last turn's outcome. */
+export function storedTaskStatusSignals(
+  task: Pick<ProjectTask, "lastOutcome">,
+): ProjectTaskStatusSignals {
+  return {
+    openQuestion: task.lastOutcome === "waiting_user",
+    leadRunning: false,
+    leadFailed: false,
+  };
+}
+
+/**
+ * The user-facing status. First match wins: Done, a failure, Waiting for approval,
+ * an open question, blocked or stalled, then the stage.
+ */
+export function resolveProjectTaskStatus(
+  task: Pick<ProjectTask, "stage" | "lastOutcome">,
+  signals: ProjectTaskStatusSignals,
+): ProjectTaskStatus {
+  if (task.stage === "done" || task.stage === "cancelled") return "done";
+  // A running turn means someone already restarted the lead after the failure.
+  if ((signals.leadFailed || task.lastOutcome === "failed") && !signals.leadRunning) {
+    return "fatal";
+  }
+  if (task.stage === "awaiting_approval") return "waiting_for_approval";
+  if (signals.openQuestion) return "ask_question";
+  if (task.stage === "blocked") return "fatal";
+  // Stalled only matters while the lead should be working; a running turn clears it.
+  if (task.lastOutcome === "stalled" && !signals.leadRunning && task.stage !== "inbox") {
+    return "fatal";
+  }
+  switch (task.stage) {
+    case "inbox":
+      return "todo";
+    case "planning":
+      return "planning";
+    case "running":
+      return "in_progress";
+    case "in_review":
+      return signals.leadRunning ? "in_review" : "ready";
+  }
+}
 
 const ProjectTaskTitle = TrimmedNonEmptyString.check(Schema.isMaxLength(512)).annotate({
   description: "Short task title.",
@@ -107,6 +191,8 @@ export const ProjectTaskBrief = Schema.Struct({
   nudgeCount: NonNegativeInt,
   waitsOn: Schema.Array(ProjectTaskId),
   stageChangedAt: IsoDateTime,
+  /** What the user sees; use these names when talking to the user. */
+  status: ProjectTaskStatus,
 });
 export type ProjectTaskBrief = typeof ProjectTaskBrief.Type;
 
@@ -356,6 +442,9 @@ export type ProjectSitrep = typeof ProjectSitrep.Type;
 export const ProjectTeamTasksByStage = Schema.Struct({
   inbox: Schema.Array(ProjectTaskBrief),
   planning: Schema.Array(ProjectTaskBrief),
+  awaiting_approval: Schema.Array(ProjectTaskBrief).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   running: Schema.Array(ProjectTaskBrief),
   in_review: Schema.Array(ProjectTaskBrief),
   done: Schema.Array(ProjectTaskBrief),
@@ -414,6 +503,8 @@ export const ProjectTeamStatus = Schema.Struct({
   /** Tasks are written as <prefix>-<number>, such as BB-7. */
   taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
   tasks: ProjectTeamTasksByStage,
+  /** How many tasks have each user-facing status. */
+  statusCounts: Schema.optional(Schema.Record(ProjectTaskStatus, NonNegativeInt)),
   stalled: Schema.Array(ProjectTaskBrief),
   openAttention: Schema.Array(ProjectAttentionItem),
   settings: ProjectTeamSettings,
@@ -480,8 +571,17 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
     description: "Task to update. A task lead may omit it to update its own task.",
   }),
   stage: Schema.optional(
-    Schema.Literals(["inbox", "running", "in_review", "done", "blocked", "cancelled"]).annotate({
-      description: 'New stage. "inbox" parks a task without starting the work.',
+    Schema.Literals([
+      "inbox",
+      "awaiting_approval",
+      "running",
+      "in_review",
+      "done",
+      "blocked",
+      "cancelled",
+    ]).annotate({
+      description:
+        'New stage. "inbox" parks a task without starting the work. "awaiting_approval": the plan is written and waits for the user\'s approval.',
     }),
   ),
   planSummary: Schema.optional(ProjectTaskSummaryText).annotate({
@@ -751,6 +851,8 @@ export const ProjectTaskReference = Schema.Struct({
   lastOutcome: Schema.NullOr(ProjectTaskOutcome).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /** An open question or blocker from this task waits on the user. */
+  openQuestion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 
