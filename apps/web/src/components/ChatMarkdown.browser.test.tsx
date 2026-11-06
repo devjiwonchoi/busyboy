@@ -198,7 +198,7 @@ describe("ChatMarkdown favicon privacy", () => {
 });
 
 describe("ChatMarkdown streaming", () => {
-  it("runs only a complete single-line shell block after a click", async () => {
+  it("runs a finished shell block's command after a click", async () => {
     const onRunShellCommand = vi.fn();
     const message = (text: string, isStreaming = false) => (
       <ChatMarkdown
@@ -212,26 +212,34 @@ describe("ChatMarkdown streaming", () => {
     const runButtons = () => buttonsLabelled(container, "Run in terminal");
     expect(runButtons()).toHaveLength(0);
 
-    await rerender(message("```bash\necho hello\n```"));
-    await act(async () => runButtons()[0]!.click());
-    expect(onRunShellCommand).toHaveBeenCalledExactlyOnceWith("echo hello");
-
-    for (const text of [
-      "~~~bash\necho tilde\n~~~",
-      "> ```bash\n> echo quote\n> ```",
-      "````bash\necho four\n````",
-    ]) {
+    for (const [text, command] of [
+      ["```bash\necho hello\n```", "echo hello"],
+      ["```sh\necho one\necho two\n```", "echo one\necho two"],
+      ["```bash\n$ pnpm install\n```", "pnpm install"],
+      [
+        "```console\n$ git status\nOn branch main\n$ git log -1\ncommit abc\n```",
+        "git status\ngit log -1",
+      ],
+      ["```shell\necho hello\n\n```", "echo hello"],
+      ["```zsh\nls \\\n  -la\n```", "ls \\\n  -la"],
+      ["~~~bash\necho tilde\n~~~", "echo tilde"],
+      ["> ```bash\n> echo quote\n> ```", "echo quote"],
+      ["````bash\necho four\n````", "echo four"],
+    ] as const) {
+      onRunShellCommand.mockClear();
       await rerender(message(text));
       expect(runButtons()).toHaveLength(1);
+      await act(async () => runButtons()[0]!.click());
+      expect(onRunShellCommand).toHaveBeenCalledExactlyOnceWith(command);
     }
 
     for (const text of [
-      "```bash\necho one\necho two\n```",
       "```typescript\necho hello\n```",
+      "```\necho untagged\n```",
       "```bash\n\n```",
-      "```bash\necho hello\n\n```",
       "```bash\necho hello\\\n```",
       "```bash\necho safe \u202e#\n```",
+      "```bash\necho\ttab\n```",
       "```bash\necho incomplete",
       "~~~bash\necho incomplete",
       "````bash\necho incomplete\n```",
@@ -240,6 +248,9 @@ describe("ChatMarkdown streaming", () => {
       await rerender(message(text));
       expect(runButtons()).toHaveLength(0);
     }
+
+    await rerender(<ChatMarkdown cwd="/tmp/project" text={"```bash\necho hello\n```"} />);
+    expect(runButtons()).toHaveLength(0);
   });
 
   it("does not retokenize completed lines when streaming finishes", async () => {
