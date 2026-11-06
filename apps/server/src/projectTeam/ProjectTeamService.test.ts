@@ -292,6 +292,71 @@ describe("ProjectTeamService", () => {
     ),
   );
 
+  it.effect("gives every task the status the user sees in team_status and task_list", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const start = (title: string) =>
+          Effect.gen(function* () {
+            const { task } = yield* team.createTask(pm, { title, request: `${title}.` });
+            return yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+          });
+        yield* team.createTask(pm, { title: "Queued", request: "Later." });
+        yield* start("Planning");
+        const approval = yield* start("Approval");
+        yield* team.updateTask(approval.leadThreadId, { stage: "awaiting_approval" });
+        const building = yield* start("Building");
+        yield* team.updateTask(building.leadThreadId, { stage: "running", planSummary: "Plan." });
+        const shipped = yield* start("Shipped");
+        yield* team.updateTask(shipped.leadThreadId, {
+          stage: "in_review",
+          prUrl: "https://github.com/acme/app/pull/9",
+        });
+        const asking = yield* start("Asking");
+        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Which one?" });
+        const stuck = yield* start("Stuck");
+        yield* team.updateTask(stuck.leadThreadId, { stage: "blocked" });
+        const finished = yield* start("Finished");
+        yield* team.updateTask(finished.leadThreadId, { stage: "done", resultSummary: "Done." });
+
+        const status = yield* team.teamStatus(pm, {});
+        const byTitle = new Map(
+          Object.values(status.tasks)
+            .flat()
+            .map((task) => [task.title, task.status]),
+        );
+        assert.deepStrictEqual(Object.fromEntries(byTitle), {
+          Queued: "todo",
+          Planning: "planning",
+          Approval: "waiting_for_approval",
+          Building: "in_progress",
+          Shipped: "ready",
+          Asking: "ask_question",
+          Stuck: "fatal",
+          Finished: "done",
+        });
+        assert.deepStrictEqual(status.statusCounts, {
+          todo: 1,
+          planning: 1,
+          waiting_for_approval: 1,
+          in_progress: 1,
+          in_review: 0,
+          ready: 1,
+          ask_question: 1,
+          fatal: 1,
+          done: 1,
+        });
+
+        const listed = yield* team.listTasks(pm, {});
+        assert.strictEqual(
+          listed.tasks.find((task) => task.title === "Asking")?.status,
+          "ask_question",
+        );
+      }),
+    ),
+  );
+
   it.effect("finds an approved plan summary with task search", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

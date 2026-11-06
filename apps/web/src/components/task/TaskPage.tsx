@@ -23,7 +23,8 @@ import {
 import { taskRouteParams } from "~/taskRoutes";
 import ChatView from "../ChatView";
 import { DecisionCard } from "../chat/DecisionCard";
-import { StatusGlyph, resolveTaskStageStatus } from "../sidebar/SidebarRowLine";
+import { StatusGlyph } from "../sidebar/SidebarRowLine";
+import { useLiveTaskStatus } from "./taskStatus";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
@@ -86,7 +87,11 @@ export function TaskPage(props: TaskPageProps) {
     );
   }
   return (
-    <div className="flex min-h-0 flex-1" data-testid="task-page">
+    // Side by side on wide screens; stacked and scrolling as one page on phones.
+    <div
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-visible"
+      data-testid="task-page"
+    >
       <SpecPane
         detail={detail}
         environmentId={environmentId}
@@ -130,7 +135,11 @@ function SpecPane(props: {
   const isLatest = shown.version === latest.version;
   const previous = versions.find((version) => version.version === shown.version - 1) ?? null;
   const spec = shown.spec;
-  const stage = resolveTaskStageStatus(task);
+  const status = useLiveTaskStatus(environmentId, {
+    ...task,
+    openQuestion: detail.openAttention.length > 0,
+  });
+  const archived = task.stage === "done" || task.stage === "cancelled";
   const ref = { projectId: task.projectId, taskId: task.id };
 
   const save = (next: ProjectTaskSpec, note: string) =>
@@ -195,17 +204,19 @@ function SpecPane(props: {
   );
 
   return (
-    <div className="min-w-0 flex-[1.2] overflow-y-auto border-r px-7 py-6">
+    <div className="min-w-0 shrink-0 border-b px-5 pt-14 pb-6 md:flex-[1.2] md:shrink md:overflow-y-auto md:border-r md:border-b-0 md:px-7 md:pt-6">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-muted-foreground text-sm">{detail.key}</span>
         <span
           className={cn(
             "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
-            stage.className,
+            status.className,
           )}
+          data-testid="task-status"
+          data-status={status.status}
         >
-          <StatusGlyph icon={stage.icon} />
-          {stage.label}
+          <StatusGlyph icon={status.icon} />
+          {status.label}
         </span>
         {task.parentTaskId === null ? null : (
           <Link
@@ -377,6 +388,12 @@ function SpecPane(props: {
         ) : null}
       </section>
 
+      {archived ? (
+        <p className="mt-6 text-muted-foreground text-sm">
+          Archived. The agent sessions and worktree are closed; the spec and history stay here.
+        </p>
+      ) : null}
+
       {task.stage === "inbox" && detail.sessions.length === 0 ? (
         <p className="mt-6 text-muted-foreground text-sm">Saved without an agent.</p>
       ) : null}
@@ -412,7 +429,7 @@ function SessionPane(props: {
   const activeTab = selected === null ? HISTORY_TAB : tab;
 
   return (
-    <div className="flex min-w-80 flex-1 flex-col">
+    <div className="flex min-h-[70vh] flex-1 flex-col md:min-h-0 md:min-w-80">
       <div className="border-b px-3 py-2">
         <ToggleGroup
           aria-label="Task sessions"

@@ -173,6 +173,7 @@ function task(
     leadThreadId: null,
     prUrl: null,
     lastOutcome: null,
+    openQuestion: false,
     ...overrides,
   };
 }
@@ -274,7 +275,7 @@ describe("sidebar tasks", () => {
     // Tasks with no session yet show by key, with subtasks under their parent.
     await vi.waitFor(() => expect(taskRowButton("BB-3 Clean up build warnings")).not.toBeNull());
     expect(taskRowButton("BB-3")?.getAttribute("aria-label")).toBe(
-      "BB-3 Clean up build warnings, Inbox",
+      "BB-3 Clean up build warnings, Todo",
     );
     expect(taskRowButton("BB-4")?.closest("li")?.className).toContain("pl-10");
     // Questions are answered in the PM chat, so the sidebar has no "Waiting on you" entry.
