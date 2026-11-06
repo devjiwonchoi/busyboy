@@ -138,7 +138,28 @@ function makeRelease(options: { readonly signed: boolean; readonly tamper?: bool
   return { root, fetch };
 }
 
-const makeUpdater = (root: string, fetch: typeof globalThis.fetch, codeSigned = true) =>
+interface QuitHarness {
+  quit: () => void;
+  installs: Array<ReadonlyArray<string>>;
+}
+
+const makeQuitHarness = (): QuitHarness & {
+  onQuit: (listener: () => void) => Effect.Effect<void>;
+} => {
+  const listeners: Array<() => void> = [];
+  return {
+    installs: [],
+    quit: () => listeners.forEach((listener) => listener()),
+    onQuit: (listener) => Effect.sync(() => void listeners.push(listener)),
+  };
+};
+
+const makeUpdater = (
+  root: string,
+  fetch: typeof globalThis.fetch,
+  codeSigned = true,
+  quitHarness = makeQuitHarness(),
+) =>
   GitHubReleaseUpdater.make({
     owner: "devjiwonchoi",
     repo: "busyboy",
@@ -147,6 +168,9 @@ const makeUpdater = (root: string, fetch: typeof globalThis.fetch, codeSigned = 
     arch: "arm64",
     stagingDir: NodePath.join(root, "pending-update"),
     quit: Effect.void,
+    onQuit: quitHarness.onQuit,
+    appBundlePath: NodePath.join(root, "BusyBoy.app"),
+    spawnInstaller: (args) => quitHarness.installs.push(args),
     fetch,
     publicKeys: [releaseKey.publicKeyPem],
     // The fake bundle has no Developer ID; the real check is tested on its own below.
@@ -221,6 +245,72 @@ describe.runIf(isMac)("updating from a GitHub release", () => {
     refuses({ signed: true, codeSigned: false }, /Apple Developer ID/),
   );
 
+  it.effect("installs the verified app when the user quits, without reopening it", () =>
+    Effect.gen(function* () {
+      const { root, fetch } = makeRelease({ signed: true });
+      const harness = makeQuitHarness();
+      const updater = yield* makeUpdater(root, fetch, true, harness);
+      yield* updater.setAutoInstallOnAppQuit(true);
+
+      // Nothing staged yet: quitting installs nothing.
+      yield* updater.checkForUpdates;
+      harness.quit();
+      assert.deepStrictEqual(harness.installs, []);
+
+      yield* updater.downloadUpdate;
+      harness.quit();
+      const staged = NodePath.join(root, "pending-update/0.0.4/app/BusyBoy.app");
+      assert.deepStrictEqual(harness.installs, [
+        [String(process.pid), NodePath.join(root, "BusyBoy.app"), staged, "no-reopen"],
+      ]);
+      harness.quit();
+      assert.strictEqual(harness.installs.length, 1);
+    }).pipe(Effect.provideService(Scope.Scope, Scope.makeUnsafe())),
+  );
+
+  it.effect("restart installs and reopens once; the quit that follows adds nothing", () =>
+    Effect.gen(function* () {
+      const { root, fetch } = makeRelease({ signed: true });
+      const harness = makeQuitHarness();
+      const updater = yield* makeUpdater(root, fetch, true, harness);
+      yield* updater.setAutoInstallOnAppQuit(true);
+      yield* updater.checkForUpdates;
+      yield* updater.downloadUpdate;
+
+      yield* updater.quitAndInstall({ isSilent: true, isForceRunAfter: true });
+      harness.quit();
+      assert.deepStrictEqual(
+        harness.installs.map((args) => args[3]),
+        ["reopen"],
+      );
+    }).pipe(Effect.provideService(Scope.Scope, Scope.makeUnsafe())),
+  );
+
+  it.effect("never installs on quit a download that failed verification", () =>
+    Effect.gen(function* () {
+      const { root, fetch } = makeRelease({ signed: true, tamper: true });
+      const harness = makeQuitHarness();
+      const updater = yield* makeUpdater(root, fetch, true, harness);
+      yield* updater.setAutoInstallOnAppQuit(true);
+      yield* updater.checkForUpdates;
+      yield* Effect.exit(updater.downloadUpdate);
+      harness.quit();
+      assert.deepStrictEqual(harness.installs, []);
+    }).pipe(Effect.provideService(Scope.Scope, Scope.makeUnsafe())),
+  );
+
+  it.effect("leaves a verified app staged on quit when install-on-quit is off", () =>
+    Effect.gen(function* () {
+      const { root, fetch } = makeRelease({ signed: true });
+      const harness = makeQuitHarness();
+      const updater = yield* makeUpdater(root, fetch, true, harness);
+      yield* updater.checkForUpdates;
+      yield* updater.downloadUpdate;
+      harness.quit();
+      assert.deepStrictEqual(harness.installs, []);
+    }).pipe(Effect.provideService(Scope.Scope, Scope.makeUnsafe())),
+  );
+
   it("requires BusyBoy's Developer ID on the unpacked app", () => {
     const root = tempDir();
     const bundle = NodePath.join(root, "BusyBoy.app");
@@ -276,5 +366,35 @@ describe.runIf(isMac)("updating from a GitHub release", () => {
     assert.isFalse(NodeFS.existsSync(staged));
     assert.isFalse(NodeFS.existsSync(`${target}.previous`));
     assert.strictEqual(NodeFS.readFileSync(opened, "utf8").trim(), target);
+  });
+
+  it("swaps the bundle without reopening it when installing on quit", () => {
+    const root = tempDir();
+    const target = NodePath.join(root, "Applications/BusyBoy.app");
+    const staged = NodePath.join(root, "staged/BusyBoy.app");
+    makeBundle(target, "old");
+    makeBundle(staged, "new");
+    const bin = NodePath.join(root, "bin");
+    NodeFS.mkdirSync(bin);
+    const opened = NodePath.join(root, "opened");
+    NodeFS.writeFileSync(NodePath.join(bin, "open"), `#!/bin/sh\necho "$1" > "${opened}"\n`, {
+      mode: 0o755,
+    });
+    const appPid = NodeChildProcess.execFileSync(
+      "/bin/sh",
+      ["-c", "sleep 0.3 >/dev/null & echo $!"],
+      { encoding: "utf8" },
+    ).trim();
+    NodeChildProcess.execFileSync(
+      "/bin/sh",
+      ["-c", GitHubReleaseUpdater.INSTALL_SCRIPT, "test", appPid, target, staged, "no-reopen"],
+      { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } },
+    );
+
+    assert.strictEqual(
+      NodeFS.readFileSync(NodePath.join(target, "Contents/marker"), "utf8"),
+      "new",
+    );
+    assert.isFalse(NodeFS.existsSync(opened));
   });
 });

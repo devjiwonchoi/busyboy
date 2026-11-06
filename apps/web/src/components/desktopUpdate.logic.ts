@@ -24,6 +24,24 @@ export function getDesktopUpdateReleaseHistoryUrl(): string {
   return DESKTOP_RELEASE_HISTORY_URL;
 }
 
+/** The download runs automatically as soon as a check finds an update. */
+export function isDesktopUpdatePreparing(state: DesktopUpdateState | null): boolean {
+  if (!state) return false;
+  return (
+    state.status === "downloading" ||
+    (state.status === "available" && state.errorContext !== "download")
+  );
+}
+
+function hasFailedDownload(state: DesktopUpdateState): boolean {
+  return (
+    (state.status === "available" || state.status === "error") &&
+    state.errorContext === "download" &&
+    state.availableVersion !== null
+  );
+}
+
+/** "download" only retries a failed download; a successful check downloads on its own. */
 export function resolveDesktopUpdateButtonAction(
   state: DesktopUpdateState,
 ): DesktopUpdateButtonAction {
@@ -35,15 +53,7 @@ export function resolveDesktopUpdateButtonAction(
   ) {
     return "install";
   }
-  if (state.status === "available") {
-    return "download";
-  }
-  if (state.status === "error") {
-    if (state.errorContext === "download" && state.availableVersion) {
-      return "download";
-    }
-  }
-  return "none";
+  return hasFailedDownload(state) ? "download" : "none";
 }
 
 export function shouldShowArm64IntelBuildWarning(state: DesktopUpdateState | null): boolean {
@@ -51,63 +61,77 @@ export function shouldShowArm64IntelBuildWarning(state: DesktopUpdateState | nul
 }
 
 export function isDesktopUpdateButtonDisabled(state: DesktopUpdateState | null): boolean {
-  return state?.status === "downloading";
+  return isDesktopUpdatePreparing(state);
 }
 
 export function getArm64IntelBuildWarningDescription(state: DesktopUpdateState): string {
+  const prefix =
+    "This Mac has Apple Silicon, but BusyBoy is still running the Intel build under Rosetta.";
   if (!shouldShowArm64IntelBuildWarning(state)) {
     return "This install is using the correct architecture.";
   }
 
   const action = resolveDesktopUpdateButtonAction(state);
-  if (action === "download") {
-    return "This Mac has Apple Silicon, but BusyBoy is still running the Intel build under Rosetta. Download the available update to switch to the native Apple Silicon build.";
-  }
   if (action === "install") {
-    return "This Mac has Apple Silicon, but BusyBoy is still running the Intel build under Rosetta. Restart to install the downloaded Apple Silicon build.";
+    return `${prefix} Restart to install the downloaded Apple Silicon build.`;
   }
-  return "This Mac has Apple Silicon, but BusyBoy is still running the Intel build under Rosetta. The next app update will replace it with the native Apple Silicon build.";
+  if (action === "download") {
+    return `${prefix} Retry the update download to switch to the native Apple Silicon build.`;
+  }
+  if (isDesktopUpdatePreparing(state)) {
+    return `${prefix} The native Apple Silicon build is downloading now.`;
+  }
+  return `${prefix} The next app update will replace it with the native Apple Silicon build.`;
+}
+
+function getDesktopUpdateReadyTooltip(state: DesktopUpdateState): string {
+  const version = getDesktopUpdateDownloadedVersion(state);
+  const label = version ? `Update ${version} ready` : "Update ready";
+  return state.localApp
+    ? `${label} — restart to update`
+    : `${label} — restart to update, or it installs when you quit`;
 }
 
 export function getDesktopUpdateButtonTooltip(state: DesktopUpdateState): string {
   if (
     state.notAppliedVersion !== undefined &&
-    (state.status === "available" || state.status === "downloaded") &&
+    state.status === "downloaded" &&
     getDesktopUpdateDownloadedVersion(state) === state.notAppliedVersion
   ) {
     return `Update ${state.notAppliedVersion} did not apply. Click to retry.`;
   }
-  if (state.status === "available") {
-    return `Update ${state.availableVersion ?? "available"} ready to download`;
+  if (hasFailedDownload(state)) {
+    return "Download failed — click to retry";
   }
-  if (state.status === "downloading") {
+  if (isDesktopUpdatePreparing(state)) {
     const progress =
-      typeof state.downloadPercent === "number" ? ` (${Math.floor(state.downloadPercent)}%)` : "";
-    return `Downloading update${progress}`;
+      state.status === "downloading" && typeof state.downloadPercent === "number"
+        ? ` (${Math.floor(state.downloadPercent)}%)`
+        : "";
+    return `Downloading update${progress}…`;
   }
   if (state.status === "downloaded") {
-    return `Update ${state.downloadedVersion ?? state.availableVersion ?? "ready"} downloaded. Click to restart and install.`;
+    return getDesktopUpdateReadyTooltip(state);
   }
   if (state.status === "error") {
-    if (state.errorContext === "download" && state.availableVersion) {
-      return `Download failed for ${state.availableVersion}. Click to retry.`;
-    }
     if (state.errorContext === "install" && state.downloadedVersion) {
       return `Install failed for ${state.downloadedVersion}. Click to retry.`;
     }
     if (state.downloadedVersion) {
-      return `Update ${state.downloadedVersion} downloaded. Click to restart and install.`;
+      return getDesktopUpdateReadyTooltip(state);
     }
     return state.message ?? "Update failed";
   }
   return "Up to date";
 }
 
-export function getDesktopUpdateInstallConfirmationMessage(
-  state: Pick<DesktopUpdateState, "availableVersion" | "downloadedVersion">,
+/** Body of the "update is ready" prompt. */
+export function getDesktopUpdateReadyDescription(
+  state: Pick<DesktopUpdateState, "localApp">,
 ): string {
-  const version = state.downloadedVersion ?? state.availableVersion;
-  return `Install update${version ? ` ${version}` : ""} and restart BusyBoy?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.`;
+  return state.localApp
+    ? "Restart to install it now. Otherwise it installs the next time BusyBoy restarts."
+    : "Restart to install it now. Otherwise it installs when you quit BusyBoy.";
 }
 
 export function getDesktopUpdateActionError(result: DesktopUpdateActionResult): string | null {
@@ -115,10 +139,6 @@ export function getDesktopUpdateActionError(result: DesktopUpdateActionResult): 
   if (typeof result.state.message !== "string") return null;
   const message = result.state.message.trim();
   return message.length > 0 ? message : null;
-}
-
-export function shouldToastDesktopUpdateActionResult(result: DesktopUpdateActionResult): boolean {
-  return getDesktopUpdateActionError(result) !== null;
 }
 
 export function canCheckForUpdate(state: DesktopUpdateState | null): boolean {

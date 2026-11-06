@@ -10,6 +10,7 @@ import type * as NodeStreamWeb from "node:stream/web";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
@@ -100,9 +101,10 @@ export function resolveAppBundlePath(executablePath: string): string | null {
 }
 
 // Waits for the app to exit, swaps the bundle (restoring the old one if the
-// move fails), and reopens whichever bundle ended up in place.
+// move fails), and reopens whichever bundle ended up in place unless the
+// fourth argument is "no-reopen" (installing on quit).
 export const INSTALL_SCRIPT = `
-pid="$1"; target="$2"; staged="$3"
+pid="$1"; target="$2"; staged="$3"; reopen="$4"
 while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
 backup="$target.previous"
 rm -rf "$backup"
@@ -113,8 +115,17 @@ if mv "$target" "$backup"; then
     mv "$backup" "$target"
   fi
 fi
-open "$target"
+[ "$reopen" = "no-reopen" ] || open "$target"
 `;
+
+function spawnInstallScript(args: ReadonlyArray<string>): void {
+  const child = NodeChildProcess.spawn(
+    "/bin/sh",
+    ["-c", INSTALL_SCRIPT, "busyboy-update", ...args],
+    { detached: true, stdio: "ignore" },
+  );
+  child.unref();
+}
 
 class GitHubReleaseUpdaterFailure extends Error {}
 
@@ -144,17 +155,24 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
   readonly arch: string;
   readonly stagingDir: string;
   readonly quit: Effect.Effect<void>;
+  /** Calls `listener` when the app quits normally (exit code 0). */
+  readonly onQuit: (listener: () => void) => Effect.Effect<void, never, Scope.Scope>;
   readonly fetch?: typeof globalThis.fetch;
   /** Tests swap these; release builds use the shipped key and codesign. */
   readonly publicKeys?: ReadonlyArray<string>;
   readonly verifyCodeSignature?: (appPath: string) => void;
+  readonly appBundlePath?: string | null;
+  readonly spawnInstaller?: (args: ReadonlyArray<string>) => void;
 }) {
   const fetch = input.fetch ?? globalThis.fetch;
   const verifyCodeSignature = input.verifyCodeSignature ?? verifyAppCodeSignature;
+  const spawnInstaller = input.spawnInstaller ?? spawnInstallScript;
   const userAgent = `${input.productName}/${input.currentVersion}`;
   const events = new NodeEvents.EventEmitter();
   let available: AvailableUpdate | null = null;
   let stagedApp: string | null = null;
+  let installOnQuit = false;
+  let installStarted = false;
 
   const fetchLatestRelease = async (): Promise<GitHubRelease | null> => {
     const response = await fetch(
@@ -234,8 +252,11 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
     return appPath;
   };
 
-  const prepareInstall = (staged: string): void => {
-    const target = resolveAppBundlePath(NodeProcess.execPath);
+  const prepareInstall = (staged: string, reopen: boolean): void => {
+    const target =
+      input.appBundlePath === undefined
+        ? resolveAppBundlePath(NodeProcess.execPath)
+        : input.appBundlePath;
     if (target === null) {
       throw new GitHubReleaseUpdaterFailure(
         `Cannot find the app bundle for ${NodeProcess.execPath}.`,
@@ -253,19 +274,28 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
         `${NodePath.dirname(target)} is not writable, so the update cannot replace ${target}.`,
       );
     }
-    const child = NodeChildProcess.spawn(
-      "/bin/sh",
-      ["-c", INSTALL_SCRIPT, "busyboy-update", String(NodeProcess.pid), target, staged],
-      { detached: true, stdio: "ignore" },
-    );
-    child.unref();
+    spawnInstaller([String(NodeProcess.pid), target, staged, reopen ? "reopen" : "no-reopen"]);
+    installStarted = true;
   };
+
+  // Only a staged app exists here, and it is staged only after verification.
+  yield* input.onQuit(() => {
+    if (!installOnQuit || installStarted || stagedApp === null) return;
+    try {
+      prepareInstall(stagedApp, false);
+    } catch {
+      // The app is quitting; the staged update is offered again next launch.
+    }
+  });
 
   return ElectronUpdater.ElectronUpdater.of({
     // The feed is fixed to this repository's stable releases.
     setFeedURL: () => Effect.void,
     setAutoDownload: () => Effect.void,
-    setAutoInstallOnAppQuit: () => Effect.void,
+    setAutoInstallOnAppQuit: (value) =>
+      Effect.sync(() => {
+        installOnQuit = value;
+      }),
     setChannel: () => Effect.void,
     setAllowPrerelease: () => Effect.void,
     allowDowngrade: Effect.succeed(false),
@@ -324,7 +354,10 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
           if (stagedApp === null) {
             throw new GitHubReleaseUpdaterFailure("No downloaded update is ready to install.");
           }
-          prepareInstall(stagedApp);
+          if (installStarted) {
+            throw new GitHubReleaseUpdaterFailure("The update is already installing.");
+          }
+          prepareInstall(stagedApp, true);
         },
         catch: (cause) =>
           new ElectronUpdater.ElectronUpdaterQuitAndInstallError({
@@ -441,6 +474,10 @@ export const layer = Layer.unwrap(
         arch: NodeProcess.arch,
         stagingDir: environment.path.join(environment.stateDir, "pending-update"),
         quit: electronApp.quit,
+        onQuit: (listener) =>
+          electronApp.on("quit", (_event: unknown, exitCode: number) => {
+            if (exitCode === 0) listener();
+          }),
       }),
     );
   }),

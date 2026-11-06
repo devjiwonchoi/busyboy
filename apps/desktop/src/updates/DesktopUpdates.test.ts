@@ -12,6 +12,9 @@ import * as References from "effect/References";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import { vi } from "vite-plus/test";
+
+vi.mock("electron-updater", () => ({ autoUpdater: {} }));
 
 import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
@@ -19,7 +22,7 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as DesktopUpdates from "./DesktopUpdates.ts";
 import * as LocalAppUpdater from "./LocalAppUpdater.ts";
-import { flushCallbacks, makeHarness } from "./updatesTestHarness.ts";
+import { awaitUpdateState, flushCallbacks, makeHarness } from "./updatesTestHarness.ts";
 
 describe("DesktopUpdates", () => {
   it("preserves complete causes for update poller and event failures", () => {
@@ -145,6 +148,105 @@ describe("DesktopUpdates", () => {
     ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
   });
 
+  it.effect("downloads an update found by the startup check without a click", () => {
+    const harness = makeHarness({
+      checkForUpdates: Effect.sync(() => harness.emit("update-available", { version: "1.2.4" })),
+    });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const updates = yield* DesktopUpdates.DesktopUpdates;
+        yield* updates.configure;
+        assert.deepEqual(harness.autoInstallOnAppQuit, [true]);
+
+        yield* TestClock.adjust(Duration.millis(15_000));
+        yield* awaitUpdateState(updates.getState, (state) => state.status === "downloading");
+        assert.equal(harness.downloadCount(), 1);
+
+        // The wrapped updater reports "update-downloaded" only once verified.
+        harness.emit("update-downloaded", { version: "1.2.4" });
+        const state = yield* awaitUpdateState(
+          updates.getState,
+          (current) => current.status === "downloaded",
+        );
+        assert.equal(state.downloadedVersion, "1.2.4");
+        assert.equal(harness.downloadCount(), 1);
+      }),
+    ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+  });
+
+  it.effect("waits for a running update action before downloading on its own", () =>
+    Effect.gen(function* () {
+      const releaseCheck = yield* Deferred.make<void>();
+      const harness = makeHarness({
+        checkForUpdates: Effect.sync(() =>
+          harness.emit("update-available", { version: "1.2.4" }),
+        ).pipe(Effect.andThen(Deferred.await(releaseCheck))),
+      });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const updates = yield* DesktopUpdates.DesktopUpdates;
+          yield* updates.configure;
+
+          const check = yield* updates.check("manual").pipe(Effect.forkScoped);
+          yield* awaitUpdateState(updates.getState, (state) => state.status === "available");
+          for (let index = 0; index < 10; index += 1) yield* flushCallbacks;
+          assert.equal(harness.downloadCount(), 0);
+          assert.isTrue(yield* updates.isActionActive);
+
+          yield* Deferred.succeed(releaseCheck, undefined);
+          yield* Fiber.join(check);
+          yield* awaitUpdateState(updates.getState, (state) => state.status === "downloading");
+          assert.equal(harness.downloadCount(), 1);
+        }),
+      ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+    }),
+  );
+
+  it.effect("keeps a failed download as a retryable error and retries on the next poll", () => {
+    let downloads = 0;
+    const harness = makeHarness({
+      checkForUpdates: Effect.sync(() => harness.emit("update-available", { version: "1.2.4" })),
+      downloadUpdate: Effect.suspend(() => {
+        downloads += 1;
+        return downloads === 1
+          ? Effect.fail(
+              new ElectronUpdater.ElectronUpdaterDownloadUpdateError({
+                channel: null,
+                cause: new Error("network down"),
+              }),
+            )
+          : Effect.void;
+      }),
+    });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const updates = yield* DesktopUpdates.DesktopUpdates;
+        yield* updates.configure;
+
+        yield* TestClock.adjust(Duration.millis(15_000));
+        const failed = yield* awaitUpdateState(
+          updates.getState,
+          (state) => state.errorContext === "download",
+        );
+        assert.equal(failed.status, "available");
+        assert.isTrue(failed.canRetry);
+        assert.isNotNull(failed.message);
+
+        // No retry loop: the error stays until the next check.
+        for (let index = 0; index < 10; index += 1) yield* flushCallbacks;
+        assert.equal(harness.downloadCount(), 1);
+
+        yield* TestClock.adjust(Duration.minutes(4));
+        yield* awaitUpdateState(updates.getState, (state) => state.status === "downloading");
+        assert.equal(harness.checkCount(), 2);
+        assert.equal(harness.downloadCount(), 2);
+      }),
+    ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+  });
+
   it.effect("subscribe delivers the latest state plus subsequent changes", () => {
     const harness = makeHarness();
 
@@ -220,7 +322,8 @@ describe("DesktopUpdates", () => {
         yield* flushCallbacks;
 
         const state = yield* updates.getState;
-        assert.equal(state.status, "available");
+        // The download starts on its own.
+        assert.equal(state.status, "downloading");
         assert.deepEqual(state.releaseNotes, [
           {
             version: "1.2.4-nightly.20260709.766",
@@ -281,7 +384,7 @@ describe("DesktopUpdates", () => {
         yield* flushCallbacks;
 
         const state = yield* updates.getState;
-        assert.equal(state.status, "available");
+        assert.equal(state.status, "downloading");
         assert.equal(state.availableVersion, "1.2.5");
         assert.isNull(state.downloadedVersion);
       }),
@@ -608,7 +711,11 @@ describe("DesktopUpdates", () => {
           if (disableDifferentialCalls === 1) {
             return Effect.void;
           }
+          // The automatic download fails, so the retry below is a manual one.
           if (disableDifferentialCalls === 2) {
+            return Effect.die(new Error("download setup failed"));
+          }
+          if (disableDifferentialCalls === 3) {
             return Deferred.succeed(actionStarted, undefined).pipe(Effect.andThen(Effect.never));
           }
           return Effect.void;
@@ -620,7 +727,7 @@ describe("DesktopUpdates", () => {
           const updates = yield* DesktopUpdates.DesktopUpdates;
           yield* updates.configure;
           harness.emit("update-available", { version: "1.2.4" });
-          yield* flushCallbacks;
+          yield* awaitUpdateState(updates.getState, (state) => state.errorContext === "download");
 
           const downloadFiber = yield* updates.download.pipe(Effect.forkScoped);
           yield* Deferred.await(actionStarted);
@@ -628,7 +735,8 @@ describe("DesktopUpdates", () => {
 
           const interruptedState = yield* updates.getState;
           assert.equal(interruptedState.status, "available");
-          assert.isNull(interruptedState.message);
+          assert.equal(interruptedState.errorContext, "download");
+          assert.isTrue(interruptedState.canRetry);
 
           const retry = yield* updates.download;
           assert.isTrue(retry.accepted);

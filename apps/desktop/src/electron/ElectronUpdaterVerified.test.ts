@@ -19,19 +19,24 @@ import * as ElectronUpdater from "./ElectronUpdater.ts";
 function fakeUpdater(installer: string) {
   const events = new NodeEvents.EventEmitter();
   const quitAndInstall = vi.fn();
+  const addQuitHandler = vi.fn();
+  const installOnQuitDuringDownload: Array<boolean> = [];
   const updater = {
+    autoInstallOnAppQuit: true,
+    addQuitHandler,
     on: (event: string, listener: (...args: Array<unknown>) => void) => events.on(event, listener),
     removeListener: (event: string, listener: (...args: Array<unknown>) => void) =>
       events.removeListener(event, listener),
     checkForUpdates: async () => ({ updateInfo: { version: "0.0.7" } }),
     downloadUpdate: async () => {
+      installOnQuitDuringDownload.push(updater.autoInstallOnAppQuit);
       NodeFS.writeFileSync(installer, "installer");
       events.emit("update-downloaded", { version: "0.0.7" });
       return [installer];
     },
     quitAndInstall,
   };
-  return { updater: updater as never, quitAndInstall };
+  return { updater, quitAndInstall, addQuitHandler, installOnQuitDuringDownload };
 }
 
 function setup(verify: ElectronUpdater.VerifyDownload) {
@@ -39,8 +44,8 @@ function setup(verify: ElectronUpdater.VerifyDownload) {
   const installer = NodePath.join(dir, "BusyBoy-Setup-0.0.7-x64.exe");
   const fake = fakeUpdater(installer);
   const seen: Array<unknown> = [];
-  const service = ElectronUpdater.makeVerified(verify, fake.updater);
-  return { service, installer, seen, quitAndInstall: fake.quitAndInstall };
+  const service = ElectronUpdater.makeVerified(verify, fake.updater as never);
+  return { service, installer, seen, ...fake };
 }
 
 const install = { isSilent: false, isForceRunAfter: true };
@@ -89,6 +94,44 @@ describe("ElectronUpdater.makeVerified", () => {
       const installed = yield* Effect.exit(service.quitAndInstall(install));
       assert.isTrue(Exit.isFailure(installed));
       assert.strictEqual(quitAndInstall.mock.calls.length, 0);
+    }),
+  );
+
+  it.effect("turns install-on-quit on only once a download is verified", () =>
+    Effect.gen(function* () {
+      const installOnQuitDuringVerify: Array<boolean> = [];
+      const { service, updater, addQuitHandler, installOnQuitDuringDownload } = setup(async () => {
+        installOnQuitDuringVerify.push(updater.autoInstallOnAppQuit);
+      });
+      // electron-updater defaults the flag to on; the wrapper keeps it off until verified.
+      assert.isFalse(updater.autoInstallOnAppQuit);
+      yield* service.setAutoInstallOnAppQuit(true);
+      assert.isFalse(updater.autoInstallOnAppQuit);
+
+      yield* service.checkForUpdates;
+      yield* service.downloadUpdate;
+      assert.deepStrictEqual(installOnQuitDuringDownload, [false]);
+      assert.deepStrictEqual(installOnQuitDuringVerify, [false]);
+      assert.isTrue(updater.autoInstallOnAppQuit);
+      assert.strictEqual(addQuitHandler.mock.calls.length, 1);
+
+      // A new download turns it off again until that one is verified too.
+      yield* service.downloadUpdate;
+      assert.deepStrictEqual(installOnQuitDuringDownload, [false, false]);
+      assert.isTrue(updater.autoInstallOnAppQuit);
+    }),
+  );
+
+  it.effect("never installs on quit a download that fails verification", () =>
+    Effect.gen(function* () {
+      const { service, updater, addQuitHandler } = setup(async () => {
+        throw new UpdateVerificationError("Its signature does not match BusyBoy's release key.");
+      });
+      yield* service.setAutoInstallOnAppQuit(true);
+      yield* service.checkForUpdates;
+      yield* Effect.exit(service.downloadUpdate);
+      assert.isFalse(updater.autoInstallOnAppQuit);
+      assert.strictEqual(addQuitHandler.mock.calls.length, 0);
     }),
   );
 });

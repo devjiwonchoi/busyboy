@@ -56,10 +56,11 @@ import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
-  getDesktopUpdateInstallConfirmationMessage,
   isDesktopUpdateButtonDisabled,
+  isDesktopUpdatePreparing,
   resolveDesktopUpdateButtonAction,
 } from "../../components/desktopUpdate.logic";
+import { showDesktopUpdateReadyPrompt } from "../../components/desktopUpdate.toast";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import {
@@ -314,55 +315,25 @@ function AboutVersionSection() {
     const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
 
     if (action === "download") {
-      void bridge.downloadUpdate().catch((error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not download update",
-            description: error instanceof Error ? error.message : "Download failed.",
-          }),
-        );
-      });
-      return;
-    }
-
-    if (action === "install") {
       if (isUpdateActionPending) return;
       setIsUpdateActionPending(true);
-      let confirmed = false;
-      try {
-        confirmed = await ensureLocalApi().dialogs.confirm(
-          getDesktopUpdateInstallConfirmationMessage(
-            updateState ?? { availableVersion: null, downloadedVersion: null },
-          ),
-        );
-      } catch (error) {
-        setIsUpdateActionPending(false);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not confirm update",
-            description: error instanceof Error ? error.message : "Update confirmation failed.",
-          }),
-        );
-        return;
-      }
-      if (!confirmed) {
-        setIsUpdateActionPending(false);
-        return;
-      }
       void bridge
-        .installUpdate()
+        .downloadUpdate()
         .catch((error: unknown) => {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "Install failed.",
+              title: "Could not download update",
+              description: error instanceof Error ? error.message : "Download failed.",
             }),
           );
         })
         .finally(() => setIsUpdateActionPending(false));
+      return;
+    }
+
+    if (action === "install" && updateState) {
+      showDesktopUpdateReadyPrompt(bridge, updateState);
       return;
     }
 
@@ -394,23 +365,28 @@ function AboutVersionSection() {
 
   const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
   const buttonTooltip = updateState ? getDesktopUpdateButtonTooltip(updateState) : null;
+  const isPreparing = isDesktopUpdatePreparing(updateState);
   const buttonDisabled =
-    action === "none"
-      ? !canCheckForUpdate(updateState)
-      : isDesktopUpdateButtonDisabled(updateState);
+    isDesktopUpdateButtonDisabled(updateState) ||
+    (action === "none" && !canCheckForUpdate(updateState));
 
-  const actionLabel: Record<string, string> = { download: "Download", install: "Install" };
+  const actionLabel: Record<string, string> = {
+    download: "Retry Download",
+    install: "Restart to Update",
+  };
   const statusLabel: Record<string, string> = {
     checking: "Checking…",
-    downloading: "Downloading…",
     "up-to-date": "Up to Date",
   };
-  const buttonLabel =
-    actionLabel[action] ?? statusLabel[updateState?.status ?? ""] ?? "Check for Updates";
+  const buttonLabel = isPreparing
+    ? "Downloading…"
+    : (actionLabel[action] ?? statusLabel[updateState?.status ?? ""] ?? "Check for Updates");
   const description =
-    action === "download" || action === "install"
-      ? "Update available."
-      : "Current version of the application.";
+    action === "install"
+      ? "Update ready."
+      : action === "download" || isPreparing
+        ? "Update available."
+        : "Current version of the application.";
 
   return (
     <>
