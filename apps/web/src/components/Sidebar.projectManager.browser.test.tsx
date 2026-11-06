@@ -187,7 +187,7 @@ describe("project manager sidebar heading", () => {
     expect(heading.querySelector('[aria-label="Needs you: 2"]')?.textContent).toBe("2");
     expect(heading.querySelector('[aria-label="Unread sitrep"]')).not.toBeNull();
 
-    await act(async () => button("busyboyRemy")!.click());
+    await act(async () => button("RemybusyboyNo messages yet")!.click());
     expect(props.onToggle).toHaveBeenCalledOnce();
     expect(props.onOpenThread).not.toHaveBeenCalled();
     expect(heading.querySelector("[aria-expanded]")?.getAttribute("aria-expanded")).toBe("true");

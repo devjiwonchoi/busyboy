@@ -10,6 +10,7 @@ import { ProjectIconGlyph } from "./ProjectFavicon";
 const SIZE_CLASS = {
   sm: { avatar: "size-5", glyph: "size-3.5", dot: "size-2" },
   md: { avatar: "size-7", glyph: "size-4.5", dot: "size-2.5" },
+  lg: { avatar: "size-9", glyph: "size-5", dot: "size-2.5" },
 } as const;
 
 const DOT_CLASS: Record<ProjectManagerStatus, string> = {
