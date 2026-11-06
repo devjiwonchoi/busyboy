@@ -460,6 +460,9 @@ export function summarizeT3ToolCalls(
     case "team-answer":
       label = phrase("Relayed", "relay", quantity(selected.length, "answer"));
       break;
+    case "team-dismiss":
+      label = phrase("Closed", "close", quantity(selected.length, "question"));
+      break;
     case "team-memory-read":
       label = phrase("Read", "read", "team memory");
       break;

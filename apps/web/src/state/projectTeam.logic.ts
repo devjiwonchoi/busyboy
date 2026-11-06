@@ -110,32 +110,21 @@ export function taskForLeadThread(
 export const isOpenDecisionCard = (card: ProjectDecisionCard): boolean =>
   card.item.answeredAt === null && card.item.supersededAt === null;
 
-export interface DockedDecisionCard {
-  readonly card: ProjectDecisionCard;
-  /** The task's key, such as BB-7. */
-  readonly taskKey: string;
-}
-
 /**
- * Open cards to dock above a thread's composer: every open card in the project for its PM
- * thread, and the cards a task lead asked for that lead's own thread. Oldest first.
+ * The question cards a thread shows in its timeline, open or closed, oldest first: every
+ * card in the project for its PM thread, and the cards a task lead asked for that lead's
+ * own thread.
  */
-export function dockedDecisionCardsForThread(
-  summaries: Iterable<
-    Pick<ProjectTeamAttentionSummary, "pmThreadId" | "decisionCards" | "taskKeyPrefix">
-  >,
+export function decisionCardsForThread(
+  summaries: Iterable<Pick<ProjectTeamAttentionSummary, "pmThreadId" | "decisionCards">>,
   threadId: ThreadId,
-): ReadonlyArray<DockedDecisionCard> {
-  const docked: DockedDecisionCard[] = [];
+): ReadonlyArray<ProjectDecisionCard> {
+  const cards: ProjectDecisionCard[] = [];
   for (const summary of summaries) {
     const isPmThread = summary.pmThreadId === threadId;
     for (const card of summary.decisionCards) {
-      if (!isOpenDecisionCard(card)) continue;
-      if (!isPmThread && card.item.askerThreadId !== threadId) continue;
-      docked.push({ card, taskKey: `${summary.taskKeyPrefix}-${card.taskNumber}` });
+      if (isPmThread || card.item.askerThreadId === threadId) cards.push(card);
     }
   }
-  return docked.toSorted(
-    (a, b) => Date.parse(a.card.item.createdAt) - Date.parse(b.card.item.createdAt),
-  );
+  return cards.toSorted((a, b) => Date.parse(a.item.createdAt) - Date.parse(b.item.createdAt));
 }

@@ -33,6 +33,7 @@ import {
   type ProjectTaskStage,
   type ProjectTeamAskUserInput,
   type ProjectTeamAttentionAnswerInput,
+  type ProjectTeamAttentionDismissInput,
   type ProjectTeamAttentionItemResult,
   type ProjectTeamAttentionSnapshot,
   type ProjectTeamAttentionSummary,
@@ -498,6 +499,11 @@ export class ProjectTeamService extends Context.Service<
     readonly answerAttention: (
       callerThreadId: ThreadId,
       input: ProjectTeamAttentionAnswerInput,
+    ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+    /** attention_dismiss: the PM, or the lead that asked, closes a question that no longer needs an answer. */
+    readonly dismissAttention: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamAttentionDismissInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
 
     /** projectTeam.createTask RPC: the user adds a task; startPlanning asks the PM to start it. */
@@ -1416,6 +1422,40 @@ const make = Effect.gen(function* () {
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question."));
 
+  const dismissAttention: ProjectTeamService["Service"]["dismissAttention"] = (
+    callerThreadId,
+    input,
+  ) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "attention_dismiss");
+      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      if (Option.isNone(item) || item.value.projectId !== role.projectId) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} was not found in this project.`,
+          role.projectId,
+        );
+      }
+      if (role.type === "lead" && item.value.askerThreadId !== callerThreadId) {
+        return yield* teamError(
+          "A task lead can only close its own questions. Ask the PM if another question is moot.",
+          role.projectId,
+        );
+      }
+      const dismissed = yield* router.dismiss({
+        item: item.value,
+        reason: input.reason,
+        senderThreadId: callerThreadId,
+        notifyAsker: role.type === "pm",
+      });
+      yield* appendEvent(
+        { id: dismissed.taskId, projectId: dismissed.projectId },
+        "note",
+        `Question closed: ${input.reason}`,
+        callerThreadId,
+      );
+      return { item: dismissed };
+    }).pipe(orTeamError("Could not close the question."));
+
   const taskKeyPrefixFor = (projectId: ProjectId, settings: ProjectTeamSettings) =>
     Effect.gen(function* () {
       if (settings.taskKeyPrefix !== undefined) return settings.taskKeyPrefix;
@@ -1866,6 +1906,7 @@ const make = Effect.gen(function* () {
     splitTaskTodo,
     answerDecision,
     answerAttention,
+    dismissAttention,
     listMemory,
     writeMemory,
     deleteMemory,

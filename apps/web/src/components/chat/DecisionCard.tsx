@@ -66,7 +66,8 @@ function answeredPayload(card: ProjectDecisionCard): UserInputAttachmentAnswerPa
 /**
  * A task lead's question in the PM thread. Open: the question card with its options and a
  * note field; the answer goes straight to the lead. Answered: the question and the choice.
- * Closed unanswered (its task ended): one muted line.
+ * Closed unanswered (its task ended, or the conversation made it moot): the muted question
+ * marked "No longer needed".
  */
 export function DecisionCard({
   card,
@@ -89,13 +90,18 @@ export function DecisionCard({
   }
   if (card.item.supersededAt !== null) {
     return (
-      <p
+      <div
         data-decision-card={card.item.id}
-        data-decision-card-state="superseded"
-        className="px-1 text-muted-foreground text-xs"
+        data-decision-card-state="resolved"
+        className="rounded-xl border border-border/50 border-dashed px-3 py-2 text-muted-foreground text-xs"
       >
-        {decisionCardHeader(card)}: closed without an answer.
-      </p>
+        <p className="flex items-center gap-1.5">
+          <span className="font-medium">{decisionCardHeader(card)}</span>
+          <span aria-hidden>·</span>
+          <span>No longer needed</span>
+        </p>
+        <p className="mt-1 line-clamp-3 whitespace-pre-wrap">{card.item.question}</p>
+      </div>
     );
   }
   return (
@@ -109,24 +115,19 @@ export function DecisionCard({
   );
 }
 
-/**
- * The answerable card. Inline it draws its own border; docked above a composer it sits in
- * the composer's banner surface, like a pending question.
- */
+/** The answerable card, with its own border. */
 export function OpenDecisionCard({
   card,
   question,
   environmentId,
   threadRef,
   cwd,
-  docked = false,
 }: {
   card: ProjectDecisionCard;
   question: OrchestrationV2UserInputQuestion;
   environmentId: EnvironmentId;
   threadRef: ScopedThreadRef;
   cwd: string | undefined;
-  docked?: boolean;
 }) {
   const answerDecision = useAnswerDecision();
   const [draft, setDraft] = useState<PendingUserInputDraftAnswer | undefined>(undefined);
@@ -187,7 +188,7 @@ export function OpenDecisionCard({
     <div
       data-decision-card={card.item.id}
       data-decision-card-state="open"
-      className={docked ? undefined : "rounded-xl border border-border/70 bg-card/60 py-1"}
+      className="rounded-xl border border-border/70 bg-card/60 py-1"
     >
       {panel(false)}
       {/* Once answered, the card leaves the open state and this view closes with it. */}

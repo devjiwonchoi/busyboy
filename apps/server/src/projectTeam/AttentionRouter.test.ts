@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
-import { relayedAnswerText } from "./AttentionRouter.ts";
+import { dismissedQuestionText, relayedAnswerText } from "./AttentionRouter.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { PROJECT_ID, setUpManager, startLead, userSays, withTeam } from "./testkit.ts";
 
@@ -123,6 +123,98 @@ describe("AttentionRouter", () => {
           .answerAttention(lead.leadThreadId, { attentionItemId: item.id, answer: "Sure." })
           .pipe(Effect.flip);
         assert.include(leadAnswers.message, "not available to a task lead");
+      }),
+    ),
+  );
+
+  it.effect("lets the PM close a moot question and tells the lead that asked", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "Ship the fix today?",
+        });
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 1);
+
+        const dismissed = yield* team.dismissAttention(pm, {
+          attentionItemId: item.id,
+          reason: "The user decided to ship tomorrow",
+        });
+        assert.isNotNull(dismissed.item.supersededAt);
+        assert.isNull(dismissed.item.answer);
+        assert.isNull(dismissed.item.answeredAt);
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
+        const [notice] = yield* Ref.get(harness.sent);
+        assert.strictEqual(notice?.threadId, lead.leadThreadId);
+        assert.strictEqual(notice?.senderThreadId, pm);
+        assert.strictEqual(
+          notice?.text,
+          dismissedQuestionText("Ship the fix today?", "The user decided to ship tomorrow"),
+        );
+        assert.include(notice?.text ?? "", "[Question closed by BusyBoy PM]");
+        const task = yield* team.readTask(pm, { taskId: lead.task.id });
+        assert.include(
+          task.events.map((event) => event.body),
+          "Question closed: The user decided to ship tomorrow",
+        );
+
+        const again = yield* team
+          .dismissAttention(pm, { attentionItemId: item.id, reason: "Again" })
+          .pipe(Effect.flip);
+        assert.include(again.message, "is closed");
+        const answer = yield* team
+          .answerAttention(pm, { attentionItemId: item.id, answer: "Yes." })
+          .pipe(Effect.flip);
+        assert.include(answer.message, "it was dismissed");
+      }),
+    ),
+  );
+
+  it.effect("lets a lead withdraw only its own open question", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const asker = yield* startLead(pm, "Hello", harness.delegate);
+        const other = yield* startLead(pm, "Goodbye", harness.delegate);
+        const own = yield* team.askUser(asker.leadThreadId, {
+          kind: "decision",
+          question: "Tabs or spaces?",
+        });
+        const answered = yield* team.askUser(asker.leadThreadId, {
+          kind: "blocker",
+          question: "Need a token.",
+        });
+        yield* team.answerAttention(pm, { attentionItemId: answered.item.id, answer: "Done." });
+        const sentBefore = (yield* Ref.get(harness.sent)).length;
+
+        const refused = yield* team
+          .dismissAttention(other.leadThreadId, {
+            attentionItemId: own.item.id,
+            reason: "Not needed",
+          })
+          .pipe(Effect.flip);
+        assert.include(refused.message, "only close its own questions");
+
+        const closedAnswered = yield* team
+          .dismissAttention(asker.leadThreadId, {
+            attentionItemId: answered.item.id,
+            reason: "Not needed",
+          })
+          .pipe(Effect.flip);
+        assert.include(closedAnswered.message, "already answered");
+
+        const withdrawn = yield* team.dismissAttention(asker.leadThreadId, {
+          attentionItemId: own.item.id,
+          reason: "Found the style guide",
+        });
+        assert.isNotNull(withdrawn.item.supersededAt);
+        assert.isNull(withdrawn.item.answer);
+        assert.strictEqual((yield* Ref.get(harness.sent)).length, sentBefore);
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
       }),
     ),
   );

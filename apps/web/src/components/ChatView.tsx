@@ -228,8 +228,8 @@ import {
   useRightPanelStore,
 } from "../rightPanelStore";
 import { useSideChatStore } from "../sideChatStore";
-import { useDockedDecisionCards } from "../state/projectTeam";
-import { DockedDecisionCards } from "./chat/DockedDecisionCards";
+import { useThreadDecisionCards } from "../state/projectTeam";
+import { PendingActionsNudge } from "./chat/PendingActionsNudge";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import {
   isPreviewSupportedInRuntime,
@@ -7523,19 +7523,8 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
-  // The task page pins a task's questions under its spec, so its chat doesn't dock them again.
-  const dockedDecisionCards = useDockedDecisionCards(
-    isServerThread && !sideChat ? routeThreadRef : null,
-  );
-  const decisionCardsDock =
-    dockedDecisionCards.length > 0 ? (
-      <DockedDecisionCards
-        cards={dockedDecisionCards}
-        environmentId={environmentId}
-        threadRef={routeThreadRef}
-        cwd={gitCwd ?? undefined}
-      />
-    ) : null;
+  // The task page pins a task's open questions under its spec, so its chat doesn't repeat them.
+  const decisionCards = useThreadDecisionCards(isServerThread && !sideChat ? routeThreadRef : null);
   const queuedRunsControl =
     isServerThread && activeThread ? (
       <QueuedRunsControl
@@ -7978,6 +7967,7 @@ export default function ChatView(props: ChatViewProps) {
                 }
                 listRef={legendListRef}
                 timelineEntries={displayedTimeline.entries}
+                decisionCards={paintOnlyDisplayedTimeline ? undefined : decisionCards}
                 runs={paintOnlyDisplayedTimeline ? [] : (serverProjection?.runs ?? [])}
                 latestRun={paintOnlyDisplayedTimeline ? null : activeActivityRun}
                 runningRunId={paintOnlyDisplayedTimeline ? null : activeRunningTurnId}
@@ -8047,25 +8037,34 @@ export default function ChatView(props: ChatViewProps) {
                   : { historyControls: threadHistoryControls })}
               />
 
-              {showScrollToBottom && !isThreadFindActive && (
+              {!isThreadFindActive && (
                 <div
-                  className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex justify-center py-1.5"
+                  className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex flex-wrap justify-center gap-2 py-1.5"
                   style={{ bottom: scrollToEndClearance + 4 }}
                 >
-                  <Button
-                    aria-label="Scroll to end"
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      composerRef.current?.restoreAfterTimelineReachedEnd();
-                      scrollToEnd(true);
-                    }}
-                    className="pointer-events-auto"
-                    size="xs"
-                    variant="glass"
-                  >
-                    <ChevronDownIcon className="size-3.5" />
-                    Scroll to end
-                  </Button>
+                  {paintOnlyDisplayedTimeline ? null : (
+                    <PendingActionsNudge
+                      cards={decisionCards}
+                      listRef={legendListRef}
+                      onNavigate={cancelTimelineLiveFollowForUserNavigationStable}
+                    />
+                  )}
+                  {showScrollToBottom && (
+                    <Button
+                      aria-label="Scroll to end"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        composerRef.current?.restoreAfterTimelineReachedEnd();
+                        scrollToEnd(true);
+                      }}
+                      className="pointer-events-auto"
+                      size="xs"
+                      variant="glass"
+                    >
+                      <ChevronDownIcon className="size-3.5" />
+                      Scroll to end
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -8205,7 +8204,6 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
-                              decisionCardsDock={decisionCardsDock}
                               bannerItems={composerBannerItems}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}

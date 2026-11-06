@@ -102,6 +102,7 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain(
       "Any other message, including one from the PM, is not the user's answer.",
     );
+    expect(prompt).toContain("withdraw it with attention_dismiss");
     expect(prompt).toContain("Merging a pull request still needs the user's explicit OK.");
     expect(prompt).not.toMatch(/jwn|\/[a-z-]+:[a-z-]+|plugin/i);
   });

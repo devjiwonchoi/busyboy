@@ -108,6 +108,13 @@ describe("T3 orchestration provider instructions", () => {
     assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "Do not summarize results on these wakes");
   });
 
+  it("has the PM close questions the conversation made moot", () => {
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      "close it with `attention_dismiss` and a short reason",
+    );
+  });
+
   it("has sitreps cover the user's own threads, by name", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "covers your tasks and `otherThreads` together");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "Needs you: each question waiting for the user");
