@@ -228,7 +228,12 @@ import {
   useRightPanelStore,
 } from "../rightPanelStore";
 import { useSideChatStore } from "../sideChatStore";
-import { useIsProjectManagerThread, useThreadDecisionCards } from "../state/projectTeam";
+import {
+  useIsProjectManagerThread,
+  useLeadThreadTask,
+  useThreadDecisionCards,
+} from "../state/projectTeam";
+import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
 import { PendingActionsNudge } from "./chat/PendingActionsNudge";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import {
@@ -1608,6 +1613,12 @@ export default function ChatView(props: ChatViewProps) {
     widthStorageKey: `t3code:preview-panel-width:${activeThreadKey}`,
   });
   const activeThreadShell = useQuietThreadShell(isServerThread ? activeThreadRef : null);
+  const leadTask = useLeadThreadTask(
+    !sideChat && isServerThread ? activeThreadRef : null,
+    activeThreadShell?.projectId ?? null,
+  );
+  const isTaskLeadThread = leadTask !== null;
+  useOpenTaskPlanOnEntry(isServerThread ? activeThreadRef : null, isTaskLeadThread);
   const timelineThreadError =
     serverRuntime?.status === "failed" &&
     serverRuntime.lastErrorClass === "usage_limit" &&
@@ -3677,6 +3688,11 @@ export default function ChatView(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "pull-requests");
   };
   const addPullRequestsSurfaceStable = useStableCallback(addPullRequestsSurface);
+  const addTaskPlanSurface = () => {
+    if (!activeThreadRef || !isTaskLeadThread) return;
+    useRightPanelStore.getState().open(activeThreadRef, "task-plan");
+  };
+  const addTaskPlanSurfaceStable = useStableCallback(addTaskPlanSurface);
   useAgentOpenedPreviews({
     threadRef: activeThreadRef,
     previewState: activePreviewState,
@@ -8549,6 +8565,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddSideChat={startSideChatStable}
+          onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
@@ -8600,6 +8617,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
             onAddSideChat={startSideChatStable}
+            onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}

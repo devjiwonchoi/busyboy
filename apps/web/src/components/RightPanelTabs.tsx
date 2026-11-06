@@ -36,6 +36,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   FileDiff,
   Files,
   Globe2,
@@ -142,6 +143,8 @@ interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddSideChat: () => void;
+  /** Present only on task lead threads, which get a Plan tab. */
+  onAddTaskPlan?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -308,6 +311,22 @@ function SurfaceMenuItem(props: {
   return <DisabledReasonTooltip reason={props.disabledReason} trigger={item} />;
 }
 
+/** The Plan entry is listed only where it applies, so other threads see no disabled item. */
+function taskPlanActions(onAddTaskPlan: (() => void) | undefined) {
+  return onAddTaskPlan === undefined
+    ? []
+    : [
+        {
+          label: "Plan",
+          icon: ClipboardList,
+          shortcut: "N",
+          available: true,
+          disabledReason: "",
+          onClick: onAddTaskPlan,
+        },
+      ];
+}
+
 function RightPanelEmptyState(props: {
   onAddBrowser: () => void;
   onAddBrowserInProfile: (profileId: string) => void;
@@ -318,6 +337,8 @@ function RightPanelEmptyState(props: {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddSideChat: () => void;
+  /** Present only on task lead threads, which get a Plan tab. */
+  onAddTaskPlan?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -329,6 +350,7 @@ function RightPanelEmptyState(props: {
   const [highlight, setHighlight] = useState(-1);
 
   const actions = [
+    ...taskPlanActions(props.onAddTaskPlan),
     {
       label: "Browser",
       icon: Globe2,
@@ -569,6 +591,8 @@ function surfaceTitle(
       return "Pull requests";
     case "side-chat":
       return "Side chat";
+    case "task-plan":
+      return "Plan";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -659,6 +683,8 @@ function SurfaceIcon({
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "side-chat":
       return <MessagesSquare className="size-3 shrink-0" />;
+    case "task-plan":
+      return <ClipboardList className="size-3 shrink-0" />;
   }
 }
 
@@ -988,6 +1014,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   };
 
   const addSurfaceActions = [
+    ...taskPlanActions(props.onAddTaskPlan),
     {
       label: "Browser",
       icon: Globe2,
@@ -1403,6 +1430,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
             onAddSideChat={props.onAddSideChat}
+            onAddTaskPlan={props.onAddTaskPlan}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}
