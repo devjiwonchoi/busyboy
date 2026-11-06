@@ -271,10 +271,10 @@ import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarT
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import {
   resolveSidebarRowStatus,
-  resolveSidebarTaskRowStatus,
   SidebarRowActionButton,
   SidebarRowLine,
 } from "./sidebar/SidebarRowLine";
+import { resolveLiveTaskStatus } from "./task/taskStatus";
 import { MiddleTruncate } from "./ui/middle-truncate";
 import {
   composerDraftHasUserContent,
@@ -1498,16 +1498,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isUnread,
     goalActive: thread.goal?.status === "active",
   });
-  // A task lead's row also shows its task's stage, so it never looks idle.
+  // A task lead's row shows its task's status instead, so it never looks idle.
   const leadTask = useLeadThreadTask(threadRef, thread.projectId);
-  const topStatus =
-    leadTask === null
-      ? threadStatus
-      : resolveSidebarTaskRowStatus({
-          threadStatus,
-          task: leadTask.task,
-          waitingOnUser: leadTask.waitingOnUser,
-        });
+  const topStatus = leadTask === null ? threadStatus : resolveLiveTaskStatus(leadTask.task, status);
 
   const handleClick = (event: ReactMouseEvent) => {
     onThreadClick(event, threadRef);

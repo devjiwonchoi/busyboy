@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const AT = "2026-11-06T09:00:00.000Z";
@@ -213,6 +213,61 @@ const button = (name: string) =>
   [...document.querySelectorAll<HTMLElement>("button,[role=option]")].find(
     (element) => element.textContent?.trim() === name,
   )!;
+
+const header = () => container.querySelector<HTMLElement>('[data-testid="task-status"]')!;
+
+describe("TaskPage status", () => {
+  it("shows the task's status, and Ask question once the task waits on the user", async () => {
+    await render();
+    expect(header().dataset.status).toBe("planning");
+    expect(header().textContent).toBe("Planning");
+
+    state.detail = {
+      ...state.detail,
+      openAttention: [
+        {
+          id: "attention-1",
+          projectId: "project-1",
+          taskId: "task-7",
+          kind: "decision",
+          question: "Which list library?",
+          options: ["Keep ours", "Switch"],
+          answer: null,
+          answeredAt: null,
+          askerThreadId: "lead-1",
+          batchId: "batch-1",
+          createdAt: AT,
+          supersededAt: null,
+          answeredBy: null,
+        },
+      ] as never,
+    };
+    await act(async () => publish());
+    await vi.waitFor(() => expect(header().textContent).toBe("Ask question"));
+  });
+
+  it("shows a PR task as Ready while its lead is idle", async () => {
+    state.detail = {
+      ...state.detail,
+      task: {
+        ...state.detail.task,
+        stage: "in_review",
+        prUrl: "https://github.com/acme/busyboy/pull/81",
+      },
+    };
+    await render();
+    expect(header().textContent).toBe("Ready · PR #81");
+  });
+
+  it("shows a finished task as Done and archived, at phone width too", async () => {
+    await page.viewport(390, 844);
+    state.detail = { ...state.detail, task: { ...state.detail.task, stage: "cancelled" } };
+    await render();
+    expect(header().textContent).toBe("Done · cancelled");
+    expect(header().getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(container.textContent).toContain("Archived.");
+  });
+});
 
 describe("TaskPage", () => {
   it("shapes a task's spec, browses versions, restores one and splits a todo", async () => {

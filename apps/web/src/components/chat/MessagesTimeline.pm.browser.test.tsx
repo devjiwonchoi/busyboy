@@ -25,6 +25,7 @@ const PROJECT_TASKS = {
       leadThreadId: ThreadId.make("lead-6"),
       prUrl: null,
       lastOutcome: null,
+      openQuestion: false,
     },
     {
       id: "task-7" as never,
@@ -35,6 +36,7 @@ const PROJECT_TASKS = {
       leadThreadId: null,
       prUrl: null,
       lastOutcome: null,
+      openQuestion: false,
     },
   ],
 };
@@ -234,7 +236,7 @@ describe("Task references in a project manager thread", () => {
     await vi.waitFor(() => {
       const tooltip = document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]');
       expect(tooltip?.textContent).toContain("#6 Cmd+number shortcuts count the PM row first");
-      expect(tooltip?.textContent).toContain("Running");
+      expect(tooltip?.textContent).toContain("In Progress");
     });
   });
 

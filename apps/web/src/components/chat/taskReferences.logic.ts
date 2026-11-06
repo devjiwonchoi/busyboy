@@ -18,16 +18,6 @@ export function parseTaskReferenceHref(href: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-export const TASK_STAGE_LABELS: Record<ProjectTaskReference["stage"], string> = {
-  inbox: "Inbox",
-  planning: "Planning",
-  running: "Running",
-  in_review: "In review",
-  done: "Done",
-  blocked: "Blocked",
-  cancelled: "Cancelled",
-};
-
 /** Turns "#N" into a task chip link when N is one of the project's tasks. Code is left alone. */
 export function remarkTaskReferences(options: {
   readonly tasks: ReadonlyMap<number, ProjectTaskReference>;
