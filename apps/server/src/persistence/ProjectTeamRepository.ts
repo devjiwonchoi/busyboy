@@ -3,13 +3,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 
 import {
   IsoDateTime,
   NonNegativeInt,
+  PositiveInt,
   ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
   ProjectAttentionItem,
@@ -120,6 +120,8 @@ export interface CreateProjectAttentionItemInput {
   readonly askerThreadId: ThreadId | null;
   readonly batchId: ProjectAttentionBatchId;
   readonly createdAt: IsoDateTime;
+  /** For a plan approval: the spec version under review. */
+  readonly specVersion?: number | null;
 }
 
 export interface CreateProjectSitrepInput {
@@ -269,10 +271,6 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly limit: number;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
-    /** Plan approval cards saved before they were removed and still open, oldest first. */
-    readonly listOpenPlanApprovals: () => Result<ReadonlyArray<ProjectAttentionItem>>;
-    /** Turns closed plan approval cards into plain decisions; open ones stay for a retry. */
-    readonly retireClosedPlanApprovals: () => Result<void>;
     /** The newest item, answered or not, for batching. */
     readonly getLatestAttentionItem: (
       projectId: ProjectId,
@@ -323,24 +321,11 @@ const TaskRow = Schema.Struct({
   ...ProjectTask.fields,
   waitsOn: Schema.fromJsonString(Schema.Array(ProjectTaskId)),
 });
-/**
- * Plan approval cards were removed. Rows saved before then may still say "approval"
- * until the startup cleanup retires them; they read as decisions.
- */
-const StoredAttentionKind = Schema.Literals(["decision", "approval", "blocker"]).pipe(
-  Schema.decodeTo(
-    ProjectAttentionKind,
-    SchemaTransformation.transform({
-      decode: (kind): ProjectAttentionKind => (kind === "approval" ? "decision" : kind),
-      encode: (kind) => kind,
-    }),
-  ),
-);
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
-  kind: StoredAttentionKind,
   supersededAt: Schema.NullOr(IsoDateTime),
   answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy),
+  specVersion: Schema.NullOr(PositiveInt),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
 });
 const SpecVersionRow = Schema.Struct({
@@ -424,7 +409,8 @@ export const make = Effect.gen(function* () {
     batch_id AS "batchId",
     created_at AS "createdAt",
     superseded_at AS "supersededAt",
-    answered_by AS "answeredBy"
+    answered_by AS "answeredBy",
+    spec_version AS "specVersion"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -809,16 +795,18 @@ export const make = Effect.gen(function* () {
       askerThreadId: Schema.NullOr(ThreadId),
       batchId: ProjectAttentionBatchId,
       createdAt: IsoDateTime,
+      specVersion: Schema.NullOr(PositiveInt),
     }),
     Result: AttentionRow,
     execute: (item) => sql`
       INSERT INTO project_attention_items (
         item_id, project_id, task_id, kind, question, options_json,
-        asker_thread_id, batch_id, created_at
+        asker_thread_id, batch_id, created_at, spec_version
       )
       VALUES (
         ${item.id}, ${item.projectId}, ${item.taskId}, ${item.kind}, ${item.question},
-        ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt}
+        ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt},
+        ${item.specVersion}
       )
       RETURNING ${attentionColumns}
     `,
@@ -919,16 +907,6 @@ export const make = Effect.gen(function* () {
         AND (answered_at IS NOT NULL OR superseded_at IS NOT NULL)
       ORDER BY created_at DESC, rowid DESC
       LIMIT ${limit}
-    `,
-  });
-  const findOpenPlanApprovals = SqlSchema.findAll({
-    Request: Schema.Struct({}),
-    Result: AttentionRow,
-    execute: () => sql`
-      SELECT ${attentionColumns}
-      FROM project_attention_items
-      WHERE kind = 'approval' AND answered_at IS NULL AND superseded_at IS NULL
-      ORDER BY created_at ASC, rowid ASC
     `,
   });
   const findLatestAttention = SqlSchema.findOneOption({
@@ -1089,7 +1067,13 @@ export const make = Effect.gen(function* () {
         });
         yield* insertSpecVersion({
           taskId: task.id,
-          spec: input.spec ?? { background: input.request, goal: "", nonGoals: "", todos: [] },
+          spec: input.spec ?? {
+            background: input.request,
+            goal: "",
+            successCriteria: "",
+            nonGoals: "",
+            todos: [],
+          },
           author: input.author ?? "pm",
           authorThreadId: input.authorThreadId ?? null,
           note: "Created",
@@ -1147,7 +1131,9 @@ export const make = Effect.gen(function* () {
       ),
 
     createAttentionItem: (input) =>
-      insertAttention(input).pipe(Effect.mapError(toRepositoryError("createAttentionItem"))),
+      insertAttention({ ...input, specVersion: input.specVersion ?? null }).pipe(
+        Effect.mapError(toRepositoryError("createAttentionItem")),
+      ),
     getAttentionItem: (id) =>
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),
     answerAttentionItem: (input) =>
@@ -1172,14 +1158,6 @@ export const make = Effect.gen(function* () {
       findRecentlyAnswered(input).pipe(
         Effect.mapError(toRepositoryError("listRecentlyAnsweredAttentionItems")),
       ),
-    listOpenPlanApprovals: () =>
-      findOpenPlanApprovals({}).pipe(Effect.mapError(toRepositoryError("listOpenPlanApprovals"))),
-    retireClosedPlanApprovals: () =>
-      sql`
-        UPDATE project_attention_items
-        SET kind = 'decision'
-        WHERE kind = 'approval' AND (answered_at IS NOT NULL OR superseded_at IS NOT NULL)
-      `.pipe(Effect.asVoid, Effect.mapError(toRepositoryError("retireClosedPlanApprovals"))),
     getLatestAttentionItem: (projectId) =>
       findLatestAttention({ projectId }).pipe(
         Effect.mapError(toRepositoryError("getLatestAttentionItem")),

@@ -10,6 +10,10 @@ import {
   ProjectTaskSpec,
   defaultTaskKeyPrefix,
   formatTaskKey,
+  formatPlanReviewFeedback,
+  PLAN_APPROVAL_ONLY,
+  PLAN_APPROVAL_START,
+  planApprovalOutcome,
   ProjectTeamAskUserInput,
   ProjectTeamSettings,
   ProjectTeamSettingsUpdateInput,
@@ -171,6 +175,17 @@ describe("task keys", () => {
       }),
     ).toThrow("Each todo needs its own id.");
   });
+
+  it("reads specs saved before success criteria as having none", () => {
+    expect(
+      Schema.decodeUnknownSync(ProjectTaskSpec)({
+        background: "",
+        goal: "Done.",
+        nonGoals: "",
+        todos: [],
+      }).successCriteria,
+    ).toBe("");
+  });
 });
 
 describe("ProjectAttentionItem", () => {
@@ -188,12 +203,13 @@ describe("ProjectAttentionItem", () => {
       batchId: "batch-1",
       createdAt: "2026-11-04T00:00:00.000Z",
     };
-    // Items stored before cards could be replaced, or before the answerer was recorded,
-    // decode as never replaced and with no answerer.
+    // Items stored before cards could be replaced, before the answerer was recorded, or
+    // before plan approvals pinned a spec version decode as never replaced, no answerer, no version.
     expect(Schema.decodeUnknownSync(ProjectAttentionItem)(item)).toEqual({
       ...item,
       supersededAt: null,
       answeredBy: null,
+      specVersion: null,
     });
   });
 });
@@ -249,8 +265,10 @@ describe("MCP inputs", () => {
       kind: "blocker",
       question: "Which account?",
     });
-    // Plan approval cards were removed: leads start without asking.
-    expect(() => decode({ kind: "approval", question: "Approve the plan?" })).toThrow();
+    expect(decode({ kind: "approval", question: "Approve the plan?" })).toEqual({
+      kind: "approval",
+      question: "Approve the plan?",
+    });
     expect(() => decode({ kind: "fyi", question: "Hi" })).toThrow();
     expect(() => decode({ kind: "decision", question: "   " })).toThrow();
   });
@@ -364,5 +382,38 @@ describe("Auto-approve plans", () => {
       autoApprovePlans: { hours: null },
     });
     expect("autoApprovePlans" in pmInput).toBe(false);
+  });
+});
+
+describe("plan approval answers", () => {
+  it("reads approve, approve only and anything else as feedback", () => {
+    expect(planApprovalOutcome(PLAN_APPROVAL_START)).toBe("start");
+    expect(planApprovalOutcome(`${PLAN_APPROVAL_ONLY}\nNote: later`)).toBe("approve_only");
+    expect(planApprovalOutcome("Request changes\nOverall:\nShorter")).toBe("changes");
+    expect(planApprovalOutcome("Approve and start the redesign instead")).toBe("changes");
+  });
+
+  it("formats review feedback with the overall comment and quoted inline comments", () => {
+    expect(
+      formatPlanReviewFeedback({
+        specVersion: 3,
+        overall: " Looks close. ",
+        comments: [
+          { section: "End result", quote: "keeps the\n scroll", comment: "Which list? " },
+          { section: "Steps", quote: "Add a test", comment: "Journey test, please." },
+        ],
+      }),
+    ).toBe(
+      [
+        "Request changes (review of spec v3)",
+        "",
+        "Overall:",
+        "Looks close.",
+        "",
+        "Inline comments:",
+        '1. [End result] "keeps the scroll" → Which list?',
+        '2. [Steps] "Add a test" → Journey test, please.',
+      ].join("\n"),
+    );
   });
 });

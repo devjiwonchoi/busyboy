@@ -183,7 +183,7 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
   description:
-    "Task lead only. The only way a task lead reaches the user: a decision or blocker only a person can resolve. Plans need no approval. Ask once with a self-contained question, then end your turn; the answer arrives as a message.",
+    'Task lead only. The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. For approval, write the plan into the spec first; the user reviews that spec version in a card and answers "Approve and start", "Approve only", or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.',
   parameters: ProjectTeamAskUserInput,
   success: ProjectTeamAttentionItemResult,
 })
@@ -193,7 +193,7 @@ const AskUserTool = Tool.make("ask_user", {
 const AttentionAnswerTool = Tool.make("attention_answer", {
   ...shared,
   description:
-    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's. Decision cards need the user's own words: the answer must quote exactly what the user wrote in this chat after the card appeared, or the call fails; otherwise let the user click the card. Blocker answers are not checked.",
+    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's. Approval and decision cards need the user's own words: the answer must quote exactly what the user wrote in this chat after the card appeared, or the call fails; otherwise let the user click the card. Blocker answers are not checked.",
   parameters: ProjectTeamAttentionAnswerInput,
   success: ProjectTeamAttentionItemResult,
 })

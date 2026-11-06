@@ -102,6 +102,7 @@ function card(
       createdAt,
       supersededAt: null,
       answeredBy: null,
+      specVersion: null,
     },
   };
 }

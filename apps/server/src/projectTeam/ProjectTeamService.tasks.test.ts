@@ -3,7 +3,13 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import { assert, describe, it } from "@effect/vitest";
-import { ChatAttachmentId, ProjectTaskId, ThreadId } from "@t3tools/contracts";
+import {
+  ChatAttachmentId,
+  PLAN_APPROVAL_START,
+  ProjectTaskId,
+  ThreadId,
+  formatPlanReviewFeedback,
+} from "@t3tools/contracts";
 import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
@@ -94,6 +100,7 @@ describe("ProjectTeamService tasks as specs", () => {
           spec: {
             background: "Dragging a project up jumps the list to the top.",
             goal: "Dragging keeps the scroll position.",
+            successCriteria: "",
             nonGoals: "",
             todos: [todo("t1", "Add a journey test"), todo("t2", "Keep scrollTop on drag start")],
           },
@@ -109,7 +116,7 @@ describe("ProjectTeamService tasks as specs", () => {
             projectId: PROJECT_ID,
             taskId: created.task.id,
             baseVersion: 1,
-            spec: { background: "", goal: "", nonGoals: "", todos: [] },
+            spec: { background: "", goal: "", successCriteria: "", nonGoals: "", todos: [] },
           })
           .pipe(Effect.flip);
         assert.include(stale.message, "changed to v2");
@@ -279,7 +286,7 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.notStrictEqual(resumed.leadThreadId, planner);
         const second = (yield* Ref.get(harness.delegated))[1];
         assert.strictEqual(second?.clientRequestId, `task-start:${created.task.id}:2`);
-        assert.include(second?.task, "The plan above is already written");
+        assert.include(second?.task, "The plan above is already approved");
         assert.notInclude(second?.task, "1. planning:");
         assert.include(second?.task, "- [ ] t1: Add a journey test");
 
@@ -309,6 +316,129 @@ describe("ProjectTeamService tasks as specs", () => {
       }),
     ),
   );
+  it.effect("waits for plan approval, sends review feedback back, and starts on approval", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId: lead } = yield* team.startTask(
+          pm,
+          { taskId: task.id },
+          harness.delegate,
+        );
+        assert.include((yield* Ref.get(harness.delegated))[0]?.task, 'ask_user(kind: "approval")');
+
+        const read = yield* team.readSpec(lead, {});
+        yield* team.writeSpec(lead, {
+          baseVersion: read.current.version,
+          spec: {
+            ...read.current.spec,
+            goal: "Dragging keeps the scroll position.",
+            successCriteria: "- The list never jumps.",
+          },
+          note: "Plan",
+        });
+
+        // Asking for approval pins spec v2 and shows the task as Waiting for approval.
+        const first = yield* team.askUser(lead, { kind: "approval", question: "Plan: keep it." });
+        assert.strictEqual(first.item.kind, "approval");
+        assert.strictEqual(first.item.specVersion, 2);
+        assert.deepStrictEqual(first.item.options, ["Approve and start", "Approve only"]);
+        const waiting = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(waiting.task.stage, "awaiting_approval");
+
+        // Feedback from the review goes to the lead and moves the task back to planning.
+        const feedback = formatPlanReviewFeedback({
+          specVersion: 2,
+          comments: [
+            { section: "End result", quote: "scroll position", comment: "Say which list." },
+          ],
+          overall: "Looks close.",
+        });
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: first.item.id,
+          answer: feedback,
+        });
+        const replanning = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(replanning.task.stage, "planning");
+        const relayed =
+          (yield* Ref.get(harness.sent)).findLast((input) => input.threadId === lead)?.text ?? "";
+        assert.include(relayed, "[User answer via BusyBoy]");
+        assert.include(relayed, '[End result] "scroll position" → Say which list.');
+        assert.include(relayed, "Looks close.");
+
+        // The next version asks again; an older open card is replaced, not left waiting.
+        const second = yield* team.askUser(lead, { kind: "approval", question: "Plan v3." });
+        const third = yield* team.askUser(lead, { kind: "approval", question: "Plan v3 again." });
+        const replaced = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.deepStrictEqual(
+          replaced.openAttention.map((item) => item.id),
+          [third.item.id],
+        );
+        assert.notStrictEqual(second.item.id, third.item.id);
+
+        // The PM cannot approve on its own words.
+        const pmApproval = yield* team
+          .answerAttention(pm, { attentionItemId: third.item.id, answer: PLAN_APPROVAL_START })
+          .pipe(Effect.flip);
+        assert.include(pmApproval.message, "user");
+
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: third.item.id,
+          answer: PLAN_APPROVAL_START,
+        });
+        const started = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(started.task.stage, "running");
+        assert.deepStrictEqual(started.openAttention, []);
+      }),
+    ),
+  );
+
+  it.effect("answers approval cards for the user while Auto-approve plans is on", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const first = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const second = yield* team.createTask(pm, { title: "Fix drop", request: "Fix drop." });
+        const { leadThreadId: leadA } = yield* team.startTask(
+          pm,
+          { taskId: first.task.id },
+          harness.delegate,
+        );
+        const { leadThreadId: leadB } = yield* team.startTask(
+          pm,
+          { taskId: second.task.id },
+          harness.delegate,
+        );
+
+        // A card that was already waiting is answered when the user turns the setting on.
+        const waiting = yield* team.askUser(leadA, { kind: "approval", question: "Plan A." });
+        yield* team.updateSettings({ projectId: PROJECT_ID, autoApprovePlans: { hours: null } });
+        const a = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: first.task.id });
+        assert.strictEqual(a.task.stage, "running");
+        assert.deepStrictEqual(a.openAttention, []);
+        const cards = (yield* team.attentionSnapshot).projects[0]?.decisionCards ?? [];
+        assert.strictEqual(
+          cards.find((card) => card.item.id === waiting.item.id)?.item.answer ?? null,
+          PLAN_APPROVAL_START,
+        );
+
+        // A new card while it is on comes back already answered, and the task runs.
+        const asked = yield* team.askUser(leadB, { kind: "approval", question: "Plan B." });
+        assert.strictEqual(asked.item.answer, PLAN_APPROVAL_START);
+        const b = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: second.task.id });
+        assert.strictEqual(b.task.stage, "running");
+        assert.deepStrictEqual(b.openAttention, []);
+        const toLeadB = (yield* Ref.get(harness.sent)).filter((input) => input.threadId === leadB);
+        assert.include(toLeadB.map((input) => input.text).join("\n"), "auto-approved");
+      }),
+    ),
+  );
+
   it.effect("lets the PM change the task key prefix on the user's word", () =>
     withTeam(() =>
       Effect.gen(function* () {

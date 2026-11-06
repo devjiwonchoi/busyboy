@@ -19,11 +19,13 @@ import { useAnswerDecision } from "../../state/projectTeam";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
+import { PlanApprovalCard } from "./PlanApprovalCard";
 
 const QUESTION_ID = "answer";
 
 const KIND_LABEL: Record<ProjectDecisionCard["item"]["kind"], string> = {
   decision: "Decision",
+  approval: "Plan approval",
   blocker: "Blocker",
 };
 
@@ -80,6 +82,9 @@ export function DecisionCard({
   threadRef: ScopedThreadRef;
   cwd: string | undefined;
 }) {
+  if (card.item.kind === "approval") {
+    return <PlanApprovalCard card={card} environmentId={environmentId} />;
+  }
   const question = decisionCardQuestion(card);
   if (card.item.answeredAt !== null) {
     return (

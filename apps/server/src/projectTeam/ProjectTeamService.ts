@@ -13,6 +13,9 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
+  PLAN_APPROVAL_ONLY,
+  PLAN_APPROVAL_START,
+  planApprovalOutcome,
   type ProjectDecisionCard,
   type ProjectSitrep,
   type ProjectId,
@@ -802,6 +805,21 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       if (task.stage !== "awaiting_approval") return task;
       const running = yield* setTask({ id: task.id, stage: "running" });
+      // The lead hears it below; its open approval card records the same answer.
+      const now = yield* nowIso;
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      for (const item of open) {
+        if (item.kind !== "approval") continue;
+        yield* repository.answerAttentionItem({
+          id: item.id,
+          answer: PLAN_APPROVAL_START,
+          answeredAt: now,
+          answeredBy: "user",
+        });
+      }
       yield* appendEvent(running, "stage_changed", "awaiting_approval → running", null);
       yield* appendEvent(
         running,
@@ -1035,7 +1053,7 @@ const make = Effect.gen(function* () {
             task.number,
           );
           const spec = yield* latestSpec(task);
-          // A task whose earlier lead already recorded its plan resumes straight into the work.
+          // A task whose plan was already approved resumes straight into the work.
           const resume = task.planSummary !== null;
           // A restart must not reuse the first lead's request id, or it gets that lead back.
           const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
@@ -1601,10 +1619,90 @@ const make = Effect.gen(function* () {
     ...patch
   }) => applySettings(projectId, patch, null);
 
+  /**
+   * A plan approval reviews the latest spec version. It replaces the task's older open
+   * approval card and shows the task as Waiting for approval until the user answers.
+   */
+  const askPlanApproval = (
+    callerThreadId: ThreadId,
+    task: ProjectTask,
+    input: ProjectTeamAskUserInput,
+  ) =>
+    Effect.gen(function* () {
+      if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
+        return yield* teamError(`#${task.number} is finished; it needs no plan approval.`);
+      }
+      const spec = yield* latestSpec(task);
+      const now = yield* nowIso;
+      yield* repository.supersedeOpenAttentionItems({
+        taskId: task.id,
+        kind: "approval",
+        supersededAt: now,
+      });
+      const item = yield* router.ask({
+        task,
+        kind: "approval",
+        question: input.question,
+        options: input.options ?? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY],
+        askerThreadId: callerThreadId,
+        specVersion: spec.version,
+      });
+      const waiting = yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
+      yield* appendEvent(
+        task,
+        "note",
+        `Asked the user to approve the plan (spec v${spec.version}).`,
+        callerThreadId,
+      );
+      // With "Auto-approve plans" on, the card is answered and the task runs right away.
+      const approved = yield* autoApprovePlanIfOn(waiting);
+      if (approved === null) return { item };
+      yield* router.publish(task.projectId);
+      const answered = yield* repository.getAttentionItem(item.id);
+      return { item: Option.getOrElse(answered, () => item) };
+    });
+
+  /** Moves a task to a new stage and logs it; no-op when it is already there. */
+  const moveTaskStage = (
+    task: ProjectTask,
+    stage: ProjectTaskStage,
+    actorThreadId: ThreadId | null,
+  ) =>
+    Effect.gen(function* () {
+      if (task.stage === stage) return task;
+      const updated = yield* setTask({ id: task.id, stage });
+      yield* appendEvent(
+        updated,
+        "stage_changed",
+        `${task.stage} → ${updated.stage}`,
+        actorThreadId,
+      );
+      yield* router.publish(task.projectId);
+      return updated;
+    });
+
+  /**
+   * After the user answers a plan approval, the task leaves Waiting for approval:
+   * start → running, approve only → inbox, feedback → planning.
+   */
+  const afterPlanApprovalAnswer = (item: ProjectAttentionItem, actorThreadId: ThreadId | null) =>
+    Effect.gen(function* () {
+      if (item.kind !== "approval" || item.answer === null) return;
+      const task = yield* requireTask(item.taskId, item.projectId);
+      if (task.stage !== "awaiting_approval") return;
+      const outcome = planApprovalOutcome(item.answer);
+      yield* moveTaskStage(
+        task,
+        outcome === "start" ? "running" : outcome === "approve_only" ? "inbox" : "planning",
+        actorThreadId,
+      );
+    });
+
   const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["lead"], "ask_user");
       const task = yield* requireTask(role.taskId, role.projectId);
+      if (input.kind === "approval") return yield* askPlanApproval(callerThreadId, task, input);
       const item = yield* router.ask({
         task,
         kind: input.kind,
@@ -1648,6 +1746,7 @@ const make = Effect.gen(function* () {
         senderThreadId: callerThreadId,
         answeredBy: "pm",
       });
+      yield* afterPlanApprovalAnswer(answered, callerThreadId);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question."));
 
@@ -1756,6 +1855,7 @@ const make = Effect.gen(function* () {
         spec: {
           background: userTaskBackground(context, attachments),
           goal: "",
+          successCriteria: "",
           nonGoals: "",
           todos: [],
         },
@@ -1841,7 +1941,7 @@ const make = Effect.gen(function* () {
             request: todo.text,
             waitsOn: [],
             parentTaskId: parent.id,
-            spec: { background: todo.text, goal: "", nonGoals: "", todos: [] },
+            spec: { background: todo.text, goal: "", successCriteria: "", nonGoals: "", todos: [] },
             now: yield* nowIso,
             author: "user",
             authorThreadId: null,
@@ -1882,6 +1982,7 @@ const make = Effect.gen(function* () {
       });
       const task = yield* requireTask(answered.taskId, answered.projectId);
       yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
+      yield* afterPlanApprovalAnswer(answered, null);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
 
