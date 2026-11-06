@@ -77,6 +77,32 @@ describe("resolveComposerDispatchMode", () => {
     }
   });
 
+  it("always steers in a seamless chat, ignoring the default and the modifier", () => {
+    for (const activeTurnDefault of ["queue", "steer", "restart"] as const) {
+      for (const alternateModifier of [false, true]) {
+        expect(
+          resolveComposerDispatchMode({
+            running: true,
+            alternateModifier,
+            activeTurnDefault,
+            seamless: true,
+          }),
+        ).toBe("steer");
+      }
+    }
+    expect(
+      resolveComposerDispatchMode({ running: false, alternateModifier: true, seamless: true }),
+    ).toBe("auto");
+    expect(
+      resolveComposerDispatchMode({
+        running: true,
+        alternateModifier: false,
+        seamless: true,
+        canSteer: false,
+      }),
+    ).toBe("queue");
+  });
+
   it("names the alternate action so the affordance can be labelled", () => {
     expect(alternateComposerDispatchAction("queue")).toBe("steer");
     expect(alternateComposerDispatchAction("steer")).toBe("queue");

@@ -232,6 +232,9 @@ const CLAUDE_SCRIPT_EXTENSIONS = [".js", ".mjs", ".tsx", ".ts", ".jsx"];
 // The SDK puts no deadline on control requests. The CLI answers
 // mcp_set_servers once each server connected or hit its own 30 s timeout.
 const CLAUDE_MCP_REGISTRATION_TIMEOUT = "90 seconds";
+// The CLI starts the run that answers an unread "next" message right after the
+// turn's result. Past this grace, no such run is coming.
+const CLAUDE_GENTLE_STEER_FOLLOW_UP_GRACE = "5 seconds";
 
 /**
  * When the CLI exits it stops the MCP servers it started, but not their children: a plugin's
@@ -3019,6 +3022,14 @@ interface ActiveClaudeTurnContext {
   // Usage of the results that steers ended, oldest first. The final result's
   // usage covers only its own segment, so the turn bills these as well.
   readonly steeredSegmentUsage: Array<SDKResultMessage["usage"]>;
+  // Gentle steers go with priority "next": Claude reads them at its next
+  // model request and cancels nothing. "offered": sent and not yet read.
+  // "boundary": a root tool result came back after the offer, so the request
+  // that follows it reads the steer.
+  gentleSteer: "none" | "offered" | "boundary";
+  // A result that ended the turn before Claude read a gentle steer. The CLI
+  // answers the steer in a follow-up run of its own, which stays in this turn.
+  heldGentleResult: SDKResultMessage | null;
   readonly subagentsByTaskId: Map<string, ActiveClaudeSubagent>;
   readonly subagentsByToolUseId: Map<string, ActiveClaudeSubagent>;
   readonly subagentNodesByTaskId: Map<string, OrchestrationV2ExecutionNode["id"]>;
@@ -6451,6 +6462,118 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           return subagent?.task.status === "running" ? settled : null;
         });
 
+        const finalizeTurnFromResult = Effect.fnUntraced(function* (
+          context: ActiveClaudeTurnContext,
+          message: SDKResultMessage,
+        ) {
+          const completedAt = yield* DateTime.now;
+          const interrupted = (yield* Ref.get(interruptedTurns)).has(context.providerTurnId);
+          yield* Ref.update(steeredTurns, (current) => {
+            const next = new Set(current);
+            next.delete(context.providerTurnId);
+            return next;
+          });
+          const usageLimited =
+            context.authenticationFailureMessage === undefined &&
+            (context.rejectedRateLimitTypes.size > 0 || context.latestAssistantRateLimited) &&
+            (message.subtype !== "success" ||
+              message.api_error_status == null ||
+              message.api_error_status === 429) &&
+            (message.terminal_reason == null ||
+              message.terminal_reason === "api_error" ||
+              message.terminal_reason === "blocking_limit");
+          // The CLI also labels a 403 authentication_failed. Logging in again
+          // can't grant a permission, so show the CLI's own text instead.
+          const permissionDenied =
+            message.subtype === "success" && message.api_error_status === 403;
+          const failureHint = permissionDenied
+            ? message.result
+            : (context.authenticationFailureMessage ??
+              (usageLimited
+                ? "Claude usage limit reached. Send the message again once the limit resets."
+                : undefined));
+          const resetTimes = Array.from(context.rateLimitResetTimes.values());
+          const resetAt =
+            resetTimes.length > 0 && resetTimes.every((time) => time !== null)
+              ? resetTimes.reduce((latest, time) => (time! > latest ? time! : latest), "")
+              : null;
+          const resultFailure = interrupted
+            ? null
+            : providerFailureFromResult(message, completedAt, failureHint, usageLimited);
+          const terminalFailure =
+            resultFailure?.class === "usage_limit"
+              ? { ...resultFailure, resetAt: resetAt ?? resultFailure.resetAt ?? null }
+              : resultFailure;
+          yield* finalizeActiveTurn({
+            context,
+            status: interrupted ? "interrupted" : terminalStatusFromResult(message, failureHint),
+            completedAt,
+            result: message,
+            ...(terminalFailure === null ? {} : { failure: terminalFailure }),
+          });
+        });
+
+        // No follow-up run came for a held result: Claude had read the steer
+        // after all, or never will. End the turn with that result.
+        const releaseHeldGentleResult = Effect.fnUntraced(function* (
+          context: ActiveClaudeTurnContext,
+          message: SDKResultMessage,
+        ) {
+          if (context.heldGentleResult !== message || (yield* Ref.get(activeTurn)) !== context) {
+            return;
+          }
+          yield* Effect.logInfo("orchestration-v2.claude-gentle-steer-follow-up-missing", {
+            providerTurnId: context.providerTurnId,
+          });
+          context.heldGentleResult = null;
+          context.gentleSteer = "none";
+          const usageIndex = context.steeredSegmentUsage.lastIndexOf(message.usage);
+          if (usageIndex !== -1) context.steeredSegmentUsage.splice(usageIndex, 1);
+          yield* finalizeTurnFromResult(context, message);
+        });
+
+        // Tracks whether Claude has read the turn's gentle steers, and spots
+        // the follow-up run that answers one the turn ended without reading.
+        const trackGentleSteer = (context: ActiveClaudeTurnContext, message: SDKMessage) => {
+          if (context.gentleSteer === "none" && context.heldGentleResult === null) return;
+          const parentToolUseId = parentToolUseIdFromSdkMessage(message);
+          const requesting =
+            message.type === "system" && message.subtype === "status"
+              ? message.status === "requesting"
+              : false;
+          const rootModelOutput =
+            parentToolUseId === null &&
+            (message.type === "assistant" ||
+              (message.type === "stream_event" && message.event.type === "message_start"));
+          if (context.heldGentleResult !== null) {
+            if (
+              isClaudeTurnStartMessage(message) ||
+              requesting ||
+              (parentToolUseId === null &&
+                (message.type === "assistant" ||
+                  message.type === "stream_event" ||
+                  message.type === "user"))
+            ) {
+              // The follow-up run reads every queued steer.
+              context.heldGentleResult = null;
+              context.gentleSteer = "none";
+            }
+            return;
+          }
+          if (
+            context.gentleSteer === "offered" &&
+            message.type === "user" &&
+            parentToolUseId === null &&
+            claudeToolResultBlocksFromUserMessage(message).length > 0
+          ) {
+            context.gentleSteer = "boundary";
+            return;
+          }
+          if (context.gentleSteer === "boundary" && (requesting || rootModelOutput)) {
+            context.gentleSteer = "none";
+          }
+        };
+
         const handleSdkMessageFrame = Effect.fnUntraced(function* (input: {
           readonly query: ClaudeAgentSdkQuerySession;
           readonly message: SDKMessage;
@@ -6636,6 +6759,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               yield* bufferWakeMessage({ nativeThreadId: liveQuery.nativeThreadId, message });
             }
             return;
+          }
+          if ((yield* Ref.get(activeTurn)) === context) {
+            trackGentleSteer(context, message);
           }
           yield* trackClaudeGoal({ nativeThreadId: liveQuery.nativeThreadId, context, message });
 
@@ -7507,56 +7633,33 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
 
           if (message.type === "result") {
-            const completedAt = yield* DateTime.now;
             const interrupted = (yield* Ref.get(interruptedTurns)).has(context.providerTurnId);
             const wasSteered = (yield* Ref.get(steeredTurns)).has(context.providerTurnId);
             if (!interrupted && wasSteered && isClaudeActiveSteeringAbortResult(message)) {
               context.steeredSegmentUsage.push(message.usage);
               return;
             }
-            yield* Ref.update(steeredTurns, (current) => {
-              const next = new Set(current);
-              next.delete(context.providerTurnId);
-              return next;
-            });
-            const usageLimited =
-              context.authenticationFailureMessage === undefined &&
-              (context.rejectedRateLimitTypes.size > 0 || context.latestAssistantRateLimited) &&
-              (message.subtype !== "success" ||
-                message.api_error_status == null ||
-                message.api_error_status === 429) &&
-              (message.terminal_reason == null ||
-                message.terminal_reason === "api_error" ||
-                message.terminal_reason === "blocking_limit");
-            // The CLI also labels a 403 authentication_failed. Logging in again
-            // can't grant a permission, so show the CLI's own text instead.
-            const permissionDenied =
-              message.subtype === "success" && message.api_error_status === 403;
-            const failureHint = permissionDenied
-              ? message.result
-              : (context.authenticationFailureMessage ??
-                (usageLimited
-                  ? "Claude usage limit reached. Send the message again once the limit resets."
-                  : undefined));
-            const resetTimes = Array.from(context.rateLimitResetTimes.values());
-            const resetAt =
-              resetTimes.length > 0 && resetTimes.every((time) => time !== null)
-                ? resetTimes.reduce((latest, time) => (time! > latest ? time! : latest), "")
-                : null;
-            const resultFailure = interrupted
-              ? null
-              : providerFailureFromResult(message, completedAt, failureHint, usageLimited);
-            const terminalFailure =
-              resultFailure?.class === "usage_limit"
-                ? { ...resultFailure, resetAt: resetAt ?? resultFailure.resetAt ?? null }
-                : resultFailure;
-            yield* finalizeActiveTurn({
-              context,
-              status: interrupted ? "interrupted" : terminalStatusFromResult(message, failureHint),
-              completedAt,
-              result: message,
-              ...(terminalFailure === null ? {} : { failure: terminalFailure }),
-            });
+            // The turn ended before Claude read a gentle steer. The CLI runs
+            // the steer next on its own; keep the turn open for that run and
+            // bill this segment with it.
+            if (
+              !interrupted &&
+              context.gentleSteer !== "none" &&
+              context.heldGentleResult === null &&
+              terminalStatusFromResult(message) === "completed" &&
+              (yield* Ref.get(activeTurn)) === context
+            ) {
+              context.heldGentleResult = message;
+              context.steeredSegmentUsage.push(message.usage);
+              yield* Effect.sleep(CLAUDE_GENTLE_STEER_FOLLOW_UP_GRACE).pipe(
+                Effect.andThen(
+                  sdkMessageLock.withPermits(1)(releaseHeldGentleResult(context, message)),
+                ),
+                Effect.forkIn(sessionScope),
+              );
+              return;
+            }
+            yield* finalizeTurnFromResult(context, message);
           }
         });
 
@@ -8379,6 +8482,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               rateLimitResetTimes: new Map(),
               latestAssistantRateLimited: false,
               steeredSegmentUsage: [],
+              gentleSteer: "none",
+              heldGentleResult: null,
               subagentsByTaskId: new Map(),
               subagentsByToolUseId: new Map(),
               subagentNodesByTaskId: new Map(),
@@ -8691,12 +8796,18 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 compileClaudeModelSelection(currentTurn.input.modelSelection).promptEffort,
               ),
               attachments: turnInput.message.attachments,
-              priority: "now",
+              // "next" waits for the turn's next model request and cancels
+              // nothing; "now" cuts off the running tools and output.
+              priority: turnInput.gentle === true ? "next" : "now",
               attachmentsDir,
               fileSystem,
               skillNames: yield* userInvocableSkillNames(currentTurn.input.runtimePolicy.cwd),
             });
-            yield* backgroundForegroundSubagents(existing);
+            // A gentle steer cancels nothing, so no subagent has to move to
+            // the background first.
+            if (turnInput.gentle !== true) {
+              yield* backgroundForegroundSubagents(existing);
+            }
             // The turn can end while the moves are answered. A steer offered
             // then would start a new turn the orchestrator never asked for, so
             // the steer fails and the orchestrator starts the follow-up turn.
@@ -8709,11 +8820,15 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 detail: `Claude provider turn ${turnInput.providerTurnId} ended before the steer was sent.`,
               });
             }
-            yield* Ref.update(steeredTurns, (current) => {
-              const next = new Set(current);
-              next.add(turnInput.providerTurnId);
-              return next;
-            });
+            if (turnInput.gentle === true) {
+              currentTurn.gentleSteer = "offered";
+            } else {
+              yield* Ref.update(steeredTurns, (current) => {
+                const next = new Set(current);
+                next.add(turnInput.providerTurnId);
+                return next;
+              });
+            }
             yield* existing.query.offer(userMessage);
           },
           (effect, turnInput) =>

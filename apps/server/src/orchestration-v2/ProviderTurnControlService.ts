@@ -65,6 +65,8 @@ export interface ProviderTurnControlServiceV2Shape {
     readonly providerThreadId: ProviderThreadId;
     readonly providerTurnId: ProviderTurnId;
     readonly messageId: MessageId;
+    /** Join the turn at its next step without cancelling running work. */
+    readonly gentle?: boolean;
   }) => Effect.Effect<void, ProviderTurnControlError>;
   readonly interruptAndAwaitTerminal: (input: {
     readonly threadId: ThreadId;
@@ -355,6 +357,7 @@ export const layer: Layer.Layer<
               runId: run.id,
               providerThread: loaded.providerThread,
               providerTurnId: loaded.providerTurn.id,
+              ...(input.gentle === true ? { gentle: true } : {}),
               message: {
                 messageId: message.id,
                 text: projectComposerContextForProvider({

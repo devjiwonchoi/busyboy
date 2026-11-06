@@ -3148,6 +3148,231 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ),
   );
 
+  describe("gentle steering", () => {
+    const segmentUsage = {
+      input_tokens: 600,
+      output_tokens: 40,
+      cache_creation_input_tokens: 500,
+      cache_read_input_tokens: 2000,
+    };
+    const followUpUsage = {
+      input_tokens: 3,
+      output_tokens: 6,
+      cache_creation_input_tokens: 2347,
+      cache_read_input_tokens: 9455,
+    };
+    const requesting = (uuid: string) =>
+      claudeSdkFrame({
+        type: "system",
+        subtype: "status",
+        status: "requesting",
+        uuid,
+        session_id: WAKE_NATIVE_SESSION,
+      });
+    const startSteeredTurn = Effect.fn("startSteeredTurn")(function* (
+      harness: Effect.Success<typeof makeWakeHarness>,
+      name: string,
+      beforeSteer: ReadonlyArray<SDKMessage> = [],
+    ) {
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const attemptId = RunAttemptId.make(`attempt-gentle-${name}`);
+      const input = makeClaudeTestTurnInput({
+        threadId: harness.threadId,
+        providerThread: harness.providerThread,
+        now: yield* DateTime.now,
+        attemptId,
+        text: "Plan the release.",
+        attachments: [],
+      });
+      yield* harness.runtime.startTurn(input);
+      for (const frame of beforeSteer) yield* harness.offerAndWait(frame);
+      yield* harness.runtime.steerTurn({
+        threadId: harness.threadId,
+        runId: input.runId,
+        providerThread: harness.providerThread,
+        providerTurnId: idAllocator.derive.providerTurn({
+          driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
+          nativeTurnId: `turn:${attemptId}`,
+        }),
+        gentle: true,
+        message: {
+          createdBy: "user",
+          creationSource: "web",
+          messageId: MessageId.make(`message-gentle-${name}`),
+          text: "Also check the changelog.",
+          attachments: [],
+        },
+      });
+      // "next" joins at the next model request and cancels nothing.
+      assert.equal(harness.offeredMessages.at(-1)?.priority, "next");
+    });
+    const finalUsage = (harness: Effect.Success<typeof makeWakeHarness>) => {
+      const completed = harness.events.findLast((event) => event.type === "provider_turn.updated");
+      return completed?.type === "provider_turn.updated"
+        ? completed.providerTurn.turnTokenUsage
+        : undefined;
+    };
+
+    it.effect("reads the steer at the next tool step and ends on one result", () =>
+      Effect.gen(function* () {
+        const backgrounded: Array<string> = [];
+        const harness = yield* makeWakeHarnessWithOptions({
+          backgroundTasks: (toolUseId) =>
+            Effect.sync(() => {
+              backgrounded.push(toolUseId);
+              return true;
+            }),
+        });
+        yield* startSteeredTurn(harness, "read", [
+          claudeSdkFrame({
+            type: "assistant",
+            uuid: "gentle-tool-use",
+            session_id: WAKE_NATIVE_SESSION,
+            parent_tool_use_id: null,
+            message: {
+              id: "gentle-tool-message",
+              type: "message",
+              role: "assistant",
+              model: "claude-sonnet-4-6",
+              content: [
+                { type: "tool_use", id: "gentle-bash", name: "Bash", input: { command: "ls" } },
+              ],
+            },
+          }),
+        ]);
+        yield* harness.offerAndWait(
+          claudeSdkFrame({
+            type: "user",
+            uuid: "gentle-tool-result",
+            session_id: WAKE_NATIVE_SESSION,
+            parent_tool_use_id: null,
+            message: {
+              role: "user",
+              content: [
+                { type: "tool_result", tool_use_id: "gentle-bash", content: "ok", is_error: false },
+              ],
+            },
+          }),
+        );
+        yield* harness.offerAndWait(requesting("gentle-requesting"));
+        yield* harness.offerAndWait(wakeAssistant);
+        yield* Queue.offer(
+          harness.sdkMessages,
+          makeResultFrame({ uuid: "gentle-read-result", result: WAKE_RESULT_TEXT }),
+        );
+        const terminal = yield* Queue.take(harness.terminalReceipts);
+        assert.equal(terminal.status, "completed");
+        assert.lengthOf(harness.terminalEvents(), 1);
+        assert.deepEqual(backgrounded, []);
+        const tool = harness.events.findLast(
+          (event) =>
+            event.type === "turn_item.updated" &&
+            event.turnItem.nativeItemRef?.nativeId === "gentle-bash",
+        );
+        assert.equal(
+          tool?.type === "turn_item.updated" ? tool.turnItem.status : undefined,
+          "completed",
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    );
+
+    it.effect("keeps the turn open for the run that answers an unread steer", () =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        yield* startSteeredTurn(harness, "unread", [
+          makeAssistantTextFrame({ uuid: "gentle-first-reply", text: "Release planned." }),
+        ]);
+        yield* harness.offerAndWait(
+          makeResultFrame({
+            uuid: "gentle-first-result",
+            result: "Release planned.",
+            usage: segmentUsage,
+          }),
+        );
+        assert.lengthOf(harness.terminalEvents(), 0);
+        yield* harness.offerAndWait(wakeTurnInit);
+        yield* harness.offerAndWait(requesting("gentle-follow-up-requesting"));
+        yield* harness.offerAndWait(wakeAssistant);
+        // The follow-up run started, so the grace no longer applies.
+        yield* TestClock.adjust("10 seconds");
+        assert.lengthOf(harness.terminalEvents(), 0);
+        yield* Queue.offer(
+          harness.sdkMessages,
+          makeResultFrame({
+            uuid: "gentle-follow-up-result",
+            result: WAKE_RESULT_TEXT,
+            usage: followUpUsage,
+          }),
+        );
+        const terminal = yield* Queue.take(harness.terminalReceipts);
+        assert.equal(terminal.status, "completed");
+        assert.lengthOf(harness.terminalEvents(), 1);
+        assert.lengthOf(harness.continuationRequests, 0);
+        const replies = harness.events.flatMap((event) =>
+          event.type === "turn_item.updated" && event.turnItem.type === "assistant_message"
+            ? [event.turnItem]
+            : [],
+        );
+        assert.includeMembers(
+          replies.map((item) => item.text),
+          ["Release planned.", WAKE_ASSISTANT_TEXT],
+        );
+        assert.equal(new Set(replies.map((item) => item.providerTurnId)).size, 1);
+        assert.deepEqual(finalUsage(harness), {
+          usageScope: "main_agent",
+          usageStatus: "complete",
+          hasSubagents: false,
+          inputTokens: 603 + 2847 + 11455,
+          outputTokens: 46,
+          cachedInputTokens: 11455,
+          cacheCreationTokens: 2847,
+        });
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    );
+
+    it.effect("ends the turn with the held result when no follow-up run comes", () =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        yield* startSteeredTurn(harness, "fallback");
+        yield* harness.offerAndWait(
+          makeResultFrame({
+            uuid: "gentle-fallback-result",
+            result: "Release planned.",
+            usage: segmentUsage,
+          }),
+        );
+        yield* TestClock.adjust("4 seconds");
+        assert.lengthOf(harness.terminalEvents(), 0);
+        yield* TestClock.adjust("1 second");
+        const terminal = yield* Queue.take(harness.terminalReceipts);
+        assert.equal(terminal.status, "completed");
+        assert.lengthOf(harness.terminalEvents(), 1);
+        // The held segment is billed once.
+        assert.deepEqual(finalUsage(harness), {
+          usageScope: "main_agent",
+          usageStatus: "complete",
+          hasSubagents: false,
+          inputTokens: 600 + 500 + 2000,
+          outputTokens: 40,
+          cachedInputTokens: 2000,
+          cacheCreationTokens: 500,
+        });
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    );
+  });
+
   it.effect("announces usage-limit pauses once per window and again on a new turn", () =>
     Effect.gen(function* () {
       const harness = yield* makeWakeHarness;

@@ -40,6 +40,11 @@ interface ComposerPrimaryActionsProps {
   canInterrupt: boolean;
   followUpBehavior?: "queue" | "steer";
   canSteer?: boolean;
+  /**
+   * One uninterrupted conversation (the PM chat): sending while running looks like an
+   * ordinary send, with no steer/queue choice, labels or shortcut hints.
+   */
+  seamless?: boolean;
   alternateShortcutLabel?: string | null;
   showPlanFollowUpPrompt: boolean;
   promptHasText: boolean;
@@ -98,6 +103,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   canInterrupt,
   followUpBehavior = "steer",
   canSteer = true,
+  seamless = false,
   alternateShortcutLabel = null,
   showPlanFollowUpPrompt,
   promptHasText,
@@ -127,6 +133,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const shortcutModifiers = useShortcutModifierState();
   const isQueuing =
+    !seamless &&
     !isEditingQueuedMessage &&
     resolveComposerDispatchMode({
       running: isRunning,
@@ -315,7 +322,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         ? "Compact and send"
         : isQueuing
           ? "Queue message"
-          : isRunning
+          : isRunning && !seamless
             ? "Steer message"
             : "Submit message";
   const submitStatus = isEnvironmentUnavailable
@@ -334,7 +341,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     submitStatus ??
     (compactsBeforeSend
       ? `Summarize ${compactTokens} tokens of history, then send`
-      : isRunning && !isEditingQueuedMessage && canSteer
+      : isRunning && !isEditingQueuedMessage && canSteer && !seamless
         ? `Click to ${followUpBehavior}, Ctrl/⌘-click${alternateShortcutLabel ? ` or ${alternateShortcutLabel}` : ""} to ${alternateAction}`
         : submitLabel);
 
@@ -369,7 +376,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         <PlayIcon className="size-4 fill-current" aria-hidden="true" />
       ) : isEditingQueuedMessage ? (
         <CheckIcon className="size-4" aria-hidden="true" />
-      ) : isRunning ? (
+      ) : isRunning && !seamless ? (
         <MorphIcon className="size-4" icon={isQueuing ? ListPlus : CornerUpRight} />
       ) : (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">

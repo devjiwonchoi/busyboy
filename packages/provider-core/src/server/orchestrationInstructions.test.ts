@@ -86,6 +86,15 @@ describe("T3 orchestration provider instructions", () => {
     );
   });
 
+  it("has the PM answer bursts of messages and run small read-only work itself", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "answer every one, none is dropped or cancelled");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "follow the latest and say so");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "`delegate_task` in async mode, read-only");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "never to edit the repository");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "produces a PR");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"Delegated task … reached a terminal state"');
+  });
+
   it("tells the PM to report only on a due sitrep", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "call `team_status` first");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "[Sitrep due] since <time>");
@@ -130,8 +139,7 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N done: <title> · <result>"');
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N in review: <title> · PR <url>"');
     assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "A task finishing does not wake you");
-    assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "reached a terminal state");
-    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"decisions" and "preferences"');
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, 'Use "preferences" for how the user likes to work');
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "After a context compaction, call `team_status`");
   });
 
