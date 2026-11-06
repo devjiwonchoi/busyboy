@@ -263,7 +263,7 @@ import {
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
-import { NewTaskDialog, type NewTaskTarget } from "./sidebar/NewTaskDialog";
+import { openQuickTask } from "./task/quickTaskStore";
 import { selectSidebarTasksWithoutSession, SidebarTaskRow } from "./sidebar/SidebarTaskRows";
 import { taskRouteParams } from "../taskRoutes";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
@@ -2352,7 +2352,6 @@ export default function Sidebar() {
     }
     return router.navigate(taskRouteParams(environmentId, projectId, taskId));
   };
-  const [newTaskTarget, setNewTaskTarget] = useState<NewTaskTarget | null>(null);
 
   const handleThreadFileDrop = async (threadRef: ScopedThreadRef, files: File[]) => {
     const dropId = queuePendingFileDrop({ threadRef, files });
@@ -3983,10 +3982,9 @@ export default function Sidebar() {
                                         isActive: routeThreadKey === manager.threadKey,
                                         onOpenThread: navigateToThread,
                                         onNewTask: () =>
-                                          setNewTaskTarget({
+                                          openQuickTask({
                                             environmentId: manager.entry.environmentId,
                                             projectId: manager.entry.summary.projectId,
-                                            projectName: projectGroup?.displayName ?? "",
                                           }),
                                         jumpLabel: showJumpHints
                                           ? (jumpLabelByKey.get(manager.threadKey) ?? null)
@@ -4050,17 +4048,6 @@ export default function Sidebar() {
           ) : null}
         </SidebarGroup>
       </SidebarContent>
-      <NewTaskDialog
-        target={newTaskTarget}
-        onClose={() => setNewTaskTarget(null)}
-        onCreated={(detail) => {
-          const target = newTaskTarget;
-          setNewTaskTarget(null);
-          if (target !== null) {
-            void navigateToTask(target.environmentId, detail.task.projectId, detail.task.id);
-          }
-        }}
-      />
       <SidebarChromeFooter />
     </>
   );

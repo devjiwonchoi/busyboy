@@ -153,6 +153,8 @@ export function SidebarProjectManagerHeading(props: {
             "flex shrink-0 items-center",
             "pointer-events-none group-hover/project:pointer-events-auto group-focus-within/project:pointer-events-auto",
             hoverOnlyClassName,
+            // Touch screens cannot hover, so the buttons stay visible there.
+            "pointer-coarse:pointer-events-auto pointer-coarse:opacity-100",
           )}
         >
           {canOperate && props.onNewTask ? (

@@ -77,6 +77,7 @@ import {
 import { taskForLeadThread } from "../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import Sidebar from "./Sidebar";
+import { QuickTaskHost } from "./task/QuickTaskHost";
 import { SidebarProvider } from "./ui/sidebar";
 
 function threadShell(id: string, projectId: string, updatedAt: string): EnvironmentThreadShell {
@@ -237,6 +238,7 @@ function renderSidebarApp() {
           <Sidebar />
         </div>
         <Outlet />
+        <QuickTaskHost />
       </SidebarProvider>
     ),
   });
@@ -297,47 +299,41 @@ describe("sidebar tasks", () => {
     );
     expect(threadRow("BB-2 Fix drag scroll")?.getAttribute("aria-current")).toBe("page");
 
-    // Quick dump from the PM heading: title, context, save to the inbox.
+    // The PM heading's "New task" opens the quick task modal on that project.
     await userEvent.hover(
       container.querySelector('[data-testid="sidebar-project-manager-heading"]')!,
     );
     await userEvent.click(
       container.querySelector<HTMLElement>('button[aria-label="New task in busyboy"]')!,
     );
-    const title = await vi.waitFor(() => {
-      const input = document.querySelector<HTMLInputElement>('input[aria-label="Task title"]');
-      expect(input).not.toBeNull();
-      return input!;
+    const context = await vi.waitFor(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Task context"]',
+      );
+      expect(textarea).not.toBeNull();
+      return textarea!;
     });
-    await userEvent.type(title, "Dark mode");
-    await userEvent.type(
-      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Context"]')!,
-      "The settings page is too bright at night.",
-    );
+    // No title: the first line becomes the title, and planning starts right away.
+    await userEvent.type(context, "Dark mode{Enter}The settings page is too bright at night.");
     await userEvent.click(
-      [...document.querySelectorAll<HTMLElement>("button")].find(
-        (button) => button.textContent === "Save to inbox",
-      )!,
-    );
-    await userEvent.click(
-      [...document.querySelectorAll<HTMLElement>("button")].find(
-        (button) => button.textContent === "Create task",
+      [...document.querySelectorAll<HTMLElement>("button")].find((button) =>
+        button.textContent?.startsWith("Create task"),
       )!,
     );
 
     await vi.waitFor(() =>
-      expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-5"),
+      expect(state.createTask).toHaveBeenCalledWith("env-1", {
+        projectId: "busyboy",
+        title: "Dark mode",
+        context: "Dark mode\nThe settings page is too bright at night.",
+        startPlanning: true,
+      }),
     );
-    expect(state.createTask).toHaveBeenCalledWith("env-1", {
-      projectId: "busyboy",
-      title: "Dark mode",
-      context: "The settings page is too bright at night.",
-      startPlanning: false,
-    });
-    // The composer closes once the task exists.
+    // The modal closes and the user stays where they were.
     await vi.waitFor(() =>
-      expect(document.querySelector('input[aria-label="Task title"]')).toBeNull(),
+      expect(document.querySelector('textarea[aria-label="Task context"]')).toBeNull(),
     );
+    expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-2");
   });
   it("folds the PM section from its heading and opens the PM chat from the avatar", async () => {
     const app = renderSidebarApp();
