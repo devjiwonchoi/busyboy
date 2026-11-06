@@ -65,7 +65,7 @@ const OrchestratorMcpSchedule = Schema.Union([
   OrchestratorMcpScheduleFromJsonString,
 ]).annotate({
   description:
-    "Trigger object: {type:'interval', everyMs}, {type:'fixed_time', timeOfDay, weekdays?}, or {type:'webhook'} to run on each request to a generated URL. Never stringify it unless the provider requires the compatibility form.",
+    "Trigger object: {type:'interval', everyMs}, {type:'fixed_time', timeOfDay, weekdays?}, or {type:'webhook', signature} to run on each request to a generated URL (signature required unless allowUnsigned is true). Never stringify it unless the provider requires the compatibility form.",
 });
 
 const OrchestratorMcpTargetOptionsFromRecord = Schema.Record(
@@ -515,7 +515,7 @@ export const OrchestratorMcpScheduleTaskInput = Schema.Struct({
   bindToCurrentThread: Schema.optional(
     Schema.Boolean.annotate({
       description:
-        "True (default) posts each run into this thread; false creates a fresh top-level thread per run.",
+        "For timers, true (default) posts each run into this thread; false creates a fresh top-level thread per run. Webhook tasks always use a fresh thread and refuse true.",
     }),
   ),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),

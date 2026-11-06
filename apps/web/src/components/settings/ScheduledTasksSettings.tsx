@@ -87,6 +87,7 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "..
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -143,6 +144,7 @@ const EMPTY_DRAFT: DraftState = {
   signatureEnabled: false,
   ...WEBHOOK_SIGNATURE_DEFAULTS,
   signatureSecret: "",
+  allowUnsigned: false,
 };
 
 function Field({
@@ -1037,6 +1039,13 @@ function ScheduledTaskEditorForm({
       reportFailure("Signing secret is required", "Enter the signature header and secret.");
       return;
     }
+    if (schedule.type === "webhook" && !schedule.signature && schedule.allowUnsigned !== true) {
+      reportFailure(
+        "Signature or opt-out required",
+        "Require a signature, or accept unsigned requests.",
+      );
+      return;
+    }
     if (
       schedule.type === "interval" &&
       (!Number.isSafeInteger(schedule.everyMs) || schedule.everyMs < MIN_SCHEDULED_TASK_INTERVAL_MS)
@@ -1425,7 +1434,25 @@ function ScheduledTaskEditorForm({
                       />
                     </Field>
                   </div>
-                ) : null}
+                ) : (
+                  <label className="flex cursor-pointer items-start gap-3 text-sm">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={draft.allowUnsigned}
+                      onCheckedChange={(checked) =>
+                        setDraft((current) => ({ ...current, allowUnsigned: checked === true }))
+                      }
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">
+                        Accept unsigned requests
+                      </span>
+                      <span className="block text-muted-foreground">
+                        Anyone with the URL can start an agent run.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
             ) : draft.scheduleMode === "fixed" ? (
               <div className="flex flex-wrap items-center gap-3">

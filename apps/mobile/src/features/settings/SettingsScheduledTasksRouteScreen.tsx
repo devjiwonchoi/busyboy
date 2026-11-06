@@ -639,6 +639,13 @@ function TaskForm({
       );
       return;
     }
+    if (schedule.type === "webhook" && !schedule.signature && schedule.allowUnsigned !== true) {
+      Dialog.alert(
+        "Signature or opt-out required",
+        "Set a signature on desktop or web, or accept unsigned requests.",
+      );
+      return;
+    }
     if (!projects.some((project) => project.id === draft.projectId)) {
       Dialog.alert("Project unavailable", "Choose a project in this environment.");
       return;
@@ -951,6 +958,24 @@ function TaskForm({
                 signatureConfigured={draft.schedule.signature !== null}
                 disabled={!canOperate || saving || environmentUnavailable}
               />
+              {draft.schedule.signature === null ? (
+                <View className="min-h-14 flex-row items-center gap-3 border-t border-border-subtle px-4 py-3">
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-lg text-foreground">Accept unsigned requests</Text>
+                    <Text className="text-sm text-foreground-muted">
+                      Anyone with the URL can start an agent run.
+                    </Text>
+                  </View>
+                  <ThemedSwitch
+                    accessibilityLabel="Accept unsigned requests"
+                    value={draft.schedule.allowUnsigned}
+                    disabled={saving}
+                    onValueChange={(allowUnsigned) =>
+                      setDraft({ ...draft, schedule: { ...draft.schedule, allowUnsigned } })
+                    }
+                  />
+                </View>
+              ) : null}
             </>
           ) : (
             <>
