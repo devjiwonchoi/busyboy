@@ -40,6 +40,8 @@ export interface TaskPageProps {
 
 const HISTORY_TAB = "history";
 
+type SpecTextField = "background" | "goal" | "successCriteria" | "nonGoals";
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     month: "short",
@@ -126,9 +128,7 @@ function SpecPane(props: {
   const latest = versions.at(-1)!;
   const { viewedVersion, onViewVersion: setViewedVersion } = props;
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Pick<ProjectTaskSpec, "background" | "goal" | "nonGoals">>(
-    latest.spec,
-  );
+  const [draft, setDraft] = useState<Pick<ProjectTaskSpec, SpecTextField>>(latest.spec);
   const [newTodo, setNewTodo] = useState("");
 
   const shown = versions.find((version) => version.version === viewedVersion) ?? latest;
@@ -172,11 +172,11 @@ function SpecPane(props: {
     );
   };
 
-  const changed = (field: "background" | "goal" | "nonGoals") =>
+  const changed = (field: SpecTextField) =>
     previous !== null && previous.spec[field] !== spec[field];
   const previousTodoIds = new Set(previous?.spec.todos.map((todo) => todo.id) ?? []);
 
-  const section = (label: string, field: "background" | "goal" | "nonGoals") => (
+  const section = (label: string, field: SpecTextField) => (
     <section className="mt-5">
       <h2 className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
         {label}
@@ -315,7 +315,8 @@ function SpecPane(props: {
       )}
 
       {section("Background", "background")}
-      {section("Goal", "goal")}
+      {section("End result", "goal")}
+      {section("Success criteria", "successCriteria")}
       {section("Non-goals", "nonGoals")}
 
       <section className="mt-5">

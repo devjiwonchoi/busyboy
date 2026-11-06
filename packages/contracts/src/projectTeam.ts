@@ -236,7 +236,10 @@ export type ProjectTaskTodo = typeof ProjectTaskTodo.Type;
 /** The written spec of a task. Every change is kept as a new version. */
 export const ProjectTaskSpec = Schema.Struct({
   background: ProjectTaskSpecText,
+  /** What the end result looks like. */
   goal: ProjectTaskSpecText,
+  /** How to tell the work is done. Older specs have none. */
+  successCriteria: ProjectTaskSpecText.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   nonGoals: ProjectTaskSpecText,
   todos: Schema.Array(ProjectTaskTodo).check(Schema.isMaxLength(200)),
 }).check(
@@ -302,7 +305,7 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
   return `${prefix}-${taskNumber}`;
 }
 
-export const ProjectAttentionKind = Schema.Literals(["decision", "blocker"]);
+export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
 export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm"]);
@@ -333,6 +336,8 @@ export const ProjectAttentionItem = Schema.Struct({
   answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /** For a plan approval: the spec version the user reviews. Null for other kinds. */
+  specVersion: Schema.NullOr(PositiveInt).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
@@ -752,10 +757,10 @@ export type ProjectTeamSettingsResult = typeof ProjectTeamSettingsResult.Type;
 export const ProjectTeamAskUserInput = Schema.Struct({
   kind: ProjectAttentionKind.annotate({
     description:
-      "decision: a choice only the user can make. blocker: something only a person can unblock.",
+      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card. blocker: something only a person can unblock.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
-    description: "Self-contained question.",
+    description: "Self-contained question. For approval, a short summary of the plan.",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -764,6 +769,54 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   ).annotate({ description: "Suggested answers, if any." }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
+
+/** Plan approval answers. Anything else is feedback on the plan. */
+export const PLAN_APPROVAL_START = "Approve and start";
+export const PLAN_APPROVAL_ONLY = "Approve only";
+/** First line of feedback sent from the plan review; comments follow. */
+export const PLAN_CHANGES_REQUESTED = "Request changes";
+
+export type PlanApprovalOutcome = "start" | "approve_only" | "changes";
+
+/** What an answer to a plan approval card means. */
+export function planApprovalOutcome(answer: string): PlanApprovalOutcome {
+  const first = answer.trim().split("\n", 1)[0]?.trim() ?? "";
+  if (first === PLAN_APPROVAL_START) return "start";
+  if (first === PLAN_APPROVAL_ONLY) return "approve_only";
+  return "changes";
+}
+
+/** A comment on text the user selected in the plan review. */
+export interface PlanReviewComment {
+  /** The plan section, such as "End result". */
+  readonly section: string;
+  /** The exact text the user selected. */
+  readonly quote: string;
+  readonly comment: string;
+}
+
+/** The answer the plan review sends when the user asks for changes. */
+export function formatPlanReviewFeedback(input: {
+  readonly specVersion: number | null;
+  readonly comments: ReadonlyArray<PlanReviewComment>;
+  readonly overall: string;
+}): string {
+  const lines = [
+    input.specVersion === null
+      ? PLAN_CHANGES_REQUESTED
+      : `${PLAN_CHANGES_REQUESTED} (review of spec v${input.specVersion})`,
+  ];
+  const overall = input.overall.trim();
+  if (overall.length > 0) lines.push("", "Overall:", overall);
+  if (input.comments.length > 0) {
+    lines.push("", "Inline comments:");
+    input.comments.forEach((entry, index) => {
+      const quote = entry.quote.replace(/\s+/g, " ").trim();
+      lines.push(`${index + 1}. [${entry.section}] "${quote}" → ${entry.comment.trim()}`);
+    });
+  }
+  return lines.join("\n");
+}
 
 const ProjectTeamOwnTaskId = Schema.optional(ProjectTaskId).annotate({
   description: "Task to use. A task lead may omit it for its own task; the PM passes it.",

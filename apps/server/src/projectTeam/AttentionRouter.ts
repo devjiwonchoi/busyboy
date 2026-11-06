@@ -70,6 +70,8 @@ export class AttentionRouter extends Context.Service<
       readonly question: string;
       readonly options: ReadonlyArray<string>;
       readonly askerThreadId: ThreadId | null;
+      /** For a plan approval: the spec version under review. */
+      readonly specVersion?: number;
     }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /** Saves the answer and relays it to the thread that asked. */
     readonly answer: (input: {
@@ -124,6 +126,7 @@ const make = Effect.gen(function* () {
         askerThreadId: input.askerThreadId,
         batchId,
         createdAt: now,
+        specVersion: input.specVersion ?? null,
       });
       yield* publish(projectId);
       return item;

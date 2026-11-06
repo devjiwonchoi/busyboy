@@ -237,6 +237,7 @@ beforeEach(() => {
               createdAt: NOW as never,
               supersededAt: null,
               answeredBy: null,
+              specVersion: null,
             },
           },
         ],

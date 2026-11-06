@@ -160,7 +160,13 @@ beforeEach(() => {
       {
         taskId: "task-7",
         version: 1,
-        spec: { background: "The list jumps.", goal: "", nonGoals: "", todos: [] },
+        spec: {
+          background: "The list jumps.",
+          goal: "",
+          successCriteria: "",
+          nonGoals: "",
+          todos: [],
+        },
         author: "user",
         authorThreadId: null,
         note: "Created",
@@ -172,6 +178,7 @@ beforeEach(() => {
         spec: {
           background: "The list jumps.",
           goal: "Keep the scroll position.",
+          successCriteria: "",
           nonGoals: "",
           todos: [todo("t1", "Add a journey test"), todo("t2", "Keep scrollTop")],
         },
@@ -299,14 +306,19 @@ describe("TaskPage", () => {
       "Run lint",
     ]);
 
-    // Edit the goal.
+    // Edit the end result and success criteria.
     await userEvent.click(button("Edit"));
-    const goal = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Goal"]')!;
+    const goal = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="End result"]')!;
     await userEvent.clear(goal);
     await userEvent.type(goal, "Dragging never jumps.");
+    await userEvent.type(
+      container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Success criteria"]')!,
+      "No jump.",
+    );
     await userEvent.click(button("Save"));
     await vi.waitFor(() => expect(state.updates).toHaveLength(3));
     expect(state.updates[2]?.spec.goal).toBe("Dragging never jumps.");
+    expect(state.updates[2]?.spec.successCriteria).toBe("No jump.");
     expect(state.updates[2]?.note).toBe("Edited by the user");
     await vi.waitFor(() => expect(page.textContent).toContain("Dragging never jumps."));
 

@@ -94,6 +94,7 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
       createdAt: ASKED_AT,
       supersededAt: null,
       answeredBy: null,
+      specVersion: null,
       ...overrides,
     },
   };
