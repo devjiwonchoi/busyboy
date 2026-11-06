@@ -45,6 +45,8 @@ export type ScheduleDraft = {
   readonly weekdays: ReadonlyArray<number>;
   readonly intervalMinutes: string;
   readonly signature: ScheduledTaskWebhookSignature | null;
+  /** The user accepted that anyone with the URL can start a run. Needed to save without a signature. */
+  readonly allowUnsigned: boolean;
 };
 
 export const DEFAULT_SCHEDULE: ScheduleDraft = {
@@ -53,6 +55,7 @@ export const DEFAULT_SCHEDULE: ScheduleDraft = {
   weekdays: [1, 2, 3, 4, 5],
   intervalMinutes: "15",
   signature: null,
+  allowUnsigned: false,
 };
 
 export function scheduleDraftForTask(task: Pick<ScheduledTask, "schedule">): ScheduleDraft {
@@ -76,6 +79,7 @@ export function scheduleDraftForTask(task: Pick<ScheduledTask, "schedule">): Sch
         ...DEFAULT_SCHEDULE,
         mode: "webhook",
         signature: task.schedule.signature,
+        allowUnsigned: task.schedule.allowUnsigned === true,
       };
   }
 }
@@ -93,6 +97,7 @@ export function scheduleFromDraft(draft: ScheduleDraft): ScheduledTaskUpsertSche
               encoding: draft.signature.encoding,
               prefix: draft.signature.prefix,
             },
+      ...(draft.signature === null && draft.allowUnsigned ? { allowUnsigned: true } : {}),
     };
   }
   if (draft.mode === "interval") {
@@ -146,6 +151,7 @@ function draftSignature(draft: ScheduledTaskDraft): string {
     draft.schedule.timeOfDay,
     [...draft.schedule.weekdays].sort((a, b) => a - b),
     draft.schedule.intervalMinutes,
+    draft.schedule.allowUnsigned,
     draft.workspace,
     draft.baseRef,
     draft.checkoutPath,

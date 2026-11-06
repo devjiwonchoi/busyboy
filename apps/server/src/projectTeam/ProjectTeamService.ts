@@ -6,6 +6,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type IsoDateTime,
   MessageId,
+  type OrchestrationV2ConversationMessage,
   type ModelSelection,
   type OrchestratorMcpDelegateTaskInput,
   type OrchestratorMcpDelegateTaskResult,
@@ -125,6 +126,63 @@ const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
 ];
 const DEFAULT_TASK_SEARCH_LIMIT = 20;
 const LEAD_MESSAGE_SUMMARY_MAX_CHARS = 300;
+export const PM_RELAY_NOT_USER_WORDS =
+  "Approval and decision cards need the user's own words. Quote exactly what the user wrote in this chat after the card appeared, or let them click the card.";
+/** Where a person types: messages the user wrote in the app, not ones an agent or the server sent. */
+const USER_TYPED_SOURCES: ReadonlySet<OrchestrationV2ConversationMessage["creationSource"]> =
+  new Set(["web", "mobile"]);
+
+const normalizeWords = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** `part` appears in `whole` with no letter or digit right before or after it. */
+const containsWords = (whole: string, part: string) => {
+  const isWordChar = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}]/u.test(char);
+  for (let at = whole.indexOf(part); at !== -1; at = whole.indexOf(part, at + 1)) {
+    if (!isWordChar(whole[at - 1]) && !isWordChar(whole[at + part.length])) return true;
+  }
+  return false;
+};
+
+/**
+ * True when `answer` is the user's own words: it equals, or after normalizing whitespace and
+ * case appears as whole words in, a message the user typed at or after `sinceMs`. Whole words
+ * keep a one-letter answer like "B" from matching any message that contains a "b".
+ */
+export function isUserChatAnswer(
+  answer: string,
+  messages: ReadonlyArray<OrchestrationV2ConversationMessage>,
+  sinceMs: number,
+): boolean {
+  const trimmed = answer.trim();
+  const normalized = normalizeWords(answer);
+  if (normalized.length === 0) return false;
+  return messages.some(
+    (message) =>
+      message.role === "user" &&
+      message.createdBy === "user" &&
+      USER_TYPED_SOURCES.has(message.creationSource) &&
+      DateTime.toEpochMillis(message.createdAt) >= sinceMs &&
+      (message.text.trim() === trimmed || containsWords(normalizeWords(message.text), normalized)),
+  );
+}
+
+/**
+ * Whether a restarted task may skip plan approval. The lead must have recorded a plan and the
+ * task's latest approval card must have been answered by the user's click (with an approve
+ * option) or by a PM relay the server checked against the user's chat. Cards answered before
+ * the answerer was recorded count when a plan is set, so tasks parked then still resume.
+ */
+export function isPlanApproved(
+  planSummary: string | null,
+  approval: ProjectAttentionItem | undefined,
+): boolean {
+  if (planSummary === null || approval === undefined || approval.answer === null) return false;
+  if (approval.answeredBy === "user") {
+    const choice = approval.answer.split("\n", 1)[0]?.trim();
+    return choice === PLAN_APPROVAL_START || choice === PLAN_APPROVAL_ONLY;
+  }
+  return true;
+}
 /** Stages whose task lead has work to show; stalled tasks come from these. */
 const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
   "planning",
@@ -806,8 +864,11 @@ const make = Effect.gen(function* () {
             task.number,
           );
           const spec = yield* latestSpec(task);
-          // A task parked after its plan was approved resumes straight into the work.
-          const approved = task.planSummary !== null;
+          // A task parked after its plan was approved resumes straight into the work. The
+          // approval must come from the card, not from planSummary alone, which any agent
+          // can write with task_update.
+          const approval = yield* repository.getLatestApprovalItem(task.id);
+          const approved = isPlanApproved(task.planSummary, Option.getOrUndefined(approval));
           // A restart must not reuse the first lead's request id, or it gets that lead back.
           const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
           const lead = yield* delegate({
@@ -1349,10 +1410,23 @@ const make = Effect.gen(function* () {
           role.projectId,
         );
       }
+      // Approvals and decisions are the user's call: the PM may only relay words the user
+      // typed in its chat after the card appeared. Blockers carry facts and need no check.
+      // A closed card skips the check so the router reports why it cannot be answered.
+      const open = item.value.answeredAt === null && item.value.supersededAt === null;
+      if (open && item.value.kind !== "blocker") {
+        const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
+          messageRoles: ["user"],
+        });
+        if (!isUserChatAnswer(input.answer, messages, isoMillis(item.value.createdAt))) {
+          return yield* teamError(PM_RELAY_NOT_USER_WORDS, role.projectId);
+        }
+      }
       const answered = yield* router.answer({
         item: item.value,
         answer: input.answer,
         senderThreadId: callerThreadId,
+        answeredBy: "pm",
       });
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question."));
@@ -1540,6 +1614,7 @@ const make = Effect.gen(function* () {
         item: item.value,
         answer: input.answer,
         senderThreadId: manager.threadId,
+        answeredBy: "user",
       });
       const task = yield* requireTask(answered.taskId, answered.projectId);
       yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);

@@ -190,10 +190,28 @@ describe("webhook scheduled tasks", () => {
   it("drops the signature when it is switched off and offers GitHub's settings", () => {
     const draft = taskToDraft({ ...webhookTask, schedule: { type: "webhook", signature: null } });
     expect(draft.signatureEnabled).toBe(false);
+    expect(draft.allowUnsigned).toBe(false);
     expect(draft.signatureHeader).toBe("x-hub-signature-256");
     expect(scheduleFromDraft(draft)).toEqual({
       type: "webhook",
       signature: null,
+    });
+  });
+
+  it("sends allowUnsigned only for an unsigned webhook the user opted out for", () => {
+    const draft = taskToDraft({
+      ...webhookTask,
+      schedule: { type: "webhook", signature: null, allowUnsigned: true },
+    });
+    expect(draft.allowUnsigned).toBe(true);
+    expect(scheduleFromDraft(draft)).toEqual({
+      type: "webhook",
+      signature: null,
+      allowUnsigned: true,
+    });
+    expect(scheduleFromDraft({ ...draft, signatureEnabled: true })).toEqual({
+      type: "webhook",
+      signature: { header: "x-hub-signature-256", encoding: "hex", prefix: "sha256=" },
     });
   });
 });

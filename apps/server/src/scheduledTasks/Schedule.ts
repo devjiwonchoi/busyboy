@@ -1,7 +1,19 @@
-import { MIN_SCHEDULED_TASK_INTERVAL_MS, type ScheduledTaskSchedule } from "@t3tools/contracts";
+import {
+  MIN_SCHEDULED_TASK_INTERVAL_MS,
+  type RuntimeMode,
+  type ScheduledTaskSchedule,
+} from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 const MINUTE_MS = 60_000;
+
+/**
+ * Webhook runs act on text from whoever calls the URL, so they never get
+ * full access. Narrower modes are kept as they are.
+ */
+export function capWebhookRuntimeMode(mode: RuntimeMode): RuntimeMode {
+  return mode === "full-access" ? "auto" : mode;
+}
 
 export function parseTimeOfDay(value: string): { hour: number; minute: number } | null {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value.trim());

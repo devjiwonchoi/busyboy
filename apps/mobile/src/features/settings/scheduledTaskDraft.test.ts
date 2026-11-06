@@ -33,9 +33,22 @@ describe("scheduleDraftForTask", () => {
   it("round-trips a webhook schedule without a signature", () => {
     const draft = scheduleDraftForTask({ schedule: { type: "webhook", signature: null } });
     expect(draft.mode).toBe("webhook");
+    expect(draft.allowUnsigned).toBe(false);
     expect(scheduleFromDraft(draft)).toEqual({
       type: "webhook",
       signature: null,
+    });
+  });
+
+  it("sends allowUnsigned for an unsigned webhook the user opted out for", () => {
+    const draft = scheduleDraftForTask({
+      schedule: { type: "webhook", signature: null, allowUnsigned: true },
+    });
+    expect(draft.allowUnsigned).toBe(true);
+    expect(scheduleFromDraft(draft)).toEqual({
+      type: "webhook",
+      signature: null,
+      allowUnsigned: true,
     });
   });
 

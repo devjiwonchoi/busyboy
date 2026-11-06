@@ -44,13 +44,16 @@ async function answerDecision(input: ProjectTeamAnswerDecisionInput) {
   server.answers.push(input);
   const current = server.summary!;
   const card = current.decisionCards.find((entry) => entry.item.id === input.attentionItemId)!;
-  server.leadMessages.push(`[User answer via BusyBoy PM] ${card.item.question} → ${input.answer}`);
+  server.leadMessages.push(`[User answer via BusyBoy] ${card.item.question} → ${input.answer}`);
   publish({
     ...current,
     openCount: current.openCount - 1,
     decisionCards: current.decisionCards.map((entry) =>
       entry === card
-        ? { ...entry, item: { ...entry.item, answer: input.answer, answeredAt: ASKED_AT } }
+        ? {
+            ...entry,
+            item: { ...entry.item, answer: input.answer, answeredAt: ASKED_AT, answeredBy: "user" },
+          }
         : entry,
     ),
   });
@@ -90,6 +93,7 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
       batchId: ProjectAttentionBatchId.make("batch-1"),
       createdAt: ASKED_AT,
       supersededAt: null,
+      answeredBy: null,
       ...overrides,
     },
   };
@@ -169,7 +173,7 @@ it("shows a task lead's approval, and Approve goes straight to the lead", async 
     answer: "Approve",
   });
   expect(server.leadMessages).toEqual([
-    "[User answer via BusyBoy PM] Plan: move the redirect into the auth guard and add a regression test. → Approve",
+    "[User answer via BusyBoy] Plan: move the redirect into the auth guard and add a regression test. → Approve",
   ]);
 
   // The card stays where it was, answered, with the pick checked.
@@ -303,7 +307,7 @@ it("opens a long plan full screen, and a pick with a note made there reaches the
   await vi.waitFor(() => expect(server.answers).toHaveLength(1));
   expect(server.answers[0]?.answer).toBe("Request changes\nNote: Split step 12 into two");
   expect(server.leadMessages).toEqual([
-    `[User answer via BusyBoy PM] ${longPlan} → Request changes\nNote: Split step 12 into two`,
+    `[User answer via BusyBoy] ${longPlan} → Request changes\nNote: Split step 12 into two`,
   ]);
   // The answered card replaces the open one, and the full-screen view closes with it.
   await vi.waitFor(() => expect(cardElement("answered")).not.toBeNull());

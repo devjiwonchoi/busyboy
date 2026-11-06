@@ -187,10 +187,12 @@ describe("ProjectAttentionItem", () => {
       batchId: "batch-1",
       createdAt: "2026-11-04T00:00:00.000Z",
     };
-    // Items stored before cards could be replaced decode as never replaced.
+    // Items stored before cards could be replaced, or before the answerer was recorded,
+    // decode as never replaced and with no answerer.
     expect(Schema.decodeUnknownSync(ProjectAttentionItem)(item)).toEqual({
       ...item,
       supersededAt: null,
+      answeredBy: null,
     });
   });
 });

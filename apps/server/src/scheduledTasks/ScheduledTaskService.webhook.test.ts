@@ -10,6 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Metric from "effect/Metric";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
@@ -28,7 +29,7 @@ const webhookTaskInput = (overrides: Record<string, unknown> = {}) =>
     title: "Review PRs",
     prompt: "Review this PR: {{body.pull_request.url}}",
     enabled: true,
-    schedule: { type: "webhook" },
+    schedule: { type: "webhook", allowUnsigned: true },
     projectId: "project-webhook",
     workspaceStrategy: { type: "root" },
     modelSelection: { instanceId: "codex", model: "gpt-5.4" },
@@ -61,7 +62,7 @@ const withService = <A, E>(
     readonly service: ScheduledTaskService.ScheduledTaskService["Service"];
     readonly launches: Queue.Queue<LaunchInput>;
     readonly secretsByRef: Map<string, string>;
-  }) => Effect.Effect<A, E, never>,
+  }) => Effect.Effect<A, E, SqlClient.SqlClient>,
   options: { readonly gate?: Deferred.Deferred<void> } = {},
 ) =>
   Effect.gen(function* () {
@@ -664,6 +665,88 @@ it.effect("counts each handled request by what happened to it", () =>
       assert.equal((yield* deliveriesCounted("accepted")) - before.accepted, 1);
       assert.equal((yield* deliveriesCounted("rejected_signature")) - before.rejected, 1);
       assert.equal((yield* deliveriesCounted("not_found")) - before.notFound, 1);
+    }),
+  ),
+);
+
+const signedSchedule = {
+  type: "webhook",
+  signature: {
+    header: "x-hub-signature-256",
+    encoding: "hex",
+    prefix: "sha256=",
+    secret: "github-secret",
+  },
+};
+
+it.effect("saving an unsigned webhook needs an explicit allowUnsigned", () =>
+  withService(({ service }) =>
+    Effect.gen(function* () {
+      for (const schedule of [
+        { type: "webhook" },
+        { type: "webhook", signature: null },
+        { type: "webhook", allowUnsigned: false },
+      ]) {
+        const failure = yield* service
+          .upsert(yield* webhookTaskInput({ schedule }))
+          .pipe(Effect.flip);
+        assert.include(failure.message, "needs a signature check");
+      }
+
+      const { task } = yield* service.upsert(yield* webhookTaskInput());
+      assert.deepEqual(task.schedule, { type: "webhook", signature: null, allowUnsigned: true });
+
+      // Editing goes through the same check.
+      const edit = yield* service
+        .upsert(yield* webhookTaskInput({ title: "Edited", schedule: { type: "webhook" } }))
+        .pipe(Effect.flip);
+      assert.include(edit.message, "needs a signature check");
+
+      const signed = yield* service.upsert(yield* webhookTaskInput({ schedule: signedSchedule }));
+      assert.deepEqual(signed.task.schedule, {
+        type: "webhook",
+        signature: { header: "x-hub-signature-256", encoding: "hex", prefix: "sha256=" },
+      });
+    }),
+  ),
+);
+
+it.effect("an unsigned webhook saved before the opt-out still runs", () =>
+  withService(({ service, launches }) =>
+    Effect.gen(function* () {
+      const { task } = yield* service.upsert(yield* webhookTaskInput());
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        UPDATE scheduled_tasks
+        SET schedule_json = ${JSON.stringify({ type: "webhook", signature: null })}
+        WHERE task_id = ${task.id}
+      `;
+      const listed = (yield* service.list()).tasks.find((candidate) => candidate.id === task.id);
+      assert.deepEqual(listed?.schedule, { type: "webhook", signature: null });
+      assert.equal((yield* service.triggerWebhook(requestFor(task)))._tag, "accepted");
+      yield* Queue.take(launches);
+    }),
+  ),
+);
+
+it.effect("webhook tasks are capped at auto mode; narrower modes and timers are kept", () =>
+  withService(({ service }) =>
+    Effect.gen(function* () {
+      const full = yield* service.upsert(yield* webhookTaskInput({ schedule: signedSchedule }));
+      assert.equal(full.task.runtimeMode, "auto");
+
+      const narrow = yield* service.upsert(
+        yield* webhookTaskInput({ id: "scheduled-task:narrow", runtimeMode: "approval-required" }),
+      );
+      assert.equal(narrow.task.runtimeMode, "approval-required");
+
+      const timer = yield* service.upsert(
+        yield* webhookTaskInput({
+          id: "scheduled-task:timer",
+          schedule: { type: "interval", everyMs: 3_600_000 },
+        }),
+      );
+      assert.equal(timer.task.runtimeMode, "full-access");
     }),
   ),
 );
