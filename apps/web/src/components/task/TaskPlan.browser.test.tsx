@@ -101,12 +101,6 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
   };
 });
 
-vi.mock(import("../ChatView"), () => ({
-  default: ((props: { threadId: string }) => (
-    <div data-testid="chat-stub">chat {props.threadId}</div>
-  )) as never,
-}));
-
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
   Link: (({
@@ -124,7 +118,7 @@ vi.mock(import("@tanstack/react-router"), async (original) => ({
   )) as never,
 }));
 
-import { TaskPage } from "./TaskPage";
+import { TaskPlan } from "./TaskPlan";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -206,7 +200,7 @@ function render() {
   return act(async () =>
     root.render(
       <div style={{ display: "flex", height: 800, width: 1200 }}>
-        <TaskPage
+        <TaskPlan
           environmentId={"env-1" as never}
           projectId={"project-1" as never}
           taskId={"task-7" as never}
@@ -223,7 +217,7 @@ const button = (name: string) =>
 
 const header = () => container.querySelector<HTMLElement>('[data-testid="task-status"]')!;
 
-describe("TaskPage status", () => {
+describe("TaskPlan status", () => {
   it("shows the task's status, and Ask question once the task waits on the user", async () => {
     await render();
     expect(header().dataset.status).toBe("planning");
@@ -264,6 +258,8 @@ describe("TaskPage status", () => {
     };
     await render();
     expect(header().textContent).toBe("Ready · PR #81");
+    const link = [...container.querySelectorAll("a")].find((a) => a.textContent === "Pull request");
+    expect(link?.getAttribute("href")).toBe("https://github.com/acme/busyboy/pull/81");
   });
 
   it("shows a finished task as Done and archived, at phone width too", async () => {
@@ -276,15 +272,13 @@ describe("TaskPage status", () => {
   });
 });
 
-describe("TaskPage", () => {
+describe("TaskPlan", () => {
   it("shapes a task's spec, browses versions, restores one and splits a todo", async () => {
     await render();
-    const page = container.querySelector('[data-testid="task-page"]')!;
+    const page = container.querySelector('[data-testid="task-plan"]')!;
     expect(page.textContent).toContain("BB-7");
     expect(page.textContent).toContain("Fix drag scroll");
     expect(page.textContent).toContain("Keep the scroll position.");
-    // The planner's session is open on the right.
-    expect(container.querySelector('[data-testid="chat-stub"]')?.textContent).toBe("chat lead-1");
     // v2 added the goal and the todos, so they are marked as changed.
     expect(container.querySelectorAll("[data-changed]").length).toBe(3);
 
@@ -341,7 +335,6 @@ describe("TaskPage", () => {
     expect(state.detail.versions.at(-1)?.note).toBe("Restored v1");
 
     // Back to a version with todos via History, restore it, then split a todo.
-    await userEvent.click(button("History"));
     expect(container.querySelector('[aria-label="Spec history"]')?.textContent).toContain(
       "Restored v1",
     );

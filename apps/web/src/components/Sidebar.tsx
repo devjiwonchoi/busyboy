@@ -2340,13 +2340,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     if (isMobile) {
       setOpenMobile(false);
     }
-    // A task's lead row stands for the task: open its page, with the lead's chat beside the spec.
-    const leadTask = taskByLeadKey.get(scopedThreadKey(threadRef));
-    if (leadTask !== undefined) {
-      return router.navigate(
-        taskRouteParams(leadTask.environmentId, leadTask.projectId, leadTask.taskId),
-      );
-    }
+    // A task lead's chat is the task: it opens like any thread, with the plan beside it.
     return router.navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(threadRef),
