@@ -3,7 +3,7 @@ import { useOpenPullRequest } from "../../native/useOpenPullRequest";
 import { ThreadMarkdownVideo, ThreadMediaVisibleContext } from "./ThreadMarkdownVideo";
 import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
 import { enrichedContextLinkPresentation } from "../../lib/enrichedLinkPresentation";
-import { ThreadContextDivider } from "./thread-context-divider";
+import { ThreadCompactionMarker } from "./thread-context-divider";
 import { ThreadHandoffDivider, ThreadHandoffRow } from "./thread-handoff-row";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
@@ -175,6 +175,7 @@ import {
   failedFeedRunIds,
   deriveThreadFeedPresentation,
   threadFeedRunIsUnsettled,
+  contextCompactionMarkerLabel,
   isContextCompactionActivityGroup,
   isContextHandoffActivityGroup,
   isSecretRequestActivityGroup,
@@ -1112,15 +1113,16 @@ function renderFeedEntry(
   }
 
   if (entry.type === "activity-group" && isContextCompactionActivityGroup(entry)) {
-    const label = entry.activities[0]!.summary;
+    const item = entry.activities[0]!.projectedItem.item;
+    if (item.type !== "compaction") return null;
     const active =
       props.unsettledTurnId !== null &&
       entry.runId === props.unsettledTurnId &&
-      entry.activities[0]!.projectedItem.item.status === "running";
+      item.status === "running";
     return (
-      <ThreadContextDivider
-        label={label}
-        icon="arrow.down.right.and.arrow.up.left"
+      <ThreadCompactionMarker
+        id={entry.id}
+        label={contextCompactionMarkerLabel(item)}
         iconColor={iconSubtleColor}
         active={active}
       />

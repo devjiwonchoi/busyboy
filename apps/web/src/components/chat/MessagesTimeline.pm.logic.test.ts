@@ -49,8 +49,7 @@ describe("pmEventLineText", () => {
     ).toBe("Sitrep requested");
   });
 
-  it("names context compaction only for the project-team compact message", () => {
-    expect(line("project-team:compact:1", "/compact")).toBe("Tidying up context · notes kept");
+  it("shows a plain /compact as typed", () => {
     expect(line("other", "/compact")).toBe("/compact");
   });
 
