@@ -8,6 +8,7 @@ import {
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { Link } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
+import { useId } from "react";
 
 import { isElectron } from "~/env";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -38,6 +39,7 @@ export function AllProjectsPage() {
     false,
     Schema.Boolean,
   );
+  const showDoneSwitchId = useId();
   const projects = useProjects();
   const sections = buildAllProjectsSections(entries, showDone);
   const doneCount = sections.reduce((total, section) => total + section.doneCount, 0);
@@ -47,10 +49,19 @@ export function AllProjectsPage() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <h1 className="min-w-0 flex-1 truncate font-medium text-sm">All projects</h1>
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-muted-foreground text-xs">
-            Show done ({doneCount})
-            <Switch size="sm" checked={showDone} onCheckedChange={(next) => setShowDone(next)} />
-          </label>
+          {/* A sibling label, not a wrapper: a wrapping label can re-send the
+              switch's click and flip it straight back. */}
+          <div className="flex shrink-0 items-center gap-2 text-muted-foreground text-xs">
+            <label htmlFor={showDoneSwitchId} className="cursor-pointer">
+              Show done ({doneCount})
+            </label>
+            <Switch
+              id={showDoneSwitchId}
+              size="sm"
+              checked={showDone}
+              onCheckedChange={(next) => setShowDone(next)}
+            />
+          </div>
         </WorkspacePageHeader>
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="wide" className="gap-8 px-3 sm:px-6">

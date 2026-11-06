@@ -1743,7 +1743,9 @@ code {
 .drag-region input,
 .drag-region textarea,
 .drag-region select,
-.drag-region a {
+.drag-region a,
+.drag-region label,
+.drag-region [role="switch"] {
   -webkit-app-region: no-drag;
 }
 

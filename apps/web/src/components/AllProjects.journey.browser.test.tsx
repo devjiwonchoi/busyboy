@@ -285,9 +285,7 @@ const row = (id: string) =>
 const sectionTitles = () =>
   [...container.querySelectorAll("[data-all-projects-section] h2")].map((h) => h.textContent);
 const showDoneSwitch = () =>
-  [...container.querySelectorAll<HTMLElement>("label")]
-    .find((label) => label.textContent?.startsWith("Show done"))!
-    .querySelector<HTMLElement>('[role="switch"]')!;
+  page.getByRole("switch", { name: /Show done/ }).element() as HTMLElement;
 
 async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
   await app.render();
