@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { ProjectId, ProjectMemoryEntryId } from "@t3tools/contracts";
 
 import {
   defaultPersonaEmoji,
@@ -47,5 +48,23 @@ describe("persona defaults", () => {
       voice: "dry",
     });
     expect(text).toContain(`Your voice: ${VOICE_PRESETS.dry}`);
+  });
+
+  it("ends with the project memory when it is given, so it survives compaction", () => {
+    const persona = { name: "Remy", avatar: { kind: "emoji", emoji: "🦊" }, voice: "dry" } as const;
+    const text = personaInstructions(persona, [
+      {
+        id: ProjectMemoryEntryId.make("memory-decisions"),
+        projectId: ProjectId.make("project-a"),
+        topic: "decisions",
+        content: "2026-11-05 Squash-merge only.",
+        updatedAt: "2026-11-05T00:00:00.000Z",
+      },
+    ]);
+    expect(text).toMatch(
+      /### Project memory\n\nThe project's memory when this session started\..*\n\n### decisions\n2026-11-05 Squash-merge only\.\n$/,
+    );
+    expect(personaInstructions(persona)).not.toContain("### Project memory");
+    expect(personaInstructions(persona, [])).toContain("No project memory yet.");
   });
 });

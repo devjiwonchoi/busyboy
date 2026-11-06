@@ -401,15 +401,23 @@ export const layerWithOptions = (
       const teamInstructionsFor = Effect.fn("ProviderSessionManagerV2.teamInstructionsFor")(
         function* (threadId: ThreadId) {
           if (Option.isNone(projectTeamRepository)) return Option.some(undefined);
-          return yield* projectTeamRepository.value.getManagerByThreadId(threadId).pipe(
-            Effect.map((manager) =>
-              Option.some(
-                Option.isSome(manager)
-                  ? personaInstructions(
-                      resolvePersona(manager.value.projectId, manager.value.settings),
-                    )
-                  : undefined,
-              ),
+          const repository = projectTeamRepository.value;
+          return yield* repository.getManagerByThreadId(threadId).pipe(
+            Effect.flatMap((manager) =>
+              Option.isNone(manager)
+                ? Effect.succeed(Option.some<string | undefined>(undefined))
+                : repository
+                    .listMemory(manager.value.projectId)
+                    .pipe(
+                      Effect.map((memory) =>
+                        Option.some<string | undefined>(
+                          personaInstructions(
+                            resolvePersona(manager.value.projectId, manager.value.settings),
+                            memory,
+                          ),
+                        ),
+                      ),
+                    ),
             ),
             Effect.catch((cause) =>
               Effect.logWarning("Could not read the thread's team role.", {

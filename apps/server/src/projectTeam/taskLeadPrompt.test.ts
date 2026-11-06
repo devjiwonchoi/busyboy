@@ -8,7 +8,8 @@ import {
   type ProjectTaskSpecVersion,
 } from "@t3tools/contracts";
 
-import { buildTaskLeadPrompt, CORE_MEMORY_PROMPT_LIMIT } from "./taskLeadPrompt.ts";
+import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
+import { buildTaskLeadPrompt } from "./taskLeadPrompt.ts";
 
 const projectId = ProjectId.make("project-1");
 const at = "2026-11-04T00:00:00.000Z";
@@ -112,17 +113,18 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("The plan above is already written, so start here");
   });
 
-  it("lists only memory topics when the memory is too long", () => {
+  it("keeps decisions whole and indexes other topics when the memory is too long", () => {
     const prompt = buildTaskLeadPrompt({
       ...base,
       memory: [
-        memory("architecture", "a".repeat(CORE_MEMORY_PROMPT_LIMIT)),
-        memory("testing", "Run the changed tests."),
+        memory("architecture", `Layered services.\n${"a".repeat(MEMORY_PROMPT_BUDGET)}`),
+        memory("decisions", "Squash-merge only."),
       ],
       otherTasks: [],
     });
     expect(prompt).not.toContain("a".repeat(100));
-    expect(prompt).toContain("- architecture\n- testing");
+    expect(prompt).toContain("### decisions\nSquash-merge only.");
+    expect(prompt).toContain("- architecture (2026-11-04): Layered services.");
     expect(prompt).toContain("No other tasks are in progress.");
   });
 });

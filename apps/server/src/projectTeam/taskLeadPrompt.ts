@@ -5,8 +5,7 @@ import {
   type ProjectTaskStage,
 } from "@t3tools/contracts";
 
-/** Core memory goes in whole up to this size; past it the prompt lists topics only. */
-export const CORE_MEMORY_PROMPT_LIMIT = 8_000;
+import { memoryPromptSection } from "./memoryPrompt.ts";
 
 export function nextStepHint(stage: ProjectTaskStage): string {
   switch (stage) {
@@ -23,16 +22,6 @@ export function nextStepHint(stage: ProjectTaskStage): string {
     case "cancelled":
       return "Nothing; the task is finished.";
   }
-}
-
-function memorySection(memory: ReadonlyArray<ProjectMemoryEntry>): string {
-  if (memory.length === 0) return "No project memory yet.";
-  const full = memory.map((entry) => `### ${entry.topic}\n${entry.content}`).join("\n\n");
-  if (full.length <= CORE_MEMORY_PROMPT_LIMIT) return full;
-  return [
-    "The project memory is too long to include. Topics (read them with memory_list):",
-    ...memory.map((entry) => `- ${entry.topic}`),
-  ].join("\n");
 }
 
 function otherTasksSection(
@@ -88,7 +77,7 @@ export function buildTaskLeadPrompt(input: {
 ${specSection(input.spec)}
 
 ## Project memory
-${memorySection(input.memory)}
+${memoryPromptSection(input.memory)}
 
 ## Other tasks in progress
 ${otherTasksSection(task, input.otherTasks)}
