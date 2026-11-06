@@ -76,7 +76,34 @@ const cases: ReadonlyArray<{
     status: "ask_question",
   },
   { name: "blocked alone", task: { stage: "blocked", lastOutcome: null }, status: "fatal" },
-  { name: "stalled", task: { stage: "running", lastOutcome: "stalled" }, status: "fatal" },
+  {
+    name: "a quiet turn is still In Progress",
+    task: { stage: "running", lastOutcome: "stalled" },
+    status: "in_progress",
+  },
+  {
+    name: "a quiet planning turn is still Planning",
+    task: { stage: "planning", lastOutcome: "stalled" },
+    status: "planning",
+  },
+  {
+    name: "a lead waiting on its subagent is In Progress",
+    task: { stage: "running", lastOutcome: "stalled" },
+    signals: { leadRunning: true },
+    status: "in_progress",
+  },
+  {
+    name: "a stall escalated to a blocker card is Fatal",
+    task: { stage: "running", lastOutcome: "stalled" },
+    signals: { openQuestion: true, openBlocker: true },
+    status: "fatal",
+  },
+  {
+    name: "a working lead turns its open blocker back into a question",
+    task: { stage: "running", lastOutcome: "stalled" },
+    signals: { openQuestion: true, openBlocker: true, leadRunning: true },
+    status: "ask_question",
+  },
   {
     name: "stalled but working again",
     task: { stage: "running", lastOutcome: "stalled" },

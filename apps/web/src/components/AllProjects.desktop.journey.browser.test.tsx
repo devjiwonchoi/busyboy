@@ -69,6 +69,7 @@ function task(
     prUrl: null,
     lastOutcome: null,
     openQuestion: false,
+    openBlocker: false,
     updatedAt: "2026-11-05T09:00:00.000Z",
     ...overrides,
   };

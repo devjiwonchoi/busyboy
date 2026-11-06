@@ -14,16 +14,19 @@ import { describeTaskStatus, type SidebarRowStatus } from "../sidebar/SidebarRow
 type TaskStatusInput = Pick<
   ProjectTaskReference,
   "stage" | "prUrl" | "lastOutcome" | "openQuestion"
->;
+> &
+  Partial<Pick<ProjectTaskReference, "openBlocker">>;
 
 /** A task's status signals from its card state and its lead thread's live state. */
 export function taskStatusSignals(
-  task: Pick<ProjectTaskReference, "openQuestion">,
+  task: Pick<ProjectTaskReference, "openQuestion"> &
+    Partial<Pick<ProjectTaskReference, "openBlocker">>,
   leadStatus: SidebarThreadStatus | null,
 ): ProjectTaskStatusSignals {
   return {
     // A tool approval or input request in the lead's thread waits on the user too.
     openQuestion: task.openQuestion || leadStatus === "approval" || leadStatus === "input",
+    openBlocker: task.openBlocker === true,
     leadRunning: leadStatus === "working",
     leadFailed: leadStatus === "failed",
   };
@@ -39,7 +42,13 @@ export function resolveLiveTaskStatus(
   leadStatus: SidebarThreadStatus | null,
 ): LiveTaskStatus {
   const status = resolveProjectTaskStatus(task, taskStatusSignals(task, leadStatus));
-  return { ...describeTaskStatus(status, task), status };
+  const described = describeTaskStatus(status, task);
+  // A quiet turn is normal work, not an alarm; the hover label just notes the lead is idle.
+  const idle =
+    task.lastOutcome === "stalled" &&
+    leadStatus !== "working" &&
+    (status === "in_progress" || status === "planning");
+  return { ...described, label: idle ? `${described.label} · idle` : described.label, status };
 }
 
 /** A task's user-facing status, kept live by its lead thread's state. */

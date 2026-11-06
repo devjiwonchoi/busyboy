@@ -116,6 +116,7 @@ function TaskPlanBody(props: {
   const status = useLiveTaskStatus(environmentId, {
     ...task,
     openQuestion: detail.openAttention.length > 0,
+    openBlocker: detail.openAttention.some((item) => item.kind === "blocker"),
   });
   const archived = task.stage === "done" || task.stage === "cancelled";
   const ref = { projectId: task.projectId, taskId: task.id };

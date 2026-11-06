@@ -151,6 +151,7 @@ const TASKS: ReadonlyArray<{
   prUrl?: string;
   lastOutcome?: ProjectTaskReference["lastOutcome"];
   openQuestion?: boolean;
+  openBlocker?: boolean;
   lead?: LeadRuntime;
 }> = [
   { number: 1, stage: "inbox" },
@@ -170,6 +171,8 @@ const TASKS: ReadonlyArray<{
   { number: 10, stage: "cancelled" },
   { number: 11, stage: "running", lastOutcome: "stalled" },
   { number: 12, stage: "blocked" },
+  // The PM's nudges ran out and raised a blocker card.
+  { number: 13, stage: "running", lastOutcome: "stalled", openQuestion: true, openBlocker: true },
 ];
 
 function leadThread(task: (typeof TASKS)[number]): EnvironmentThreadShell {
@@ -217,6 +220,7 @@ beforeEach(() => {
           prUrl: task.prUrl ?? null,
           lastOutcome: task.lastOutcome ?? null,
           openQuestion: task.openQuestion ?? false,
+          openBlocker: task.openBlocker ?? false,
           updatedAt: null,
         })),
         // Task 7 asked the user a question.
@@ -315,8 +319,10 @@ const EXPECTED: Record<number, { icon: string; label: string }> = {
   8: { icon: "task-fatal", label: "Fatal" },
   9: { icon: "task-done", label: "Done" },
   10: { icon: "task-done", label: "Done · cancelled" },
-  11: { icon: "task-fatal", label: "Fatal" },
+  // A quiet turn is normal work: In Progress, with the idle hint in the label.
+  11: { icon: "task-in_progress", label: "In Progress · idle" },
   12: { icon: "task-fatal", label: "Fatal" },
+  13: { icon: "task-fatal", label: "Fatal" },
 };
 
 async function expectEveryStatus() {
