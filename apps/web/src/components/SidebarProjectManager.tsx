@@ -61,14 +61,15 @@ export function SidebarSitrepButton(props: {
             aria-label="Sitrep"
             disabled={props.summary.sitrepInProgress}
             onClick={handleClick}
-            className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md bg-transparent px-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-64"
+            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-default disabled:opacity-64"
           />
         }
       >
-        <RefreshCwIcon aria-hidden className="size-3" />
-        Sitrep
+        <RefreshCwIcon aria-hidden className="size-3.5" />
       </TooltipTrigger>
-      <TooltipPopup side="top">Sitrep now</TooltipPopup>
+      <TooltipPopup side="top">
+        {props.summary.sitrepInProgress ? "Sitrep in progress" : "Sitrep now"}
+      </TooltipPopup>
     </Tooltip>
   );
 }
@@ -154,13 +155,6 @@ export function SidebarProjectManagerHeading(props: {
             hoverOnlyClassName,
           )}
         >
-          {canOperate ? (
-            <SidebarSitrepButton
-              threadRef={pmThreadRef}
-              summary={summary}
-              onThreadActivate={props.onOpenThread}
-            />
-          ) : null}
           {canOperate && props.onNewTask ? (
             <Tooltip>
               <TooltipTrigger
@@ -189,6 +183,14 @@ export function SidebarProjectManagerHeading(props: {
             </button>
           ) : null}
         </span>
+        {/* Always visible: touch screens cannot hover to reveal it. */}
+        {canOperate ? (
+          <SidebarSitrepButton
+            threadRef={pmThreadRef}
+            summary={summary}
+            onThreadActivate={props.onOpenThread}
+          />
+        ) : null}
       </div>
     </div>
   );

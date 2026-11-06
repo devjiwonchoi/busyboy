@@ -282,6 +282,7 @@ import {
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { SitrepIntervalPicker, SitrepSettingsContent } from "./SitrepIntervalPicker";
+import { CollapsedComposerAction } from "./CollapsedComposerAction";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
@@ -2956,6 +2957,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     : props.resumeCompactionTokens !== null && !props.keepFullHistory
       ? "Open composer to compact and send"
       : "Send message";
+  // Sitrep can take the collapsed mobile row's arrow in the PM chat when
+  // nothing is running, resumable or being answered.
+  const collapsedComposerSitrep =
+    projectManager !== null &&
+    !canInterrupt &&
+    !showResumeAction &&
+    !isEditingQueuedMessage &&
+    activePendingProgress === null
+      ? {
+          inProgress: projectManager.sitrepInProgress,
+          disabled: !canOperateThread || environmentUnavailable !== null,
+          onRequest: requestSitrepNow,
+        }
+      : null;
   const showMobilePendingAnswerActions =
     isMobileViewport && !isComposerCollapsedMobile && pendingPrimaryAction !== null;
 
@@ -6700,35 +6715,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         : "Ask anything...")}
                 </button>
                 {collapsedComposerImagePreviews}
-                <button
-                  type="button"
-                  data-chat-composer-transition-actions="true"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-message-action text-message-action-foreground hover:bg-message-action-hover disabled:opacity-64"
+                <CollapsedComposerAction
+                  sitrep={collapsedComposerSitrep}
+                  hasSendableContent={composerSendState.hasSendableContent}
+                  showResume={showResumeAction}
                   disabled={collapsedComposerPrimaryActionDisabled}
-                  aria-label={collapsedComposerPrimaryActionLabel}
-                  onPointerDown={(event) => event.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation();
+                  label={collapsedComposerPrimaryActionLabel}
+                  onPrimary={() => {
                     if (showResumeAction) onResume();
                     else if (props.resumeCompactionTokens !== null && !props.keepFullHistory)
                       expandMobileComposer();
                     else submitComposer();
                   }}
-                >
-                  {showResumeAction ? (
-                    <PlayIcon className="size-4 fill-current" aria-hidden="true" />
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path
-                        d="M8 3L8 13M8 3L4 7M8 3L12 7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </button>
+                />
               </div>
             ) : null}
 
