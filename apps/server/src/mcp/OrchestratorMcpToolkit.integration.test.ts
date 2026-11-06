@@ -1649,6 +1649,8 @@ describe("orchestrator MCP toolkit", () => {
             const delegatedSource = yield* orchestrator.getThreadProjection(
               delegated.childThreadId,
             );
+            // The parent runs in full access; a child started without a mode gets the auto default.
+            expect(delegatedSource.thread.runtimeMode).toBe("auto");
             expect(delegatedSource.messages[0]).toMatchObject({
               senderThreadId: parentThreadId,
             });

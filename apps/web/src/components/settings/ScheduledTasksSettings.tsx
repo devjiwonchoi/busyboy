@@ -28,6 +28,7 @@ import type {
 } from "@t3tools/contracts";
 import { DEFAULT_WEBHOOK_PROMPT } from "@t3tools/client-runtime/scheduled-task-webhook";
 import {
+  DEFAULT_RUNTIME_MODE,
   MIN_SCHEDULED_TASK_INTERVAL_MS,
   ProviderInstanceId,
   resolveEnvironmentMachineKind,
@@ -136,7 +137,7 @@ const EMPTY_DRAFT: DraftState = {
   startFromOrigin: true,
   existingWorktreePath: "",
   modelKey: "",
-  runtimeMode: "full-access",
+  runtimeMode: DEFAULT_RUNTIME_MODE,
   interactionMode: "default",
   baseModelSelection: null,
   signatureEnabled: false,

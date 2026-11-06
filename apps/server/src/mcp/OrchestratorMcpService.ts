@@ -60,6 +60,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -577,13 +578,29 @@ function interactionModeRank(mode: ProviderInteractionMode): number {
   return mode === "plan" ? 0 : 1;
 }
 
+/** The narrower of two runtime modes. */
+export function narrowerRuntimeMode(left: RuntimeMode, right: RuntimeMode): RuntimeMode {
+  return runtimeModeRank(left) <= runtimeModeRank(right) ? left : right;
+}
+
+/**
+ * With no runtimeMode requested, a new thread starts in `defaultMode` (the
+ * settings default), never broader than its parent. An explicit "inherit"
+ * still takes the parent's mode.
+ */
 export function resolveRuntimeMode(
   parentMode: RuntimeMode,
   requested: OrchestratorMcpRuntimeMode | undefined,
   target?: Pick<ResolvedTarget, "modelSelection" | "supportedRuntimeModes">,
+  defaultMode?: RuntimeMode,
 ): Effect.Effect<RuntimeMode, OrchestratorMcpFailure> {
   const inherited = requested === undefined || requested === "inherit";
-  const resolved = inherited ? parentMode : requested;
+  const resolved =
+    requested === undefined && defaultMode !== undefined
+      ? narrowerRuntimeMode(parentMode, defaultMode)
+      : inherited
+        ? parentMode
+        : requested;
   if (runtimeModeRank(resolved) > runtimeModeRank(parentMode)) {
     return Effect.fail(
       failure(
@@ -916,6 +933,14 @@ const make = Effect.gen(function* () {
   const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+
+  const defaultRuntimeModeFor = (projectId: ProjectId) =>
+    serverSettings.getSettings.pipe(
+      Effect.map(
+        (settings) => resolveProjectSettings(settings, projectId).settings.defaultRuntimeMode,
+      ),
+      Effect.mapError(() => failure("orchestration_error", "Unable to read server settings.")),
+    );
 
   const requireProject = (projectId: ProjectId) =>
     projects.getById(projectId).pipe(
@@ -1650,7 +1675,10 @@ const make = Effect.gen(function* () {
           threadId: bindToCurrentThread && parent !== undefined ? parent.thread.id : null,
           workspaceStrategy: scheduledTaskWorkspaceStrategy(bindToCurrentThread),
           modelSelection,
-          runtimeMode: limits.runtimeMode,
+          runtimeMode: narrowerRuntimeMode(
+            limits.runtimeMode,
+            yield* defaultRuntimeModeFor(projectId),
+          ),
           interactionMode: limits.interactionMode,
           createdBy: "agent",
           creationSource: "mcp",
@@ -1978,6 +2006,7 @@ const make = Effect.gen(function* () {
           parent.thread.runtimeMode,
           input.runtimeMode,
           target,
+          yield* defaultRuntimeModeFor(parent.thread.projectId),
         );
         const interactionMode = yield* resolveInteractionMode(
           parent.thread.interactionMode,
@@ -2298,6 +2327,7 @@ const make = Effect.gen(function* () {
                 parent.thread.runtimeMode,
                 request.runtimeMode,
                 target,
+                yield* defaultRuntimeModeFor(parent.thread.projectId),
               );
               const interactionMode = yield* resolveInteractionMode(
                 parent.thread.interactionMode,

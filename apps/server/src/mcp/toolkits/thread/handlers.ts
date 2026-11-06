@@ -287,7 +287,9 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
       targetRunId: input.targetRunId,
     })),
   ),
-  t3_thread_organize: writesThread((input) =>
+  // Pinning, archiving and marking unread run nothing on the target, so a
+  // caller may organize threads whose modes are broader than its own.
+  t3_thread_organize: McpToolAccess.writesWithCapability((input) =>
     Effect.gen(function* () {
       const { threads, projection } = yield* readThread(input.threadId);
       const common = { commandId: yield* newCommandId(), threadId: projection.thread.id };

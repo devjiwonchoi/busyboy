@@ -448,9 +448,17 @@ it.effect("a client caller targets any thread within its ceiling and cannot act 
     expect(pinned.isError).toBe(false);
     expect(pinned.structuredContent).toMatchObject({ sequence: 7 });
 
-    const aboveCeiling = yield* call(
+    // Organizing runs nothing on the target, so a narrower caller may archive it.
+    const archivedAboveCeiling = yield* call(
       "t3_thread_organize",
-      { action: "pin", threadId: "other-project-thread" },
+      { action: "archive", threadId: "other-project-thread" },
+      clientScope("approval-required"),
+    );
+    expect(archivedAboveCeiling.isError).toBe(false);
+
+    const aboveCeiling = yield* call(
+      "t3_queue_cancel",
+      { threadId: "other-project-thread", queuedRunId: "run:queued" },
       clientScope("approval-required"),
     );
     expect(declaredFailure(aboveCeiling)).toMatchObject({
