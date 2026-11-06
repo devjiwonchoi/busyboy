@@ -116,6 +116,7 @@ import {
 } from "./common.ts";
 import { isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
+import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
@@ -1841,6 +1842,40 @@ const make = Effect.gen(function* () {
         });
     });
 
+  // Reading the PM transcript on every snapshot would be wasteful; the preview only
+  // changes when a run settles or the user writes, which moves these shell fields.
+  const lastMessageCache = new Map<
+    ThreadId,
+    { key: string; value: ProjectTeamAttentionSummary["lastMessage"] }
+  >();
+  const readManagerLastMessage = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const shell = yield* threads.getThreadShell(threadId);
+      if (shell === null) return null;
+      const key = [
+        shell.latestRunId,
+        shell.latestRunCompletedAt === undefined || shell.latestRunCompletedAt === null
+          ? ""
+          : DateTime.toEpochMillis(shell.latestRunCompletedAt),
+        shell.latestUserMessageAt === null ? "" : DateTime.toEpochMillis(shell.latestUserMessageAt),
+        shell.itemCount,
+      ].join("|");
+      const cached = lastMessageCache.get(threadId);
+      if (cached !== undefined && cached.key === key) return cached.value;
+      const { messages } = yield* threads.getThreadRecords(threadId, ["messages"], {
+        messageRoles: ["assistant", "user"],
+      });
+      const value = managerLastMessage(messages);
+      lastMessageCache.set(threadId, { key, value });
+      return value;
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("could not read the PM chat's last message", { threadId, cause }).pipe(
+          Effect.as(null),
+        ),
+      ),
+    );
+
   const attentionSnapshot: ProjectTeamService["Service"]["attentionSnapshot"] = Effect.gen(
     function* () {
       const managers = yield* repository.listManagers();
@@ -1883,6 +1918,7 @@ const make = Effect.gen(function* () {
             presence,
             decisionCards,
             taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
+            lastMessage: yield* readManagerLastMessage(manager.threadId),
             tasks: tasks.map((task) => ({
               id: task.id,
               number: task.number,

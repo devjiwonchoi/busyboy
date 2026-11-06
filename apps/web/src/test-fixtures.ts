@@ -243,6 +243,7 @@ export function makeProjectManagerSummaryFixture(
     decisionCards: [],
     tasks: [],
     taskKeyPrefix: "T",
+    lastMessage: null,
     ...rest,
     presence: {
       running: 0,

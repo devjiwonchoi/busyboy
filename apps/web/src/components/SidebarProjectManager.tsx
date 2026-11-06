@@ -77,10 +77,18 @@ export function SidebarSitrepButton(props: {
 const hoverOnlyClassName =
   "opacity-0 transition-opacity focus-visible:opacity-100 group-hover/project:opacity-100 group-focus-within/project:opacity-100";
 
+/** The second line of a manager row: the PM chat's latest message, or a hint before the first one. */
+export function projectManagerPreview(summary: ProjectTeamAttentionSummary): string {
+  const last = summary.lastMessage;
+  if (last === null) return "No messages yet";
+  return last.role === "user" ? `You: ${last.text}` : last.text;
+}
+
 /**
- * A project's section heading while its manager is on: the PM avatar and name
- * stand for the project. Clicking the row folds the section like a project
- * folder; clicking the avatar opens the PM thread.
+ * A project's section heading while its manager is on, shaped like a chat list
+ * row: a large PM avatar, the PM and project names, and a one-line preview of
+ * the PM chat's latest message. Clicking the row folds the section like a
+ * project folder; clicking the avatar opens the PM thread.
  */
 export function SidebarProjectManagerHeading(props: {
   projectName: string;
@@ -101,12 +109,13 @@ export function SidebarProjectManagerHeading(props: {
   const nowMinute = useNowMinute();
   const presence = formatProjectManagerPresence(summary, Date.parse(`${nowMinute}:00.000Z`));
   const status = resolveProjectManagerStatus({ summary, pmThreadWorking: props.pmThreadWorking });
+  const preview = props.pmThreadWorking ? "Working…" : projectManagerPreview(summary);
   return (
     <div className="group/project">
       <div
         data-testid="sidebar-project-manager-heading"
         className={cn(
-          "relative flex h-7 items-center rounded-md transition-colors",
+          "relative flex min-h-12 items-center gap-0.5 rounded-lg py-1 pr-1 transition-colors",
           props.isActive ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
         )}
       >
@@ -118,11 +127,11 @@ export function SidebarProjectManagerHeading(props: {
                 aria-label={`Open ${summary.persona.name} chat`}
                 aria-current={props.isActive ? "page" : undefined}
                 onClick={() => props.onOpenThread(pmThreadRef)}
-                className="ml-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                className="ml-1 flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
               />
             }
           >
-            <PmAvatar persona={summary.persona} status={status} size="sm" />
+            <PmAvatar persona={summary.persona} status={status} size="lg" />
           </TooltipTrigger>
           <TooltipPopup side="right">Open PM chat</TooltipPopup>
         </Tooltip>
@@ -133,26 +142,45 @@ export function SidebarProjectManagerHeading(props: {
                 type="button"
                 aria-expanded={props.expanded}
                 onClick={props.onToggle}
-                className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+                className="flex min-w-0 flex-1 cursor-pointer flex-col justify-center gap-0.5 self-stretch rounded-md px-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
               />
             }
           >
-            <span className="min-w-0 truncate font-semibold text-sidebar-foreground">
-              {projectName}
+            <span className="flex min-w-0 items-baseline gap-1.5 text-xs">
+              <span className="min-w-0 shrink-0 truncate font-semibold text-sidebar-foreground">
+                {summary.persona.name}
+              </span>
+              <span className="min-w-0 truncate text-2xs text-sidebar-muted-foreground">
+                {projectName}
+              </span>
             </span>
-            <span className="min-w-0 truncate text-sidebar-muted-foreground">
-              {summary.persona.name}
+            <span
+              data-testid="sidebar-project-manager-preview"
+              className={cn(
+                "block min-w-0 truncate text-xs",
+                summary.lastMessage === null && !props.pmThreadWorking
+                  ? "text-sidebar-muted-foreground/70"
+                  : "text-sidebar-muted-foreground",
+              )}
+            >
+              {preview}
             </span>
           </TooltipTrigger>
           <TooltipPopup side="right">{presence}</TooltipPopup>
         </Tooltip>
         <SidebarProjectManagerBadges summary={summary} />
         {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
+        {/*
+          With a mouse these float over the end of the preview on hover, so they
+          take no room from it; touch screens cannot hover, so they stay in the row.
+        */}
         <span
           className={cn(
             "flex shrink-0 items-center",
+            "absolute top-1/2 right-8 -translate-y-1/2 rounded-md bg-inherit",
             "pointer-events-none group-hover/project:pointer-events-auto group-focus-within/project:pointer-events-auto",
             hoverOnlyClassName,
+            "pointer-coarse:pointer-events-auto pointer-coarse:static pointer-coarse:translate-y-0 pointer-coarse:bg-transparent pointer-coarse:opacity-100",
           )}
         >
           {canOperate && props.onNewTask ? (

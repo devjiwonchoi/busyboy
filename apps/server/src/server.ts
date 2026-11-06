@@ -8,6 +8,7 @@ import * as ProjectTeamRepository from "./persistence/ProjectTeamRepository.ts";
 import * as ContextCare from "./projectTeam/ContextCare.ts";
 import * as DefaultManagerReactor from "./projectTeam/defaultManagerReactor.ts";
 import * as FinishedTaskCleanup from "./projectTeam/FinishedTaskCleanup.ts";
+import * as ManagerLastMessage from "./projectTeam/managerLastMessage.ts";
 import * as PlanApprovalCleanup from "./projectTeam/PlanApprovalCleanup.ts";
 import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
 import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
@@ -462,6 +463,7 @@ const layerProjectTeam = Layer.mergeAll(
   ContextCare.layerWorker,
   FinishedTaskCleanup.layerWorker,
   PlanApprovalCleanup.layerWorker,
+  ManagerLastMessage.layerWorker,
 ).pipe(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(ProjectTeamService.layerWithDependencies),
