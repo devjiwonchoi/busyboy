@@ -409,6 +409,13 @@ export function PreviewChromeRow({
                     setDropdownOpen(false);
                   }}
                   onKeyDown={handleKeyDown}
+                  onPointerUp={(event) => {
+                    // Phones have no Tab key: tapping the input accepts the completion.
+                    if (event.pointerType === "mouse" || !showingCompletion) return;
+                    const end = draft.length + completionSuffix.length;
+                    commitCompletion();
+                    queueMicrotask(() => inputRef.current?.setSelectionRange(end, end));
+                  }}
                   role="combobox"
                   aria-autocomplete="both"
                   aria-expanded={listVisible}

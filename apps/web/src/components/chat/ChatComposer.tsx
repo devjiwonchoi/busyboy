@@ -2439,6 +2439,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const isMobileViewport = useMediaQuery("max-sm");
+  const isCoarsePointer = useMediaQuery({ pointer: "coarse" });
+  // Phones have no Tab key, so suggestions are accepted by tapping them.
+  const acceptsSuggestionByTap = isMobileViewport || isCoarsePointer;
   const {
     isComposerFocused,
     setIsComposerFocused,
@@ -5783,6 +5786,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // render, which during a stream is every delta.
   const onComposerPasteStable = useStableCallback(onComposerPaste);
   const onComposerCommandKeyStable = useStableCallback(onComposerCommandKey);
+  const acceptPromptSuggestionStable = useStableCallback(() => {
+    if (visiblePromptSuggestion === null || promptRef.current.length > 0) return;
+    replacePromptFromHistory(visiblePromptSuggestion);
+  });
   const isPathQueryActiveStable = useStableCallback(
     () => resolveActiveComposerTrigger().trigger?.kind === "path",
   );
@@ -6710,7 +6717,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : "text-placeholder",
                   )}
                   onPointerDown={(event) => event.preventDefault()}
-                  onClick={isChoiceOnlyPendingQuestion ? undefined : expandMobileComposerStable}
+                  onClick={
+                    isChoiceOnlyPendingQuestion
+                      ? undefined
+                      : () => {
+                          // A tap on the suggestion accepts it, as Tab does on desktop.
+                          acceptPromptSuggestionStable();
+                          expandMobileComposerStable();
+                        }
+                  }
                   disabled={isChoiceOnlyPendingQuestion}
                   aria-label="Expand composer"
                 >
@@ -6722,7 +6737,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : prompt.trim() ||
                       (showProviderUnavailable
                         ? "Enable a provider in Settings"
-                        : "Ask anything...")}
+                        : visiblePromptSuggestion !== null
+                          ? `${visiblePromptSuggestion}  (tap)`
+                          : "Ask anything...")}
                 </button>
                 {collapsedComposerImagePreviews}
                 <CollapsedComposerAction
@@ -7245,6 +7262,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       isComposerResting &&
                         "flex items-center overflow-hidden whitespace-nowrap leading-8",
                     )}
+                    onPlaceholderActivate={
+                      acceptsSuggestionByTap && visiblePromptSuggestion !== null
+                        ? acceptPromptSuggestionStable
+                        : undefined
+                    }
                     onChange={onPromptChangeStable}
                     onVisibleSelectionChange={expandComposerForEditorChangeStable}
                     onCommandKeyDown={onComposerCommandKeyStable}
@@ -7270,7 +7292,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                 : phase === "disconnected"
                                   ? DISCONNECTED_COMPOSER_PLACEHOLDER
                                   : visiblePromptSuggestion !== null
-                                    ? `${visiblePromptSuggestion}  (Tab)`
+                                    ? `${visiblePromptSuggestion}  (${acceptsSuggestionByTap ? "tap" : "Tab"})`
                                     : "Ask anything, @tag files/folders, $use skills, or / for commands"
                     }
                     disabled={
