@@ -98,7 +98,12 @@ export const PROJECT_TASK_STATUS_LABELS: Record<ProjectTaskStatus, string> = {
 export interface ProjectTaskStatusSignals {
   /** An open question or blocker from this task waits on the user. */
   readonly openQuestion: boolean;
-  /** The lead's current turn is running. */
+  /**
+   * A blocker card from this task is open: only a person can unblock it, as after the
+   * PM's nudges ran out or a failed turn. Optional for callers that predate it.
+   */
+  readonly openBlocker?: boolean;
+  /** The lead's current turn is running, or it waits on its own subagents or background work. */
   readonly leadRunning: boolean;
   /** The lead's latest turn failed. */
   readonly leadFailed: boolean;
@@ -117,7 +122,9 @@ export function storedTaskStatusSignals(
 
 /**
  * The user-facing status. First match wins: Done, a failure, Waiting for approval,
- * an open question, blocked or stalled, then the stage.
+ * an open blocker card, an open question, blocked, then the stage.
+ * A stalled turn alone is not Fatal: leads end quiet turns all the time. It turns Fatal
+ * only once the PM's nudges ran out and raised a blocker card.
  */
 export function resolveProjectTaskStatus(
   task: Pick<ProjectTask, "stage" | "lastOutcome">,
@@ -129,12 +136,10 @@ export function resolveProjectTaskStatus(
     return "fatal";
   }
   if (task.stage === "awaiting_approval") return "waiting_for_approval";
+  // A working lead is past the blocker; the open card still asks the user.
+  if (signals.openBlocker === true && !signals.leadRunning) return "fatal";
   if (signals.openQuestion) return "ask_question";
   if (task.stage === "blocked") return "fatal";
-  // Stalled only matters while the lead should be working; a running turn clears it.
-  if (task.lastOutcome === "stalled" && !signals.leadRunning && task.stage !== "inbox") {
-    return "fatal";
-  }
   switch (task.stage) {
     case "inbox":
       return "todo";
@@ -977,6 +982,8 @@ export const ProjectTaskReference = Schema.Struct({
   ),
   /** An open question or blocker from this task waits on the user. */
   openQuestion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** One of those is a blocker card, which only a person can unblock; the task shows Fatal. */
+  openBlocker: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** When the task last changed; null from servers that predate the field. */
   updatedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });

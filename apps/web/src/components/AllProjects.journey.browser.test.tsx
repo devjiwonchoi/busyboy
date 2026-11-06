@@ -163,6 +163,7 @@ function task(
     prUrl: null,
     lastOutcome: null,
     openQuestion: false,
+    openBlocker: false,
     updatedAt: NOW,
     ...overrides,
   };

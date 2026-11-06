@@ -269,6 +269,67 @@ describe("TaskOutcomeReactor", () => {
     ),
   );
 
+  it.effect("keeps a lead waiting on its own background subagent In Progress", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Research first", harness.delegate);
+        yield* team.updateTask(lead.leadThreadId, { stage: "running", planSummary: "Plan." });
+        // The provider's own background subagent, not a BusyBoy delegated task.
+        harness.addThread(lead.leadThreadId).shell = {
+          pendingBackgroundTasks: [
+            { kind: "subagent", taskId: "bg-1", description: "Research iOS auto-PiP rules" },
+          ],
+        };
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        const { tasks } = yield* team.listTasks(pm, {});
+        const brief = tasks.find((task) => task.id === lead.task.id);
+        assert.strictEqual(brief?.lastOutcome, null);
+        assert.strictEqual(brief?.status, "in_progress");
+      }),
+    ),
+  );
+
+  it.effect("shows a quiet turn as In Progress, and Fatal once the nudges escalate", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Quiet", harness.delegate);
+        yield* team.updateTask(lead.leadThreadId, { stage: "running", planSummary: "Plan." });
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        const statusOf = team
+          .listTasks(pm, {})
+          .pipe(Effect.map(({ tasks }) => tasks.find((task) => task.id === lead.task.id)));
+        const quiet = yield* statusOf;
+        assert.strictEqual(quiet?.lastOutcome, "stalled");
+        assert.strictEqual(quiet?.status, "in_progress");
+
+        yield* team.nudgeTask(pm, { taskId: lead.task.id });
+        yield* team.nudgeTask(pm, { taskId: lead.task.id });
+        assert.strictEqual((yield* statusOf)?.status, "in_progress");
+        const escalated = yield* team.nudgeTask(pm, { taskId: lead.task.id });
+        assert.strictEqual(escalated.status, "escalated");
+        assert.strictEqual((yield* statusOf)?.status, "fatal");
+      }),
+    ),
+  );
+
   it.effect("treats a lead run cancelled by a restart as stalled, not failed", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

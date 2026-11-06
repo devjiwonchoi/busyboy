@@ -67,18 +67,29 @@ export const makePeriodicGate = (periodMs: number) =>
 
 /**
  * Whether a task lead is still working even though a turn just ended: it has another
- * run in flight, or delegated children of its own that have not settled.
+ * run in flight, delegated children of its own that have not settled, or background
+ * work the provider still runs for it (a background subagent, command or monitor).
  * `endedRunId` is the run that just ended, which the shell may still report as active.
  * A failed read counts as idle so the caller falls back to its normal handling.
+ * `ignoreBackgroundWork` skips the background check for callers that must not wait on a
+ * long-lived background command, such as cleanup after a task is done.
  */
 export const isLeadBusy = (
   threads: ThreadManagement.ThreadManagementService["Service"],
   leadThreadId: ThreadId,
   endedRunId?: string,
+  options?: { readonly ignoreBackgroundWork?: boolean },
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const shell = yield* threads.getThreadShell(leadThreadId);
     if (shell !== null && shell.activeRunId !== null && shell.activeRunId !== endedRunId) {
+      return true;
+    }
+    if (
+      options?.ignoreBackgroundWork !== true &&
+      shell !== null &&
+      (shell.pendingBackgroundTasks?.length ?? 0) > 0
+    ) {
       return true;
     }
     const { subagents } = yield* threads.getThreadRecords(leadThreadId, ["subagents"]);

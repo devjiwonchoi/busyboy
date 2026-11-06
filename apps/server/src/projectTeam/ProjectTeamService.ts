@@ -663,10 +663,13 @@ const make = Effect.gen(function* () {
   /** Live status signals per task: open questions and the lead thread's state. */
   const liveTaskSignals = (
     tasks: ReadonlyArray<ProjectTask>,
-    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId">>,
+    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId" | "kind">>,
   ) =>
     Effect.gen(function* () {
       const asking = new Set(openAttention.map((item) => item.taskId));
+      const blocked = new Set(
+        openAttention.filter((item) => item.kind === "blocker").map((item) => item.taskId),
+      );
       const entries = yield* Effect.forEach(
         tasks,
         (task) =>
@@ -684,6 +687,7 @@ const make = Effect.gen(function* () {
                   );
             const signals: ProjectTaskStatusSignals = {
               openQuestion: asking.has(task.id),
+              openBlocker: blocked.has(task.id),
               leadRunning,
               leadFailed,
             };
@@ -2337,6 +2341,7 @@ const make = Effect.gen(function* () {
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),
+              openBlocker: open.some((item) => item.taskId === task.id && item.kind === "blocker"),
               updatedAt: task.updatedAt,
             })),
           } satisfies ProjectTeamAttentionSummary;

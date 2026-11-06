@@ -120,7 +120,11 @@ const make = Effect.gen(function* () {
       if (lead === undefined) return;
       const descendants = descendantsOf(lead.id, projectThreads);
       if (options?.stopLead !== true) {
-        if (yield* isLeadBusy(threads, lead.id, options?.endedRunId)) return;
+        // A leftover background command (say, a dev server) must not keep the worktree forever.
+        const busy = yield* isLeadBusy(threads, lead.id, options?.endedRunId, {
+          ignoreBackgroundWork: true,
+        });
+        if (busy) return;
         if (descendants.some((thread) => thread.activeRunId !== null)) return;
       }
 

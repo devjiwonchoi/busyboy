@@ -26,6 +26,7 @@ const PROJECT_TASKS = {
       prUrl: null,
       lastOutcome: null,
       openQuestion: false,
+      openBlocker: false,
       updatedAt: null,
     },
     {
@@ -38,6 +39,7 @@ const PROJECT_TASKS = {
       prUrl: null,
       lastOutcome: null,
       openQuestion: false,
+      openBlocker: false,
       updatedAt: null,
     },
   ],
