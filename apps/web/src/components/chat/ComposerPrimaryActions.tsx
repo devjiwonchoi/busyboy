@@ -42,7 +42,7 @@ interface ComposerPrimaryActionsProps {
   canSteer?: boolean;
   /**
    * One uninterrupted conversation (the PM chat): sending while running looks like an
-   * ordinary send, with no steer/queue choice, labels or shortcut hints.
+   * ordinary send, with no steer/queue choice, labels or shortcut hints, and no Stop.
    */
   seamless?: boolean;
   alternateShortcutLabel?: string | null;
@@ -142,6 +142,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       alternateModifier: shortcutModifiers.metaKey || shortcutModifiers.ctrlKey,
     }) === "queue";
   const alternateAction = alternateComposerDispatchAction(followUpBehavior);
+  const showStop = canInterrupt && !seamless;
   const isSendDisabled = !canOperateThread || sendDisabledReason !== null;
   const stageBackdropVariant = useSidebarStageBackdropVariant(
     environmentIdentificationMode === "artwork",
@@ -177,7 +178,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   if (pendingAction) {
     return (
       <div className={cn("flex items-center justify-end", compact ? "gap-1.5" : "gap-2")}>
-        {canInterrupt ? renderStopGenerationButton(true) : null}
+        {showStop ? renderStopGenerationButton(true) : null}
         {pendingAction.questionIndex > 0 ? (
           compact ? (
             <Button
@@ -280,7 +281,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     );
   }
 
-  if (canInterrupt && !hasSendableContent && !isEditingQueuedMessage) {
+  if (showStop && !hasSendableContent && !isEditingQueuedMessage) {
     return renderStopGenerationButton(false);
   }
 

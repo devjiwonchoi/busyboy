@@ -204,9 +204,9 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render(props: ComponentProps<typeof RunningChat>) {
+async function render(props: ComponentProps<typeof RunningChat>, width = 390, height = 844) {
   container = document.body.appendChild(document.createElement("div"));
-  container.style.cssText = "height: 844px; width: 390px; display: flex; flex-direction: column;";
+  container.style.cssText = `height: ${height}px; width: ${width}px; display: flex; flex-direction: column;`;
   const root = createRoot(container);
   roots.push(root);
   await act(async () =>
@@ -239,6 +239,8 @@ const bubbleTexts = () =>
     .toSorted((left, right) => left.top - right.top)
     .map(({ text }) => text);
 
+const stopButton = () => container.querySelector('button[aria-label="Stop generation"]');
+
 const sendButtonLabel = () =>
   container
     .querySelector<HTMLButtonElement>('form button[type="submit"]')
@@ -249,8 +251,8 @@ describe("talking to the project manager while it works (phone width)", () => {
     // The user's setting says queue; the PM chat ignores it and joins the running turn.
     await render({ threadId: PM_THREAD_ID, followUpBehavior: "queue" });
 
-    // Nothing typed: only Stop, as in any running chat.
-    expect(container.querySelector('button[aria-label="Stop generation"]')).not.toBeNull();
+    // No Stop while it works: stopping the PM used to stop every task lead with it.
+    expect(stopButton()).toBeNull();
 
     await userEvent.fill(
       container.querySelector<HTMLInputElement>('input[aria-label="Message"]')!,
@@ -281,6 +283,7 @@ describe("talking to the project manager while it works (phone width)", () => {
 
   it("keeps today's steer UI in a normal thread given the same inputs", async () => {
     await render({ threadId: "user-thread", followUpBehavior: "steer" });
+    expect(stopButton()).not.toBeNull();
 
     await userEvent.fill(
       container.querySelector<HTMLInputElement>('input[aria-label="Message"]')!,
@@ -297,4 +300,26 @@ describe("talking to the project manager while it works (phone width)", () => {
     );
     expect(container.querySelector("[data-timeline-compaction-marker]")).not.toBeNull();
   });
+});
+
+describe("stopping the project manager", () => {
+  for (const [label, width, height] of [
+    ["phone", 390, 844],
+    ["desktop", 1280, 800],
+  ] as const) {
+    it(`offers no Stop in the PM chat at ${label} width, but keeps it in other threads`, async () => {
+      await page.viewport(width, height);
+
+      await render({ threadId: PM_THREAD_ID, followUpBehavior: "steer" }, width, height);
+      expect(stopButton()).toBeNull();
+      // The turn is running, so the composer still takes follow-ups.
+      expect(sendButtonLabel()).toBe("Submit message");
+
+      await act(async () => roots.pop()!.unmount());
+      container.remove();
+
+      await render({ threadId: "user-thread", followUpBehavior: "steer" }, width, height);
+      expect(stopButton()).not.toBeNull();
+    });
+  }
 });

@@ -996,6 +996,23 @@ const make = Effect.gen(function* () {
       );
     }).pipe((effect) => threadDispatch.withLock(input.threadId, effect));
 
+  /**
+   * Task leads are delegated children of the PM thread, but they live on their
+   * own: only cancelling their task stops them. An unreadable role counts as
+   * not a lead, so the stop still reaches ordinary children.
+   */
+  const isTaskLeadThread = (threadId: ThreadId) =>
+    Option.isNone(projectTeamRepository)
+      ? Effect.succeed(false)
+      : projectTeamRepository.value.findTaskByLeadThreadId(threadId).pipe(
+          Effect.map(Option.isSome),
+          Effect.catch((cause) =>
+            Effect.logWarning("Could not read the thread's team role.", { threadId, cause }).pipe(
+              Effect.as(false),
+            ),
+          ),
+        );
+
   const stopDelegatedTasks: ThreadManagementServiceShape["stopDelegatedTasks"] = (input) =>
     Effect.gen(function* () {
       const { subagents } = yield* orchestrator.getThreadRecords(input.threadId, ["subagents"]);
@@ -1005,6 +1022,7 @@ const make = Effect.gen(function* () {
       for (const task of subagents) {
         if (task.origin !== "app_owned" || task.childThreadId === null) continue;
         const threadId = task.childThreadId;
+        if (yield* isTaskLeadThread(threadId)) continue;
         yield* dispatch({
           type: "thread.stop",
           commandId: CommandId.make(`${input.commandId}:stop:${threadId}`),
