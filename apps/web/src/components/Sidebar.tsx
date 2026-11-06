@@ -504,11 +504,7 @@ function useSidebarThreads(input: {
       });
     }
   }
-  // A manager's section has no collapse control, so a key stored before it had a
-  // manager must not keep it collapsed.
-  const collapsedProjectKeys = new Set(
-    collapsedProjectKeyList.filter((projectKey) => !projectManagerByProjectKey.has(projectKey)),
-  );
+  const collapsedProjectKeys = new Set(collapsedProjectKeyList);
   const partition = partitionSidebarThreads({
     threads,
     scopedProjectKeys,
@@ -1171,6 +1167,8 @@ function SidebarProjectHeader(props: {
             resolveSidebarThreadStatus(pm.manager.thread) === "working"
           }
           isActive={pm.isActive}
+          expanded={props.expanded}
+          onToggle={props.onToggle}
           onOpenThread={pm.onOpenThread}
           onNewThread={props.onNewThread}
           onNewTask={pm.onNewTask}

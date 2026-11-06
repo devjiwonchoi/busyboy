@@ -224,7 +224,11 @@ describe("sidebar Cmd+number", () => {
     await vi.waitFor(() => expect(openThread()).toBe("/env-1/pm-thread"));
     // The PM heading is highlighted as the open conversation.
     await vi.waitFor(() =>
-      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain("busyboy"),
+      expect(
+        container.querySelector(
+          '[data-testid="sidebar-project-manager-heading"] [aria-current="page"]',
+        ),
+      ).not.toBeNull(),
     );
 
     await pressJump("2");

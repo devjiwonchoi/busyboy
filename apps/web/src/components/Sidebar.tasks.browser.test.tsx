@@ -179,6 +179,7 @@ function task(
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  localStorage.removeItem("busyboy:sidebar:collapsed-projects");
   state.projects = [project("busyboy", "busyboy")];
   state.groups = [projectGroup("busyboy", "busyboy")];
   state.threads = [
@@ -337,5 +338,46 @@ describe("sidebar tasks", () => {
     await vi.waitFor(() =>
       expect(document.querySelector('input[aria-label="Task title"]')).toBeNull(),
     );
+  });
+  it("folds the PM section from its heading and opens the PM chat from the avatar", async () => {
+    const app = renderSidebarApp();
+    await app.render();
+    await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
+    const heading = () =>
+      container.querySelector<HTMLElement>('[data-testid="sidebar-project-manager-heading"]')!;
+    const toggle = () => heading().querySelector<HTMLElement>("button[aria-expanded]")!;
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(threadRow("BB-2 Fix drag scroll")).not.toBeNull();
+
+    // Clicking the row folds the tasks and threads under it, without opening the PM chat.
+    await userEvent.click(toggle());
+    await vi.waitFor(() => expect(taskRowButton("BB-3")).toBeNull());
+    expect(threadRow("BB-2 Fix drag scroll")).toBeNull();
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(app.router.state.location.pathname).toBe("/");
+    // No chevron: the heading keeps the same look.
+    expect(heading().querySelector("svg.lucide-chevron-right")).toBeNull();
+
+    // The fold survives a reload.
+    await act(() => root.unmount());
+    root = createRoot(container);
+    const reloaded = renderSidebarApp();
+    await reloaded.render();
+    await vi.waitFor(() => expect(toggle().getAttribute("aria-expanded")).toBe("false"));
+    expect(taskRowButton("BB-3")).toBeNull();
+
+    // The avatar opens the PM chat and leaves the fold alone.
+    await userEvent.click(
+      heading().querySelector<HTMLElement>('button[aria-label="Open Remy chat"]')!,
+    );
+    await vi.waitFor(() =>
+      expect(reloaded.router.state.location.pathname).toBe("/env-1/pm-thread"),
+    );
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+
+    // Clicking the row again unfolds it.
+    await userEvent.click(toggle());
+    await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
+    expect(threadRow("BB-2 Fix drag scroll")).not.toBeNull();
   });
 });

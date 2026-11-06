@@ -78,7 +78,8 @@ const hoverOnlyClassName =
 
 /**
  * A project's section heading while its manager is on: the PM avatar and name
- * stand for the project, and clicking opens the PM thread.
+ * stand for the project. Clicking the row folds the section like a project
+ * folder; clicking the avatar opens the PM thread.
  */
 export function SidebarProjectManagerHeading(props: {
   projectName: string;
@@ -86,6 +87,8 @@ export function SidebarProjectManagerHeading(props: {
   pmThreadRef: ScopedThreadRef;
   pmThreadWorking: boolean;
   isActive: boolean;
+  expanded: boolean;
+  onToggle: () => void;
   onOpenThread: (threadRef: ScopedThreadRef) => void;
   onNewThread: (() => void) | null;
   /** Opens the new task composer for this project. */
@@ -111,13 +114,28 @@ export function SidebarProjectManagerHeading(props: {
             render={
               <button
                 type="button"
+                aria-label={`Open ${summary.persona.name} chat`}
                 aria-current={props.isActive ? "page" : undefined}
                 onClick={() => props.onOpenThread(pmThreadRef)}
-                className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+                className="ml-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
               />
             }
           >
             <PmAvatar persona={summary.persona} status={status} size="sm" />
+          </TooltipTrigger>
+          <TooltipPopup side="right">Open PM chat</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                aria-expanded={props.expanded}
+                onClick={props.onToggle}
+                className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+              />
+            }
+          >
             <span className="min-w-0 truncate font-semibold text-sidebar-foreground">
               {projectName}
             </span>
