@@ -77,7 +77,12 @@ const install = (respond: (channel: string) => unknown) => {
   vi.stubGlobal("AuthenticatorAssertionResponse", FakeAssertionResponse);
 
   const invoke = vi.fn(async (channel: string, _publicKey: unknown) => respond(channel));
-  installPasskeyBridge(invoke);
+  // Run the bridge from its source text alone, the way `contextBridge.executeInMainWorld`
+  // copies it into the page's world: any reference outside its body would throw here.
+  const fromSource = new Function(
+    `return (${installPasskeyBridge.toString()})`,
+  )() as typeof installPasskeyBridge;
+  fromSource(invoke, { create: PASSKEY_CREATE_CHANNEL, get: PASSKEY_GET_CHANNEL });
   return {
     invoke,
     nativeCreate,

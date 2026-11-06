@@ -432,7 +432,7 @@ type OpenLinkListener = (event: DesktopPreviewOpenLinkEvent) => Effect.Effect<vo
 
 /**
  * `about:blank` stays out: Chromium skips browser-side navigation for it, so the child copies
- * the guest's `contextIsolation: false` preferences and Electron gives no way to override them.
+ * the guest's preferences and Electron gives no way to override them.
  * Deliberately not `ElectronShell.parseSafeExternalUrl`: that also admits
  * `vscode://vscode-remote/...` deep links, which belong in `shell.openExternal` and not in a
  * window spawned by a third-party page in the preview.
@@ -449,9 +449,8 @@ const isPopupUrl = (rawUrl: string): boolean => {
 
 /**
  * A popup is not a webview attach, so the `will-attach-webview` hardening in `DesktopWindow`
- * never sees it, and an unoverridden child would inherit the guest's relaxed posture: the
- * picker preload needs `contextIsolation: false` to share `globalThis` with the previewed page,
- * and no OAuth provider should get that.
+ * never sees it, and an unoverridden child would inherit the guest's preferences. Popups
+ * state the isolated, sandboxed posture explicitly.
  */
 const POPUP_WINDOW_OPTIONS = {
   webPreferences: {

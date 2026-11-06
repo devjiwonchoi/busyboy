@@ -30,11 +30,12 @@ export type BrowserSessionPartitionNamespace = "profile";
 // handlers must allow it; otherwise built-in "Copy" buttons — e.g. the Next.js
 // / Vercel error overlay — fail with `Failed to execute 'writeText' on
 // 'Clipboard': Write permission denied`.
+//
+// Deliberately NOT clipboard-read or geolocation: preview pages are untrusted, and granting
+// them silently lets any site read a copied password or API key, or the user's location.
 const ALLOWED_PREVIEW_PERMISSIONS: ReadonlySet<string> = new Set([
-  "clipboard-read",
   "clipboard-sanitized-write",
   "notifications",
-  "geolocation",
   // `DesktopWindow` disables HTML fullscreen window resizing for the app window
   // and every preview guest, so a page that goes fullscreen fills its own
   // webview instead of taking over the whole T3 window.

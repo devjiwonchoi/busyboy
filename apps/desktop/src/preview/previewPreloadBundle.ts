@@ -4,7 +4,6 @@
  * be bundled, and should stay small because it loads into every page.
  */
 export const PREVIEW_PRELOAD_BUNDLED_PACKAGES: ReadonlyArray<string> = [
-  "react-grab",
   // Dependency-free, so bundling it adds only the classifier.
   "@t3tools/shared/protectedFields",
 ];
