@@ -265,7 +265,6 @@ import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
 import { NewTaskDialog, type NewTaskTarget } from "./sidebar/NewTaskDialog";
 import { selectSidebarTasksWithoutSession, SidebarTaskRow } from "./sidebar/SidebarTaskRows";
-import { SidebarWaitingOnYouRow } from "./sidebar/SidebarWaitingOnYouRow";
 import { taskRouteParams } from "../taskRoutes";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
@@ -3874,10 +3873,6 @@ export default function Sidebar() {
                       };
                       const from = isContextDrag ? null : (dragState?.activeSection ?? null);
                       const items: ReactNode[] = [
-                        <SidebarWaitingOnYouRow
-                          key="waiting-on-you"
-                          onNavigate={() => (isMobile ? setOpenMobile(false) : undefined)}
-                        />,
                         <SidebarDraftBlock
                           key="draft-sessions"
                           projectByKey={projectByKey}
