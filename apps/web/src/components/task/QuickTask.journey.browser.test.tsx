@@ -145,46 +145,113 @@ async function pngFile(name: string): Promise<File> {
   return new File([blob], name, { type: "image/png" });
 }
 
+function composer(): HTMLElement | null {
+  return document.querySelector('[data-slot="quick-task-composer"]');
+}
+
 describe("quick task", () => {
-  it("Cmd+N opens it on the current project; a pasted screenshot rides along", async () => {
+  it("Cmd+N opens the composer; Create more keeps it open for the next task", async () => {
     await page.viewport(1280, 800);
     const router = await renderChatScreen();
 
     await userEvent.keyboard("{Meta>}n{/Meta}");
-    const context = page.getByRole("textbox", { name: "Task context" });
-    await expect.element(context).toBeVisible();
-    // The open thread's project is preselected.
-    await expect
-      .element(page.getByRole("combobox", { name: "Project" }))
-      .toHaveTextContent("website");
+    const title = page.getByRole("textbox", { name: "Task title" });
+    const description = page.getByRole("textbox", { name: "Task description" });
+    await expect.element(title).toHaveFocus();
+    await expect.element(page.getByRole("dialog", { name: "New task" })).toBeVisible();
+    // The open thread's project is preselected, in the header chip and the pill.
+    await expect.element(page.getByTestId("quick-task-project-chip")).toHaveTextContent("website");
+    await expect.element(page.getByRole("button", { name: "Project: website" })).toBeVisible();
+    // A light dim, no blur, and the panel sits near the top.
+    const backdrop = document.querySelector<HTMLElement>('[data-slot="quick-task-backdrop"]')!;
+    expect(getComputedStyle(backdrop).backdropFilter).toMatch(/^(none|)$/);
+    expect(composer()!.getBoundingClientRect().top).toBeLessThan(200);
 
-    await userEvent.fill(context, "Checkout button overlaps\nSee the screenshot.");
+    await userEvent.type(title, "Checkout button overlaps");
+    await userEvent.keyboard("{Tab}");
+    await expect.element(description).toHaveFocus();
+    const before = description.element().getBoundingClientRect().height;
+    await userEvent.keyboard("See the screenshot.{Enter}It covers the total.{Enter}On iPhone too.");
+    // The description grows with its content.
+    expect(description.element().getBoundingClientRect().height).toBeGreaterThan(before);
     const clipboard = new DataTransfer();
     clipboard.items.add(await pngFile("screenshot.png"));
     await act(async () => {
-      context
+      description
         .element()
         .dispatchEvent(new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true }));
     });
-    await expect.element(page.getByRole("listitem").getByText("screenshot.png")).toBeVisible();
+    await expect
+      .element(page.getByRole("list", { name: "Attachments" }).getByText("screenshot.png"))
+      .toBeVisible();
     expect(state.startUpload).toHaveBeenCalledWith(
       expect.objectContaining({ environmentId: "env-1" }),
     );
+    // Tab goes on from the description to the property pills.
+    await userEvent.keyboard("{Tab}");
+    await expect.element(page.getByRole("button", { name: "Remove screenshot.png" })).toHaveFocus();
+    await userEvent.keyboard("{Tab}");
+    await expect.element(page.getByRole("button", { name: "Project: website" })).toHaveFocus();
+    await userEvent.keyboard("{Tab}");
+    await expect.element(page.getByRole("button", { name: "Start: Plan now" })).toHaveFocus();
 
+    await userEvent.click(page.getByRole("switch"));
+    await userEvent.click(title);
     await userEvent.keyboard("{Meta>}{Enter}{/Meta}");
     await vi.waitFor(() => expect(state.createTask).toHaveBeenCalledOnce());
     expect(state.createTask).toHaveBeenCalledWith("env-1", {
       projectId: "website",
       title: "Checkout button overlaps",
-      context: "Checkout button overlaps\nSee the screenshot.",
+      context: "See the screenshot.\nIt covers the total.\nOn iPhone too.",
       startPlanning: true,
       attachments: [
         expect.objectContaining({ type: "image", id: "pending-0", name: "screenshot.png" }),
       ],
     });
-    await expect.element(context).not.toBeInTheDocument();
+    // Create more: still open, cleared, ready for the next title.
+    await expect.element(title).toHaveValue("");
+    await expect.element(description).toHaveValue("");
+    await expect.element(title).toHaveFocus();
+    expect(page.getByRole("list", { name: "Attachments" }).query()).toBeNull();
+
+    // The next one waits in Todo instead of starting a plan, and closes the composer.
+    await userEvent.click(page.getByRole("button", { name: "Start: Plan now" }));
+    await userEvent.click(page.getByRole("menuitemradio", { name: "Save as Todo" }));
+    await userEvent.click(page.getByRole("switch"));
+    await userEvent.type(title, "Footer links are grey on grey");
+    await userEvent.click(page.getByRole("button", { name: /Create task/ }));
+    await vi.waitFor(() => expect(state.createTask).toHaveBeenCalledTimes(2));
+    expect(state.createTask).toHaveBeenLastCalledWith("env-1", {
+      projectId: "website",
+      title: "Footer links are grey on grey",
+      context: "",
+      startPlanning: false,
+    });
+    await expect.element(title).not.toBeInTheDocument();
     // The user stays on the thread.
     expect(router.state.location.pathname).toBe("/env-1/thread-1");
+  });
+
+  it("switches project from the pill, expands, and closes with Esc", async () => {
+    await page.viewport(1280, 800);
+    await renderChatScreen();
+    await userEvent.keyboard("{Meta>}n{/Meta}");
+
+    await userEvent.click(page.getByRole("button", { name: "Project: website" }));
+    await userEvent.click(page.getByRole("menuitemradio", { name: "busyboy" }));
+    await expect.element(page.getByTestId("quick-task-project-chip")).toHaveTextContent("busyboy");
+
+    const normalWidth = composer()!.getBoundingClientRect().width;
+    await userEvent.click(page.getByRole("button", { name: "Expand" }));
+    await vi.waitFor(() =>
+      expect(composer()!.getBoundingClientRect().width).toBeGreaterThan(normalWidth),
+    );
+    expect(composer()!.getBoundingClientRect().height).toBeGreaterThan(600);
+    await userEvent.click(page.getByRole("button", { name: "Collapse" }));
+
+    await userEvent.click(page.getByRole("textbox", { name: "Task title" }));
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("textbox", { name: "Task title" })).not.toBeInTheDocument();
   });
 
   it("asks for a description instead of creating an empty task", async () => {
@@ -196,20 +263,30 @@ describe("quick task", () => {
     expect(state.createTask).not.toHaveBeenCalled();
   });
 
-  it("gives phones a + button that opens the same sheet", async () => {
+  it("gives phones a + button that opens the same composer as a bottom sheet", async () => {
     await page.viewport(390, 844);
     await renderChatScreen();
 
     const add = page.getByRole("button", { name: "New task" });
     await expect.element(add).toBeVisible();
     await userEvent.click(add);
-    await expect.element(page.getByRole("textbox", { name: "Task context" })).toBeVisible();
+    await expect.element(page.getByRole("textbox", { name: "Task title" })).toBeVisible();
+    await expect.element(page.getByRole("textbox", { name: "Task description" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Project: website" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: /Create task/ })).toBeVisible();
+    await vi.waitFor(() => {
+      const rect = composer()!.getBoundingClientRect();
+      expect(Math.round(rect.bottom)).toBe(844);
+      expect(Math.round(rect.width)).toBe(390);
+    });
+    // No expand on a phone: the sheet is already full width.
+    expect(
+      getComputedStyle(composer()!.querySelector('button[aria-label="Expand"]')!).display,
+    ).toBe("none");
 
     // From md up the header leaves it to Cmd+N.
     await userEvent.click(page.getByRole("button", { name: "Close" }));
-    await expect
-      .element(page.getByRole("textbox", { name: "Task context" }))
-      .not.toBeInTheDocument();
+    await expect.element(page.getByRole("textbox", { name: "Task title" })).not.toBeInTheDocument();
     await page.viewport(1280, 800);
     await vi.waitFor(() =>
       expect(
