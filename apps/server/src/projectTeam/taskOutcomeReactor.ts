@@ -188,7 +188,7 @@ const make = Effect.gen(function* () {
       if (previous === runKey) return;
 
       const task = yield* repository.findTaskByLeadThreadId(run.threadId);
-      // A lead that parked its task after "Approve only" has nothing left to report.
+      // A lead that parked its task in the inbox has nothing left to report.
       if (Option.isNone(task) || task.value.stage === "cancelled" || task.value.stage === "inbox") {
         return;
       }

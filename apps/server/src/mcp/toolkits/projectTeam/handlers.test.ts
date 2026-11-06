@@ -10,7 +10,12 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import { liveThreadsLayer } from "../../McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ProjectTeamService from "../../../projectTeam/ProjectTeamService.ts";
-import { setUpManager, withTeam, type TeamHarness } from "../../../projectTeam/testkit.ts";
+import {
+  setUpManager,
+  userSays,
+  withTeam,
+  type TeamHarness,
+} from "../../../projectTeam/testkit.ts";
 import * as ProjectTeamHandlers from "./handlers.ts";
 import { ProjectTeamToolkit } from "./tools.ts";
 
@@ -127,8 +132,8 @@ describe("projectTeam MCP toolkit", () => {
           ]);
 
           const asked = yield* call(lead, "ask_user", {
-            kind: "approval",
-            question: "Approve the plan: add hello.sh and a test?",
+            kind: "decision",
+            question: "Add hello.sh in bash or sh?",
           });
           assert.isFalse(asked.isError);
           const item = content(asked).item;
@@ -141,12 +146,14 @@ describe("projectTeam MCP toolkit", () => {
             [item.id],
           );
 
+          // The PM may relay only words the user typed in its chat.
+          userSays(harness, pm, "Bash, please.");
           const answered = yield* call(pm, "attention_answer", {
             attentionItemId: item.id,
-            answer: "Approved.",
+            answer: "Bash, please.",
           });
           assert.isFalse(answered.isError);
-          assert.strictEqual(content(answered).item.answer, "Approved.");
+          assert.strictEqual(content(answered).item.answer, "Bash, please.");
 
           const after = yield* call(lead, "task_read", { taskId: content(created).task.id });
           assert.isFalse(after.isError);
@@ -172,7 +179,10 @@ describe("projectTeam MCP toolkit", () => {
         const first = yield* startTask("First");
         const second = yield* startTask("Second");
 
-        const asked = yield* call(first.lead, "ask_user", { kind: "approval", question: "Plan?" });
+        const asked = yield* call(first.lead, "ask_user", {
+          kind: "decision",
+          question: "Bash or sh?",
+        });
         const selfApproval = yield* call(first.lead, "attention_answer", {
           attentionItemId: content(asked).item.id,
           answer: "Approved.",

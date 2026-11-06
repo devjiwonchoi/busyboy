@@ -244,10 +244,12 @@ describe("MCP inputs", () => {
 
   it("validates ask_user kinds", () => {
     const decode = Schema.decodeUnknownSync(ProjectTeamAskUserInput);
-    expect(decode({ kind: "approval", question: "  Approve the plan?  " })).toEqual({
-      kind: "approval",
-      question: "Approve the plan?",
+    expect(decode({ kind: "blocker", question: "  Which account?  " })).toEqual({
+      kind: "blocker",
+      question: "Which account?",
     });
+    // Plan approval cards were removed: leads start without asking.
+    expect(() => decode({ kind: "approval", question: "Approve the plan?" })).toThrow();
     expect(() => decode({ kind: "fyi", question: "Hi" })).toThrow();
     expect(() => decode({ kind: "decision", question: "   " })).toThrow();
   });

@@ -213,7 +213,7 @@ describe("ProjectTeamService", () => {
         assert.strictEqual(message?.threadId, leadThreadId);
         assert.strictEqual(
           message?.text,
-          "[PM nudge] Continue. Current stage: planning. Next step: Write the plan into the spec with task_spec_write, then ask for approval with ask_user(kind: approval). Write the plan.",
+          '[PM nudge] Continue. Current stage: planning. Next step: Write the plan into the spec with task_spec_write, then call task_update(stage: "running", planSummary) and start implementing. Write the plan.',
         );
         const second = yield* team.nudgeTask(pm, { taskId: task.id });
         assert.strictEqual(second.task.nudgeCount, 2);
@@ -258,8 +258,8 @@ describe("ProjectTeamService", () => {
         const asking = yield* team.createTask(pm, { title: "Ask", request: "Ask the user." });
         const askingLead = yield* team.startTask(pm, { taskId: asking.task.id }, harness.delegate);
         yield* team.askUser(askingLead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Which login provider?",
         });
         const blocked = yield* team.createTask(pm, { title: "Stuck", request: "Get stuck." });
         const blockedLead = yield* team.startTask(
@@ -281,7 +281,7 @@ describe("ProjectTeamService", () => {
         );
         assert.deepStrictEqual(
           status.openAttention.map((item) => item.question),
-          ["Approve the plan?"],
+          ["Which login provider?"],
         );
         assert.strictEqual(status.changes.newAttention.length, 1);
         assert.deepStrictEqual(
@@ -622,6 +622,11 @@ describe("ProjectTeamService", () => {
         const fragile = yield* startLead(pm, "Fragile", harness.delegate);
         yield* team.writeMemory(pm, { topic: "decisions", content: "Use pnpm." });
 
+        // A lead's plan needs no approval: it starts running and the plan shows in the journal.
+        yield* team.updateTask(shipped.leadThreadId, {
+          stage: "running",
+          planSummary: "Add the button, then a journey test.",
+        });
         yield* TestClock.adjust("1 minute");
         yield* team.updateTask(shipped.leadThreadId, { stage: "done" });
         yield* TestClock.adjust("1 minute");
@@ -658,6 +663,7 @@ describe("ProjectTeamService", () => {
             ["decision", `Decided on #2: ${blocker.question} → Retry once.`],
             ["failed", "#2 failed: Fragile"],
             ["done", "#1 Ship it done"],
+            ["decision", "Plan for #1 Ship it: Add the button, then a journey test."],
           ],
         );
         assert.deepStrictEqual(

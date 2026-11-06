@@ -107,7 +107,7 @@ describe("TaskOutcomeReactor", () => {
         const pm = yield* setUpManager;
         const quiet = yield* startLead(pm, "Quiet", harness.delegate);
         const asking = yield* startLead(pm, "Asking", harness.delegate);
-        yield* team.askUser(asking.leadThreadId, { kind: "approval", question: "Plan?" });
+        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Tabs or spaces?" });
 
         const at = "2026-11-04T00:05:00.000Z";
         yield* reactor.handle(
@@ -175,8 +175,8 @@ describe("TaskOutcomeReactor", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Notes", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Plan?",
+          kind: "decision",
+          question: "Tabs or spaces?",
         });
         yield* reactor.handle(
           leadTurnEnded({
@@ -462,7 +462,7 @@ describe("TaskOutcomeReactor", () => {
         const pm = yield* setUpManager;
         const asking = yield* startLead(pm, "Asking", harness.delegate);
         const quiet = yield* startLead(pm, "Quiet", harness.delegate);
-        yield* team.askUser(asking.leadThreadId, { kind: "approval", question: "Plan?" });
+        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Tabs or spaces?" });
 
         const at = "2026-11-04T00:05:00.000Z";
         for (const lead of [asking, quiet]) {

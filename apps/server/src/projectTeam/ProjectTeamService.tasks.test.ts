@@ -1,16 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
-import {
-  PLAN_APPROVAL_ONLY,
-  PLAN_APPROVAL_START,
-  type ProjectTeamError,
-  ProjectTaskId,
-  ThreadId,
-} from "@t3tools/contracts";
+import { ProjectTaskId, ThreadId } from "@t3tools/contracts";
 import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { PROJECT_ID, setUpManager, userMessage, userSays, withTeam } from "./testkit.ts";
+import { PROJECT_ID, setUpManager, userMessage, withTeam } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 
@@ -212,27 +206,29 @@ describe("ProjectTeamService tasks as specs", () => {
         const foreign = yield* team.readSpec(planner, { taskId: other.task.id }).pipe(Effect.flip);
         assert.include(foreign.message, "only use its own task's spec");
 
-        // A plan approval offers both answers by default.
-        const { item } = yield* team.askUser(planner, {
-          kind: "approval",
-          question: "Fix drag scroll: approve the plan in the spec?",
+        // No approval card: the planner starts running with its plan recorded.
+        const running = yield* team.updateTask(planner, {
+          stage: "running",
+          planSummary: "Keep scrollTop.",
         });
-        assert.deepStrictEqual(item.options, [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY]);
-        yield* team.answerDecision({
+        assert.strictEqual(running.task.stage, "running");
+        const afterPlan = yield* team.getTaskDetail({
           projectId: PROJECT_ID,
-          attentionItemId: item.id,
-          answer: PLAN_APPROVAL_ONLY,
+          taskId: created.task.id,
         });
+        assert.deepStrictEqual(afterPlan.openAttention, []);
+        assert.isFalse(
+          (yield* harness.messagesTo(pm)).some((text) => text.includes("[Decision card]")),
+        );
 
-        // "Approve only": the lead parks the task with the plan recorded.
-        yield* team.updateTask(planner, { stage: "inbox", planSummary: "Keep scrollTop." });
-
-        // Starting it again opens an implementer that skips planning.
+        // A stopped lead parks the task; starting it again opens an implementer that skips planning.
+        yield* team.updateTask(planner, { stage: "inbox" });
         const resumed = yield* team.startTask(pm, { taskId: created.task.id }, harness.delegate);
         assert.notStrictEqual(resumed.leadThreadId, planner);
         const second = (yield* Ref.get(harness.delegated))[1];
         assert.strictEqual(second?.clientRequestId, `task-start:${created.task.id}:2`);
-        assert.include(second?.task, "The plan above is already approved");
+        assert.include(second?.task, "The plan above is already written");
+        assert.notInclude(second?.task, "1. planning:");
         assert.include(second?.task, "- [ ] t1: Add a journey test");
 
         // The implementer checks todos off as it works; a repeat check adds no version.
@@ -275,121 +271,25 @@ describe("ProjectTeamService tasks as specs", () => {
     ),
   );
 
-  describe("resuming a parked task", () => {
-    /** Starts a planner, lets `approve` answer its approval card, parks it with a plan, restarts it. */
-    const parkAndRestart = (
-      approve: (input: {
-        readonly pm: ThreadId;
-        readonly planner: ThreadId;
-        readonly harness: Parameters<Parameters<typeof withTeam>[0]>[0];
-      }) => Effect.Effect<void, ProjectTeamError, ProjectTeamService.ProjectTeamService>,
-    ) =>
-      withTeam((harness) =>
-        Effect.gen(function* () {
-          const team = yield* service;
-          const pm = yield* setUpManager;
-          const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
-          const { leadThreadId: planner } = yield* team.startTask(
-            pm,
-            { taskId: task.id },
-            harness.delegate,
-          );
-          yield* approve({ pm, planner, harness });
-          // Any agent can write a planSummary; it is not approval on its own.
-          yield* team.updateTask(planner, { stage: "inbox", planSummary: "Keep scrollTop." });
-          yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
-          const resumed = (yield* Ref.get(harness.delegated))[1]?.task ?? "";
-          const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
-          return {
-            approved: resumed.includes("The plan above is already approved"),
-            roles: detail.sessions.map((session) => session.role),
-          };
-        }),
-      );
-
-    it.effect("plans again when the plan summary has no answered approval card", () =>
+  it.effect("plans again when a parked task has no plan yet", () =>
+    withTeam((harness) =>
       Effect.gen(function* () {
-        const unasked = yield* parkAndRestart(() => Effect.void);
-        assert.deepStrictEqual(unasked, { approved: false, roles: ["lead", "lead"] });
-
-        const unanswered = yield* parkAndRestart(({ planner }) =>
-          Effect.gen(function* () {
-            const team = yield* service;
-            yield* team.askUser(planner, { kind: "approval", question: "Approve the plan?" });
-          }),
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* team.updateTask(leadThreadId, { stage: "inbox" });
+        yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        const restarted = (yield* Ref.get(harness.delegated))[1]?.task ?? "";
+        assert.include(restarted, "1. planning:");
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.deepStrictEqual(
+          detail.sessions.map((session) => session.role),
+          ["lead", "lead"],
         );
-        assert.deepStrictEqual(unanswered, { approved: false, roles: ["lead", "lead"] });
       }),
-    );
-
-    it.effect("plans again when the user clicked something other than an approval", () =>
-      Effect.gen(function* () {
-        const result = yield* parkAndRestart(({ planner }) =>
-          Effect.gen(function* () {
-            const team = yield* service;
-            const { item } = yield* team.askUser(planner, {
-              kind: "approval",
-              question: "Approve the plan?",
-            });
-            yield* team.answerDecision({
-              projectId: PROJECT_ID,
-              attentionItemId: item.id,
-              answer: "Request changes\nNote: smaller",
-            });
-          }),
-        );
-        assert.deepStrictEqual(result, { approved: false, roles: ["lead", "lead"] });
-      }),
-    );
-
-    it.effect("resumes approved after the user clicks approve", () =>
-      Effect.gen(function* () {
-        const result = yield* parkAndRestart(({ planner }) =>
-          Effect.gen(function* () {
-            const team = yield* service;
-            const { item } = yield* team.askUser(planner, {
-              kind: "approval",
-              question: "Approve the plan?",
-            });
-            yield* team.answerDecision({
-              projectId: PROJECT_ID,
-              attentionItemId: item.id,
-              answer: `${PLAN_APPROVAL_ONLY}\nNote: ship it`,
-            });
-          }),
-        );
-        assert.deepStrictEqual(result, { approved: true, roles: ["lead", "implementer"] });
-      }),
-    );
-
-    it.effect("resumes approved after the PM relays the user's own chat words", () =>
-      Effect.gen(function* () {
-        const result = yield* parkAndRestart(({ pm, planner, harness }) =>
-          Effect.gen(function* () {
-            const team = yield* service;
-            const { item } = yield* team.askUser(planner, {
-              kind: "approval",
-              question: "Approve the plan?",
-            });
-            userSays(harness, pm, "전부 승인");
-            yield* team.answerAttention(pm, { attentionItemId: item.id, answer: "전부 승인" });
-          }),
-        );
-        assert.deepStrictEqual(result, { approved: true, roles: ["lead", "implementer"] });
-      }),
-    );
-
-    it("counts a card answered before the answerer was recorded only with a plan", () => {
-      const legacy = {
-        kind: "approval",
-        answer: "yes",
-        answeredBy: null,
-      } as unknown as Parameters<typeof ProjectTeamService.isPlanApproved>[1];
-      assert.isTrue(ProjectTeamService.isPlanApproved("Plan.", legacy));
-      assert.isFalse(ProjectTeamService.isPlanApproved(null, legacy));
-      assert.isFalse(ProjectTeamService.isPlanApproved("Plan.", undefined));
-    });
-  });
+    ),
+  );
 });
 
 describe("isUserChatAnswer", () => {

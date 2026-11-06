@@ -193,7 +193,7 @@ beforeEach(() => {
           prUrl: "prUrl" in task ? task.prUrl : null,
           lastOutcome: "lastOutcome" in task ? task.lastOutcome : null,
         })),
-        // Task 9 asked the user to approve its plan.
+        // Task 9 asked the user a question.
         decisionCards: [
           {
             taskNumber: 9,
@@ -202,8 +202,8 @@ beforeEach(() => {
               id: "attention-9" as never,
               projectId: "busyboy" as never,
               taskId: "task-9" as never,
-              kind: "approval",
-              question: "Approve the plan?",
+              kind: "decision",
+              question: "Which login provider?",
               options: [],
               answer: null,
               answeredAt: null,

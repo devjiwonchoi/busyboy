@@ -77,8 +77,6 @@ import {
   type ProjectTeamTaskSpecResult,
   type ProjectTeamTaskSpecWriteInput,
   type ProjectTeamTaskTodoSetInput,
-  PLAN_APPROVAL_ONLY,
-  PLAN_APPROVAL_START,
   defaultTaskKeyPrefix,
   formatTaskKey,
   ProviderInstanceId,
@@ -127,7 +125,7 @@ const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
 const DEFAULT_TASK_SEARCH_LIMIT = 20;
 const LEAD_MESSAGE_SUMMARY_MAX_CHARS = 300;
 export const PM_RELAY_NOT_USER_WORDS =
-  "Approval and decision cards need the user's own words. Quote exactly what the user wrote in this chat after the card appeared, or let them click the card.";
+  "Decision cards need the user's own words. Quote exactly what the user wrote in this chat after the card appeared, or let them click the card.";
 /** Where a person types: messages the user wrote in the app, not ones an agent or the server sent. */
 const USER_TYPED_SOURCES: ReadonlySet<OrchestrationV2ConversationMessage["creationSource"]> =
   new Set(["web", "mobile"]);
@@ -166,23 +164,6 @@ export function isUserChatAnswer(
   );
 }
 
-/**
- * Whether a restarted task may skip plan approval. The lead must have recorded a plan and the
- * task's latest approval card must have been answered by the user's click (with an approve
- * option) or by a PM relay the server checked against the user's chat. Cards answered before
- * the answerer was recorded count when a plan is set, so tasks parked then still resume.
- */
-export function isPlanApproved(
-  planSummary: string | null,
-  approval: ProjectAttentionItem | undefined,
-): boolean {
-  if (planSummary === null || approval === undefined || approval.answer === null) return false;
-  if (approval.answeredBy === "user") {
-    const choice = approval.answer.split("\n", 1)[0]?.trim();
-    return choice === PLAN_APPROVAL_START || choice === PLAN_APPROVAL_ONLY;
-  }
-  return true;
-}
 /** Stages whose task lead has work to show; stalled tasks come from these. */
 const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
   "planning",
@@ -215,7 +196,7 @@ const trimJournalText = (text: string): string =>
 
 /**
  * The team's recent history for team_status, newest first: tasks that finished or
- * failed, the user's answered questions, and posted sitreps.
+ * failed, leads' plans, the user's answered questions, and posted sitreps.
  */
 export function buildJournal(input: {
   readonly tasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "title">>;
@@ -234,7 +215,16 @@ export function buildJournal(input: {
   const entries: Array<ProjectTeamJournalEntry> = [];
   for (const event of input.endings) {
     const task = event.taskId === null ? undefined : taskById.get(event.taskId);
-    if (event.kind === "outcome") {
+    if (event.kind === "summary") {
+      // A lead's plan: it starts without approval, so the journal is where the PM sees it.
+      entries.push({
+        at: event.createdAt,
+        kind: "decision",
+        text: trimJournalText(
+          `${task === undefined ? "Plan" : `Plan for #${task.number} ${task.title}`}: ${event.body.replace(/^Plan: /, "")}`,
+        ),
+      });
+    } else if (event.kind === "outcome") {
       entries.push({
         at: event.createdAt,
         kind: "failed",
@@ -864,15 +854,12 @@ const make = Effect.gen(function* () {
             task.number,
           );
           const spec = yield* latestSpec(task);
-          // A task parked after its plan was approved resumes straight into the work. The
-          // approval must come from the card, not from planSummary alone, which any agent
-          // can write with task_update.
-          const approval = yield* repository.getLatestApprovalItem(task.id);
-          const approved = isPlanApproved(task.planSummary, Option.getOrUndefined(approval));
+          // A task whose earlier lead already recorded its plan resumes straight into the work.
+          const resume = task.planSummary !== null;
           // A restart must not reuse the first lead's request id, or it gets that lead back.
           const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
           const lead = yield* delegate({
-            task: buildTaskLeadPrompt({ task, key, spec, approved, memory, otherTasks: active }),
+            task: buildTaskLeadPrompt({ task, key, spec, resume, memory, otherTasks: active }),
             title: `${key} ${task.title}`,
             role: "implementation",
             isolation: "worktree",
@@ -898,7 +885,7 @@ const make = Effect.gen(function* () {
           yield* repository.addTaskSession({
             taskId: started.id,
             threadId: lead.childThreadId,
-            role: approved ? "implementer" : "lead",
+            role: resume ? "implementer" : "lead",
             createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
@@ -1387,9 +1374,7 @@ const make = Effect.gen(function* () {
         task,
         kind: input.kind,
         question: input.question,
-        options:
-          input.options ??
-          (input.kind === "approval" ? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY] : []),
+        options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
       // The question shows on the task's page and above the PM composer; the PM is not woken.
@@ -1410,7 +1395,7 @@ const make = Effect.gen(function* () {
           role.projectId,
         );
       }
-      // Approvals and decisions are the user's call: the PM may only relay words the user
+      // Decisions are the user's call: the PM may only relay words the user
       // typed in its chat after the card appeared. Blockers carry facts and need no check.
       // A closed card skips the check so the router reports why it cannot be answered.
       const open = item.value.answeredAt === null && item.value.supersededAt === null;

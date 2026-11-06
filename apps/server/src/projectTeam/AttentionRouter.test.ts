@@ -16,9 +16,9 @@ describe("AttentionRouter", () => {
         const cancelled = yield* startLead(pm, "Group sidebar tasks", harness.delegate);
         const finished = yield* startLead(pm, "Hello", harness.delegate);
         const kept = yield* startLead(pm, "Goodbye", harness.delegate);
-        const approval = yield* team.askUser(cancelled.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+        const first = yield* team.askUser(cancelled.leadThreadId, {
+          kind: "decision",
+          question: "Which login provider?",
         });
         yield* team.askUser(cancelled.leadThreadId, { kind: "decision", question: "Which?" });
         yield* team.askUser(finished.leadThreadId, { kind: "blocker", question: "Token?" });
@@ -38,7 +38,7 @@ describe("AttentionRouter", () => {
         );
         // The PM gets a clear refusal instead of a failed relay to a stopped lead.
         const answer = yield* team
-          .answerAttention(pm, { attentionItemId: approval.item.id, answer: "Yes." })
+          .answerAttention(pm, { attentionItemId: first.item.id, answer: "Yes." })
           .pipe(Effect.flip);
         assert.include(answer.message, "its task ended");
       }),
@@ -54,12 +54,12 @@ describe("AttentionRouter", () => {
         const b = yield* startLead(pm, "Goodbye", harness.delegate);
 
         const first = yield* team.askUser(a.leadThreadId, {
-          kind: "approval",
+          kind: "decision",
           question: "Plan A?",
         });
         yield* TestClock.adjust("1 minute");
         const second = yield* team.askUser(b.leadThreadId, {
-          kind: "approval",
+          kind: "decision",
           question: "Plan B?",
         });
         yield* TestClock.adjust("90 seconds");
@@ -94,8 +94,8 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Ship the fix today?",
         });
         userSays(harness, pm, "Yes, go ahead.");
 
@@ -111,7 +111,7 @@ describe("AttentionRouter", () => {
         assert.strictEqual(relay?.mode, "auto");
         assert.strictEqual(
           relay?.text,
-          "[User's chat answer, relayed by BusyBoy PM] Approve the plan? → Yes, go ahead.",
+          "[User's chat answer, relayed by BusyBoy PM] Ship the fix today? → Yes, go ahead.",
         );
         assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
 
@@ -134,8 +134,8 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Ship the fix today?",
         });
         userSays(harness, pm, "Yes.");
 
@@ -160,50 +160,6 @@ describe("AttentionRouter", () => {
     ),
   );
 
-  it.effect(
-    "shows each question as a card and replaces an unanswered approval with the newer plan",
-    () =>
-      withTeam((harness) =>
-        Effect.gen(function* () {
-          const team = yield* ProjectTeamService.ProjectTeamService;
-          const pm = yield* setUpManager;
-          const lead = yield* startLead(pm, "Fix login", harness.delegate);
-          const first = yield* team.askUser(lead.leadThreadId, {
-            kind: "approval",
-            question: "Plan v1?",
-          });
-          yield* TestClock.adjust("1 minute");
-          const second = yield* team.askUser(lead.leadThreadId, {
-            kind: "approval",
-            question: "Plan v2?",
-          });
-
-          const summary = (yield* team.attentionSnapshot).projects[0];
-          assert.strictEqual(summary?.openCount, 1);
-          assert.deepStrictEqual(
-            summary?.decisionCards.map((card) => [
-              card.taskTitle,
-              card.item.question,
-              card.item.supersededAt === null,
-            ]),
-            [
-              ["Fix login", "Plan v1?", false],
-              ["Fix login", "Plan v2?", true],
-            ],
-          );
-          const stale = yield* team
-            .answerDecision({ projectId: PROJECT_ID, attentionItemId: first.item.id, answer: "Ok" })
-            .pipe(Effect.flip);
-          assert.include(stale.message, "a newer question replaced it");
-          assert.strictEqual(second.item.supersededAt, null);
-
-          // Cards show on the task page and above the PM composer; the PM is not woken for them.
-          const toPm = yield* harness.messagesTo(pm);
-          assert.isFalse(toPm.some((text) => text.includes("Plan v2?")));
-        }),
-      ),
-  );
-
   it.effect("sends a card answer straight to the task lead without waking the PM", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -211,8 +167,8 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Fix login", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Ship the fix today?",
           options: ["Approve", "Request changes"],
         });
 
@@ -228,7 +184,7 @@ describe("AttentionRouter", () => {
         assert.strictEqual(relay?.senderThreadId, pm);
         assert.strictEqual(
           relay?.text,
-          "[User answer via BusyBoy] Approve the plan? → Approve\nNote: keep it small",
+          "[User answer via BusyBoy] Ship the fix today? → Approve\nNote: keep it small",
         );
         const summary = (yield* team.attentionSnapshot).projects[0];
         assert.strictEqual(summary?.openCount, 0);
@@ -238,18 +194,19 @@ describe("AttentionRouter", () => {
     ),
   );
 
-  it.effect("rejects a PM answer on an approval or decision card the user did not write", () =>
+  it.effect("rejects a PM answer on a decision card the user did not write", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* ProjectTeamService.ProjectTeamService;
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         // Written before the card appeared, so it cannot answer it.
-        userSays(harness, pm, "Approve and start", { id: "early" });
+        userSays(harness, pm, "Use Postgres", { id: "early" });
         yield* TestClock.adjust("1 minute");
-        const approval = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+        const database = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "Which database?",
+          options: ["Use Postgres", "Use SQLite"],
         });
         const decision = yield* team.askUser(lead.leadThreadId, {
           kind: "decision",
@@ -258,7 +215,7 @@ describe("AttentionRouter", () => {
         });
         const later = "2026-11-04T00:02:00.000Z";
         // An agent or the server writing as the user does not count either.
-        userSays(harness, pm, "Approve and start", {
+        userSays(harness, pm, "Use Postgres", {
           id: "from-agent",
           createdAt: later,
           createdBy: "agent",
@@ -271,7 +228,7 @@ describe("AttentionRouter", () => {
         });
 
         for (const [item, answer] of [
-          [approval.item, "Approve and start"],
+          [database.item, "Use Postgres"],
           [decision.item, "spaces"],
         ] as const) {
           const error = yield* team
@@ -292,8 +249,8 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Ship the fix today?",
         });
         userSays(harness, pm, "좋아요.\n  전부   승인 해주세요");
 
@@ -305,7 +262,7 @@ describe("AttentionRouter", () => {
         const [relay] = yield* Ref.get(harness.sent);
         assert.strictEqual(
           relay?.text,
-          "[User's chat answer, relayed by BusyBoy PM] Approve the plan? →  전부 승인 ",
+          "[User's chat answer, relayed by BusyBoy PM] Ship the fix today? →  전부 승인 ",
         );
       }),
     ),

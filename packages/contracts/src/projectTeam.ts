@@ -215,7 +215,7 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
   return `${prefix}-${taskNumber}`;
 }
 
-export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
+export const ProjectAttentionKind = Schema.Literals(["decision", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
 export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm"]);
@@ -481,12 +481,11 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
   }),
   stage: Schema.optional(
     Schema.Literals(["inbox", "running", "in_review", "done", "blocked", "cancelled"]).annotate({
-      description:
-        'New stage. "inbox" parks a task whose plan was approved without starting the work.',
+      description: 'New stage. "inbox" parks a task without starting the work.',
     }),
   ),
   planSummary: Schema.optional(ProjectTaskSummaryText).annotate({
-    description: "The approved plan, in short.",
+    description: "The plan, in short.",
   }),
   resultSummary: Schema.optional(ProjectTaskSummaryText).annotate({
     description: "What was delivered.",
@@ -622,10 +621,10 @@ export type ProjectTeamSettingsResult = typeof ProjectTeamSettingsResult.Type;
 export const ProjectTeamAskUserInput = Schema.Struct({
   kind: ProjectAttentionKind.annotate({
     description:
-      "decision: a choice only the user can make. approval: sign-off on a plan. blocker: something only a person can unblock.",
+      "decision: a choice only the user can make. blocker: something only a person can unblock.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
-    description: "Self-contained question. For approval, include the plan summary.",
+    description: "Self-contained question.",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -634,10 +633,6 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   ).annotate({ description: "Suggested answers, if any." }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
-
-/** Answers a plan approval offers when the task lead gives none. */
-export const PLAN_APPROVAL_START = "Approve and start";
-export const PLAN_APPROVAL_ONLY = "Approve only";
 
 const ProjectTeamOwnTaskId = Schema.optional(ProjectTaskId).annotate({
   description: "Task to use. A task lead may omit it for its own task; the PM passes it.",
@@ -853,7 +848,7 @@ export const ProjectTeamTaskDetail = Schema.Struct({
   versions: Schema.Array(ProjectTaskSpecVersion),
   sessions: Schema.Array(ProjectTaskSession),
   children: Schema.Array(ProjectTaskBrief),
-  /** Open questions and approvals pinned on the task. */
+  /** Open questions pinned on the task. */
   openAttention: Schema.Array(ProjectAttentionItem),
 });
 export type ProjectTeamTaskDetail = typeof ProjectTeamTaskDetail.Type;
