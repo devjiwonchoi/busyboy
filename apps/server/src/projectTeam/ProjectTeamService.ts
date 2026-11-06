@@ -1745,6 +1745,11 @@ const make = Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
         return yield* teamError(`#${task.number} is finished; it needs no plan approval.`);
       }
+      if (input.summary === undefined) {
+        return yield* teamError(
+          "ask_user(kind: approval) needs a summary: 3-5 short lines the user reads on the card to approve without opening the plan (what changes, the end result, done when, anything risky or cut).",
+        );
+      }
       const spec = yield* latestSpec(task);
       const now = yield* nowIso;
       yield* repository.supersedeOpenAttentionItems({
@@ -1759,6 +1764,7 @@ const make = Effect.gen(function* () {
         options: input.options ?? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY],
         askerThreadId: callerThreadId,
         specVersion: spec.version,
+        summary: input.summary,
       });
       yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
       yield* appendEvent(

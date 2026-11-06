@@ -239,6 +239,7 @@ beforeEach(() => {
               supersededAt: null,
               answeredBy: null,
               specVersion: null,
+              summary: null,
             },
           },
         ],

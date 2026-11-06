@@ -61,7 +61,7 @@ function stagesSection(resume: boolean): string {
    - successCriteria: a short list of checks that tell the work is done.
    - nonGoals: what is out of scope.
    - todos: one per step, including how you will verify the change.
-   Then call ask_user(kind: "approval") with a short summary of the plan; the server attaches the spec version and shows the user a review card. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
+   Then call ask_user(kind: "approval") with a one-line question saying what the task is, and a summary: 3-5 short lines the user reads on the card to approve without opening the plan (what changes, the end result, done when in 1-2 lines, and anything notable such as risky steps or scope cuts). The server attaches the spec version and shows the user a review card. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
    - "${PLAN_APPROVAL_START}": go on to running.
    - "${PLAN_APPROVAL_ONLY}": call task_update(stage: "inbox", planSummary) and stop. The work starts later in a new session.
    - "${PLAN_CHANGES_REQUESTED}" or anything else is feedback: an overall comment and inline comments, each quoting the text it is about ("quote" → comment). Address every comment in the spec with task_spec_write (that keeps the old version for diffing), then ask for approval again.`;

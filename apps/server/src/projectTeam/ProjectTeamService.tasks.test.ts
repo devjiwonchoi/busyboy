@@ -340,9 +340,20 @@ describe("ProjectTeamService tasks as specs", () => {
           note: "Plan",
         });
 
+        // An approval needs a summary for the card.
+        const noSummary = yield* team
+          .askUser(lead, { kind: "approval", question: "Plan: keep it." })
+          .pipe(Effect.flip);
+        assert.include(noSummary.message, "needs a summary");
+
         // Asking for approval pins spec v2 and shows the task as Waiting for approval.
-        const first = yield* team.askUser(lead, { kind: "approval", question: "Plan: keep it." });
+        const first = yield* team.askUser(lead, {
+          kind: "approval",
+          question: "Plan: keep it.",
+          summary: "Keep the scroll position while dragging.",
+        });
         assert.strictEqual(first.item.kind, "approval");
+        assert.strictEqual(first.item.summary, "Keep the scroll position while dragging.");
         assert.strictEqual(first.item.specVersion, 2);
         assert.deepStrictEqual(first.item.options, ["Approve and start", "Approve only"]);
         const waiting = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
@@ -370,8 +381,16 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.include(relayed, "Looks close.");
 
         // The next version asks again; an older open card is replaced, not left waiting.
-        const second = yield* team.askUser(lead, { kind: "approval", question: "Plan v3." });
-        const third = yield* team.askUser(lead, { kind: "approval", question: "Plan v3 again." });
+        const second = yield* team.askUser(lead, {
+          kind: "approval",
+          question: "Plan v3.",
+          summary: "Short plan.",
+        });
+        const third = yield* team.askUser(lead, {
+          kind: "approval",
+          question: "Plan v3 again.",
+          summary: "Short plan.",
+        });
         const replaced = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.deepStrictEqual(
           replaced.openAttention.map((item) => item.id),
@@ -416,7 +435,11 @@ describe("ProjectTeamService tasks as specs", () => {
         );
 
         // A card that already waited past the grace period is answered when AFK comes on.
-        const waiting = yield* team.askUser(leadA, { kind: "approval", question: "Plan A." });
+        const waiting = yield* team.askUser(leadA, {
+          kind: "approval",
+          question: "Plan A.",
+          summary: "Short plan.",
+        });
         yield* TestClock.adjust("2 minutes");
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
         const a = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: first.task.id });
@@ -428,7 +451,11 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.strictEqual(answeredA?.answeredBy ?? null, "afk");
 
         // A new card waits through the grace period, then the sweep approves it.
-        const asked = yield* team.askUser(leadB, { kind: "approval", question: "Plan B." });
+        const asked = yield* team.askUser(leadB, {
+          kind: "approval",
+          question: "Plan B.",
+          summary: "Short plan.",
+        });
         assert.isNull(asked.item.answer);
         yield* team.afkSweep;
         const early = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: second.task.id });
