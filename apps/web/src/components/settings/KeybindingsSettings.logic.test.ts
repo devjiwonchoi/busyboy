@@ -360,38 +360,9 @@ describe("KeybindingsSettings.logic", () => {
   });
 
   it("marks each default shortcut for multi-binding commands as default", () => {
-    const rows = buildKeybindingRows([
-      {
-        command: "chat.new",
-        shortcut: {
-          key: "n",
-          modKey: true,
-          metaKey: false,
-          ctrlKey: false,
-          altKey: false,
-          shiftKey: false,
-        },
-        whenAst: {
-          type: "not",
-          node: { type: "identifier", name: "terminalFocus" },
-        },
-      },
-      {
-        command: "chat.new",
-        shortcut: {
-          key: "o",
-          modKey: true,
-          metaKey: false,
-          ctrlKey: false,
-          altKey: false,
-          shiftKey: true,
-        },
-        whenAst: {
-          type: "not",
-          node: { type: "identifier", name: "terminalFocus" },
-        },
-      },
-    ] satisfies ResolvedKeybindingsConfig);
+    const rows = buildKeybindingRows(
+      DEFAULT_RESOLVED_KEYBINDINGS.filter((rule) => rule.command === "composer.sendBackground"),
+    );
 
     expect(rows.map((row) => row.source)).toEqual(["Default", "Default"]);
   });

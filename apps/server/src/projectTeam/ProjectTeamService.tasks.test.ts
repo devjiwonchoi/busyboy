@@ -1,8 +1,14 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+
 import { assert, describe, it } from "@effect/vitest";
-import { ProjectTaskId, ThreadId } from "@t3tools/contracts";
+import { ChatAttachmentId, ProjectTaskId, ThreadId } from "@t3tools/contracts";
 import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
 
+import { createPendingAttachmentId } from "../attachmentStore.ts";
+import * as ServerConfig from "../config.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { PROJECT_ID, setUpManager, userMessage, withTeam } from "./testkit.ts";
 
@@ -11,6 +17,50 @@ const service = ProjectTeamService.ProjectTeamService;
 const todo = (id: string, text: string) => ({ id, text, done: false, subtaskId: null });
 
 describe("ProjectTeamService tasks as specs", () => {
+  it.effect("keeps files the user attached to a new task and lists them in its spec", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        yield* setUpManager;
+        const { attachmentsDir } = yield* ServerConfig.ServerConfig;
+        const pendingId = createPendingAttachmentId("png")!;
+        const bytes = new Uint8Array([1, 2, 3]);
+        NodeFS.mkdirSync(attachmentsDir, { recursive: true });
+        NodeFS.writeFileSync(NodePath.join(attachmentsDir, `${pendingId}.png`), bytes);
+
+        const created = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          title: "Fix the broken header",
+          context: "The header overlaps the sidebar.",
+          startPlanning: false,
+          attachments: [
+            {
+              type: "image",
+              id: ChatAttachmentId.make(pendingId),
+              name: "screenshot.png",
+              mimeType: "image/png",
+              sizeBytes: bytes.byteLength,
+            },
+          ],
+        });
+
+        const background = created.versions[0]?.spec.background ?? "";
+        const [context, list] = background.split("\n\n");
+        assert.strictEqual(context, "The header overlaps the sidebar.");
+        const match =
+          /^Attachments \(read these files\):\n- screenshot\.png \(image\/png\): (\/.+)$/.exec(
+            list ?? "",
+          );
+        assert.isNotNull(match);
+        const path = match![1]!;
+        assert.notInclude(path, "pending");
+        assert.isTrue(NodeFS.existsSync(path));
+        assert.deepStrictEqual([...NodeFS.readFileSync(path)], [1, 2, 3]);
+        assert.strictEqual(created.task.request, "The header overlaps the sidebar.");
+      }),
+    ),
+  );
+
   it.effect("lets the user dump a task, shape its spec, restore a version and split a todo", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

@@ -30,6 +30,7 @@ import { ProviderUpdatePrimaryNotification } from "../components/ProviderUpdateP
 import { DesktopUpdateLaunchNotice } from "../components/sidebar/updateEverythingRun";
 import { ThreadNotificationCoordinator } from "../components/ThreadNotificationCoordinator";
 import { ReopenClosedViewShortcut } from "../components/ReopenClosedViewShortcut";
+import { QuickTaskHost } from "../components/task/QuickTaskHost";
 import { ProjectCloneToastCoordinator } from "../components/ProjectCloneToastCoordinator";
 import { PullRequestGuideRunCoordinator } from "../components/pullRequest/guide/PullRequestGuideRunCoordinator";
 import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToastCoordinator";
@@ -233,6 +234,7 @@ function RootRouteView() {
           <SnapShotCoordinator />
           <ThreadNotificationCoordinator />
           <ReopenClosedViewShortcut />
+          {primaryEnvironmentAuthenticated ? <QuickTaskHost /> : null}
           <ConfirmDialogHost />
           <SlowRpcRequestToastCoordinator />
           <ProjectCloneToastCoordinator />
