@@ -2,6 +2,7 @@ import type { EnvironmentId, ProjectTaskReference } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  blockedByKeys,
   blockedByLabel,
   blockedByShortLabel,
   buildTaskRelationsIndex,
@@ -75,8 +76,13 @@ describe("taskRelations", () => {
     expect(ui.parent?.key).toBe("BU-53");
     expect(ui.blockedBy.map((related) => related.key)).toEqual(["SI-4"]);
     expect(ui.related.map((related) => related.key)).toEqual(["BU-55"]);
-    expect(blockedByLabel(ui.blockedBy)).toBe("Blocked by SI-4 · Server");
-    expect(blockedByShortLabel(ui.blockedBy)).toBe("Blocked by SI-4");
+    expect(blockedByLabel(ui.blockedBy)).toBe("SI-4 끝나야 시작 · Server");
+    expect(blockedByShortLabel(ui.blockedBy)).toBe("SI-4 끝나야 시작");
+    expect(blockedByKeys(ui.blockedBy)).toBe("SI-4");
+    const two = [...ui.blockedBy, ...ui.related];
+    expect(blockedByLabel(two)).toBe("SI-4, BU-55 끝나야 시작");
+    expect(blockedByShortLabel(two)).toBe("2개 끝나야 시작");
+    expect(blockedByKeys(two)).toBe("SI-4 +1");
   });
 
   it("lists the tasks a task blocks, and none once it is done", () => {

@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { Link } from "@tanstack/react-router";
-import { FlagIcon } from "lucide-react";
+import { HourglassIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useId } from "react";
 
@@ -23,7 +23,7 @@ import { splitDirectorEntry } from "~/state/projectTeam.logic";
 import { taskRouteParams } from "~/taskRoutes";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { formatTaskPullRequestLabel, StatusGlyphWithLabel } from "../sidebar/SidebarRowLine";
-import { BlockedFlag, SubtaskProgressBadge } from "../task/TaskRelations";
+import { SubtaskProgressBadge, WaitingMarker } from "../task/TaskRelations";
 import {
   blockedByShortLabel,
   buildTaskRelationsIndex,
@@ -260,7 +260,7 @@ function TaskListRow(props: {
         {relations.progress !== null ? (
           <SubtaskProgressBadge progress={relations.progress} />
         ) : null}
-        <BlockedFlag blockedBy={relations.blockedBy} className="hidden sm:inline-flex" />
+        <WaitingMarker blockedBy={relations.blockedBy} className="hidden sm:inline-flex" />
       </div>
       <div className="flex shrink-0 items-center gap-3 pl-6 text-muted-foreground text-xs sm:pl-0">
         <span className={cn("sm:w-28 sm:truncate", status.className)}>{statusLabel}</span>
@@ -270,7 +270,7 @@ function TaskListRow(props: {
             data-blocked-label
             className="inline-flex items-center gap-1 text-orange-500 sm:hidden dark:text-orange-400"
           >
-            <FlagIcon aria-hidden className="size-3.5 fill-current" />
+            <HourglassIcon aria-hidden className="size-3.5" />
             {blockedByShortLabel(relations.blockedBy)}
           </span>
         ) : null}

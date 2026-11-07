@@ -278,6 +278,15 @@ function threadRow(title: string): HTMLElement | null {
   );
 }
 
+/** The row shows "⏳ <key>": an hourglass and the key it waits on, never a flag. */
+function expectWaitingOn(row: HTMLElement | null, key: string) {
+  const marker = row?.querySelector<HTMLElement>("[data-waiting-marker]");
+  expect(marker).toBeTruthy();
+  expect(marker!.querySelector("[data-waiting-icon]")).not.toBeNull();
+  expect(marker!.querySelector("[aria-hidden]")?.textContent).toBe(key);
+  expect(row!.querySelector(".lucide-flag")).toBeNull();
+}
+
 describe("sidebar tasks", () => {
   it("lists tasks by key, opens their pages, and adds a task from the PM heading", async () => {
     const app = renderSidebarApp();
@@ -289,20 +298,22 @@ describe("sidebar tasks", () => {
       "BB-3 Clean up build warnings, Todo",
     );
     expect(taskRowButton("BB-4")?.closest("li")?.className).toContain("pl-10");
-    // Linear-style markers: the parent counts its subtasks; blocked tasks show a flag
-    // naming the unfinished task they wait on (BB-1 is done, so it no longer blocks).
+    // Linear-style markers: the parent counts its subtasks; a waiting task shows an
+    // hourglass and the key of the unfinished task it waits on (BB-1 is done, so it no
+    // longer counts). No flag: it read like a priority.
     expect(
       taskRowButton("BB-3")
         ?.querySelector("[data-subtask-progress]")
         ?.getAttribute("data-subtask-progress"),
     ).toBe("0/1");
     expect(taskRowButton("BB-4")?.getAttribute("aria-label")).toBe(
-      "BB-4 Silence tsc warnings, Todo, Blocked by BB-2 · Fix drag scroll",
+      "BB-4 Silence tsc warnings, Todo, BB-2 끝나야 시작 · Fix drag scroll",
     );
-    expect(taskRowButton("BB-4")?.querySelector("[data-blocked-flag]")).not.toBeNull();
-    expect(taskRowButton("BB-3")?.querySelector("[data-blocked-flag]")).toBeNull();
-    // A lead's row shows the flag too.
-    expect(threadRow("BB-2 Fix drag scroll")?.querySelector("[data-blocked-flag]")).not.toBeNull();
+    expectWaitingOn(taskRowButton("BB-4"), "BB-2");
+    expect(taskRowButton("BB-3")?.querySelector("[data-waiting-marker]")).toBeNull();
+    // A lead's row shows it too.
+    expectWaitingOn(threadRow("BB-2 Fix drag scroll"), "BB-3");
+    expect(container.querySelector(".lucide-flag")).toBeNull();
     // Questions are answered in the PM chat, so the sidebar has no "Waiting on you" entry.
     expect(container.textContent).not.toContain("Waiting on you");
     // Done tasks and a task's earlier sessions stay out of the list.

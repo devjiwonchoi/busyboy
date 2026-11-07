@@ -1,6 +1,6 @@
 import type { EnvironmentId, ProjectTaskId } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import { ChevronRightIcon, FlagIcon } from "lucide-react";
+import { ChevronRightIcon, HourglassIcon, Link2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
@@ -9,6 +9,7 @@ import { useProjectManagerEntries } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
 import { GlyphWithLabel, StatusGlyphWithLabel } from "../sidebar/SidebarRowLine";
 import {
+  blockedByKeys,
   blockedByLabel,
   buildTaskRelationsIndex,
   type RelatedTask,
@@ -43,22 +44,35 @@ export function useRelatedTask(
   return taskId === null ? null : relatedTask(index, environmentId, taskId);
 }
 
-// Linear's colors: an orange flag for "blocked by", a red one for "blocking".
+// An hourglass for "waits on" and a chain for "blocking": neither reads as priority.
 const BLOCKED_CLASS = "text-orange-500 dark:text-orange-400";
 const BLOCKING_CLASS = "text-red-500 dark:text-red-400";
 
-/** The blocked marker on a task row; names its blockers on hover or long-press. */
-export function BlockedFlag(props: { blockedBy: ReadonlyArray<RelatedTask>; className?: string }) {
+/**
+ * "⏳ BU-66" on a task row: the task waits on an unfinished one. Names it in full on
+ * hover or long-press.
+ */
+export function WaitingMarker(props: {
+  blockedBy: ReadonlyArray<RelatedTask>;
+  className?: string;
+  /** Hides the keys where the row is too narrow; the label still names them. */
+  keysClassName?: string;
+}) {
   if (props.blockedBy.length === 0) return null;
   const label = blockedByLabel(props.blockedBy);
   return (
     <span
-      data-blocked-flag
+      data-waiting-marker
       className={cn("relative z-10 inline-flex shrink-0", BLOCKED_CLASS, props.className)}
     >
       <span className="sr-only">{label}</span>
-      <GlyphWithLabel label={label} testId="blocked-flag-trigger">
-        <FlagIcon aria-hidden className="size-3.5 fill-current" />
+      <GlyphWithLabel label={label} testId="waiting-marker-trigger">
+        <span aria-hidden className="inline-flex items-center gap-0.5 font-mono text-2xs">
+          <HourglassIcon data-waiting-icon className="size-3" />
+          <span data-waiting-keys className={props.keysClassName}>
+            {blockedByKeys(props.blockedBy)}
+          </span>
+        </span>
       </GlyphWithLabel>
     </span>
   );
@@ -125,7 +139,7 @@ export function TaskStructureLine(props: { relations: TaskRelations | null }) {
   if (relations.blockedBy.length > 0) {
     parts.push(
       <span key="blocked" className="inline-flex min-w-0 items-center gap-1">
-        <FlagIcon aria-hidden className={cn("size-3 shrink-0 fill-current", BLOCKED_CLASS)} />
+        <HourglassIcon aria-hidden className={cn("size-3 shrink-0", BLOCKED_CLASS)} />
         <span className="truncate">
           Blocked by{" "}
           {relations.blockedBy.map((related, position) => (
@@ -197,8 +211,8 @@ export function TaskParentBreadcrumb(props: { relations: TaskRelations | null })
 }
 
 /**
- * Linear's relation lists for one task: Sub-tasks with progress, Blocked by (orange
- * flag), Blocking (red flag) and Related (finished links). Each row opens its task.
+ * Linear's relation lists for one task: Sub-tasks with progress, Blocked by (hourglass),
+ * Blocking (chain) and Related (finished links). Each row opens its task.
  */
 export function TaskStructure(props: { relations: TaskRelations | null; className?: string }) {
   const { relations } = props;
@@ -226,13 +240,13 @@ export function TaskStructure(props: { relations: TaskRelations | null; classNam
       <RelationGroup
         label="Blocked by"
         name="blocked-by"
-        icon={<FlagIcon aria-hidden className={cn("size-3 fill-current", BLOCKED_CLASS)} />}
+        icon={<HourglassIcon aria-hidden className={cn("size-3", BLOCKED_CLASS)} />}
         tasks={relations.blockedBy}
       />
       <RelationGroup
         label="Blocking"
         name="blocking"
-        icon={<FlagIcon aria-hidden className={cn("size-3 fill-current", BLOCKING_CLASS)} />}
+        icon={<Link2Icon aria-hidden className={cn("size-3", BLOCKING_CLASS)} />}
         tasks={relations.blocking}
       />
       <RelationGroup label="Related" name="related" tasks={relations.related} />
@@ -288,7 +302,10 @@ export function RelatedTaskRow(props: { related: RelatedTask }) {
   );
 }
 
-/** A compact row's markers, after its title: subtask progress and the blocked flag. */
+/**
+ * A compact row's markers, after its title: subtask progress and the waiting marker.
+ * The waiting keys show only when the row (an `@container/task-row`) leaves the title room.
+ */
 export function TaskRowMarkers(props: { relations: TaskRelations | null }) {
   const { relations } = props;
   if (relations === null) return null;
@@ -298,7 +315,10 @@ export function TaskRowMarkers(props: { relations: TaskRelations | null }) {
       {relations.progress !== null ? (
         <SubtaskProgressBadge progress={relations.progress} className="text-2xs" />
       ) : null}
-      <BlockedFlag blockedBy={relations.blockedBy} />
+      <WaitingMarker
+        blockedBy={relations.blockedBy}
+        keysClassName="hidden @min-[15rem]/task-row:inline"
+      />
     </span>
   );
 }

@@ -1606,7 +1606,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     swipeActions.push({ kind: "archive", onSelect: () => onArchive(threadRef) });
 
   const rowSurfaceClassName = cn(
-    "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+    "@container/task-row group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
     props.isActive
       ? "bg-sidebar-row-active text-sidebar-foreground"
       : isSelected
