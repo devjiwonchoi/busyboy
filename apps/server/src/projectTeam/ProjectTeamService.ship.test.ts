@@ -105,6 +105,7 @@ describe("ProjectTeamService ship loop", () => {
           repository: "acme/app",
           number: 7,
           watching: true,
+          forTaskLead: true,
           link: { url: PR_URL, source: "agent" },
         });
         // An open pull request is In Review until it passes the Ready gate.

@@ -108,6 +108,7 @@ export function evaluatePullRequestWatch(
       remarkIds,
       conflicting,
       wakes,
+      ...(watch.forTaskLead === true ? { forTaskLead: true } : {}),
     },
     exhausted: commentsOnly && wakes >= PULL_REQUEST_WATCH_WAKE_LIMIT,
   };

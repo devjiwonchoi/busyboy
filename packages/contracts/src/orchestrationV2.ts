@@ -2703,6 +2703,8 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
     ...ThreadPullRequestKey.fields,
     watching: Schema.Boolean,
+    /** The server watches for a project task's lead, a subagent that owns its pull request. */
+    forTaskLead: Schema.optional(Schema.Boolean),
     link: Schema.optional(
       Schema.Struct({ url: TrimmedNonEmptyString, source: ThreadPullRequestLinkSource }),
     ),
