@@ -154,11 +154,11 @@ import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import {
   readIsProjectManagerThread,
-  useProjectManagerEntries,
   useLeadThreadTask,
   useProjectManagerForThread,
   type ProjectManagerEntry,
 } from "../state/projectTeam";
+import { useDirectorProjectKeys, useProjectOnlyManagerEntries } from "../state/director";
 import { SidebarProjectManagerBadges, SidebarProjectManagerHeading } from "./SidebarProjectManager";
 import {
   buildThreadRouteParams,
@@ -448,9 +448,13 @@ function useSidebarThreads(input: {
   const { scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey, projectGroups } = input;
   const allThreads = useThreadShells();
   const sideChatParents = useSideChatStore((state) => state.parentByThreadKey);
-  // Side chats live in their thread's right panel, not in the list.
+  const directorProjectKeys = useDirectorProjectKeys(useEnvironmentIds());
+  // Side chats live in their thread's right panel, not in the list. The
+  // Director's chat lives behind its rail avatar.
   const threads = allThreads.filter(
-    (thread) => sideChatParents[threadShellKey(thread)] === undefined,
+    (thread) =>
+      sideChatParents[threadShellKey(thread)] === undefined &&
+      !directorProjectKeys.has(`${thread.environmentId}:${thread.projectId}`),
   );
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const [workingShelfExpanded, setWorkingShelfExpanded] = useLocalStorage(
@@ -463,7 +467,7 @@ function useSidebarThreads(input: {
     NO_COLLAPSED_PROJECTS,
     Schema.Array(Schema.String),
   );
-  const projectManagerEntries = useProjectManagerEntries(useEnvironmentIds());
+  const projectManagerEntries = useProjectOnlyManagerEntries(useEnvironmentIds());
   const projectKeyByProject = new Map<string, string>(
     projectGroups.flatMap((group) =>
       group.memberProjects.map(

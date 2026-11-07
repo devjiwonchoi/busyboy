@@ -119,3 +119,34 @@ export function decisionCardsForThread(
   }
   return cards.toSorted((a, b) => Date.parse(a.item.createdAt) - Date.parse(b.item.createdAt));
 }
+
+/** The workspace Director lives in a hidden system project, not a user project. */
+export const isDirectorSummary = (summary: Pick<ProjectTeamAttentionSummary, "kind">): boolean =>
+  summary.kind === "director";
+
+/** Splits the Director off the project managers. The first Director wins. */
+export function splitDirectorEntry<
+  E extends { readonly summary: Pick<ProjectTeamAttentionSummary, "kind"> },
+>(entries: readonly E[]): { readonly director: E | null; readonly projects: readonly E[] } {
+  let director: E | null = null;
+  const projects: E[] = [];
+  for (const entry of entries) {
+    if (isDirectorSummary(entry.summary)) director ??= entry;
+    else projects.push(entry);
+  }
+  return { director, projects };
+}
+
+/** "environmentId:projectId" of every Director system project, to hide them from project lists. */
+export function directorProjectKeys(
+  entries: ReadonlyArray<{
+    readonly environmentId: string;
+    readonly summary: Pick<ProjectTeamAttentionSummary, "kind" | "projectId">;
+  }>,
+): ReadonlySet<string> {
+  return new Set(
+    entries
+      .filter((entry) => isDirectorSummary(entry.summary))
+      .map((entry) => `${entry.environmentId}:${entry.summary.projectId}`),
+  );
+}

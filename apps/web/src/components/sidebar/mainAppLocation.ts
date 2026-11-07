@@ -1,6 +1,8 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
+import { useDirectorChat } from "../director/useDirectorChat";
+
 export function isSidebarUtilityPage(pathname: string) {
   return (
     pathname === "/settings" ||
@@ -23,11 +25,13 @@ export function MainAppLocationTracker() {
   const isAllProjects = useLocation({
     select: (location) => location.pathname === ALL_PROJECTS_PATH,
   });
+  // The Director's chat has its own rail entry, so Chat goes back past it.
+  const isDirectorChat = useDirectorChat()?.isOpen === true;
   useEffect(() => {
     if (href === null) return;
     mainAppHref = href;
-    if (!isAllProjects) chatHref = href;
-  }, [href, isAllProjects]);
+    if (!isAllProjects && !isDirectorChat) chatHref = href;
+  }, [href, isAllProjects, isDirectorChat]);
   return null;
 }
 
