@@ -1055,6 +1055,7 @@ import {
 } from "lucide-react";
 import { proposedPlanTitle } from "@t3tools/shared/proposedPlanText";
 import { hasProviderSetup } from "./ProviderStatusBanner";
+import { useChatAnnotations } from "./useChatAnnotations";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -2057,6 +2058,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     void requestSitrep(projectManagerRef);
   });
   const composerDraft = useComposerThreadDraft(composerDraftTarget);
+  const composerAnnotations = useChatAnnotations(composerDraftTarget);
   const composerDraftTargetKeyRef = useRef("");
   useLayoutEffect(() => {
     composerDraftTargetKeyRef.current = composerDraftTargetKey;
@@ -2544,7 +2546,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     prompt,
     imageCount: composerImages.length + composerFiles.length,
     terminalContexts: composerTerminalContexts,
-    elementContextCount: composerPreviewAnnotations.length + composerReviewComments.length,
+    elementContextCount:
+      composerPreviewAnnotations.length +
+      composerReviewComments.length +
+      composerAnnotations.annotations.length,
   });
   const composerTriggerKind = composerTrigger?.kind ?? null;
   const pathTriggerQuery = composerTrigger?.kind === "path" ? composerTrigger.query : "";
@@ -6742,6 +6747,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                           : "Ask anything...")}
                 </button>
                 {collapsedComposerImagePreviews}
+                {composerAnnotations.annotations.length > 0 ? (
+                  <div data-composer-annotations className="shrink-0">
+                    {composerAnnotations.chip}
+                  </div>
+                ) : null}
                 <CollapsedComposerAction
                   sitrep={collapsedComposerSitrep}
                   hasSendableContent={composerSendState.hasSendableContent}
@@ -6851,6 +6861,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     ))}
                   </div>
                 )}
+
+              {!isComposerCollapsedMobile &&
+              !isComposerApprovalState &&
+              composerAnnotations.annotations.length > 0 ? (
+                <div data-composer-annotations className="mb-2 flex">
+                  {composerAnnotations.chip}
+                </div>
+              ) : null}
 
               {!isComposerCollapsedMobile &&
                 !isComposerApprovalState &&

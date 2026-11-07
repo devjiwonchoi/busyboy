@@ -865,21 +865,37 @@ export function formatPlanReviewFeedback(input: {
   readonly comments: ReadonlyArray<PlanReviewComment>;
   readonly overall: string;
 }): string {
-  const lines = [
+  const head =
     input.specVersion === null
       ? PLAN_CHANGES_REQUESTED
-      : `${PLAN_CHANGES_REQUESTED} (review of spec v${input.specVersion})`,
-  ];
+      : `${PLAN_CHANGES_REQUESTED} (review of spec v${input.specVersion})`;
+  return [head, ...planReviewNotes(input)].join("\n");
+}
+
+/** An approval that carries the reviewer's notes; it still reads as "start". */
+export function formatPlanApproval(input: {
+  readonly comments: ReadonlyArray<PlanReviewComment>;
+  readonly overall: string;
+}): string {
+  return [PLAN_APPROVAL_START, ...planReviewNotes(input)].join("\n");
+}
+
+function planReviewNotes(input: {
+  readonly comments: ReadonlyArray<PlanReviewComment>;
+  readonly overall: string;
+}): string[] {
+  const lines: string[] = [];
   const overall = input.overall.trim();
   if (overall.length > 0) lines.push("", "Overall:", overall);
   if (input.comments.length > 0) {
     lines.push("", "Inline comments:");
     input.comments.forEach((entry, index) => {
       const quote = entry.quote.replace(/\s+/g, " ").trim();
-      lines.push(`${index + 1}. [${entry.section}] "${quote}" → ${entry.comment.trim()}`);
+      const comment = entry.comment.trim();
+      lines.push(`${index + 1}. [${entry.section}] "${quote}"${comment ? ` → ${comment}` : ""}`);
     });
   }
-  return lines.join("\n");
+  return lines;
 }
 
 const ProjectTeamOwnTaskId = Schema.optional(ProjectTaskId).annotate({

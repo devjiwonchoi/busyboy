@@ -13,7 +13,7 @@ import { useAnswerDecision } from "~/state/projectTeam";
 import { Button } from "../ui/button";
 import { AFK_ANSWERED_LABEL } from "./Afk";
 import { PlanApprovalModal } from "./PlanApprovalModal";
-import { PlanApprovalSections } from "./PlanMarkdown";
+import { PlanApprovalSections, PlanTitle } from "./PlanMarkdown";
 
 const OUTCOME_LABEL: Record<PlanApprovalOutcome, string> = {
   start: "Approved and started",
@@ -102,9 +102,11 @@ export function PlanApprovalCard({
             View plan
           </Button>
         </div>
-        {outcome === "changes" && feedback.length > 0 ? (
+        {feedback.length > 0 ? (
           <details className="mt-1 text-muted-foreground text-xs">
-            <summary className="cursor-pointer select-none">Feedback</summary>
+            <summary className="cursor-pointer select-none">
+              {outcome === "changes" ? "Feedback" : "Notes"}
+            </summary>
             <p className="mt-1 whitespace-pre-wrap">{feedback}</p>
           </details>
         ) : null}
@@ -133,7 +135,11 @@ export function PlanApprovalCard({
       data-decision-card-state="open"
       className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5"
     >
-      <p className="truncate font-medium text-muted-foreground text-xs">{header}</p>
+      <PlanTitle
+        as="div"
+        meta={card.item.specVersion === null ? "Plan approval" : `Plan approval · v${card.item.specVersion}`}
+        title={card.taskTitle}
+      />
       <PlanApprovalSections item={card.item} />
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={sending} onClick={() => approve(PLAN_APPROVAL_START)}>
