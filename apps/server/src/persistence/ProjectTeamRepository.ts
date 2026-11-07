@@ -32,6 +32,9 @@ import {
   ProjectTaskModelRole,
   ProjectTaskModelStep,
   ProjectTaskModelSteps,
+  ProjectTaskMetrics,
+  ProjectTaskSize,
+  ProjectTaskStepUsages,
   ProjectTaskReview,
   ProjectTaskRoleModels,
   ProjectTaskSession,
@@ -264,6 +267,38 @@ export class ProjectTeamRepository extends Context.Service<
       readonly role: ProjectTaskModelRole;
       readonly step: ProjectTaskModelStep;
     }) => Result<Option.Option<ProjectTask>>;
+    /** The task and role a session thread works on, if it is linked to one. */
+    readonly findTaskSessionByThreadId: (
+      threadId: ThreadId,
+    ) => Result<Option.Option<ProjectTaskSession>>;
+    /**
+     * Opens the usage row of a model session (the lead, or a task_delegate child). Opening
+     * it again keeps the first row, so a session reused for later runs adds to it. True
+     * when this call opened it; a fix step's first opening also counts a fix round.
+     */
+    readonly startModelRun: (input: StartProjectTaskModelRunInput) => Result<boolean>;
+    /** The usage row of a session thread, if it has one. */
+    readonly findModelRunByThreadId: (
+      threadId: ThreadId,
+    ) => Result<Option.Option<ProjectTaskModelRun>>;
+    /**
+     * Adds one finished run to a session's row and refreshes the task's per-role totals.
+     * None when the session has no row.
+     */
+    readonly addModelRunUsage: (
+      input: AddProjectTaskModelRunUsageInput,
+    ) => Result<Option.Option<ProjectTask>>;
+    /** Adds to one of the task's outcome counts. */
+    readonly bumpTaskMetric: (input: {
+      readonly id: ProjectTaskId;
+      readonly metric: "reviewFindings" | "fixRounds" | "ciFailures";
+      readonly by: number;
+    }) => Result<Option.Option<ProjectTask>>;
+    readonly setTaskSize: (input: {
+      readonly id: ProjectTaskId;
+      readonly size: ProjectTaskSize;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
     /** Case-insensitive substring match over title, request, plan and result summaries. */
     readonly searchTasks: (input: {
       readonly projectId: ProjectId;
@@ -381,6 +416,45 @@ export class ProjectTeamRepository extends Context.Service<
   }
 >()("t3/persistence/ProjectTeamRepository") {}
 
+/** One model session's usage on a task, summed over its runs. */
+export const ProjectTaskModelRun = Schema.Struct({
+  taskId: ProjectTaskId,
+  threadId: ThreadId,
+  role: ProjectTaskModelRole,
+  providerInstanceId: Schema.String,
+  model: Schema.NullOr(Schema.String),
+  startedAt: IsoDateTime,
+  finishedAt: Schema.NullOr(IsoDateTime),
+  durationMs: NonNegativeInt,
+  runCount: NonNegativeInt,
+  inputTokens: NonNegativeInt,
+  cachedInputTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  costUsd: Schema.NullOr(Schema.Number),
+});
+export type ProjectTaskModelRun = typeof ProjectTaskModelRun.Type;
+
+export interface StartProjectTaskModelRunInput {
+  readonly taskId: ProjectTaskId;
+  readonly threadId: ThreadId;
+  readonly role: ProjectTaskModelRole;
+  readonly providerInstanceId: string;
+  readonly model: string | null;
+  readonly startedAt: IsoDateTime;
+  /** A fix step: opening its row also counts a fix round on the task. */
+  readonly countsFixRound?: boolean;
+}
+
+export interface AddProjectTaskModelRunUsageInput {
+  readonly threadId: ThreadId;
+  readonly durationMs: number;
+  readonly inputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly outputTokens: number;
+  readonly costUsd: number | null;
+  readonly finishedAt: IsoDateTime;
+}
+
 const ManagerRow = Schema.Struct({
   ...ProjectManagerRecord.fields,
   settings: Schema.fromJsonString(ProjectTeamSettings),
@@ -392,6 +466,8 @@ const TaskRow = Schema.Struct({
   ready: Schema.NullOr(Schema.fromJsonString(ProjectTaskReady)),
   roleModels: Schema.fromJsonString(ProjectTaskRoleModels),
   modelSteps: Schema.fromJsonString(ProjectTaskModelSteps),
+  stepUsage: Schema.fromJsonString(ProjectTaskStepUsages),
+  metrics: Schema.fromJsonString(ProjectTaskMetrics),
 });
 const RoleModelsJson = Schema.fromJsonString(ProjectTaskRoleModels);
 const ModelStepJson = Schema.fromJsonString(ProjectTaskModelStep);
@@ -468,6 +544,8 @@ export const make = Effect.gen(function* () {
     ready_json AS "ready",
     role_models_json AS "roleModels",
     model_steps_json AS "modelSteps",
+    step_usage_json AS "stepUsage",
+    metrics_json AS "metrics",
     stage_changed_at AS "stageChangedAt",
     created_at AS "createdAt",
     updated_at AS "updatedAt"
@@ -771,6 +849,160 @@ export const make = Effect.gen(function* () {
     execute: ({ id, role, step }) => sql`
       UPDATE project_tasks SET
         model_steps_json = json_set(model_steps_json, ${`$.${role}`}, json(${step}))
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const findTaskSessionByThread = SqlSchema.findOneOption({
+    Request: Schema.Struct({ threadId: ThreadId }),
+    Result: ProjectTaskSession,
+    execute: ({ threadId }) => sql`
+      SELECT
+        task_id AS "taskId",
+        thread_id AS "threadId",
+        role AS "role",
+        created_at AS "createdAt"
+      FROM project_task_sessions
+      WHERE thread_id = ${threadId}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+  });
+  const insertModelRun = SqlSchema.findAll({
+    Request: Schema.Struct({
+      taskId: ProjectTaskId,
+      threadId: ThreadId,
+      role: ProjectTaskModelRole,
+      providerInstanceId: Schema.String,
+      model: Schema.NullOr(Schema.String),
+      startedAt: IsoDateTime,
+    }),
+    Result: Schema.Struct({ taskId: ProjectTaskId }),
+    execute: ({ taskId, threadId, role, providerInstanceId, model, startedAt }) => sql`
+      INSERT INTO project_task_model_runs (
+        task_id, thread_id, role, provider_instance_id, model, started_at
+      )
+      VALUES (${taskId}, ${threadId}, ${role}, ${providerInstanceId}, ${model}, ${startedAt})
+      ON CONFLICT (task_id, thread_id) DO NOTHING
+      RETURNING task_id AS "taskId"
+    `,
+  });
+  const modelRunColumns = sql.literal(`
+    task_id AS "taskId",
+    thread_id AS "threadId",
+    role AS "role",
+    provider_instance_id AS "providerInstanceId",
+    model AS "model",
+    started_at AS "startedAt",
+    finished_at AS "finishedAt",
+    duration_ms AS "durationMs",
+    run_count AS "runCount",
+    input_tokens AS "inputTokens",
+    cached_input_tokens AS "cachedInputTokens",
+    output_tokens AS "outputTokens",
+    cost_usd AS "costUsd"
+  `);
+  const findModelRunByThread = SqlSchema.findOneOption({
+    Request: Schema.Struct({ threadId: ThreadId }),
+    Result: ProjectTaskModelRun,
+    execute: ({ threadId }) => sql`
+      SELECT ${modelRunColumns}
+      FROM project_task_model_runs
+      WHERE thread_id = ${threadId}
+      ORDER BY started_at DESC
+      LIMIT 1
+    `,
+  });
+  const updateModelRunUsage = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      threadId: ThreadId,
+      durationMs: NonNegativeInt,
+      inputTokens: NonNegativeInt,
+      cachedInputTokens: NonNegativeInt,
+      outputTokens: NonNegativeInt,
+      costUsd: Schema.NullOr(Schema.Number),
+      finishedAt: IsoDateTime,
+    }),
+    Result: Schema.Struct({ taskId: ProjectTaskId }),
+    execute: (input) => sql`
+      UPDATE project_task_model_runs SET
+        duration_ms = duration_ms + ${input.durationMs},
+        run_count = run_count + 1,
+        input_tokens = input_tokens + ${input.inputTokens},
+        cached_input_tokens = cached_input_tokens + ${input.cachedInputTokens},
+        output_tokens = output_tokens + ${input.outputTokens},
+        cost_usd = CASE
+          WHEN ${input.costUsd} IS NULL THEN cost_usd
+          ELSE COALESCE(cost_usd, 0) + ${input.costUsd}
+        END,
+        finished_at = ${input.finishedAt}
+      WHERE rowid = (
+        SELECT rowid FROM project_task_model_runs
+        WHERE thread_id = ${input.threadId}
+        ORDER BY started_at DESC
+        LIMIT 1
+      )
+      RETURNING task_id AS "taskId"
+    `,
+  });
+  const refreshTaskStepUsage = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId }),
+    Result: TaskRow,
+    execute: ({ id }) => sql`
+      UPDATE project_tasks SET
+        step_usage_json = COALESCE((
+          SELECT json_group_object(
+            role,
+            json_object(
+              'durationMs', duration_ms,
+              'runs', runs,
+              'inputTokens', input_tokens,
+              'outputTokens', output_tokens,
+              'costUsd', cost_usd
+            )
+          )
+          FROM (
+            SELECT
+              role,
+              SUM(duration_ms) AS duration_ms,
+              SUM(run_count) AS runs,
+              SUM(input_tokens) AS input_tokens,
+              SUM(output_tokens) AS output_tokens,
+              SUM(cost_usd) AS cost_usd
+            FROM project_task_model_runs
+            WHERE task_id = ${id} AND run_count > 0
+            GROUP BY role
+          )
+        ), '{}')
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskMetric = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectTaskId,
+      path: Schema.String,
+      by: Schema.Int,
+    }),
+    Result: TaskRow,
+    execute: ({ id, path, by }) => sql`
+      UPDATE project_tasks SET
+        metrics_json = json_set(
+          metrics_json,
+          ${path},
+          COALESCE(json_extract(metrics_json, ${path}), 0) + ${by}
+        )
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskSize = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, size: ProjectTaskSize, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, size, now }) => sql`
+      UPDATE project_tasks SET
+        metrics_json = json_set(metrics_json, '$.size', ${size}),
+        updated_at = ${now}
       WHERE task_id = ${id}
       RETURNING ${taskColumns}
     `,
@@ -1319,6 +1551,41 @@ export const make = Effect.gen(function* () {
       updateTaskRoleModels(input).pipe(Effect.mapError(toRepositoryError("setTaskRoleModels"))),
     recordModelStep: (input) =>
       updateTaskModelStep(input).pipe(Effect.mapError(toRepositoryError("recordModelStep"))),
+    findTaskSessionByThreadId: (threadId) =>
+      findTaskSessionByThread({ threadId }).pipe(
+        Effect.mapError(toRepositoryError("findTaskSessionByThreadId")),
+      ),
+    startModelRun: ({ countsFixRound, ...input }) =>
+      Effect.gen(function* () {
+        const opened = (yield* insertModelRun(input)).length > 0;
+        // Counted with the insert, so a fix round is never lost or counted twice.
+        if (opened && countsFixRound === true) {
+          yield* updateTaskMetric({ id: input.taskId, path: "$.fixRounds", by: 1 });
+        }
+        return opened;
+      }).pipe(sql.withTransaction, Effect.mapError(toRepositoryError("startModelRun"))),
+    findModelRunByThreadId: (threadId) =>
+      findModelRunByThread({ threadId }).pipe(
+        Effect.mapError(toRepositoryError("findModelRunByThreadId")),
+      ),
+    addModelRunUsage: (input) =>
+      updateModelRunUsage({
+        ...input,
+        durationMs: Math.max(0, Math.round(input.durationMs)),
+      }).pipe(
+        Effect.flatMap((row) =>
+          Option.isNone(row)
+            ? Effect.succeed(Option.none<ProjectTask>())
+            : refreshTaskStepUsage({ id: row.value.taskId }),
+        ),
+        Effect.mapError(toRepositoryError("addModelRunUsage")),
+      ),
+    bumpTaskMetric: ({ id, metric, by }) =>
+      updateTaskMetric({ id, path: `$.${metric}`, by }).pipe(
+        Effect.mapError(toRepositoryError("bumpTaskMetric")),
+      ),
+    setTaskSize: (input) =>
+      updateTaskSize(input).pipe(Effect.mapError(toRepositoryError("setTaskSize"))),
     searchTasks: ({ projectId, query, limit }) =>
       searchTaskRows({ projectId, pattern: `%${escapeLike(query)}%`, limit }).pipe(
         Effect.mapError(toRepositoryError("searchTasks")),

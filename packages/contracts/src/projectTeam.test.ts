@@ -160,7 +160,7 @@ describe("ProjectTask", () => {
       createdAt: "2026-11-04T00:00:00.000Z",
       updatedAt: "2026-11-04T00:00:00.000Z",
     };
-    // Tasks stored before subtasks, rounds or role models existed have none of them.
+    // Tasks stored before subtasks, rounds, role models or usage existed have none of them.
     expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual({
       ...task,
       parentTaskId: null,
@@ -170,7 +170,16 @@ describe("ProjectTask", () => {
       ready: null,
       roleModels: {},
       modelSteps: {},
+      stepUsage: {},
+      metrics: { size: null, reviewFindings: 0, fixRounds: 0, ciFailures: 0 },
     });
+    // A review stored before review sessions existed was the lead's own.
+    expect(
+      Schema.decodeUnknownSync(ProjectTask)({
+        ...task,
+        review: { clean: true, findings: "", head: "abc1234", reviewedAt: task.createdAt },
+      }).review?.by,
+    ).toBe("lead");
     expect(() => Schema.decodeUnknownSync(ProjectTask)({ ...task, stage: "review" })).toThrow();
   });
 });

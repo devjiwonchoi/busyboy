@@ -87,6 +87,9 @@ import {
   type ProjectTeamSetTaskRoleModelsInput,
   type ProjectTeamTaskDelegateInput,
   type ProjectTaskModelRole,
+  type ProjectTaskModelTarget,
+  type ProjectMergeOwner,
+  mergeOwnerOf,
   type ProjectTaskRoleModelsPatch,
   applyRoleModelsPatch,
   type ProjectTeamTaskDetail,
@@ -159,6 +162,7 @@ import {
   AFK_AGENT_RULE,
   DIRECTOR_PERSONA,
   isUserWordsVoice,
+  mergeOwnerChangeText,
   resolvePersona,
   voiceText,
 } from "./persona.ts";
@@ -409,6 +413,22 @@ export type DelegateTaskLead = (
   input: OrchestratorMcpDelegateTaskInput,
 ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
 
+/** A child the step started, as delegate_task reports it. */
+export interface DelegatedChild {
+  readonly childThreadId: ThreadId;
+  readonly providerInstanceId: ProviderInstanceId;
+  readonly model: string | null;
+}
+
+/**
+ * Starts a lead's step as a delegated task. `onChildCreated` runs once the child thread
+ * exists and before a mode=wait call blocks, so the child is linked before it acts.
+ */
+export type DelegateStep = (
+  input: OrchestratorMcpDelegateTaskInput,
+  onChildCreated?: (child: DelegatedChild) => Effect.Effect<void>,
+) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
+
 export function toTaskBrief(
   task: ProjectTask,
   signals: ProjectTaskStatusSignals = storedTaskStatusSignals(task),
@@ -599,7 +619,7 @@ export class ProjectTeamService extends Context.Service<
     readonly delegateStep: (
       callerThreadId: ThreadId,
       input: ProjectTeamTaskDelegateInput,
-      delegate: DelegateTaskLead,
+      delegate: DelegateStep,
     ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, ProjectTeamError>;
     /** task_spec_read: a lead reads its own task's spec; the PM reads any. */
     readonly readSpec: (
@@ -745,9 +765,19 @@ export class ProjectTeamService extends Context.Service<
      * of an in-review task: the next Ship round starts and the task is no longer Ready.
      * None when the thread leads no in-review task.
      */
+    /** The usage row of a task's model session thread, or null for any other thread. */
+    readonly modelSessionOf: (
+      threadId: ThreadId,
+    ) => Effect.Effect<ProjectTeamRepository.ProjectTaskModelRun | null, ProjectTeamError>;
+    /** Adds one finished run of a model session to its task's usage. */
+    readonly recordRunUsage: (
+      input: ProjectTeamRepository.AddProjectTaskModelRunUsageInput,
+    ) => Effect.Effect<void, ProjectTeamError>;
     readonly recordShipWake: (input: {
       readonly leadThreadId: ThreadId;
       readonly summary: string;
+      /** A check failed, which counts toward the task's CI failures. */
+      readonly checksFailed?: boolean;
     }) => Effect.Effect<Option.Option<ProjectTask>, ProjectTeamError>;
   }
 >()("t3/projectTeam/ProjectTeamService") {}
@@ -1506,15 +1536,49 @@ const make = Effect.gen(function* () {
       const manager = yield* requireManager(role.projectId);
       const model = resolveRoleModels(task.roleModels, manager.settings.roleModels)[input.role];
       const key = yield* keyOf(task);
-      const result = yield* delegate({
-        task: input.task,
-        title: input.title ?? `${key} ${input.role}`,
-        role: DELEGATE_ROLE[input.role],
-        ...(input.isolation === undefined ? {} : { isolation: input.isolation }),
-        ...(input.mode === undefined ? {} : { mode: input.mode }),
-        ...(input.clientRequestId === undefined ? {} : { clientRequestId: input.clientRequestId }),
-        ...(model === null ? {} : { target: toDelegateTarget(model.target) }),
-      }).pipe(
+      // Links the child before it acts: its usage row, and for a review its reviewer
+      // session. Opening the row again (a retry, or the call after the hook) is a no-op.
+      const linkChild = (child: DelegatedChild) =>
+        Effect.gen(function* () {
+          const startedAt = yield* nowIso;
+          yield* repository.startModelRun({
+            taskId: task.id,
+            threadId: child.childThreadId,
+            role: input.role,
+            providerInstanceId: child.providerInstanceId,
+            model: child.model,
+            startedAt,
+            countsFixRound: input.role === "fix",
+          });
+          if (input.role === "review") {
+            // The review session records its own result with task_review_set.
+            yield* repository.addTaskSession({
+              taskId: task.id,
+              threadId: child.childThreadId,
+              role: "reviewer",
+              createdAt: startedAt,
+            });
+          }
+        }).pipe(orTeamError("Could not record the step.", role.projectId));
+      const result = yield* delegate(
+        {
+          task: input.task,
+          title: input.title ?? `${key} ${input.role}`,
+          role: DELEGATE_ROLE[input.role],
+          ...(input.isolation === undefined ? {} : { isolation: input.isolation }),
+          ...(input.mode === undefined ? {} : { mode: input.mode }),
+          ...(input.clientRequestId === undefined
+            ? {}
+            : { clientRequestId: input.clientRequestId }),
+          ...(model === null ? {} : { target: toDelegateTarget(model.target) }),
+        },
+        (child) =>
+          linkChild(child).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("could not link a delegated step before it ran", { cause }),
+            ),
+          ),
+      ).pipe(
         Effect.mapError((failure) =>
           teamError(
             `Could not start the ${input.role} step for #${task.number}: ${failure.message}`,
@@ -1523,6 +1587,7 @@ const make = Effect.gen(function* () {
         ),
       );
       yield* recordModelStep(task, input.role, result, callerThreadId);
+      yield* linkChild(result);
       yield* router.publish(role.projectId);
       return result;
     }).pipe(orTeamError("Could not delegate the step."));
@@ -1630,6 +1695,16 @@ const make = Effect.gen(function* () {
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
           // Logged as the lead's, so the PM's latest action still reads "started".
           const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
+          yield* repository
+            .startModelRun({
+              taskId: started.id,
+              threadId: lead.childThreadId,
+              role: "plan",
+              providerInstanceId: lead.providerInstanceId,
+              model: lead.model,
+              startedAt: started.stageChangedAt,
+            })
+            .pipe(orTeamError("Could not record the plan step.", role.projectId));
           yield* router.publish(role.projectId);
           return { task: withStep, leadThreadId: lead.childThreadId };
         }),
@@ -1882,17 +1957,87 @@ const make = Effect.gen(function* () {
 
   const shortSha = (sha: string) => sha.slice(0, 7);
 
+  /** The review model a task's reviews must come from, or null when none is set. */
+  const reviewModelOf = (task: ProjectTask) =>
+    Effect.map(
+      requireManager(task.projectId),
+      (manager) => resolveRoleModels(task.roleModels, manager.settings.roleModels).review?.target ?? null,
+    );
+
+  /**
+   * Who may record a review: the task's lead, or a review session it started with
+   * task_delegate(role: "review").
+   */
+  const reviewerOf = (callerThreadId: ThreadId) =>
+    Effect.gen(function* () {
+      const role = yield* roleOf(callerThreadId);
+      if (role.type === "lead") {
+        return { taskId: role.taskId, projectId: role.projectId, by: "lead" as const, model: null };
+      }
+      const session = yield* repository
+        .findTaskSessionByThreadId(callerThreadId)
+        .pipe(orTeamError("Could not read the review session."));
+      if (Option.isNone(session) || session.value.role !== "reviewer") {
+        return yield* teamError(
+          "task_review_set is only for a task lead or the review session it started with task_delegate(role: \"review\").",
+        );
+      }
+      const task = yield* repository
+        .getTask(session.value.taskId)
+        .pipe(orTeamError("Could not read the task."));
+      if (Option.isNone(task)) return yield* teamError(`Task ${session.value.taskId} was not found.`);
+      const run = yield* repository
+        .findModelRunByThreadId(callerThreadId)
+        .pipe(orTeamError("Could not read the review session."));
+      return {
+        taskId: task.value.id,
+        projectId: task.value.projectId,
+        by: "reviewer" as const,
+        model: Option.isSome(run) ? run.value.model : null,
+      };
+    });
+
+  /** The reason a review does not let the task ship on HEAD, or null when it does. */
+  const reviewGateProblem = (
+    task: ProjectTask,
+    reviewModel: ProjectTaskModelTarget | null,
+  ): string | null => {
+    const review = task.review;
+    if (reviewModel === null || review === null || !review.clean) return null;
+    const rerun = `Run task_delegate(role: "review") on HEAD; the review session records its result with task_review_set.`;
+    if (review.by !== "reviewer") {
+      return `#${task.number}'s clean review is your own, but it has a review model (${reviewModel.providerInstanceId} · ${reviewModel.model}). ${rerun}`;
+    }
+    // A review by a model the user has since replaced no longer counts.
+    if (review.model !== undefined && review.model !== reviewModel.model) {
+      return `#${task.number}'s clean review came from ${review.model}, but the review model is now ${reviewModel.model}. ${rerun}`;
+    }
+    return null;
+  };
+
   const setReview: ProjectTeamService["Service"]["setReview"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["lead"], "task_review_set");
-      const taskId = input.taskId ?? role.taskId;
-      if (taskId !== role.taskId) {
-        return yield* teamError("A task lead can only review its own task.", role.projectId);
+      const reviewer = yield* reviewerOf(callerThreadId);
+      const task = yield* requireTask(
+        reviewer.taskId,
+        reviewer.projectId,
+      );
+      if (input.taskId !== undefined && input.taskId !== task.id) {
+        return yield* teamError(
+          "task_review_set records a review of your own task only.",
+          task.projectId,
+        );
       }
-      const task = yield* requireTask(taskId, role.projectId);
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
         return yield* teamError(
           `#${task.number} is ${task.stage}; there is nothing to review.`,
+          task.projectId,
+        );
+      }
+      const reviewModel = yield* reviewModelOf(task);
+      if (reviewer.by === "lead" && input.clean && reviewModel !== null) {
+        return yield* teamError(
+          `#${task.number} has a review model (${reviewModel.providerInstanceId} · ${reviewModel.model}), so a clean review must come from it, not from you. Run task_delegate(role: "review") on HEAD; the review session records its result with task_review_set.`,
           task.projectId,
         );
       }
@@ -1918,18 +2063,36 @@ const make = Effect.gen(function* () {
       }
       const recorded = yield* repository.recordTaskReview({
         id: task.id,
-        review: { clean: input.clean, findings, head: input.head, reviewedAt: yield* nowIso },
+        review: {
+          clean: input.clean,
+          findings,
+          head: input.head,
+          reviewedAt: yield* nowIso,
+          by: reviewer.by,
+          ...(reviewer.model === null ? {} : { model: reviewer.model }),
+        },
         startsIterateRound: !input.clean && task.stage === "running",
         now: yield* nowIso,
       });
       if (Option.isNone(recorded)) return yield* teamError(`Task ${task.id} was not found.`);
-      const updated = recorded.value;
+      const findingCount = findings.split("\n").filter((line) => line.trim().length > 0).length;
+      const updated =
+        input.clean || findingCount === 0
+          ? recorded.value
+          : Option.getOrElse(
+              yield* repository
+                .bumpTaskMetric({ id: task.id, metric: "reviewFindings", by: findingCount })
+                .pipe(orTeamError("Could not count the findings.", task.projectId)),
+              () => recorded.value,
+            );
+      const who =
+        reviewer.by === "lead" ? "Self-review" : `Review by ${reviewer.model ?? "the review model"}`;
       yield* appendEvent(
         updated,
         "note",
         input.clean
-          ? `Self-review on ${shortSha(input.head)}: clean`
-          : `Self-review on ${shortSha(input.head)}: not clean, Iterate round ${updated.iterateRound}\n${clip(findings, 2_000)}`,
+          ? `${who} on ${shortSha(input.head)}: clean`
+          : `${who} on ${shortSha(input.head)}: not clean, Iterate round ${updated.iterateRound}\n${clip(findings, 2_000)}`,
         callerThreadId,
       );
       yield* router.publish(task.projectId);
@@ -2046,9 +2209,13 @@ const make = Effect.gen(function* () {
       const review = task.review;
       if (review === null || !review.clean || review.head !== input.head) {
         return yield* teamError(
-          `#${task.number} has no clean self-review of ${shortSha(input.head)}. Review the diff and record it with task_review_set first.`,
+          `#${task.number} has no clean review of ${shortSha(input.head)}. Review the diff and record it with task_review_set first.`,
           task.projectId,
         );
+      }
+      const readyReviewProblem = reviewGateProblem(task, yield* reviewModelOf(task));
+      if (readyReviewProblem !== null) {
+        return yield* teamError(readyReviewProblem, task.projectId);
       }
       const pr = yield* shipGate.read({ projectId: task.projectId, url: prUrl });
       if (Option.isNone(pr)) {
@@ -2210,6 +2377,10 @@ const make = Effect.gen(function* () {
             task.projectId,
           );
         }
+        const shipReviewProblem = reviewGateProblem(task, yield* reviewModelOf(task));
+        if (shipReviewProblem !== null) {
+          return yield* teamError(shipReviewProblem, task.projectId);
+        }
         const head = yield* leadHead(task);
         if (review !== null && Option.isSome(head) && head.value !== review.head) {
           return yield* teamError(
@@ -2272,6 +2443,12 @@ const make = Effect.gen(function* () {
         input.parentTaskId === undefined || input.parentTaskId === null
           ? input.parentTaskId
           : yield* checkParent(task.id, input.parentTaskId, role.projectId);
+      if (input.size !== undefined && input.size !== task.metrics.size) {
+        yield* repository
+          .setTaskSize({ id: task.id, size: input.size, now: yield* nowIso })
+          .pipe(orTeamError("Could not record the task size.", role.projectId));
+        yield* appendEvent(task, "note", `Size: ${input.size}`, callerThreadId);
+      }
       const updated = yield* setTask({
         id: task.id,
         ...(input.title === undefined ? {} : { title: input.title }),
@@ -2720,6 +2897,7 @@ const make = Effect.gen(function* () {
       readonly enabled?: boolean | undefined;
       readonly taskKeyPrefix?: string | undefined;
       readonly roleModels?: ProjectTaskRoleModelsPatch | undefined;
+      readonly mergeOwner?: ProjectMergeOwner | undefined;
       /** User-only; updateSettingsAsManager never passes it. */
       readonly afk?: { readonly hours: number | null } | null | undefined;
     },
@@ -2788,6 +2966,7 @@ const make = Effect.gen(function* () {
             persona,
             ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
             ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
+            ...(patch.mergeOwner === undefined ? {} : { mergeOwner: patch.mergeOwner }),
             ...(afk === undefined ? {} : { afk }),
             // Only setting the interval by hand stops it adapting, for good; other fields
             // keep the pin as is.
@@ -2802,8 +2981,16 @@ const make = Effect.gen(function* () {
       }
       // The system prompt only refreshes when the PM's session reopens, so a user's change
       // reaches the live PM as a message. A PM that changed itself already knows.
+      const mergeOwnerNews =
+        mergeOwnerOf(settings) === mergeOwnerOf(manager.settings)
+          ? null
+          : mergeOwnerChangeText(mergeOwnerOf(settings));
       const personaNews =
-        actorThreadId === null ? personaChangeText(previousPersona, persona) : null;
+        actorThreadId === null
+          ? [personaChangeText(previousPersona, persona), mergeOwnerNews]
+              .filter((line): line is string => line !== null)
+              .join("\n") || null
+          : null;
       if (personaNews !== null && settings.enabled) {
         const key = `project-team:persona:${projectId}:${now}`;
         yield* threads.dispatch({
@@ -2871,6 +3058,7 @@ const make = Effect.gen(function* () {
             },
             taskKeyPrefix: input.taskKeyPrefix,
             roleModels: input.roleModels,
+            mergeOwner: input.mergeOwner,
           },
           callerThreadId,
         ),
@@ -3721,11 +3909,35 @@ const make = Effect.gen(function* () {
       return { task: updated, event };
     }).pipe(orTeamError("Could not record the task outcome.", input.task.projectId));
 
+  const modelSessionOf: ProjectTeamService["Service"]["modelSessionOf"] = (threadId) =>
+    repository.findModelRunByThreadId(threadId).pipe(
+      Effect.map(Option.getOrNull),
+      orTeamError("Could not read the model session."),
+    );
+
+  const recordRunUsage: ProjectTeamService["Service"]["recordRunUsage"] = (input) =>
+    Effect.gen(function* () {
+      const updated = yield* repository.addModelRunUsage(input);
+      if (Option.isSome(updated)) yield* router.publish(updated.value.projectId);
+    }).pipe(orTeamError("Could not record the step's usage."));
+
   const recordShipWake: ProjectTeamService["Service"]["recordShipWake"] = (input) =>
     Effect.gen(function* () {
       const task = yield* repository.findTaskByLeadThreadId(input.leadThreadId);
       if (Option.isNone(task) || task.value.stage !== "in_review") return Option.none();
-      const reopened = yield* repository.reopenShipRound({ id: task.value.id, now: yield* nowIso });
+      const shipped = yield* repository.reopenShipRound({ id: task.value.id, now: yield* nowIso });
+      if (Option.isNone(shipped)) return Option.none();
+      const reopened =
+        input.checksFailed === true
+          ? Option.orElse(
+              yield* repository.bumpTaskMetric({
+                id: task.value.id,
+                metric: "ciFailures",
+                by: 1,
+              }),
+              () => shipped,
+            )
+          : shipped;
       if (Option.isNone(reopened)) return Option.none();
       yield* appendEvent(
         reopened.value,
@@ -3775,6 +3987,8 @@ const make = Effect.gen(function* () {
     streamAttention,
     recordOutcome,
     recordShipWake,
+    modelSessionOf,
+    recordRunUsage,
   } satisfies ProjectTeamService["Service"];
 });
 

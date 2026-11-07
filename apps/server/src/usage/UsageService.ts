@@ -41,7 +41,12 @@ import type {
   UsageRecord,
 } from "@t3tools/provider-core/server/usage";
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
-import { createOverrideRateTable, parseRateTable, type RateTable } from "./usagePricing.ts";
+import {
+  createOverrideRateTable,
+  parseRateTable,
+  priceUsage,
+  type RateTable,
+} from "./usagePricing.ts";
 import {
   listTranscriptFiles,
   readDirectoryVolumeId,
@@ -154,8 +159,21 @@ export class UsageService extends Context.Service<
   {
     readonly readSummary: (input: UsageSummaryInput) => Effect.Effect<UsageSummary, UsageReadError>;
     readonly refreshRates: Effect.Effect<UsagePricing>;
+    /**
+     * The list price of one model's tokens, using the user's price overrides first. Null
+     * when the model has no known price.
+     */
+    readonly estimateCostUsd: (input: EstimateCostInput) => Effect.Effect<number | null>;
   }
 >()("t3/usage/UsageService") {}
+
+export interface EstimateCostInput {
+  readonly model: string;
+  readonly uncachedInputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly cacheCreationTokens: number;
+  readonly outputTokens: number;
+}
 
 const EMPTY_PRICING: UsagePricing = {
   status: "unavailable",
@@ -180,6 +198,7 @@ const layerTest = Layer.succeed(
         scanDurationMs: 0,
       }),
     refreshRates: Effect.succeed(EMPTY_PRICING),
+    estimateCostUsd: () => Effect.succeed(null),
   }),
 );
 
@@ -272,6 +291,33 @@ export const make = Effect.gen(function* () {
     Effect.map(pricing),
     Effect.withSpan("UsageService.refreshRates"),
   );
+
+  const estimateCostUsd: UsageService["Service"]["estimateCostUsd"] = (input) =>
+    Effect.gen(function* () {
+      yield* ensureRates(false);
+      const settings = yield* settingsService.getSettings;
+      const priced = priceUsage(
+        rates,
+        {
+          model: input.model,
+          rateModel: input.model,
+          speed: "standard",
+          reportedCostUsd: null,
+          totals: {
+            uncachedInputTokens: input.uncachedInputTokens,
+            cachedInputTokens: input.cachedInputTokens,
+            cacheCreationTokens: input.cacheCreationTokens,
+            outputTokens: input.outputTokens,
+            reasoningTokens: 0,
+          },
+        },
+        createOverrideRateTable(settings.usagePriceOverrides),
+      );
+      return priced.costSource === "unpriced" ? null : priced.costUsd;
+    }).pipe(
+      Effect.catchCause(() => Effect.succeed(null)),
+      Effect.withSpan("UsageService.estimateCostUsd"),
+    );
 
   const readSettings = settingsService.getSettings.pipe(
     Effect.catchCause(
@@ -824,7 +870,7 @@ export const make = Effect.gen(function* () {
     return yield* Deferred.await(deferred);
   });
 
-  return { readSummary, refreshRates, awaitPersisted } as const;
+  return { readSummary, refreshRates, estimateCostUsd, awaitPersisted } as const;
 });
 
 export const layer = Layer.effect(UsageService, make);

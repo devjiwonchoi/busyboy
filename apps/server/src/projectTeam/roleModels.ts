@@ -81,7 +81,7 @@ export function roleModelsPromptSection(resolved: ResolvedRoleModels): string {
   const how = anyDelegated
     ? `\ntask_delegate starts a child on the role's model and records which model ran the step, so the user sees it on the task. Write each brief so the child can act alone:
 - implement: the todos to build, the relevant spec parts (goal, criteria, files), and how to verify.
-- review: the base branch and HEAD to diff, the spec's criteria, and to list findings one per line, or say it is clean. Record its result with task_review_set.
+- review: the base branch and HEAD sha to diff, the spec's goal and criteria, and the changed files (\`git diff --stat <base>...HEAD\`). Tell it to read the diff and those files rather than explore the whole repository, list findings one per line, and record the result itself with task_review_set(clean, findings, head). Its clean review is the one that lets the task ship; yours does not count while a review model is set.
 - fix: the review findings to fix, the spec's criteria, and to commit when done.
 Merge each child's result, then go on. A role's model can change while you work; task_delegate always uses the current one.`
     : "";

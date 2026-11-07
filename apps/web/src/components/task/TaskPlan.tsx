@@ -531,11 +531,14 @@ function TaskModels(props: {
   return (
     <section className="mt-5" aria-label="모델" data-task-models="">
       <h2 className={SECTION_HEADING}>모델</h2>
-      <TaskModelSteps
-        environmentId={props.environmentId}
-        steps={task.modelSteps}
-        className="mb-2"
-      />
+      <div className="mb-2">
+        <TaskModelSteps
+          environmentId={props.environmentId}
+          steps={task.modelSteps}
+          usage={task.stepUsage}
+          metrics={task.metrics}
+        />
+      </div>
       <ul className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
         {PROJECT_TASK_MODEL_ROLES.map((role) => {
           const inherited = effectiveRoleModel(role, {}, props.projectRoleModels);

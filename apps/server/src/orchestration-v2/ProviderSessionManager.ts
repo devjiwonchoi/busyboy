@@ -426,7 +426,11 @@ export const layerWithOptions = (
                           afkActive(afkSetting(manager.value.settings), nowMs)
                             ? AFK_AGENT_RULE
                             : undefined,
-                          { kind: manager.value.kind, workspacePreferences },
+                          {
+                            kind: manager.value.kind,
+                            workspacePreferences,
+                            mergeOwner: manager.value.settings.mergeOwner,
+                          },
                         ),
                       ),
                     ),

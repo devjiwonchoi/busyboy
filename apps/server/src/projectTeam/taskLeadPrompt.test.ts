@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
+  EMPTY_PROJECT_TASK_METRICS,
   emptyProjectTaskSpec,
   newProjectTaskTodo,
   ProjectId,
@@ -39,6 +40,8 @@ const task: ProjectTask = {
   ready: null,
   roleModels: {},
   modelSteps: {},
+  stepUsage: {},
+  metrics: EMPTY_PROJECT_TASK_METRICS,
   stageChangedAt: at,
   createdAt: at,
   updatedAt: at,
@@ -133,7 +136,7 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("2. Iterate (running):");
     expect(prompt).toContain("3. Ship (in_review):");
     expect(prompt).toContain("task_review_set(clean, findings, head)");
-    expect(prompt).toContain("without a clean self-review of the current HEAD");
+    expect(prompt).toContain("without a clean review of the current HEAD");
     expect(prompt).toContain('"[Spec changed]": the user or the PM changed the spec');
     expect(prompt).not.toContain("## Language");
     // Leads ask the user to approve the plan and read inline review comments.

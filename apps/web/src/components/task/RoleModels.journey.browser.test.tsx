@@ -81,13 +81,24 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
     }) as never,
     // Mirrors the server: it stores the patch and pushes the next summary.
     useUpdateTeamSettings: (() =>
-      async (_ref: unknown, patch: { roleModels: Record<string, unknown> }) => {
+      async (
+        _ref: unknown,
+        patch: { roleModels?: Record<string, unknown>; mergeOwner?: "pm" | "user" },
+      ) => {
         server.settingsPatches.push(patch);
         server.summary = {
           ...server.summary,
           settings: {
             ...server.summary.settings,
-            roleModels: applyPatch(server.summary.settings.roleModels ?? {}, patch.roleModels),
+            ...(patch.roleModels === undefined
+              ? {}
+              : {
+                  roleModels: applyPatch(
+                    server.summary.settings.roleModels ?? {},
+                    patch.roleModels,
+                  ),
+                }),
+            ...(patch.mergeOwner === undefined ? {} : { mergeOwner: patch.mergeOwner }),
           },
         };
         publish();
@@ -393,6 +404,76 @@ for (const viewport of [
         roleModels: { fix: null },
       });
       await vi.waitFor(() => expect(byLabel("수정 모델")!.textContent).toContain("리드 모델"));
+    });
+
+    it("shows each step's time, tokens and cost, and the task's total", async () => {
+      server.detail = {
+        ...server.detail,
+        task: {
+          ...server.detail.task,
+          stepUsage: {
+            plan: { durationMs: 6 * 60_000, runs: 1, inputTokens: 220_000, outputTokens: 9_000, costUsd: 0.9 },
+            implement: {
+              durationMs: 14 * 60_000,
+              runs: 2,
+              inputTokens: 1_200_000,
+              outputTokens: 38_000,
+              costUsd: 2.1,
+            },
+          },
+          metrics: { size: "medium", reviewFindings: 3, fixRounds: 1, ciFailures: 0 },
+        },
+      };
+      await act(async () =>
+        root.render(
+          <TaskPlan environmentId={ENVIRONMENT_ID} projectId={PROJECT_ID} taskId={TASK_ID} />,
+        ),
+      );
+      const section = await vi.waitFor(() => {
+        const element = container.querySelector<HTMLElement>("[data-task-models]");
+        expect(element).not.toBeNull();
+        return element!;
+      });
+      const implement = section.querySelector<HTMLElement>("[data-model-step='implement']")!;
+      expect(implement.textContent).toBe("구현 · GPT-5.5 · 14m ×2 · 1.2M/38k · $2.10");
+      expect(section.querySelector("[data-model-step='plan']")?.textContent).toBe(
+        "계획 · GPT-5.4 · 6m · 220k/9k · $0.90",
+      );
+      const total = section.querySelector<HTMLElement>("[data-task-usage-total]")!;
+      expect(total.textContent).toBe(
+        "합계 20m · 1.4M/47k 토큰 · 약 $3.00 · 리뷰 지적 3 · 수정 1회 · CI 실패 0 · 크기 중",
+      );
+      expectInside(implement, container);
+      expectInside(total, container);
+    });
+
+    it("sets who merges in team settings and keeps it", async () => {
+      function Settings() {
+        const summary = useServer(() => server.summary);
+        return <ProjectManagerSettingsSection projectRef={projectRef as never} summary={summary} />;
+      }
+      await act(async () => root.render(<Settings />));
+      const group = byLabel("Who merges")!;
+      expect(container.textContent).toContain("Who merges");
+      expectInside(group, container);
+      const option = (label: string) =>
+        [...group.querySelectorAll<HTMLElement>("button")].find(
+          (button) => button.textContent === label,
+        )!;
+      // No choice yet means the PM merges, as before.
+      expect(option("PM").getAttribute("aria-pressed")).toBe("true");
+
+      await userEvent.click(option("Me"));
+      expect(server.settingsPatches).toEqual([{ mergeOwner: "user" }]);
+      await vi.waitFor(() => expect(option("Me").getAttribute("aria-pressed")).toBe("true"));
+
+      // Reopening the settings shows the saved choice.
+      await act(async () => root.render(<div />));
+      await act(async () => root.render(<Settings />));
+      const reopened = [...byLabel("Who merges")!.querySelectorAll<HTMLElement>("button")].find(
+        (button) => button.textContent === "Me",
+      )!;
+      expect(reopened.getAttribute("aria-pressed")).toBe("true");
     });
 
     it("shows the model per step on the plan card, live and once done", async () => {

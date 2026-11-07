@@ -14,6 +14,7 @@ import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
 import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
 import * as StalledTaskSweep from "./projectTeam/StalledTaskSweep.ts";
 import * as TaskOutcomeReactor from "./projectTeam/taskOutcomeReactor.ts";
+import * as RoleStepReactor from "./projectTeam/RoleStepReactor.ts";
 import * as ShipWakeReactor from "./projectTeam/ShipWakeReactor.ts";
 import * as Scheduler from "./scheduling/Scheduler.ts";
 // @effect-diagnostics nodeBuiltinImport:off
@@ -462,6 +463,7 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
 const layerProjectTeam = Layer.mergeAll(
   SitrepScheduler.layerWorker,
   TaskOutcomeReactor.layerWorker,
+  RoleStepReactor.layerWorker,
   ShipWakeReactor.layerWorker,
   StalledTaskSweep.layerWorker,
   ProjectTeamService.layerAfkWorker,

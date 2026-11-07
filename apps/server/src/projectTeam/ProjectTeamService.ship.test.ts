@@ -160,7 +160,7 @@ describe("ProjectTeamService ship loop", () => {
         const stale = yield* team
           .markTaskReady(lead, { head: "eee5555", localChecks: "" })
           .pipe(Effect.flip);
-        assert.include(stale.message, "no clean self-review of eee5555");
+        assert.include(stale.message, "no clean review of eee5555");
       }),
     ),
   );

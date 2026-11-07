@@ -15,7 +15,12 @@ import * as Ref from "effect/Ref";
 
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { classifyTaskOutcome, nextInboxTask, TaskOutcomeReactor } from "./taskOutcomeReactor.ts";
+import {
+  classifyTaskOutcome,
+  nextInboxTask,
+  outcomeWakeText,
+  TaskOutcomeReactor,
+} from "./taskOutcomeReactor.ts";
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
 import {
   approvePlan,
@@ -121,6 +126,35 @@ describe("classifyTaskOutcome", () => {
       classifyTaskOutcome({ task: base, openAttentionCount: 0, status: "interrupted" }),
       "stalled",
     );
+  });
+});
+
+describe("outcomeWakeText merge owner", () => {
+  const readyWake = (mergeOwner?: "pm" | "user") =>
+    outcomeWakeText({
+      task: {
+        number: 4,
+        title: "Ship it",
+        resultSummary: null,
+        prUrl: "https://github.com/acme/app/pull/4",
+      },
+      outcome: "ready",
+      previousOutcome: "in_review",
+      projectTasks: [],
+      maxConcurrentTasks: 3,
+      ...(mergeOwner === undefined ? {} : { mergeOwner }),
+    });
+
+  it("tells the PM not to merge and to send a merge brief when the user merges", () => {
+    const text = readyWake("user") ?? "";
+    assert.include(text, "Merge owner: the user. Do not merge #4.");
+    assert.include(text, "merge brief: what changed, the evidence, the risk, and your recommendation");
+    assert.notInclude(text, "squash-merge");
+  });
+
+  it("lets the PM merge a clean pull request by default", () => {
+    assert.include(readyWake() ?? "", "Merge owner: you. If #4's pull request is clean, squash-merge it");
+    assert.strictEqual(readyWake("pm"), readyWake());
   });
 });
 
@@ -516,7 +550,7 @@ describe("TaskOutcomeReactor", () => {
         yield* team.markTaskReady(reviewed.leadThreadId, { head: "abc1234", localChecks: "" });
         for (const ordinal of [2, 3, 4]) yield* turnEnds(ordinal);
         assert.deepStrictEqual(yield* harness.messagesTo(pm), [
-          `#1 ready: Reviewed · PR ${prUrl} · #2 is next in the inbox`,
+          `#1 ready: Reviewed · PR ${prUrl} · #2 is next in the inbox\nMerge owner: you. If #1's pull request is clean, squash-merge it, then tell the user.`,
         ]);
       }),
     ),
