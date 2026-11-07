@@ -118,7 +118,9 @@ export function DirectorCard(props: {
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <h2 className="truncate font-medium text-sm">{summary.persona.name}</h2>
-            <span className="shrink-0 text-muted-foreground text-xs">Director</span>
+            {summary.persona.name === "Director" ? null : (
+              <span className="shrink-0 text-muted-foreground text-xs">Director</span>
+            )}
           </div>
           <p className="truncate text-muted-foreground text-xs">{presence}</p>
         </div>
