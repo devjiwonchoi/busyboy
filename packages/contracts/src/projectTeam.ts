@@ -13,6 +13,7 @@ import {
 import { ChatAttachment } from "./chatAttachment.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
 import { ProjectIconOverride } from "./project.ts";
+import { ProviderInstanceId } from "./providerInstance.ts";
 
 export const ProjectTaskId = TrimmedNonEmptyString.pipe(Schema.brand("ProjectTaskId"));
 export type ProjectTaskId = typeof ProjectTaskId.Type;
@@ -118,6 +119,91 @@ export const ProjectTaskReady = Schema.Struct({
   readyAt: IsoDateTime,
 });
 export type ProjectTaskReady = typeof ProjectTaskReady.Type;
+
+/**
+ * The four kinds of work in a task. The lead runs on the plan model; it hands the
+ * other three to their models with task_delegate.
+ */
+export const ProjectTaskModelRole = Schema.Literals(["plan", "implement", "review", "fix"]);
+export type ProjectTaskModelRole = typeof ProjectTaskModelRole.Type;
+export const PROJECT_TASK_MODEL_ROLES: ReadonlyArray<ProjectTaskModelRole> = [
+  "plan",
+  "implement",
+  "review",
+  "fix",
+];
+
+/** A provider instance and one of its models, as orchestrator_capabilities lists them. */
+export const ProjectTaskModelTarget = Schema.Struct({
+  providerInstanceId: ProviderInstanceId,
+  model: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+});
+export type ProjectTaskModelTarget = typeof ProjectTaskModelTarget.Type;
+
+/** A model per role. A missing role runs on the lead's own model. */
+export const ProjectTaskRoleModels = Schema.Struct({
+  plan: Schema.optionalKey(ProjectTaskModelTarget),
+  implement: Schema.optionalKey(ProjectTaskModelTarget),
+  review: Schema.optionalKey(ProjectTaskModelTarget),
+  fix: Schema.optionalKey(ProjectTaskModelTarget),
+});
+export type ProjectTaskRoleModels = typeof ProjectTaskRoleModels.Type;
+
+/** A change to role models: a target sets the role, null clears it, absent keeps it. */
+export const ProjectTaskRoleModelsPatch = Schema.Struct({
+  plan: Schema.optionalKey(Schema.NullOr(ProjectTaskModelTarget)),
+  implement: Schema.optionalKey(Schema.NullOr(ProjectTaskModelTarget)),
+  review: Schema.optionalKey(Schema.NullOr(ProjectTaskModelTarget)),
+  fix: Schema.optionalKey(Schema.NullOr(ProjectTaskModelTarget)),
+}).annotate({
+  description:
+    "Provider and model per role (plan, implement, review, fix) from orchestrator_capabilities. null clears a role so it runs on the lead's own model.",
+});
+export type ProjectTaskRoleModelsPatch = typeof ProjectTaskRoleModelsPatch.Type;
+
+/** Applies a patch to role models. */
+export function applyRoleModelsPatch(
+  current: ProjectTaskRoleModels,
+  patch: ProjectTaskRoleModelsPatch,
+): ProjectTaskRoleModels {
+  const next: { -readonly [K in ProjectTaskModelRole]?: ProjectTaskModelTarget } = { ...current };
+  for (const role of PROJECT_TASK_MODEL_ROLES) {
+    const value = patch[role];
+    if (value === undefined) continue;
+    if (value === null) delete next[role];
+    else next[role] = value;
+  }
+  return next;
+}
+
+/** The model a role runs on: the task's override, else the project default, else none. */
+export function effectiveRoleModel(
+  role: ProjectTaskModelRole,
+  task: ProjectTaskRoleModels,
+  project: ProjectTaskRoleModels | undefined,
+): { readonly target: ProjectTaskModelTarget; readonly source: "task" | "project" } | null {
+  const own = task[role];
+  if (own !== undefined) return { target: own, source: "task" };
+  const fallback = project?.[role];
+  return fallback === undefined ? null : { target: fallback, source: "project" };
+}
+
+/** The model that last ran a role on a task, as delegate_task reported it. */
+export const ProjectTaskModelStep = Schema.Struct({
+  providerInstanceId: ProviderInstanceId,
+  /** Null when the provider did not report a model. */
+  model: Schema.NullOr(Schema.String),
+  at: IsoDateTime,
+});
+export type ProjectTaskModelStep = typeof ProjectTaskModelStep.Type;
+
+export const ProjectTaskModelSteps = Schema.Struct({
+  plan: Schema.optionalKey(ProjectTaskModelStep),
+  implement: Schema.optionalKey(ProjectTaskModelStep),
+  review: Schema.optionalKey(ProjectTaskModelStep),
+  fix: Schema.optionalKey(ProjectTaskModelStep),
+});
+export type ProjectTaskModelSteps = typeof ProjectTaskModelSteps.Type;
 
 export const ProjectTaskOutcome = Schema.Literals([
   "waiting_user",
@@ -257,6 +343,10 @@ export const ProjectTask = Schema.Struct({
   review: Schema.NullOr(ProjectTaskReview).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** Set by task_ready once the pull request passed the Ready gate; the status reads it. */
   ready: Schema.NullOr(ProjectTaskReady).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** This task's model per role; a role it leaves out uses the project's. */
+  roleModels: ProjectTaskRoleModels.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  /** The model that last ran each role. */
+  modelSteps: ProjectTaskModelSteps.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   stageChangedAt: IsoDateTime,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -293,6 +383,8 @@ export const ProjectTaskEventKind = Schema.Literals([
   "preference_changed",
   /** The server answered a question for the user while AFK was on. */
   "afk_answer",
+  /** A role ran on a model, such as "implement → codex · gpt-5.5". */
+  "model_step",
 ]);
 export type ProjectTaskEventKind = typeof ProjectTaskEventKind.Type;
 
@@ -712,6 +804,8 @@ export const ProjectTeamSettings = Schema.Struct({
   afk: Schema.optionalKey(ProjectTeamAfk),
   /** Before AFK: "Auto-approve plans". Read as AFK by afkSetting; never written again. */
   autoApprovePlans: Schema.optionalKey(ProjectTeamAfk),
+  /** The project's model per role; a task can override each one. */
+  roleModels: Schema.optionalKey(ProjectTaskRoleModels),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -913,7 +1007,8 @@ export type ProjectTeamTaskResult = typeof ProjectTeamTaskResult.Type;
 export const ProjectTeamTaskStartInput = Schema.Struct({
   taskId: ProjectTaskId,
   target: Schema.optional(OrchestratorMcpTarget).annotate({
-    description: "Provider and model for the task lead. Omit to use the PM's own.",
+    description:
+      "Provider and model for the task lead. Omit to use the PM's own. A plan model set for the project or task wins.",
   }),
 });
 export type ProjectTeamTaskStartInput = typeof ProjectTeamTaskStartInput.Type;
@@ -1072,8 +1167,10 @@ export const ProjectTeamSettingsUpdateInput = Schema.Struct({
       "chill: relaxed and brief. dry: terse and matter-of-fact. chatty: warm and talkative.",
   }),
   taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
+  roleModels: Schema.optional(ProjectTaskRoleModelsPatch),
 }).check(
   Schema.makeFilter((input) =>
+    input.roleModels !== undefined ||
     input.maxConcurrentTasks !== undefined ||
     input.sitrepIntervalMinutes !== undefined ||
     input.sitrepNotify !== undefined ||
@@ -1237,6 +1334,34 @@ export const ProjectTeamTaskReadyInput = Schema.Struct({
   localChecks: ReadyLocalChecks.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 export type ProjectTeamTaskReadyInput = typeof ProjectTeamTaskReadyInput.Type;
+/** Roles a lead hands off with task_delegate; it runs the plan role itself. */
+export const ProjectTaskDelegatedRole = Schema.Literals(["implement", "review", "fix"]);
+export type ProjectTaskDelegatedRole = typeof ProjectTaskDelegatedRole.Type;
+
+export const ProjectTeamTaskDelegateInput = Schema.Struct({
+  role: ProjectTaskDelegatedRole.annotate({
+    description:
+      "implement: build todos. review: review the diff against the spec and list findings. fix: fix the review findings.",
+  }),
+  task: TrimmedNonEmptyString.check(Schema.isMaxLength(100_000)).annotate({
+    description:
+      "Self-contained brief for the child: the spec parts it needs, for review the diff range, for fix the review findings.",
+  }),
+  title: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(200))),
+  mode: Schema.optional(
+    Schema.Literals(["async", "wait"]).annotate({
+      description: "Defaults to async. Use wait when this turn needs the result to continue.",
+    }),
+  ),
+  isolation: Schema.optional(
+    Schema.Literals(["shared", "worktree"]).annotate({
+      description:
+        "Defaults to shared: the child works in your checkout. worktree gives it a copy from your current commit.",
+    }),
+  ),
+  clientRequestId: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(256))),
+});
+export type ProjectTeamTaskDelegateInput = typeof ProjectTeamTaskDelegateInput.Type;
 
 export const ProjectTeamAttentionItemResult = Schema.Struct({
   item: ProjectAttentionItem,
@@ -1341,6 +1466,8 @@ export const ProjectTaskReference = Schema.Struct({
   /** Iterate and Ship rounds so far, shown on the phase badge; 0 from older servers. */
   iterateRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
   shipRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /** The model that last ran each role, shown on the plan card. */
+  modelSteps: ProjectTaskModelSteps.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 
@@ -1447,6 +1574,7 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   ),
   enabled: Schema.optional(Schema.Boolean),
   taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
+  roleModels: Schema.optional(ProjectTaskRoleModelsPatch),
   /**
    * User-only: turns AFK on for `hours` (null = until turned off), or off with null.
    * Deliberately absent from team_settings_update so no agent can set it.
@@ -1529,6 +1657,14 @@ export const ProjectTeamSplitTaskTodoResult = Schema.Struct({
   parent: ProjectTeamTaskDetail,
 });
 export type ProjectTeamSplitTaskTodoResult = typeof ProjectTeamSplitTaskTodoResult.Type;
+
+/** projectTeam.setTaskRoleModels: the user overrides the project's role models for one task. */
+export const ProjectTeamSetTaskRoleModelsInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  roleModels: ProjectTaskRoleModelsPatch,
+});
+export type ProjectTeamSetTaskRoleModelsInput = typeof ProjectTeamSetTaskRoleModelsInput.Type;
 
 export class ProjectTeamError extends Schema.TaggedError<ProjectTeamError>()("ProjectTeamError", {
   message: Schema.String,

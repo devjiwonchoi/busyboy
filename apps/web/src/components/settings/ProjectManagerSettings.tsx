@@ -1,6 +1,8 @@
 import {
   AuthOrchestrationOperateScope,
+  PROJECT_TASK_MODEL_ROLES,
   type ProjectManagerVoice,
+  type ProjectTaskModelRole,
   type ProjectTeamAttentionSummary,
   type ScopedProjectRef,
 } from "@t3tools/contracts";
@@ -9,6 +11,7 @@ import { lazy, Suspense, useState } from "react";
 import { useProjectManager, useUpdateTeamSettings } from "../../state/projectTeam";
 import { useEnvironmentScope } from "../../state/session";
 import { ProjectIconGlyph } from "../ProjectFavicon";
+import { RoleModelPicker } from "../task/RoleModelPicker";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
@@ -31,6 +34,13 @@ const VOICES: ReadonlyArray<{ value: ProjectManagerVoice; label: string }> = [
   { value: "chatty", label: "Chatty" },
   { value: "custom", label: "Custom" },
 ];
+
+const ROLE_MODEL_ROWS: Record<ProjectTaskModelRole, { title: string; description: string }> = {
+  plan: { title: "Plan", description: "The task lead runs on this model and writes the plan." },
+  implement: { title: "Implement", description: "Builds the todos." },
+  review: { title: "Review", description: "Reviews the diff before the pull request." },
+  fix: { title: "Fix", description: "Fixes what the review found." },
+};
 
 const TASK_KEY_PREFIX_PATTERN = /^[A-Z][A-Z0-9]{0,5}$/;
 
@@ -208,6 +218,39 @@ export function ProjectManagerSettingsSection(props: {
                 />
               </div>
             ) : null}
+          </SettingsRow>
+          <SettingsRow
+            title="Models per role"
+            description="A task can change these on its page. An unset role runs on the task lead's model."
+          >
+            <ul className="flex flex-col pb-2" aria-label="Models per role">
+              {PROJECT_TASK_MODEL_ROLES.map((role) => (
+                <li
+                  key={role}
+                  data-role-model={role}
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-border/60 border-t py-2.5 first:border-t-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm">{ROLE_MODEL_ROWS[role].title}</div>
+                    <p className="text-muted-foreground/80 text-xs">
+                      {ROLE_MODEL_ROWS[role].description}
+                    </p>
+                  </div>
+                  <RoleModelPicker
+                    environmentId={projectRef.environmentId}
+                    projectId={projectRef.projectId}
+                    value={summary.settings.roleModels?.[role] ?? null}
+                    unsetLabel="Lead's model"
+                    ariaLabel={`${ROLE_MODEL_ROWS[role].title} model`}
+                    clearLabel={`Use the lead's model for ${ROLE_MODEL_ROWS[role].title.toLowerCase()}`}
+                    disabled={!canOperate}
+                    onChange={(target) =>
+                      void updateSettings(projectRef, { roleModels: { [role]: target } })
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
           </SettingsRow>
         </>
       ) : null}

@@ -4,12 +4,18 @@ import type {
   ProjectAttentionItem,
   ProjectId,
   ProjectTaskId,
+  ProjectTaskRoleModels,
   ProjectTaskSpec,
   ProjectTaskSpecVersion,
   ProjectTaskTodo,
   ProjectTeamTaskDetail,
 } from "@t3tools/contracts";
-import { approvalPlanOf, newProjectTaskTodo } from "@t3tools/contracts";
+import {
+  approvalPlanOf,
+  effectiveRoleModel,
+  newProjectTaskTodo,
+  PROJECT_TASK_MODEL_ROLES,
+} from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { GitPullRequestIcon } from "lucide-react";
 import { useState } from "react";
@@ -18,6 +24,7 @@ import { cn } from "~/lib/utils";
 import {
   useProjectManager,
   useRestoreTaskSpec,
+  useSetTaskRoleModels,
   useSplitTaskTodo,
   useTaskDetail,
   useUpdateTaskSpec,
@@ -42,6 +49,8 @@ import {
   useTaskRelations,
 } from "./TaskRelations";
 import { TaskPhaseBadge } from "./TaskPhaseBadge";
+import { RoleModelPicker, useRoleModelLabel } from "./RoleModelPicker";
+import { TASK_MODEL_ROLE_LABELS, TaskModelSteps } from "./TaskModelSteps";
 import { taskPhaseView } from "./taskPhase.logic";
 import { useLiveTaskStatus } from "./taskStatus";
 import { Button } from "../ui/button";
@@ -105,6 +114,7 @@ export function TaskPlan(props: TaskPlanProps) {
       environmentId={environmentId}
       pmName={summary?.persona.name ?? null}
       pmThreadId={summary?.pmThreadId ?? null}
+      projectRoleModels={summary?.settings.roleModels}
       className={props.className}
     />
   );
@@ -115,6 +125,7 @@ function TaskPlanBody(props: {
   environmentId: EnvironmentId;
   pmName: string | null;
   pmThreadId: ProjectTeamTaskDetail["task"]["leadThreadId"];
+  projectRoleModels: ProjectTaskRoleModels | undefined;
   className?: string | undefined;
 }) {
   const { detail, environmentId } = props;
@@ -456,6 +467,13 @@ function TaskPlanBody(props: {
 
       <TaskStructure relations={relations} className="mt-5" />
 
+      <TaskModels
+        detail={detail}
+        environmentId={environmentId}
+        projectRoleModels={props.projectRoleModels}
+        disabled={archived}
+      />
+
       {section("Background", "background")}
 
       <section className="mt-5">
@@ -494,5 +512,61 @@ function TaskPlanBody(props: {
         <p className="mt-6 text-muted-foreground text-sm">Saved without an agent.</p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 모델: the model that last ran each role, and this task's model per role. An unset role shows
+ * what it falls back to, the project's model or the lead's own.
+ */
+function TaskModels(props: {
+  detail: ProjectTeamTaskDetail;
+  environmentId: EnvironmentId;
+  projectRoleModels: ProjectTaskRoleModels | undefined;
+  disabled: boolean;
+}) {
+  const { task } = props.detail;
+  const setTaskRoleModels = useSetTaskRoleModels();
+  const label = useRoleModelLabel(props.environmentId);
+  return (
+    <section className="mt-5" aria-label="모델" data-task-models="">
+      <h2 className={SECTION_HEADING}>모델</h2>
+      <TaskModelSteps
+        environmentId={props.environmentId}
+        steps={task.modelSteps}
+        className="mb-2"
+      />
+      <ul className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
+        {PROJECT_TASK_MODEL_ROLES.map((role) => {
+          const inherited = effectiveRoleModel(role, {}, props.projectRoleModels);
+          return (
+            <li key={role} data-role-model={role} className="contents">
+              <span className="text-muted-foreground text-xs">{TASK_MODEL_ROLE_LABELS[role]}</span>
+              <span className="min-w-0">
+                <RoleModelPicker
+                  environmentId={props.environmentId}
+                  projectId={task.projectId}
+                  value={task.roleModels[role] ?? null}
+                  unsetLabel={
+                    inherited === null ? "리드 모델" : `${label(inherited.target)} · 프로젝트`
+                  }
+                  ariaLabel={`${TASK_MODEL_ROLE_LABELS[role]} 모델`}
+                  clearLabel={`${TASK_MODEL_ROLE_LABELS[role]} 모델 지우기`}
+                  size="xs"
+                  disabled={props.disabled}
+                  onChange={(target) =>
+                    void setTaskRoleModels(props.environmentId, {
+                      projectId: task.projectId,
+                      taskId: task.id,
+                      roleModels: { [role]: target },
+                    })
+                  }
+                />
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

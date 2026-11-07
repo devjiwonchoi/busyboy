@@ -250,3 +250,18 @@ No other tasks are in progress.
 - Add progress notes with task_update(note) when something important changes.
 - A message starting "[AFK]" means the user turned AFK on or off; follow it."
 `;
+
+exports[`buildTaskLeadPrompt > tells the lead which model runs each role and to hand them off with task_delegate 1`] = `
+"## Models per role
+- Plan: you, started on claude · claude-opus-5-5 (project default).
+- Implement: codex · gpt-5.5 (project default). Hand it off with task_delegate(role: "implement").
+- Review: no model set. Do it yourself, or fan out with delegate_task as usual.
+- Fix: codex · gpt-5.5-mini (set on this task). Hand it off with task_delegate(role: "fix").
+task_delegate starts a child on the role's model and records which model ran the step, so the user sees it on the task. Write each brief so the child can act alone:
+- implement: the todos to build, the relevant spec parts (goal, criteria, files), and how to verify.
+- review: the base branch and HEAD to diff, the spec's criteria, and to list findings one per line, or say it is clean. Record its result with task_review_set.
+- fix: the review findings to fix, the spec's criteria, and to commit when done.
+Merge each child's result, then go on. A role's model can change while you work; task_delegate always uses the current one.
+
+"
+`;

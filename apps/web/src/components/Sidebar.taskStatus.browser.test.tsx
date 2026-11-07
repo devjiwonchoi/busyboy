@@ -233,6 +233,7 @@ beforeEach(() => {
           iterateRound: 0,
           shipRound: 0,
           ...(task.ready === undefined ? {} : { ready: task.ready }),
+          modelSteps: {},
           updatedAt: null,
         })),
         // Task 7 asked the user a question.

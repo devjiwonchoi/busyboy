@@ -15,6 +15,7 @@ import Migration0011 from "./Migrations/011_ProjectAttentionVerification.ts";
 import Migration0012 from "./Migrations/012_ProjectManagerKind.ts";
 import Migration0013 from "./Migrations/013_ProjectTaskRounds.ts";
 import Migration0014 from "./Migrations/014_ProjectTaskReady.ts";
+import Migration0015 from "./Migrations/015_ProjectTaskRoleModels.ts";
 
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
@@ -31,6 +32,7 @@ export const migrationEntries = [
   [12, "ProjectManagerKind", Migration0012],
   [13, "ProjectTaskRounds", Migration0013],
   [14, "ProjectTaskReady", Migration0014],
+  [15, "ProjectTaskRoleModels", Migration0015],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

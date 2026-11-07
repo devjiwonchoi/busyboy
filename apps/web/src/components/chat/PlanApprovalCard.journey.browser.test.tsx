@@ -127,6 +127,7 @@ function taskRef(number: number, title: string, overrides: Partial<ProjectTaskRe
     openBlocker: false,
     iterateRound: 0,
     shipRound: 0,
+    modelSteps: {},
     updatedAt: AT,
     ...overrides,
   } satisfies ProjectTaskReference;

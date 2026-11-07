@@ -5,12 +5,14 @@ import {
   ProjectId,
   ProjectMemoryEntryId,
   ProjectTaskId,
+  ProviderInstanceId,
   type ProjectMemoryEntry,
   type ProjectTask,
   type ProjectTaskSpecVersion,
 } from "@t3tools/contracts";
 
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
+import { resolveRoleModels } from "./roleModels.ts";
 import { buildTaskLeadPrompt } from "./taskLeadPrompt.ts";
 
 const projectId = ProjectId.make("project-1");
@@ -35,6 +37,8 @@ const task: ProjectTask = {
   shipRound: 0,
   review: null,
   ready: null,
+  roleModels: {},
+  modelSteps: {},
   stageChangedAt: at,
   createdAt: at,
   updatedAt: at,
@@ -176,6 +180,41 @@ describe("buildTaskLeadPrompt", () => {
 
   it("keeps the whole prompt stable", () => {
     expect(buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] })).toMatchSnapshot();
+  });
+
+  it("tells the lead which model runs each role and to hand them off with task_delegate", () => {
+    const claude = ProviderInstanceId.make("claude");
+    const codex = ProviderInstanceId.make("codex");
+    const prompt = buildTaskLeadPrompt({
+      ...base,
+      memory: [],
+      otherTasks: [],
+      roleModels: resolveRoleModels(
+        { fix: { providerInstanceId: codex, model: "gpt-5.5-mini" } },
+        {
+          plan: { providerInstanceId: claude, model: "claude-opus-5-5" },
+          implement: { providerInstanceId: codex, model: "gpt-5.5" },
+        },
+      ),
+    });
+    const section = prompt.slice(prompt.indexOf("## Models per role"), prompt.indexOf("## Rules"));
+    expect(section).toMatchSnapshot();
+    expect(section).toContain(
+      'codex · gpt-5.5 (project default). Hand it off with task_delegate(role: "implement")',
+    );
+    expect(section).toContain("codex · gpt-5.5-mini (set on this task)");
+    expect(section).toContain("- Review: no model set. Do it yourself");
+  });
+
+  it("keeps every role on the lead's own model when none is set", () => {
+    const prompt = buildTaskLeadPrompt({
+      ...base,
+      memory: [],
+      otherTasks: [],
+      roleModels: resolveRoleModels({}, undefined),
+    });
+    expect(prompt).toContain("- Plan: you, on your own model.");
+    expect(prompt).not.toContain("task_delegate starts a child");
   });
 
   it("tells the lead to write what the user reads in the user's language", () => {

@@ -164,6 +164,7 @@ function task(
     openBlocker: false,
     iterateRound: 0,
     shipRound: 0,
+    modelSteps: {},
     updatedAt: NOW,
     ...overrides,
   };

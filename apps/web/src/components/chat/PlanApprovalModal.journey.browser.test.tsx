@@ -100,6 +100,7 @@ function taskRef(id: string, number: number, title: string, extra: Partial<Proje
     openBlocker: false,
     iterateRound: 0,
     shipRound: 0,
+    modelSteps: {},
     updatedAt: AT,
     ...extra,
   } satisfies ProjectTaskReference;
@@ -187,6 +188,8 @@ function makeDetail(): ProjectTeamTaskDetail {
       nudgeCount: 0,
       iterateRound: 0,
       shipRound: 0,
+      modelSteps: {},
+      roleModels: {},
       review: null,
       ready: null,
       stageChangedAt: AT,

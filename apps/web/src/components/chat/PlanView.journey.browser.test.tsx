@@ -79,6 +79,7 @@ function taskRef(): ProjectTaskReference {
     iterateRound: server.iterateRound,
     shipRound: server.shipRound,
     ready: server.ready,
+    modelSteps: {},
     updatedAt: AT,
   };
 }

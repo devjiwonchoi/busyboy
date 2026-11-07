@@ -86,6 +86,11 @@ import {
   type ProjectTeamRestoreTaskSpecInput,
   type ProjectTeamSplitTaskTodoInput,
   type ProjectTeamSplitTaskTodoResult,
+  type ProjectTeamSetTaskRoleModelsInput,
+  type ProjectTeamTaskDelegateInput,
+  type ProjectTaskModelRole,
+  type ProjectTaskRoleModelsPatch,
+  applyRoleModelsPatch,
   type ProjectTeamTaskDetail,
   type ProjectTeamTaskRefInput,
   type ProjectTeamUpdateTaskSpecInput,
@@ -173,6 +178,12 @@ import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
+import {
+  DELEGATE_ROLE,
+  modelStepEventBody,
+  resolveRoleModels,
+  toDelegateTarget,
+} from "./roleModels.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 import { resolveUserLanguage } from "./userLanguage.ts";
 
@@ -506,6 +517,8 @@ export function describeManagerAction(
         : "changed the sitrep interval";
     case "afk_answer":
       return `auto-answered a question for ${task} (AFK)`;
+    case "model_step":
+      return `ran a step of ${task}`;
   }
 }
 
@@ -616,6 +629,15 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamTaskUpdateInput,
     ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
+    /**
+     * task_delegate: a lead hands implement, review or fix to the role's model. The
+     * server picks the target and records which model ran the step.
+     */
+    readonly delegateStep: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamTaskDelegateInput,
+      delegate: DelegateTaskLead,
+    ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, ProjectTeamError>;
     /** task_spec_read: a lead reads its own task's spec; the PM reads any. */
     readonly readSpec: (
       callerThreadId: ThreadId,
@@ -718,6 +740,10 @@ export class ProjectTeamService extends Context.Service<
     readonly splitTaskTodo: (
       input: ProjectTeamSplitTaskTodoInput,
     ) => Effect.Effect<ProjectTeamSplitTaskTodoResult, ProjectTeamError>;
+    /** projectTeam.setTaskRoleModels RPC: the user overrides the project's role models for one task. */
+    readonly setTaskRoleModels: (
+      input: ProjectTeamSetTaskRoleModelsInput,
+    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
 
     /** projectTeam.answerDecision RPC: the user answered a card; goes straight to the lead. */
     readonly answerDecision: (
@@ -1513,6 +1539,63 @@ const make = Effect.gen(function* () {
       yield* router.publish(updated.projectId);
     }).pipe(orTeamError("Could not update the epic."));
 
+  /** Stores the model a delegate_task call ran a role on, and logs it. */
+  const recordModelStep = (
+    task: ProjectTask,
+    role: ProjectTaskModelRole,
+    ran: Pick<OrchestratorMcpDelegateTaskResult, "providerInstanceId" | "model">,
+    actorThreadId: ThreadId,
+  ) =>
+    Effect.gen(function* () {
+      const updated = yield* repository.recordModelStep({
+        id: task.id,
+        role,
+        step: { providerInstanceId: ran.providerInstanceId, model: ran.model, at: yield* nowIso },
+      });
+      yield* appendEvent(
+        task,
+        "model_step",
+        modelStepEventBody(role, ran.providerInstanceId, ran.model),
+        actorThreadId,
+      );
+      return Option.getOrElse(updated, () => task);
+    });
+
+  const delegateStep: ProjectTeamService["Service"]["delegateStep"] = (
+    callerThreadId,
+    input,
+    delegate,
+  ) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["lead"], "task_delegate");
+      const task = yield* requireTask(role.taskId, role.projectId);
+      if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
+        return yield* teamError(`#${task.number} is finished.`, role.projectId);
+      }
+      const manager = yield* requireManager(role.projectId);
+      const model = resolveRoleModels(task.roleModels, manager.settings.roleModels)[input.role];
+      const key = yield* keyOf(task);
+      const result = yield* delegate({
+        task: input.task,
+        title: input.title ?? `${key} ${input.role}`,
+        role: DELEGATE_ROLE[input.role],
+        ...(input.isolation === undefined ? {} : { isolation: input.isolation }),
+        ...(input.mode === undefined ? {} : { mode: input.mode }),
+        ...(input.clientRequestId === undefined ? {} : { clientRequestId: input.clientRequestId }),
+        ...(model === null ? {} : { target: toDelegateTarget(model.target) }),
+      }).pipe(
+        Effect.mapError((failure) =>
+          teamError(
+            `Could not start the ${input.role} step for #${task.number}: ${failure.message}`,
+            role.projectId,
+          ),
+        ),
+      );
+      yield* recordModelStep(task, input.role, result, callerThreadId);
+      yield* router.publish(role.projectId);
+      return result;
+    }).pipe(orTeamError("Could not delegate the step."));
+
   const startTask: ProjectTeamService["Service"]["startTask"] = (callerThreadId, input, delegate) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm"], "task_start");
@@ -1562,6 +1645,10 @@ const make = Effect.gen(function* () {
           );
           // A restart must not reuse the first lead's request id, or it gets that lead back.
           const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
+          const roleModels = resolveRoleModels(task.roleModels, manager.settings.roleModels);
+          // A plan model the user picked wins over the PM's choice.
+          const leadTarget =
+            roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
           const lead = yield* delegate({
             task: buildTaskLeadPrompt({
               task,
@@ -1575,6 +1662,7 @@ const make = Effect.gen(function* () {
               ...(coveredBy === null
                 ? {}
                 : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
+              roleModels,
             }),
             title: `${key} ${task.title}`,
             role: "implementation",
@@ -1584,7 +1672,7 @@ const make = Effect.gen(function* () {
               earlierSessions === 0
                 ? `task-start:${task.id}`
                 : `task-start:${task.id}:${earlierSessions + 1}`,
-            ...(input.target === undefined ? {} : { target: input.target }),
+            ...(leadTarget === undefined ? {} : { target: leadTarget }),
           }).pipe(
             Effect.mapError((failure) =>
               teamError(
@@ -1609,8 +1697,10 @@ const make = Effect.gen(function* () {
             createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
+          // Logged as the lead's, so the PM's latest action still reads "started".
+          const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
           yield* router.publish(role.projectId);
-          return { task: started, leadThreadId: lead.childThreadId };
+          return { task: withStep, leadThreadId: lead.childThreadId };
         }),
       );
     }).pipe(orTeamError("Could not start the task."));
@@ -2698,6 +2788,7 @@ const make = Effect.gen(function* () {
       readonly persona?: PersonaPatch | undefined;
       readonly enabled?: boolean | undefined;
       readonly taskKeyPrefix?: string | undefined;
+      readonly roleModels?: ProjectTaskRoleModelsPatch | undefined;
       /** User-only; updateSettingsAsManager never passes it. */
       readonly afk?: { readonly hours: number | null } | null | undefined;
     },
@@ -2745,8 +2836,16 @@ const make = Effect.gen(function* () {
             patch.quietHours === undefined
               ? manager.settings.quietHours
               : (patch.quietHours ?? undefined);
+          const { roleModels: previousRoleModels, ...currentRest } = current;
+          const roleModels =
+            patch.roleModels === undefined
+              ? previousRoleModels
+              : applyRoleModelsPatch(previousRoleModels ?? {}, patch.roleModels);
           const settings: ProjectTeamSettings = {
-            ...current,
+            ...currentRest,
+            ...(roleModels === undefined || Object.keys(roleModels).length === 0
+              ? {}
+              : { roleModels }),
             ...(patch.maxConcurrentTasks === undefined
               ? {}
               : { maxConcurrentTasks: patch.maxConcurrentTasks }),
@@ -2840,6 +2939,7 @@ const make = Effect.gen(function* () {
               voice: input.voice,
             },
             taskKeyPrefix: input.taskKeyPrefix,
+            roleModels: input.roleModels,
           },
           callerThreadId,
         ),
@@ -3146,6 +3246,19 @@ const make = Effect.gen(function* () {
       Effect.flatMap(taskDetail),
       orTeamError("Could not read the task.", input.projectId),
     );
+
+  const setTaskRoleModels: ProjectTeamService["Service"]["setTaskRoleModels"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* requireTask(input.taskId, input.projectId);
+      const updated = yield* repository.setTaskRoleModels({
+        id: task.id,
+        roleModels: applyRoleModelsPatch(task.roleModels, input.roleModels),
+        now: yield* nowIso,
+      });
+      const next = Option.getOrElse(updated, () => task);
+      yield* router.publish(task.projectId);
+      return yield* taskDetail(next);
+    }).pipe(orTeamError("Could not set the task's models.", input.projectId));
 
   const updateTaskSpec: ProjectTeamService["Service"]["updateTaskSpec"] = (input) =>
     Effect.gen(function* () {
@@ -3662,6 +3775,7 @@ const make = Effect.gen(function* () {
               updatedAt: task.updatedAt,
               iterateRound: task.iterateRound,
               shipRound: task.shipRound,
+              modelSteps: task.modelSteps,
             })),
           } satisfies ProjectTeamAttentionSummary;
         }),
@@ -3754,6 +3868,8 @@ const make = Effect.gen(function* () {
     updateTaskSpec,
     restoreTaskSpec,
     splitTaskTodo,
+    setTaskRoleModels,
+    delegateStep,
     answerDecision,
     answerAttention,
     dismissAttention,

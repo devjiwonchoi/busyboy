@@ -19,6 +19,7 @@ import type {
   ProjectTeamAnswerDecisionInput,
   ProjectTeamCreateTaskInput,
   ProjectTeamRestoreTaskSpecInput,
+  ProjectTeamSetTaskRoleModelsInput,
   ProjectTeamSplitTaskTodoInput,
   ProjectTeamTaskRefInput,
   ProjectTeamUpdateTaskSpecInput,
@@ -228,6 +229,13 @@ export function useSplitTaskTodo() {
   const splitTaskTodo = useAtomCommand(projectTeamEnvironment.splitTaskTodo);
   return (environmentId: EnvironmentId, input: ProjectTeamSplitTaskTodoInput) =>
     splitTaskTodo({ environmentId, input });
+}
+
+/** Overrides the project's role models for one task; null in the patch clears a role. */
+export function useSetTaskRoleModels() {
+  const setTaskRoleModels = useAtomCommand(projectTeamEnvironment.setTaskRoleModels);
+  return (environmentId: EnvironmentId, input: ProjectTeamSetTaskRoleModelsInput) =>
+    setTaskRoleModels({ environmentId, input });
 }
 
 /** One task's detail, refetched whenever the team's attention changes. */

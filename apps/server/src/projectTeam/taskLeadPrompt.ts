@@ -9,6 +9,7 @@ import {
 
 import { SPEC_CHANGED_PREFIX } from "./AttentionRouter.ts";
 import { memoryPromptSection } from "./memoryPrompt.ts";
+import { type ResolvedRoleModels, roleModelsPromptSection } from "./roleModels.ts";
 import { userLanguageRule } from "./userLanguage.ts";
 
 export function nextStepHint(stage: ProjectTaskStage): string {
@@ -166,6 +167,8 @@ export function buildTaskLeadPrompt(input: {
   readonly userLanguage?: string;
   /** Set for a subtask the user approved with its parent's breakdown: it skips the approval card. */
   readonly coveredBy?: CoveredBy;
+  /** The model each role runs on; absent means every role runs on the lead's own model. */
+  readonly roleModels?: ResolvedRoleModels;
 }): string {
   const { task } = input;
   const language =
@@ -185,7 +188,14 @@ ${otherTasksSection(task, input.otherTasks)}
 
 ## Stages
 ${stagesSection(input.resume, input.coveredBy)}
-
+${
+  input.roleModels === undefined
+    ? ""
+    : `
+## Models per role
+${roleModelsPromptSection(input.roleModels)}
+`
+}
 ## Rules
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "approval" for the plan (never for a subtask covered by its parent's approved breakdown), "decision" for a choice only the user can make and "blocker" for something only a person can unblock.
 - Ask only when you are truly blocked or the choice is the user's to make. The user has not followed your thread. Start every ask_user question, including a plan for approval, with one plain sentence saying what the task is. Refer to other tasks by name, not by number alone. For a decision, give the options, the tradeoff and your recommendation.

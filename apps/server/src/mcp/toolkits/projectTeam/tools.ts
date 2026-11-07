@@ -1,4 +1,5 @@
 import {
+  OrchestratorMcpDelegateTaskResult,
   OrchestratorMcpFailure,
   ProjectTeamAskUserInput,
   ProjectTeamAttentionAnswerInput,
@@ -33,6 +34,7 @@ import {
   ProjectTeamTaskEvidenceSetInput,
   ProjectTeamTaskReviewSetInput,
   ProjectTeamTaskReadyInput,
+  ProjectTeamTaskDelegateInput,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -146,6 +148,17 @@ const TaskReadyTool = Tool.make("task_ready", {
 })
   .annotate(Tool.Title, "Mark a task ready")
   .annotate(Tool.Destructive, false);
+const TaskDelegateTool = Tool.make("task_delegate", {
+  ...shared,
+  dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
+  description:
+    "Task lead only. Hand implement, review or fix to the model the user set for that role; without one, the child runs on your own model. The server picks the model and records which one ran the step. Returns the delegated task, like delegate_task; its completion wakes you.",
+  parameters: ProjectTeamTaskDelegateInput,
+  success: OrchestratorMcpDelegateTaskResult,
+})
+  .annotate(Tool.Title, "Delegate a task step")
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.OpenWorld, true);
 
 const TaskNudgeTool = Tool.make("task_nudge", {
   ...shared,
@@ -285,6 +298,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TaskEvidenceSetTool,
   TaskReviewSetTool,
   TaskReadyTool,
+  TaskDelegateTool,
   TaskNudgeTool,
   TaskListTool,
   TaskReadTool,
