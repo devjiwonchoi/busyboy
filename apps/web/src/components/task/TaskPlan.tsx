@@ -331,7 +331,13 @@ function TaskPlanBody(props: {
           {detail.openAttention.map((item) => (
             <DecisionCard
               key={item.id}
-              card={{ item, taskNumber: task.number, taskTitle: task.title, plan: planFor(item) }}
+              card={{
+                item,
+                taskNumber: task.number,
+                taskTitle: task.title,
+                plan: planFor(item),
+                proposal: null,
+              }}
               environmentId={environmentId}
               threadRef={scopeThreadRef(environmentId, props.pmThreadId!)}
               cwd={undefined}

@@ -10,6 +10,7 @@ import { formatProjectManagerPresence } from "~/state/projectTeam.logic";
 import { useEnvironmentScope } from "~/state/session";
 import { threadEnvironment } from "~/state/threads";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
+import { ProposalCard } from "../chat/ProposalCard";
 import { PmAvatar } from "../PmAvatar";
 import { projectManagerPreview } from "../SidebarProjectManager";
 import { toastManager } from "../ui/toast";
@@ -146,6 +147,18 @@ export function DirectorCard(props: {
           ? "Ask the Director about anything across your projects. It routes the work to each project's PM."
           : preview}
       </p>
+      {summary.decisionCards
+        .filter(
+          (card) =>
+            card.item.kind === "proposal" &&
+            card.item.answeredAt === null &&
+            card.item.supersededAt === null,
+        )
+        .map((card) => (
+          <div key={card.item.id} className="mt-3">
+            <ProposalCard card={card} environmentId={director.threadRef.environmentId} />
+          </div>
+        ))}
       <p className="mt-2 text-muted-foreground text-xs">{workspaceDigestStats(props.projects)}</p>
       <form onSubmit={onSubmit} className="mt-3 flex items-end gap-2">
         <label htmlFor={inputId} className="sr-only">

@@ -20,6 +20,7 @@ import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { AFK_ANSWERED_LABEL } from "./Afk";
+import { ProposalCard } from "./ProposalCard";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 
 const QUESTION_ID = "answer";
@@ -28,6 +29,7 @@ const KIND_LABEL: Record<ProjectDecisionCard["item"]["kind"], string> = {
   decision: "Decision",
   approval: "Plan approval",
   blocker: "Blocker",
+  proposal: "태스크 제안",
 };
 
 /** Questions asked without options still need something to pick; the note carries the detail. */
@@ -83,6 +85,9 @@ export function DecisionCard({
   threadRef: ScopedThreadRef;
   cwd: string | undefined;
 }) {
+  if (card.item.kind === "proposal") {
+    return <ProposalCard card={card} environmentId={environmentId} />;
+  }
   if (card.item.kind === "approval") {
     return <PlanApprovalCard card={card} environmentId={environmentId} />;
   }
