@@ -59,6 +59,9 @@ const handlers = {
   task_todo_set: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.setTodo(caller, input)),
   ),
+  task_evidence_set: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.setEvidence(caller, input)),
+  ),
   task_nudge: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.nudgeTask(caller, input)),
   ),

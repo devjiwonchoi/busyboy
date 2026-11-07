@@ -1,6 +1,7 @@
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentId,
+  ProjectAttentionItem,
   ProjectId,
   ProjectTaskId,
   ProjectTaskSpec,
@@ -8,6 +9,7 @@ import type {
   ProjectTaskTodo,
   ProjectTeamTaskDetail,
 } from "@t3tools/contracts";
+import { approvalPlanOf, newProjectTaskTodo } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { GitPullRequestIcon } from "lucide-react";
 import { useState } from "react";
@@ -111,6 +113,10 @@ function TaskPlanBody(props: {
   const restoreTaskSpec = useRestoreTaskSpec();
   const splitTaskTodo = useSplitTaskTodo();
   const latest = versions.at(-1)!;
+  const planFor = (item: ProjectAttentionItem) => {
+    const pinned = versions.find((version) => version.version === item.specVersion);
+    return item.kind === "approval" && pinned !== undefined ? approvalPlanOf(pinned.spec) : null;
+  };
   // Null shows the latest version; a number pins an older one, read-only.
   const [viewedVersion, setViewedVersion] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
@@ -155,10 +161,7 @@ function TaskPlanBody(props: {
     void save(
       {
         ...latest.spec,
-        todos: [
-          ...latest.spec.todos,
-          { id: `t${Date.now().toString(36)}`, text, done: false, subtaskId: null },
-        ],
+        todos: [...latest.spec.todos, newProjectTaskTodo(`t${Date.now().toString(36)}`, text)],
       },
       `Added "${text}"`,
     );
@@ -304,7 +307,7 @@ function TaskPlanBody(props: {
           {detail.openAttention.map((item) => (
             <DecisionCard
               key={item.id}
-              card={{ item, taskNumber: task.number, taskTitle: task.title }}
+              card={{ item, taskNumber: task.number, taskTitle: task.title, plan: planFor(item) }}
               environmentId={environmentId}
               threadRef={scopeThreadRef(environmentId, props.pmThreadId!)}
               cwd={undefined}

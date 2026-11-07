@@ -30,6 +30,7 @@ import {
   ProjectTeamTaskSpecResult,
   ProjectTeamTaskSpecWriteInput,
   ProjectTeamTaskTodoSetInput,
+  ProjectTeamTaskEvidenceSetInput,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -110,6 +111,17 @@ const TaskTodoSetTool = Tool.make("task_todo_set", {
   success: ProjectTeamTaskSpecResult,
 })
   .annotate(Tool.Title, "Check a task todo")
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+const TaskEvidenceSetTool = Tool.make("task_evidence_set", {
+  ...shared,
+  description:
+    "Record the proof for one success criterion once it holds: the test that passed, the check you ran, or a screenshot link. In Review needs evidence on every criterion.",
+  parameters: ProjectTeamTaskEvidenceSetInput,
+  success: ProjectTeamTaskSpecResult,
+})
+  .annotate(Tool.Title, "Record evidence for a criterion")
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
 
@@ -248,6 +260,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TaskSpecReadTool,
   TaskSpecWriteTool,
   TaskTodoSetTool,
+  TaskEvidenceSetTool,
   TaskNudgeTool,
   TaskListTool,
   TaskReadTool,

@@ -88,6 +88,7 @@ function card(
   return {
     taskNumber,
     taskTitle,
+    plan: null,
     item: {
       id: ProjectAttentionItemId.make(id),
       projectId: PROJECT_ID,

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  approvalPlanOf,
+  emptyProjectTaskSpec,
+  newProjectTaskTodo,
   afkActive,
   afkPickOption,
   afkSetting,
@@ -188,6 +191,78 @@ describe("task keys", () => {
         todos: [],
       }).successCriteria,
     ).toBe("");
+  });
+
+  it("reads specs saved before structured plans as having no structure", () => {
+    expect(
+      Schema.decodeUnknownSync(ProjectTaskSpec)({
+        background: "",
+        goal: "Done.",
+        successCriteria: "Tests pass.",
+        nonGoals: "",
+        todos: [{ id: "t1", text: "Write it", done: true, subtaskId: null }],
+      }),
+    ).toEqual({
+      background: "",
+      goal: "Done.",
+      successCriteria: "Tests pass.",
+      nonGoals: "",
+      todos: [
+        {
+          id: "t1",
+          text: "Write it",
+          done: true,
+          subtaskId: null,
+          criteria: [],
+          dependsOn: [],
+          doneWhen: "",
+        },
+      ],
+      summary: "",
+      flow: "",
+      prototype: "",
+      prototypeWaiver: "",
+      criteria: [],
+      files: [],
+    });
+  });
+
+  it("gives an approval card the plan's summary and todos with their done-when lines", () => {
+    expect(
+      approvalPlanOf({
+        ...emptyProjectTaskSpec(),
+        summary: "The list jumps. After this it stays put.",
+        todos: [
+          { ...newProjectTaskTodo("t1", "Keep scrollTop"), doneWhen: "dragging keeps the spot" },
+          { ...newProjectTaskTodo("t2", "Add a test"), dependsOn: ["t1"], doneWhen: "it passes" },
+        ],
+      }),
+    ).toEqual({
+      summary: "The list jumps. After this it stays put.",
+      todos: [
+        {
+          id: "t1",
+          text: "Keep scrollTop",
+          done: false,
+          doneWhen: "dragging keeps the spot",
+          dependsOn: [],
+        },
+        { id: "t2", text: "Add a test", done: false, doneWhen: "it passes", dependsOn: ["t1"] },
+      ],
+    });
+  });
+
+  it("rejects a spec with two criteria sharing an id", () => {
+    const criterion = { id: "c1", text: "It works", provenBy: "a test" };
+    expect(() =>
+      Schema.decodeUnknownSync(ProjectTaskSpec)({
+        background: "",
+        goal: "",
+        nonGoals: "",
+        todos: [],
+        criteria: [criterion, criterion],
+      }),
+    ).toThrow("Each criterion needs its own id.");
   });
 });
 

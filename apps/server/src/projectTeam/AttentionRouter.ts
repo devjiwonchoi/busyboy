@@ -42,6 +42,8 @@ export const AFK_ANSWER_PREFIX = "[Auto-answered (AFK): the user is away]";
 export const AFK_NOTICE_PREFIX = "[AFK]";
 
 /** Prefix of the note a lead gets when the PM closes its question without an answer. */
+/** Starts the message telling a lead its approval card closed because someone else changed the spec. */
+export const SPEC_CHANGED_PREFIX = "[Spec changed]";
 export const PM_DISMISS_PREFIX = "[Question closed by BusyBoy PM]";
 
 function trimQuestion(question: string): string {

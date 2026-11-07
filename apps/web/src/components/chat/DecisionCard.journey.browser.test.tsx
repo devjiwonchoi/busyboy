@@ -80,6 +80,7 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
   return {
     taskNumber: 3,
     taskTitle: "Fix the login redirect",
+    plan: null,
     item: {
       id: ProjectAttentionItemId.make("attention-plan"),
       projectId: PROJECT_ID,

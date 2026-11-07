@@ -4,6 +4,8 @@ import * as NodePath from "node:path";
 
 import { assert, describe, it } from "@effect/vitest";
 import {
+  emptyProjectTaskSpec,
+  newProjectTaskTodo,
   ChatAttachmentId,
   ProjectId,
   PLAN_APPROVAL_START,
@@ -20,11 +22,19 @@ import { createPendingAttachmentId } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { PROJECT_ID, setUpManager, startLead, userMessage, withTeam } from "./testkit.ts";
+import {
+  PROJECT_ID,
+  readyPlan,
+  writeReadyPlan,
+  setUpManager,
+  startLead,
+  userMessage,
+  withTeam,
+} from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 
-const todo = (id: string, text: string) => ({ id, text, done: false, subtaskId: null });
+const todo = newProjectTaskTodo;
 
 describe("ProjectTeamService tasks as specs", () => {
   it.effect("keeps files the user attached to a new task and lists them in its spec", () =>
@@ -100,6 +110,7 @@ describe("ProjectTeamService tasks as specs", () => {
           taskId: created.task.id,
           baseVersion: 1,
           spec: {
+            ...emptyProjectTaskSpec(),
             background: "Dragging a project up jumps the list to the top.",
             goal: "Dragging keeps the scroll position.",
             successCriteria: "",
@@ -118,7 +129,7 @@ describe("ProjectTeamService tasks as specs", () => {
             projectId: PROJECT_ID,
             taskId: created.task.id,
             baseVersion: 1,
-            spec: { background: "", goal: "", successCriteria: "", nonGoals: "", todos: [] },
+            spec: emptyProjectTaskSpec(),
           })
           .pipe(Effect.flip);
         assert.include(stale.message, "changed to v2");
@@ -239,8 +250,29 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.strictEqual(read.key, "DE-1");
         const plan = {
           ...read.current.spec,
+          summary: "Dragging a project jumps the list to the top. After this it stays put.",
           goal: "Dragging keeps the scroll position.",
-          todos: [todo("t1", "Add a journey test"), todo("t2", "Keep scrollTop")],
+          criteria: [
+            {
+              id: "c1",
+              text: "Dragging keeps the scroll position",
+              provenBy: "a journey test",
+              evidence: null,
+            },
+          ],
+          todos: [
+            { ...todo("t1", "Add a journey test"), criteria: ["c1"], doneWhen: "it fails today" },
+            { ...todo("t2", "Keep scrollTop"), criteria: ["c1"], doneWhen: "the test passes" },
+          ],
+          files: [
+            {
+              path: "apps/web/src/components/Sidebar.tsx",
+              change: "changed" as const,
+              why: "Keep scrollTop on drag start",
+              todos: ["t2"],
+            },
+          ],
+          prototypeWaiver: "Nothing changes visually.",
         };
         const written = yield* team.writeSpec(planner, {
           baseVersion: read.current.version,
@@ -267,7 +299,20 @@ describe("ProjectTeamService tasks as specs", () => {
         const foreign = yield* team.readSpec(planner, { taskId: other.task.id }).pipe(Effect.flip);
         assert.include(foreign.message, "only use its own task's spec");
 
-        // No approval card: the planner starts running with its plan recorded.
+        // The planner cannot start before the user approves the plan.
+        const early = yield* team
+          .updateTask(planner, { stage: "running", planSummary: "Keep scrollTop." })
+          .pipe(Effect.flip);
+        assert.include(early.message, "no approved plan");
+        const { item: card } = yield* team.askUser(planner, {
+          kind: "approval",
+          question: "Approve the plan?",
+        });
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: card.id,
+          answer: PLAN_APPROVAL_START,
+        });
         const running = yield* team.updateTask(planner, {
           stage: "running",
           planSummary: "Keep scrollTop.",
@@ -278,9 +323,6 @@ describe("ProjectTeamService tasks as specs", () => {
           taskId: created.task.id,
         });
         assert.deepStrictEqual(afterPlan.openAttention, []);
-        assert.isFalse(
-          (yield* harness.messagesTo(pm)).some((text) => text.includes("[Decision card]")),
-        );
 
         // A stopped lead parks the task; starting it again opens an implementer that skips planning.
         yield* team.updateTask(planner, { stage: "inbox" });
@@ -334,33 +376,40 @@ describe("ProjectTeamService tasks as specs", () => {
         const read = yield* team.readSpec(lead, {});
         yield* team.writeSpec(lead, {
           baseVersion: read.current.version,
-          spec: {
+          spec: readyPlan({
             ...read.current.spec,
             goal: "Dragging keeps the scroll position.",
             successCriteria: "- The list never jumps.",
-          },
+          }),
           note: "Plan",
         });
-
-        // An approval needs both card sections: goal and verification.
-        const noSections = yield* team
-          .askUser(lead, { kind: "approval", question: "Plan: keep it.", goal: "- Keep it." })
-          .pipe(Effect.flip);
-        assert.include(noSections.message, "needs goal and verification");
 
         // Asking for approval pins spec v2 and shows the task as Waiting for approval.
         const first = yield* team.askUser(lead, {
           kind: "approval",
           question: "Plan: keep it.",
-          goal: "- Keep the scroll position while dragging.",
-          verification: "- A journey test drags and checks scrollTop.",
           // Leads can't bring back "Approve only": approving always starts the work.
           options: ["Approve and start", "Approve only"],
         });
         assert.strictEqual(first.item.kind, "approval");
-        assert.strictEqual(first.item.summary, "- Keep the scroll position while dragging.");
-        assert.strictEqual(first.item.verification, "- A journey test drags and checks scrollTop.");
+        // The card shows the plan's summary and its todos, each with how to tell it is done.
+        assert.strictEqual(first.item.summary, "hello.sh prints hello when you run it.");
         assert.strictEqual(first.item.specVersion, 2);
+        const card = (yield* team.attentionSnapshot).projects[0]?.decisionCards.find(
+          (candidate) => candidate.item.id === first.item.id,
+        );
+        assert.deepStrictEqual(card?.plan, {
+          summary: "hello.sh prints hello when you run it.",
+          todos: [
+            {
+              id: "t1",
+              text: "Write hello.sh",
+              done: false,
+              doneWhen: "the test passes",
+              dependsOn: [],
+            },
+          ],
+        });
         assert.deepStrictEqual(first.item.options, ["Approve and start"]);
         const waiting = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.strictEqual(waiting.task.stage, "awaiting_approval");
@@ -390,14 +439,10 @@ describe("ProjectTeamService tasks as specs", () => {
         const second = yield* team.askUser(lead, {
           kind: "approval",
           question: "Plan v3.",
-          goal: "- Short plan.",
-          verification: "- A test.",
         });
         const third = yield* team.askUser(lead, {
           kind: "approval",
           question: "Plan v3 again.",
-          goal: "- Short plan.",
-          verification: "- A test.",
         });
         const replaced = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.deepStrictEqual(
@@ -443,11 +488,11 @@ describe("ProjectTeamService tasks as specs", () => {
         );
 
         // A card that already waited past the grace period is answered when AFK comes on.
+        yield* writeReadyPlan(leadA);
+        yield* writeReadyPlan(leadB);
         const waiting = yield* team.askUser(leadA, {
           kind: "approval",
           question: "Plan A.",
-          goal: "- Short plan.",
-          verification: "- A test.",
         });
         yield* TestClock.adjust("2 minutes");
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
@@ -463,8 +508,6 @@ describe("ProjectTeamService tasks as specs", () => {
         const asked = yield* team.askUser(leadB, {
           kind: "approval",
           question: "Plan B.",
-          goal: "- Short plan.",
-          verification: "- A test.",
         });
         assert.isNull(asked.item.answer);
         yield* team.afkSweep;

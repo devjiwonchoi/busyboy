@@ -7,6 +7,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 
 import {
+  emptyProjectTaskSpec,
   IsoDateTime,
   NonNegativeInt,
   PositiveInt,
@@ -196,6 +197,10 @@ export class ProjectTeamRepository extends Context.Service<
     readonly getLatestSpecVersion: (
       taskId: ProjectTaskId,
     ) => Result<Option.Option<ProjectTaskSpecVersion>>;
+    readonly getSpecVersion: (input: {
+      readonly taskId: ProjectTaskId;
+      readonly version: number;
+    }) => Result<Option.Option<ProjectTaskSpecVersion>>;
     /** Stores the spec as the next version number. */
     readonly appendSpecVersion: (
       input: AppendProjectTaskSpecVersionInput,
@@ -278,6 +283,11 @@ export class ProjectTeamRepository extends Context.Service<
     readonly listAttentionItemsSince: (input: {
       readonly projectId: ProjectId;
       readonly since: IsoDateTime;
+    }) => Result<ReadonlyArray<ProjectAttentionItem>>;
+    /** A task's answered items of one kind, oldest answer first. */
+    readonly listAnsweredTaskAttentionItems: (input: {
+      readonly taskId: ProjectTaskId;
+      readonly kind: ProjectAttentionKind;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
     /** The most recently answered items, newest answer first. */
     readonly listRecentlyAnsweredAttentionItems: (input: {
@@ -699,6 +709,15 @@ export const make = Effect.gen(function* () {
       ORDER BY version ASC
     `,
   });
+  const findSpecVersion = SqlSchema.findOneOption({
+    Request: Schema.Struct({ taskId: ProjectTaskId, version: Schema.Int }),
+    Result: SpecVersionRow,
+    execute: ({ taskId, version }) => sql`
+      SELECT ${specVersionColumns}
+      FROM project_task_spec_versions
+      WHERE task_id = ${taskId} AND version = ${version}
+    `,
+  });
   const findLatestSpecVersion = SqlSchema.findOneOption({
     Request: Schema.Struct({ taskId: ProjectTaskId }),
     Result: SpecVersionRow,
@@ -938,6 +957,16 @@ export const make = Effect.gen(function* () {
       LIMIT ${limit}
     `,
   });
+  const findAnsweredTaskAttention = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: ProjectTaskId, kind: ProjectAttentionKind }),
+    Result: AttentionRow,
+    execute: ({ taskId, kind }) => sql`
+      SELECT ${attentionColumns}
+      FROM project_attention_items
+      WHERE task_id = ${taskId} AND kind = ${kind} AND answered_at IS NOT NULL
+      ORDER BY answered_at ASC, rowid ASC
+    `,
+  });
   const findRecentAttention = SqlSchema.findAll({
     Request: Schema.Struct({ projectId: ProjectId, limit: Schema.Int }),
     Result: AttentionRow,
@@ -1110,13 +1139,7 @@ export const make = Effect.gen(function* () {
         });
         yield* insertSpecVersion({
           taskId: task.id,
-          spec: input.spec ?? {
-            background: input.request,
-            goal: "",
-            successCriteria: "",
-            nonGoals: "",
-            todos: [],
-          },
+          spec: input.spec ?? emptyProjectTaskSpec(input.request),
           author: input.author ?? "pm",
           authorThreadId: input.authorThreadId ?? null,
           note: "Created",
@@ -1141,6 +1164,8 @@ export const make = Effect.gen(function* () {
       findTasksWaitingOn({ taskId }).pipe(Effect.mapError(toRepositoryError("listTasksWaitingOn"))),
     listSpecVersions: (taskId) =>
       findSpecVersions({ taskId }).pipe(Effect.mapError(toRepositoryError("listSpecVersions"))),
+    getSpecVersion: (input) =>
+      findSpecVersion(input).pipe(Effect.mapError(toRepositoryError("getSpecVersion"))),
     getLatestSpecVersion: (taskId) =>
       findLatestSpecVersion({ taskId }).pipe(
         Effect.mapError(toRepositoryError("getLatestSpecVersion")),
@@ -1202,6 +1227,10 @@ export const make = Effect.gen(function* () {
       findOpenAttention(input).pipe(Effect.mapError(toRepositoryError("listOpenAttentionItems"))),
     listAttentionItemsSince: (input) =>
       findAttentionSince(input).pipe(Effect.mapError(toRepositoryError("listAttentionItemsSince"))),
+    listAnsweredTaskAttentionItems: (input) =>
+      findAnsweredTaskAttention(input).pipe(
+        Effect.mapError(toRepositoryError("listAnsweredTaskAttentionItems")),
+      ),
     listRecentlyAnsweredAttentionItems: (input) =>
       findRecentlyAnswered(input).pipe(
         Effect.mapError(toRepositoryError("listRecentlyAnsweredAttentionItems")),
