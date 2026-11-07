@@ -303,6 +303,7 @@ for (const viewport of [
 
     // Answering it there drops it from the count; it stays as the record.
     await act(async () => buttonIn(login, "Approve").click());
+    await act(async () => buttonIn(login, "Submit").click());
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
     expect(server.answers[0]).toEqual({
       projectId: PROJECT_ID,
