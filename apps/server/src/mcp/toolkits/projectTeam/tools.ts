@@ -56,7 +56,7 @@ const shared = {
 const TaskCreateTool = Tool.make("task_create", {
   ...shared,
   description:
-    "PM: add a task to the project's inbox when the user asks for new work, with intake saying why it is new (refused without it, or when an open task has the same title). Write the request so a task lead can act on it alone. Set waitsOn for tasks touching the same files and parentTaskId when it is part of a bigger task; both may point at tasks in other projects. Then start it with task_start when a slot is free. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
+    "PM/Director: post a task proposal card (title, goal, verification, and which project) in your chat. Include intake explaining why this is new work; goal and verification are required. Write title, goal and verification in the user's language, and the request so a task lead can act on it alone. Nothing is created until the user presses 태스크로 추가. Wait for [제안 승인됨], then start it with task_start when a slot is free (Director: the target project's PM is woken on acceptance). [제안 빠짐] means the user dropped it; [제안 피드백] carries their feedback — post a new proposal if still useful. Set waitsOn and parentTaskId only to tasks already added by the user; they may be in other projects. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
   parameters: ProjectTeamTaskCreateInput,
   success: ProjectTeamTaskResult,
 })

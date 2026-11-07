@@ -82,6 +82,8 @@ export interface CreateProjectTaskInput {
   readonly waitsOn: ReadonlyArray<ProjectTaskId>;
   readonly now: IsoDateTime;
   readonly parentTaskId?: ProjectTaskId | undefined;
+  /** "proposed" stores a PM's or the Director's proposal, hidden until the user adds it. Defaults to inbox. */
+  readonly stage?: "inbox" | "proposed" | undefined;
   /** Spec v1. Defaults to the request as background. */
   readonly spec?: ProjectTaskSpec | undefined;
   /** Who wrote spec v1. Defaults to the PM. */
@@ -610,16 +612,17 @@ export const make = Effect.gen(function* () {
       request: Schema.String,
       waitsOn: WaitsOnJson,
       parentTaskId: Schema.NullOr(ProjectTaskId),
+      stage: Schema.Literals(["inbox", "proposed"]),
       now: IsoDateTime,
     }),
     Result: TaskRow,
-    execute: ({ id, projectId, title, request, waitsOn, parentTaskId, now }) => sql`
+    execute: ({ id, projectId, title, request, waitsOn, parentTaskId, stage, now }) => sql`
       INSERT INTO project_tasks (
         task_id, project_id, number, title, request, stage, waits_on_json, parent_task_id,
         nudge_count, stage_changed_at, created_at, updated_at
       )
       SELECT
-        ${id}, ${projectId}, COALESCE(MAX(number), 0) + 1, ${title}, ${request}, 'inbox',
+        ${id}, ${projectId}, COALESCE(MAX(number), 0) + 1, ${title}, ${request}, ${stage},
         ${waitsOn}, ${parentTaskId}, 0, ${now}, ${now}, ${now}
       FROM project_tasks
       WHERE project_id = ${projectId}
@@ -642,7 +645,8 @@ export const make = Effect.gen(function* () {
       FROM project_tasks
       WHERE ${sql.and([
         sql`project_id = ${projectId}`,
-        ...(stages === undefined ? [] : [sql.in("stage", stages)]),
+        // Proposals stay out of every list unless a caller asks for them.
+        stages === undefined ? sql`stage <> 'proposed'` : sql.in("stage", stages),
       ])}
       ORDER BY number ASC
     `,
@@ -781,7 +785,7 @@ export const make = Effect.gen(function* () {
     execute: ({ parentTaskId }) => sql`
       SELECT ${taskColumns}
       FROM project_tasks
-      WHERE parent_task_id = ${parentTaskId}
+      WHERE parent_task_id = ${parentTaskId} AND stage <> 'proposed'
       ORDER BY number ASC
     `,
   });
@@ -793,6 +797,7 @@ export const make = Effect.gen(function* () {
       SELECT ${taskColumns}
       FROM project_tasks
       WHERE EXISTS (SELECT 1 FROM json_each(waits_on_json) WHERE value = ${taskId})
+        AND stage <> 'proposed'
       ORDER BY created_at ASC
     `,
   });
@@ -890,6 +895,7 @@ export const make = Effect.gen(function* () {
       SELECT ${taskColumns}
       FROM project_tasks
       WHERE project_id = ${projectId}
+        AND stage <> 'proposed'
         AND (
           title LIKE ${pattern} ESCAPE '\\'
           OR request LIKE ${pattern} ESCAPE '\\'
@@ -1266,6 +1272,7 @@ export const make = Effect.gen(function* () {
           request: input.request,
           waitsOn: input.waitsOn,
           parentTaskId: input.parentTaskId ?? null,
+          stage: input.stage ?? "inbox",
           now: input.now,
         });
         yield* insertSpecVersion({

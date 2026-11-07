@@ -14,6 +14,7 @@ import {
   PLAN_APPROVAL_START,
   ProjectId,
   type ProjectTaskSpec,
+  type ProjectTeamTaskCreateInput,
   ProviderInstanceId,
   type ServerProvider,
   ThreadId,
@@ -496,12 +497,46 @@ export const startLead = (
 ) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
-    const { task } = yield* team.createTask(pm, {
-      intake: "New work.",
+    const role = yield* team.roleOf(pm);
+    if (role.type !== "pm") {
+      throw new Error("A task lead fixture needs its project's PM.");
+    }
+    const { task } = yield* team.createTaskForUser({
+      projectId: role.projectId,
       title,
-      request: `${title}.`,
+      context: `${title}.`,
+      startPlanning: false,
     });
     return yield* team.startTask(pm, { taskId: task.id }, delegate);
+  });
+
+/** Existing task fixtures go through the same proposal and user acceptance as the chat. */
+export const createAcceptedTask = (caller: ThreadId, input: ProjectTeamTaskCreateInput) =>
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService.ProjectTeamService;
+    const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+    const { task } = yield* team.createTask(caller, {
+      goal: input.request,
+      verification: "Check the requested result.",
+      ...input,
+    });
+    const role = yield* team.roleOf(caller);
+    if (role.type === "none") {
+      throw new Error("The proposer must have a team role.");
+    }
+    const [item] = yield* repository.listOpenAttentionItems({
+      projectId: role.projectId,
+      taskId: task.id,
+    });
+    if (item === undefined) {
+      throw new Error("The task proposal card is missing.");
+    }
+    yield* team.answerDecision({
+      projectId: item.projectId,
+      attentionItemId: item.id,
+      answer: "태스크로 추가",
+    });
+    return yield* team.readTask(caller, { taskId: task.id });
   });
 
 /** A plan that meets the Definition of Ready: an end state, a proven criterion, a linked step, a file. */

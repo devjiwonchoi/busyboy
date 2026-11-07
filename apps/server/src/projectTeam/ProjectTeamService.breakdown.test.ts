@@ -76,13 +76,29 @@ describe("ProjectTeamService intake and breakdown", () => {
         const team = yield* service;
         const pm = yield* setUpManager;
         const noIntake = yield* team
-          .createTask(pm, { title: "Fix login", request: "Fix it." })
+          .createTask(pm, {
+            goal: "Fix login.",
+            verification: "Login works.",
+            title: "Fix login",
+            request: "Fix it.",
+          })
           .pipe(Effect.flip);
         assert.include(noIntake.message, "task_create needs intake");
 
-        yield* team.createTask(pm, { intake: "New bug.", title: "Fix login", request: "Fix it." });
+        yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          title: "Fix login",
+          context: "Fix it.",
+          startPlanning: false,
+        });
         const duplicate = yield* team
-          .createTask(pm, { intake: "Again.", title: "fix the  Login!", request: "Fix it." })
+          .createTask(pm, {
+            goal: "Fix login.",
+            verification: "Login works.",
+            intake: "Again.",
+            title: "fix the  Login!",
+            request: "Fix it.",
+          })
           .pipe(Effect.flip);
         assert.include(duplicate.message, 'DE-1 "Fix login" is already open');
         assert.include(duplicate.message, "task_nudge(taskId, note, scope: true)");

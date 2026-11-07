@@ -11,6 +11,7 @@ import { liveThreadsLayer } from "../../McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ProjectTeamService from "../../../projectTeam/ProjectTeamService.ts";
 import {
+  PROJECT_ID,
   setUpManager,
   userSays,
   withTeam,
@@ -93,10 +94,21 @@ describe("projectTeam MCP toolkit", () => {
           const pm = yield* setUpManager;
           const created = yield* call(pm, "task_create", {
             intake: "New work.",
+            goal: "Deliver the requested result.",
+            verification: "Check the result.",
             title: "A",
             request: "Do A.",
           });
           assert.isFalse(created.isError);
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
+            (entry) => entry.item.taskId === content(created).task.id,
+          )!;
+          yield* team.answerDecision({
+            projectId: PROJECT_ID,
+            attentionItemId: card.item.id,
+            answer: "태스크로 추가",
+          });
           const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
           assert.isFalse(started.isError);
           const lead = content(started).leadThreadId as ThreadId;
@@ -127,11 +139,22 @@ describe("projectTeam MCP toolkit", () => {
           const pm = yield* setUpManager;
           const created = yield* call(pm, "task_create", {
             intake: "New work.",
+            goal: "Deliver the requested result.",
+            verification: "Check the result.",
             title: "Add hello.sh",
             request: "Add hello.sh with a test.",
           });
-          assert.strictEqual(content(created).task.stage, "inbox");
+          assert.strictEqual(content(created).task.stage, "proposed");
 
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
+            (entry) => entry.item.taskId === content(created).task.id,
+          )!;
+          yield* team.answerDecision({
+            projectId: PROJECT_ID,
+            attentionItemId: card.item.id,
+            answer: "태스크로 추가",
+          });
           const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
           assert.isFalse(started.isError);
           assert.strictEqual(content(started).task.stage, "planning");
@@ -183,8 +206,19 @@ describe("projectTeam MCP toolkit", () => {
           Effect.gen(function* () {
             const created = yield* call(pm, "task_create", {
               intake: "New work.",
+              goal: "Deliver the requested result.",
+              verification: "Check the result.",
               title,
               request: `${title}.`,
+            });
+            const team = yield* ProjectTeamService.ProjectTeamService;
+            const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
+              (entry) => entry.item.taskId === content(created).task.id,
+            )!;
+            yield* team.answerDecision({
+              projectId: PROJECT_ID,
+              attentionItemId: card.item.id,
+              answer: "태스크로 추가",
             });
             const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
             return {

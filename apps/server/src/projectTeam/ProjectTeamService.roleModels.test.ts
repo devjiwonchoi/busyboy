@@ -122,10 +122,11 @@ describe("ProjectTeamService role models", () => {
           projectId: PROJECT_ID,
           roleModels: { implement: { providerInstanceId: codex, model: "gpt-5.5" } },
         });
-        const { task: created } = yield* team.createTask(pm, {
-          intake: "New work.",
+        const { task: created } = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Add hello.sh",
-          request: "Add hello.sh.",
+          context: "Add hello.sh.",
         });
         const detail = yield* team.setTaskRoleModels({
           projectId: PROJECT_ID,
@@ -195,10 +196,11 @@ describe("ProjectTeamService role models", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task: created } = yield* team.createTask(pm, {
-          intake: "New work.",
+        const { task: created } = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Add hello.sh",
-          request: "Add hello.sh.",
+          context: "Add hello.sh.",
         });
         yield* team.startTask(
           pm,
