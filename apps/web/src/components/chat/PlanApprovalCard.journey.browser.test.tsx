@@ -347,7 +347,9 @@ for (const viewport of [
     // Goal and Verification as headed sections, the bullets as real lists.
     const title = login.querySelector<HTMLElement>("[data-plan-title]")!;
     expect(title.textContent).toBe("Login redirect");
-    expect(login.querySelector("[data-plan-meta]")?.textContent).toMatch(/^Plan approval · v\d+$/);
+    expect(login.querySelector("[data-plan-meta]")?.textContent).toMatch(
+      /^BB-3 · Plan approval · v\d+$/,
+    );
     expect(parseFloat(getComputedStyle(title).fontSize)).toBeGreaterThanOrEqual(18);
     const sections = [...login.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
     expect(sections.map((section) => section.querySelector("h3")?.textContent)).toEqual([

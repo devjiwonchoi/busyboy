@@ -15,6 +15,7 @@ import {
   type SubtaskProgress,
   type TaskRelations,
   type TaskRelationsIndex,
+  relatedTask,
   taskRelations,
 } from "./taskRelations.logic";
 import { useLiveTaskStatus } from "./taskStatus";
@@ -31,6 +32,15 @@ export function useTaskRelations(
 ): TaskRelations | null {
   const index = useTaskRelationsIndex();
   return taskId === null ? null : taskRelations(index, environmentId, taskId);
+}
+
+/** One task with its key and live stage, from the PM summaries the app already holds. */
+export function useRelatedTask(
+  environmentId: EnvironmentId,
+  taskId: ProjectTaskId | null,
+): RelatedTask | null {
+  const index = useTaskRelationsIndex();
+  return taskId === null ? null : relatedTask(index, environmentId, taskId);
 }
 
 // Linear's colors: an orange flag for "blocked by", a red one for "blocking".

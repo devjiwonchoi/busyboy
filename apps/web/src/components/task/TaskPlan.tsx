@@ -24,6 +24,15 @@ import {
 } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
 import { DecisionCard } from "../chat/DecisionCard";
+import { PlanSummary } from "../chat/PlanMarkdown";
+import {
+  PlanBreakdown,
+  PlanCriteria,
+  PlanFileTree,
+  PlanFlow,
+  PlanPrototype,
+} from "../plan/PlanDocument";
+import { planTodoDependencyNumbers } from "../plan/planView.logic";
 import { StatusGlyph } from "../sidebar/SidebarRowLine";
 import {
   BlockedFlag,
@@ -316,8 +325,31 @@ function TaskPlanBody(props: {
         </section>
       ) : null}
 
+      {spec.summary.trim().length > 0 ? (
+        <section className="mt-5">
+          <h2 className={SECTION_HEADING}>Summary</h2>
+          <PlanSummary text={spec.summary} />
+        </section>
+      ) : null}
+
       {section("End result", "goal")}
-      {section("Success criteria", "successCriteria")}
+      {editing ? null : <PlanPrototype html={spec.prototype} waiver={spec.prototypeWaiver} />}
+      {spec.flow.trim().length > 0 ? (
+        <section className="mt-5">
+          <h2 className={SECTION_HEADING}>Flow</h2>
+          <PlanFlow source={spec.flow} />
+        </section>
+      ) : null}
+      {spec.criteria.length > 0 && !editing ? (
+        <section className="mt-5">
+          <h2 className={SECTION_HEADING}>
+            {`Success criteria · ${spec.criteria.filter((criterion) => criterion.evidence !== null).length}/${spec.criteria.length}`}
+          </h2>
+          <PlanCriteria criteria={spec.criteria} />
+        </section>
+      ) : (
+        section("Success criteria", "successCriteria")
+      )}
       {section("Non-goals", "nonGoals")}
 
       <section className="mt-5">
@@ -347,11 +379,22 @@ function TaskPlanBody(props: {
                 disabled={!isLatest}
                 onCheckedChange={() => void toggleTodo(todo)}
               />
-              <span
-                className={cn("min-w-0 flex-1", todo.done && "text-muted-foreground line-through")}
-              >
-                {todo.text}
-              </span>
+              <div className="min-w-0 flex-1">
+                <span className={cn(todo.done && "text-muted-foreground line-through")}>
+                  {todo.text}
+                </span>
+                {todo.dependsOn.length > 0 ? (
+                  <span
+                    data-plan-todo-deps
+                    className="ms-1.5 inline-flex whitespace-nowrap rounded-full border border-border/70 px-1.5 text-[11px] text-muted-foreground"
+                  >
+                    {`↳ after ${planTodoDependencyNumbers(spec.todos, todo).join(", ")}`}
+                  </span>
+                ) : null}
+                {todo.doneWhen.trim().length > 0 ? (
+                  <p className="text-muted-foreground text-xs">{`Done when: ${todo.doneWhen}`}</p>
+                ) : null}
+              </div>
               {todo.subtaskId !== null ? (
                 <Link
                   {...taskRouteParams(environmentId, task.projectId, todo.subtaskId)}
@@ -392,6 +435,20 @@ function TaskPlanBody(props: {
           </form>
         ) : null}
       </section>
+
+      {spec.todos.some((todo) => todo.dependsOn.length > 0) ? (
+        <section className="mt-5">
+          <h2 className={SECTION_HEADING}>Breakdown</h2>
+          <PlanBreakdown todos={spec.todos} running={task.stage === "running"} />
+        </section>
+      ) : null}
+
+      {spec.files.length > 0 ? (
+        <section className="mt-5">
+          <h2 className={SECTION_HEADING}>Files</h2>
+          <PlanFileTree files={spec.files} todos={spec.todos} />
+        </section>
+      ) : null}
 
       <TaskStructure relations={relations} className="mt-5" />
 

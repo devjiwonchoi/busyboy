@@ -3,18 +3,22 @@ import {
   PLAN_APPROVAL_START,
   planApprovalOutcome,
   type PlanApprovalOutcome,
+  type ProjectApprovalPlan,
   type ProjectDecisionCard,
+  type ProjectTaskStage,
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 
-import { useAnswerDecision } from "~/state/projectTeam";
+import { useAnswerDecision, useTaskDetail } from "~/state/projectTeam";
 
-import { TaskStructureLine, useTaskRelations } from "../task/TaskRelations";
+import { PlanTodoList } from "../plan/PlanTodoList";
+import { planProgressLabel, type PlanTodoLike } from "../plan/planView.logic";
+import { TaskStructureLine, useRelatedTask, useTaskRelations } from "../task/TaskRelations";
 import { Button } from "../ui/button";
 import { AFK_ANSWERED_LABEL } from "./Afk";
 import { PlanApprovalModal } from "./PlanApprovalModal";
-import { PlanApprovalSections, PlanTitle } from "./PlanMarkdown";
+import { PlanApprovalSections, PlanSummary, PlanTitle } from "./PlanMarkdown";
 
 const OUTCOME_LABEL: Record<PlanApprovalOutcome, string> = {
   start: "Approved and started",
@@ -29,10 +33,26 @@ export function planApprovalHeader(card: ProjectDecisionCard): string {
   return `Plan approval · ${card.taskTitle}${version}`;
 }
 
+/** A plan from a spec with the summary + todos shape; older plans fall back to Goal/Verification. */
+function structuredPlan(card: ProjectDecisionCard): ProjectApprovalPlan | null {
+  const plan = card.plan;
+  if (plan === null) return null;
+  return plan.summary.trim().length > 0 || plan.todos.length > 0 ? plan : null;
+}
+
+/** "BU-62 · Plan approval · v3". */
+function metaLine(key: string | null, label: string, specVersion: number | null): string {
+  return [key, label, specVersion === null ? null : `v${specVersion}`]
+    .filter((part) => part !== null)
+    .join(" · ");
+}
+
 /**
- * A task lead's plan, waiting for the user's go-ahead. Open: the lead's Goal and Verification,
- * the Approve button (same answer call as the modal, so it counts as the user's click; it
- * always starts the work) and "Review plan" for the full plan, comments and requested changes. Answered: the outcome, with the plan still viewable. Closed unanswered: muted.
+ * A task lead's plan, waiting for the user's go-ahead: meta line, title, the lead's summary and
+ * the steps as a todo list, with Approve (same answer call as the modal, so it counts as the
+ * user's click; it always starts the work) and View details for the full plan and comments.
+ * Once approved the same card stays as a live progress board: steps tick as the lead checks
+ * them off and the current one spins. Changes requested or closed: one muted line.
  */
 export function PlanApprovalCard({
   card,
@@ -45,14 +65,18 @@ export function PlanApprovalCard({
   const [sending, setSending] = useState(false);
   const answerDecision = useAnswerDecision();
   const relations = useTaskRelations(environmentId, card.item.taskId);
+  const related = useRelatedTask(environmentId, card.item.taskId);
+  const key = related?.key ?? null;
   const header = planApprovalHeader(card);
   const answer = card.item.answer;
+  const plan = structuredPlan(card);
   const state =
     card.item.answeredAt !== null
       ? "answered"
       : card.item.supersededAt !== null
         ? "resolved"
         : "open";
+  const outcome = state === "answered" ? planApprovalOutcome(answer ?? "") : null;
 
   const modal = (
     <PlanApprovalModal
@@ -77,8 +101,35 @@ export function PlanApprovalCard({
     });
   };
 
+  if (plan !== null && outcome !== null && outcome !== "changes") {
+    return (
+      <div
+        data-decision-card={card.item.id}
+        data-decision-card-state="answered"
+        data-plan-board
+        className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5"
+      >
+        <PlanTitle
+          as="div"
+          meta={metaLine(key, OUTCOME_LABEL[outcome], card.item.specVersion)}
+          title={card.taskTitle}
+        />
+        <PlanSummary text={plan.summary} />
+        <LivePlanBoard
+          card={card}
+          environmentId={environmentId}
+          pinned={plan}
+          stage={related?.task.stage ?? null}
+          afk={card.item.answeredBy === "afk"}
+          onViewDetails={() => setReviewing(true)}
+        />
+        {modal}
+      </div>
+    );
+  }
+
   if (state === "answered") {
-    const outcome = planApprovalOutcome(answer ?? "");
+    const answered = outcome ?? planApprovalOutcome("");
     const feedback = (answer ?? "").split("\n").slice(1).join("\n").trim();
     return (
       <div
@@ -91,7 +142,7 @@ export function PlanApprovalCard({
           <span aria-hidden className="text-muted-foreground">
             ·
           </span>
-          <span data-plan-outcome={outcome}>{OUTCOME_LABEL[outcome]}</span>
+          <span data-plan-outcome={answered}>{OUTCOME_LABEL[answered]}</span>
           {card.item.answeredBy === "afk" ? (
             <span className="text-muted-foreground text-xs">{AFK_ANSWERED_LABEL}</span>
           ) : null}
@@ -107,7 +158,7 @@ export function PlanApprovalCard({
         {feedback.length > 0 ? (
           <details className="mt-1 text-muted-foreground text-xs">
             <summary className="cursor-pointer select-none">
-              {outcome === "changes" ? "Feedback" : "Notes"}
+              {answered === "changes" ? "Feedback" : "Notes"}
             </summary>
             <p className="mt-1 whitespace-pre-wrap">{feedback}</p>
           </details>
@@ -139,24 +190,116 @@ export function PlanApprovalCard({
     >
       <PlanTitle
         as="div"
-        meta={
-          card.item.specVersion === null
-            ? "Plan approval"
-            : `Plan approval · v${card.item.specVersion}`
-        }
+        meta={metaLine(key, "Plan approval", card.item.specVersion)}
         title={card.taskTitle}
       />
       <TaskStructureLine relations={relations} />
-      <PlanApprovalSections item={card.item} />
+      {plan === null ? (
+        <PlanApprovalSections item={card.item} />
+      ) : (
+        <>
+          <PlanSummary text={plan.summary} />
+          <PlanTodoList todos={plan.todos} running={false} />
+        </>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={sending} onClick={() => approve(PLAN_APPROVAL_START)}>
           Approve
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setReviewing(true)}>
-          Review plan
+          {plan === null ? "Review plan" : "View details"}
         </Button>
+        {plan !== null && plan.todos.length > 0 ? (
+          <span data-plan-progress className="ms-auto text-muted-foreground text-xs">
+            {planProgressLabel(plan.todos)}
+          </span>
+        ) : null}
       </div>
       {modal}
+    </div>
+  );
+}
+
+const LIVE_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
+  "awaiting_approval",
+  "running",
+  "in_review",
+  "blocked",
+]);
+
+/**
+ * The approved plan's steps and footer. While the task is live it reads the latest spec, so
+ * steps tick as the lead checks them; once the task is finished it shows the pinned plan's
+ * step count only, so old cards in the chat don't each keep a live query open.
+ */
+function LivePlanBoard(props: {
+  card: ProjectDecisionCard;
+  environmentId: EnvironmentId;
+  pinned: ProjectApprovalPlan;
+  stage: ProjectTaskStage | null;
+  afk: boolean;
+  onViewDetails: () => void;
+}) {
+  const live = props.stage !== null && LIVE_STAGES.has(props.stage);
+  if (!live) {
+    const finished =
+      props.stage === "done" ? "Done" : props.stage === "cancelled" ? "Cancelled" : null;
+    return (
+      <BoardFooter
+        todos={props.pinned.todos}
+        afk={props.afk}
+        onViewDetails={props.onViewDetails}
+        status={finished}
+      />
+    );
+  }
+  return <LiveTodos {...props} />;
+}
+
+function LiveTodos(props: {
+  card: ProjectDecisionCard;
+  environmentId: EnvironmentId;
+  pinned: ProjectApprovalPlan;
+  stage: ProjectTaskStage | null;
+  afk: boolean;
+  onViewDetails: () => void;
+}) {
+  const query = useTaskDetail(props.environmentId, {
+    projectId: props.card.item.projectId,
+    taskId: props.card.item.taskId,
+  });
+  const todos: ReadonlyArray<PlanTodoLike> =
+    query.data?.versions.at(-1)?.spec.todos ?? props.pinned.todos;
+  return (
+    <>
+      <PlanTodoList todos={todos} running={props.stage === "running"} />
+      <BoardFooter
+        todos={todos}
+        afk={props.afk}
+        onViewDetails={props.onViewDetails}
+        status={null}
+      />
+    </>
+  );
+}
+
+function BoardFooter(props: {
+  todos: ReadonlyArray<Pick<PlanTodoLike, "done">>;
+  afk: boolean;
+  onViewDetails: () => void;
+  status: string | null;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" variant="ghost" onClick={props.onViewDetails}>
+        View details
+      </Button>
+      {props.afk ? (
+        <span className="text-muted-foreground text-xs">{AFK_ANSWERED_LABEL}</span>
+      ) : null}
+      <span data-plan-progress className="ms-auto text-muted-foreground text-xs">
+        {props.status ?? (props.todos.length > 0 ? planProgressLabel(props.todos) : null)}
+      </span>
     </div>
   );
 }

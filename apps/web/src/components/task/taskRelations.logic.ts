@@ -103,6 +103,15 @@ function byNumber(a: RelatedTask, b: RelatedTask): number {
     : a.key.localeCompare(b.key, undefined, { numeric: true });
 }
 
+/** One task with its key, such as BU-55; null when the app doesn't know it. */
+export function relatedTask(
+  index: TaskRelationsIndex,
+  environmentId: EnvironmentId,
+  taskId: ProjectTaskId,
+): RelatedTask | null {
+  return index.byId.get(indexKey(environmentId, taskId)) ?? null;
+}
+
 /** A task's parent, blockers, blocked tasks and subtasks. Unknown IDs are left out. */
 export function taskRelations(
   index: TaskRelationsIndex,

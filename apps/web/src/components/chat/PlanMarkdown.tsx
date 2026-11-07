@@ -20,6 +20,16 @@ export function PlanMarkdown({ text, className }: { text: string; className?: st
   );
 }
 
+/** The lead's summary: markdown, so bold key phrases stay bold. Commentable as "Summary". */
+export function PlanSummary({ text, className }: { text: string; className?: string }) {
+  if (text.trim().length === 0) return null;
+  return (
+    <div data-plan-section="Summary" data-plan-summary-text className={className}>
+      <PlanMarkdown text={text} className="text-sm leading-relaxed" />
+    </div>
+  );
+}
+
 /** Turns plain bullets into unchecked task items, so Verification reads as a checklist. */
 export function asChecklist(text: string): string {
   return text.replace(/^(\s*)[-*+]\s+(?!\[[ xX]\]\s)/gm, "$1- [ ] ");

@@ -5,6 +5,7 @@ import type {
   ProjectTeamTaskDetail,
   ProjectTeamUpdateTaskSpecInput,
 } from "@t3tools/contracts";
+import { emptyProjectTaskSpec, newProjectTaskTodo } from "@t3tools/contracts";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { page, userEvent } from "vite-plus/test/browser";
@@ -123,7 +124,7 @@ import { TaskPlan } from "./TaskPlan";
 let container: HTMLDivElement;
 let root: Root;
 
-const todo = (id: string, text: string) => ({ id, text, done: false, subtaskId: null });
+const todo = (id: string, text: string) => newProjectTaskTodo(id, text);
 
 beforeEach(() => {
   state.updates = [];
@@ -155,6 +156,7 @@ beforeEach(() => {
         taskId: "task-7",
         version: 1,
         spec: {
+          ...emptyProjectTaskSpec(),
           background: "The list jumps.",
           goal: "",
           successCriteria: "",
@@ -170,6 +172,7 @@ beforeEach(() => {
         taskId: "task-7",
         version: 2,
         spec: {
+          ...emptyProjectTaskSpec(),
           background: "The list jumps.",
           goal: "Keep the scroll position.",
           successCriteria: "",

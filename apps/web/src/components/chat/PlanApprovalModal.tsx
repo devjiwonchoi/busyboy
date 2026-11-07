@@ -9,7 +9,7 @@ import {
 } from "@t3tools/contracts";
 import { XIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { cn, randomUUID } from "~/lib/utils";
 import { useAnswerDecision, useTaskDetail } from "~/state/projectTeam";
@@ -25,8 +25,22 @@ import { DIALOG_POPUP_CLASS } from "../ui/dialog-styles";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { diffWords } from "./planDiff";
-import { TaskParentBreadcrumb, TaskStructure, useTaskRelations } from "../task/TaskRelations";
-import { PlanApprovalSections, PlanMarkdown } from "./PlanMarkdown";
+import {
+  TaskParentBreadcrumb,
+  TaskStructure,
+  useRelatedTask,
+  useTaskRelations,
+} from "../task/TaskRelations";
+import {
+  PlanBreakdown,
+  PlanCriteria,
+  PlanFileTree,
+  PlanFlow,
+  PlanPrototype,
+  PlanSectionHeading,
+} from "../plan/PlanDocument";
+import { PlanTodoList } from "../plan/PlanTodoList";
+import { PlanApprovalSections, PlanMarkdown, PlanSummary } from "./PlanMarkdown";
 
 /** A text selection in the plan, waiting for the Comment button. */
 interface PendingSelection {
@@ -211,6 +225,7 @@ function PlanReview({
   readOnly: boolean;
 }) {
   const relations = useTaskRelations(environmentId, card.item.taskId);
+  const running = useRelatedTask(environmentId, card.item.taskId)?.task.stage === "running";
   const query = useTaskDetail(environmentId, {
     projectId: card.item.projectId,
     taskId: card.item.taskId,
@@ -330,13 +345,20 @@ function PlanReview({
     });
   };
 
-  const sectionHeading = (label: string) => (
-    <h3 className="mb-1 font-semibold text-foreground text-sm">{label}</h3>
-  );
+  const sectionHeading = (label: string) => <PlanSectionHeading>{label}</PlanSectionHeading>;
+  const structured = spec.summary.trim().length > 0;
+  // A section that only has something to show outside the diff view.
+  const extraSection = (label: string, content: ReactNode, show: boolean) =>
+    show && !diffing ? (
+      <section key={label} className="mt-6" data-plan-part={label}>
+        {sectionHeading(label)}
+        {content}
+      </section>
+    ) : null;
 
   const textSection = (
     label: string,
-    field: "background" | "goal" | "successCriteria" | "nonGoals",
+    field: "background" | "summary" | "goal" | "successCriteria" | "nonGoals",
   ) => {
     const text = spec[field].trim();
     const before = previous?.spec[field].trim() ?? "";
@@ -376,16 +398,7 @@ function PlanReview({
       ) : spec.todos.length === 0 ? (
         <p className="text-muted-foreground text-sm">—</p>
       ) : (
-        <ol
-          data-plan-section="Steps"
-          className="flex list-decimal flex-col gap-1 ps-5 text-sm leading-relaxed"
-        >
-          {spec.todos.map((todo) => (
-            <li key={todo.id} className={cn(todo.done && "text-muted-foreground line-through")}>
-              {todo.text}
-            </li>
-          ))}
-        </ol>
+        <PlanTodoList todos={spec.todos} running={running} />
       )}
     </section>
   );
@@ -472,12 +485,37 @@ function PlanReview({
             onMouseUp={captureSelection}
             onTouchEnd={captureSelection}
           >
-            <PlanApprovalSections item={card.item} className="gap-6" />
+            {structured ? (
+              diffing ? (
+                textSection("Summary", "summary")
+              ) : (
+                <PlanSummary text={spec.summary} />
+              )
+            ) : (
+              <PlanApprovalSections item={card.item} className="gap-6" />
+            )}
             <div className="mt-6">
+              {structured ? steps : null}
               {textSection("End result", "goal")}
-              {textSection("Success criteria", "successCriteria")}
+              {diffing ? null : (
+                <PlanPrototype html={spec.prototype} waiver={spec.prototypeWaiver} />
+              )}
+              {extraSection("Flow", <PlanFlow source={spec.flow} />, spec.flow.trim().length > 0)}
+              {spec.criteria.length > 0 && !diffing
+                ? extraSection("Success criteria", <PlanCriteria criteria={spec.criteria} />, true)
+                : textSection("Success criteria", "successCriteria")}
               {textSection("Non-goals", "nonGoals")}
-              {steps}
+              {structured ? null : steps}
+              {extraSection(
+                "Breakdown",
+                <PlanBreakdown todos={spec.todos} running={running} />,
+                spec.todos.some((todo) => todo.dependsOn.length > 0),
+              )}
+              {extraSection(
+                "Files",
+                <PlanFileTree files={spec.files} todos={spec.todos} />,
+                spec.files.length > 0,
+              )}
             </div>
             <TaskStructure relations={relations} className="mt-6" />
             {spec.background.trim().length > 0 ? (
