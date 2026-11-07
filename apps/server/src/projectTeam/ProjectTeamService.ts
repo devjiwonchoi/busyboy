@@ -19,6 +19,9 @@ import {
   type ProjectSitrep,
   type ProjectId,
   type ProjectManagerAvatar,
+  type ProjectManagerKind,
+  PROJECT_SUMMARY_MAX_LINES,
+  PROJECT_SUMMARY_TOPIC,
   type ProjectManagerLastAction,
   type ProjectManagerPersona,
   type ProjectManagerPresence,
@@ -59,6 +62,9 @@ import {
   type ProjectTeamSettingsUpdateInput,
   type ProjectTeamStatus,
   type ProjectTeamStatusInput,
+  type ProjectTeamEpic,
+  type ProjectTeamWorkspace,
+  type ProjectTeamWorkspaceProject,
   type ProjectTeamTaskCreateInput,
   type ProjectTeamTaskListInput,
   type ProjectTeamTaskListResult,
@@ -105,6 +111,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 
 import { resolveAttachmentPath } from "../attachmentStore.ts";
@@ -122,6 +129,7 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
+import { directorWorkspaceRoot, epicStage } from "./director.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
@@ -134,7 +142,13 @@ import {
   orTeamError,
   teamError,
 } from "./common.ts";
-import { AFK_AGENT_RULE, isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
+import {
+  AFK_AGENT_RULE,
+  DIRECTOR_PERSONA,
+  isUserWordsVoice,
+  resolvePersona,
+  voiceText,
+} from "./persona.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
@@ -219,6 +233,17 @@ export function planRequestedWakeText(
   return [
     `[Task added by the user] ${key} ${task.title}`,
     `The user wants a plan for it. Start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user if it has to wait.`,
+  ].join("\n");
+}
+
+/** Wakes a project's PM when the Director routes a task to it. */
+export function directorAddedTaskWakeText(
+  key: string,
+  task: Pick<ProjectTask, "id" | "title">,
+): string {
+  return [
+    `[Director added task] ${key} ${task.title}`,
+    `The Director put it in your inbox on the user's behalf. Treat it as the user's request: start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user in one line if it has to wait.`,
   ].join("\n");
 }
 
@@ -342,6 +367,8 @@ export function pickManagerModelSelection(
 
 export type ProjectTeamRole =
   | { readonly type: "pm"; readonly projectId: ProjectId }
+  /** The workspace Director; projectId is its hidden system project, which holds epics. */
+  | { readonly type: "director"; readonly projectId: ProjectId }
   | { readonly type: "lead"; readonly projectId: ProjectId; readonly taskId: ProjectTaskId }
   | { readonly type: "none" };
 
@@ -359,7 +386,12 @@ export const roleOfThread = (
   Effect.gen(function* () {
     const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
     const manager = yield* repository.getManagerByThreadId(threadId);
-    if (Option.isSome(manager)) return { type: "pm", projectId: manager.value.projectId };
+    if (Option.isSome(manager)) {
+      return {
+        type: manager.value.kind === "director" ? "director" : "pm",
+        projectId: manager.value.projectId,
+      };
+    }
     const task = yield* repository.findTaskByLeadThreadId(threadId);
     if (Option.isSome(task)) {
       return { type: "lead", projectId: task.value.projectId, taskId: task.value.id };
@@ -744,6 +776,9 @@ const make = Effect.gen(function* () {
     const refreshed = yield* providerRegistry.refresh().pipe(Effect.timeoutOption("15 seconds"));
     return Option.isSome(refreshed) ? pickManagerModelSelection(refreshed.value) : null;
   });
+  const path = yield* Path.Path;
+  const directorRoot = directorWorkspaceRoot(path, serverConfig.baseDir);
+  const isDirectorRoot = (workspaceRoot: string) => path.resolve(workspaceRoot) === directorRoot;
   const managerLocks = yield* KeyedLock.make<ProjectId>();
   const taskStartLocks = yield* KeyedLock.make<ProjectId>();
   const specLocks = yield* KeyedLock.make<ProjectTaskId>();
@@ -754,7 +789,7 @@ const make = Effect.gen(function* () {
       orTeamError("Could not read the thread's team role."),
     );
 
-  const requireRole = <T extends "pm" | "lead">(
+  const requireRole = <T extends "pm" | "lead" | "director">(
     callerThreadId: ThreadId,
     allowed: ReadonlyArray<T>,
     operation: string,
@@ -766,7 +801,9 @@ const make = Effect.gen(function* () {
             teamError(
               role.type === "none"
                 ? `${operation} is only for a project's PM or task leads.`
-                : `${operation} is not available to a ${role.type === "pm" ? "PM" : "task lead"}.`,
+                : role.type === "director"
+                  ? `${operation} is not available to the Director: route the work to a project's PM with task_create and projectId.`
+                  : `${operation} is not available to a ${role.type === "pm" ? "PM" : "task lead"}.`,
             ),
           ),
     );
@@ -893,9 +930,11 @@ const make = Effect.gen(function* () {
   const setTask = (input: Omit<ProjectTeamRepository.UpdateProjectTaskInput, "now">) =>
     Effect.gen(function* () {
       const now = yield* nowIso;
-      // Only a move into in_review/done can clear tasks waiting on this one.
+      // Only a move into in_review/done can clear tasks waiting on this one; a new
+      // parent needs the old one, whose epic stage may change.
       const before =
-        input.stage !== undefined && isDependencyCleared(input.stage)
+        (input.stage !== undefined && isDependencyCleared(input.stage)) ||
+        input.parentTaskId !== undefined
           ? yield* repository.getTask(input.id)
           : Option.none<ProjectTask>();
       const updated = yield* repository.updateTask({ ...input, now });
@@ -913,6 +952,16 @@ const make = Effect.gen(function* () {
           taskId: updated.value.id,
           supersededAt: now,
         });
+      }
+      // An epic's stage follows its subtasks: re-add them up when one moves or changes parent.
+      const previous = Option.isSome(before) ? before.value : undefined;
+      if (input.stage !== undefined || input.parentTaskId !== undefined) {
+        const parents = new Set<ProjectTaskId>();
+        if (updated.value.parentTaskId !== null) parents.add(updated.value.parentTaskId);
+        if (input.parentTaskId !== undefined && previous?.parentTaskId) {
+          parents.add(previous.parentTaskId);
+        }
+        for (const parentId of parents) yield* syncEpic(parentId);
       }
       return updated.value;
     });
@@ -1152,6 +1201,9 @@ const make = Effect.gen(function* () {
         if (Option.isNone(project)) {
           return yield* teamError(`Project ${projectId} was not found.`, projectId);
         }
+        const kind: ProjectManagerKind = isDirectorRoot(project.value.workspaceRoot)
+          ? "director"
+          : "pm";
         const existing = yield* repository.getManager(projectId);
         if (Option.isSome(existing)) {
           const shell = yield* threads.getThreadShell(existing.value.threadId);
@@ -1159,9 +1211,13 @@ const make = Effect.gen(function* () {
             return yield* reviveManager(existing.value, shell, project.value.title);
           }
         }
+        const defaults =
+          kind === "director"
+            ? { ...DEFAULT_PROJECT_TEAM_SETTINGS, persona: DIRECTOR_PERSONA }
+            : DEFAULT_PROJECT_TEAM_SETTINGS;
         const persona = resolvePersona(
           projectId,
-          Option.isSome(existing) ? existing.value.settings : DEFAULT_PROJECT_TEAM_SETTINGS,
+          Option.isSome(existing) ? existing.value.settings : defaults,
         );
         const settings = resolveProjectSettings(
           yield* serverSettings.getSettings,
@@ -1193,12 +1249,11 @@ const make = Effect.gen(function* () {
           projectId,
           Effect.gen(function* () {
             const stored = yield* repository.getManager(projectId);
-            const kept = Option.isSome(stored)
-              ? stored.value.settings
-              : DEFAULT_PROJECT_TEAM_SETTINGS;
+            const kept = Option.isSome(stored) ? stored.value.settings : defaults;
             return yield* repository.upsertManager({
               projectId,
               threadId,
+              kind,
               settings: { ...kept, persona: resolvePersona(projectId, kept) },
               now: yield* nowIso,
             });
@@ -1214,16 +1269,17 @@ const make = Effect.gen(function* () {
 
   const createTask: ProjectTeamService["Service"]["createTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm"], "task_create");
-      const waitsOn = (yield* checkWaitsOn(null, input.waitsOn ?? [], role.projectId)).map(
+      const role = yield* requireRole(callerThreadId, ["pm", "director"], "task_create");
+      const projectId = yield* taskCreateProject(role, input.projectId);
+      const waitsOn = (yield* checkWaitsOn(null, input.waitsOn ?? [], projectId)).map(
         (task) => task.id,
       );
       if (input.parentTaskId !== undefined) {
-        yield* checkParent(null, input.parentTaskId, role.projectId);
+        yield* checkParent(null, input.parentTaskId, projectId);
       }
       const task = yield* repository.createTask({
         id: ProjectTaskId.make(yield* newId("task")),
-        projectId: role.projectId,
+        projectId,
         title: input.title,
         request: input.request,
         waitsOn,
@@ -1233,9 +1289,66 @@ const make = Effect.gen(function* () {
         authorThreadId: callerThreadId,
       });
       yield* appendEvent(task, "created", task.title, callerThreadId);
-      yield* router.publish(role.projectId);
+      if (task.parentTaskId !== null) yield* syncEpic(task.parentTaskId);
+      if (projectId !== role.projectId) {
+        const manager = yield* requireManager(projectId);
+        const key = formatTaskKey(
+          yield* taskKeyPrefixFor(projectId, manager.settings),
+          task.number,
+        );
+        yield* wakeManagerWith(
+          projectId,
+          `project-team:director-added:${task.id}`,
+          directorAddedTaskWakeText(key, task),
+        );
+        yield* router.publish(role.projectId);
+      }
+      yield* router.publish(projectId);
       return { task };
     }).pipe(orTeamError("Could not create the task."));
+
+  /**
+   * Where task_create adds the task: a PM's own project, or for the Director the
+   * project it names (whose PM runs it), else its own project as an epic.
+   */
+  const taskCreateProject = (
+    role: Extract<ProjectTeamRole, { readonly type: "pm" | "director" }>,
+    requested: ProjectId | undefined,
+  ) =>
+    Effect.gen(function* () {
+      if (requested === undefined || requested === role.projectId) return role.projectId;
+      if (role.type !== "director") {
+        return yield* teamError(
+          "A PM adds tasks to its own project only; leave projectId out.",
+          role.projectId,
+        );
+      }
+      const manager = yield* repository
+        .getManager(requested)
+        .pipe(orTeamError("Could not read the project's PM.", requested));
+      if (Option.isNone(manager) || manager.value.kind !== "pm") {
+        return yield* teamError(
+          `Project ${requested} has no PM. Pick a projectId from team_status.`,
+          role.projectId,
+        );
+      }
+      return requested;
+    });
+
+  /** Moves an epic in the Director's project to the stage its subtasks add up to. */
+  const syncEpic = (epicId: ProjectTaskId): Effect.Effect<void, ProjectTeamError> =>
+    Effect.gen(function* () {
+      const epic = yield* repository.getTask(epicId);
+      if (Option.isNone(epic)) return;
+      const manager = yield* repository.getManager(epic.value.projectId);
+      if (Option.isNone(manager) || manager.value.kind !== "director") return;
+      const children = yield* repository.listChildTasks(epicId);
+      const stage = epicStage(children.map((child) => child.stage));
+      if (stage === epic.value.stage) return;
+      const updated = yield* setTask({ id: epicId, stage });
+      yield* appendEvent(updated, "stage_changed", `${epic.value.stage} → ${stage}`, null);
+      yield* router.publish(updated.projectId);
+    }).pipe(orTeamError("Could not update the epic."));
 
   const startTask: ProjectTeamService["Service"]["startTask"] = (callerThreadId, input, delegate) =>
     Effect.gen(function* () {
@@ -1320,16 +1433,29 @@ const make = Effect.gen(function* () {
       );
     }).pipe(orTeamError("Could not start the task."));
 
-  /** The task a spec tool acts on: a lead's own task, or the one the PM names. */
-  const specTaskFor = (callerThreadId: ThreadId, taskId: ProjectTaskId | undefined, tool: string) =>
+  /**
+   * The task a spec tool acts on: a lead's own task, or the one the PM names. The
+   * Director reads any task's spec and writes only its own epics'.
+   */
+  const specTaskFor = (
+    callerThreadId: ThreadId,
+    taskId: ProjectTaskId | undefined,
+    tool: string,
+    access: "read" | "write" = "write",
+  ) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], tool);
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], tool);
       const id = taskId ?? (role.type === "lead" ? role.taskId : undefined);
       if (id === undefined) return yield* teamError(`${tool} needs a taskId.`);
       if (role.type === "lead" && id !== role.taskId) {
         return yield* teamError("A task lead can only use its own task's spec.", role.projectId);
       }
-      return { task: yield* requireTask(id, role.projectId), author: role.type };
+      const task =
+        role.type === "director" && access === "read"
+          ? yield* requireAnyTask(id, role.projectId)
+          : yield* requireTask(id, role.projectId);
+      const author: "pm" | "lead" = role.type === "lead" ? "lead" : "pm";
+      return { task, author };
     });
 
   const specResult = (task: ProjectTask, current: ProjectTeamTaskSpecResult["current"]) =>
@@ -1373,7 +1499,7 @@ const make = Effect.gen(function* () {
 
   const readSpec: ProjectTeamService["Service"]["readSpec"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const { task } = yield* specTaskFor(callerThreadId, input.taskId, "task_spec_read");
+      const { task } = yield* specTaskFor(callerThreadId, input.taskId, "task_spec_read", "read");
       return yield* specResult(task, yield* latestSpec(task));
     }).pipe(orTeamError("Could not read the spec."));
 
@@ -1424,13 +1550,25 @@ const make = Effect.gen(function* () {
 
   const updateTask: ProjectTeamService["Service"]["updateTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "task_update");
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "task_update");
       const taskId = input.taskId ?? (role.type === "lead" ? role.taskId : undefined);
       if (taskId === undefined) return yield* teamError("task_update needs a taskId.");
       if (role.type === "lead" && taskId !== role.taskId) {
         return yield* teamError("A task lead can only update its own task.", role.projectId);
       }
       const task = yield* requireTask(taskId, role.projectId);
+      // An epic has no lead; its stage follows its subtasks, except that it can be cancelled.
+      if (
+        role.type === "director" &&
+        input.stage !== undefined &&
+        input.stage !== "cancelled" &&
+        input.stage !== task.stage
+      ) {
+        return yield* teamError(
+          "An epic's stage follows its subtasks; you can only cancel it.",
+          role.projectId,
+        );
+      }
       const structural =
         input.title !== undefined ||
         input.waitsOn !== undefined ||
@@ -1585,7 +1723,7 @@ const make = Effect.gen(function* () {
 
   const listTasks: ProjectTeamService["Service"]["listTasks"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "task_list");
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "task_list");
       const tasks = yield* repository.listTasks({
         projectId: role.projectId,
         ...(input.stages === undefined ? {} : { stages: input.stages }),
@@ -1600,14 +1738,18 @@ const make = Effect.gen(function* () {
 
   const readTask: ProjectTeamService["Service"]["readTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "task_read");
-      const task = yield* requireTask(input.taskId, role.projectId);
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "task_read");
+      // The Director reads tasks in every project.
+      const task =
+        role.type === "director"
+          ? yield* requireAnyTask(input.taskId, role.projectId)
+          : yield* requireTask(input.taskId, role.projectId);
       const events = yield* repository.listTaskEvents({
         taskId: task.id,
         limit: input.eventLimit ?? DEFAULT_TASK_EVENT_LIMIT,
       });
       const openAttention = yield* repository.listOpenAttentionItems({
-        projectId: role.projectId,
+        projectId: task.projectId,
         taskId: task.id,
       });
       return { task, events, openAttention };
@@ -1615,18 +1757,26 @@ const make = Effect.gen(function* () {
 
   const searchTasks: ProjectTeamService["Service"]["searchTasks"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "task_search");
-      const tasks = yield* repository.searchTasks({
-        projectId: role.projectId,
-        query: input.query,
-        limit: input.limit ?? DEFAULT_TASK_SEARCH_LIMIT,
-      });
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "task_search");
+      const limit = input.limit ?? DEFAULT_TASK_SEARCH_LIMIT;
+      // The Director searches every project with a manager, its own epics included.
+      const projectIds =
+        role.type === "director"
+          ? (yield* repository.listManagers()).map((manager) => manager.projectId)
+          : [role.projectId];
+      const found = yield* Effect.forEach(projectIds, (projectId) =>
+        repository.searchTasks({ projectId, query: input.query, limit }),
+      );
+      const tasks = found
+        .flat()
+        .toSorted((a, b) => isoMillis(b.updatedAt) - isoMillis(a.updatedAt))
+        .slice(0, limit);
       return { tasks };
     }).pipe(orTeamError("Could not search tasks."));
 
   const teamStatus: ProjectTeamService["Service"]["teamStatus"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "team_status");
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "team_status");
       const projectId = role.projectId;
       const manager = yield* requireManager(projectId);
       const since: IsoDateTime | null =
@@ -1656,7 +1806,7 @@ const make = Effect.gen(function* () {
         sitreps: yield* repository.listRecentPostedSitreps({ projectId, limit: JOURNAL_LIMIT }),
       });
       const memoryTopics = (yield* repository.listMemory(projectId)).map((entry) => entry.topic);
-      if (role.type === "pm") yield* sitreps.noteStatusRead(projectId);
+      if (role.type !== "lead") yield* sitreps.noteStatusRead(projectId);
       const otherThreads = yield* readOtherThreads({
         threads,
         repository,
@@ -1700,8 +1850,65 @@ const make = Effect.gen(function* () {
         otherThreads,
         journal,
         memoryTopics,
+        ...(role.type === "director" ? { workspace: yield* workspaceView(tasks) } : {}),
       } satisfies ProjectTeamStatus;
     }).pipe(orTeamError("Could not read the team status."));
+
+  /**
+   * The Director's view of the workspace: each project's counts, open tasks and
+   * questions, and its PM's summary; then each open epic with its subtasks.
+   */
+  const workspaceView = (epics: ReadonlyArray<ProjectTask>) =>
+    Effect.gen(function* () {
+      const managers = (yield* repository.listManagers()).filter(
+        (manager) => manager.kind === "pm",
+      );
+      const briefById = new Map<string, ProjectTaskBrief>();
+      const prefixByProject = new Map<string, string>();
+      const projectsView: Array<ProjectTeamWorkspaceProject> = [];
+      for (const manager of managers) {
+        const project = yield* projects.get(manager.projectId);
+        if (Option.isNone(project) || project.value.deletedAt !== null) continue;
+        const tasks = yield* repository.listTasks({ projectId: manager.projectId });
+        const openAttention = yield* repository.listOpenAttentionItems({
+          projectId: manager.projectId,
+        });
+        const brief = yield* liveTaskSignals(tasks, openAttention);
+        const briefs = tasks.map(brief);
+        for (const item of briefs) briefById.set(item.id, item);
+        const prefix = yield* taskKeyPrefixFor(manager.projectId, manager.settings);
+        prefixByProject.set(manager.projectId, prefix);
+        const summary = (yield* repository.listMemory(manager.projectId)).find(
+          (entry) => entry.topic === PROJECT_SUMMARY_TOPIC,
+        );
+        projectsView.push({
+          projectId: manager.projectId,
+          title: project.value.title,
+          pmName: resolvePersona(manager.projectId, manager.settings).name,
+          taskKeyPrefix: prefix,
+          statusCounts: countTaskStatuses(briefs),
+          openTasks: briefs.filter((item) => item.stage !== "done" && item.stage !== "cancelled"),
+          openAttention,
+          summary: summary?.content ?? null,
+        });
+      }
+      const epicsView: Array<ProjectTeamEpic> = [];
+      for (const epic of epics) {
+        if (epic.stage === "done" || epic.stage === "cancelled") continue;
+        const children = yield* repository.listChildTasks(epic.id);
+        epicsView.push({
+          task: toTaskBrief(epic),
+          children: children.map((child) => ({
+            id: child.id,
+            projectId: child.projectId,
+            key: formatTaskKey(prefixByProject.get(child.projectId) ?? "T", child.number),
+            title: child.title,
+            status: (briefById.get(child.id) ?? toTaskBrief(child)).status,
+          })),
+        });
+      }
+      return { projects: projectsView, epics: epicsView } satisfies ProjectTeamWorkspace;
+    });
 
   const applySettings = (
     projectId: ProjectId,
@@ -1836,7 +2043,7 @@ const make = Effect.gen(function* () {
     callerThreadId,
     input,
   ) =>
-    requireRole(callerThreadId, ["pm"], "team_settings_update").pipe(
+    requireRole(callerThreadId, ["pm", "director"], "team_settings_update").pipe(
       Effect.flatMap((role) =>
         applySettings(
           role.projectId,
@@ -2311,13 +2518,22 @@ const make = Effect.gen(function* () {
 
   const listMemory: ProjectTeamService["Service"]["listMemory"] = (callerThreadId) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "memory_list");
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "memory_list");
       return { entries: yield* repository.listMemory(role.projectId) };
     }).pipe(orTeamError("Could not read the project memory."));
 
   const writeMemory: ProjectTeamService["Service"]["writeMemory"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "memory_write");
+      const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "memory_write");
+      if (input.topic === PROJECT_SUMMARY_TOPIC) {
+        const lines = input.content.split("\n").filter((line) => line.trim() !== "").length;
+        if (lines > PROJECT_SUMMARY_MAX_LINES) {
+          return yield* teamError(
+            `The "${PROJECT_SUMMARY_TOPIC}" topic holds at most ${PROJECT_SUMMARY_MAX_LINES} lines; it has ${lines}. Shorten it to what the Director needs: the project's goal, what is in flight and what is next.`,
+            role.projectId,
+          );
+        }
+      }
       const entry = yield* repository.upsertMemory({
         id: ProjectMemoryEntryId.make(yield* newId("memory")),
         projectId: role.projectId,
@@ -2330,7 +2546,7 @@ const make = Effect.gen(function* () {
 
   const deleteMemory: ProjectTeamService["Service"]["deleteMemory"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm"], "memory_delete");
+      const role = yield* requireRole(callerThreadId, ["pm", "director"], "memory_delete");
       const deleted = yield* repository.deleteMemory({
         projectId: role.projectId,
         topic: input.topic,
@@ -2499,6 +2715,7 @@ const make = Effect.gen(function* () {
           return {
             projectId,
             pmThreadId: manager.threadId,
+            ...(manager.kind === "director" ? { kind: "director" as const } : {}),
             openCount: open.length + otherThreadsWaiting,
             latestBatchId: Option.isSome(latestItem) ? latestItem.value.batchId : null,
             latestSitrepId: Option.isSome(latestPosted) ? latestPosted.value.id : null,

@@ -47,7 +47,12 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import type * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { AFK_AGENT_RULE, personaInstructions, resolvePersona } from "../projectTeam/persona.ts";
+import {
+  AFK_AGENT_RULE,
+  personaInstructions,
+  resolvePersona,
+  workspacePreferencesFor,
+} from "../projectTeam/persona.ts";
 import { computerUseCapabilityAvailable } from "../computerUse/ComputerUseCapability.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -411,8 +416,9 @@ export const layerWithOptions = (
                 : Effect.all([
                     repository.listMemory(manager.value.projectId),
                     Clock.currentTimeMillis,
+                    workspacePreferencesFor(repository, manager.value.kind),
                   ]).pipe(
-                    Effect.map(([memory, nowMs]) =>
+                    Effect.map(([memory, nowMs, workspacePreferences]) =>
                       Option.some<string | undefined>(
                         personaInstructions(
                           resolvePersona(manager.value.projectId, manager.value.settings),
@@ -420,6 +426,7 @@ export const layerWithOptions = (
                           afkActive(afkSetting(manager.value.settings), nowMs)
                             ? AFK_AGENT_RULE
                             : undefined,
+                          { kind: manager.value.kind, workspacePreferences },
                         ),
                       ),
                     ),

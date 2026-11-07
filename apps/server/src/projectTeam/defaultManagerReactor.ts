@@ -19,8 +19,9 @@ export class DefaultManagerReactor extends Context.Service<
   DefaultManagerReactor,
   {
     /**
-     * Gives every project that is not deleted a PM, except "No project" (the
-     * Scratch project), whose PM from before this rule is removed.
+     * Creates the Director's system project, then gives every project that is not
+     * deleted a PM (the Director's project gets the Director), except "No project"
+     * (the Scratch project), whose PM from before this rule is removed.
      */
     readonly ensureAll: Effect.Effect<void>;
     /**
@@ -85,7 +86,16 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const ensureAll: DefaultManagerReactor["Service"]["ensureAll"] = projects.list().pipe(
+  // The Director's hidden project gets its manager from the project loop below.
+  const ensureDirectorProject = folders.ensureDirectorProject.pipe(
+    Effect.asVoid,
+    Effect.catchCause((cause) =>
+      Effect.logWarning("project team Director project setup failed", { cause }),
+    ),
+  );
+
+  const ensureAll: DefaultManagerReactor["Service"]["ensureAll"] = ensureDirectorProject.pipe(
+    Effect.andThen(projects.list()),
     Effect.flatMap((rows) =>
       Effect.forEach(rows, (row) => ensure(row.projectId), { discard: true }),
     ),

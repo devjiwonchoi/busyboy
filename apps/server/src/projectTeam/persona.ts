@@ -5,8 +5,14 @@ import type {
   ProjectMemoryEntry,
   ProjectTeamSettings,
 } from "@t3tools/contracts";
-import { projectManagerInstructions } from "@t3tools/provider-core/server/orchestrationInstructions";
+import {
+  directorInstructions,
+  projectManagerInstructions,
+} from "@t3tools/provider-core/server/orchestrationInstructions";
 
+import * as Effect from "effect/Effect";
+
+import type * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import { memoryPromptSection } from "./memoryPrompt.ts";
 
 const DEFAULT_NAMES = [
@@ -91,6 +97,13 @@ export const defaultPersona = (projectId: string): ProjectManagerPersona => ({
   voice: "chill",
 });
 
+/** The Director's default persona; the user can rename it like any PM. */
+export const DIRECTOR_PERSONA: ProjectManagerPersona = {
+  name: "Director",
+  avatar: { kind: "emoji", emoji: "🧭" },
+  voice: "chill",
+};
+
 /** The stored persona, or the project's default when none is stored yet. */
 export const resolvePersona = (
   projectId: string,
@@ -113,17 +126,63 @@ ${memoryPromptSection(memory)}
 export const AFK_AGENT_RULE =
   'The user is away (AFK). Do not wait on the user: take your recommended option and record the assumption in a task note. Questions and plan approvals you still raise are answered for the user after a minute with the "(Recommended)" option, or the first one. Anything irreversible or that only a person can do (merging, secrets, payments, deleting data) still waits: raise it as kind "blocker", which AFK never answers.';
 
-/** The PM instructions for a persona, then the project memory and the AFK rule when given. */
+/**
+ * The Director's "preferences" memory, for a PM prompt. Read-only for the PM: the user
+ * changes it by telling the Director.
+ */
+export const workspacePreferencesSection = (content: string): string => `
+### Workspace preferences (from the Director)
+
+The user's preferences for every project, kept by the workspace Director. Follow them; they are read-only for you. Your own project memory wins where it is more specific. To change one, the user tells the Director.
+
+${content.trim()}
+`;
+
+/**
+ * The PM (or Director) instructions for a persona, then the Director's workspace
+ * preferences, the project memory and the AFK rule when given.
+ */
 export const personaInstructions = (
   persona: ProjectManagerPersona,
   memory?: ReadonlyArray<ProjectMemoryEntry>,
   /** The AFK rule while the user is away when the session opens. */
   afkRule?: string,
-): string =>
-  projectManagerInstructions({
+  options?: {
+    readonly kind?: "pm" | "director";
+    /** The Director's "preferences" memory; only a PM's prompt carries it. */
+    readonly workspacePreferences?: string | undefined;
+  },
+): string => {
+  const voice = {
     name: persona.name,
     voice: voiceText(persona.voice, persona.voiceCustom),
     voiceIsUserWords: isUserWordsVoice(persona.voice, persona.voiceCustom),
-  }) +
-  (memory === undefined ? "" : pmMemorySection(memory)) +
-  (afkRule === undefined ? "" : `\n### The user is AFK\n\n${afkRule}\n`);
+  };
+  const director = options?.kind === "director";
+  const preferences = options?.workspacePreferences?.trim();
+  return (
+    (director ? directorInstructions(voice) : projectManagerInstructions(voice)) +
+    (!director && preferences ? workspacePreferencesSection(preferences) : "") +
+    (memory === undefined ? "" : pmMemorySection(memory)) +
+    (afkRule === undefined ? "" : `\n### The user is AFK\n\n${afkRule}\n`)
+  );
+};
+
+/** The Director's "preferences" memory for a PM's prompt; undefined for the Director itself or when there is none. */
+export const workspacePreferencesFor = (
+  repository: ProjectTeamRepository.ProjectTeamRepository["Service"],
+  kind: "pm" | "director",
+) =>
+  kind === "director"
+    ? Effect.succeed<string | undefined>(undefined)
+    : Effect.gen(function* () {
+        const director = (yield* repository.listManagers()).find(
+          (manager) => manager.kind === "director",
+        );
+        if (director === undefined) return undefined;
+        const memory = yield* repository.listMemory(director.projectId);
+        return memory.find((entry) => entry.topic === "preferences")?.content;
+      }).pipe(
+        // Missing workspace preferences must never stop a PM session from opening.
+        Effect.catchCause(() => Effect.succeed<string | undefined>(undefined)),
+      );
