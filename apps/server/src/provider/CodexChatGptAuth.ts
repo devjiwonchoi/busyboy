@@ -846,13 +846,24 @@ export const makeCodexChatGptAuth = Effect.fn("makeCodexChatGptAuth")(function* 
           description: "Register a connection for another ChatGPT account.",
           type: "agent" as const,
         },
-        ...profiles.slice(0, 30).map((profile) => ({
-          id: profileMethodId(profile.clientId),
-          name: `${profile.email ?? "ChatGPT account"} · ${profile.connectionLabel}`,
-          ...(profile.email ? { accountEmail: profile.email } : {}),
-          description: "Reuse this account's original sign-in registration.",
-          type: "agent" as const,
-        })),
+        // Each sign-in registers a new connection, so one account can collect several.
+        // Offer only the most recent connection per email.
+        ...profiles
+          .filter((profile, index) => {
+            const email = profile.email?.trim().toLowerCase();
+            return (
+              !email ||
+              profiles.findIndex((other) => other.email?.trim().toLowerCase() === email) === index
+            );
+          })
+          .slice(0, 30)
+          .map((profile) => ({
+            id: profileMethodId(profile.clientId),
+            name: profile.email ?? `ChatGPT account · ${profile.connectionLabel}`,
+            ...(profile.email ? { accountEmail: profile.email } : {}),
+            description: "Reuse this account's original sign-in registration.",
+            type: "agent" as const,
+          })),
       ];
     }),
     authenticate: (method, context) =>
