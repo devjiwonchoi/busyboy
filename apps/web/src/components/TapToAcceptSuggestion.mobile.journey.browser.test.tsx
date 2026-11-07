@@ -31,6 +31,7 @@ vi.mock(import("./preview/useAddressBarSuggestionData"), async (original) => ({
   }) as never,
 }));
 
+import { revealAndFocusWithinTap } from "./chat/revealAndFocusWithinTap";
 import { ComposerCommandMenu, type ComposerCommandItem } from "./chat/ComposerCommandMenu";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "./ComposerPromptEditor";
 import { PreviewChromeRow } from "./preview/PreviewChromeRow";
@@ -75,6 +76,50 @@ function SuggestingComposer(props: { tappable: boolean }) {
   );
 }
 
+/**
+ * The phone composer as ChatComposer lays it out while unfocused: a one-line
+ * "Expand composer" row, with the editor mounted but hidden until it expands.
+ */
+function CollapsedComposer() {
+  const [expanded, setExpanded] = useState(false);
+  const [value, setValue] = useState("");
+  const [editorRef] = useState(() => createRef<ComposerPromptEditorHandle>());
+  return (
+    <div>
+      {expanded ? null : (
+        <button
+          type="button"
+          aria-label="Expand composer"
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() =>
+            revealAndFocusWithinTap(
+              () => setExpanded(true),
+              () => editorRef.current?.focusAtEnd(),
+            )
+          }
+        >
+          {`${SUGGESTION}`}
+        </button>
+      )}
+      <div style={expanded ? undefined : { display: "none" }}>
+        <ComposerPromptEditor
+          editorRef={editorRef}
+          ariaLabel="Message"
+          value={value}
+          cursor={value.length}
+          contextRecords={new Map()}
+          skills={[]}
+          disabled={false}
+          placeholder={value ? "" : `${SUGGESTION}  (tap)`}
+          onPlaceholderActivate={value ? undefined : () => setValue(SUGGESTION)}
+          onChange={(next) => setValue(next)}
+          onPaste={() => {}}
+        />
+      </div>
+    </div>
+  );
+}
+
 function editorElement() {
   const element = container.querySelector<HTMLElement & { editor: Editor }>(".tiptap");
   if (!element) throw new Error("Composer did not mount");
@@ -103,6 +148,24 @@ function tapInputAt(input: HTMLInputElement, x: number) {
 }
 
 describe("tap to accept a suggestion at phone width", () => {
+  it("focuses the collapsed composer with one tap, inside that tap", async () => {
+    await act(async () => root.render(<CollapsedComposer />));
+    // iOS Safari only focuses (and raises the keyboard) when focus() runs
+    // inside the tap, so record focus as the tap's click finishes.
+    let focusedDuringTap: Element | null = null;
+    const recordFocus = () => {
+      focusedDuringTap = document.activeElement;
+    };
+    window.addEventListener("click", recordFocus);
+
+    await userEvent.click(page.getByRole("button", { name: "Expand composer" }));
+    window.removeEventListener("click", recordFocus);
+
+    expect(focusedDuringTap).toBe(editorElement());
+    expect(document.activeElement).toBe(editorElement());
+    expect(editorElement().textContent).toBe("");
+  });
+
   it("only focuses an unfocused composer; the suggestion is not accepted", async () => {
     await act(async () => root.render(<SuggestingComposer tappable />));
     expect(document.activeElement).not.toBe(editorElement());
