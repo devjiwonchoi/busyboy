@@ -97,6 +97,18 @@ describe("provider compatibility", () => {
     }
   });
 
+  it("bundled policies cover this server's own version", () => {
+    // Codex refuses to start without a matching "supported" policy.
+    assert.strictEqual(
+      resolveProviderCompatibility(
+        ModelManifest.BUNDLED_MODEL_MANIFEST.compatibility,
+        driver,
+        "0.164.0",
+      )?.status,
+      "supported",
+    );
+  });
+
   it("supports every driver without inventing policies for uncovered adapters", () => {
     for (const kind of [
       "codex",
