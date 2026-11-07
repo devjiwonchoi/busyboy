@@ -78,6 +78,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { revealAndFocusWithinTap } from "./revealAndFocusWithinTap";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -4158,6 +4159,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     });
   };
   const expandMobileComposerStable = useStableCallback(expandMobileComposer);
+  const expandMobileComposerFromTapStable = useStableCallback(() =>
+    revealAndFocusWithinTap(expandMobileComposer, () => composerEditorRef.current?.focusAtEnd()),
+  );
 
   // Entries are built on the keypress, not per render: the timeline changes
   // on every streamed delta and ArrowUp is rare.
@@ -6616,7 +6620,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                 !activePendingProgress?.activeQuestion?.multiSelect && "px-3 py-2",
                               )}
                               onPointerDown={(event) => event.preventDefault()}
-                              onClick={expandMobileComposerStable}
+                              onClick={expandMobileComposerFromTapStable}
                               aria-label="Write custom answer"
                             >
                               {activePendingProgress?.customAnswer || "Write custom answer"}
@@ -6723,7 +6727,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   )}
                   onPointerDown={(event) => event.preventDefault()}
                   // Expanding only focuses; the suggestion is accepted by a later tap on it.
-                  onClick={isChoiceOnlyPendingQuestion ? undefined : expandMobileComposerStable}
+                  onClick={
+                    isChoiceOnlyPendingQuestion ? undefined : expandMobileComposerFromTapStable
+                  }
                   disabled={isChoiceOnlyPendingQuestion}
                   aria-label="Expand composer"
                 >
