@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   updates: [] as ProjectTeamUpdateTaskSpecInput[],
   leadShellExists: true,
+  managers: [] as unknown[],
 }));
 
 vi.mock(import("../../state/projectTeam"), async (original) => {
@@ -31,6 +32,7 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
       return { data: detail, error: null } as never;
     }) as never,
     useProjectManager: (() => ({ pmThreadId: "pm-thread", persona: { name: "Jota" } })) as never,
+    useProjectManagerEntries: (() => state.managers) as never,
     useLeadThreadTask: ((ref: { threadId: string } | null) =>
       ref?.threadId === "lead-1" ? { task: state.detail.task } : null) as never,
     useUpdateTaskSpec: (() => (_env: string, input: ProjectTeamUpdateTaskSpecInput) => {
@@ -47,6 +49,19 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
     }) as never,
   };
 });
+
+vi.mock(import("../../state/environments"), async (original) => ({
+  ...(await original()),
+  useEnvironmentIds: (() => ["env-1"]) as never,
+}));
+
+// The thread view here has no router; a plain link stands in for task links.
+vi.mock(import("@tanstack/react-router"), async (original) => ({
+  ...(await original()),
+  Link: (({ params, to: _to, ...rest }: { params?: { taskId?: string }; to?: string }) => (
+    <a href={`#${params?.taskId ?? ""}`} {...rest} />
+  )) as never,
+}));
 
 vi.mock(import("~/hooks/useTheme"), async (original) => ({
   ...(await original()),
@@ -106,6 +121,7 @@ beforeEach(() => {
   useRightPanelStore.setState({ byThreadKey: {}, userActionRevisionByThreadKey: {} });
   state.updates = [];
   state.leadShellExists = true;
+  state.managers = [];
   state.detail = {
     key: "BU-49",
     task: {
@@ -277,7 +293,86 @@ async function switchToBrowserAndBack() {
   expect(browserBody()).toBeNull();
 }
 
+function taskRef(id: string, number: number, title: string, extra: Record<string, unknown> = {}) {
+  return {
+    id,
+    number,
+    parentTaskId: null,
+    waitsOn: [],
+    title,
+    stage: "running",
+    leadThreadId: null,
+    prUrl: null,
+    lastOutcome: null,
+    openQuestion: false,
+    openBlocker: false,
+    updatedAt: AT,
+    ...extra,
+  };
+}
+
+/** BU-49 is part of BU-53, waits on BU-55 and has two subtasks, one done. */
+function seedStructure() {
+  state.managers = [
+    {
+      environmentId: "env-1",
+      summary: {
+        projectId: "project-1",
+        taskKeyPrefix: "BU",
+        tasks: [
+          taskRef("task-53", 53, "Director"),
+          taskRef("task-55", 55, "Dependency model"),
+          taskRef("task-49", 49, "Plan in the right sidebar", {
+            leadThreadId: "lead-1",
+            parentTaskId: "task-53",
+            waitsOn: ["task-55"],
+          }),
+          taskRef("task-50", 50, "Tab chrome", { stage: "done", parentTaskId: "task-49" }),
+          taskRef("task-51", 51, "Phone sheet", { stage: "inbox", parentTaskId: "task-49" }),
+        ],
+      },
+    },
+  ];
+}
+
+/** The Plan tab shows the parent breadcrumb, the markers and the relation lists. */
+function expectStructure() {
+  const plan = planBody()!;
+  const parent = plan.querySelector<HTMLElement>("[data-task-parent]")!;
+  expect(parent.textContent).toBe("BU-53Director");
+  expect(parent.getAttribute("href")).toBe("#task-53");
+  expect(plan.querySelector("[data-subtask-progress]")?.getAttribute("data-subtask-progress")).toBe(
+    "1/2",
+  );
+  expect(plan.querySelector("[data-blocked-flag]")?.textContent).toBe(
+    "Blocked by BU-55 · Dependency model",
+  );
+  // The old "Parent task" / "Subtasks N" chips are gone.
+  expect(plan.textContent).not.toContain("Parent task");
+  const structure = plan.querySelector<HTMLElement>("[data-task-structure]")!;
+  expect(
+    [...structure.querySelectorAll("[data-related-task]")].map((row) =>
+      row.getAttribute("data-related-task"),
+    ),
+  ).toEqual(["BU-50", "BU-51", "BU-55"]);
+  for (const row of structure.querySelectorAll<HTMLElement>("[data-related-task]")) {
+    expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(
+      plan.getBoundingClientRect().right + 1,
+    );
+  }
+}
+
 describe("task lead thread on desktop", () => {
+  it("shows the task's parent, blockers and subtasks on the Plan tab", async () => {
+    await page.viewport(1280, 800);
+    seedStructure();
+    await renderThread(LEAD);
+    await vi.waitFor(() =>
+      expect(planBody()?.querySelector("[data-task-structure]")).not.toBeNull(),
+    );
+    expectStructure();
+  });
+
   it("opens on the Plan tab in the right panel, switches to Browser and back", async () => {
     await page.viewport(1280, 800);
     await renderThread(LEAD);
@@ -328,6 +423,16 @@ describe("task lead thread on desktop", () => {
 });
 
 describe("task lead thread on a phone", () => {
+  it("shows the task's parent, blockers and subtasks on the Plan tab", async () => {
+    await page.viewport(390, 844);
+    seedStructure();
+    await renderThread(LEAD);
+    await vi.waitFor(() =>
+      expect(planBody()?.querySelector("[data-task-structure]")).not.toBeNull(),
+    );
+    expectStructure();
+  });
+
   it("opens the panel sheet on Plan, switches to Browser and back, and reopens from the header", async () => {
     await page.viewport(390, 844);
     await renderThread(LEAD);

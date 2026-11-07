@@ -169,6 +169,7 @@ function task(
     id: id as never,
     number,
     parentTaskId: null,
+    waitsOn: [],
     title,
     stage: "inbox",
     leadThreadId: null,
@@ -203,9 +204,13 @@ beforeEach(() => {
           task("task-2", 2, "Fix drag scroll", {
             stage: "planning",
             leadThreadId: "lead-2" as never,
+            waitsOn: ["task-3" as never],
           }),
           task("task-3", 3, "Clean up build warnings"),
-          task("task-4", 4, "Silence tsc warnings", { parentTaskId: "task-3" as never }),
+          task("task-4", 4, "Silence tsc warnings", {
+            parentTaskId: "task-3" as never,
+            waitsOn: ["task-2" as never, "task-1" as never],
+          }),
           task("task-1", 1, "Old work", { stage: "done" }),
         ],
       }),
@@ -282,6 +287,20 @@ describe("sidebar tasks", () => {
       "BB-3 Clean up build warnings, Todo",
     );
     expect(taskRowButton("BB-4")?.closest("li")?.className).toContain("pl-10");
+    // Linear-style markers: the parent counts its subtasks; blocked tasks show a flag
+    // naming the unfinished task they wait on (BB-1 is done, so it no longer blocks).
+    expect(
+      taskRowButton("BB-3")
+        ?.querySelector("[data-subtask-progress]")
+        ?.getAttribute("data-subtask-progress"),
+    ).toBe("0/1");
+    expect(taskRowButton("BB-4")?.getAttribute("aria-label")).toBe(
+      "BB-4 Silence tsc warnings, Todo, Blocked by BB-2 · Fix drag scroll",
+    );
+    expect(taskRowButton("BB-4")?.querySelector("[data-blocked-flag]")).not.toBeNull();
+    expect(taskRowButton("BB-3")?.querySelector("[data-blocked-flag]")).toBeNull();
+    // A lead's row shows the flag too.
+    expect(threadRow("BB-2 Fix drag scroll")?.querySelector("[data-blocked-flag]")).not.toBeNull();
     // Questions are answered in the PM chat, so the sidebar has no "Waiting on you" entry.
     expect(container.textContent).not.toContain("Waiting on you");
     // Done tasks and a task's earlier sessions stay out of the list.

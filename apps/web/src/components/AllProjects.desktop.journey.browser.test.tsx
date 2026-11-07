@@ -63,6 +63,7 @@ function task(
     id: id as never,
     number,
     parentTaskId: null,
+    waitsOn: [],
     title,
     stage: "running",
     leadThreadId: null,

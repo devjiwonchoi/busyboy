@@ -1015,6 +1015,8 @@ export const ProjectTaskReference = Schema.Struct({
   number: PositiveInt,
   /** Set for a task split from another; the sidebar nests it under its parent. */
   parentTaskId: Schema.NullOr(ProjectTaskId).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** Tasks this one waits on, possibly in other projects; open ones show it as blocked. */
+  waitsOn: Schema.Array(ProjectTaskId).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   title: Schema.String,
   stage: ProjectTaskStage,
   leadThreadId: Schema.NullOr(ThreadId),

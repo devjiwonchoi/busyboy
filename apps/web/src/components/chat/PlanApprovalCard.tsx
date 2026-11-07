@@ -10,6 +10,7 @@ import { useState } from "react";
 
 import { useAnswerDecision } from "~/state/projectTeam";
 
+import { TaskStructureLine, useTaskRelations } from "../task/TaskRelations";
 import { Button } from "../ui/button";
 import { AFK_ANSWERED_LABEL } from "./Afk";
 import { PlanApprovalModal } from "./PlanApprovalModal";
@@ -43,6 +44,7 @@ export function PlanApprovalCard({
   const [reviewing, setReviewing] = useState(false);
   const [sending, setSending] = useState(false);
   const answerDecision = useAnswerDecision();
+  const relations = useTaskRelations(environmentId, card.item.taskId);
   const header = planApprovalHeader(card);
   const answer = card.item.answer;
   const state =
@@ -137,9 +139,14 @@ export function PlanApprovalCard({
     >
       <PlanTitle
         as="div"
-        meta={card.item.specVersion === null ? "Plan approval" : `Plan approval · v${card.item.specVersion}`}
+        meta={
+          card.item.specVersion === null
+            ? "Plan approval"
+            : `Plan approval · v${card.item.specVersion}`
+        }
         title={card.taskTitle}
       />
+      <TaskStructureLine relations={relations} />
       <PlanApprovalSections item={card.item} />
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={sending} onClick={() => approve(PLAN_APPROVAL_START)}>

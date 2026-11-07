@@ -185,6 +185,7 @@ function manager(patch: Parameters<typeof makeProjectManagerSummaryFixture>[0] =
         id: `task-${number}` as never,
         number,
         parentTaskId: null,
+        waitsOn: [],
         title: `Task ${number}`,
         stage: number === 1 ? "inbox" : "planning",
         leadThreadId: `lead-${number}` as never,

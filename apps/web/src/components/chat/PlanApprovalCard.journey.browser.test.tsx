@@ -7,6 +7,7 @@ import {
   ProjectAttentionItemId,
   type ProjectDecisionCard,
   ProjectId,
+  type ProjectTaskReference,
   type ProjectTaskStage,
   type ProjectTeamAnswerDecisionInput,
   type ProjectTeamAttentionSummary,
@@ -92,7 +93,56 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
   }) as never,
   useAnswerDecision: (() => (_environmentId: unknown, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision(input)) as never,
+  useProjectManagerEntries: (() => {
+    const summary = useServerSummary();
+    return summary === null ? [] : [{ environmentId: ENVIRONMENT_ID, summary }];
+  }) as never,
 }));
+
+vi.mock(import("../../state/environments"), async (original) => ({
+  ...(await original()),
+  useEnvironmentIds: (() => [ENVIRONMENT_ID]) as never,
+}));
+
+// The chat sits inside the app's router; a plain link stands in for it here.
+vi.mock(import("@tanstack/react-router"), async (original) => ({
+  ...(await original()),
+  Link: (({ params, to: _to, ...rest }: { params?: { taskId?: string }; to?: string }) => (
+    <a href={`#${params?.taskId ?? ""}`} {...rest} />
+  )) as never,
+}));
+
+function taskRef(number: number, title: string, overrides: Partial<ProjectTaskReference> = {}) {
+  return {
+    id: ProjectTaskId.make(`task-${number}`),
+    number,
+    parentTaskId: null,
+    waitsOn: [],
+    title,
+    stage: "running",
+    leadThreadId: null,
+    prUrl: null,
+    lastOutcome: null,
+    openQuestion: false,
+    openBlocker: false,
+    updatedAt: AT,
+    ...overrides,
+  } satisfies ProjectTaskReference;
+}
+
+/** Login redirect is part of Auth overhaul, waits on Session store and has two subtasks. */
+const TASKS: ProjectTaskReference[] = [
+  taskRef(1, "Auth overhaul"),
+  taskRef(2, "Session store"),
+  taskRef(3, "Login redirect", {
+    stage: "awaiting_approval",
+    parentTaskId: ProjectTaskId.make("task-1"),
+    waitsOn: [ProjectTaskId.make("task-2")],
+  }),
+  taskRef(5, "Guard tests", { stage: "done", parentTaskId: ProjectTaskId.make("task-3") }),
+  taskRef(6, "Drop /next", { stage: "inbox", parentTaskId: ProjectTaskId.make("task-3") }),
+  taskRef(9, "Task page cache", { stage: "awaiting_approval" }),
+];
 
 function planCard(
   id: string,
@@ -228,7 +278,12 @@ let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   server.summary = {
-    ...makeProjectManagerSummaryFixture({ pmThreadId: PM_THREAD_ID, taskKeyPrefix: "BB" }),
+    ...makeProjectManagerSummaryFixture({
+      projectId: PROJECT_ID,
+      pmThreadId: PM_THREAD_ID,
+      taskKeyPrefix: "BB",
+      tasks: TASKS,
+    }),
     openCount: 2,
     decisionCards: [loginPlan, cachePlan],
   };
@@ -323,6 +378,25 @@ for (const viewport of [
     );
     expect(login.textContent).not.toContain("This task fixes");
 
+    // Where the task sits, Linear-style, in one quiet line under the title.
+    const structure = login.querySelector<HTMLElement>("[data-task-structure-line]")!;
+    expect(structure.textContent!.replace(/\s*·\s*/g, " · ")).toBe(
+      "Part of BB-1 · Blocked by BB-2 · 1/2 subtasks",
+    );
+    expect(
+      title.compareDocumentPosition(structure) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      structure.compareDocumentPosition(sections[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect([...structure.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
+      "#task-1",
+      "#task-2",
+    ]);
+    expect(structure.getBoundingClientRect().right).toBeLessThanOrEqual(
+      login.getBoundingClientRect().right,
+    );
+
     // One way to approve; the buttons fit inside the card at this width.
     expect(login.textContent).not.toContain("Approve only");
     const cardRect = login.getBoundingClientRect();
@@ -354,6 +428,8 @@ for (const viewport of [
 
     // An older card's single summary shows as Goal only, and approving it starts too.
     const cache = await jumpTo("attention-cache");
+    // A task with no parent, blockers or subtasks has no structure line.
+    expect(cache.querySelector("[data-task-structure-line]")).toBeNull();
     const oldSections = [...cache.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
     expect(oldSections.map((section) => section.dataset.planSummarySection)).toEqual(["Goal"]);
     expect(oldSections[0]!.textContent).toContain("keep the last 5 task pages in memory");

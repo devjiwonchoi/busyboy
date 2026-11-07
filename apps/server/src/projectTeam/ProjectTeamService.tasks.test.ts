@@ -737,6 +737,12 @@ describe("task dependencies", () => {
         });
         assert.deepStrictEqual(ui.waitsOn, [api.id]);
         assert.strictEqual(ui.parentTaskId, api.id);
+        // The app gets the links too, so it can mark the task blocked.
+        const shown = (yield* team.attentionSnapshot).projects
+          .flatMap((project) => project.tasks)
+          .find((task) => task.id === ui.id);
+        assert.deepStrictEqual(shown?.waitsOn, [api.id]);
+        assert.strictEqual(shown?.parentTaskId, api.id);
 
         // The cross-project dependency still gates the start.
         const refused = yield* team

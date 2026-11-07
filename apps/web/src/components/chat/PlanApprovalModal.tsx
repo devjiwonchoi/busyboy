@@ -26,6 +26,7 @@ import { DIALOG_POPUP_CLASS } from "../ui/dialog-styles";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { diffWords } from "./planDiff";
+import { TaskParentBreadcrumb, TaskStructure, useTaskRelations } from "../task/TaskRelations";
 import { PlanApprovalSections, PlanMarkdown } from "./PlanMarkdown";
 
 /** A text selection in the plan, waiting for the Comment button. */
@@ -210,6 +211,7 @@ function PlanReview({
   onOpenChange: (open: boolean) => void;
   readOnly: boolean;
 }) {
+  const relations = useTaskRelations(environmentId, card.item.taskId);
   const query = useTaskDetail(environmentId, {
     projectId: card.item.projectId,
     taskId: card.item.taskId,
@@ -272,9 +274,7 @@ function PlanReview({
         ? `v${version} · latest`
         : `v${version}`;
   // A just-added comment whose pill is still open is not part of the feedback yet.
-  const savedComments = comments.filter(
-    (entry) => !(editing?.isNew && editing.id === entry.id),
-  );
+  const savedComments = comments.filter((entry) => !(editing?.isNew && editing.id === entry.id));
   const notes = { comments: savedComments, overall };
   const hasFeedback = savedComments.length > 0 || overall.trim().length > 0;
 
@@ -296,7 +296,10 @@ function PlanReview({
     window.getSelection()?.removeAllRanges();
   };
 
-  const resolveRange = (id: string, host: ParentNode | undefined = bodyRef.current ?? undefined) => {
+  const resolveRange = (
+    id: string,
+    host: ParentNode | undefined = bodyRef.current ?? undefined,
+  ) => {
     const entry = comments.find((comment) => comment.id === id);
     const section = host?.querySelector<HTMLElement>(
       `[data-plan-section="${CSS.escape(entry?.section ?? "")}"]`,
@@ -432,6 +435,7 @@ function PlanReview({
             </Select>
           </div>
         </div>
+        <TaskParentBreadcrumb relations={relations} />
         <DialogTitle data-plan-title className="font-semibold text-2xl leading-tight">
           {title}
         </DialogTitle>
@@ -473,6 +477,7 @@ function PlanReview({
               {textSection("Non-goals", "nonGoals")}
               {steps}
             </div>
+            <TaskStructure relations={relations} className="mt-6" />
             {spec.background.trim().length > 0 ? (
               <details className="mt-6 text-sm">
                 <summary className="cursor-pointer select-none font-semibold text-sm">

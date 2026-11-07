@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { Link } from "@tanstack/react-router";
+import { FlagIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useId } from "react";
 
@@ -21,6 +22,13 @@ import { useProjectManagerEntries } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { formatTaskPullRequestLabel, StatusGlyphWithLabel } from "../sidebar/SidebarRowLine";
+import { BlockedFlag, SubtaskProgressBadge } from "../task/TaskRelations";
+import {
+  blockedByShortLabel,
+  buildTaskRelationsIndex,
+  type TaskRelationsIndex,
+  taskRelations,
+} from "../task/taskRelations.logic";
 import { useLiveTaskStatus } from "../task/taskStatus";
 import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
@@ -42,6 +50,7 @@ export function AllProjectsPage() {
   const showDoneSwitchId = useId();
   const projects = useProjects();
   const sections = buildAllProjectsSections(entries, showDone);
+  const relationsIndex = buildTaskRelationsIndex(entries);
   const doneCount = sections.reduce((total, section) => total + section.doneCount, 0);
 
   return (
@@ -82,6 +91,7 @@ export function AllProjectsPage() {
                     ) ?? null
                   }
                   section={section}
+                  relationsIndex={relationsIndex}
                 />
               ))
             )}
@@ -95,6 +105,7 @@ export function AllProjectsPage() {
 function ProjectSection(props: {
   project: EnvironmentProject | null;
   section: AllProjectsSection;
+  relationsIndex: TaskRelationsIndex;
 }) {
   const { section, project } = props;
   const { environmentId, summary } = section;
@@ -123,6 +134,7 @@ function ProjectSection(props: {
               task={task}
               depth={depth}
               taskKeyPrefix={summary.taskKeyPrefix}
+              relationsIndex={props.relationsIndex}
             />
           ))}
         </ul>
@@ -137,8 +149,10 @@ function TaskListRow(props: {
   task: ProjectTaskReference;
   depth: number;
   taskKeyPrefix: string;
+  relationsIndex: TaskRelationsIndex;
 }) {
   const { environmentId, task } = props;
+  const relations = taskRelations(props.relationsIndex, environmentId, task.id);
   const status = useLiveTaskStatus(environmentId, task);
   const openPrLink = useOpenPrLink();
   const updated = useRelativeTimeState(task.updatedAt);
@@ -150,6 +164,7 @@ function TaskListRow(props: {
     <li
       data-all-projects-task={task.id}
       data-task-status={status.status}
+      data-blocked={relations.blockedBy.length > 0 || undefined}
       className="relative flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b border-border/60 px-2 py-2 hover:bg-accent/50 sm:flex-nowrap"
     >
       <div
@@ -167,9 +182,23 @@ function TaskListRow(props: {
         >
           {task.title}
         </Link>
+        {relations.progress !== null ? (
+          <SubtaskProgressBadge progress={relations.progress} />
+        ) : null}
+        <BlockedFlag blockedBy={relations.blockedBy} className="hidden sm:inline-flex" />
       </div>
       <div className="flex shrink-0 items-center gap-3 pl-6 text-muted-foreground text-xs sm:pl-0">
         <span className={cn("sm:w-28 sm:truncate", status.className)}>{statusLabel}</span>
+        {/* Phones have no hover, so the blocked marker names its blocker in the row. */}
+        {relations.blockedBy.length > 0 ? (
+          <span
+            data-blocked-label
+            className="inline-flex items-center gap-1 text-orange-500 sm:hidden dark:text-orange-400"
+          >
+            <FlagIcon aria-hidden className="size-3.5 fill-current" />
+            {blockedByShortLabel(relations.blockedBy)}
+          </span>
+        ) : null}
         <span className="sm:w-16">
           {task.prUrl !== null ? (
             <a

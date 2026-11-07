@@ -214,6 +214,7 @@ beforeEach(() => {
           id: `task-${task.number}` as never,
           number: task.number,
           parentTaskId: null,
+          waitsOn: [],
           title: `Task ${task.number}`,
           stage: task.stage,
           leadThreadId: `lead-${task.number}` as never,

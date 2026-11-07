@@ -276,6 +276,8 @@ import {
   SidebarRowLine,
 } from "./sidebar/SidebarRowLine";
 import { resolveLiveTaskStatus } from "./task/taskStatus";
+import { TaskRowMarkers, useTaskRelations } from "./task/TaskRelations";
+import { blockedByLabel } from "./task/taskRelations.logic";
 import { MiddleTruncate } from "./ui/middle-truncate";
 import {
   composerDraftHasUserContent,
@@ -1502,6 +1504,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   // A task lead's row shows its task's status instead, so it never looks idle.
   const leadTask = useLeadThreadTask(threadRef, thread.projectId);
   const topStatus = leadTask === null ? threadStatus : resolveLiveTaskStatus(leadTask.task, status);
+  const leadRelations = useTaskRelations(thread.environmentId, leadTask?.task.id ?? null);
 
   const handleClick = (event: ReactMouseEvent) => {
     onThreadClick(event, threadRef);
@@ -1688,13 +1691,19 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     ) : leadTask === null ? (
       titleText
     ) : (
-      // The status icon gives way to row actions on hover, so the task's status shows here.
-      <Tooltip>
-        <TooltipTrigger render={titleText} />
-        <TooltipPopup side="right" data-testid="sidebar-task-status-tooltip">
-          {topStatus?.label}
-        </TooltipPopup>
-      </Tooltip>
+      <>
+        {/* The status icon gives way to row actions on hover, so the task's status shows here. */}
+        <Tooltip>
+          <TooltipTrigger render={titleText} />
+          <TooltipPopup side="right" data-testid="sidebar-task-status-tooltip">
+            {topStatus?.label}
+            {leadRelations !== null && leadRelations.blockedBy.length > 0
+              ? ` · ${blockedByLabel(leadRelations.blockedBy)}`
+              : null}
+          </TooltipPopup>
+        </Tooltip>
+        <TaskRowMarkers relations={leadRelations} />
+      </>
     );
   const accessibleTitle = isRenaming ? null : <span className="sr-only">{thread.title}</span>;
 
@@ -4008,6 +4017,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                                     key={`task:${environmentId}:${task.id}`}
                                     task={task}
                                     taskKeyPrefix={summary.taskKeyPrefix}
+                                    environmentId={environmentId}
                                     depth={depth}
                                     isActive={routeTaskId === task.id}
                                     onOpen={() =>
