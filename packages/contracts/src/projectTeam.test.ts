@@ -12,6 +12,7 @@ import {
   ProjectTaskSpec,
   defaultTaskKeyPrefix,
   formatTaskKey,
+  formatPlanApproval,
   formatPlanReviewFeedback,
   PLAN_APPROVAL_ONLY,
   PLAN_APPROVAL_START,
@@ -424,5 +425,26 @@ describe("plan approval answers", () => {
         '2. [Steps] "Add a test" → Journey test, please.',
       ].join("\n"),
     );
+  });
+
+  it("formats an approval with notes that still reads as approve and start", () => {
+    const answer = formatPlanApproval({
+      overall: "",
+      comments: [
+        { section: "Goal", quote: "big title", comment: "" },
+        { section: "Steps", quote: "Add a test", comment: "On phones too." },
+      ],
+    });
+    expect(answer).toBe(
+      [
+        "Approve and start",
+        "",
+        "Inline comments:",
+        '1. [Goal] "big title"',
+        '2. [Steps] "Add a test" → On phones too.',
+      ].join("\n"),
+    );
+    expect(planApprovalOutcome(answer)).toBe("start");
+    expect(formatPlanApproval({ overall: " ", comments: [] })).toBe(PLAN_APPROVAL_START);
   });
 });

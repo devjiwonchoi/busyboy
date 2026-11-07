@@ -1,7 +1,7 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import {
   type EnvironmentId,
-  PLAN_APPROVAL_START,
+  formatPlanApproval,
   formatPlanReviewFeedback,
   planApprovalOutcome,
   type PlanReviewComment,
@@ -10,11 +10,16 @@ import {
 } from "@t3tools/contracts";
 import { XIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { useIsMobile } from "~/hooks/useMediaQuery";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 import { useAnswerDecision, useTaskDetail } from "~/state/projectTeam";
+import {
+  AnnotationOverlay,
+  type AnnotationEditing,
+  scrollAnnotationIntoView,
+} from "../annotations/AnnotationOverlay";
+import { AnnotationsChip } from "../annotations/AnnotationsChip";
 import { Button } from "../ui/button";
 import { Dialog, DialogBackdrop, DialogPortal, DialogTitle, DialogViewport } from "../ui/dialog";
 import { DIALOG_POPUP_CLASS } from "../ui/dialog-styles";
@@ -23,10 +28,12 @@ import { Textarea } from "../ui/textarea";
 import { diffWords } from "./planDiff";
 import { PlanApprovalSections, PlanMarkdown } from "./PlanMarkdown";
 
-/** A text selection in the plan, waiting for its comment. */
+/** A text selection in the plan, waiting for the Comment button. */
 interface PendingSelection {
   readonly section: string;
   readonly quote: string;
+  /** Where the quote starts in its section's text, to find the right copy of repeated text. */
+  readonly start: number;
   /** The selection's box, relative to the plan body. */
   readonly top: number;
   readonly bottom: number;
@@ -34,13 +41,17 @@ interface PendingSelection {
   readonly bodyWidth: number;
   /** True when the Comment button fits above the selection inside the visible plan. */
   readonly roomAbove: boolean;
-  readonly editing: boolean;
+}
+
+/** An inline comment on the plan: a pin on its quote, edited in the annotation pill. */
+interface PlanAnnotation extends PlanReviewComment {
+  readonly id: string;
+  readonly start: number;
 }
 
 /** Height of the floating Comment button plus its gap to the selection. */
 const COMMENT_BUTTON_OFFSET = 34;
 const COMMENT_BUTTON_WIDTH = 96;
-const COMMENT_EDITOR_WIDTH = 288;
 
 const OUTCOME_STATUS = {
   start: "Approved and started",
@@ -63,8 +74,12 @@ function readPlanSelection(body: HTMLElement): PendingSelection | null {
   if (!sectionElement.contains(range.endContainer)) {
     range.setEnd(sectionElement, sectionElement.childNodes.length);
   }
-  const quote = range.toString().trim();
+  const raw = range.toString();
+  const quote = raw.trim();
   if (quote.length === 0) return null;
+  const before = document.createRange();
+  before.setStart(sectionElement, 0);
+  before.setEnd(range.startContainer, range.startOffset);
   const rect = range.getBoundingClientRect();
   const bodyRect = body.getBoundingClientRect();
   const visibleTop = Math.max(
@@ -74,50 +89,58 @@ function readPlanSelection(body: HTMLElement): PendingSelection | null {
   return {
     section: sectionElement.dataset.planSection ?? "",
     quote,
+    start: before.toString().length + (raw.length - raw.trimStart().length),
     top: rect.top - bodyRect.top,
     bottom: rect.bottom - bodyRect.top,
     left: rect.left - bodyRect.left,
     bodyWidth: bodyRect.width,
     roomAbove: rect.top - visibleTop >= COMMENT_BUTTON_OFFSET,
-    editing: false,
   };
 }
 
-/** Button above the selection (below without room); the editor below. Both stay inside the body. */
-function floatingCommentPosition(pending: PendingSelection) {
-  const width = pending.editing ? COMMENT_EDITOR_WIDTH : COMMENT_BUTTON_WIDTH;
-  const above = !pending.editing && pending.roomAbove;
+/** The Comment button: above the selection (below without room), inside the body. */
+function commentButtonPosition(pending: PendingSelection) {
   return {
-    top: above ? pending.top - COMMENT_BUTTON_OFFSET : pending.bottom + 6,
-    left: Math.max(0, Math.min(pending.left, pending.bodyWidth - width)),
+    top: pending.roomAbove ? pending.top - COMMENT_BUTTON_OFFSET : pending.bottom + 6,
+    left: Math.max(0, Math.min(pending.left, pending.bodyWidth - COMMENT_BUTTON_WIDTH)),
   };
 }
 
-/** Wraps the first match of each quote in <mark>. */
-function withHighlights(text: string, quotes: ReadonlyArray<string>): ReactNode {
-  const ranges: Array<[number, number]> = [];
-  for (const quote of quotes) {
-    const at = text.indexOf(quote);
-    if (at < 0) continue;
-    const end = at + quote.length;
-    if (ranges.some(([from, to]) => at < to && end > from)) continue;
-    ranges.push([at, end]);
+/** The range of `quote` in `root`'s text, taking the copy closest to `start`. */
+function findQuoteRange(root: HTMLElement, quote: string, start: number): Range | null {
+  const nodes: Text[] = [];
+  const offsets: number[] = [];
+  let text = "";
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    nodes.push(node as Text);
+    offsets.push(text.length);
+    text += node.nodeValue ?? "";
   }
-  if (ranges.length === 0) return text;
-  ranges.sort((a, b) => a[0] - b[0]);
-  const nodes: ReactNode[] = [];
-  let cursor = 0;
-  for (const [from, to] of ranges) {
-    if (from > cursor) nodes.push(text.slice(cursor, from));
-    nodes.push(
-      <mark key={from} className="rounded-sm bg-warning/30 text-inherit">
-        {text.slice(from, to)}
-      </mark>,
-    );
-    cursor = to;
+  let best = -1;
+  for (let at = text.indexOf(quote); at >= 0; at = text.indexOf(quote, at + 1)) {
+    if (best < 0 || Math.abs(at - start) < Math.abs(best - start)) best = at;
   }
-  if (cursor < text.length) nodes.push(text.slice(cursor));
-  return nodes;
+  if (best < 0) return null;
+  // The start lands in the node that holds its first character; the end in the node that
+  // holds its last one.
+  const locate = (offset: number, isEnd: boolean) => {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index]!;
+      const relative = offset - offsets[index]!;
+      if (isEnd ? relative <= node.length && node.length > 0 : relative < node.length) {
+        return { node, offset: relative };
+      }
+    }
+    return null;
+  };
+  const from = locate(best, false);
+  const to = locate(best + quote.length, true);
+  if (!from || !to) return null;
+  const range = document.createRange();
+  range.setStart(from.node, from.offset);
+  range.setEnd(to.node, to.offset);
+  return range;
 }
 
 function DiffText({ before, after }: { before: string; after: string }) {
@@ -192,22 +215,22 @@ function PlanReview({
     taskId: card.item.taskId,
   });
   const answerDecision = useAnswerDecision();
-  const isMobile = useIsMobile();
   const bodyRef = useRef<HTMLDivElement>(null);
+  const [overlayHost, setOverlayHost] = useState<HTMLDivElement | null>(null);
   const [viewed, setViewed] = useState<number | null>(null);
   const [showChanges, setShowChanges] = useState(false);
-  const [comments, setComments] = useState<ReadonlyArray<PlanReviewComment>>([]);
+  const [comments, setComments] = useState<ReadonlyArray<PlanAnnotation>>([]);
+  const [editing, setEditing] = useState<AnnotationEditing>(null);
   const [overall, setOverall] = useState("");
   const [pending, setPending] = useState<PendingSelection | null>(null);
-  const [draftComment, setDraftComment] = useState("");
   const [sending, setSending] = useState(false);
 
-  // Track the selection in the plan body; an open comment editor keeps its selection.
+  // Track the selection in the plan body for the Comment button.
   useEffect(() => {
     const onSelectionChange = () => {
       const body = bodyRef.current;
       if (body === null) return;
-      setPending((current) => (current?.editing ? current : readPlanSelection(body)));
+      setPending(readPlanSelection(body));
     };
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
@@ -248,26 +271,48 @@ function PlanReview({
       : version === latest.version
         ? `v${version} · latest`
         : `v${version}`;
-  const hasFeedback = comments.length > 0 || overall.trim().length > 0;
+  // A just-added comment whose pill is still open is not part of the feedback yet.
+  const savedComments = comments.filter(
+    (entry) => !(editing?.isNew && editing.id === entry.id),
+  );
+  const notes = { comments: savedComments, overall };
+  const hasFeedback = savedComments.length > 0 || overall.trim().length > 0;
 
   const captureSelection = () => {
     const body = bodyRef.current;
     if (body === null || !canComment) return;
-    setPending((current) => (current?.editing ? current : readPlanSelection(body)));
+    setPending(readPlanSelection(body));
   };
 
-  const saveComment = () => {
-    const text = draftComment.trim();
-    if (pending === null || text.length === 0) return;
-    setComments([...comments, { section: pending.section, quote: pending.quote, comment: text }]);
+  const addComment = () => {
+    if (pending === null) return;
+    const id = randomUUID();
+    setComments([
+      ...comments,
+      { id, section: pending.section, quote: pending.quote, start: pending.start, comment: "" },
+    ]);
+    setEditing({ id, isNew: true });
     setPending(null);
-    setDraftComment("");
     window.getSelection()?.removeAllRanges();
   };
 
-  const cancelComment = () => {
-    setPending(null);
-    setDraftComment("");
+  const resolveRange = (id: string, host: ParentNode | undefined = bodyRef.current ?? undefined) => {
+    const entry = comments.find((comment) => comment.id === id);
+    const section = host?.querySelector<HTMLElement>(
+      `[data-plan-section="${CSS.escape(entry?.section ?? "")}"]`,
+    );
+    return entry && section ? findQuoteRange(section, entry.quote, entry.start) : null;
+  };
+
+  const openComment = (id: string) => {
+    const range = resolveRange(id);
+    if (range) scrollAnnotationIntoView(range);
+    setEditing({ id, isNew: false });
+  };
+
+  const removeComment = (id: string) => {
+    setComments(comments.filter((entry) => entry.id !== id));
+    if (editing?.id === id) setEditing(null);
   };
 
   const send = (answer: string) => {
@@ -283,17 +328,16 @@ function PlanReview({
     });
   };
 
-  const quotesFor = (section: string) =>
-    comments.filter((entry) => entry.section === section).map((entry) => entry.quote);
+  const sectionHeading = (label: string) => (
+    <h3 className="mb-1 font-semibold text-foreground text-sm">{label}</h3>
+  );
 
   const textSection = (label: string, field: keyof Omit<ProjectTaskSpec, "todos">) => {
     const text = spec[field].trim();
     const before = previous?.spec[field].trim() ?? "";
     return (
       <section key={field} className="mt-6 first:mt-0">
-        <h3 className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
-          {label}
-        </h3>
+        {sectionHeading(label)}
         <div
           data-plan-section={label}
           className={cn(
@@ -307,7 +351,7 @@ function PlanReview({
           ) : text.length === 0 ? (
             "—"
           ) : (
-            <PlanMarkdown text={text} highlights={canComment ? quotesFor(label) : undefined} />
+            <PlanMarkdown text={text} />
           )}
         </div>
       </section>
@@ -316,9 +360,7 @@ function PlanReview({
 
   const steps = (
     <section className="mt-6">
-      <h3 className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
-        Steps
-      </h3>
+      {sectionHeading("Steps")}
       {diffing ? (
         <div data-plan-section="Steps" className="whitespace-pre-wrap text-sm leading-relaxed">
           <DiffText
@@ -335,7 +377,7 @@ function PlanReview({
         >
           {spec.todos.map((todo) => (
             <li key={todo.id} className={cn(todo.done && "text-muted-foreground line-through")}>
-              {canComment ? withHighlights(todo.text, quotesFor("Steps")) : todo.text}
+              {todo.text}
             </li>
           ))}
         </ol>
@@ -343,89 +385,13 @@ function PlanReview({
     </section>
   );
 
-  const commentEditor =
-    pending === null ? null : pending.editing ? (
-      <div className="flex flex-col gap-2 rounded-lg border bg-popover p-2 shadow-md">
-        <p className="line-clamp-2 border-l-2 border-warning/60 ps-2 text-muted-foreground text-xs">
-          {pending.quote}
-        </p>
-        <Textarea
-          aria-label="Comment"
-          autoFocus
-          size="sm"
-          value={draftComment}
-          onChange={(event) => setDraftComment(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) saveComment();
-          }}
-        />
-        <div className="flex justify-end gap-1.5">
-          <Button size="xs" variant="ghost" onClick={cancelComment}>
-            Cancel
-          </Button>
-          <Button size="xs" disabled={draftComment.trim().length === 0} onClick={saveComment}>
-            Save comment
-          </Button>
-        </div>
-      </div>
-    ) : (
-      <Button
-        size="xs"
-        variant="outline"
-        // Solid even on hover: the outline style is see-through in dark mode, and this sits on text.
-        className="bg-popover shadow-lg dark:bg-popover [:hover,[data-pressed]]:bg-popover dark:[:hover,[data-pressed]]:bg-popover"
-        // Keep the selection when the button takes the press.
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => setPending({ ...pending, editing: true })}
-      >
-        Comment
-      </Button>
-    );
-
-  const commentList = (
-    <div className="flex flex-col gap-2" data-plan-comments>
-      <h3 className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
-        Comments{comments.length > 0 ? ` · ${comments.length}` : ""}
-      </h3>
-      {comments.length === 0 ? (
-        <p className="text-muted-foreground text-xs">Select text in the plan to comment on it.</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {comments.map((entry, index) => (
-            <li
-              // Comments have no id; their order is stable until one is removed.
-              key={`${index}:${entry.quote}`}
-              data-plan-comment
-              className="rounded-lg border bg-card/60 p-2 text-sm"
-            >
-              <div className="flex items-start gap-2">
-                <span className="text-[11px] text-muted-foreground">{entry.section}</span>
-                <Button
-                  size="icon-xs"
-                  variant="ghost-muted"
-                  className="ml-auto"
-                  aria-label="Remove comment"
-                  onClick={() => setComments(comments.filter((_, at) => at !== index))}
-                >
-                  <XIcon />
-                </Button>
-              </div>
-              <p className="mt-1 line-clamp-3 border-l-2 border-warning/60 ps-2 text-muted-foreground text-xs">
-                {entry.quote}
-              </p>
-              <p className="mt-1 whitespace-pre-wrap">{entry.comment}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex shrink-0 flex-col gap-2 border-b px-5 pt-4 pb-3 md:px-7">
+      <header className="flex shrink-0 flex-col gap-1.5 border-b px-5 pt-4 pb-3 md:px-7">
         <div className="flex flex-wrap items-center gap-2 pe-8">
-          <span className="font-mono text-muted-foreground text-sm">{detail.key}</span>
+          <span data-plan-meta className="font-mono text-muted-foreground text-xs">
+            {detail.key}
+          </span>
           <span
             data-plan-status
             className={cn(
@@ -466,7 +432,9 @@ function PlanReview({
             </Select>
           </div>
         </div>
-        <DialogTitle className="text-xl leading-tight">{title}</DialogTitle>
+        <DialogTitle data-plan-title className="font-semibold text-2xl leading-tight">
+          {title}
+        </DialogTitle>
         {!readOnly && shown.version !== reviewVersion.version ? (
           <p role="status" className="text-muted-foreground text-xs">
             Viewing v{shown.version}, read-only. You are reviewing v{reviewVersion.version}.{" "}
@@ -488,55 +456,69 @@ function PlanReview({
         </DialogPrimitive.Close>
       </header>
 
-      <div data-plan-scroll className="min-h-0 flex-1 overflow-y-auto">
-        <div
-          className={cn(
-            "grid gap-6 px-5 py-5 md:px-7",
-            canComment && "md:grid-cols-[minmax(0,1fr)_17rem]",
-          )}
-        >
+      <div ref={setOverlayHost} className="relative flex min-h-0 flex-1 flex-col">
+        <div data-plan-scroll className="min-h-0 flex-1 overflow-y-auto">
           <div
             ref={bodyRef}
-            className="relative min-w-0"
+            className="relative mx-auto w-full max-w-4xl min-w-0 px-5 pt-8 pb-5 md:px-7"
             data-plan-body
             data-plan-version={shown.version}
             onMouseUp={captureSelection}
             onTouchEnd={captureSelection}
           >
-            <PlanApprovalSections
-              item={card.item}
-              className="rounded-lg border bg-muted/30 px-3 py-2.5"
-            />
-            {textSection("End result", "goal")}
-            {textSection("Success criteria", "successCriteria")}
-            {textSection("Non-goals", "nonGoals")}
-            {steps}
+            <PlanApprovalSections item={card.item} className="gap-6" />
+            <div className="mt-6">
+              {textSection("End result", "goal")}
+              {textSection("Success criteria", "successCriteria")}
+              {textSection("Non-goals", "nonGoals")}
+              {steps}
+            </div>
             {spec.background.trim().length > 0 ? (
               <details className="mt-6 text-sm">
-                <summary className="cursor-pointer select-none font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+                <summary className="cursor-pointer select-none font-semibold text-sm">
                   Background
                 </summary>
                 <PlanMarkdown text={spec.background} className="mt-1.5 text-muted-foreground" />
               </details>
             ) : null}
-            {canComment && !isMobile && commentEditor !== null ? (
-              <div
-                className={cn("absolute z-20", pending!.editing && "w-72 max-w-full")}
-                style={floatingCommentPosition(pending!)}
-              >
-                {commentEditor}
+            {canComment && pending !== null && editing === null ? (
+              <div className="absolute z-20" style={commentButtonPosition(pending)}>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  // Solid even on hover: the outline style is see-through in dark mode, and this sits on text.
+                  className="bg-popover shadow-lg dark:bg-popover [:hover,[data-pressed]]:bg-popover dark:[:hover,[data-pressed]]:bg-popover"
+                  // Keep the selection when the button takes the press.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={addComment}
+                >
+                  Comment
+                </Button>
               </div>
             ) : null}
           </div>
-          {canComment ? <aside className="min-w-0 md:border-l md:ps-5">{commentList}</aside> : null}
         </div>
+        {canComment ? (
+          <AnnotationOverlay
+            host={overlayHost}
+            annotations={comments}
+            resolveRange={resolveRange}
+            editing={editing}
+            onEdit={(id) => setEditing({ id, isNew: false })}
+            onSave={(id, comment) => {
+              setComments(
+                comments.map((entry) => (entry.id === id ? { ...entry, comment } : entry)),
+              );
+              setEditing(null);
+            }}
+            onCancel={(id, isNew) => (isNew ? removeComment(id) : setEditing(null))}
+            onDelete={removeComment}
+          />
+        ) : null}
       </div>
 
       {canAnswer ? (
         <footer className="flex shrink-0 flex-col gap-2 border-t bg-muted/40 px-5 py-3 md:px-7">
-          {canComment && isMobile && commentEditor !== null ? (
-            <div data-plan-mobile-comment>{commentEditor}</div>
-          ) : null}
           <Textarea
             aria-label="Overall comment"
             placeholder="Overall comment (optional)"
@@ -545,26 +527,28 @@ function PlanReview({
             value={overall}
             onChange={(event) => setOverall(event.target.value)}
           />
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!hasFeedback || sending}
-              onClick={() =>
-                send(
-                  formatPlanReviewFeedback({
-                    specVersion: reviewVersion.version,
-                    comments,
-                    overall,
-                  }),
-                )
-              }
-            >
-              Request changes
-            </Button>
-            <Button size="sm" disabled={sending} onClick={() => send(PLAN_APPROVAL_START)}>
-              Approve
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <AnnotationsChip
+              annotations={savedComments}
+              noun="comment"
+              onOpen={openComment}
+              onRemove={removeComment}
+            />
+            <div className="ms-auto flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!hasFeedback || sending}
+                onClick={() =>
+                  send(formatPlanReviewFeedback({ specVersion: reviewVersion.version, ...notes }))
+                }
+              >
+                Request changes
+              </Button>
+              <Button size="sm" disabled={sending} onClick={() => send(formatPlanApproval(notes))}>
+                Approve
+              </Button>
+            </div>
           </div>
         </footer>
       ) : null}

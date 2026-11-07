@@ -287,12 +287,20 @@ for (const viewport of [
 
     const login = await jumpTo("attention-login");
     expect(login.dataset.decisionCardState).toBe("open");
-    // Goal and Verification show as labelled sections, the bullets as real lists.
+    // Reads like a doc: the task title as the big heading over a small meta line, then
+    // Goal and Verification as headed sections, the bullets as real lists.
+    const title = login.querySelector<HTMLElement>("[data-plan-title]")!;
+    expect(title.textContent).toBe("Login redirect");
+    expect(login.querySelector("[data-plan-meta]")?.textContent).toMatch(/^Plan approval · v\d+$/);
+    expect(parseFloat(getComputedStyle(title).fontSize)).toBeGreaterThanOrEqual(18);
     const sections = [...login.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
-    expect(sections.map((section) => section.querySelector("h4")?.textContent)).toEqual([
+    expect(sections.map((section) => section.querySelector("h3")?.textContent)).toEqual([
       "Goal",
       "Verification",
     ]);
+    expect(
+      title.compareDocumentPosition(sections[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     const [goal, verification] = sections;
     expect([...goal!.querySelectorAll("ul > li")].map((item) => item.textContent)).toEqual([
       "The login redirect moves into the auth guard",
@@ -303,6 +311,11 @@ for (const viewport of [
     expect(goal!.querySelector("code")?.textContent).toBe("/next");
     expect(goal!.textContent).not.toContain("- ");
     expect(verification!.querySelectorAll("ul > li")).toHaveLength(2);
+    // Verification is a read-only checklist.
+    const checks = [...verification!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    expect(checks).toHaveLength(2);
+    expect(checks.every((check) => !check.checked)).toBe(true);
+    expect(checks.every((check) => check.disabled || check.readOnly)).toBe(true);
     // Each bullet sits on its own line.
     const items = goal!.querySelectorAll("li");
     expect(items[1]!.getBoundingClientRect().top).toBeGreaterThan(

@@ -236,6 +236,7 @@ import {
 import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
 import { PendingActionsNudge } from "./chat/PendingActionsNudge";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
+import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -1300,20 +1301,11 @@ export default function ChatView(props: ChatViewProps) {
   const [restingComposerControlsHost, setRestingComposerControlsHost] =
     useState<HTMLDivElement | null>(null);
   const [restingComposerControlsVisible, setRestingComposerControlsVisible] = useState(false);
-  const citeAssistantText = (
-    citation: AssistantCitation,
-    sourceAnchor: AssistantCitationSourceAnchor,
-  ) => {
-    const inserted = composerRef.current?.citeAssistantText(citation, sourceAnchor) ?? false;
-    if (!inserted) {
-      toastManager.add({
-        type: "warning",
-        title: "The composer is not ready",
-        description: "Try citing the selection after the connection or pending input is resolved.",
-      });
-    }
-    return inserted;
-  };
+  const chatAnnotations = useChatAnnotations(composerDraftTarget);
+  const [annotationHost, setAnnotationHost] = useState<HTMLDivElement | null>(null);
+  // "Add to chat" pins the selection and opens its comment pill; the quote is sent with the
+  // next message.
+  const citeAssistantText = (citation: AssistantCitation) => chatAnnotations.add(citation);
   const citeAssistantTextStable = useStableCallback(citeAssistantText);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
@@ -6087,11 +6079,14 @@ export default function ChatView(props: ChatViewProps) {
       });
     // A direct "send annotation" writes the draft and sends in the same tick; the reference
     // must be in the text now, not after the next render.
-    const promptForSend = directAnnotation
-      ? ensureInlineContextReferences(promptRef.current, [
-          previewAnnotationContextReference(directAnnotation.annotation),
-        ])
-      : promptRef.current;
+    const promptForSend = withComposerAnnotations(
+      directAnnotation
+        ? ensureInlineContextReferences(promptRef.current, [
+            previewAnnotationContextReference(directAnnotation.annotation),
+          ])
+        : promptRef.current,
+      useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.annotations ?? [],
+    );
     if (queuedRunEdit.isEditing) {
       // Edit mode repurposes the composer: sending saves the queued message
       // in place instead of dispatching a new turn.
@@ -6201,7 +6196,7 @@ export default function ChatView(props: ChatViewProps) {
       if (composerRef.current?.validateProviderInput(outgoingFollowUpText) === false) {
         return;
       }
-      const followUpPromptSnapshot = promptRef.current;
+      const followUpPromptSnapshot = promptForSend;
       const followUpTerminalContexts = [...sendableComposerTerminalContexts];
       const followUpReviewComments = [...composerReviewComments];
       const followUpPreviewAnnotations = [...composerPreviewAnnotations];
@@ -7950,7 +7945,11 @@ export default function ChatView(props: ChatViewProps) {
                 }}
               />
             </div>
-            <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+            <div
+              ref={setAnnotationHost}
+              className="relative flex min-h-0 flex-1 flex-col bg-background"
+            >
+              {chatAnnotations.overlay(annotationHost)}
               <MessagesTimeline
                 citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
                 citationHistoryLoading={threadDetailLoading}

@@ -189,17 +189,16 @@ function section(name: string): HTMLElement {
 async function openReview() {
   await act(async () => root.render(<LiveCard />));
   const card = container.querySelector('[data-decision-card-state="open"]')!;
-  expect(card.textContent).toContain("Plan approval · Plan approval modal · v2");
+  // Reads like a doc: "# title", then Goal and Verification.
+  expect(card.querySelector("[data-plan-meta]")?.textContent).toBe("Plan approval · v2");
+  expect(card.querySelector("[data-plan-title]")?.textContent).toBe("Plan approval modal");
   expect(card.textContent).toContain("A card in the PM chat");
   await userEvent.click(button("Review plan"));
   await vi.waitFor(() => expect(section("End result")).toBeTruthy());
 }
 
-/** The Comment button is the top element at its center and, when floating, clears the selection. */
-async function expectCommentButtonOnTop(
-  selected: HTMLElement,
-  placement: "above" | "below" | "footer",
-) {
+/** The Comment button is the top element at its center and clears the selection. */
+async function expectCommentButtonOnTop(selected: HTMLElement) {
   const comment = await vi.waitFor(() => button("Comment"));
   const box = comment.getBoundingClientRect();
   const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
@@ -208,19 +207,46 @@ async function expectCommentButtonOnTop(
   expect(getComputedStyle(comment).backgroundColor).not.toMatch(
     /(,|\/)\s*0?\.\d+\)$|(,|\/)\s*0\)$/,
   );
-  if (placement === "footer") {
-    expect(comment.closest("footer")).not.toBeNull();
-    return;
-  }
   // A triple click selects the whole section; the app trims the selection to its text.
   const text = document.createRange();
   text.selectNodeContents(selected);
-  const words = text.getBoundingClientRect();
-  if (placement === "above") expect(box.bottom).toBeLessThanOrEqual(words.top);
-  else expect(box.top).toBeGreaterThanOrEqual(words.bottom);
+  expect(box.bottom).toBeLessThanOrEqual(text.getBoundingClientRect().top);
   const body = modal().querySelector("[data-plan-body]")!.getBoundingClientRect();
   expect(box.left).toBeGreaterThanOrEqual(body.left);
   expect(box.right).toBeLessThanOrEqual(body.right);
+}
+
+function pin(number: number): HTMLElement | null {
+  return modal().querySelector<HTMLElement>(`[data-annotation-pin="${number}"]`);
+}
+
+function pill(): HTMLElement | null {
+  return modal().querySelector<HTMLElement>("[data-annotation-pill]");
+}
+
+/** The pill sits above its pin and fully inside the viewport. */
+function expectPillAbovePin(number: number) {
+  const box = pill()!.getBoundingClientRect();
+  expect(box.bottom).toBeLessThanOrEqual(pin(number)!.getBoundingClientRect().top);
+  expect(box.top).toBeGreaterThanOrEqual(0);
+  expect(box.left).toBeGreaterThanOrEqual(0);
+  expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+}
+
+function chipLabel(): string | undefined {
+  return modal().querySelector("[data-annotations-chip]")?.textContent?.trim();
+}
+
+/** Selects a section, presses Comment and types into the new annotation's pill. */
+async function commentOn(name: string, text: string) {
+  await userEvent.tripleClick(section(name));
+  await expectCommentButtonOnTop(section(name));
+  await userEvent.click(button("Comment"));
+  await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("new"));
+  const input = pill()!.querySelector("textarea")!;
+  await vi.waitFor(() => expect(document.activeElement).toBe(input));
+  expect(input.placeholder).toBe("Add an optional comment…");
+  if (text) await userEvent.type(input, text);
 }
 
 describe.each([
@@ -250,9 +276,12 @@ describe.each([
       "Verification",
     ]);
     expect(sections[0]!.querySelectorAll("li")).toHaveLength(2);
-    expect(sections[1]!.querySelector("li")?.textContent).toBe(
+    expect(sections[1]!.querySelector("li")?.textContent?.trim()).toBe(
       "A journey test approves from the modal",
     );
+    // Verification reads as a checklist.
+    const check = sections[1]!.querySelector<HTMLInputElement>('li input[type="checkbox"]');
+    expect(check?.checked).toBe(false);
     // Plan sections render as markdown too.
     expect(section("Success criteria").textContent?.trim()).toBe("The user can approve from the PM chat.");
     expect(section("Success criteria").querySelector("li strong")?.textContent).toBe("PM chat");
@@ -266,31 +295,41 @@ describe.each([
       });
     }
 
+    // No comments column: the plan takes the full width.
+    expect(review.querySelector("[data-plan-comments]")).toBeNull();
+    expect(chipLabel()).toBeUndefined();
     // Nothing to send yet.
     expect(button("Request changes").disabled).toBe(true);
 
-    // A selection lower in the plan gets the button above it.
-    await userEvent.tripleClick(section("Non-goals"));
-    await expectCommentButtonOnTop(section("Non-goals"), width < 768 ? "footer" : "above");
+    // Comment on End result: a numbered pin, then the pill above it. Enter saves.
+    await commentOn("End result", "Say which cursor.");
+    await vi.waitFor(() => expect(pin(1)?.textContent).toBe("1"));
+    await vi.waitFor(() => expectPillAbovePin(1));
+    expect(CSS.highlights.get("t3-annotation")?.size).toBe(1);
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(pill()).toBeNull());
+    expect(chipLabel()).toBe("1 comment");
 
-    // End result sits under the Goal/Verification box, so there is room above it too.
-    await userEvent.tripleClick(section("End result"));
-    await expectCommentButtonOnTop(section("End result"), width < 768 ? "footer" : "above");
-    await userEvent.click(button("Comment"));
-    await userEvent.type(
-      review.querySelector<HTMLTextAreaElement>('textarea[aria-label="Comment"]')!,
-      "Say which cursor.",
-    );
-    await userEvent.click(button("Save comment"));
+    // A second one, cancelled with Esc: its pin goes away and the dialog stays open.
+    await commentOn("Non-goals", "Never mind");
+    await vi.waitFor(() => expect(pin(2)).not.toBeNull());
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(pin(2)).toBeNull());
+    expect(document.querySelector("[data-plan-review]")).not.toBeNull();
+    expect(chipLabel()).toBe("1 comment");
 
-    const comments = review.querySelectorAll("[data-plan-comment]");
-    expect(comments).toHaveLength(1);
-    expect(comments[0]!.textContent).toContain("End result");
-    expect(comments[0]!.textContent).toContain("Keep the cursor position steady after review.");
-    expect(comments[0]!.textContent).toContain("Say which cursor.");
-    expect(section("End result").querySelector("mark")?.textContent).toBe(
-      "Keep the cursor position steady after review.",
-    );
+    // The pin reopens the comment for editing.
+    await userEvent.click(pin(1)!);
+    await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("edit"));
+    expectPillAbovePin(1);
+    const input = pill()!.querySelector("textarea")!;
+    expect(input.value).toBe("Say which cursor.");
+    // Focus lands at the end of the saved comment.
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(input.selectionStart).toBe(input.value.length);
+    await userEvent.keyboard(" Text or mouse?");
+    await userEvent.click(button("Save", pill()!));
+    await vi.waitFor(() => expect(pill()).toBeNull());
 
     await userEvent.type(
       review.querySelector<HTMLTextAreaElement>('textarea[aria-label="Overall comment"]')!,
@@ -304,8 +343,9 @@ describe.each([
     expect(answer.answer).toContain("Request changes (review of spec v2)");
     expect(answer.answer).toContain("Looks close.");
     expect(answer.answer).toContain(
-      '[End result] "Keep the cursor position steady after review." → Say which cursor.',
+      '[End result] "Keep the cursor position steady after review." → Say which cursor. Text or mouse?',
     );
+    expect(answer.answer).not.toContain("Never mind");
     await vi.waitFor(() => expect(document.querySelector("[data-plan-review]")).toBeNull());
     const answered = container.querySelector('[data-decision-card-state="answered"]')!;
     expect(answered.textContent).toContain("Changes requested");
@@ -327,6 +367,32 @@ describe.each([
     expect(modal().textContent).toContain("Approved and started");
     expect(() => button("Approve", modal())).toThrow();
     expect(modal().querySelector('textarea[aria-label="Overall comment"]')).toBeNull();
+  });
+
+  it("approves with a comment, which the lead gets as a note", async () => {
+    await openReview();
+    await commentOn("End result", "");
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(chipLabel()).toBe("1 comment"));
+    // The chip lists it; picking the entry reopens its pill.
+    await userEvent.click(modal().querySelector<HTMLElement>("[data-annotations-chip]")!);
+    const list = await vi.waitFor(() => document.querySelector("[data-annotations-list]")!);
+    expect(list.textContent).toContain("Keep the cursor position");
+    await userEvent.click(list.querySelector("button")!);
+    await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("edit"));
+    await userEvent.type(pill()!.querySelector("textarea")!, "Phones too.");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.click(button("Approve", modal()));
+    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
+    const answer = server.answers[0]!.answer;
+    expect(answer.split("\n")[0]).toBe(PLAN_APPROVAL_START);
+    expect(answer).toContain(
+      '[End result] "Keep the cursor position steady after review." → Phones too.',
+    );
+    await vi.waitFor(() => expect(document.querySelector("[data-plan-review]")).toBeNull());
+    expect(container.querySelector('[data-decision-card-state="answered"]')?.textContent).toContain(
+      "Approved and started",
+    );
   });
 
   it("shows word changes against the previous version", async () => {
