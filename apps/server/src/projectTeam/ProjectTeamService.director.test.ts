@@ -56,17 +56,20 @@ describe("ProjectTeamService Director", () => {
         });
 
         const { task: epic } = yield* team.createTask(director.threadId, {
+          intake: "New work.",
           title: "Dark mode everywhere",
           request: "Ship dark mode in both apps.",
         });
         assert.strictEqual(epic.projectId, DIRECTOR);
         const { task: first } = yield* team.createTask(director.threadId, {
+          intake: "New work.",
           title: "Dark mode in the first app",
           request: "Add a dark theme.",
           projectId: PROJECT_ID,
           parentTaskId: epic.id,
         });
         const { task: second } = yield* team.createTask(director.threadId, {
+          intake: "New work.",
           title: "Dark mode in the second app",
           request: "Add a dark theme.",
           projectId: SECOND,
@@ -110,10 +113,12 @@ describe("ProjectTeamService Director", () => {
           content: "Web app.\nIn flight: login.\nNext: billing.",
         });
         const { task: epic } = yield* team.createTask(director.threadId, {
+          intake: "New work.",
           title: "Shared auth",
           request: "One login across apps.",
         });
         const { task: child } = yield* team.createTask(director.threadId, {
+          intake: "New work.",
           title: "Login page",
           request: "Build it.",
           projectId: PROJECT_ID,
@@ -159,6 +164,7 @@ describe("ProjectTeamService Director", () => {
         const team = yield* service;
         const { firstPm, director } = yield* setUpWorkspace(harness);
         const { task: epic } = yield* team.createTask(director.threadId, {
+          intake: "New work.",
           title: "Epic",
           request: "Spans projects.",
         });
@@ -169,12 +175,18 @@ describe("ProjectTeamService Director", () => {
         assert.include(start.message, "not available to the Director");
 
         const crossProject = yield* Effect.flip(
-          team.createTask(firstPm, { title: "Elsewhere", request: "No.", projectId: SECOND }),
+          team.createTask(firstPm, {
+            intake: "New work.",
+            title: "Elsewhere",
+            request: "No.",
+            projectId: SECOND,
+          }),
         );
         assert.include(crossProject.message, "own project");
 
         const toDirector = yield* Effect.flip(
           team.createTask(director.threadId, {
+            intake: "New work.",
             title: "Bad",
             request: "No PM there.",
             projectId: ProjectId.make("project-missing"),

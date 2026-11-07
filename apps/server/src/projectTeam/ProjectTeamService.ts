@@ -133,6 +133,12 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
+import {
+  allSubtasksDone,
+  findOpenDuplicate,
+  PRE_APPROVAL_STAGES,
+  splitReadySubtasks,
+} from "./breakdown.ts";
 import { directorWorkspaceRoot, epicStage } from "./director.ts";
 import { planReadinessGaps, specLinkProblems, unprovenCriteria } from "./planReadiness.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
@@ -155,6 +161,8 @@ import {
   voiceText,
 } from "./persona.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
+import { pullRequestFormatProblems } from "./pullRequestFormat.ts";
+import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
@@ -772,6 +780,7 @@ const make = Effect.gen(function* () {
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
   const serverConfig = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
+  const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
 
   /** Copies the user's pending uploads under the task so the pending sweep keeps them. */
   const claimTaskAttachments = (
@@ -1044,6 +1053,10 @@ const make = Effect.gen(function* () {
           creationSource: "server",
         });
       }
+      yield* wakeReadySubtasks(
+        running,
+        `${yield* keyOf(running)} ${running.title}'s plan was approved with its breakdown.`,
+      );
       return running;
     });
 
@@ -1298,10 +1311,87 @@ const make = Effect.gen(function* () {
       }).pipe(orTeamError("Could not set up the project's PM.", projectId)),
     );
 
+  /** Refuses a new task whose title matches an open task's: that work belongs there. */
+  const refuseDuplicate = (projectId: ProjectId, title: string, callerProjectId: ProjectId) =>
+    Effect.gen(function* () {
+      const duplicate = findOpenDuplicate(yield* repository.listTasks({ projectId }), title);
+      if (duplicate === undefined) return;
+      const manager = yield* requireManager(projectId);
+      const key = formatTaskKey(
+        yield* taskKeyPrefixFor(projectId, manager.settings),
+        duplicate.number,
+      );
+      return yield* teamError(
+        `${key} "${duplicate.title}" is already open (${duplicate.stage}). Add this to it with task_nudge(taskId, note, scope: true) instead, or give the new task a title that says how it differs.`,
+        callerProjectId,
+      );
+    });
+
+  /**
+   * A lead drafts a subtask of its own task. It stays in the inbox until the user
+   * approves the parent's plan, which approves the whole breakdown at once.
+   */
+  const draftSubtask = (
+    callerThreadId: ThreadId,
+    role: Extract<ProjectTeamRole, { readonly type: "lead" }>,
+    input: ProjectTeamTaskCreateInput,
+  ) =>
+    Effect.gen(function* () {
+      if (input.projectId !== undefined && input.projectId !== role.projectId) {
+        return yield* teamError(
+          "A task lead drafts subtasks in its own project only; leave projectId out.",
+          role.projectId,
+        );
+      }
+      if (input.parentTaskId !== undefined && input.parentTaskId !== role.taskId) {
+        return yield* teamError(
+          "A task lead drafts subtasks of its own task only; leave parentTaskId out.",
+          role.projectId,
+        );
+      }
+      const parent = yield* requireTask(role.taskId, role.projectId);
+      if (FinishedTaskCleanup.isFinishedStage(parent.stage)) {
+        return yield* teamError(`#${parent.number} is ${parent.stage}.`, role.projectId);
+      }
+      yield* refuseDuplicate(role.projectId, input.title, role.projectId);
+      const waitsOn = (yield* checkWaitsOn(null, input.waitsOn ?? [], role.projectId)).map(
+        (task) => task.id,
+      );
+      const task = yield* repository.createTask({
+        id: ProjectTaskId.make(yield* newId("task")),
+        projectId: role.projectId,
+        title: input.title,
+        request: input.request,
+        waitsOn,
+        parentTaskId: parent.id,
+        now: yield* nowIso,
+        author: "agent",
+        authorThreadId: callerThreadId,
+      });
+      yield* appendEvent(task, "created", task.title, callerThreadId);
+      yield* appendEvent(
+        task,
+        "note",
+        `Drafted by #${parent.number}'s lead. It starts once the user approves #${parent.number}'s plan, which covers its whole breakdown.`,
+        callerThreadId,
+      );
+      yield* router.publish(role.projectId);
+      return { task };
+    });
+
   const createTask: ProjectTeamService["Service"]["createTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "director"], "task_create");
+      const role = yield* requireRole(callerThreadId, ["pm", "director", "lead"], "task_create");
+      if (role.type === "lead") return yield* draftSubtask(callerThreadId, role, input);
       const projectId = yield* taskCreateProject(role, input.projectId);
+      const intake = input.intake?.trim() ?? "";
+      if (intake.length === 0) {
+        return yield* teamError(
+          "task_create needs intake: one line on why this is new work. If it is a question, answer it or ask a read-only subagent. If it belongs to an open task, add it there with task_nudge(scope: true).",
+          role.projectId,
+        );
+      }
+      yield* refuseDuplicate(projectId, input.title, role.projectId);
       const waitsOn = (yield* checkWaitsOn(null, input.waitsOn ?? [], projectId)).map(
         (task) => task.id,
       );
@@ -1319,6 +1409,8 @@ const make = Effect.gen(function* () {
         author: "pm",
         authorThreadId: callerThreadId,
       });
+      // The intake goes first, so "created" stays the PM's latest action.
+      yield* appendEvent(task, "note", `Intake: ${intake}`, callerThreadId);
       yield* appendEvent(task, "created", task.title, callerThreadId);
       if (task.parentTaskId !== null) yield* syncEpic(task.parentTaskId);
       if (projectId !== role.projectId) {
@@ -1409,6 +1501,13 @@ const make = Effect.gen(function* () {
               );
             }
           }
+          const coveredBy = yield* breakdownCoverage(task);
+          if (coveredBy === null && task.parentTaskId !== null && (yield* isLeadDraft(task))) {
+            return yield* teamError(
+              `#${task.number} is a drafted subtask. It starts once the user approves its parent's plan, which covers the whole breakdown.`,
+              role.projectId,
+            );
+          }
           const memory = yield* repository.listMemory(role.projectId);
           const key = formatTaskKey(
             yield* taskKeyPrefixFor(role.projectId, manager.settings),
@@ -1433,6 +1532,9 @@ const make = Effect.gen(function* () {
               otherTasks: active,
               ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
               ...(userLanguage === null ? {} : { userLanguage }),
+              ...(coveredBy === null
+                ? {}
+                : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
             }),
             title: `${key} ${task.title}`,
             role: "implementation",
@@ -1455,6 +1557,10 @@ const make = Effect.gen(function* () {
             id: task.id,
             stage: "planning",
             leadThreadId: lead.childThreadId,
+            // The parent's approved breakdown is this subtask's approved plan.
+            ...(coveredBy === null || task.planSummary !== null
+              ? {}
+              : { planSummary: yield* coveredPlanSummary(task, coveredBy) }),
           });
           yield* repository.addTaskSession({
             taskId: started.id,
@@ -1714,6 +1820,52 @@ const make = Effect.gen(function* () {
         ),
       );
 
+  /** A subtask the parent's lead drafted with task_create, rather than one the PM or user added. */
+  const isLeadDraft = (task: ProjectTask) =>
+    repository
+      .getSpecVersion({ taskId: task.id, version: 1 })
+      .pipe(Effect.map((first) => Option.isSome(first) && first.value.author === "agent"));
+
+  /**
+   * The parent whose approved plan covers this subtask, or null. Approving a parent's
+   * plan approves its whole breakdown: every subtask its lead drafted before that card,
+   * and those the PM or the user filed under it. A subtask the lead drafts after the
+   * approval waits for the next one.
+   */
+  const breakdownCoverage = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      if (task.parentTaskId === null) return null;
+      const parent = yield* repository.getTask(task.parentTaskId);
+      if (Option.isNone(parent)) return null;
+      const approvals = (yield* repository.listAnsweredTaskAttentionItems({
+        taskId: parent.value.id,
+        kind: "approval",
+      })).filter((item) => item.answer !== null && planApprovalOutcome(item.answer) !== "changes");
+      if (approvals.length === 0) return null;
+      if (!(yield* isLeadDraft(task))) return parent.value;
+      const created = isoMillis(task.createdAt);
+      return approvals.some((item) => isoMillis(item.createdAt) >= created) ? parent.value : null;
+    });
+
+  /** A task's key, such as BU-7, in its own project's prefix. */
+  const keyOf = (task: Pick<ProjectTask, "projectId" | "number">) =>
+    Effect.gen(function* () {
+      const manager = yield* repository.getManager(task.projectId);
+      const prefix = yield* taskKeyPrefixFor(
+        task.projectId,
+        Option.isSome(manager) ? manager.value.settings : DEFAULT_PROJECT_TEAM_SETTINGS,
+      );
+      return formatTaskKey(prefix, task.number);
+    });
+
+  /** What a covered subtask's plan summary says: its line in the parent's breakdown. */
+  const coveredPlanSummary = (task: ProjectTask, parent: ProjectTask) =>
+    Effect.gen(function* () {
+      const parentSpec = yield* latestSpec(parent);
+      const line = parentSpec.spec.todos.find((todo) => todo.subtaskId === task.id)?.text;
+      return `Approved with ${yield* keyOf(parent)} ${parent.title}'s breakdown: ${clip(line ?? task.request, 1_500)}`;
+    });
+
   /**
    * Each stage needs the previous phase's output: starting work needs an approved plan
    * (coming back from review, a blocker or Done is fine), and In Review needs a pull
@@ -1728,7 +1880,8 @@ const make = Effect.gen(function* () {
       if (
         stage === "running" &&
         PRE_WORK_STAGES.has(task.stage) &&
-        !(yield* hasApprovedPlan(task))
+        !(yield* hasApprovedPlan(task)) &&
+        (yield* breakdownCoverage(task)) === null
       ) {
         return yield* teamError(
           `#${task.number} has no approved plan yet, so it cannot start. Write the plan with task_spec_write and ask for approval with ask_user(kind: "approval"); approving it starts the task.`,
@@ -1746,6 +1899,16 @@ const make = Effect.gen(function* () {
         if (unproven.length > 0) {
           return yield* teamError(
             `#${task.number} has success criteria without evidence: ${unproven.join(", ")}. Prove each one, then record it with task_evidence_set.`,
+            task.projectId,
+          );
+        }
+        // The pull request follows the user's PR rules; one that can't be read is let through.
+        const url = prUrl ?? task.prUrl;
+        const text = url === null ? Option.none() : yield* pullRequestText.read(url);
+        const problems = Option.isSome(text) ? pullRequestFormatProblems(text.value) : [];
+        if (problems.length > 0) {
+          return yield* teamError(
+            `The pull request does not follow the PR rules yet. Fix it with gh pr edit, then move to In Review again:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
             task.projectId,
           );
         }
@@ -1844,6 +2007,16 @@ const make = Effect.gen(function* () {
         yield* sitreps.noteMilestone(role.projectId);
       }
       if (stageChanged) yield* noteIdleMilestone(role.projectId, task.stage);
+      if (stageChanged && isDependencyCleared(updated.stage) && updated.parentTaskId !== null) {
+        const parent = yield* repository.getTask(updated.parentTaskId);
+        if (Option.isSome(parent)) {
+          const state = updated.stage === "done" ? "done" : "in review";
+          yield* wakeReadySubtasks(
+            parent.value,
+            `${yield* keyOf(updated)} ${updated.title} is ${state}.`,
+          );
+        }
+      }
       if (stageChanged && FinishedTaskCleanup.isFinishedStage(updated.stage)) {
         // A PM cancel stops the lead now; otherwise the lead's turn ends first.
         yield* finishedTasks.archiveLead(updated, {
@@ -1853,6 +2026,7 @@ const make = Effect.gen(function* () {
         // Reopened, like moving a Linear issue out of Done: the lead and worktree return.
         yield* finishedTasks.reviveLead(updated);
       }
+      if (stageChanged && updated.stage === "done") yield* finishParentIfDone(updated);
       yield* router.publish(role.projectId);
       return { task: updated };
     }).pipe(orTeamError("Could not update the task."));
@@ -1891,6 +2065,82 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => "the task lead's last message could not be read."),
     );
 
+  /** True when the lead logged anything (a note, spec version, stage) since the PM's last nudge. */
+  const leadProgressedSinceNudge = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      if (task.leadThreadId === null) return false;
+      const events = yield* repository.listTaskEvents({ taskId: task.id, limit: 50 });
+      const lastNudge = events.findLast((event) => event.kind === "nudge");
+      if (lastNudge === undefined) return false;
+      const since = isoMillis(lastNudge.createdAt);
+      return events.some(
+        (event) =>
+          event.actorThreadId === task.leadThreadId &&
+          event.kind !== "outcome" &&
+          isoMillis(event.createdAt) > since,
+      );
+    });
+
+  /**
+   * The PM adds the user's scope to a task. It is not a stall nudge, so it never counts
+   * toward escalation, and an open approval card closes: the plan it shows is now short
+   * of the scope, so the lead folds it in and asks again.
+   */
+  const addScope = (
+    callerThreadId: ThreadId,
+    task: ProjectTask,
+    leadThreadId: ThreadId,
+    note: string | undefined,
+  ) =>
+    Effect.gen(function* () {
+      if (note === undefined) {
+        return yield* teamError(
+          "A scope nudge needs a note with the scope to add.",
+          task.projectId,
+        );
+      }
+      const open = (yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      })).filter((item) => item.kind === "approval");
+      const now = yield* nowIso;
+      for (const item of open) {
+        yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: now });
+      }
+      const current =
+        open.length > 0 && task.stage === "awaiting_approval"
+          ? yield* moveTaskStage(task, "planning", callerThreadId)
+          : task;
+      const key = `project-team:scope:${yield* newId(task.id)}`;
+      yield* threads.sendToThread({
+        projectId: task.projectId,
+        commandId: CommandId.make(key),
+        threadId: leadThreadId,
+        messageId: MessageId.make(key),
+        senderThreadId: callerThreadId,
+        text: [
+          `[PM scope note] The user added scope: ${note}`,
+          open.length > 0
+            ? "Your approval card closed because the plan it showed lacks this. Fold it into the spec with task_spec_write and ask for approval again."
+            : PRE_APPROVAL_STAGES.has(current.stage)
+              ? "Fold it into your plan before you ask for approval."
+              : "Fold it into the spec and the work. If it changes the goal or the success criteria materially, ask for approval again.",
+        ].join(" "),
+        attachments: [],
+        mode: "auto",
+        createdBy: "agent",
+        creationSource: "server",
+      });
+      yield* appendEvent(
+        current,
+        "note",
+        `Scope added by the PM${open.length > 0 ? "; the open approval card closed" : ""}: ${note}`,
+        callerThreadId,
+      );
+      yield* router.publish(task.projectId);
+      return { status: "sent", task: current, attentionItem: null } as const;
+    });
+
   const nudgeTask: ProjectTeamService["Service"]["nudgeTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm"], "task_nudge");
@@ -1901,7 +2151,16 @@ const make = Effect.gen(function* () {
       if (task.stage === "done" || task.stage === "cancelled") {
         return yield* teamError(`#${task.number} is already ${task.stage}.`, role.projectId);
       }
-      if (task.nudgeCount >= MAX_TASK_NUDGES) {
+      if (input.scope === true) {
+        return yield* addScope(callerThreadId, task, task.leadThreadId, input.note);
+      }
+      // Escalate only a lead that did nothing since the last nudge; one that made
+      // progress starts its count again.
+      const counted =
+        task.nudgeCount >= MAX_TASK_NUDGES && (yield* leadProgressedSinceNudge(task))
+          ? yield* setTask({ id: task.id, nudgeCount: 0 })
+          : task;
+      if (counted.nudgeCount >= MAX_TASK_NUDGES) {
         const open = yield* repository.listOpenAttentionItems({
           projectId: role.projectId,
           taskId: task.id,
@@ -1937,7 +2196,7 @@ const make = Effect.gen(function* () {
         createdBy: "agent",
         creationSource: "server",
       });
-      const nudged = yield* setTask({ id: task.id, nudgeCount: task.nudgeCount + 1 });
+      const nudged = yield* setTask({ id: task.id, nudgeCount: counted.nudgeCount + 1 });
       yield* appendEvent(nudged, "nudge", input.note ?? "Continue.", callerThreadId);
       yield* router.publish(role.projectId);
       return { status: "sent", task: nudged, attentionItem: null } as const;
@@ -2295,6 +2554,15 @@ const make = Effect.gen(function* () {
     ...patch
   }) => applySettings(projectId, patch, null);
 
+  /** Subtasks a lead drafted under this task that have not started: its breakdown. */
+  const openDrafts = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      const children = (yield* repository.listChildTasks(task.id)).filter(
+        (child) => child.stage === "inbox",
+      );
+      return yield* Effect.filter(children, isLeadDraft);
+    });
+
   /**
    * A plan approval reviews the latest spec version. It replaces the task's older open
    * approval card and shows the task as Waiting for approval until the user answers.
@@ -2308,8 +2576,25 @@ const make = Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
         return yield* teamError(`#${task.number} is finished; it needs no plan approval.`);
       }
+      const coveredBy = yield* breakdownCoverage(task);
+      if (coveredBy !== null) {
+        const parentKey = yield* keyOf(coveredBy);
+        return yield* teamError(
+          `#${task.number} needs no approval card: the user approved it with ${parentKey} ${coveredBy.title}'s breakdown. Write your detailed plan with task_spec_write, then call task_update(stage: "running", planSummary). If its goal or verification must change materially, don't ask here: record it with task_update(note: "Breakdown change: ...") and end your turn, so ${parentKey}'s breakdown is re-approved once for all its subtasks.`,
+          task.projectId,
+        );
+      }
       const spec = yield* latestSpec(task);
-      const gaps = planReadinessGaps(spec.spec);
+      const unlinked = (yield* openDrafts(task)).filter(
+        (draft) => !spec.spec.todos.some((todo) => todo.subtaskId === draft.id),
+      );
+      const gaps = [
+        ...planReadinessGaps(spec.spec),
+        ...unlinked.map(
+          (draft) =>
+            `Subtask #${draft.number} "${draft.title}" has no todo: add one with subtaskId "${draft.id}" so the card shows it in the breakdown.`,
+        ),
+      ];
       if (gaps.length > 0) {
         return yield* teamError(
           `The plan in spec v${spec.version} is not ready for review. Fix these with task_spec_write, then ask again:\n${gaps.map((gap) => `- ${gap}`).join("\n")}`,
@@ -2378,6 +2663,12 @@ const make = Effect.gen(function* () {
         outcome === "start" ? "running" : outcome === "approve_only" ? "inbox" : "planning",
         actorThreadId,
       );
+      if (outcome !== "changes") {
+        yield* wakeReadySubtasks(
+          task,
+          `${yield* keyOf(task)} ${task.title}'s plan was approved with its breakdown.`,
+        );
+      }
     });
 
   const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
@@ -2712,6 +3003,83 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  /**
+   * Wakes the PM with the parent's approved subtasks that can start now: in the inbox,
+   * covered by the approval, and with every waitsOn in review or done.
+   */
+  const wakeReadySubtasks = (parent: ProjectTask, why: string) =>
+    Effect.gen(function* () {
+      const inbox = (yield* repository.listChildTasks(parent.id)).filter(
+        (child) => child.stage === "inbox",
+      );
+      const covered = yield* Effect.filter(inbox, (child) =>
+        breakdownCoverage(child).pipe(Effect.map((by) => by !== null)),
+      );
+      if (covered.length === 0) return;
+      const stages = new Map<string, ProjectTaskStage>();
+      for (const id of new Set(covered.flatMap((child) => child.waitsOn))) {
+        const dependency = yield* repository.getTask(id);
+        if (Option.isSome(dependency)) stages.set(id, dependency.value.stage);
+      }
+      const { ready, waiting } = splitReadySubtasks(covered, (id) => stages.get(id));
+      if (ready.length === 0) return;
+      const list = (tasks: ReadonlyArray<ProjectTask>) =>
+        tasks.map((task) => `#${task.number} ${task.title}`).join(", ");
+      yield* wakeManagerWith(
+        parent.projectId,
+        `project-team:ready:${parent.id}:${ready.map((task) => task.id).join(",")}`,
+        `[Ready to start] ${why} Start with task_start: ${list(ready)}.${
+          waiting.length === 0 ? "" : ` Still waiting on other tasks: ${list(waiting)}.`
+        }`,
+      );
+    }).pipe(
+      // A missed wake only delays the start; the change that caused it must not fail.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("waking the PM with ready subtasks failed", {
+          taskId: parent.id,
+          cause,
+        }),
+      ),
+    );
+
+  /** After a subtask is done: a parent whose subtasks are all finished becomes Done. */
+  const finishParentIfDone = (subtask: ProjectTask): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      if (subtask.parentTaskId === null) return;
+      const parent = yield* repository.getTask(subtask.parentTaskId);
+      if (Option.isNone(parent)) return;
+      // A Director epic follows its subtasks on its own; an unapproved parent is not done.
+      if (parent.value.stage !== "running" && parent.value.stage !== "in_review") return;
+      const manager = yield* repository.getManager(parent.value.projectId);
+      if (Option.isNone(manager) || manager.value.kind !== "pm") return;
+      const children = yield* repository.listChildTasks(parent.value.id);
+      if (!allSubtasksDone(children)) return;
+      const done = children.filter((child) => child.stage === "done").length;
+      const result = `All ${done} of its subtasks are done.`;
+      const finished = yield* setTask({
+        id: parent.value.id,
+        stage: "done",
+        resultSummary: result,
+      });
+      yield* appendEvent(finished, "stage_changed", `${parent.value.stage} → done`, null);
+      yield* appendEvent(finished, "summary", `Result: ${result}`, null);
+      yield* sitreps.noteMilestone(finished.projectId);
+      yield* finishedTasks.archiveLead(finished, { stopLead: false });
+      yield* wakeManagerWith(
+        finished.projectId,
+        `project-team:parent-done:${finished.id}`,
+        `#${finished.number} done: ${finished.title} · ${result}`,
+      );
+      yield* router.publish(finished.projectId);
+      // A finished parent may finish its own parent in turn.
+      yield* finishParentIfDone(finished);
+    }).pipe(
+      // The subtask's own update stands even if the parent cannot be finished.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("finishing a parent task failed", { taskId: subtask.id, cause }),
+      ),
+    );
+
   /** Queues a short server message for the PM, once per key; skipped when the PM is off or gone. */
   const wakeManagerWith = (projectId: ProjectId, key: string, text: string) =>
     Effect.gen(function* () {
@@ -2864,16 +3232,29 @@ const make = Effect.gen(function* () {
     });
 
   /** A plan approval card shows the summary and todos of the spec version it asks about. */
-  const approvalPlanFor = (item: ProjectAttentionItem) =>
-    item.kind !== "approval" || item.specVersion === null
+  const approvalPlanFor = (item: ProjectAttentionItem) => {
+    const specVersion = item.specVersion;
+    return item.kind !== "approval" || specVersion === null
       ? Effect.succeed(null)
-      : repository
-          .getSpecVersion({ taskId: item.taskId, version: item.specVersion })
-          .pipe(
-            Effect.map((version) =>
-              Option.isSome(version) ? approvalPlanOf(version.value.spec) : null,
-            ),
-          );
+      : Effect.gen(function* () {
+          const version = yield* repository.getSpecVersion({
+            taskId: item.taskId,
+            version: specVersion,
+          });
+          if (Option.isNone(version)) return null;
+          // The breakdown this one approval covers.
+          const subtasks = (yield* repository.listChildTasks(item.taskId))
+            .filter((child) => child.stage !== "cancelled")
+            .map((child) => ({
+              taskId: child.id,
+              number: child.number,
+              title: child.title,
+              request: child.request,
+              waitsOn: child.waitsOn,
+            }));
+          return approvalPlanOf(version.value.spec, subtasks);
+        });
+  };
 
   // Reading the PM transcript on every snapshot would be wasteful; the preview only
   // changes when a run settles or the user writes, which moves these shell fields.

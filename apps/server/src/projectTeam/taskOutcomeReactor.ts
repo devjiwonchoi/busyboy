@@ -17,6 +17,7 @@ import * as Stream from "effect/Stream";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import { untrustedFrame } from "../untrustedText.ts";
+import { PRE_APPROVAL_STAGES } from "./breakdown.ts";
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
 import { memoryOverBudgetNote } from "./memoryPrompt.ts";
@@ -59,7 +60,10 @@ export function classifyTaskOutcome(input: {
  * other projects are looked up in `otherStages`.
  */
 export function nextInboxTask(
-  tasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>,
+  tasks: ReadonlyArray<
+    Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn"> &
+      Partial<Pick<ProjectTask, "parentTaskId">>
+  >,
   otherStages: ReadonlyMap<string, ProjectTask["stage"]> = new Map(),
 ): Pick<ProjectTask, "number"> | null {
   const stageById = new Map<string, ProjectTask["stage"]>([
@@ -68,6 +72,11 @@ export function nextInboxTask(
   ]);
   const ready = tasks
     .filter((task) => task.stage === "inbox")
+    // A subtask whose parent's plan is not approved yet is a draft in its breakdown.
+    .filter((task) => {
+      const parentStage = task.parentTaskId == null ? undefined : stageById.get(task.parentTaskId);
+      return parentStage === undefined || !PRE_APPROVAL_STAGES.has(parentStage);
+    })
     .filter((task) =>
       task.waitsOn.every((dependencyId) => {
         const stage = stageById.get(dependencyId);
@@ -100,7 +109,10 @@ export function outcomeWakeText(input: {
   readonly outcome: ProjectTaskOutcome;
   /** The task's outcome before this turn. */
   readonly previousOutcome: ProjectTaskOutcome | null;
-  readonly projectTasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>;
+  readonly projectTasks: ReadonlyArray<
+    Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn"> &
+      Partial<Pick<ProjectTask, "parentTaskId">>
+  >;
   /** Stages of dependencies in other projects, by task id. */
   readonly otherStages?: ReadonlyMap<string, ProjectTask["stage"]>;
   readonly maxConcurrentTasks: number;

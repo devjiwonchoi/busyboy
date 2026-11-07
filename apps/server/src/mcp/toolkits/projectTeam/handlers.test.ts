@@ -85,27 +85,38 @@ const call = (caller: ThreadId, name: string, args: Record<string, unknown>) =>
 const content = (result: McpSchema.CallToolResult) => result.structuredContent as any;
 
 describe("projectTeam MCP toolkit", () => {
-  it.effect("keeps PM tools from task leads and ask_user from the PM", () =>
-    withTeam((harness) =>
-      Effect.gen(function* () {
-        const pm = yield* setUpManager;
-        const created = yield* call(pm, "task_create", { title: "A", request: "Do A." });
-        assert.isFalse(created.isError);
-        const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
-        assert.isFalse(started.isError);
-        const lead = content(started).leadThreadId as ThreadId;
+  it.effect(
+    "keeps PM tools from task leads, lets leads draft subtasks, and keeps ask_user from the PM",
+    () =>
+      withTeam((harness) =>
+        Effect.gen(function* () {
+          const pm = yield* setUpManager;
+          const created = yield* call(pm, "task_create", {
+            intake: "New work.",
+            title: "A",
+            request: "Do A.",
+          });
+          assert.isFalse(created.isError);
+          const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
+          assert.isFalse(started.isError);
+          const lead = content(started).leadThreadId as ThreadId;
 
-        const leadCreate = yield* call(lead, "task_create", { title: "B", request: "Do B." });
-        assert.isTrue(leadCreate.isError);
-        assert.include(JSON.stringify(leadCreate.content), "not available to a task lead");
+          const leadStart = yield* call(lead, "task_start", { taskId: content(created).task.id });
+          assert.isTrue(leadStart.isError);
+          assert.include(JSON.stringify(leadStart.content), "not available to a task lead");
 
-        const pmAsk = yield* call(pm, "ask_user", { kind: "decision", question: "Which?" });
-        assert.isTrue(pmAsk.isError);
-        assert.include(JSON.stringify(pmAsk.content), "not available to a PM");
-      }).pipe(
-        Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
+          // A lead's task_create drafts a subtask of its own task.
+          const leadCreate = yield* call(lead, "task_create", { title: "B", request: "Do B." });
+          assert.isFalse(leadCreate.isError);
+          assert.strictEqual(content(leadCreate).task.parentTaskId, content(created).task.id);
+
+          const pmAsk = yield* call(pm, "ask_user", { kind: "decision", question: "Which?" });
+          assert.isTrue(pmAsk.isError);
+          assert.include(JSON.stringify(pmAsk.content), "not available to a PM");
+        }).pipe(
+          Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
+        ),
       ),
-    ),
   );
 
   it.effect("runs create, start, ask_user and attention_answer end to end", () =>
@@ -115,6 +126,7 @@ describe("projectTeam MCP toolkit", () => {
         return yield* Effect.gen(function* () {
           const pm = yield* setUpManager;
           const created = yield* call(pm, "task_create", {
+            intake: "New work.",
             title: "Add hello.sh",
             request: "Add hello.sh with a test.",
           });
@@ -169,7 +181,11 @@ describe("projectTeam MCP toolkit", () => {
         const pm = yield* setUpManager;
         const startTask = (title: string) =>
           Effect.gen(function* () {
-            const created = yield* call(pm, "task_create", { title, request: `${title}.` });
+            const created = yield* call(pm, "task_create", {
+              intake: "New work.",
+              title,
+              request: `${title}.`,
+            });
             const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
             return {
               taskId: content(created).task.id as string,

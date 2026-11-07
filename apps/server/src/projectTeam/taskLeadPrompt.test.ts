@@ -109,7 +109,8 @@ describe("buildTaskLeadPrompt", () => {
     );
     // The structured plan and its gates.
     expect(prompt).toContain("goal: the end state.");
-    expect(prompt).not.toContain("verification");
+    // The card no longer takes goal and verification bullets.
+    expect(prompt).not.toContain("goal and verification");
     expect(prompt).toContain("provenBy: how you will prove it");
     expect(prompt).toContain(
       "Every criterion needs a todo that builds it, and every todo serves a criterion.",
@@ -184,6 +185,32 @@ describe("buildTaskLeadPrompt", () => {
     const prompt = buildTaskLeadPrompt({ ...base, resume: true, memory: [], otherTasks: [] });
     expect(prompt).not.toContain("1. planning:");
     expect(prompt).toContain("The plan above is already approved, so start here");
+  });
+
+  it("lets a subtask covered by its parent's approved breakdown skip the approval card", () => {
+    const prompt = buildTaskLeadPrompt({
+      ...base,
+      memory: [],
+      otherTasks: [],
+      coveredBy: { key: "BB-9", title: "Workflow system" },
+    });
+    expect(prompt).toMatchSnapshot();
+    expect(prompt).toContain('This task is a subtask of BB-9 "Workflow system".');
+    expect(prompt).toContain('do not call ask_user(kind: "approval"), the server refuses it');
+    expect(prompt).toContain('task_update(note: "Breakdown change: ...")');
+    expect(prompt).toContain("Once your plan is in the spec, call task_update");
+    expect(prompt).not.toContain('Then call ask_user(kind: "approval")');
+  });
+
+  it("teaches the breakdown and the PR rules", () => {
+    const prompt = buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] });
+    expect(prompt).toContain("draft one subtask per pull request with task_create");
+    expect(prompt).toContain("One approval of your plan approves every subtask");
+    expect(prompt).toContain('Title: short, an action verb + change, such as "Fix login redirect"');
+    expect(prompt).toContain("### Why?\n\n     <the problem and why it matters>");
+    expect(prompt).toContain("no test or validation notes, no task key");
+    expect(prompt).toContain('"Stacked on #<parent PR>." before ### Why?');
+    expect(prompt).toContain("Open it ready for review, not as a draft.");
   });
 
   it("keeps decisions whole and indexes other topics when the memory is too long", () => {

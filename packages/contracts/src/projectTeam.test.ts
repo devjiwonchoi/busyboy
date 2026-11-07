@@ -249,6 +249,7 @@ describe("task keys", () => {
         },
         { id: "t2", text: "Add a test", done: false, doneWhen: "it passes", dependsOn: ["t1"] },
       ],
+      subtasks: [],
     });
   });
 

@@ -436,11 +436,12 @@ describe("TaskOutcomeReactor", () => {
         const first = yield* startLead(pm, "First", harness.delegate);
         const base = yield* startLead(pm, "Base", harness.delegate);
         yield* team.createTask(pm, {
+          intake: "New work.",
           title: "After base",
           request: "After base.",
           waitsOn: [base.task.id],
         });
-        yield* team.createTask(pm, { title: "Free", request: "Free." });
+        yield* team.createTask(pm, { intake: "New work.", title: "Free", request: "Free." });
         yield* team.updateTask(first.leadThreadId, { stage: "done" });
 
         yield* reactor.handle(
@@ -465,7 +466,7 @@ describe("TaskOutcomeReactor", () => {
         const team = yield* ProjectTeamService.ProjectTeamService;
         const pm = yield* setUpManager;
         const reviewed = yield* startLead(pm, "Reviewed", harness.delegate);
-        yield* team.createTask(pm, { title: "Next", request: "Next." });
+        yield* team.createTask(pm, { intake: "New work.", title: "Next", request: "Next." });
         yield* team.updateTask(reviewed.leadThreadId, {
           stage: "in_review",
           prUrl: "https://github.com/acme/repo/pull/1",
@@ -497,9 +498,18 @@ describe("TaskOutcomeReactor", () => {
         harness.addProject(otherProject, "Website");
         const pm = yield* setUpManager;
         const otherPm = (yield* team.ensureManager(otherProject)).threadId;
-        const { task: api } = yield* team.createTask(otherPm, { title: "API", request: "API." });
+        const { task: api } = yield* team.createTask(otherPm, {
+          intake: "New work.",
+          title: "API",
+          request: "API.",
+        });
         const first = yield* startLead(pm, "First", harness.delegate);
-        yield* team.createTask(pm, { title: "UI", request: "UI.", waitsOn: [api.id] });
+        yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "UI",
+          request: "UI.",
+          waitsOn: [api.id],
+        });
         yield* team.updateTask(otherPm, {
           taskId: api.id,
           stage: "in_review",
@@ -589,7 +599,7 @@ describe("TaskOutcomeReactor", () => {
         yield* startLead(pm, "Busy one", harness.delegate);
         yield* team.updateTask(finished.leadThreadId, { stage: "done" });
         yield* startLead(pm, "Busy two", harness.delegate);
-        yield* team.createTask(pm, { title: "Queued", request: "Queued." });
+        yield* team.createTask(pm, { intake: "New work.", title: "Queued", request: "Queued." });
 
         yield* reactor.handle(
           leadTurnEnded({

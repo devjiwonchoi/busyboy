@@ -40,6 +40,8 @@ import * as AttentionRouter from "./AttentionRouter.ts";
 import * as ContextCare from "./ContextCare.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
+import type { PullRequestText } from "./pullRequestFormat.ts";
+import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
@@ -95,6 +97,8 @@ export interface TeamHarness {
   readonly addScratchProject: (projectId: ProjectId) => void;
   /** Registers a fake thread for a lead started by `delegate` so tests can set its state. */
   readonly addThread: (threadId: ThreadId) => FakeThread;
+  /** Pull requests the In Review gate reads, by URL; one missing here can't be read. */
+  readonly pullRequests: Map<string, PullRequestText>;
   /** Server messages dispatched to a thread. */
   readonly messagesTo: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<string>>;
 }
@@ -336,6 +340,7 @@ export const withTeam = <A, E>(
         Effect.sync(() => ({ refName: harness.checkedOutBranch(input.cwd) }) as never),
     });
     const sendFailures = { remaining: 0 };
+    const pullRequests = new Map<string, PullRequestText>();
     const providerRegistry = Layer.mock(ProviderRegistry.ProviderRegistry)({
       getProviders: Effect.sync(() => [...providers]),
       refresh: () => Effect.sync(() => [...providers]),
@@ -370,6 +375,7 @@ export const withTeam = <A, E>(
           NodeCrypto.layer,
           managedProjectFolders,
           Path.layer,
+          PullRequestTextReader.layerTest((url) => Option.fromNullishOr(pullRequests.get(url))),
         ),
       ),
       Layer.provideMerge(
@@ -388,6 +394,7 @@ export const withTeam = <A, E>(
       delegated,
       sendFailures,
       providers,
+      pullRequests,
       checkedOutBranch: () => null,
       onArchive: () => Effect.void,
       onRestore: () => Effect.void,
@@ -451,7 +458,11 @@ export const startLead = (
 ) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
-    const { task } = yield* team.createTask(pm, { title, request: `${title}.` });
+    const { task } = yield* team.createTask(pm, {
+      intake: "New work.",
+      title,
+      request: `${title}.`,
+    });
     return yield* team.startTask(pm, { taskId: task.id }, delegate);
   });
 
