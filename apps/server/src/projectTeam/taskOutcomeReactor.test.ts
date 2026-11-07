@@ -4,6 +4,7 @@ import {
   MessageId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2Run,
+  ProjectId,
   ProviderInstanceId,
   RunId,
   ThreadId,
@@ -485,6 +486,36 @@ describe("TaskOutcomeReactor", () => {
     ),
   );
 
+  it.effect("names an inbox task as next when its dependency in another project is in review", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const otherProject = ProjectId.make("project-2");
+        harness.addProject(otherProject, "Website");
+        const pm = yield* setUpManager;
+        const otherPm = (yield* team.ensureManager(otherProject)).threadId;
+        const { task: api } = yield* team.createTask(otherPm, { title: "API", request: "API." });
+        const first = yield* startLead(pm, "First", harness.delegate);
+        yield* team.createTask(pm, { title: "UI", request: "UI.", waitsOn: [api.id] });
+        yield* team.updateTask(otherPm, { taskId: api.id, stage: "in_review" });
+        yield* team.updateTask(first.leadThreadId, { stage: "done" });
+
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: first.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:01:00.000Z",
+          }),
+        );
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), [
+          "[Dependency cleared] WE-1 API in Website is in review. Ready to start: #2 UI.",
+          `#1 done: First · #2 is next in the inbox\n${foldLine(1)}`,
+        ]);
+      }),
+    ),
+  );
+
   it.effect("wakes the PM with the title and result when a task finishes with an empty inbox", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -643,5 +674,14 @@ describe("nextInboxTask", () => {
       2,
     );
     assert.isNull(nextInboxTask([task("a", 1, "running"), task("b", 2, "inbox", ["a"])]));
+  });
+
+  it("reads dependencies in other projects from their stages", () => {
+    const task = (id: string, number: number, stage: string, waitsOn: Array<string> = []) =>
+      ({ id, number, stage, waitsOn }) as never;
+    const tasks = [task("b", 2, "inbox", ["elsewhere"])];
+    assert.isNull(nextInboxTask(tasks));
+    assert.isNull(nextInboxTask(tasks, new Map([["elsewhere", "running"]])));
+    assert.strictEqual(nextInboxTask(tasks, new Map([["elsewhere", "done"]]))?.number, 2);
   });
 });

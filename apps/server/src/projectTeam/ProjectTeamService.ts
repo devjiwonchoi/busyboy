@@ -143,6 +143,9 @@ import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 export const MAX_TASK_NUDGES = 2;
 const DEFAULT_TASK_EVENT_LIMIT = 20;
 /** Stages the PM presence counts; done and cancelled tasks never show. */
+/** A task waiting on another may start once that one is in review or done. */
+const isDependencyCleared = (stage: ProjectTaskStage) => stage === "in_review" || stage === "done";
+
 const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
   "inbox",
   "planning",
@@ -789,6 +792,86 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  /** A task in any project: waitsOn and parents may cross projects. */
+  const requireAnyTask = (taskId: ProjectTaskId, projectId: ProjectId) =>
+    repository.getTask(taskId).pipe(
+      orTeamError("Could not read the task.", projectId),
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(teamError(`Task ${taskId} was not found.`, projectId)),
+          onSome: Effect.succeed,
+        }),
+      ),
+    );
+
+  /**
+   * Checks the tasks a task would wait on: they exist in some project, and none of them
+   * already waits on the task, directly or through other tasks. Returns them deduplicated.
+   */
+  const checkWaitsOn = (
+    taskId: ProjectTaskId | null,
+    waitsOn: ReadonlyArray<ProjectTaskId>,
+    projectId: ProjectId,
+  ) =>
+    Effect.gen(function* () {
+      const dependencies: Array<ProjectTask> = [];
+      for (const id of new Set(waitsOn)) {
+        if (id === taskId) return yield* teamError("A task can't wait on itself.", projectId);
+        dependencies.push(yield* requireAnyTask(id, projectId));
+      }
+      if (taskId === null) return dependencies;
+      const seen = new Set<string>();
+      const stack = dependencies.map((task) => ({ task, root: task }));
+      while (stack.length > 0) {
+        const { task, root } = stack.pop()!;
+        if (seen.has(task.id)) continue;
+        seen.add(task.id);
+        for (const next of task.waitsOn) {
+          if (next === taskId) {
+            return yield* teamError(
+              `Waiting on #${root.number} ${root.title} would make a cycle: it already waits on this task, directly or through other tasks.`,
+              projectId,
+            );
+          }
+          const found = yield* repository
+            .getTask(next)
+            .pipe(orTeamError("Could not read the task.", projectId));
+          if (Option.isSome(found)) stack.push({ task: found.value, root });
+        }
+      }
+      return dependencies;
+    });
+
+  /** Checks a parent: it exists in some project and is not the task or one of its subtasks. */
+  const checkParent = (
+    taskId: ProjectTaskId | null,
+    parentTaskId: ProjectTaskId,
+    projectId: ProjectId,
+  ) =>
+    Effect.gen(function* () {
+      if (parentTaskId === taskId) {
+        return yield* teamError("A task can't be its own parent.", projectId);
+      }
+      const parent = yield* requireAnyTask(parentTaskId, projectId);
+      const seen = new Set<string>();
+      let current: ProjectTask = parent;
+      while (current.parentTaskId !== null && !seen.has(current.id)) {
+        seen.add(current.id);
+        if (current.parentTaskId === taskId) {
+          return yield* teamError(
+            `#${parent.number} ${parent.title} can't be the parent: it is already part of this task.`,
+            projectId,
+          );
+        }
+        const next = yield* repository
+          .getTask(current.parentTaskId)
+          .pipe(orTeamError("Could not read the task.", projectId));
+        if (Option.isNone(next)) break;
+        current = next.value;
+      }
+      return parent;
+    });
+
   const appendEvent = (
     task: Pick<ProjectTask, "id" | "projectId">,
     kind: ProjectTaskEventKind,
@@ -810,8 +893,20 @@ const make = Effect.gen(function* () {
   const setTask = (input: Omit<ProjectTeamRepository.UpdateProjectTaskInput, "now">) =>
     Effect.gen(function* () {
       const now = yield* nowIso;
+      // Only a move into in_review/done can clear tasks waiting on this one.
+      const before =
+        input.stage !== undefined && isDependencyCleared(input.stage)
+          ? yield* repository.getTask(input.id)
+          : Option.none<ProjectTask>();
       const updated = yield* repository.updateTask({ ...input, now });
       if (Option.isNone(updated)) return yield* teamError(`Task ${input.id} was not found.`);
+      if (
+        Option.isSome(before) &&
+        !isDependencyCleared(before.value.stage) &&
+        isDependencyCleared(updated.value.stage)
+      ) {
+        yield* wakeUnblockedProjects(updated.value);
+      }
       // A finished task's questions can no longer be answered, so close them.
       if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
         yield* repository.supersedeOpenAttentionItems({
@@ -1120,16 +1215,19 @@ const make = Effect.gen(function* () {
   const createTask: ProjectTeamService["Service"]["createTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm"], "task_create");
-      const waitsOn = input.waitsOn ?? [];
-      yield* Effect.forEach(waitsOn, (taskId) => requireTask(taskId, role.projectId), {
-        discard: true,
-      });
+      const waitsOn = (yield* checkWaitsOn(null, input.waitsOn ?? [], role.projectId)).map(
+        (task) => task.id,
+      );
+      if (input.parentTaskId !== undefined) {
+        yield* checkParent(null, input.parentTaskId, role.projectId);
+      }
       const task = yield* repository.createTask({
         id: ProjectTaskId.make(yield* newId("task")),
         projectId: role.projectId,
         title: input.title,
         request: input.request,
         waitsOn,
+        parentTaskId: input.parentTaskId,
         now: yield* nowIso,
         author: "pm",
         authorThreadId: callerThreadId,
@@ -1159,8 +1257,8 @@ const make = Effect.gen(function* () {
             );
           }
           for (const dependencyId of task.waitsOn) {
-            const dependency = yield* requireTask(dependencyId, role.projectId);
-            if (dependency.stage !== "done" && dependency.stage !== "in_review") {
+            const dependency = yield* requireAnyTask(dependencyId, role.projectId);
+            if (!isDependencyCleared(dependency.stage)) {
               return yield* teamError(
                 `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`,
                 role.projectId,
@@ -1333,8 +1431,29 @@ const make = Effect.gen(function* () {
         return yield* teamError("A task lead can only update its own task.", role.projectId);
       }
       const task = yield* requireTask(taskId, role.projectId);
+      const structural =
+        input.title !== undefined ||
+        input.waitsOn !== undefined ||
+        input.parentTaskId !== undefined;
+      if (role.type === "lead" && structural) {
+        return yield* teamError(
+          "Only the PM can change a task's title, waitsOn or parent.",
+          role.projectId,
+        );
+      }
+      const dependencies =
+        input.waitsOn === undefined
+          ? undefined
+          : yield* checkWaitsOn(task.id, input.waitsOn, role.projectId);
+      const parent =
+        input.parentTaskId === undefined || input.parentTaskId === null
+          ? input.parentTaskId
+          : yield* checkParent(task.id, input.parentTaskId, role.projectId);
       const updated = yield* setTask({
         id: task.id,
+        ...(input.title === undefined ? {} : { title: input.title }),
+        ...(dependencies === undefined ? {} : { waitsOn: dependencies.map((dep) => dep.id) }),
+        ...(parent === undefined ? {} : { parentTaskId: parent === null ? null : parent.id }),
         ...(input.stage === undefined ? {} : { stage: input.stage }),
         ...(input.planSummary === undefined ? {} : { planSummary: input.planSummary }),
         ...(input.resultSummary === undefined ? {} : { resultSummary: input.resultSummary }),
@@ -1360,6 +1479,18 @@ const make = Effect.gen(function* () {
       }
       if (input.note !== undefined) {
         yield* appendEvent(updated, "note", input.note, callerThreadId);
+      }
+      if (input.title !== undefined && input.title !== task.title) {
+        yield* appendEvent(updated, "note", `Renamed from "${task.title}"`, callerThreadId);
+      }
+      if (dependencies !== undefined) {
+        const list = dependencies.map((dep) => `#${dep.number} ${dep.title}`).join(", ");
+        const body = list.length === 0 ? "Waits on nothing" : `Waits on ${list}`;
+        yield* appendEvent(updated, "note", body, callerThreadId);
+      }
+      if (parent !== undefined) {
+        const body = parent === null ? "No parent" : `Part of #${parent.number} ${parent.title}`;
+        yield* appendEvent(updated, "note", body, callerThreadId);
       }
       if (
         (stageChanged && updated.stage === "done") ||
@@ -2105,6 +2236,55 @@ const make = Effect.gen(function* () {
       yield* afterPlanApprovalAnswer(answered, null);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
+
+  /**
+   * Wakes the PM of every other project with an inbox task that this task just cleared:
+   * all of that task's waitsOn are now in review or done. Its own PM hears it from the
+   * outcome wake, so same-project tasks are left out.
+   */
+  const wakeUnblockedProjects = (dependency: ProjectTask) =>
+    Effect.gen(function* () {
+      const waiting = (yield* repository.listTasksWaitingOn(dependency.id)).filter(
+        (task) => task.projectId !== dependency.projectId && task.stage === "inbox",
+      );
+      if (waiting.length === 0) return;
+      const readyByProject = new Map<ProjectId, Array<ProjectTask>>();
+      for (const task of waiting) {
+        let ready = true;
+        for (const id of task.waitsOn) {
+          if (id === dependency.id) continue;
+          const other = yield* repository.getTask(id);
+          if (Option.isNone(other) || !isDependencyCleared(other.value.stage)) ready = false;
+        }
+        if (!ready) continue;
+        readyByProject.set(task.projectId, [...(readyByProject.get(task.projectId) ?? []), task]);
+      }
+      if (readyByProject.size === 0) return;
+      const manager = yield* repository.getManager(dependency.projectId);
+      const prefix = yield* taskKeyPrefixFor(
+        dependency.projectId,
+        Option.isSome(manager) ? manager.value.settings : DEFAULT_PROJECT_TEAM_SETTINGS,
+      );
+      const project = yield* projects.get(dependency.projectId);
+      const from = Option.isSome(project) ? ` in ${project.value.title}` : "";
+      const state = dependency.stage === "done" ? "done" : "in review";
+      for (const [projectId, tasks] of readyByProject) {
+        const ready = tasks.map((task) => `#${task.number} ${task.title}`).join(", ");
+        yield* wakeManagerWith(
+          projectId,
+          `project-team:unblocked:${yield* newId(dependency.id)}`,
+          `[Dependency cleared] ${formatTaskKey(prefix, dependency.number)} ${dependency.title}${from} is ${state}. Ready to start: ${ready}.`,
+        );
+      }
+    }).pipe(
+      // A missed wake only delays the start; the stage change itself must not fail.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("waking PMs of unblocked tasks failed", {
+          taskId: dependency.id,
+          cause,
+        }),
+      ),
+    );
 
   /** Queues a short server message for the PM, once per key; skipped when the PM is off or gone. */
   const wakeManagerWith = (projectId: ProjectId, key: string, text: string) =>

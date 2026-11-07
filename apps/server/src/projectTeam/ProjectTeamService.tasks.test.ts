@@ -5,11 +5,13 @@ import * as NodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import {
   ChatAttachmentId,
+  ProjectId,
   PLAN_APPROVAL_START,
   ProjectTaskId,
   ThreadId,
   formatPlanReviewFeedback,
 } from "@t3tools/contracts";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
@@ -18,7 +20,7 @@ import { createPendingAttachmentId } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { PROJECT_ID, setUpManager, userMessage, withTeam } from "./testkit.ts";
+import { PROJECT_ID, setUpManager, startLead, userMessage, withTeam } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 
@@ -703,4 +705,181 @@ describe("isUserChatAnswer", () => {
     assert.isFalse(ProjectTeamService.isUserChatAnswer("B", said("maybe later"), 0));
     assert.isFalse(ProjectTeamService.isUserChatAnswer("approve", said("I don't approved it"), 0));
   });
+});
+
+describe("task dependencies", () => {
+  const OTHER_PROJECT_ID = ProjectId.make("project-2");
+
+  const eventBodies = (taskId: ProjectTaskId) =>
+    Effect.gen(function* () {
+      const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+      const events = yield* repository.listProjectEventsSince({
+        projectId: PROJECT_ID,
+        since: "2000-01-01T00:00:00.000Z",
+      });
+      return events.filter((event) => event.taskId === taskId).map((event) => event.body);
+    });
+
+  it.effect("lets the PM wait on and nest under tasks in other projects, and rename tasks", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        harness.addProject(OTHER_PROJECT_ID, "Website");
+        const pm = yield* setUpManager;
+        const otherPm = (yield* team.ensureManager(OTHER_PROJECT_ID)).threadId;
+        const { task: api } = yield* team.createTask(otherPm, { title: "API", request: "API." });
+
+        const { task: ui } = yield* team.createTask(pm, {
+          title: "BU-53 A: UI",
+          request: "UI.",
+          waitsOn: [api.id, api.id],
+          parentTaskId: api.id,
+        });
+        assert.deepStrictEqual(ui.waitsOn, [api.id]);
+        assert.strictEqual(ui.parentTaskId, api.id);
+
+        // The cross-project dependency still gates the start.
+        const refused = yield* team
+          .startTask(pm, { taskId: ui.id }, harness.delegate)
+          .pipe(Effect.flip);
+        assert.include(refused.message, "waits on #1, which is inbox");
+
+        const { task: renamed } = yield* team.updateTask(pm, {
+          taskId: ui.id,
+          title: "UI",
+          waitsOn: [],
+          parentTaskId: null,
+        });
+        assert.strictEqual(renamed.title, "UI");
+        assert.deepStrictEqual(renamed.waitsOn, []);
+        assert.isNull(renamed.parentTaskId);
+        assert.includeMembers(yield* eventBodies(ui.id), [
+          'Renamed from "BU-53 A: UI"',
+          "Waits on nothing",
+          "No parent",
+        ]);
+
+        const { task: nested } = yield* team.updateTask(pm, {
+          taskId: ui.id,
+          parentTaskId: api.id,
+        });
+        assert.strictEqual(nested.parentTaskId, api.id);
+        assert.strictEqual(nested.title, "UI");
+        assert.include(yield* eventBodies(ui.id), "Part of #1 API");
+
+        const unknown = yield* team
+          .updateTask(pm, { taskId: ui.id, waitsOn: [ProjectTaskId.make("task:missing")] })
+          .pipe(Effect.flip);
+        assert.include(unknown.message, "task:missing was not found");
+      }),
+    ),
+  );
+
+  it.effect("refuses waitsOn and parent cycles, also across projects", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        harness.addProject(OTHER_PROJECT_ID, "Website");
+        const pm = yield* setUpManager;
+        const otherPm = (yield* team.ensureManager(OTHER_PROJECT_ID)).threadId;
+        const { task: a } = yield* team.createTask(pm, { title: "A", request: "A." });
+        const { task: b } = yield* team.createTask(pm, {
+          title: "B",
+          request: "B.",
+          waitsOn: [a.id],
+        });
+        const { task: c } = yield* team.createTask(otherPm, {
+          title: "C",
+          request: "C.",
+          waitsOn: [b.id],
+          parentTaskId: a.id,
+        });
+
+        const self = yield* team
+          .updateTask(pm, { taskId: a.id, waitsOn: [a.id] })
+          .pipe(Effect.flip);
+        assert.include(self.message, "can't wait on itself");
+        const loop = yield* team
+          .updateTask(pm, { taskId: a.id, waitsOn: [c.id] })
+          .pipe(Effect.flip);
+        assert.include(loop.message, "Waiting on #1 C would make a cycle");
+        const ownParent = yield* team
+          .updateTask(pm, { taskId: a.id, parentTaskId: a.id })
+          .pipe(Effect.flip);
+        assert.include(ownParent.message, "can't be its own parent");
+        const parentLoop = yield* team
+          .updateTask(pm, { taskId: a.id, parentTaskId: c.id })
+          .pipe(Effect.flip);
+        assert.include(parentLoop.message, "already part of this task");
+
+        // Nothing changed.
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const stored = (yield* repository.getTask(a.id)).pipe(Option.getOrThrow);
+        assert.deepStrictEqual(stored.waitsOn, []);
+        assert.isNull(stored.parentTaskId);
+      }),
+    ),
+  );
+
+  it.effect("keeps a task's title, waitsOn and parent for the PM", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const started = yield* startLead(pm, "Lead task", harness.delegate);
+        for (const change of [{ title: "Mine now" }, { waitsOn: [] }, { parentTaskId: null }]) {
+          const refused = yield* team.updateTask(started.leadThreadId, change).pipe(Effect.flip);
+          assert.include(refused.message, "Only the PM can change");
+        }
+      }),
+    ),
+  );
+
+  it.effect("wakes another project's PM once when its inbox task's last dependency clears", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        harness.addProject(OTHER_PROJECT_ID, "Website");
+        const pm = yield* setUpManager;
+        const otherPm = (yield* team.ensureManager(OTHER_PROJECT_ID)).threadId;
+        const { task: schema } = yield* team.createTask(otherPm, {
+          title: "Schema",
+          request: "Schema.",
+        });
+        const api = yield* startLead(otherPm, "API", harness.delegate);
+        const { task: ui } = yield* team.createTask(pm, {
+          title: "UI",
+          request: "UI.",
+          waitsOn: [schema.id, api.task.id],
+        });
+        // Waiting on something that's already running elsewhere doesn't wake anyone.
+        yield* team.createTask(pm, { title: "Docs", request: "Docs.", waitsOn: [api.task.id] });
+        yield* team.updateTask(pm, { taskId: ui.id, note: "Planned." });
+        const before = (yield* harness.messagesTo(pm)).length;
+
+        // One of two dependencies clears: still blocked.
+        yield* team.updateTask(api.leadThreadId, {
+          stage: "in_review",
+          prUrl: "https://github.com/acme/web/pull/1",
+        });
+        const afterFirst = (yield* harness.messagesTo(pm)).slice(before);
+        assert.deepStrictEqual(afterFirst, [
+          "[Dependency cleared] WE-2 API in Website is in review. Ready to start: #2 Docs.",
+        ]);
+
+        // The last one clears: the PM hears that UI is ready.
+        yield* team.updateTask(otherPm, { taskId: schema.id, stage: "done" });
+        // Moving on from in review to done is not a new unblock.
+        yield* team.updateTask(api.leadThreadId, { stage: "done" });
+        assert.deepStrictEqual((yield* harness.messagesTo(pm)).slice(before), [
+          "[Dependency cleared] WE-2 API in Website is in review. Ready to start: #2 Docs.",
+          "[Dependency cleared] WE-1 Schema in Website is done. Ready to start: #1 UI.",
+        ]);
+        assert.notInclude((yield* harness.messagesTo(otherPm)).join("\n"), "[Dependency cleared]");
+
+        const started = yield* team.startTask(pm, { taskId: ui.id }, harness.delegate);
+        assert.strictEqual(started.task.stage, "planning");
+      }),
+    ),
+  );
 });

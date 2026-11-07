@@ -82,7 +82,10 @@ export interface UpdateProjectTaskInput {
   readonly id: ProjectTaskId;
   readonly now: IsoDateTime;
   readonly stage?: ProjectTaskStage;
+  readonly title?: string;
   readonly waitsOn?: ReadonlyArray<ProjectTaskId>;
+  /** null removes the parent. */
+  readonly parentTaskId?: ProjectTaskId | null;
   readonly leadThreadId?: ThreadId;
   readonly prUrl?: string;
   readonly planSummary?: string;
@@ -179,6 +182,8 @@ export class ProjectTeamRepository extends Context.Service<
     }) => Result<ReadonlyArray<ProjectTask>>;
     readonly findTaskByLeadThreadId: (threadId: ThreadId) => Result<Option.Option<ProjectTask>>;
     readonly listChildTasks: (parentTaskId: ProjectTaskId) => Result<ReadonlyArray<ProjectTask>>;
+    /** Tasks in any project whose waitsOn includes the task. */
+    readonly listTasksWaitingOn: (taskId: ProjectTaskId) => Result<ReadonlyArray<ProjectTask>>;
 
     /** Oldest first. */
     readonly listSpecVersions: (
@@ -582,7 +587,9 @@ export const make = Effect.gen(function* () {
       id: ProjectTaskId,
       now: IsoDateTime,
       stage: Schema.optional(ProjectTaskStage),
+      title: Schema.optional(Schema.String),
       waitsOn: Schema.optional(WaitsOnJson),
+      parentTaskId: Schema.optional(Schema.NullOr(ProjectTaskId)),
       leadThreadId: Schema.optional(ThreadId),
       prUrl: Schema.optional(Schema.String),
       planSummary: Schema.optional(Schema.String),
@@ -594,6 +601,7 @@ export const make = Effect.gen(function* () {
     execute: (input) => {
       const stage = input.stage ?? null;
       const stageChanged = sql`(${stage} IS NOT NULL AND ${stage} <> stage)`;
+      const setParent = input.parentTaskId === undefined ? 0 : 1;
       return sql`
         UPDATE project_tasks SET
           stage = COALESCE(${stage}, stage),
@@ -602,7 +610,12 @@ export const make = Effect.gen(function* () {
             WHEN ${stageChanged} THEN 0
             ELSE COALESCE(${input.nudgeCount ?? null}, nudge_count)
           END,
+          title = COALESCE(${input.title ?? null}, title),
           waits_on_json = COALESCE(${input.waitsOn ?? null}, waits_on_json),
+          parent_task_id = CASE
+            WHEN ${setParent} = 1 THEN ${input.parentTaskId ?? null}
+            ELSE parent_task_id
+          END,
           lead_thread_id = COALESCE(${input.leadThreadId ?? null}, lead_thread_id),
           pr_url = COALESCE(${input.prUrl ?? null}, pr_url),
           plan_summary = COALESCE(${input.planSummary ?? null}, plan_summary),
@@ -622,6 +635,17 @@ export const make = Effect.gen(function* () {
       FROM project_tasks
       WHERE parent_task_id = ${parentTaskId}
       ORDER BY number ASC
+    `,
+  });
+
+  const findTasksWaitingOn = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: TaskRow,
+    execute: ({ taskId }) => sql`
+      SELECT ${taskColumns}
+      FROM project_tasks
+      WHERE EXISTS (SELECT 1 FROM json_each(waits_on_json) WHERE value = ${taskId})
+      ORDER BY created_at ASC
     `,
   });
 
@@ -1104,6 +1128,8 @@ export const make = Effect.gen(function* () {
       ),
     listChildTasks: (parentTaskId) =>
       findChildTasks({ parentTaskId }).pipe(Effect.mapError(toRepositoryError("listChildTasks"))),
+    listTasksWaitingOn: (taskId) =>
+      findTasksWaitingOn({ taskId }).pipe(Effect.mapError(toRepositoryError("listTasksWaitingOn"))),
     listSpecVersions: (taskId) =>
       findSpecVersions({ taskId }).pipe(Effect.mapError(toRepositoryError("listSpecVersions"))),
     getLatestSpecVersion: (taskId) =>

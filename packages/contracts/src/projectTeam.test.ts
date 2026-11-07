@@ -229,6 +229,14 @@ describe("MCP inputs", () => {
     expect(() => decode({ stage: "inbox" })).toThrow();
   });
 
+  it("lets task_update change the title and structure, and null clear the parent", () => {
+    const decode = Schema.decodeUnknownSync(ProjectTeamTaskUpdateInput);
+    expect(decode({ title: "Rename" })).toEqual({ title: "Rename" });
+    expect(decode({ waitsOn: [] })).toEqual({ waitsOn: [] });
+    expect(decode({ parentTaskId: null })).toEqual({ parentTaskId: null });
+    expect(() => decode({ title: "  " })).toThrow();
+  });
+
   it("requires at least one setting in team_settings_update and lets null clear quiet hours", () => {
     const decode = Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput);
     expect(() => decode({})).toThrow();
