@@ -11,6 +11,7 @@ import { XIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { TOUCH_SELECTION_ACTION_GAP } from "~/lib/selectionActions";
 import { cn, randomUUID } from "~/lib/utils";
 import { useAnswerDecision, useTaskDetail } from "~/state/projectTeam";
 import {
@@ -55,6 +56,8 @@ interface PendingSelection {
   readonly bodyWidth: number;
   /** True when the Comment button fits above the selection inside the visible plan. */
   readonly roomAbove: boolean;
+  /** Made by touch: the phone's own copy menu sits above, so the button goes below. */
+  readonly touch: boolean;
 }
 
 /** An inline comment on the plan: a pin on its quote, edited in the annotation pill. */
@@ -74,7 +77,7 @@ const OUTCOME_STATUS = {
 } as const;
 
 /** The plan section the user selected text in, or null outside the plan body. */
-function readPlanSelection(body: HTMLElement): PendingSelection | null {
+function readPlanSelection(body: HTMLElement, touch: boolean): PendingSelection | null {
   const selection = window.getSelection();
   if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return null;
   const range = selection.getRangeAt(0).cloneRange();
@@ -109,13 +112,18 @@ function readPlanSelection(body: HTMLElement): PendingSelection | null {
     left: rect.left - bodyRect.left,
     bodyWidth: bodyRect.width,
     roomAbove: rect.top - visibleTop >= COMMENT_BUTTON_OFFSET,
+    touch,
   };
 }
 
 /** The Comment button: above the selection (below without room), inside the body. */
 function commentButtonPosition(pending: PendingSelection) {
   return {
-    top: pending.roomAbove ? pending.top - COMMENT_BUTTON_OFFSET : pending.bottom + 6,
+    top: pending.touch
+      ? pending.bottom + TOUCH_SELECTION_ACTION_GAP
+      : pending.roomAbove
+        ? pending.top - COMMENT_BUTTON_OFFSET
+        : pending.bottom + 6,
     left: Math.max(0, Math.min(pending.left, pending.bodyWidth - COMMENT_BUTTON_WIDTH)),
   };
 }
@@ -241,15 +249,32 @@ function PlanReview({
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const [sending, setSending] = useState(false);
 
+  // How the last press was made, and whether it was on the Comment button: a phone can clear
+  // the selection before the tap lands, which must not take the button away.
+  const pressRef = useRef({ touch: false, onComment: false });
+
   // Track the selection in the plan body for the Comment button.
   useEffect(() => {
     const onSelectionChange = () => {
       const body = bodyRef.current;
-      if (body === null) return;
-      setPending(readPlanSelection(body));
+      if (body === null || pressRef.current.onComment) return;
+      setPending(readPlanSelection(body, pressRef.current.touch));
     };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!event.isPrimary) return;
+      pressRef.current = {
+        touch: event.pointerType !== "mouse",
+        onComment:
+          event.target instanceof Element &&
+          event.target.closest("[data-plan-comment-button]") !== null,
+      };
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("selectionchange", onSelectionChange);
+    };
   }, []);
 
   const detail = query.data;
@@ -294,8 +319,8 @@ function PlanReview({
 
   const captureSelection = () => {
     const body = bodyRef.current;
-    if (body === null || !canComment) return;
-    setPending(readPlanSelection(body));
+    if (body === null || !canComment || pressRef.current.onComment) return;
+    setPending(readPlanSelection(body, pressRef.current.touch));
   };
 
   const addComment = () => {
@@ -307,6 +332,7 @@ function PlanReview({
     ]);
     setEditing({ id, isNew: true });
     setPending(null);
+    pressRef.current.onComment = false;
     window.getSelection()?.removeAllRanges();
   };
 
@@ -527,7 +553,11 @@ function PlanReview({
               </details>
             ) : null}
             {canComment && pending !== null && editing === null ? (
-              <div className="absolute z-20" style={commentButtonPosition(pending)}>
+              <div
+                data-plan-comment-button
+                className="absolute z-20"
+                style={commentButtonPosition(pending)}
+              >
                 <Button
                   size="xs"
                   variant="outline"

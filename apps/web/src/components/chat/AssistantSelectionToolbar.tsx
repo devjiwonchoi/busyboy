@@ -14,6 +14,7 @@ import {
   observeSelectionActions,
   resolveSelectionActionPosition,
   type SelectionActionPoint,
+  type SelectionInput,
 } from "~/lib/selectionActions";
 import { Button } from "../ui/button";
 
@@ -51,7 +52,7 @@ export function AssistantSelectionToolbar({
   useEffect(() => {
     if (!viewport) return;
     const clear = () => setSelection(null);
-    const update = (pointer: SelectionActionPoint | null) => {
+    const update = (pointer: SelectionActionPoint | null, input: SelectionInput) => {
       const nativeSelection = window.getSelection();
       const captured = captureAssistantTextSelection(viewport, nativeSelection);
       const messageId = captured?.source.dataset.assistantCitationSource;
@@ -88,6 +89,7 @@ export function AssistantSelectionToolbar({
           selectionRect: rects.item(rects.length - 1) ?? rect,
           pointer: pointerOnText ? pointer : null,
           viewport: { width: window.innerWidth, height: window.innerHeight },
+          input,
         }),
       });
     };

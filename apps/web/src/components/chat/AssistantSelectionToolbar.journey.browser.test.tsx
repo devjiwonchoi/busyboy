@@ -12,6 +12,8 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
+import { longPressSelect, tap } from "../../test-touch-selection";
+
 import { formatAssistantCitationForComposer } from "../../composer-logic";
 import { useSideChatStore } from "../../sideChatStore";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
@@ -165,6 +167,52 @@ describe("selecting assistant text", () => {
     await expect
       .element(page.getByRole("button", { name: "Ask in side chat" }))
       .not.toBeInTheDocument();
+  });
+});
+
+describe("selecting assistant text by touch on a phone", () => {
+  beforeEach(async () => {
+    await page.viewport(390, 844);
+  });
+
+  it("shows the actions below the selection and adds the quote with Add to chat", async () => {
+    await render();
+    await longPressSelect(page.getByText(reply).element(), "release", "Friday");
+
+    const toolbar = await vi.waitFor(() => page.getByRole("toolbar").element());
+    // Below the last selected line, clear of the end handle; the phone's own menu sits above.
+    const selected = window.getSelection()!.getRangeAt(0).getClientRects();
+    const lastLine = selected.item(selected.length - 1)!;
+    const box = toolbar.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(lastLine.bottom + 20);
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+
+    // The tap clears the selection before it lands; the action still goes through.
+    await tap(page.getByRole("button", { name: "Add to chat" }).element());
+    const composer = page.getByRole("textbox", { name: "Main composer" });
+    await expect.element(composer).toHaveValue(expect.stringContaining("release+on+Friday"));
+    await expect.element(page.getByRole("toolbar")).not.toBeInTheDocument();
+  });
+
+  it("asks in the side chat", async () => {
+    await render();
+    await longPressSelect(page.getByText(reply).element(), "smoke", "tests");
+    await tap(
+      await vi.waitFor(() => page.getByRole("button", { name: "Ask in side chat" }).element()),
+    );
+
+    const sideComposer = page.getByRole("textbox", { name: "Side chat composer" });
+    await expect.element(sideComposer).toHaveValue(expect.stringContaining("smoke+tests"));
+  });
+
+  it("hides the actions on a tap elsewhere in the reply", async () => {
+    await render();
+    const text = page.getByText(reply).element();
+    await longPressSelect(text, "Ship");
+    await vi.waitFor(() => page.getByRole("toolbar").element());
+    await tap(text);
+    await expect.element(page.getByRole("toolbar")).not.toBeInTheDocument();
   });
 });
 

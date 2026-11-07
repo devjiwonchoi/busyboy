@@ -7,6 +7,8 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
+import { longPressSelect, tap } from "../../test-touch-selection";
+
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
 import { useChatAnnotations, withComposerAnnotations } from "./useChatAnnotations";
@@ -208,6 +210,22 @@ describe.each([
     await vi.waitFor(() => expect(pin(1)).toBeNull());
     expect(chip()).toBeUndefined();
     expect(CSS.highlights.get("t3-annotation")?.size ?? 0).toBe(0);
+  });
+
+  it.runIf(width < 768)("annotates a touch selection", async () => {
+    await longPressSelect(page.getByText(second).element(), "release", "Friday");
+    const add = await vi.waitFor(() => page.getByRole("button", { name: "Add to chat" }).element());
+    await tap(add);
+
+    await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("new"));
+    await vi.waitFor(() => expect(pin(1)?.textContent).toBe("1"));
+    await userEvent.keyboard("Which Friday?");
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(chip()).toBe("1 annotation"));
+
+    await userEvent.click(page.getByRole("button", { name: "Send" }));
+    expect(sent[0]).toContain("release+on+Friday");
+    expect(sent[0]).toContain("Which+Friday");
   });
 
   it("keeps the pill inside the screen when the text is at the top", async () => {
