@@ -104,7 +104,64 @@ const makeHarness = Effect.fn("test.make_desktop_app_update_harness")(function* 
   return { service };
 });
 
+const makeStatesService = Effect.fn("test.make_desktop_app_update_states")(function* (input: {
+  readonly mode: "web" | "desktop";
+  readonly latest: Option.Option<DesktopUpdateStatusReport>;
+  readonly changes: readonly DesktopUpdateStatusReport[];
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-desktop-app-update-test-" });
+  const baseConfig = yield* ServerConfig.ServerConfig.pipe(
+    Effect.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
+  );
+  return yield* DesktopAppUpdate.make().pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        DesktopTelemetryReceiver.layerTest({
+          desktopUpdates: Effect.succeed({
+            latest: input.latest,
+            changes: Stream.fromIterable(input.changes),
+          }),
+        }),
+        ServerConfig.layer({ ...baseConfig, mode: input.mode, desktopTelemetryControlFd: 5 }),
+      ),
+    ),
+  );
+});
+
 it.layer(NodeServices.layer)("desktop app update", (it) => {
+  it.effect("streams the desktop app's latest update state and each change", () =>
+    Effect.gen(function* () {
+      const downloading = makeState({ status: "downloading", downloadPercent: 40 });
+      const ready = makeState({ status: "downloaded", downloadedVersion: "1.2.4" });
+      const service = yield* makeStatesService({
+        mode: "desktop",
+        latest: Option.some(report("bg", downloading)),
+        changes: [report("bg", ready)],
+      });
+      const states = yield* Stream.runCollect(service.states);
+      expect(Array.from(states)).toEqual([downloading, ready]);
+
+      const empty = yield* makeStatesService({
+        mode: "desktop",
+        latest: Option.none(),
+        changes: [],
+      });
+      expect(Array.from(yield* Stream.runCollect(empty.states))).toEqual([null]);
+    }),
+  );
+
+  it.effect("streams a single null when no desktop app runs this server", () =>
+    Effect.gen(function* () {
+      const service = yield* makeStatesService({
+        mode: "web",
+        latest: Option.some(report("bg", makeState({ status: "downloaded" }))),
+        changes: [],
+      });
+      expect(Array.from(yield* Stream.runCollect(service.states))).toEqual([null]);
+    }),
+  );
+
   it.effect("is unavailable without desktop mode or the control fd", () =>
     Effect.gen(function* () {
       const web = yield* makeHarness({ mode: "web" });

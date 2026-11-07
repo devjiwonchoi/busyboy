@@ -51,6 +51,9 @@ export class DesktopAppUpdate extends Context.Service<
       requestId: string,
       onHandoffAccepted?: () => Effect.Effect<void>,
     ) => Effect.Effect<never, ServerSelfUpdateError>;
+    /** The desktop app's latest reported update state, then each change.
+        Starts with null until the app has reported one. */
+    readonly states: Stream.Stream<DesktopUpdateState | null>;
   }
 >()("t3/desktopUpdate/DesktopAppUpdate") {}
 
@@ -219,7 +222,18 @@ export const make = Effect.fn("desktopUpdate.desktopAppUpdate.make")(function* (
     );
   });
 
-  return DesktopAppUpdate.of({ available, run, commit });
+  const states: DesktopAppUpdate["Service"]["states"] = available
+    ? Stream.unwrap(
+        Effect.map(receiver.desktopUpdates, ({ latest, changes }) =>
+          Stream.concat(
+            Stream.make(Option.match(latest, { onNone: () => null, onSome: (r) => r.state })),
+            Stream.map(changes, (report): DesktopUpdateState | null => report.state),
+          ),
+        ),
+      )
+    : Stream.make(null);
+
+  return DesktopAppUpdate.of({ available, run, commit, states });
 });
 
 export const layer = Layer.effect(DesktopAppUpdate, make());
