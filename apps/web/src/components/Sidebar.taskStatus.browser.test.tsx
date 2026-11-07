@@ -152,6 +152,7 @@ const TASKS: ReadonlyArray<{
   lastOutcome?: ProjectTaskReference["lastOutcome"];
   openQuestion?: boolean;
   openBlocker?: boolean;
+  ready?: boolean;
   lead?: LeadRuntime;
 }> = [
   { number: 1, stage: "inbox" },
@@ -164,7 +165,14 @@ const TASKS: ReadonlyArray<{
     prUrl: "https://github.com/acme/busyboy/pull/81",
     lead: "running",
   },
-  { number: 6, stage: "in_review", prUrl: "https://github.com/acme/busyboy/pull/82" },
+  // Ready comes from the server's Ready gate, not from an idle lead.
+  {
+    number: 6,
+    stage: "in_review",
+    prUrl: "https://github.com/acme/busyboy/pull/82",
+    lastOutcome: "ready",
+    ready: true,
+  },
   { number: 7, stage: "planning", openQuestion: true },
   { number: 8, stage: "running", lead: "failed" },
   { number: 9, stage: "done" },
@@ -224,6 +232,7 @@ beforeEach(() => {
           openBlocker: task.openBlocker ?? false,
           iterateRound: 0,
           shipRound: 0,
+          ...(task.ready === undefined ? {} : { ready: task.ready }),
           updatedAt: null,
         })),
         // Task 7 asked the user a question.

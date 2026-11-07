@@ -34,6 +34,7 @@ const task: ProjectTask = {
   iterateRound: 0,
   shipRound: 0,
   review: null,
+  ready: null,
   stageChangedAt: at,
   createdAt: at,
   updatedAt: at,
@@ -152,7 +153,8 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain('task_update(stage: "running", planSummary)');
     expect(prompt).toContain("delegate_task");
     expect(prompt).toContain('task_update(stage: "in_review", prUrl)');
-    expect(prompt).toContain("watch_pull_request");
+    expect(prompt).toContain("BusyBoy then watches it for you");
+    expect(prompt).toContain("task_ready(head)");
     expect(prompt).toContain("Without a remote, commit locally");
     expect(prompt).toContain('task_update(stage: "done", resultSummary)');
     expect(prompt).toContain("memory_write");
@@ -219,7 +221,7 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("### Why?\n\n     <the problem and why it matters>");
     expect(prompt).toContain("no test or validation notes, no task key");
     expect(prompt).toContain('"Stacked on #<parent PR>." before ### Why?');
-    expect(prompt).toContain("Open it ready for review, not as a draft.");
+    expect(prompt).toContain("Open it as a draft; task_ready marks it ready for review");
   });
 
   it("keeps decisions whole and indexes other topics when the memory is too long", () => {

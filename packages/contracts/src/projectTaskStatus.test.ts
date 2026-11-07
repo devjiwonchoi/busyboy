@@ -16,7 +16,7 @@ const idle: ProjectTaskStatusSignals = {
 
 const cases: ReadonlyArray<{
   readonly name: string;
-  readonly task: Pick<ProjectTask, "stage" | "lastOutcome">;
+  readonly task: Pick<ProjectTask, "stage" | "lastOutcome"> & { readonly ready?: boolean };
   readonly signals?: Partial<ProjectTaskStatusSignals>;
   readonly status: ProjectTaskStatus;
 }> = [
@@ -35,14 +35,19 @@ const cases: ReadonlyArray<{
   },
   { name: "running", task: { stage: "running", lastOutcome: null }, status: "in_progress" },
   {
-    name: "PR with a working lead is In Review",
+    name: "an open PR is In Review, even with an idle lead",
     task: { stage: "in_review", lastOutcome: "in_review" },
-    signals: { leadRunning: true },
     status: "in_review",
   },
   {
-    name: "PR with an idle lead is Ready",
-    task: { stage: "in_review", lastOutcome: "in_review" },
+    name: "a PR that passed the Ready gate is Ready",
+    task: { stage: "in_review", lastOutcome: "ready", ready: true },
+    status: "ready",
+  },
+  {
+    name: "Ready stays Ready while the lead works",
+    task: { stage: "in_review", lastOutcome: "ready", ready: true },
+    signals: { leadRunning: true },
     status: "ready",
   },
   {

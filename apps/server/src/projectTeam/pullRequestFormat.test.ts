@@ -13,7 +13,7 @@ const body = [
   "",
 ].join("\n");
 
-const good = { title: "Check pull request format", body, isDraft: false };
+const good = { title: "Check pull request format", body };
 
 const problemsFor = (overrides: Partial<typeof good>) =>
   pullRequestFormatProblems({ ...good, ...overrides });
@@ -58,12 +58,6 @@ describe("pullRequestFormatProblems", () => {
     expect(problems).toHaveLength(2);
     expect(problems[0]).toContain("period");
     expect(problems[1]).toContain("action verb");
-  });
-
-  it("refuses a draft", () => {
-    expect(problemsFor({ isDraft: true })).toEqual([
-      "The pull request is a draft: mark it ready for review (gh pr ready <url>).",
-    ]);
   });
 
   it("refuses a body without ### Why?", () => {

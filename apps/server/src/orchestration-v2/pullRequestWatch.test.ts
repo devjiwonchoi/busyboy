@@ -282,7 +282,7 @@ describe("pullRequestWatchMessage", () => {
     );
     assert.include(message.text, "unwatch_pull_request");
     assert.deepEqual(message.notification, {
-      source: { kind: "monitor" },
+      source: { kind: "monitor", pullRequestChanges: ["checks-failed", "remarks"] },
       outcome: "failed",
       summary: "#12: checks failed, new comments",
     });

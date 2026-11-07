@@ -143,6 +143,7 @@ beforeEach(() => {
       iterateRound: 0,
       shipRound: 0,
       review: null,
+      ready: null,
       stageChangedAt: AT,
       createdAt: AT,
       updatedAt: AT,

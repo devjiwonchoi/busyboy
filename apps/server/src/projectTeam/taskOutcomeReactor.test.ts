@@ -64,8 +64,14 @@ function leadTurnEnded(input: {
 }
 
 describe("classifyTaskOutcome", () => {
-  it("orders waiting_user, in_review, done, failed, then stalled", () => {
-    const base = { stage: "running" as const, prUrl: null };
+  it("orders waiting_user, ready, in_review, done, failed, then stalled", () => {
+    const base = { stage: "running" as const, prUrl: null, ready: null };
+    const ready = {
+      head: "abc1234",
+      gate: "checks" as const,
+      localChecks: "",
+      readyAt: "2026-11-04T00:00:00.000Z",
+    };
     assert.strictEqual(
       classifyTaskOutcome({
         task: { ...base, prUrl: "https://pr" },
@@ -76,7 +82,15 @@ describe("classifyTaskOutcome", () => {
     );
     assert.strictEqual(
       classifyTaskOutcome({
-        task: { stage: "in_review", prUrl: "https://pr" },
+        task: { stage: "in_review", prUrl: "https://pr", ready },
+        openAttentionCount: 0,
+        status: "completed",
+      }),
+      "ready",
+    );
+    assert.strictEqual(
+      classifyTaskOutcome({
+        task: { stage: "in_review", prUrl: "https://pr", ready: null },
         openAttentionCount: 0,
         status: "failed",
       }),
@@ -84,7 +98,7 @@ describe("classifyTaskOutcome", () => {
     );
     assert.strictEqual(
       classifyTaskOutcome({
-        task: { stage: "done", prUrl: "https://pr" },
+        task: { stage: "done", prUrl: "https://pr", ready: null },
         openAttentionCount: 0,
         status: "completed",
       }),
@@ -466,7 +480,7 @@ describe("TaskOutcomeReactor", () => {
     ),
   );
 
-  it.effect("wakes the PM once when a task goes into review, not on every later lead turn", () =>
+  it.effect("stays quiet when a PR opens and wakes the PM once when it turns Ready", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const reactor = yield* TaskOutcomeReactor;
@@ -475,13 +489,10 @@ describe("TaskOutcomeReactor", () => {
         const reviewed = yield* startLead(pm, "Reviewed", harness.delegate);
         yield* team.createTask(pm, { intake: "New work.", title: "Next", request: "Next." });
         yield* reviewClean(reviewed.leadThreadId);
-        yield* team.updateTask(reviewed.leadThreadId, {
-          stage: "in_review",
-          prUrl: "https://github.com/acme/repo/pull/1",
-        });
-
-        for (const ordinal of [1, 2, 3]) {
-          yield* reactor.handle(
+        const prUrl = "https://github.com/acme/repo/pull/1";
+        yield* team.updateTask(reviewed.leadThreadId, { stage: "in_review", prUrl });
+        const turnEnds = (ordinal: number) =>
+          reactor.handle(
             leadTurnEnded({
               lead: reviewed.leadThreadId,
               status: "completed",
@@ -489,9 +500,23 @@ describe("TaskOutcomeReactor", () => {
               ordinal,
             }),
           );
-        }
+
+        // Opening the PR is not news for the PM: the lead still has checks and review ahead.
+        yield* turnEnds(1);
+        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
+
+        harness.shipStates.set(prUrl, {
+          state: "open",
+          isDraft: true,
+          headSha: "abc1234",
+          mergeability: "mergeable",
+          checks: [{ name: "test", status: "success" }],
+          unresolvedThreads: 0,
+        });
+        yield* team.markTaskReady(reviewed.leadThreadId, { head: "abc1234", localChecks: "" });
+        for (const ordinal of [2, 3, 4]) yield* turnEnds(ordinal);
         assert.deepStrictEqual(yield* harness.messagesTo(pm), [
-          "#1 in review: Reviewed · PR https://github.com/acme/repo/pull/1 · #2 is next in the inbox",
+          `#1 ready: Reviewed · PR ${prUrl} · #2 is next in the inbox`,
         ]);
       }),
     ),

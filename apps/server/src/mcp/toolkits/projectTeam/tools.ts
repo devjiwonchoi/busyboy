@@ -32,6 +32,7 @@ import {
   ProjectTeamTaskTodoSetInput,
   ProjectTeamTaskEvidenceSetInput,
   ProjectTeamTaskReviewSetInput,
+  ProjectTeamTaskReadyInput,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -134,6 +135,16 @@ const TaskReviewSetTool = Tool.make("task_review_set", {
   success: ProjectTeamTaskResult,
 })
   .annotate(Tool.Title, "Record a self-review")
+  .annotate(Tool.Destructive, false);
+
+const TaskReadyTool = Tool.make("task_ready", {
+  ...shared,
+  description:
+    "Mark your In Review task Ready once its pull request is done. Pass head = `git rev-parse HEAD` after pushing it. The server refuses while checks fail or run, a review thread is unresolved, the branch conflicts, or HEAD lacks a clean self-review. A pull request with no checks also needs evidence on every criterion and localChecks: the commands you ran on HEAD and their result. On pass the server marks a draft pull request ready for review, and the task shows Ready until a new failure or comment.",
+  parameters: ProjectTeamTaskReadyInput,
+  success: ProjectTeamTaskResult,
+})
+  .annotate(Tool.Title, "Mark a task ready")
   .annotate(Tool.Destructive, false);
 
 const TaskNudgeTool = Tool.make("task_nudge", {
@@ -273,6 +284,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TaskTodoSetTool,
   TaskEvidenceSetTool,
   TaskReviewSetTool,
+  TaskReadyTool,
   TaskNudgeTool,
   TaskListTool,
   TaskReadTool,

@@ -41,9 +41,11 @@ import * as ContextCare from "./ContextCare.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import type { PullRequestText } from "./pullRequestFormat.ts";
+import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
+import * as ShipWakeReactor from "./ShipWakeReactor.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
 import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
@@ -102,6 +104,12 @@ export interface TeamHarness {
   readonly addThread: (threadId: ThreadId) => FakeThread;
   /** Pull requests the In Review gate reads, by URL; one missing here can't be read. */
   readonly pullRequests: Map<string, PullRequestText>;
+  /** Pull request states the Ready gate reads, by URL; one missing here can't be read. */
+  readonly shipStates: Map<string, PullRequestShipGate.PullRequestShipState>;
+  /** URLs the Ready gate marked ready for review, in order. */
+  readonly markedReady: Array<string>;
+  /** When set, marking a pull request ready for review fails with this message. */
+  markReadyRefusal: string | null;
   /** Server messages dispatched to a thread. */
   readonly messagesTo: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<string>>;
 }
@@ -112,6 +120,7 @@ export type TeamServices =
   | AttentionRouter.AttentionRouter
   | ProjectTeamRepository.ProjectTeamRepository
   | TaskOutcomeReactor.TaskOutcomeReactor
+  | ShipWakeReactor.ShipWakeReactor
   | StalledTaskSweep.StalledTaskSweep
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
@@ -344,6 +353,7 @@ export const withTeam = <A, E>(
     });
     const sendFailures = { remaining: 0 };
     const pullRequests = new Map<string, PullRequestText>();
+    const shipStates = new Map<string, PullRequestShipGate.PullRequestShipState>();
     const providerRegistry = Layer.mock(ProviderRegistry.ProviderRegistry)({
       getProviders: Effect.sync(() => [...providers]),
       refresh: () => Effect.sync(() => [...providers]),
@@ -361,6 +371,7 @@ export const withTeam = <A, E>(
 
     const layer = Layer.mergeAll(
       TaskOutcomeReactor.layer,
+      ShipWakeReactor.layer,
       StalledTaskSweep.layer,
       DefaultManagerReactor.layer,
       ContextCare.layer,
@@ -382,6 +393,16 @@ export const withTeam = <A, E>(
           WorktreeHeadReader.layerTest((worktreePath) =>
             Option.fromNullishOr(harness.worktreeHead(worktreePath)),
           ),
+          PullRequestShipGate.layerTest({
+            read: (url) => Option.fromNullishOr(shipStates.get(url)),
+            markReady: (url) => {
+              if (harness.markReadyRefusal !== null) return harness.markReadyRefusal;
+              harness.markedReady.push(url);
+              const state = shipStates.get(url);
+              if (state !== undefined) shipStates.set(url, { ...state, isDraft: false });
+              return null;
+            },
+          }),
         ),
       ),
       Layer.provideMerge(
@@ -401,6 +422,9 @@ export const withTeam = <A, E>(
       sendFailures,
       providers,
       pullRequests,
+      shipStates,
+      markedReady: [],
+      markReadyRefusal: null,
       checkedOutBranch: () => null,
       worktreeHead: () => null,
       onArchive: () => Effect.void,

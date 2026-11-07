@@ -163,6 +163,7 @@ describe("ProjectTask", () => {
       iterateRound: 0,
       shipRound: 0,
       review: null,
+      ready: null,
     });
     expect(() => Schema.decodeUnknownSync(ProjectTask)({ ...task, stage: "review" })).toThrow();
   });

@@ -97,9 +97,32 @@ export const ProjectTaskReview = Schema.Struct({
 });
 export type ProjectTaskReview = typeof ProjectTaskReview.Type;
 
+/**
+ * How a task passed the Ready gate: the pull request's checks, or, when it has none,
+ * the lead's local evidence on the same commit.
+ */
+export const ProjectTaskReadyGate = Schema.Literals(["checks", "local"]);
+export type ProjectTaskReadyGate = typeof ProjectTaskReadyGate.Type;
+
+const ReadyLocalChecks = Schema.String.check(Schema.isMaxLength(4_000)).annotate({
+  description:
+    "Only for a pull request with no checks: the commands you ran on HEAD (tests, typecheck, lint) and their result. Leave it empty when the pull request has checks.",
+});
+
+/** Set when the task passed the Ready gate; a new failure, comment or stage change clears it. */
+export const ProjectTaskReady = Schema.Struct({
+  head: ReviewHead,
+  gate: ProjectTaskReadyGate,
+  /** The commands the lead ran when the gate was local; empty for checks. */
+  localChecks: ReadyLocalChecks,
+  readyAt: IsoDateTime,
+});
+export type ProjectTaskReady = typeof ProjectTaskReady.Type;
+
 export const ProjectTaskOutcome = Schema.Literals([
   "waiting_user",
   "in_review",
+  "ready",
   "done",
   "failed",
   "stalled",
@@ -168,7 +191,10 @@ export function storedTaskStatusSignals(
  * only once the PM's nudges ran out and raised a blocker card.
  */
 export function resolveProjectTaskStatus(
-  task: Pick<ProjectTask, "stage" | "lastOutcome">,
+  task: Pick<ProjectTask, "stage" | "lastOutcome"> & {
+    /** The task passed the Ready gate (its stored ready flag is set). */
+    readonly ready?: boolean | undefined;
+  },
   signals: ProjectTaskStatusSignals,
 ): ProjectTaskStatus {
   if (task.stage === "done" || task.stage === "cancelled") return "done";
@@ -189,7 +215,7 @@ export function resolveProjectTaskStatus(
     case "running":
       return "in_progress";
     case "in_review":
-      return signals.leadRunning ? "in_review" : "ready";
+      return task.ready === true ? "ready" : "in_review";
   }
 }
 
@@ -222,10 +248,15 @@ export const ProjectTask = Schema.Struct({
   nudgeCount: NonNegativeInt,
   /** Iterate rounds so far: entering running, or a review that was not clean, starts one. */
   iterateRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
-  /** Ship rounds so far: each move into in_review starts one. */
+  /**
+   * Ship rounds so far: the first move into in_review starts one, and so does each
+   * failed check, new comment or conflict on the watched pull request.
+   */
   shipRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
   /** The lead's latest self-review, recorded with task_review_set. */
   review: Schema.NullOr(ProjectTaskReview).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** Set by task_ready once the pull request passed the Ready gate; the status reads it. */
+  ready: Schema.NullOr(ProjectTaskReady).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   stageChangedAt: IsoDateTime,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -1200,6 +1231,13 @@ export const ProjectTeamTaskReviewSetInput = Schema.Struct({
 });
 export type ProjectTeamTaskReviewSetInput = typeof ProjectTeamTaskReviewSetInput.Type;
 
+export const ProjectTeamTaskReadyInput = Schema.Struct({
+  taskId: ProjectTeamOwnTaskId,
+  head: ReviewHead,
+  localChecks: ReadyLocalChecks.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+});
+export type ProjectTeamTaskReadyInput = typeof ProjectTeamTaskReadyInput.Type;
+
 export const ProjectTeamAttentionItemResult = Schema.Struct({
   item: ProjectAttentionItem,
 });
@@ -1296,6 +1334,8 @@ export const ProjectTaskReference = Schema.Struct({
   openQuestion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** One of those is a blocker card, which only a person can unblock; the task shows Fatal. */
   openBlocker: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** The task passed the Ready gate; an in-review task shows Ready only then. */
+  ready: Schema.optional(Schema.Boolean),
   /** When the task last changed; null from servers that predate the field. */
   updatedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** Iterate and Ship rounds so far, shown on the phase badge; 0 from older servers. */

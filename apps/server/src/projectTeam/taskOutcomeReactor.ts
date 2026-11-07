@@ -43,12 +43,14 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
  * and the continuation's end reclassifies.
  */
 export function classifyTaskOutcome(input: {
-  readonly task: Pick<ProjectTask, "stage" | "prUrl">;
+  readonly task: Pick<ProjectTask, "stage" | "prUrl" | "ready">;
   readonly openAttentionCount: number;
   readonly status: TerminalRunStatus;
 }): ProjectTaskOutcome {
   if (input.openAttentionCount > 0) return "waiting_user";
-  if (input.task.prUrl !== null && input.task.stage !== "done") return "in_review";
+  if (input.task.prUrl !== null && input.task.stage !== "done") {
+    return input.task.stage === "in_review" && input.task.ready !== null ? "ready" : "in_review";
+  }
   if (input.task.stage === "done") return "done";
   if (input.status === "failed") return "failed";
   return "stalled";
@@ -99,10 +101,12 @@ function oneLine(text: string): string {
 
 /**
  * The one line that wakes the PM after a task lead's turn, or null to stay quiet.
- * A failure wakes it, and so does a task that just became done or in review, so the PM
- * can tell the user right away. The completion line names the next ready inbox task when
- * there is room to start it. Later turns with the same outcome stay quiet.
- * Stalls are left to StalledTaskSweep.
+ * A failure wakes it, and so does a task that just became done or Ready, so the PM can
+ * tell the user right away. Opening a pull request (in review) does not: the lead still
+ * works it through checks and review until the Ready gate passes. The completion line
+ * names the next ready inbox task when there is room to start it. Later turns with the
+ * same outcome stay quiet. Questions and blockers reach the PM as attention items, and
+ * stalls are left to StalledTaskSweep.
  */
 export function outcomeWakeText(input: {
   readonly task: Pick<ProjectTask, "number" | "title" | "resultSummary" | "prUrl">;
@@ -124,13 +128,13 @@ export function outcomeWakeText(input: {
   if (input.outcome === "failed") {
     return `#${input.task.number} failed: ${input.task.title} (the lead's turn failed; a blocker is open)`;
   }
-  if (input.outcome !== "done" && input.outcome !== "in_review") return null;
+  if (input.outcome !== "done" && input.outcome !== "ready") return null;
   if (input.previousOutcome === input.outcome) return null;
   const parts =
     input.outcome === "done"
       ? [`#${input.task.number} done: ${oneLine(input.task.title)}`]
-      : [`#${input.task.number} in review: ${oneLine(input.task.title)}`];
-  if (input.outcome === "in_review" && input.task.prUrl !== null) {
+      : [`#${input.task.number} ready: ${oneLine(input.task.title)}`];
+  if (input.outcome === "ready" && input.task.prUrl !== null) {
     parts.push(`PR ${input.task.prUrl}`);
   }
   const summary = input.task.resultSummary === null ? "" : oneLine(input.task.resultSummary);

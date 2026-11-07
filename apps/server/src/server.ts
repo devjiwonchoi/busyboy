@@ -14,6 +14,7 @@ import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
 import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
 import * as StalledTaskSweep from "./projectTeam/StalledTaskSweep.ts";
 import * as TaskOutcomeReactor from "./projectTeam/taskOutcomeReactor.ts";
+import * as ShipWakeReactor from "./projectTeam/ShipWakeReactor.ts";
 import * as Scheduler from "./scheduling/Scheduler.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeHttp from "node:http";
@@ -78,6 +79,7 @@ import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as PullRequestTextReader from "./projectTeam/PullRequestTextReader.ts";
 import * as WorktreeHeadReader from "./projectTeam/WorktreeHeadReader.ts";
+import * as PullRequestShipGate from "./projectTeam/PullRequestShipGate.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
@@ -460,6 +462,7 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
 const layerProjectTeam = Layer.mergeAll(
   SitrepScheduler.layerWorker,
   TaskOutcomeReactor.layerWorker,
+  ShipWakeReactor.layerWorker,
   StalledTaskSweep.layerWorker,
   ProjectTeamService.layerAfkWorker,
   // Needs the team's AttentionRouter, so it starts here rather than beside DelegatedTaskQuestionReactor.
@@ -476,6 +479,7 @@ const layerProjectTeam = Layer.mergeAll(
       Layer.provide(ProcessRunner.layer),
     ),
   ),
+  Layer.provide(PullRequestShipGate.layer.pipe(Layer.provide(layerPullRequestService))),
   Layer.provide(layerGitWorkflow),
   Layer.provideMerge(ProjectTeamRepository.layer),
 );

@@ -150,6 +150,7 @@ beforeEach(() => {
       iterateRound: 0,
       shipRound: 0,
       review: null,
+      ready: null,
       stageChangedAt: AT,
       createdAt: AT,
       updatedAt: AT,
@@ -253,13 +254,33 @@ describe("TaskPlan status", () => {
     await vi.waitFor(() => expect(header().textContent).toBe("Ask question"));
   });
 
-  it("shows a PR task as Ready while its lead is idle", async () => {
+  it("shows an open PR as In Review even with an idle lead", async () => {
     state.detail = {
       ...state.detail,
       task: {
         ...state.detail.task,
         stage: "in_review",
         prUrl: "https://github.com/acme/busyboy/pull/81",
+      },
+    };
+    await render();
+    expect(header().textContent).toBe("In Review · PR #81");
+  });
+
+  it("shows a PR task as Ready once it passed the Ready gate", async () => {
+    state.detail = {
+      ...state.detail,
+      task: {
+        ...state.detail.task,
+        stage: "in_review",
+        prUrl: "https://github.com/acme/busyboy/pull/81",
+        lastOutcome: "ready",
+        ready: {
+          head: "abc1234",
+          gate: "checks",
+          localChecks: "",
+          readyAt: AT,
+        },
       },
     };
     await render();
@@ -299,10 +320,13 @@ describe.each([
     await act(async () => publish());
     await vi.waitFor(() => expect(phase()?.textContent).toBe("구현·리뷰 · 3회차"));
 
+    // Ready comes from the server's Ready gate.
     withTask({
       stage: "in_review",
       shipRound: 2,
       prUrl: "https://github.com/acme/busyboy/pull/81",
+      lastOutcome: "ready",
+      ready: { head: "abc1234", gate: "checks", localChecks: "", readyAt: AT },
     });
     await act(async () => publish());
     await vi.waitFor(() => expect(phase()?.textContent).toBe("배포 준비됨 · 2회차"));

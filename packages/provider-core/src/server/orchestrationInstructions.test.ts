@@ -137,9 +137,12 @@ describe("T3 orchestration provider instructions", () => {
   it("lists the PM's wakes and keeps decisions in memory across compactions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N failed: …"');
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N done: <title> · <result>"');
-    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N in review: <title> · PR <url>"');
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N ready: <title> · PR <url>"');
     assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "A task finishing does not wake you");
-    assert.include(PROJECT_MANAGER_INSTRUCTIONS, 'Use "preferences" for how the user likes to work');
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      'Use "preferences" for how the user likes to work',
+    );
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "After a context compaction, call `team_status`");
   });
 

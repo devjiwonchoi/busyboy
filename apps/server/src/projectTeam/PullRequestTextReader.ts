@@ -14,14 +14,13 @@ const GH_TIMEOUT = Duration.seconds(15);
 const GhPullRequestJson = Schema.Struct({
   title: Schema.String,
   body: Schema.String,
-  isDraft: Schema.Boolean,
 });
 const decodeGhPullRequest = Schema.decodeUnknownEffect(Schema.fromJsonString(GhPullRequestJson));
 
 export class PullRequestTextReader extends Context.Service<
   PullRequestTextReader,
   {
-    /** The PR's title, body and draft flag; None when it can't be read (no gh, offline, not a GitHub PR). Never fails. */
+    /** The PR's title and body; None when it can't be read (no gh, offline, not a GitHub PR). Never fails. */
     readonly read: (url: string) => Effect.Effect<Option.Option<PullRequestText>>;
   }
 >()("t3/projectTeam/PullRequestTextReader") {}
@@ -39,7 +38,7 @@ const make = Effect.gen(function* () {
       if (!isGitHubPullRequest(url)) return Option.none();
       const result = yield* processRunner.run({
         command: "gh",
-        args: ["pr", "view", url, "--json", "title,body,isDraft"],
+        args: ["pr", "view", url, "--json", "title,body"],
         timeout: GH_TIMEOUT,
         maxOutputBytes: 1_000_000,
       });

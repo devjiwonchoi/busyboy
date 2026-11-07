@@ -142,6 +142,7 @@ function TaskPlanBody(props: {
     ...task,
     openQuestion: detail.openAttention.length > 0,
     openBlocker: detail.openAttention.some((item) => item.kind === "blocker"),
+    ready: task.ready !== null,
   });
   const archived = task.stage === "done" || task.stage === "cancelled";
   const ref = { projectId: task.projectId, taskId: task.id };
