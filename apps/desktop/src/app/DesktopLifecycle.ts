@@ -15,6 +15,7 @@ import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopState from "./DesktopState.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
+import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 
 export class DesktopLifecycleRelaunchError extends Schema.TaggedError<DesktopLifecycleRelaunchError>()(
   "DesktopLifecycleRelaunchError",
@@ -41,14 +42,18 @@ type DesktopLifecycleRegistrationServices =
   | ElectronWindow.ElectronWindow;
 
 /**
- * @effect-expect-leaking DesktopEnvironment | DesktopShutdown | DesktopState | DesktopWindow | ElectronApp | ElectronTheme | ElectronWindow
+ * @effect-expect-leaking DesktopEnvironment | DesktopShutdown | DesktopState | DesktopUpdates | DesktopWindow | ElectronApp | ElectronTheme | ElectronWindow
  */
 export class DesktopLifecycle extends Context.Service<
   DesktopLifecycle,
   {
     readonly relaunch: (
       reason: string,
-    ) => Effect.Effect<void, never, DesktopLifecycleRuntimeServices>;
+    ) => Effect.Effect<
+      void,
+      never,
+      DesktopLifecycleRuntimeServices | DesktopUpdates.DesktopUpdates
+    >;
     readonly register: Effect.Effect<
       void,
       never,
@@ -165,9 +170,20 @@ export const make = DesktopLifecycle.of({
     const electronApp = yield* ElectronApp.ElectronApp;
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     const state = yield* DesktopState.DesktopState;
+    const updates = yield* DesktopUpdates.DesktopUpdates;
     yield* logLifecycleInfo("desktop relaunch requested", { reason });
     yield* Effect.gen(function* () {
       yield* Effect.yieldNow;
+      // A downloaded update is applied by relaunching through the updater,
+      // which reopens the new version. If none is ready, or installing it
+      // fails (the updater recovers the app), relaunch as usual.
+      const install = yield* updates.install;
+      const installFailed =
+        install.state.status === "error" && install.state.errorContext === "install";
+      if (install.accepted && !installFailed) {
+        yield* logLifecycleInfo("desktop relaunch applies the downloaded update", { reason });
+        return;
+      }
       yield* Ref.set(state.quitting, true);
       yield* requestDesktopShutdownAndWait();
       if (environment.isDevelopment) {

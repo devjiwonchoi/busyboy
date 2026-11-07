@@ -141,16 +141,25 @@ function makeRelease(options: { readonly signed: boolean; readonly tamper?: bool
 interface QuitHarness {
   quit: () => void;
   installs: Array<ReadonlyArray<string>>;
+  records: Array<string>;
+  failInstall: boolean;
 }
 
+// Like ElectronApp.on: the listener is removed when its scope closes.
 const makeQuitHarness = (): QuitHarness & {
-  onQuit: (listener: () => void) => Effect.Effect<void>;
+  onQuit: (listener: () => void) => Effect.Effect<void, never, Scope.Scope>;
 } => {
-  const listeners: Array<() => void> = [];
+  const listeners = new Set<() => void>();
   return {
     installs: [],
+    records: [],
+    failInstall: false,
     quit: () => listeners.forEach((listener) => listener()),
-    onQuit: (listener) => Effect.sync(() => void listeners.push(listener)),
+    onQuit: (listener) =>
+      Effect.acquireRelease(
+        Effect.sync(() => void listeners.add(listener)),
+        () => Effect.sync(() => void listeners.delete(listener)),
+      ),
   };
 };
 
@@ -170,7 +179,11 @@ const makeUpdater = (
     quit: Effect.void,
     onQuit: quitHarness.onQuit,
     appBundlePath: NodePath.join(root, "BusyBoy.app"),
-    spawnInstaller: (args) => quitHarness.installs.push(args),
+    spawnInstaller: (args) => {
+      if (quitHarness.failInstall) throw new Error("spawn failed");
+      quitHarness.installs.push(args);
+    },
+    recordQuitInstall: (message) => quitHarness.records.push(message),
     fetch,
     publicKeys: [releaseKey.publicKeyPem],
     // The fake bundle has no Developer ID; the real check is tested on its own below.
@@ -265,6 +278,50 @@ describe.runIf(isMac)("updating from a GitHub release", () => {
       ]);
       harness.quit();
       assert.strictEqual(harness.installs.length, 1);
+    }).pipe(Effect.provideService(Scope.Scope, Scope.makeUnsafe())),
+  );
+
+  it.effect("installs on quit after shutdown has closed the app's layers", () =>
+    Effect.gen(function* () {
+      const { root, fetch } = makeRelease({ signed: true });
+      const harness = makeQuitHarness();
+      const layerScope = Scope.makeUnsafe();
+      const updater = yield* makeUpdater(root, fetch, true, harness).pipe(
+        Effect.provideService(Scope.Scope, layerScope),
+      );
+      yield* updater.setAutoInstallOnAppQuit(true);
+      yield* updater.checkForUpdates;
+      yield* updater.downloadUpdate;
+
+      // A normal quit finishes shutdown, tearing down layers, before Electron emits "quit".
+      yield* Scope.close(layerScope, Exit.void);
+      harness.quit();
+
+      const staged = NodePath.join(root, "pending-update/0.0.4/app/BusyBoy.app");
+      assert.deepStrictEqual(harness.installs, [
+        [String(process.pid), NodePath.join(root, "BusyBoy.app"), staged, "no-reopen"],
+      ]);
+      assert.deepStrictEqual(harness.records, [`Installing ${staged} on quit.`]);
+    }),
+  );
+
+  it.effect("a failed install on quit is recorded and the quit goes on", () =>
+    Effect.gen(function* () {
+      const { root, fetch } = makeRelease({ signed: true });
+      const harness = makeQuitHarness();
+      const updater = yield* makeUpdater(root, fetch, true, harness);
+      yield* updater.setAutoInstallOnAppQuit(true);
+      yield* updater.checkForUpdates;
+      yield* updater.downloadUpdate;
+
+      harness.failInstall = true;
+      assert.doesNotThrow(() => harness.quit());
+      assert.deepStrictEqual(harness.installs, []);
+      assert.strictEqual(harness.records.length, 1);
+      assert.match(harness.records[0]!, /^Could not install .* on quit: spawn failed$/);
+      // The update stays staged, so the next launch offers it again.
+      const staged = NodePath.join(root, "pending-update/0.0.4/app/BusyBoy.app");
+      assert.isTrue(NodeFS.existsSync(staged));
     }).pipe(Effect.provideService(Scope.Scope, Scope.makeUnsafe())),
   );
 
