@@ -30,6 +30,7 @@ import {
   shouldContinueDesktopUpdateCheckAnimation,
   shouldShowDesktopUpdateCheckIcon,
 } from "./DesktopUpdateStatusIcon";
+import { PhoneDesktopUpdatePill } from "./PhoneDesktopUpdatePill";
 import { SidebarUpdateReleaseNotes } from "./SidebarUpdateReleaseNotes";
 import { SidebarUpdateCapsule } from "./SidebarUpdateCapsule";
 import { UpdateEverythingDialog } from "./UpdateEverythingDialog";
@@ -324,7 +325,7 @@ function SidebarUpdateControl() {
     );
   };
 
-  if (!isElectron && !runsEverything && !isRunningEverything) return null;
+  if (!isElectron && !runsEverything && !isRunningEverything) return <PhoneDesktopUpdatePill />;
 
   const statusIcon = (
     <DesktopUpdateStatusIcon
