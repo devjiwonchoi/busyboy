@@ -2733,6 +2733,7 @@ const make = Effect.gen(function* () {
               id: task.id,
               number: task.number,
               parentTaskId: task.parentTaskId,
+              waitsOn: task.waitsOn,
               title: task.title,
               stage: task.stage,
               leadThreadId: task.leadThreadId,

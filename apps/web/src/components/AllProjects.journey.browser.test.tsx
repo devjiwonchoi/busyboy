@@ -157,6 +157,7 @@ function task(
     id: id as never,
     number,
     parentTaskId: null,
+    waitsOn: [],
     title,
     stage: "inbox",
     leadThreadId: null,
@@ -210,6 +211,12 @@ beforeEach(() => {
             stage: "planning",
             openQuestion: true,
             updatedAt: minutesAgo(30),
+          }),
+          // Waits on a task in another project that isn't done yet.
+          task("task-5", 5, "Wire the launch page", {
+            parentTaskId: "task-3" as never,
+            waitsOn: ["site-1" as never],
+            updatedAt: minutesAgo(45),
           }),
         ],
       }),
@@ -305,7 +312,29 @@ async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
   const ids = [
     ...container.querySelectorAll("[data-all-projects-section='busyboy'] [data-all-projects-task]"),
   ].map((item) => item.getAttribute("data-all-projects-task"));
-  expect(ids).toEqual(["task-3", "task-4", "task-2"]);
+  expect(ids).toEqual(["task-3", "task-4", "task-5", "task-2"]);
+
+  // Linear-style structure: the parent counts its subtasks, a blocked task shows a flag.
+  expect(
+    row("task-3")!.querySelector("[data-subtask-progress]")!.getAttribute("data-subtask-progress"),
+  ).toBe("0/2");
+  expect(row("task-5")!.getAttribute("data-blocked")).toBe("true");
+  expect(row("task-4")!.getAttribute("data-blocked")).toBeNull();
+  if (window.innerWidth < 640) {
+    // No hover on a phone: the row names the blocker itself.
+    const label = row("task-5")!.querySelector<HTMLElement>("[data-blocked-label]")!;
+    expect(label.offsetParent).not.toBeNull();
+    expect(label.textContent).toBe("Blocked by SI-1");
+  } else {
+    expect(
+      row("task-5")!.querySelector<HTMLElement>("[data-blocked-label]")!.offsetParent,
+    ).toBeNull();
+    await userEvent.hover(row("task-5")!.querySelector("[data-testid='blocked-flag-trigger']")!);
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("Blocked by SI-1 · Launch page"),
+    );
+    await userEvent.unhover(row("task-5")!.querySelector("[data-testid='blocked-flag-trigger']")!);
+  }
 
   // Each row: status, key, title, PR link and last update.
   expect(row("task-2")!.textContent).toContain("BB-2");

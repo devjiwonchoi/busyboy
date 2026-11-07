@@ -23,6 +23,13 @@ import {
 import { taskRouteParams } from "~/taskRoutes";
 import { DecisionCard } from "../chat/DecisionCard";
 import { StatusGlyph } from "../sidebar/SidebarRowLine";
+import {
+  BlockedFlag,
+  SubtaskProgressBadge,
+  TaskParentBreadcrumb,
+  TaskStructure,
+  useTaskRelations,
+} from "./TaskRelations";
 import { useLiveTaskStatus } from "./taskStatus";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -99,6 +106,7 @@ function TaskPlanBody(props: {
 }) {
   const { detail, environmentId } = props;
   const { task, versions } = detail;
+  const relations = useTaskRelations(environmentId, task.id);
   const updateTaskSpec = useUpdateTaskSpec();
   const restoreTaskSpec = useRestoreTaskSpec();
   const splitTaskTodo = useSplitTaskTodo();
@@ -200,19 +208,8 @@ function TaskPlanBody(props: {
           <StatusGlyph icon={status.icon} />
           {status.label}
         </span>
-        {task.parentTaskId === null ? null : (
-          <Link
-            {...taskRouteParams(environmentId, task.projectId, task.parentTaskId)}
-            className="rounded-full border px-2 py-0.5 text-muted-foreground text-xs hover:text-foreground"
-          >
-            Parent task
-          </Link>
-        )}
-        {detail.children.length > 0 ? (
-          <span className="rounded-full border px-2 py-0.5 text-muted-foreground text-xs">
-            Subtasks {detail.children.length}
-          </span>
-        ) : null}
+        {relations?.progress ? <SubtaskProgressBadge progress={relations.progress} /> : null}
+        <BlockedFlag blockedBy={relations?.blockedBy ?? []} />
         <div className="ml-auto">
           <Select
             value={String(shown.version)}
@@ -232,7 +229,10 @@ function TaskPlanBody(props: {
         </div>
       </div>
 
-      <h1 className="mt-2 font-semibold text-lg leading-snug">{task.title}</h1>
+      <div className="mt-2">
+        <TaskParentBreadcrumb relations={relations} />
+      </div>
+      <h1 className="font-semibold text-lg leading-snug">{task.title}</h1>
 
       {task.prUrl === null ? null : (
         <a
@@ -389,6 +389,8 @@ function TaskPlanBody(props: {
           </form>
         ) : null}
       </section>
+
+      <TaskStructure relations={relations} className="mt-5" />
 
       {section("Background", "background")}
 

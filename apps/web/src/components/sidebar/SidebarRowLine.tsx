@@ -164,6 +164,15 @@ const TOUCH_LABEL_MS = 2000;
  * long-press. A long-press only shows the label; it doesn't click the row.
  */
 export function StatusGlyphWithLabel(props: { status: SidebarRowStatus }) {
+  return (
+    <GlyphWithLabel label={props.status.label}>
+      <StatusGlyph icon={props.status.icon} />
+    </GlyphWithLabel>
+  );
+}
+
+/** Any icon that names itself the same way: on hover, or on a phone on long-press. */
+export function GlyphWithLabel(props: { label: string; children: ReactNode; testId?: string }) {
   const [open, setOpen] = useState(false);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -184,7 +193,7 @@ export function StatusGlyphWithLabel(props: { status: SidebarRowStatus }) {
       <TooltipTrigger
         render={
           <span
-            data-testid="status-glyph-trigger"
+            data-testid={props.testId ?? "status-glyph-trigger"}
             className="pointer-events-auto inline-flex select-none [-webkit-touch-callout:none]"
             onPointerDown={(event) => {
               longPressed.current = false;
@@ -213,9 +222,9 @@ export function StatusGlyphWithLabel(props: { status: SidebarRowStatus }) {
           />
         }
       >
-        <StatusGlyph icon={props.status.icon} />
+        {props.children}
       </TooltipTrigger>
-      <TooltipPopup side="top">{props.status.label}</TooltipPopup>
+      <TooltipPopup side="top">{props.label}</TooltipPopup>
     </Tooltip>
   );
 }

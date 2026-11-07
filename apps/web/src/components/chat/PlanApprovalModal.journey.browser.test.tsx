@@ -5,6 +5,7 @@ import {
   ProjectAttentionItemId,
   type ProjectDecisionCard,
   ProjectId,
+  type ProjectTaskReference,
   type ProjectTeamAnswerDecisionInput,
   type ProjectTeamTaskDetail,
   ProjectTaskId,
@@ -18,6 +19,7 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
+import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
@@ -31,6 +33,8 @@ const server = vi.hoisted(() => ({
   detail: null as ProjectTeamTaskDetail | null,
   listeners: new Set<() => void>(),
   answers: [] as ProjectTeamAnswerDecisionInput[],
+  /** Every project's tasks, for the Structure section. */
+  managers: [] as Array<{ environmentId: string; summary: unknown }>,
 }));
 
 function publishCard(card: ProjectDecisionCard) {
@@ -62,7 +66,79 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
   })) as never,
   useAnswerDecision: (() => (_environmentId: unknown, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision(input)) as never,
+  useProjectManagerEntries: (() => server.managers) as never,
 }));
+
+vi.mock(import("../../state/environments"), async (original) => ({
+  ...(await original()),
+  useEnvironmentIds: (() => [ENVIRONMENT_ID]) as never,
+}));
+
+// The chat sits inside the app's router; a plain link stands in for it here.
+vi.mock(import("@tanstack/react-router"), async (original) => ({
+  ...(await original()),
+  Link: (({ params, to: _to, ...rest }: { params?: { taskId?: string }; to?: string }) => (
+    <a href={`#${params?.taskId ?? ""}`} {...rest} />
+  )) as never,
+}));
+
+function taskRef(id: string, number: number, title: string, extra: Partial<ProjectTaskReference>) {
+  return {
+    id: ProjectTaskId.make(id),
+    number,
+    parentTaskId: null,
+    waitsOn: [],
+    title,
+    stage: "running",
+    leadThreadId: null,
+    prUrl: null,
+    lastOutcome: null,
+    openQuestion: false,
+    openBlocker: false,
+    updatedAt: AT,
+    ...extra,
+  } satisfies ProjectTaskReference;
+}
+
+/**
+ * BU-32 is part of BU-30, waits on BU-31 (open) and BU-29 (done), has two subtasks,
+ * and blocks a task in another project.
+ */
+function makeManagers() {
+  return [
+    {
+      environmentId: ENVIRONMENT_ID,
+      summary: makeProjectManagerSummaryFixture({
+        projectId: PROJECT_ID,
+        taskKeyPrefix: "BU",
+        tasks: [
+          taskRef("task-29", 29, "Card styles", { stage: "done" }),
+          taskRef("task-30", 30, "Plan approval rework", {}),
+          taskRef("task-31", 31, "Card layout", {}),
+          taskRef("task-32", 32, "Plan approval modal", {
+            stage: "awaiting_approval",
+            parentTaskId: ProjectTaskId.make("task-30"),
+            waitsOn: [ProjectTaskId.make("task-31"), ProjectTaskId.make("task-29")],
+          }),
+          taskRef("task-33", 33, "Modal shell", {
+            stage: "done",
+            parentTaskId: TASK_ID,
+          }),
+          taskRef("task-34", 34, "Version picker", { stage: "inbox", parentTaskId: TASK_ID }),
+        ],
+      }),
+    },
+    {
+      environmentId: ENVIRONMENT_ID,
+      summary: makeProjectManagerSummaryFixture({
+        projectId: ProjectId.make("site"),
+        pmThreadId: ThreadId.make("pm-site"),
+        taskKeyPrefix: "SI",
+        tasks: [taskRef("site-4", 4, "Docs page", { waitsOn: [TASK_ID] })],
+      }),
+    },
+  ];
+}
 
 function todo(id: string, text: string) {
   return { id, text, done: false, subtaskId: null };
@@ -259,6 +335,7 @@ describe.each([
     server.card = makeCard();
     server.detail = makeDetail();
     server.answers = [];
+    server.managers = [];
     container = document.body.appendChild(document.createElement("div"));
     root = createRoot(container);
   });
@@ -283,7 +360,9 @@ describe.each([
     const check = sections[1]!.querySelector<HTMLInputElement>('li input[type="checkbox"]');
     expect(check?.checked).toBe(false);
     // Plan sections render as markdown too.
-    expect(section("Success criteria").textContent?.trim()).toBe("The user can approve from the PM chat.");
+    expect(section("Success criteria").textContent?.trim()).toBe(
+      "The user can approve from the PM chat.",
+    );
     expect(section("Success criteria").querySelector("li strong")?.textContent).toBe("PM chat");
     expect(section("Non-goals").textContent).toBe("Changing how tasks are created.");
     expect(section("Steps").querySelectorAll("li")).toHaveLength(2);
@@ -349,6 +428,49 @@ describe.each([
     await vi.waitFor(() => expect(document.querySelector("[data-plan-review]")).toBeNull());
     const answered = container.querySelector('[data-decision-card-state="answered"]')!;
     expect(answered.textContent).toContain("Changes requested");
+  });
+
+  it("shows where the task sits: parent, blockers, blocked tasks and subtasks", async () => {
+    server.managers = makeManagers();
+    await openReview();
+    const review = modal();
+    // Linear's parent breadcrumb, above the title.
+    const parent = review.querySelector<HTMLElement>("[data-task-parent]")!;
+    expect(parent.textContent).toBe("BU-30Plan approval rework");
+    expect(parent.getAttribute("href")).toBe("#task-30");
+    const title = review.querySelector<HTMLElement>("[data-plan-title]")!;
+    expect(parent.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // The relation lists, in Linear's order; each row is a status icon, key and title.
+    const structure = review.querySelector<HTMLElement>("[data-task-structure]")!;
+    const groups = [...structure.querySelectorAll<HTMLElement>("[data-relation-group]")];
+    const rows = (group: HTMLElement) =>
+      [...group.querySelectorAll("[data-related-task]")].map((row) =>
+        row.getAttribute("data-related-task"),
+      );
+    expect(groups.map((group) => group.dataset.relationGroup)).toEqual([
+      "subtasks",
+      "blocked-by",
+      "blocking",
+      "related",
+    ]);
+    expect(groups[0]!.querySelector("h3")!.textContent).toContain("Sub-tasks");
+    expect(
+      groups[0]!.querySelector("[data-subtask-progress]")!.getAttribute("data-subtask-progress"),
+    ).toBe("1/2");
+    expect(rows(groups[0]!)).toEqual(["BU-33", "BU-34"]);
+    expect(rows(groups[1]!)).toEqual(["BU-31"]);
+    // Blocks a task in another project.
+    expect(rows(groups[2]!)).toEqual(["SI-4"]);
+    // A finished blocker moves to Related.
+    expect(rows(groups[3]!)).toEqual(["BU-29"]);
+    const done = structure.querySelector<HTMLElement>('[data-related-task="BU-33"]')!;
+    expect(done.dataset.taskStatus).toBe("done");
+    expect(done.querySelector("a")!.getAttribute("href")).toBe("#task-33");
+    // Every row fits the modal at this width.
+    for (const row of structure.querySelectorAll<HTMLElement>("[data-related-task]")) {
+      expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+    }
   });
 
   it("approves and starts", async () => {
