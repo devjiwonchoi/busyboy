@@ -86,6 +86,8 @@ describe("taskReferencesForThread", () => {
         lastOutcome: null,
         openQuestion: false,
         openBlocker: false,
+        iterateRound: 0,
+        shipRound: 0,
         updatedAt: null,
       },
       {
@@ -100,6 +102,8 @@ describe("taskReferencesForThread", () => {
         lastOutcome: null,
         openQuestion: false,
         openBlocker: false,
+        iterateRound: 0,
+        shipRound: 0,
         updatedAt: null,
       },
     ],

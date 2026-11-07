@@ -1298,6 +1298,9 @@ export const ProjectTaskReference = Schema.Struct({
   openBlocker: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** When the task last changed; null from servers that predate the field. */
   updatedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** Iterate and Ship rounds so far, shown on the phase badge; 0 from older servers. */
+  iterateRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  shipRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 

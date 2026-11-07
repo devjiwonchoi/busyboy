@@ -5,15 +5,17 @@ import {
   type PlanApprovalOutcome,
   type ProjectApprovalPlan,
   type ProjectDecisionCard,
+  type ProjectTaskReference,
   type ProjectTaskStage,
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { useAnswerDecision, useTaskDetail } from "~/state/projectTeam";
 
 import { PlanTodoList } from "../plan/PlanTodoList";
 import { planProgressLabel, type PlanTodoLike } from "../plan/planView.logic";
+import { LiveTaskPhaseBadge } from "../task/TaskPhaseBadge";
 import { TaskStructureLine, useRelatedTask, useTaskRelations } from "../task/TaskRelations";
 import { Button } from "../ui/button";
 import { AFK_ANSWERED_LABEL } from "./Afk";
@@ -119,7 +121,7 @@ export function PlanApprovalCard({
           card={card}
           environmentId={environmentId}
           pinned={plan}
-          stage={related?.task.stage ?? null}
+          task={related?.task ?? null}
           afk={card.item.answeredBy === "afk"}
           onViewDetails={() => setReviewing(true)}
         />
@@ -236,24 +238,29 @@ function LivePlanBoard(props: {
   card: ProjectDecisionCard;
   environmentId: EnvironmentId;
   pinned: ProjectApprovalPlan;
-  stage: ProjectTaskStage | null;
+  task: ProjectTaskReference | null;
   afk: boolean;
   onViewDetails: () => void;
 }) {
-  const live = props.stage !== null && LIVE_STAGES.has(props.stage);
+  const stage = props.task?.stage ?? null;
+  const live = stage !== null && LIVE_STAGES.has(stage);
+  const phase =
+    props.task === null ? null : (
+      <LiveTaskPhaseBadge environmentId={props.environmentId} task={props.task} />
+    );
   if (!live) {
-    const finished =
-      props.stage === "done" ? "Done" : props.stage === "cancelled" ? "Cancelled" : null;
+    // Done reads from the phase badge; a cancelled task has no phase, so it says so.
     return (
       <BoardFooter
         todos={props.pinned.todos}
         afk={props.afk}
         onViewDetails={props.onViewDetails}
-        status={finished}
+        phase={phase}
+        status={stage === "done" ? "" : stage === "cancelled" ? "Cancelled" : null}
       />
     );
   }
-  return <LiveTodos {...props} />;
+  return <LiveTodos {...props} stage={stage} phase={phase} />;
 }
 
 function LiveTodos(props: {
@@ -261,6 +268,7 @@ function LiveTodos(props: {
   environmentId: EnvironmentId;
   pinned: ProjectApprovalPlan;
   stage: ProjectTaskStage | null;
+  phase: ReactNode;
   afk: boolean;
   onViewDetails: () => void;
 }) {
@@ -277,6 +285,7 @@ function LiveTodos(props: {
         todos={todos}
         afk={props.afk}
         onViewDetails={props.onViewDetails}
+        phase={props.phase}
         status={null}
       />
     </>
@@ -287,6 +296,8 @@ function BoardFooter(props: {
   todos: ReadonlyArray<Pick<PlanTodoLike, "done">>;
   afk: boolean;
   onViewDetails: () => void;
+  phase: ReactNode;
+  /** Replaces the step count; "" shows none. */
   status: string | null;
 }) {
   return (
@@ -297,8 +308,13 @@ function BoardFooter(props: {
       {props.afk ? (
         <span className="text-muted-foreground text-xs">{AFK_ANSWERED_LABEL}</span>
       ) : null}
-      <span data-plan-progress className="ms-auto text-muted-foreground text-xs">
-        {props.status ?? (props.todos.length > 0 ? planProgressLabel(props.todos) : null)}
+      <span className="ms-auto flex items-center gap-2">
+        {props.phase}
+        {props.status === "" ? null : (
+          <span data-plan-progress className="text-muted-foreground text-xs">
+            {props.status ?? (props.todos.length > 0 ? planProgressLabel(props.todos) : null)}
+          </span>
+        )}
       </span>
     </div>
   );

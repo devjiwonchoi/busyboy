@@ -3,7 +3,7 @@ import type { LegendListRef } from "@legendapp/list/react";
 import { act, createRef, type ComponentProps, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
@@ -28,6 +28,8 @@ const PROJECT_TASKS = {
       lastOutcome: null,
       openQuestion: false,
       openBlocker: false,
+      iterateRound: 2,
+      shipRound: 0,
       updatedAt: null,
     },
     {
@@ -42,6 +44,8 @@ const PROJECT_TASKS = {
       lastOutcome: null,
       openQuestion: false,
       openBlocker: false,
+      iterateRound: 0,
+      shipRound: 0,
       updatedAt: null,
     },
   ],
@@ -213,6 +217,11 @@ describe("MessagesTimeline in a normal thread", () => {
   });
 });
 
+const phaseSteps = (element: HTMLElement) =>
+  [...element.querySelectorAll<HTMLElement>("[data-phase-step]")].map(
+    (step) => step.dataset.phaseStepState,
+  );
+
 describe("Task references in a project manager thread", () => {
   const withTaskReferences: Entry[] = [
     message("ask", "How is it going?"),
@@ -243,7 +252,42 @@ describe("Task references in a project manager thread", () => {
       const tooltip = document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]');
       expect(tooltip?.textContent).toContain("#6 Cmd+number shortcuts count the PM row first");
       expect(tooltip?.textContent).toContain("In Progress");
+      // The phase stepper with its round: the second Iterate round.
+      expect(tooltip?.querySelector("[data-task-phase-label]")?.textContent).toBe(
+        "구현·리뷰 · 2회차",
+      );
     });
+    // Inside the text, each chip carries only the stepper segments.
+    expect(chips.map(phaseSteps)).toEqual([
+      ["done", "current", "upcoming"],
+      ["current", "upcoming", "upcoming"],
+    ]);
+  });
+
+  it("keeps the chip's phase stepper on one line at phone width", async () => {
+    await page.viewport(390, 844);
+    try {
+      await renderTimeline(PM_THREAD_ID, withTaskReferences);
+      const chips = [...container.querySelectorAll<HTMLElement>("[data-task-reference-chip]")];
+      for (const chip of chips) {
+        const steps = chip.querySelector<HTMLElement>("[data-task-phase]")!;
+        const box = chip.getBoundingClientRect();
+        const rect = steps.getBoundingClientRect();
+        expect(rect.width).toBeGreaterThan(0);
+        expect(rect.right).toBeLessThanOrEqual(box.right + 0.5);
+        expect(rect.top).toBeGreaterThanOrEqual(box.top - 0.5);
+        expect(rect.bottom).toBeLessThanOrEqual(box.bottom + 0.5);
+      }
+      await userEvent.hover(chips[1]!);
+      await vi.waitFor(() =>
+        expect(
+          document.querySelector('[data-slot="tooltip-popup"] [data-task-phase-label]')
+            ?.textContent,
+        ).toBe("계획"),
+      );
+    } finally {
+      await page.viewport(1280, 900);
+    }
   });
 
   it("leaves #N alone in threads outside the PM's team", async () => {

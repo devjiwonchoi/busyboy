@@ -96,6 +96,8 @@ function taskRef(id: string, number: number, title: string, extra: Partial<Proje
     lastOutcome: null,
     openQuestion: false,
     openBlocker: false,
+    iterateRound: 0,
+    shipRound: 0,
     updatedAt: AT,
     ...extra,
   } satisfies ProjectTaskReference;

@@ -27,6 +27,8 @@ function task(
     lastOutcome: null,
     openQuestion: false,
     openBlocker: false,
+    iterateRound: 0,
+    shipRound: 0,
     updatedAt: null,
     ...overrides,
   };

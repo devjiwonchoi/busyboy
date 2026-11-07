@@ -41,6 +41,8 @@ import {
   TaskStructure,
   useTaskRelations,
 } from "./TaskRelations";
+import { TaskPhaseBadge } from "./TaskPhaseBadge";
+import { taskPhaseView } from "./taskPhase.logic";
 import { useLiveTaskStatus } from "./taskStatus";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -220,6 +222,7 @@ function TaskPlanBody(props: {
           <StatusGlyph icon={status.icon} />
           {status.label}
         </span>
+        <TaskPhaseBadge view={taskPhaseView({ ...task, status: status.status })} />
         {relations?.progress ? <SubtaskProgressBadge progress={relations.progress} /> : null}
         <BlockedFlag blockedBy={relations?.blockedBy ?? []} />
         <div className="ml-auto">

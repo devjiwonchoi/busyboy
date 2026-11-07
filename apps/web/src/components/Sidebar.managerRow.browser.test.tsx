@@ -193,6 +193,8 @@ function manager(patch: Parameters<typeof makeProjectManagerSummaryFixture>[0] =
         lastOutcome: null,
         openQuestion: false,
         openBlocker: false,
+        iterateRound: 0,
+        shipRound: 0,
         updatedAt: null,
       })),
       ...patch,

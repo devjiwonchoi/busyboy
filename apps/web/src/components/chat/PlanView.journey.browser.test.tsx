@@ -39,6 +39,8 @@ const AT = "2026-11-07T03:00:00.000Z";
 const server = vi.hoisted(() => ({
   card: null as ProjectDecisionCard | null,
   stage: "awaiting_approval" as ProjectTaskStage,
+  iterateRound: 0,
+  shipRound: 0,
   versions: [] as Array<{ version: number; spec: ProjectTaskSpec }>,
   answers: [] as ProjectTeamAnswerDecisionInput[],
   listeners: new Set<() => void>(),
@@ -73,6 +75,8 @@ function taskRef(): ProjectTaskReference {
     lastOutcome: null,
     openQuestion: false,
     openBlocker: false,
+    iterateRound: server.iterateRound,
+    shipRound: server.shipRound,
     updatedAt: AT,
   };
 }
@@ -282,6 +286,13 @@ function expectInside(outer: HTMLElement, inner: HTMLElement) {
   expect(rect.right).toBeLessThanOrEqual(box.right + 0.5);
 }
 
+const phaseText = (element: HTMLElement) =>
+  element.querySelector("[data-task-phase-label]")?.textContent ?? null;
+const phaseSteps = (element: HTMLElement) =>
+  [...element.querySelectorAll<HTMLElement>("[data-phase-step]")].map(
+    (step) => step.dataset.phaseStepState,
+  );
+
 describe.each([
   { name: "desktop", width: 1280, height: 900 },
   { name: "phone", width: 390, height: 844 },
@@ -291,6 +302,8 @@ describe.each([
     await page.viewport(width, height);
     const spec = makeSpec();
     server.stage = "awaiting_approval";
+    server.iterateRound = 0;
+    server.shipRound = 0;
     server.versions = [{ version: 3, spec }];
     server.card = makeCard(spec);
     server.answers = [];
@@ -355,12 +368,26 @@ describe.each([
     await vi.waitFor(() => expect(statuses(card())).toEqual(["done", "done", "done"]));
     expect(card().querySelector("[data-plan-progress]")?.textContent).toBe("3 steps · 3 done");
 
-    // Once the task is done, the card stops reading live and says so.
+    // The phase badge follows the task: Iterate with its round, then Ship, Ready and Done.
+    expect(phaseText(card())).toBe("구현·리뷰");
+    expectInside(card(), card().querySelector<HTMLElement>("[data-task-phase]")!);
+    server.iterateRound = 2;
+    await act(async () => notify());
+    await vi.waitFor(() => expect(phaseText(card())).toBe("구현·리뷰 · 2회차"));
+    expect(phaseSteps(card())).toEqual(["done", "current", "upcoming"]);
+    // In review with the lead idle reads as Ready.
+    server.stage = "in_review";
+    server.shipRound = 1;
+    await act(async () => notify());
+    await vi.waitFor(() => expect(phaseText(card())).toBe("배포 준비됨"));
+    expect(phaseSteps(card())).toEqual(["done", "done", "current"]);
+
+    // Once the task is done, the card stops reading live and the badge says so.
     server.stage = "done";
     await act(async () => notify());
-    await vi.waitFor(() =>
-      expect(card().querySelector("[data-plan-progress]")?.textContent).toBe("Done"),
-    );
+    await vi.waitFor(() => expect(phaseText(card())).toBe("완료"));
+    expect(phaseSteps(card())).toEqual(["done", "done", "done"]);
+    expect(card().querySelector("[data-plan-progress]")).toBeNull();
     expect(rows(card())).toHaveLength(0);
   });
 
