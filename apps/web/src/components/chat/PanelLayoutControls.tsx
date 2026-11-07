@@ -7,11 +7,8 @@ import type { ThreadPanelPresentation } from "../../rightPanelLayout";
 import { PopoverCreateHandle, PopoverTrigger } from "../ui/popover";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { MobileNewTaskButton } from "../task/MobileNewTaskButton";
 
 export interface PanelLayoutControlsProps {
-  /** Phone-only "+" that opens the quick "New task" sheet. */
-  showNewTaskControl?: boolean;
   showThreadPanelControl?: boolean;
   showTerminalControl?: boolean;
   showRightPanelControl?: boolean;
@@ -32,7 +29,6 @@ export interface PanelLayoutControlsProps {
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
-  showNewTaskControl = false,
   showThreadPanelControl = true,
   showTerminalControl = true,
   showRightPanelControl = true,
@@ -80,7 +76,6 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       data-panel-layout-controls
     >
-      {showNewTaskControl ? <MobileNewTaskButton /> : null}
       {showThreadPanelControl
         ? threadPanelPresentation === "popover"
           ? threadPanelTooltip(

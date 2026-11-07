@@ -7783,7 +7783,6 @@ export default function ChatView(props: ChatViewProps) {
   const panelToggleControls = (
     <PanelLayoutControls
       {...panelToggleControlProps}
-      showNewTaskControl
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
     />
   );

@@ -402,7 +402,7 @@ describe("sidebar manager row", () => {
         expect(found.length).toBeGreaterThan(0);
         return found;
       });
-      expect(items).toEqual(["New task", "New thread"]);
+      expect(items).toEqual(["New thread"]);
     });
   }
 

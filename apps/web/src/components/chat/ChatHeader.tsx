@@ -283,8 +283,7 @@ export const ChatHeader = memo(function ChatHeader({
       ref={breadcrumbContainerRef}
       className={cn(
         "flex min-w-0 flex-1 items-center gap-2 sm:gap-3",
-        // Phones also show the "New task" button in the controls.
-        rightPanelOpen ? "pr-10 max-md:pr-20" : "pr-24 max-md:pr-36",
+        rightPanelOpen ? "pr-10" : "pr-24",
       )}
       onContextMenu={handleHeaderContextMenu}
     >

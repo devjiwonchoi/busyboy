@@ -264,7 +264,6 @@ import {
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarRowSwipe, type SidebarRowSwipeAction } from "./sidebar/SidebarRowSwipe";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
-import { openQuickTask } from "./task/quickTaskStore";
 import { selectSidebarTasksWithoutSession, SidebarTaskRow } from "./sidebar/SidebarTaskRows";
 import { taskRouteParams } from "../taskRoutes";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
@@ -1144,7 +1143,6 @@ function SidebarProjectHeader(props: {
     readonly manager: SidebarSectionProjectManager;
     readonly isActive: boolean;
     readonly onOpenThread: (threadRef: ScopedThreadRef) => void;
-    readonly onNewTask: () => void;
     readonly jumpLabel: string | null;
   };
 }) {
@@ -1178,7 +1176,6 @@ function SidebarProjectHeader(props: {
           onToggle={props.onToggle}
           onOpenThread={pm.onOpenThread}
           onNewThread={props.onNewThread}
-          onNewTask={pm.onNewTask}
           jumpLabel={pm.jumpLabel}
         />
       </SortableSidebarMarker>
@@ -3998,11 +3995,6 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                                         manager,
                                         isActive: routeThreadKey === manager.threadKey,
                                         onOpenThread: navigateToThread,
-                                        onNewTask: () =>
-                                          openQuickTask({
-                                            environmentId: manager.entry.environmentId,
-                                            projectId: manager.entry.summary.projectId,
-                                          }),
                                         jumpLabel: showJumpHints
                                           ? (jumpLabelByKey.get(manager.threadKey) ?? null)
                                           : null,
