@@ -3465,6 +3465,8 @@ const make = Effect.gen(function* () {
               openQuestion: open.some((item) => item.taskId === task.id),
               openBlocker: open.some((item) => item.taskId === task.id && item.kind === "blocker"),
               updatedAt: task.updatedAt,
+              iterateRound: task.iterateRound,
+              shipRound: task.shipRound,
             })),
           } satisfies ProjectTeamAttentionSummary;
         }),

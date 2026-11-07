@@ -222,6 +222,8 @@ beforeEach(() => {
           lastOutcome: task.lastOutcome ?? null,
           openQuestion: task.openQuestion ?? false,
           openBlocker: task.openBlocker ?? false,
+          iterateRound: 0,
+          shipRound: 0,
           updatedAt: null,
         })),
         // Task 7 asked the user a question.

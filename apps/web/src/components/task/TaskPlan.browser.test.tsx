@@ -205,7 +205,7 @@ afterEach(async () => {
 function render() {
   return act(async () =>
     root.render(
-      <div style={{ display: "flex", height: 800, width: 1200 }}>
+      <div style={{ display: "flex", height: 800, width: "100%", maxWidth: 1200 }}>
         <TaskPlan
           environmentId={"env-1" as never}
           projectId={"project-1" as never}
@@ -275,6 +275,46 @@ describe("TaskPlan status", () => {
     expect(header().textContent).toBe("Done · cancelled");
     expect(header().getBoundingClientRect().width).toBeGreaterThan(0);
     expect(container.textContent).toContain("Archived.");
+  });
+});
+
+describe.each([
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "phone", width: 390, height: 844 },
+])("TaskPlan phase badge on $name", ({ width, height }) => {
+  const phase = () => container.querySelector<HTMLElement>("[data-task-phase]");
+  const withTask = (task: Partial<ProjectTeamTaskDetail["task"]>) => {
+    state.detail = { ...state.detail, task: { ...state.detail.task, ...task } };
+  };
+
+  it("sits next to the status and follows the task from planning to done", async () => {
+    await page.viewport(width, height);
+    await render();
+    expect(header().nextElementSibling).toBe(phase());
+    expect(phase()?.textContent).toBe("계획");
+    const box = container.getBoundingClientRect();
+    expect(phase()!.getBoundingClientRect().right).toBeLessThanOrEqual(box.right + 0.5);
+
+    withTask({ stage: "running", iterateRound: 3 });
+    await act(async () => publish());
+    await vi.waitFor(() => expect(phase()?.textContent).toBe("구현·리뷰 · 3회차"));
+
+    withTask({
+      stage: "in_review",
+      shipRound: 2,
+      prUrl: "https://github.com/acme/busyboy/pull/81",
+    });
+    await act(async () => publish());
+    await vi.waitFor(() => expect(phase()?.textContent).toBe("배포 준비됨 · 2회차"));
+    expect(phase()?.dataset.taskPhaseTone).toBe("ready");
+
+    withTask({ stage: "done" });
+    await act(async () => publish());
+    await vi.waitFor(() => expect(phase()?.textContent).toBe("완료"));
+
+    withTask({ stage: "cancelled" });
+    await act(async () => publish());
+    await vi.waitFor(() => expect(phase()).toBeNull());
   });
 });
 

@@ -71,6 +71,8 @@ function task(
     lastOutcome: null,
     openQuestion: false,
     openBlocker: false,
+    iterateRound: 0,
+    shipRound: 0,
     updatedAt: "2026-11-05T09:00:00.000Z",
     ...overrides,
   };

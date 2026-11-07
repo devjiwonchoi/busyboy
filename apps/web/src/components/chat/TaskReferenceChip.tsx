@@ -4,6 +4,8 @@ import { Link } from "@tanstack/react-router";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { StatusGlyph } from "../sidebar/SidebarRowLine";
+import { TaskPhaseBadge } from "../task/TaskPhaseBadge";
+import { taskPhaseView } from "../task/taskPhase.logic";
 import { useLiveTaskStatus } from "../task/taskStatus";
 
 const CHIP_CLASS_NAME =
@@ -15,14 +17,16 @@ export function TaskReferenceChip(props: {
   readonly task: ProjectTaskReference;
 }) {
   const { environmentId, task } = props;
+  const label = `#${task.number} ${task.title}`;
+  const status = useLiveTaskStatus(environmentId, task);
+  const phase = taskPhaseView({ ...task, status: status.status });
   const content = (
     <>
       <span className="shrink-0 text-muted-foreground tabular-nums">#{task.number}</span>
       <span className="min-w-0 truncate">{task.title}</span>
+      <TaskPhaseBadge view={phase} compact className="self-center" />
     </>
   );
-  const label = `#${task.number} ${task.title}`;
-  const status = useLiveTaskStatus(environmentId, task);
   return (
     <Tooltip>
       <TooltipTrigger
@@ -56,6 +60,7 @@ export function TaskReferenceChip(props: {
             </span>
             {status.label}
           </div>
+          <TaskPhaseBadge view={phase} />
         </div>
       </TooltipPopup>
     </Tooltip>
