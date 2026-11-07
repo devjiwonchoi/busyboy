@@ -35,7 +35,7 @@ import {
 import { planTodoDependencyNumbers } from "../plan/planView.logic";
 import { StatusGlyph } from "../sidebar/SidebarRowLine";
 import {
-  BlockedFlag,
+  WaitingMarker,
   SubtaskProgressBadge,
   TaskParentBreadcrumb,
   TaskStructure,
@@ -221,7 +221,7 @@ function TaskPlanBody(props: {
           {status.label}
         </span>
         {relations?.progress ? <SubtaskProgressBadge progress={relations.progress} /> : null}
-        <BlockedFlag blockedBy={relations?.blockedBy ?? []} />
+        <WaitingMarker blockedBy={relations?.blockedBy ?? []} />
         <div className="ml-auto">
           <Select
             value={String(shown.version)}

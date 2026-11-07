@@ -316,7 +316,7 @@ function taskRef(id: string, number: number, title: string, extra: Record<string
   };
 }
 
-/** BU-49 is part of BU-53, waits on BU-55 and has two subtasks, one done. */
+/** BU-49 is part of BU-53, waits on BU-55, blocks BU-60 and has two subtasks, one done. */
 function seedStructure() {
   state.managers = [
     {
@@ -334,6 +334,7 @@ function seedStructure() {
           }),
           taskRef("task-50", 50, "Tab chrome", { stage: "done", parentTaskId: "task-49" }),
           taskRef("task-51", 51, "Phone sheet", { stage: "inbox", parentTaskId: "task-49" }),
+          taskRef("task-60", 60, "Release notes", { stage: "inbox", waitsOn: ["task-49"] }),
         ],
       },
     },
@@ -349,9 +350,15 @@ function expectStructure() {
   expect(plan.querySelector("[data-subtask-progress]")?.getAttribute("data-subtask-progress")).toBe(
     "1/2",
   );
-  expect(plan.querySelector("[data-blocked-flag]")?.textContent).toBe(
-    "Blocked by BU-55 · Dependency model",
+  const waiting = plan.querySelector<HTMLElement>("[data-waiting-marker]")!;
+  expect(waiting.querySelector(".sr-only")?.textContent).toBe(
+    "BU-55 끝나야 시작 · Dependency model",
   );
+  expect(waiting.querySelector("[aria-hidden]")?.textContent).toBe("BU-55");
+  expect(plan.querySelector(".lucide-flag")).toBeNull();
+  expect(
+    plan.querySelector("[data-relation-group='blocked-by'] h3 .lucide-hourglass"),
+  ).not.toBeNull();
   // The old "Parent task" / "Subtasks N" chips are gone.
   expect(plan.textContent).not.toContain("Parent task");
   const structure = plan.querySelector<HTMLElement>("[data-task-structure]")!;
@@ -359,7 +366,11 @@ function expectStructure() {
     [...structure.querySelectorAll("[data-related-task]")].map((row) =>
       row.getAttribute("data-related-task"),
     ),
-  ).toEqual(["BU-50", "BU-51", "BU-55"]);
+  ).toEqual(["BU-50", "BU-51", "BU-55", "BU-60"]);
+  // "Blocking" has its own chain icon, apart from the waiting hourglass.
+  expect(
+    structure.querySelector("[data-relation-group='blocking'] h3 .lucide-link-2"),
+  ).not.toBeNull();
   for (const row of structure.querySelectorAll<HTMLElement>("[data-related-task]")) {
     expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(
       plan.getBoundingClientRect().right + 1,

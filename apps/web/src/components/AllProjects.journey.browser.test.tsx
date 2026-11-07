@@ -314,7 +314,7 @@ async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
   ].map((item) => item.getAttribute("data-all-projects-task"));
   expect(ids).toEqual(["task-3", "task-4", "task-5", "task-2"]);
 
-  // Linear-style structure: the parent counts its subtasks, a blocked task shows a flag.
+  // Linear-style structure: the parent counts its subtasks, a waiting task an hourglass.
   expect(
     row("task-3")!.querySelector("[data-subtask-progress]")!.getAttribute("data-subtask-progress"),
   ).toBe("0/2");
@@ -324,17 +324,24 @@ async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
     // No hover on a phone: the row names the blocker itself.
     const label = row("task-5")!.querySelector<HTMLElement>("[data-blocked-label]")!;
     expect(label.offsetParent).not.toBeNull();
-    expect(label.textContent).toBe("Blocked by SI-1");
+    expect(label.textContent).toBe("SI-1 끝나야 시작");
+    expect(label.querySelector(".lucide-hourglass")).not.toBeNull();
   } else {
     expect(
       row("task-5")!.querySelector<HTMLElement>("[data-blocked-label]")!.offsetParent,
     ).toBeNull();
-    await userEvent.hover(row("task-5")!.querySelector("[data-testid='blocked-flag-trigger']")!);
+    const marker = row("task-5")!.querySelector<HTMLElement>("[data-waiting-marker]")!;
+    expect(marker.querySelector("[aria-hidden]")?.textContent).toBe("SI-1");
+    await userEvent.hover(row("task-5")!.querySelector("[data-testid='waiting-marker-trigger']")!);
     await vi.waitFor(() =>
-      expect(document.body.textContent).toContain("Blocked by SI-1 · Launch page"),
+      expect(document.body.textContent).toContain("SI-1 끝나야 시작 · Launch page"),
     );
-    await userEvent.unhover(row("task-5")!.querySelector("[data-testid='blocked-flag-trigger']")!);
+    await userEvent.unhover(
+      row("task-5")!.querySelector("[data-testid='waiting-marker-trigger']")!,
+    );
   }
+
+  expect(container.querySelector(".lucide-flag")).toBeNull();
 
   // Each row: status, key, title, PR link and last update.
   expect(row("task-2")!.textContent).toContain("BB-2");

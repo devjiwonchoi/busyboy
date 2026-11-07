@@ -158,19 +158,24 @@ export function taskRelations(
   };
 }
 
-/** "Blocked by BU-55 · Dependency model" or "Blocked by BU-55, BU-58". */
+/** "BU-55 끝나야 시작 · Dependency model" or "BU-55, BU-58 끝나야 시작". */
 export function blockedByLabel(blockedBy: ReadonlyArray<RelatedTask>): string {
   const [first] = blockedBy;
   if (first === undefined) return "";
-  if (blockedBy.length === 1) return `Blocked by ${first.key} · ${first.task.title}`;
-  return `Blocked by ${blockedBy.map((related) => related.key).join(", ")}`;
+  if (blockedBy.length === 1) return `${first.key} 끝나야 시작 · ${first.task.title}`;
+  return `${blockedBy.map((related) => related.key).join(", ")} 끝나야 시작`;
 }
 
-/** "Blocked by BU-55" or "Blocked by 2 tasks", short enough for a phone row. */
+/** "BU-55 끝나야 시작" or "2개 끝나야 시작", short enough for a phone row. */
 export function blockedByShortLabel(blockedBy: ReadonlyArray<RelatedTask>): string {
   const [first] = blockedBy;
   if (first === undefined) return "";
-  return blockedBy.length === 1
-    ? `Blocked by ${first.key}`
-    : `Blocked by ${blockedBy.length} tasks`;
+  return blockedBy.length === 1 ? `${first.key} 끝나야 시작` : `${blockedBy.length}개 끝나야 시작`;
+}
+
+/** The keys a row shows next to the hourglass: "BU-55" or "BU-55 +1". */
+export function blockedByKeys(blockedBy: ReadonlyArray<RelatedTask>): string {
+  const [first] = blockedBy;
+  if (first === undefined) return "";
+  return blockedBy.length === 1 ? first.key : `${first.key} +${blockedBy.length - 1}`;
 }
