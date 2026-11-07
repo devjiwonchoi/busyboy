@@ -6,7 +6,6 @@ import {
   planApprovalOutcome,
   type PlanReviewComment,
   type ProjectDecisionCard,
-  type ProjectTaskSpec,
 } from "@t3tools/contracts";
 import { XIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
@@ -335,7 +334,10 @@ function PlanReview({
     <h3 className="mb-1 font-semibold text-foreground text-sm">{label}</h3>
   );
 
-  const textSection = (label: string, field: keyof Omit<ProjectTaskSpec, "todos">) => {
+  const textSection = (
+    label: string,
+    field: "background" | "goal" | "successCriteria" | "nonGoals",
+  ) => {
     const text = spec[field].trim();
     const before = previous?.spec[field].trim() ?? "";
     return (

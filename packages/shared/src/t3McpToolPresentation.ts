@@ -342,6 +342,10 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   task_spec_read: tool(["Read", "Reading", "Read", "a task spec"], "team-task-read"),
   task_spec_write: tool(["Write", "Writing", "Wrote", "a task spec"], "team-task-update"),
   task_todo_set: tool(["Check", "Checking", "Checked", "a task todo"], "team-task-update"),
+  task_evidence_set: tool(
+    ["Record", "Recording", "Recorded", "criterion evidence"],
+    "team-task-update",
+  ),
   task_nudge: tool(["Nudge", "Nudging", "Nudged", "a team task"], "team-task-nudge"),
   task_list: tool(["List", "Listing", "Listed", "team tasks"], "team-task-read"),
   task_read: tool(["Read", "Reading", "Read", "a team task"], "team-task-read"),

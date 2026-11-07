@@ -11,7 +11,9 @@ import {
   type OrchestrationV2TurnItem,
   type OrchestratorMcpDelegateTaskInput,
   type OrchestratorMcpDelegateTaskResult,
+  PLAN_APPROVAL_START,
   ProjectId,
+  type ProjectTaskSpec,
   type ServerProvider,
   ThreadId,
   type ThreadPullRequestLink,
@@ -451,4 +453,53 @@ export const startLead = (
     const team = yield* ProjectTeamService.ProjectTeamService;
     const { task } = yield* team.createTask(pm, { title, request: `${title}.` });
     return yield* team.startTask(pm, { taskId: task.id }, delegate);
+  });
+
+/** A plan that meets the Definition of Ready: an end state, a proven criterion, a linked step, a file. */
+export const readyPlan = (spec: ProjectTaskSpec): ProjectTaskSpec => ({
+  ...spec,
+  summary: "hello.sh prints hello when you run it.",
+  goal: spec.goal.trim().length > 0 ? spec.goal : "hello.sh prints hello.",
+  criteria: [{ id: "c1", text: "hello.sh prints hello", provenBy: "a unit test", evidence: null }],
+  todos: [
+    {
+      id: "t1",
+      text: "Write hello.sh",
+      done: false,
+      subtaskId: null,
+      criteria: ["c1"],
+      dependsOn: [],
+      doneWhen: "the test passes",
+    },
+  ],
+  files: [{ path: "hello.sh", change: "new", why: "the script", todos: ["t1"] }],
+});
+
+/** The lead writes a plan that meets the Definition of Ready. */
+export const writeReadyPlan = (lead: ThreadId) =>
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService.ProjectTeamService;
+    const read = yield* team.readSpec(lead, {});
+    return yield* team.writeSpec(lead, {
+      baseVersion: read.current.version,
+      spec: readyPlan(read.current.spec),
+      note: "Plan",
+    });
+  });
+
+/** The lead writes a ready plan and the user approves it, so the task is running. */
+export const approvePlan = (lead: ThreadId) =>
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService.ProjectTeamService;
+    yield* writeReadyPlan(lead);
+    const { item } = yield* team.askUser(lead, {
+      kind: "approval",
+      question: "Approve the plan?",
+    });
+    yield* team.answerDecision({
+      projectId: item.projectId,
+      attentionItemId: item.id,
+      answer: PLAN_APPROVAL_START,
+    });
+    return item;
   });

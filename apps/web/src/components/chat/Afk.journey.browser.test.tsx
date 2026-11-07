@@ -58,6 +58,7 @@ function afkAnsweredCard(answeredAt: string): ProjectDecisionCard {
   return {
     taskNumber: 3,
     taskTitle: "Add a cache",
+    plan: null,
     item: {
       id: ProjectAttentionItemId.make("attention-cache"),
       projectId: ProjectId.make("project-1"),

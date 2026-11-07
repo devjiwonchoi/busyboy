@@ -18,7 +18,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { defaultPersona, defaultPersonaName } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
-import { PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
+import { PROJECT_ID, setUpManager, startLead, withTeam, approvePlan } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 
@@ -228,6 +228,7 @@ describe("ProjectTeamService", () => {
         const fourth = yield* team.nudgeTask(pm, { taskId: task.id });
         assert.strictEqual(fourth.attentionItem?.id, third.attentionItem?.id);
 
+        yield* approvePlan(leadThreadId);
         yield* team.updateTask(leadThreadId, { stage: "running", planSummary: "Plan." });
         const afterProgress = yield* team.readTask(pm, { taskId: task.id });
         assert.strictEqual(afterProgress.task.nudgeCount, 0);
@@ -307,6 +308,7 @@ describe("ProjectTeamService", () => {
         const approval = yield* start("Approval");
         yield* team.updateTask(approval.leadThreadId, { stage: "awaiting_approval" });
         const building = yield* start("Building");
+        yield* approvePlan(building.leadThreadId);
         yield* team.updateTask(building.leadThreadId, { stage: "running", planSummary: "Plan." });
         const shipped = yield* start("Shipped");
         yield* team.updateTask(shipped.leadThreadId, {
@@ -364,6 +366,7 @@ describe("ProjectTeamService", () => {
         const pm = yield* setUpManager;
         const { task } = yield* team.createTask(pm, { title: "Cache", request: "Speed it up." });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* approvePlan(leadThreadId);
         yield* team.updateTask(leadThreadId, {
           stage: "running",
           planSummary: "Add an LRU cache in front of the resolver.",
@@ -704,7 +707,8 @@ describe("ProjectTeamService", () => {
         const fragile = yield* startLead(pm, "Fragile", harness.delegate);
         yield* team.writeMemory(pm, { topic: "decisions", content: "Use pnpm." });
 
-        // A lead's plan needs no approval: it starts running and the plan shows in the journal.
+        // Once the plan is approved it runs, and the plan shows in the journal.
+        yield* approvePlan(shipped.leadThreadId);
         yield* team.updateTask(shipped.leadThreadId, {
           stage: "running",
           planSummary: "Add the button, then a journey test.",
@@ -746,6 +750,7 @@ describe("ProjectTeamService", () => {
             ["failed", "#2 failed: Fragile"],
             ["done", "#1 Ship it done"],
             ["decision", "Plan for #1 Ship it: Add the button, then a journey test."],
+            ["decision", "Decided on #1: Approve the plan? → Approve and start"],
           ],
         );
         assert.deepStrictEqual(

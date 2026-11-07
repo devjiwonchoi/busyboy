@@ -1,4 +1,6 @@
 import {
+  approvalPlanOf,
+  emptyProjectTaskSpec,
   type ChatAttachment,
   CommandId,
   DEFAULT_MODEL,
@@ -91,6 +93,8 @@ import {
   type ProjectTeamTaskSpecResult,
   type ProjectTeamTaskSpecWriteInput,
   type ProjectTeamTaskTodoSetInput,
+  type ProjectTeamTaskEvidenceSetInput,
+  type ProjectTaskSpecVersion,
   defaultTaskKeyPrefix,
   formatTaskKey,
   ProviderInstanceId,
@@ -130,6 +134,7 @@ import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import { directorWorkspaceRoot, epicStage } from "./director.ts";
+import { planReadinessGaps, specLinkProblems, unprovenCriteria } from "./planReadiness.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
@@ -153,11 +158,21 @@ import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
+import { resolveUserLanguage } from "./userLanguage.ts";
 
 export const MAX_TASK_NUDGES = 2;
 const DEFAULT_TASK_EVENT_LIMIT = 20;
 /** Stages the PM presence counts; done and cancelled tasks never show. */
 /** A task waiting on another may start once that one is in review or done. */
+/** How many of the user's latest PM chat messages decide their language. */
+const USER_LANGUAGE_SAMPLE = 10;
+
+/** Stages before the work starts; leaving them for running needs an approved plan. */
+const PRE_WORK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
+  "inbox",
+  "planning",
+  "awaiting_approval",
+]);
 const isDependencyCleared = (stage: ProjectTaskStage) => stage === "in_review" || stage === "done";
 
 const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
@@ -487,6 +502,17 @@ export function afkEventBody(setting: ProjectTeamSettings["afk"]): string {
     : `${AFK_EVENT_PREFIX} turned on by you until ${setting.until}`;
 }
 
+export function specChangedText(input: {
+  readonly task: Pick<ProjectTask, "number" | "title">;
+  readonly cardVersion: number | null;
+  readonly version: number;
+  readonly changedBy: "pm" | "user";
+}): string {
+  const who = input.changedBy === "user" ? "The user" : "The PM";
+  const card = input.cardVersion === null ? "your plan" : `your plan (spec v${input.cardVersion})`;
+  return `${AttentionRouter.SPEC_CHANGED_PREFIX} ${who} changed the spec of #${input.task.number} ${input.task.title} to v${input.version} while ${card} waited for approval, so that approval card is closed and the task is back in planning. Read the spec with task_spec_read, update the plan if needed, and ask for approval again.`;
+}
+
 export function autoApprovedPlanText(task: Pick<ProjectTask, "number" | "title">): string {
   return `${AttentionRouter.AUTO_APPROVED_PLAN_PREFIX} Your plan for #${task.number} ${task.title} → Approve and start. The task is now running; go on with the todos, and record the assumptions you make.`;
 }
@@ -585,6 +611,11 @@ export class ProjectTeamService extends Context.Service<
     readonly setTodo: (
       callerThreadId: ThreadId,
       input: ProjectTeamTaskTodoSetInput,
+    ) => Effect.Effect<ProjectTeamTaskSpecResult, ProjectTeamError>;
+    /** task_evidence_set: records the proof for one success criterion, as a new version. */
+    readonly setEvidence: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamTaskEvidenceSetInput,
     ) => Effect.Effect<ProjectTeamTaskSpecResult, ProjectTeamError>;
     readonly nudgeTask: (
       callerThreadId: ThreadId,
@@ -1386,6 +1417,10 @@ const make = Effect.gen(function* () {
           const spec = yield* latestSpec(task);
           // A task whose plan was already approved resumes straight into the work.
           const resume = task.planSummary !== null;
+          const userLanguage = resolveUserLanguage(
+            task.request,
+            yield* recentUserWords(manager.threadId),
+          );
           // A restart must not reuse the first lead's request id, or it gets that lead back.
           const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
           const lead = yield* delegate({
@@ -1397,6 +1432,7 @@ const make = Effect.gen(function* () {
               memory,
               otherTasks: active,
               ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
+              ...(userLanguage === null ? {} : { userLanguage }),
             }),
             title: `${key} ${task.title}`,
             role: "implementation",
@@ -1465,7 +1501,70 @@ const make = Effect.gen(function* () {
       return { key: formatTaskKey(prefix, task.number), current };
     });
 
-  /** Writes the next version from the latest one; a lead's write is an agent's. */
+  /**
+   * A new plan version makes an open approval card for an older version stale: the card
+   * closes and the task goes back to planning. A lead that did not make the change hears it.
+   */
+  const closeStaleApproval = (
+    task: ProjectTask,
+    version: ProjectTaskSpecVersion,
+    changedBy: "lead" | "pm" | "user",
+    actorThreadId: ThreadId | null,
+  ) =>
+    Effect.gen(function* () {
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      const stale = open.filter(
+        (item) =>
+          item.kind === "approval" &&
+          (item.specVersion === null || item.specVersion < version.version),
+      );
+      if (stale.length === 0) return;
+      const now = yield* nowIso;
+      for (const item of stale) {
+        yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: now });
+      }
+      const cardVersion = stale.at(-1)?.specVersion ?? null;
+      const current = yield* requireTask(task.id, task.projectId);
+      if (current.stage === "awaiting_approval") {
+        yield* moveTaskStage(current, "planning", actorThreadId);
+      }
+      yield* appendEvent(
+        current,
+        "note",
+        `Approval card${cardVersion === null ? "" : ` for v${cardVersion}`} closed: the spec moved to v${version.version}.`,
+        actorThreadId,
+      );
+      if (changedBy !== "lead" && current.leadThreadId !== null) {
+        const manager = yield* requireManager(task.projectId);
+        const key = `project-team:spec-changed:${yield* newId(task.id)}`;
+        yield* threads.sendToThread({
+          projectId: task.projectId,
+          commandId: CommandId.make(key),
+          threadId: current.leadThreadId,
+          messageId: MessageId.make(key),
+          senderThreadId: manager.threadId,
+          text: specChangedText({
+            task: current,
+            cardVersion,
+            version: version.version,
+            changedBy,
+          }),
+          attachments: [],
+          mode: "auto",
+          createdBy: "agent",
+          creationSource: "server",
+        });
+      }
+      yield* router.publish(task.projectId);
+    });
+
+  /**
+   * Writes the next version from the latest one; a lead's write is an agent's.
+   * A plan revision closes a stale approval card; checking a todo or recording evidence does not.
+   */
   const appendAgentSpec = (
     callerThreadId: ThreadId,
     task: ProjectTask,
@@ -1473,29 +1572,36 @@ const make = Effect.gen(function* () {
     note: string,
     next: (latest: ProjectTaskSpec) => Effect.Effect<ProjectTaskSpec, ProjectTeamError>,
     baseVersion?: number,
+    revisesPlan = true,
   ) =>
-    specLocks.withLock(
-      task.id,
-      Effect.gen(function* () {
-        const latest = yield* latestSpec(task);
-        if (baseVersion !== undefined && latest.version !== baseVersion) {
-          return yield* teamError(
-            `The spec is at v${latest.version} now, not v${baseVersion}. Read it again with task_spec_read and redo your change on top of it.`,
-            task.projectId,
-          );
-        }
-        const version = yield* repository.appendSpecVersion({
-          taskId: task.id,
-          spec: yield* next(latest.spec),
-          author: author === "pm" ? "pm" : "agent",
-          authorThreadId: callerThreadId,
-          note,
-          createdAt: yield* nowIso,
-        });
-        yield* appendEvent(task, "note", `Spec v${version.version}: ${note}`, callerThreadId);
-        return version;
-      }),
-    );
+    specLocks
+      .withLock(
+        task.id,
+        Effect.gen(function* () {
+          const latest = yield* latestSpec(task);
+          if (baseVersion !== undefined && latest.version !== baseVersion) {
+            return yield* teamError(
+              `The spec is at v${latest.version} now, not v${baseVersion}. Read it again with task_spec_read and redo your change on top of it.`,
+              task.projectId,
+            );
+          }
+          const version = yield* repository.appendSpecVersion({
+            taskId: task.id,
+            spec: yield* next(latest.spec),
+            author: author === "pm" ? "pm" : "agent",
+            authorThreadId: callerThreadId,
+            note,
+            createdAt: yield* nowIso,
+          });
+          yield* appendEvent(task, "note", `Spec v${version.version}: ${note}`, callerThreadId);
+          return version;
+        }),
+      )
+      .pipe(
+        Effect.tap((version) =>
+          revisesPlan ? closeStaleApproval(task, version, author, callerThreadId) : Effect.void,
+        ),
+      );
 
   const readSpec: ProjectTeamService["Service"]["readSpec"] = (callerThreadId, input) =>
     Effect.gen(function* () {
@@ -1506,6 +1612,13 @@ const make = Effect.gen(function* () {
   const writeSpec: ProjectTeamService["Service"]["writeSpec"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const { task, author } = yield* specTaskFor(callerThreadId, input.taskId, "task_spec_write");
+      const problems = specLinkProblems(input.spec);
+      if (problems.length > 0) {
+        return yield* teamError(
+          `The spec links to ids it does not have:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+          task.projectId,
+        );
+      }
       const version = yield* appendAgentSpec(
         callerThreadId,
         task,
@@ -1543,10 +1656,101 @@ const make = Effect.gen(function* () {
               candidate.id === input.todoId ? { ...candidate, done: input.done } : candidate,
             ),
           }),
+        undefined,
+        false,
       );
       yield* router.publish(task.projectId);
       return yield* specResult(task, version);
     }).pipe(orTeamError("Could not update the todo."));
+
+  const setEvidence: ProjectTeamService["Service"]["setEvidence"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const { task, author } = yield* specTaskFor(
+        callerThreadId,
+        input.taskId,
+        "task_evidence_set",
+      );
+      const current = yield* latestSpec(task);
+      const criterion = current.spec.criteria.find(
+        (candidate) => candidate.id === input.criterionId,
+      );
+      if (criterion === undefined) {
+        return yield* teamError(
+          `The spec has no criterion ${input.criterionId}. Read it with task_spec_read.`,
+          task.projectId,
+        );
+      }
+      if (criterion.evidence === input.evidence) return yield* specResult(task, current);
+      const version = yield* appendAgentSpec(
+        callerThreadId,
+        task,
+        author,
+        `Evidence for "${clip(criterion.text, 80)}"`,
+        (latest) =>
+          Effect.succeed({
+            ...latest,
+            criteria: latest.criteria.map((candidate) =>
+              candidate.id === input.criterionId
+                ? { ...candidate, evidence: input.evidence }
+                : candidate,
+            ),
+          }),
+        undefined,
+        false,
+      );
+      yield* router.publish(task.projectId);
+      return yield* specResult(task, version);
+    }).pipe(orTeamError("Could not record the evidence."));
+
+  /** The user, or AFK while they were away, approved a plan for this task. */
+  const hasApprovedPlan = (task: ProjectTask) =>
+    repository
+      .listAnsweredTaskAttentionItems({ taskId: task.id, kind: "approval" })
+      .pipe(
+        Effect.map((items) =>
+          items.some(
+            (item) => item.answer !== null && planApprovalOutcome(item.answer) !== "changes",
+          ),
+        ),
+      );
+
+  /**
+   * Each stage needs the previous phase's output: starting work needs an approved plan
+   * (coming back from review, a blocker or Done is fine), and In Review needs a pull
+   * request and evidence for every success criterion.
+   */
+  const checkStageGate = (
+    task: ProjectTask,
+    stage: ProjectTaskStage,
+    prUrl: string | null | undefined,
+  ) =>
+    Effect.gen(function* () {
+      if (
+        stage === "running" &&
+        PRE_WORK_STAGES.has(task.stage) &&
+        !(yield* hasApprovedPlan(task))
+      ) {
+        return yield* teamError(
+          `#${task.number} has no approved plan yet, so it cannot start. Write the plan with task_spec_write and ask for approval with ask_user(kind: "approval"); approving it starts the task.`,
+          task.projectId,
+        );
+      }
+      if (stage === "in_review") {
+        if ((prUrl === undefined ? task.prUrl : prUrl) === null) {
+          return yield* teamError(
+            `#${task.number} needs a pull request for In Review: pass prUrl. Without a remote, commit locally and move it to done instead.`,
+            task.projectId,
+          );
+        }
+        const unproven = unprovenCriteria((yield* latestSpec(task)).spec);
+        if (unproven.length > 0) {
+          return yield* teamError(
+            `#${task.number} has success criteria without evidence: ${unproven.join(", ")}. Prove each one, then record it with task_evidence_set.`,
+            task.projectId,
+          );
+        }
+      }
+    });
 
   const updateTask: ProjectTeamService["Service"]["updateTask"] = (callerThreadId, input) =>
     Effect.gen(function* () {
@@ -1578,6 +1782,9 @@ const make = Effect.gen(function* () {
           "Only the PM can change a task's title, waitsOn or parent.",
           role.projectId,
         );
+      }
+      if (input.stage !== undefined && input.stage !== task.stage) {
+        yield* checkStageGate(task, input.stage, input.prUrl);
       }
       const dependencies =
         input.waitsOn === undefined
@@ -1649,6 +1856,21 @@ const make = Effect.gen(function* () {
       yield* router.publish(role.projectId);
       return { task: updated };
     }).pipe(orTeamError("Could not update the task."));
+
+  /** What the user recently typed in the PM chat; a read failure leaves it empty. */
+  const recentUserWords = (managerThreadId: ThreadId) =>
+    threads.getThreadRecords(managerThreadId, ["messages"], { messageRoles: ["user"] }).pipe(
+      Effect.map(({ messages }) =>
+        messages
+          .filter(
+            (message) =>
+              message.createdBy === "user" && USER_TYPED_SOURCES.has(message.creationSource),
+          )
+          .slice(-USER_LANGUAGE_SAMPLE)
+          .map((message) => message.text),
+      ),
+      Effect.orElseSucceed((): ReadonlyArray<string> => []),
+    );
 
   const lastLeadMessage = (leadThreadId: ThreadId) =>
     threads.getThreadRecords(leadThreadId, ["messages"], { messageRoles: ["assistant"] }).pipe(
@@ -2086,12 +2308,14 @@ const make = Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
         return yield* teamError(`#${task.number} is finished; it needs no plan approval.`);
       }
-      if (input.goal === undefined || input.verification === undefined) {
+      const spec = yield* latestSpec(task);
+      const gaps = planReadinessGaps(spec.spec);
+      if (gaps.length > 0) {
         return yield* teamError(
-          "ask_user(kind: approval) needs goal and verification: 2-4 short markdown bullets each, shown on the card so the user can approve without opening the plan. goal: what changes and the end result (note risky steps or scope cuts). verification: how we'll know it's done (tests, checks, screenshots).",
+          `The plan in spec v${spec.version} is not ready for review. Fix these with task_spec_write, then ask again:\n${gaps.map((gap) => `- ${gap}`).join("\n")}`,
+          task.projectId,
         );
       }
-      const spec = yield* latestSpec(task);
       const now = yield* nowIso;
       yield* repository.supersedeOpenAttentionItems({
         taskId: task.id,
@@ -2106,8 +2330,8 @@ const make = Effect.gen(function* () {
         options: [PLAN_APPROVAL_START],
         askerThreadId: callerThreadId,
         specVersion: spec.version,
-        summary: input.goal,
-        verification: input.verification,
+        // The card opens with the plan's summary; its todos come from the pinned version.
+        summary: spec.spec.summary,
       });
       yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
       yield* appendEvent(
@@ -2288,6 +2512,7 @@ const make = Effect.gen(function* () {
         createdAt: yield* nowIso,
       });
       yield* appendEvent(task, "note", `Spec v${version.version}: ${note}`, null);
+      yield* closeStaleApproval(task, version, "user", null);
       return version;
     });
 
@@ -2310,13 +2535,7 @@ const make = Effect.gen(function* () {
         request: context.length > 0 ? context : input.title,
         waitsOn: [],
         parentTaskId: input.parentTaskId,
-        spec: {
-          background: userTaskBackground(context, attachments),
-          goal: "",
-          successCriteria: "",
-          nonGoals: "",
-          todos: [],
-        },
+        spec: emptyProjectTaskSpec(userTaskBackground(context, attachments)),
         now: yield* nowIso,
         author: "user",
         authorThreadId: null,
@@ -2399,7 +2618,7 @@ const make = Effect.gen(function* () {
             request: todo.text,
             waitsOn: [],
             parentTaskId: parent.id,
-            spec: { background: todo.text, goal: "", successCriteria: "", nonGoals: "", todos: [] },
+            spec: emptyProjectTaskSpec(todo.text),
             now: yield* nowIso,
             author: "user",
             authorThreadId: null,
@@ -2626,15 +2845,35 @@ const make = Effect.gen(function* () {
       const tasks = new Map(
         (yield* repository.listTasks({ projectId })).map((task) => [task.id, task]),
       );
-      return [...closed, ...open]
-        .toSorted((a, b) => isoMillis(a.createdAt) - isoMillis(b.createdAt))
-        .flatMap((item): ReadonlyArray<ProjectDecisionCard> => {
+      const items = [...closed, ...open].toSorted(
+        (a, b) => isoMillis(a.createdAt) - isoMillis(b.createdAt),
+      );
+      return yield* Effect.forEach(items, (item) =>
+        Effect.gen(function* () {
           const task = tasks.get(item.taskId);
-          return task === undefined
-            ? []
-            : [{ item, taskNumber: task.number, taskTitle: task.title }];
-        });
+          if (task === undefined) return [];
+          const card: ProjectDecisionCard = {
+            item,
+            taskNumber: task.number,
+            taskTitle: task.title,
+            plan: yield* approvalPlanFor(item),
+          };
+          return [card];
+        }),
+      ).pipe(Effect.map((cards) => cards.flat()));
     });
+
+  /** A plan approval card shows the summary and todos of the spec version it asks about. */
+  const approvalPlanFor = (item: ProjectAttentionItem) =>
+    item.kind !== "approval" || item.specVersion === null
+      ? Effect.succeed(null)
+      : repository
+          .getSpecVersion({ taskId: item.taskId, version: item.specVersion })
+          .pipe(
+            Effect.map((version) =>
+              Option.isSome(version) ? approvalPlanOf(version.value.spec) : null,
+            ),
+          );
 
   // Reading the PM transcript on every snapshot would be wasteful; the preview only
   // changes when a run settles or the user writes, which moves these shell fields.
@@ -2802,6 +3041,7 @@ const make = Effect.gen(function* () {
     readSpec,
     writeSpec,
     setTodo,
+    setEvidence,
     nudgeTask,
     listTasks,
     readTask,

@@ -17,7 +17,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { classifyTaskOutcome, nextInboxTask, TaskOutcomeReactor } from "./taskOutcomeReactor.ts";
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
-import { PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
+import { PROJECT_ID, setUpManager, startLead, withTeam, approvePlan } from "./testkit.ts";
 
 const foldLine = (number: number) =>
   `Memory: fold #${number} into memory: one dated line in "decisions" with its key decisions and result; drop detail only this task needed.`;
@@ -277,6 +277,7 @@ describe("TaskOutcomeReactor", () => {
         const team = yield* ProjectTeamService.ProjectTeamService;
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Research first", harness.delegate);
+        yield* approvePlan(lead.leadThreadId);
         yield* team.updateTask(lead.leadThreadId, { stage: "running", planSummary: "Plan." });
         // The provider's own background subagent, not a BusyBoy delegated task.
         harness.addThread(lead.leadThreadId).shell = {
@@ -306,6 +307,7 @@ describe("TaskOutcomeReactor", () => {
         const team = yield* ProjectTeamService.ProjectTeamService;
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Quiet", harness.delegate);
+        yield* approvePlan(lead.leadThreadId);
         yield* team.updateTask(lead.leadThreadId, { stage: "running", planSummary: "Plan." });
         yield* reactor.handle(
           leadTurnEnded({
@@ -498,7 +500,11 @@ describe("TaskOutcomeReactor", () => {
         const { task: api } = yield* team.createTask(otherPm, { title: "API", request: "API." });
         const first = yield* startLead(pm, "First", harness.delegate);
         yield* team.createTask(pm, { title: "UI", request: "UI.", waitsOn: [api.id] });
-        yield* team.updateTask(otherPm, { taskId: api.id, stage: "in_review" });
+        yield* team.updateTask(otherPm, {
+          taskId: api.id,
+          stage: "in_review",
+          prUrl: "https://github.com/acme/api/pull/1",
+        });
         yield* team.updateTask(first.leadThreadId, { stage: "done" });
 
         yield* reactor.handle(

@@ -231,32 +231,117 @@ const ProjectTaskSpecText = Schema.String.check(Schema.isMaxLength(60_000));
 export const ProjectTaskTodoId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 export type ProjectTaskTodoId = typeof ProjectTaskTodoId.Type;
 
+/** Older specs have no structure; these decode as empty. */
+const textOrEmpty = (maxLength: number) =>
+  Schema.String.check(Schema.isMaxLength(maxLength)).pipe(
+    Schema.withDecodingDefault(Effect.succeed("")),
+  );
+const noIds = Schema.Array(ProjectTaskTodoId).pipe(Schema.withDecodingDefault(Effect.succeed([])));
+
 export const ProjectTaskTodo = Schema.Struct({
   id: ProjectTaskTodoId,
   text: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
   done: Schema.Boolean,
   /** Set once the todo was split into its own task. */
   subtaskId: Schema.NullOr(ProjectTaskId),
+  /** Ids of the criteria this step builds. */
+  criteria: noIds,
+  /** Ids of the todos that must be done first. */
+  dependsOn: noIds,
+  /** The check that shows this step is done. */
+  doneWhen: textOrEmpty(2_000),
 });
 export type ProjectTaskTodo = typeof ProjectTaskTodo.Type;
+
+/** One success criterion: what must be true, how it is proven, and the proof once it exists. */
+export const ProjectTaskCriterion = Schema.Struct({
+  id: ProjectTaskTodoId,
+  text: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  /** How it will be proven, such as "server test" or "phone screenshot". */
+  provenBy: textOrEmpty(2_000),
+  /** The proof, recorded during the work with task_evidence_set. */
+  evidence: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4_000))).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+});
+export type ProjectTaskCriterion = typeof ProjectTaskCriterion.Type;
+
+export const ProjectTaskFileChange = Schema.Literals(["new", "changed", "deleted"]);
+export type ProjectTaskFileChange = typeof ProjectTaskFileChange.Type;
+
+/** A file the plan touches, and why. */
+export const ProjectTaskFile = Schema.Struct({
+  path: TrimmedNonEmptyString.check(Schema.isMaxLength(500)),
+  change: ProjectTaskFileChange,
+  why: textOrEmpty(1_000),
+  /** Ids of the todos that touch it. */
+  todos: noIds,
+});
+export type ProjectTaskFile = typeof ProjectTaskFile.Type;
 
 /** The written spec of a task. Every change is kept as a new version. */
 export const ProjectTaskSpec = Schema.Struct({
   background: ProjectTaskSpecText,
+  /**
+   * The plan in the lead's own words, 2-4 sentences in the user's language: what is wrong
+   * today and what the user sees when it is done. The approval card opens with it.
+   */
+  summary: textOrEmpty(4_000),
   /** What the end result looks like. */
   goal: ProjectTaskSpecText,
   /** How to tell the work is done. Older specs have none. */
   successCriteria: ProjectTaskSpecText.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   nonGoals: ProjectTaskSpecText,
   todos: Schema.Array(ProjectTaskTodo).check(Schema.isMaxLength(200)),
+  /** A Mermaid diagram of the behavior once the work is done. */
+  flow: textOrEmpty(60_000),
+  /** A throwaway HTML mockup of the end state, for plans that change UI. */
+  prototype: textOrEmpty(200_000),
+  /** Why a plan that changes UI has no prototype. */
+  prototypeWaiver: textOrEmpty(2_000),
+  /** Success criteria as a checklist; successCriteria is the older free-text form. */
+  criteria: Schema.Array(ProjectTaskCriterion)
+    .check(Schema.isMaxLength(50))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<ProjectTaskCriterion>))),
+  /** Every file the plan adds, changes or deletes. */
+  files: Schema.Array(ProjectTaskFile)
+    .check(Schema.isMaxLength(300))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<ProjectTaskFile>))),
 }).check(
   Schema.makeFilter((spec) =>
     new Set(spec.todos.map((todo) => todo.id)).size === spec.todos.length
       ? true
       : "Each todo needs its own id.",
   ),
+  Schema.makeFilter((spec) =>
+    new Set(spec.criteria.map((criterion) => criterion.id)).size === spec.criteria.length
+      ? true
+      : "Each criterion needs its own id.",
+  ),
 );
 export type ProjectTaskSpec = typeof ProjectTaskSpec.Type;
+
+/** A spec with nothing planned yet. */
+export function emptyProjectTaskSpec(background = ""): ProjectTaskSpec {
+  return {
+    background,
+    summary: "",
+    goal: "",
+    successCriteria: "",
+    nonGoals: "",
+    todos: [],
+    flow: "",
+    prototype: "",
+    prototypeWaiver: "",
+    criteria: [],
+    files: [],
+  };
+}
+
+/** A new unchecked todo with no links yet. */
+export function newProjectTaskTodo(id: string, text: string): ProjectTaskTodo {
+  return { id, text, done: false, subtaskId: null, criteria: [], dependsOn: [], doneWhen: "" };
+}
 
 export const ProjectTaskSpecAuthor = Schema.Literals(["user", "pm", "agent"]);
 export type ProjectTaskSpecAuthor = typeof ProjectTaskSpecAuthor.Type;
@@ -356,11 +441,45 @@ export const ProjectAttentionItem = Schema.Struct({
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
+/** One step on a plan approval card: what gets done and how to tell it is done. */
+export const ProjectApprovalPlanTodo = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  done: Schema.Boolean,
+  doneWhen: Schema.String,
+  /** Ids of the todos it comes after. */
+  dependsOn: Schema.Array(Schema.String),
+});
+export type ProjectApprovalPlanTodo = typeof ProjectApprovalPlanTodo.Type;
+
+/** What a plan approval card shows: the summary and the todos of the spec version it pins. */
+export const ProjectApprovalPlan = Schema.Struct({
+  summary: Schema.String,
+  todos: Schema.Array(ProjectApprovalPlanTodo),
+});
+export type ProjectApprovalPlan = typeof ProjectApprovalPlan.Type;
+
+/** The approval card's plan, taken from a spec version. */
+export function approvalPlanOf(spec: ProjectTaskSpec): ProjectApprovalPlan {
+  return {
+    summary: spec.summary,
+    todos: spec.todos.map((todo) => ({
+      id: todo.id,
+      text: todo.text,
+      done: todo.done,
+      doneWhen: todo.doneWhen,
+      dependsOn: todo.dependsOn,
+    })),
+  };
+}
+
 /** A question shown to the user as a card, with the name of the task that asked it. */
 export const ProjectDecisionCard = Schema.Struct({
   item: ProjectAttentionItem,
   taskNumber: PositiveInt,
   taskTitle: Schema.String,
+  /** For a plan approval: the plan it asks about. Null for other kinds and missing versions. */
+  plan: Schema.NullOr(ProjectApprovalPlan).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectDecisionCard = typeof ProjectDecisionCard.Type;
 
@@ -870,18 +989,10 @@ export type ProjectTeamSettingsResult = typeof ProjectTeamSettingsResult.Type;
 export const ProjectTeamAskUserInput = Schema.Struct({
   kind: ProjectAttentionKind.annotate({
     description:
-      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card. blocker: something only a person can unblock.",
+      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card with the spec's summary and todos. blocker: something only a person can unblock.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description: "Self-contained question. For approval, one line saying what the task is.",
-  }),
-  goal: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
-    description:
-      "Required for approval: the card's Goal section. 2-4 short markdown bullets: what changes and what the end result looks like, plus anything notable such as risky steps or scope cuts.",
-  }),
-  verification: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
-    description:
-      "Required for approval: the card's Verification section. 2-4 short markdown bullets: how we'll know it's done (tests, checks, screenshots).",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -977,7 +1088,7 @@ export const ProjectTeamTaskSpecWriteInput = Schema.Struct({
   }),
   spec: ProjectTaskSpec.annotate({
     description:
-      "The whole spec. Keep todo ids that already exist; give new todos a new short id such as t4.",
+      "The whole spec. summary is 2-4 sentences in your own words, in the user's language: what is wrong today and what the user sees when it is done; the approval card opens with it. goal is the end state; criteria are checks, each with provenBy; each todo needs a doneWhen line (how the user can tell it is done) and lists the criteria it builds (criteria) and the todos it comes after (dependsOn); files lists every file with change and why; flow is a Mermaid diagram; prototype is an HTML mockup for UI changes, else prototypeWaiver says why not. Keep ids that already exist; give new todos and criteria a short new id such as t4 or c3.",
   }),
   note: TrimmedNonEmptyString.check(Schema.isMaxLength(500)).annotate({
     description: 'Why it changed, in a few words, such as "Plan from the code review".',
@@ -991,6 +1102,16 @@ export const ProjectTeamTaskTodoSetInput = Schema.Struct({
   done: Schema.Boolean,
 });
 export type ProjectTeamTaskTodoSetInput = typeof ProjectTeamTaskTodoSetInput.Type;
+
+export const ProjectTeamTaskEvidenceSetInput = Schema.Struct({
+  taskId: ProjectTeamOwnTaskId,
+  criterionId: ProjectTaskTodoId,
+  evidence: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)).annotate({
+    description:
+      "The proof that the criterion holds, such as the test that passed or a screenshot link.",
+  }),
+});
+export type ProjectTeamTaskEvidenceSetInput = typeof ProjectTeamTaskEvidenceSetInput.Type;
 
 export const ProjectTeamAttentionItemResult = Schema.Struct({
   item: ProjectAttentionItem,
