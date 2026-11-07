@@ -30,7 +30,7 @@ import {
   ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE,
   type AssistantCitation,
   type EnvironmentId,
-  type MessageId,
+  MessageId,
   type OrchestrationV2TurnItem,
   type RunAttemptId,
   type ScopedThreadRef,
@@ -5752,7 +5752,7 @@ function DecisionCardTimelineRow({
 }) {
   const ctx = use(TimelineRowCtx);
   if (ctx.threadRef === null) return null;
-  return (
+  const card = (
     <DecisionCard
       card={row.card}
       environmentId={ctx.activeThreadEnvironmentId}
@@ -5760,6 +5760,23 @@ function DecisionCardTimelineRow({
       cwd={ctx.markdownCwd}
     />
   );
+
+  // Plan cards share message selection, annotations, and citation navigation in every state.
+  if (row.card.item.kind === "approval") {
+    return (
+      <AssistantCitationSource
+        messageId={MessageId.make(row.card.item.id)}
+        threadRef={ctx.threadRef}
+        itemKey={row.id}
+        request={ctx.citationRequest}
+        listRef={ctx.listRef}
+      >
+        {card}
+      </AssistantCitationSource>
+    );
+  }
+
+  return card;
 }
 
 function AnsweredQuestionTimelineRow({ entry }: { entry: WorkLogEntry }) {
