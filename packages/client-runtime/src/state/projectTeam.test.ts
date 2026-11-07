@@ -72,6 +72,8 @@ function summary(
     decisionCards: [],
     tasks: [],
     taskKeyPrefix: "T",
+    lastMessage: null,
+    afkAnswers: [],
     ...overrides,
   };
 }
