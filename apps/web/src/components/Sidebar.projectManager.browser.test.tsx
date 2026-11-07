@@ -212,9 +212,8 @@ describe("project manager sidebar heading", () => {
     expect(props.onOpenThread).not.toHaveBeenCalled();
   });
 
-  it("puts New task and New thread behind one + menu", async () => {
-    const onNewTask = vi.fn();
-    const props = await renderHeading({ onNewTask });
+  it("puts New thread behind the + menu, with no New task", async () => {
+    const props = await renderHeading();
     await act(async () => button("Add to busyboy")!.click());
     const item = (name: string) =>
       [...document.querySelectorAll<HTMLElement>('[data-slot="menu-item"]')].find(
@@ -224,9 +223,8 @@ describe("project manager sidebar heading", () => {
     await act(async () => item("New thread")!.click());
     expect(props.onNewThread).toHaveBeenCalledOnce();
     await act(async () => button("Add to busyboy")!.click());
-    await vi.waitFor(() => expect(item("New task")).toBeDefined());
-    await act(async () => item("New task")!.click());
-    expect(onNewTask).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(item("New thread")).toBeDefined());
+    expect(item("New task")).toBeUndefined();
   });
 
   it("has no tasks fold: task leads are ordinary rows below the heading", async () => {

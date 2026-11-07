@@ -16,7 +16,6 @@ const state = vi.hoisted(() => ({
   threads: [] as unknown[],
   projects: [] as unknown[],
   managers: [] as { environmentId: string; summary: ProjectTeamAttentionSummary }[],
-  createTask: (() => undefined) as unknown as (...args: unknown[]) => Promise<unknown>,
   startTurn: vi.fn(async (_input: unknown) => ({ _tag: "Success", value: undefined })),
 }));
 
@@ -55,7 +54,6 @@ vi.mock(import("../state/projectTeam"), async (original) => ({
     byPmThreadId: new Map(state.managers.map((m) => [m.summary.pmThreadId, m.summary])),
   })) as never,
   useRequestSitrep: (() => vi.fn()) as never,
-  useCreateTask: (() => state.createTask) as never,
   // The real hook reads the summary from atoms; read it from the test's managers instead.
   useLeadThreadTask: ((ref: { threadId: string }, projectId: string | null) =>
     taskForLeadThread(
@@ -85,8 +83,6 @@ import {
 import { taskForLeadThread } from "../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import { AllProjectsPage, SHOW_DONE_TASKS_STORAGE_KEY } from "./allProjects/AllProjectsPage";
-import { QuickTaskHost } from "./task/QuickTaskHost";
-import { closeQuickTask, openQuickTask } from "./task/quickTaskStore";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { ThreadSidebarWithRail } from "./sidebar/ThreadSidebarWithRail";
 import { SidebarProvider } from "./ui/sidebar";
@@ -246,7 +242,6 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await act(async () => closeQuickTask());
   await act(() => root.unmount());
   container.remove();
   vi.restoreAllMocks();
@@ -276,7 +271,6 @@ function renderApp() {
           </div>
         </div>
         <MainAppLocationTracker />
-        <QuickTaskHost />
       </SidebarProvider>
     ),
   });
@@ -395,11 +389,6 @@ async function walkThroughDirector(app: ReturnType<typeof renderApp>) {
   await vi.waitFor(() =>
     expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-1"),
   );
-
-  // New tasks are planned in a project, never in the Director's.
-  await act(async () => openQuickTask());
-  await vi.waitFor(() => expect(document.querySelector("[role='dialog']")).not.toBeNull());
-  expect(document.querySelector("[role='dialog']")!.textContent).not.toContain("Director");
 }
 
 describe("Director", () => {

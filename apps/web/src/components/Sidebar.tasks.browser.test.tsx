@@ -2,7 +2,6 @@ import "~/index.css";
 
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import type { ProjectTaskReference, ProjectTeamAttentionSummary } from "@t3tools/contracts";
-import { AsyncResult } from "effect/reactivity";
 import { act } from "react";
 import { userEvent } from "vite-plus/test/browser";
 import { createRoot, type Root } from "react-dom/client";
@@ -15,7 +14,6 @@ const state = vi.hoisted(() => ({
   projects: [] as unknown[],
   groups: [] as unknown[],
   managers: [] as { environmentId: string; summary: ProjectTeamAttentionSummary }[],
-  createTask: (() => undefined) as unknown as (...args: unknown[]) => Promise<unknown>,
 }));
 
 vi.mock(import("../state/server"), async (original) => {
@@ -47,7 +45,6 @@ vi.mock(import("../state/projectTeam"), async (original) => ({
     byPmThreadId: new Map(state.managers.map((m) => [m.summary.pmThreadId, m.summary])),
   })) as never,
   useRequestSitrep: (() => vi.fn()) as never,
-  useCreateTask: (() => state.createTask) as never,
   // The real hook reads the summary from atoms; read it from the test's managers instead.
   useLeadThreadTask: ((ref: { threadId: string }, projectId: string | null) =>
     taskForLeadThread(
@@ -77,7 +74,6 @@ import {
 import { taskForLeadThread } from "../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import Sidebar from "./Sidebar";
-import { QuickTaskHost } from "./task/QuickTaskHost";
 import { SidebarProvider } from "./ui/sidebar";
 
 function threadShell(id: string, projectId: string, updatedAt: string): EnvironmentThreadShell {
@@ -219,16 +215,7 @@ beforeEach(() => {
       }),
     },
   ];
-  state.createTask = vi.fn(async () =>
-    AsyncResult.success({
-      task: { ...task("task-5", 5, "Dark mode"), projectId: "busyboy" },
-      key: "BB-5",
-      versions: [],
-      sessions: [],
-      children: [],
-      openAttention: [],
-    }),
-  );
+
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -249,7 +236,6 @@ function renderSidebarApp() {
           <Sidebar />
         </div>
         <Outlet />
-        <QuickTaskHost />
       </SidebarProvider>
     ),
   });
@@ -289,7 +275,7 @@ function expectWaitingOn(row: HTMLElement | null, key: string) {
 }
 
 describe("sidebar tasks", () => {
-  it("lists tasks by key, opens their pages, and adds a task from the PM heading", async () => {
+  it("lists tasks by key, opens their pages, and ignores Cmd+N", async () => {
     const app = renderSidebarApp();
     await app.render();
 
@@ -333,50 +319,30 @@ describe("sidebar tasks", () => {
     await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/lead-2"));
     expect(threadRow("BB-2 Fix drag scroll")?.getAttribute("aria-current")).toBe("page");
 
-    // The PM heading's "+" menu has "New task", which opens the quick task modal on that project.
+    // There is no new task composer: Cmd+N and Ctrl+N do nothing.
+    const before = container.innerHTML;
+    await userEvent.keyboard("{Meta>}n{/Meta}");
+    await userEvent.keyboard("{Control>}n{/Control}");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.innerHTML).toBe(before);
+    expect(app.router.state.location.pathname).toBe("/env-1/lead-2");
+
+    // The PM heading's "+" menu has no "New task" either.
     await userEvent.hover(
       container.querySelector('[data-testid="sidebar-project-manager-heading"]')!,
     );
     await userEvent.click(
       container.querySelector<HTMLElement>('button[aria-label="Add to busyboy"]')!,
     );
-    await userEvent.click(
-      await vi.waitFor(() => {
-        const item = [...document.querySelectorAll<HTMLElement>('[data-slot="menu-item"]')].find(
-          (candidate) => candidate.textContent === "New task",
-        );
-        expect(item).toBeDefined();
-        return item!;
-      }),
-    );
-    const context = await vi.waitFor(() => {
-      const textarea = document.querySelector<HTMLTextAreaElement>(
-        'textarea[aria-label="Task context"]',
+    const items = await vi.waitFor(() => {
+      const found = [...document.querySelectorAll('[data-slot="menu-item"]')].map(
+        (item) => item.textContent,
       );
-      expect(textarea).not.toBeNull();
-      return textarea!;
+      expect(found.length).toBeGreaterThan(0);
+      return found;
     });
-    // No title: the first line becomes the title, and planning starts right away.
-    await userEvent.type(context, "Dark mode{Enter}The settings page is too bright at night.");
-    await userEvent.click(
-      [...document.querySelectorAll<HTMLElement>("button")].find((button) =>
-        button.textContent?.startsWith("Create task"),
-      )!,
-    );
-
-    await vi.waitFor(() =>
-      expect(state.createTask).toHaveBeenCalledWith("env-1", {
-        projectId: "busyboy",
-        title: "Dark mode",
-        context: "Dark mode\nThe settings page is too bright at night.",
-        startPlanning: true,
-      }),
-    );
-    // The modal closes and the user stays where they were.
-    await vi.waitFor(() =>
-      expect(document.querySelector('textarea[aria-label="Task context"]')).toBeNull(),
-    );
-    expect(app.router.state.location.pathname).toBe("/env-1/lead-2");
+    expect(items).toEqual(["New thread"]);
   });
   it("opens the PM chat from its heading, then folds the PM section from it", async () => {
     const app = renderSidebarApp();

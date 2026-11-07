@@ -1,7 +1,6 @@
 import {
   approvalPlanOf,
   emptyProjectTaskSpec,
-  type ChatAttachment,
   CommandId,
   DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
@@ -82,7 +81,6 @@ import {
   type ProjectTeamTaskStartResult,
   type ProjectTeamTaskUpdateInput,
   type ProjectTeamUpdateSettingsInput,
-  type ProjectTeamCreateTaskInput,
   type ProjectTeamRestoreTaskSpecInput,
   type ProjectTeamSplitTaskTodoInput,
   type ProjectTeamSplitTaskTodoResult,
@@ -122,19 +120,12 @@ import { normalizeThreadPullRequestKey } from "@t3tools/shared/threadPullRequest
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 
-import { resolveAttachmentPath } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
-import {
-  type AttachmentClaimError,
-  claimPendingAttachments,
-  releaseClaimedAttachments,
-} from "../orchestration-v2/AttachmentClaims.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import { isFailedCheck } from "../orchestration-v2/pullRequestWatch.ts";
@@ -267,17 +258,6 @@ function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-/** Wakes the PM when the user adds a task and asks for a plan. */
-export function planRequestedWakeText(
-  key: string,
-  task: Pick<ProjectTask, "id" | "title">,
-): string {
-  return [
-    `[Task added by the user] ${key} ${task.title}`,
-    `The user wants a plan for it. Start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user if it has to wait.`,
-  ].join("\n");
-}
-
 /** Wakes a project's PM when the Director routes a task to it. */
 export function directorAddedTaskWakeText(
   key: string,
@@ -287,23 +267,6 @@ export function directorAddedTaskWakeText(
     `[Director added task] ${key} ${task.title}`,
     `The Director put it in your inbox on the user's behalf. Treat it as the user's request: start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user in one line if it has to wait.`,
   ].join("\n");
-}
-
-/** The spec background for a user-created task: their context, then the files they attached. */
-export function userTaskBackground(
-  context: string,
-  attachments: ReadonlyArray<{
-    readonly name: string;
-    readonly mimeType: string;
-    readonly path: string;
-  }>,
-): string {
-  if (attachments.length === 0) return context;
-  const list = [
-    "Attachments (read these files):",
-    ...attachments.map((file) => `- ${file.name} (${file.mimeType}): ${file.path}`),
-  ].join("\n");
-  return context.length > 0 ? `${context}\n\n${list}` : list;
 }
 
 const trimJournalText = (text: string): string =>
@@ -720,10 +683,6 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamAttentionDismissInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
 
-    /** projectTeam.createTask RPC: the user adds a task; startPlanning asks the PM to start it. */
-    readonly createTaskForUser: (
-      input: ProjectTeamCreateTaskInput,
-    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
     /** projectTeam.getTask RPC. */
     readonly getTaskDetail: (
       input: ProjectTeamTaskRefInput,
@@ -843,37 +802,9 @@ const make = Effect.gen(function* () {
   const newId = yield* makeIdGenerator;
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
   const serverConfig = yield* ServerConfig.ServerConfig;
-  const fileSystem = yield* FileSystem.FileSystem;
   const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
   const shipGate = yield* PullRequestShipGate.PullRequestShipGate;
-
-  /** Copies the user's pending uploads under the task so the pending sweep keeps them. */
-  const claimTaskAttachments = (
-    taskId: ProjectTaskId,
-    projectId: ProjectId,
-    attachments: ReadonlyArray<ChatAttachment>,
-  ) =>
-    claimPendingAttachments({ threadId: taskId, attachments }).pipe(
-      Effect.flatMap((claimed) =>
-        Effect.forEach(claimed.attachments, (attachment) => {
-          const path = resolveAttachmentPath({
-            attachmentsDir: serverConfig.attachmentsDir,
-            attachment,
-          });
-          return path === null
-            ? Effect.fail(
-                teamError(`Attachment '${attachment.name}' has no stored file.`, projectId),
-              )
-            : Effect.succeed({ name: attachment.name, mimeType: attachment.mimeType, path });
-        }).pipe(Effect.onError(() => releaseClaimedAttachments(claimed.claimedPaths))),
-      ),
-      Effect.catchTag("AttachmentClaimError", (error: AttachmentClaimError) =>
-        Effect.fail(teamError(error.message, projectId)),
-      ),
-      Effect.provideService(ServerConfig.ServerConfig, serverConfig),
-      Effect.provideService(FileSystem.FileSystem, fileSystem),
-    );
 
   // At boot the provider cache may still be empty, so probe once before giving up.
   const availableModelSelection = Effect.gen(function* () {
@@ -3204,43 +3135,6 @@ const make = Effect.gen(function* () {
       return version;
     });
 
-  const createTaskForUser: ProjectTeamService["Service"]["createTaskForUser"] = (input) =>
-    Effect.gen(function* () {
-      yield* requireManager(input.projectId);
-      if (input.parentTaskId !== undefined) {
-        yield* requireTask(input.parentTaskId, input.projectId);
-      }
-      const context = input.context.trim();
-      const taskId = ProjectTaskId.make(yield* newId("task"));
-      const attachments =
-        input.attachments === undefined || input.attachments.length === 0
-          ? []
-          : yield* claimTaskAttachments(taskId, input.projectId, input.attachments);
-      const task = yield* repository.createTask({
-        id: taskId,
-        projectId: input.projectId,
-        title: input.title,
-        request: context.length > 0 ? context : input.title,
-        waitsOn: [],
-        parentTaskId: input.parentTaskId,
-        spec: emptyProjectTaskSpec(userTaskBackground(context, attachments)),
-        now: yield* nowIso,
-        author: "user",
-        authorThreadId: null,
-      });
-      yield* appendEvent(task, "created", task.title, null);
-      const detail = yield* taskDetail(task);
-      if (input.startPlanning) {
-        yield* wakeManagerWith(
-          task.projectId,
-          `project-team:plan-requested:${task.id}`,
-          planRequestedWakeText(detail.key, task),
-        );
-      }
-      yield* router.publish(task.projectId);
-      return detail;
-    }).pipe(orTeamError("Could not create the task.", input.projectId));
-
   const getTaskDetail: ProjectTeamService["Service"]["getTaskDetail"] = (input) =>
     requireTask(input.taskId, input.projectId).pipe(
       Effect.flatMap(taskDetail),
@@ -3863,7 +3757,6 @@ const make = Effect.gen(function* () {
     updateSettingsAsManager,
     updateSettings,
     askUser,
-    createTaskForUser,
     getTaskDetail,
     updateTaskSpec,
     restoreTaskSpec,

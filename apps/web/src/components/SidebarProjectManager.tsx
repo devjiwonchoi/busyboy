@@ -4,7 +4,7 @@ import {
   type ProjectTeamAttentionSummary,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { ListPlusIcon, MessageSquarePlusIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { MessageSquarePlusIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useId, type MouseEvent as ReactMouseEvent } from "react";
 
 import { cn } from "~/lib/utils";
@@ -102,8 +102,6 @@ export function SidebarProjectManagerHeading(props: {
   onToggle: () => void;
   onOpenThread: (threadRef: ScopedThreadRef) => void;
   onNewThread: (() => void) | null;
-  /** Opens the new task composer for this project. */
-  onNewTask?: (() => void) | null;
   jumpLabel?: string | null;
 }) {
   const { summary, pmThreadRef, projectName } = props;
@@ -114,7 +112,6 @@ export function SidebarProjectManagerHeading(props: {
   const preview = props.pmThreadWorking ? "Working…" : projectManagerPreview(summary);
   const nameId = useId();
   const previewId = useId();
-  const onNewTask = canOperate ? (props.onNewTask ?? null) : null;
   const handleClick = () => {
     if (props.isActive) {
       props.onToggle();
@@ -166,12 +163,8 @@ export function SidebarProjectManagerHeading(props: {
               data-testid="sidebar-project-manager-actions"
               className="pointer-events-auto relative flex shrink-0 items-center"
             >
-              {onNewTask || props.onNewThread ? (
-                <SidebarProjectAddMenu
-                  projectName={projectName}
-                  onNewTask={onNewTask}
-                  onNewThread={props.onNewThread}
-                />
+              {props.onNewThread ? (
+                <SidebarProjectAddMenu projectName={projectName} onNewThread={props.onNewThread} />
               ) : null}
               {/* Always visible: touch screens cannot hover to reveal it. */}
               {canOperate ? (
@@ -207,11 +200,7 @@ export function SidebarProjectManagerHeading(props: {
  * look-alike add icons. Hover-only with a mouse; always shown on touch screens
  * and at phone width, where the sidebar is a sheet.
  */
-function SidebarProjectAddMenu(props: {
-  projectName: string;
-  onNewTask: (() => void) | null;
-  onNewThread: (() => void) | null;
-}) {
+function SidebarProjectAddMenu(props: { projectName: string; onNewThread: () => void }) {
   return (
     <Menu>
       <MenuTrigger
@@ -224,18 +213,10 @@ function SidebarProjectAddMenu(props: {
         <PlusIcon aria-hidden className="size-3.5" />
       </MenuTrigger>
       <MenuPopup align="end">
-        {props.onNewTask ? (
-          <MenuItem onClick={props.onNewTask}>
-            <ListPlusIcon aria-hidden />
-            New task
-          </MenuItem>
-        ) : null}
-        {props.onNewThread ? (
-          <MenuItem onClick={props.onNewThread}>
-            <MessageSquarePlusIcon aria-hidden />
-            New thread
-          </MenuItem>
-        ) : null}
+        <MenuItem onClick={props.onNewThread}>
+          <MessageSquarePlusIcon aria-hidden />
+          New thread
+        </MenuItem>
       </MenuPopup>
     </Menu>
   );

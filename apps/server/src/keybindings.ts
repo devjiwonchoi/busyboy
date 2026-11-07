@@ -116,14 +116,15 @@ const LATE_DEFAULT_KEYBINDINGS: ReadonlyArray<{
   },
 ];
 
-// Default shortcuts a release took away from one command and gave to another.
-// An untouched old default is dropped once, so the new default can take the key.
-// A user who changed the rule keeps it.
+// Default shortcuts a release took away from their command. An untouched old
+// default is dropped once, so the key stays free. A user who puts it back keeps it.
+// Ids are stored in users' applied migrations, so never rename one.
 const MOVED_DEFAULT_KEYBINDINGS: ReadonlyArray<{
   readonly id: string;
   readonly previous: KeybindingRule;
 }> = [
   {
+    // mod+n opened a new thread, then a removed new task composer; now it does nothing.
     id: "task.new:mod+n",
     previous: { key: "mod+n", command: "chat.new", when: "!terminalFocus" },
   },
@@ -131,7 +132,7 @@ const MOVED_DEFAULT_KEYBINDINGS: ReadonlyArray<{
 
 // Commands a release removed. Their entries, usually old defaults written on
 // first run, are dropped without an issue so they cannot block the default sync.
-const RETIRED_KEYBINDING_COMMANDS: ReadonlySet<unknown> = new Set(["thread.settle"]);
+const RETIRED_KEYBINDING_COMMANDS: ReadonlySet<unknown> = new Set(["thread.settle", "task.new"]);
 
 function isRetiredKeybindingEntry(entry: unknown): boolean {
   return Predicate.hasProperty(entry, "command") && RETIRED_KEYBINDING_COMMANDS.has(entry.command);

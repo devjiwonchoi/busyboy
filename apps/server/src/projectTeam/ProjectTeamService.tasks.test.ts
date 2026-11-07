@@ -1,12 +1,7 @@
-// @effect-diagnostics nodeBuiltinImport:off
-import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
-
 import { assert, describe, it } from "@effect/vitest";
 import {
   emptyProjectTaskSpec,
   newProjectTaskTodo,
-  ChatAttachmentId,
   ProjectId,
   PLAN_APPROVAL_START,
   ProjectTaskId,
@@ -18,8 +13,6 @@ import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 
-import { createPendingAttachmentId } from "../attachmentStore.ts";
-import * as ServerConfig from "../config.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import {
@@ -38,72 +31,26 @@ const service = ProjectTeamService.ProjectTeamService;
 const todo = newProjectTaskTodo;
 
 describe("ProjectTeamService tasks as specs", () => {
-  it.effect("keeps files the user attached to a new task and lists them in its spec", () =>
+  it.effect("lets the user shape a task's spec, restore a version and split a todo", () =>
     withTeam(() =>
-      Effect.gen(function* () {
-        const team = yield* service;
-        yield* setUpManager;
-        const { attachmentsDir } = yield* ServerConfig.ServerConfig;
-        const pendingId = createPendingAttachmentId("png")!;
-        const bytes = new Uint8Array([1, 2, 3]);
-        NodeFS.mkdirSync(attachmentsDir, { recursive: true });
-        NodeFS.writeFileSync(NodePath.join(attachmentsDir, `${pendingId}.png`), bytes);
-
-        const created = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
-          title: "Fix the broken header",
-          context: "The header overlaps the sidebar.",
-          startPlanning: false,
-          attachments: [
-            {
-              type: "image",
-              id: ChatAttachmentId.make(pendingId),
-              name: "screenshot.png",
-              mimeType: "image/png",
-              sizeBytes: bytes.byteLength,
-            },
-          ],
-        });
-
-        const background = created.versions[0]?.spec.background ?? "";
-        const [context, list] = background.split("\n\n");
-        assert.strictEqual(context, "The header overlaps the sidebar.");
-        const match =
-          /^Attachments \(read these files\):\n- screenshot\.png \(image\/png\): (\/.+)$/.exec(
-            list ?? "",
-          );
-        assert.isNotNull(match);
-        const path = match![1]!;
-        assert.notInclude(path, "pending");
-        assert.isTrue(NodeFS.existsSync(path));
-        assert.deepStrictEqual([...NodeFS.readFileSync(path)], [1, 2, 3]);
-        assert.strictEqual(created.task.request, "The header overlaps the sidebar.");
-      }),
-    ),
-  );
-
-  it.effect("lets the user dump a task, shape its spec, restore a version and split a todo", () =>
-    withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
 
-        // Quick dump: no planner, the context becomes spec v1.
-        const created = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
+        // The request becomes spec v1.
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
           title: "Sidebar scroll jumps while dragging",
-          context: "Dragging a project up jumps the list to the top.",
-          startPlanning: false,
+          request: "Dragging a project up jumps the list to the top.",
         });
+        const created = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.strictEqual(created.key, "DE-1");
         assert.strictEqual(created.task.stage, "inbox");
         assert.strictEqual(created.versions.length, 1);
-        assert.strictEqual(created.versions[0]?.author, "user");
         assert.strictEqual(
           created.versions[0]?.spec.background,
           "Dragging a project up jumps the list to the top.",
         );
-        assert.deepStrictEqual(yield* harness.messagesTo(pm), []);
 
         // The user writes a goal and todos: v2.
         const edited = yield* team.updateTaskSpec({
@@ -169,25 +116,21 @@ describe("ProjectTeamService tasks as specs", () => {
     ),
   );
 
-  it.effect("asks the PM to start a planner and links the lead as a task session", () =>
+  it.effect("links the lead as a task session", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
         yield* team.updateSettings({ projectId: PROJECT_ID, taskKeyPrefix: "BB" });
 
-        const created = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
+        const created = yield* team.createTask(pm, {
+          intake: "New work.",
           title: "Direct task creation",
-          context: "",
-          startPlanning: true,
+          request: "Direct task creation",
         });
-        assert.strictEqual(created.key, "BB-1");
-        // An empty dump still gives the lead something to read.
-        assert.strictEqual(created.task.request, "Direct task creation");
-        const [wake] = yield* harness.messagesTo(pm);
-        assert.include(wake, "[Task added by the user] BB-1 Direct task creation");
-        assert.include(wake, `task_start (taskId: ${created.task.id})`);
+        const key = (yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: created.task.id }))
+          .key;
+        assert.strictEqual(key, "BB-1");
 
         yield* team.startTask(pm, { taskId: created.task.id }, harness.delegate);
         const detail = yield* team.getTaskDetail({
@@ -232,11 +175,10 @@ describe("ProjectTeamService tasks as specs", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const created = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
+        const created = yield* team.createTask(pm, {
+          intake: "New work.",
           title: "Fix drag scroll",
-          context: "The list jumps to the top.",
-          startPlanning: true,
+          request: "The list jumps to the top.",
         });
         const { leadThreadId: planner } = yield* team.startTask(
           pm,
@@ -357,7 +299,7 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.deepStrictEqual(
           detail.versions.map((version) => `${version.author}: ${version.note}`),
           [
-            "user: Created",
+            "pm: Created",
             "agent: Plan",
             "user: Edited by the user",
             'agent: Checked "Add a journey test"',

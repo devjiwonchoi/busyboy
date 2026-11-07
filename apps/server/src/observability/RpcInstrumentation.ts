@@ -103,7 +103,6 @@ const RPC_AGGREGATES = {
   [WS_METHODS.projectTeamRequestSitrep]: "projectTeam",
   [WS_METHODS.projectTeamAnswerDecision]: "projectTeam",
   [WS_METHODS.projectTeamUpdateSettings]: "projectTeam",
-  [WS_METHODS.projectTeamCreateTask]: "projectTeam",
   [WS_METHODS.projectTeamGetTask]: "projectTeam",
   [WS_METHODS.projectTeamUpdateTaskSpec]: "projectTeam",
   [WS_METHODS.projectTeamRestoreTaskSpec]: "projectTeam",
