@@ -76,6 +76,7 @@ import * as DesktopComputerUseChannel from "./computerUse/DesktopComputerUseChan
 import * as ServerBrowserStream from "./preview/ServerBrowserStream.ts";
 import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
+import * as PullRequestTextReader from "./projectTeam/PullRequestTextReader.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
@@ -469,6 +470,7 @@ const layerProjectTeam = Layer.mergeAll(
 ).pipe(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(ProjectTeamService.layerWithDependencies),
+  Layer.provide(PullRequestTextReader.layer.pipe(Layer.provide(ProcessRunner.layer))),
   Layer.provide(layerGitWorkflow),
   Layer.provideMerge(ProjectTeamRepository.layer),
 );

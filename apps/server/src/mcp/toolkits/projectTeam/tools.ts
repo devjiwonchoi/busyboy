@@ -52,7 +52,7 @@ const shared = {
 const TaskCreateTool = Tool.make("task_create", {
   ...shared,
   description:
-    "PM only. Add a task to the project's inbox when the user asks for work. Write the request so a task lead can act on it alone. Set waitsOn for tasks touching the same files and parentTaskId when it is part of a bigger task; both may point at tasks in other projects. Then start it with task_start when a slot is free.",
+    "PM: add a task to the project's inbox when the user asks for new work, with intake saying why it is new (refused without it, or when an open task has the same title). Write the request so a task lead can act on it alone. Set waitsOn for tasks touching the same files and parentTaskId when it is part of a bigger task; both may point at tasks in other projects. Then start it with task_start when a slot is free. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
   parameters: ProjectTeamTaskCreateInput,
   success: ProjectTeamTaskResult,
 })
@@ -128,7 +128,7 @@ const TaskEvidenceSetTool = Tool.make("task_evidence_set", {
 const TaskNudgeTool = Tool.make("task_nudge", {
   ...shared,
   description:
-    "PM only. Push a stalled task lead to its next step; the server adds a stage hint. After repeated nudges without progress it raises a blocker for the user instead (status escalated).",
+    "PM only. Push a stalled task lead to its next step; the server adds a stage hint. After repeated nudges with no progress from the lead it raises a blocker for the user instead (status escalated). With scope: true, the note adds the user's scope instead: it never counts toward escalation and closes an open plan approval card.",
   parameters: ProjectTeamTaskNudgeInput,
   success: ProjectTeamTaskNudgeResult,
 })
@@ -195,7 +195,7 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
   description:
-    'Task lead only. The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers "Approve and start" or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.',
+    'Task lead only. The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. A subtask covered by its parent\'s approved breakdown never asks for approval. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers "Approve and start" or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.',
   parameters: ProjectTeamAskUserInput,
   success: ProjectTeamAttentionItemResult,
 })

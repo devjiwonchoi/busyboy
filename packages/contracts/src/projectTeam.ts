@@ -452,17 +452,36 @@ export const ProjectApprovalPlanTodo = Schema.Struct({
 });
 export type ProjectApprovalPlanTodo = typeof ProjectApprovalPlanTodo.Type;
 
+/** A drafted subtask the approval covers: approving the parent approves it too. */
+export const ProjectApprovalPlanSubtask = Schema.Struct({
+  taskId: ProjectTaskId,
+  number: PositiveInt,
+  title: Schema.String,
+  /** Its goal and verification, as the parent's lead wrote them. */
+  request: Schema.String,
+  waitsOn: Schema.Array(ProjectTaskId),
+});
+export type ProjectApprovalPlanSubtask = typeof ProjectApprovalPlanSubtask.Type;
+
 /** What a plan approval card shows: the summary and the todos of the spec version it pins. */
 export const ProjectApprovalPlan = Schema.Struct({
   summary: Schema.String,
   todos: Schema.Array(ProjectApprovalPlanTodo),
+  /** The breakdown: drafted subtasks this one approval covers. */
+  subtasks: Schema.Array(ProjectApprovalPlanSubtask).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
 export type ProjectApprovalPlan = typeof ProjectApprovalPlan.Type;
 
-/** The approval card's plan, taken from a spec version. */
-export function approvalPlanOf(spec: ProjectTaskSpec): ProjectApprovalPlan {
+/** The approval card's plan, taken from a spec version and the subtasks it covers. */
+export function approvalPlanOf(
+  spec: ProjectTaskSpec,
+  subtasks: ReadonlyArray<ProjectApprovalPlanSubtask> = [],
+): ProjectApprovalPlan {
   return {
     summary: spec.summary,
+    subtasks: [...subtasks],
     todos: spec.todos.map((todo) => ({
       id: todo.id,
       text: todo.text,
@@ -796,7 +815,11 @@ export const ProjectTeamTaskCreateInput = Schema.Struct({
   }),
   parentTaskId: Schema.optional(ProjectTaskId).annotate({
     description:
-      "The task this one is part of, shown as its parent. May be a task in another project.",
+      "PM and Director: the task this one is part of, shown as its parent. May be a task in another project. A task lead leaves it out: its subtasks are always its own task's.",
+  }),
+  intake: Schema.optional(ProjectTaskSummaryText).annotate({
+    description:
+      "PM and Director, required: one line on why this is new work, not a question you can answer or scope for an open task (nudge that one instead).",
   }),
 });
 export type ProjectTeamTaskCreateInput = typeof ProjectTeamTaskCreateInput.Type;
@@ -878,7 +901,11 @@ export type ProjectTeamTaskUpdateInput = typeof ProjectTeamTaskUpdateInput.Type;
 export const ProjectTeamTaskNudgeInput = Schema.Struct({
   taskId: ProjectTaskId,
   note: Schema.optional(ProjectTaskSummaryText).annotate({
-    description: "What the task lead should do next.",
+    description: "What the task lead should do next, or the scope to add.",
+  }),
+  scope: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "True when the note adds scope from the user rather than pushing a stalled lead. It never counts toward escalation, and it closes an open plan approval card so the lead folds the scope in and asks again.",
   }),
 });
 export type ProjectTeamTaskNudgeInput = typeof ProjectTeamTaskNudgeInput.Type;

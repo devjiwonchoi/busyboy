@@ -33,7 +33,7 @@ describe("ProjectTeamService plan gates", () => {
         const pm = yield* setUpManager;
         const promptFor = (title: string, request: string) =>
           Effect.gen(function* () {
-            const { task } = yield* team.createTask(pm, { title, request });
+            const { task } = yield* team.createTask(pm, { intake: "New work.", title, request });
             yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
             return (yield* Ref.get(harness.delegated)).at(-1)?.task ?? "";
           });

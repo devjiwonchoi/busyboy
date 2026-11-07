@@ -210,6 +210,7 @@ describe("ProjectTeamService tasks as specs", () => {
         const team = yield* service;
         const pm = yield* setUpManager;
         const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
           title: "Add hello.sh",
           request: "Add hello.sh with a test.",
         });
@@ -295,7 +296,11 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.include(stale.message, "Read it again with task_spec_read");
 
         // Another task's spec is off limits to this lead.
-        const other = yield* team.createTask(pm, { title: "Other", request: "Other." });
+        const other = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Other",
+          request: "Other.",
+        });
         const foreign = yield* team.readSpec(planner, { taskId: other.task.id }).pipe(Effect.flip);
         assert.include(foreign.message, "only use its own task's spec");
 
@@ -365,7 +370,11 @@ describe("ProjectTeamService tasks as specs", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drag",
+          request: "Fix drag.",
+        });
         const { leadThreadId: lead } = yield* team.startTask(
           pm,
           { taskId: task.id },
@@ -409,6 +418,7 @@ describe("ProjectTeamService tasks as specs", () => {
               dependsOn: [],
             },
           ],
+          subtasks: [],
         });
         assert.deepStrictEqual(first.item.options, ["Approve and start"]);
         const waiting = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
@@ -474,8 +484,16 @@ describe("ProjectTeamService tasks as specs", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const first = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
-        const second = yield* team.createTask(pm, { title: "Fix drop", request: "Fix drop." });
+        const first = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drag",
+          request: "Fix drag.",
+        });
+        const second = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drop",
+          request: "Fix drop.",
+        });
         const { leadThreadId: leadA } = yield* team.startTask(
           pm,
           { taskId: first.task.id },
@@ -529,7 +547,11 @@ describe("ProjectTeamService tasks as specs", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTask(pm, { title: "Docs", request: "Docs." });
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Docs",
+          request: "Docs.",
+        });
         yield* team.updateSettingsAsManager(pm, { taskKeyPrefix: "BB" });
         const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.strictEqual(detail.key, "BB-1");
@@ -543,7 +565,11 @@ describe("ProjectTeamService tasks as specs", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drag",
+          request: "Fix drag.",
+        });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* team.updateTask(leadThreadId, { stage: "inbox" });
         yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
@@ -574,7 +600,11 @@ describe("AFK", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drag",
+          request: "Fix drag.",
+        });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
 
         const on = yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 8 } });
@@ -646,7 +676,11 @@ describe("AFK", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drag",
+          request: "Fix drag.",
+        });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
         const asked = yield* team.askUser(leadThreadId, {
@@ -678,7 +712,11 @@ describe("AFK", () => {
         const team = yield* service;
         const pm = yield* setUpManager;
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 1 } });
-        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drag",
+          request: "Fix drag.",
+        });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* TestClock.adjust("2 hours");
         yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
@@ -723,7 +761,11 @@ describe("AFK", () => {
           },
           now: "2026-11-04T00:00:00.000Z",
         });
-        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { task } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Fix drag",
+          request: "Fix drag.",
+        });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
         yield* TestClock.adjust("61 seconds");
@@ -770,9 +812,14 @@ describe("task dependencies", () => {
         harness.addProject(OTHER_PROJECT_ID, "Website");
         const pm = yield* setUpManager;
         const otherPm = (yield* team.ensureManager(OTHER_PROJECT_ID)).threadId;
-        const { task: api } = yield* team.createTask(otherPm, { title: "API", request: "API." });
+        const { task: api } = yield* team.createTask(otherPm, {
+          intake: "New work.",
+          title: "API",
+          request: "API.",
+        });
 
         const { task: ui } = yield* team.createTask(pm, {
+          intake: "New work.",
           title: "BU-53 A: UI",
           request: "UI.",
           waitsOn: [api.id, api.id],
@@ -831,13 +878,19 @@ describe("task dependencies", () => {
         harness.addProject(OTHER_PROJECT_ID, "Website");
         const pm = yield* setUpManager;
         const otherPm = (yield* team.ensureManager(OTHER_PROJECT_ID)).threadId;
-        const { task: a } = yield* team.createTask(pm, { title: "A", request: "A." });
+        const { task: a } = yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "A",
+          request: "A.",
+        });
         const { task: b } = yield* team.createTask(pm, {
+          intake: "New work.",
           title: "B",
           request: "B.",
           waitsOn: [a.id],
         });
         const { task: c } = yield* team.createTask(otherPm, {
+          intake: "New work.",
           title: "C",
           request: "C.",
           waitsOn: [b.id],
@@ -892,17 +945,24 @@ describe("task dependencies", () => {
         const pm = yield* setUpManager;
         const otherPm = (yield* team.ensureManager(OTHER_PROJECT_ID)).threadId;
         const { task: schema } = yield* team.createTask(otherPm, {
+          intake: "New work.",
           title: "Schema",
           request: "Schema.",
         });
         const api = yield* startLead(otherPm, "API", harness.delegate);
         const { task: ui } = yield* team.createTask(pm, {
+          intake: "New work.",
           title: "UI",
           request: "UI.",
           waitsOn: [schema.id, api.task.id],
         });
         // Waiting on something that's already running elsewhere doesn't wake anyone.
-        yield* team.createTask(pm, { title: "Docs", request: "Docs.", waitsOn: [api.task.id] });
+        yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Docs",
+          request: "Docs.",
+          waitsOn: [api.task.id],
+        });
         yield* team.updateTask(pm, { taskId: ui.id, note: "Planned." });
         const before = (yield* harness.messagesTo(pm)).length;
 
