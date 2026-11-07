@@ -45,6 +45,7 @@ const make = Effect.gen(function* () {
       yield* team.recordShipWake({
         leadThreadId: event.payload.threadId,
         summary: notification.summary,
+        checksFailed: changes.includes("checks-failed"),
       });
     }).pipe(
       Effect.catchCause((cause) =>

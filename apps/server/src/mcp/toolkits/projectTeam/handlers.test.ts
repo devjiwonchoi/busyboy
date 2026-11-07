@@ -119,6 +119,22 @@ describe("projectTeam MCP toolkit", () => {
       ),
   );
 
+  it.effect("lets the PM set who merges with team_settings_update", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const pm = yield* setUpManager;
+        const updated = yield* call(pm, "team_settings_update", { mergeOwner: "user" });
+        assert.isFalse(updated.isError);
+        assert.strictEqual(content(updated).settings.mergeOwner, "user");
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const status = yield* team.teamStatus(pm, {});
+        assert.strictEqual(status.settings.mergeOwner, "user");
+      }).pipe(
+        Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
+      ),
+    ),
+  );
+
   it.effect("runs create, start, ask_user and attention_answer end to end", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

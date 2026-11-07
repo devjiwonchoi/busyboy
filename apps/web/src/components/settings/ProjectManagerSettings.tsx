@@ -1,5 +1,6 @@
 import {
   AuthOrchestrationOperateScope,
+  mergeOwnerOf,
   PROJECT_TASK_MODEL_ROLES,
   type ProjectManagerVoice,
   type ProjectTaskModelRole,
@@ -219,6 +220,26 @@ export function ProjectManagerSettingsSection(props: {
               </div>
             ) : null}
           </SettingsRow>
+          <SettingsRow
+            title="Who merges"
+            description="Me: the project manager never merges and sends you a short merge brief when a task is Ready."
+            control={
+              <ToggleGroup
+                aria-label="Who merges"
+                value={[mergeOwnerOf(summary.settings)]}
+                disabled={!canOperate}
+                onValueChange={(values) => {
+                  const next = values[0];
+                  if (next === "pm" || next === "user") {
+                    void updateSettings(projectRef, { mergeOwner: next });
+                  }
+                }}
+              >
+                <Toggle value="pm">PM</Toggle>
+                <Toggle value="user">Me</Toggle>
+              </ToggleGroup>
+            }
+          />
           <SettingsRow
             title="Models per role"
             description="A task can change these on its page. An unset role runs on the task lead's model."

@@ -139,6 +139,15 @@ export interface OrchestratorMcpDelegateTaskOptions {
    * branch instead of the parent's local commit, so it never inherits a stale checkout.
    */
   readonly worktreeBase?: "origin-default";
+  /**
+   * Runs once the child thread exists and before a mode=wait call blocks, so a caller can
+   * link the child (for example as a task's review session) before the child acts.
+   */
+  readonly onChildCreated?: (child: {
+    readonly childThreadId: ThreadId;
+    readonly providerInstanceId: ProviderInstanceId;
+    readonly model: string | null;
+  }) => Effect.Effect<void, OrchestratorMcpFailure>;
 }
 
 /**
@@ -2124,6 +2133,13 @@ const make = Effect.gen(function* () {
           });
         }
 
+        if (childThreadId !== null && options?.onChildCreated !== undefined) {
+          yield* options.onChildCreated({
+            childThreadId,
+            providerInstanceId: target.modelSelection.instanceId,
+            model: target.modelSelection.model ?? null,
+          });
+        }
         if (input.mode !== "wait") {
           return yield* readTask(scope, taskId, false, true);
         }

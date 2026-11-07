@@ -88,12 +88,20 @@ const ReviewFindings = Schema.String.check(Schema.isMaxLength(20_000)).annotate(
   description: "What the review found, one per line; empty when clean.",
 });
 
-/** The lead's latest self-review of its diff. */
+/** Who recorded a review: the task lead itself, or the review session task_delegate started. */
+export const ProjectTaskReviewer = Schema.Literals(["lead", "reviewer"]);
+export type ProjectTaskReviewer = typeof ProjectTaskReviewer.Type;
+
+/** The latest review of the task's diff. */
 export const ProjectTaskReview = Schema.Struct({
   clean: Schema.Boolean,
   findings: ReviewFindings,
   head: ReviewHead,
   reviewedAt: IsoDateTime,
+  /** Reviews stored before reviewers existed were the lead's own. */
+  by: ProjectTaskReviewer.pipe(Schema.withDecodingDefault(Effect.succeed("lead" as const))),
+  /** The model that reviewed, when a review session did. */
+  model: Schema.optionalKey(Schema.String),
 });
 export type ProjectTaskReview = typeof ProjectTaskReview.Type;
 
@@ -203,6 +211,48 @@ export const ProjectTaskModelSteps = Schema.Struct({
   fix: Schema.optionalKey(ProjectTaskModelStep),
 });
 export type ProjectTaskModelSteps = typeof ProjectTaskModelSteps.Type;
+
+/** What one role's sessions spent on a task, summed over their runs. */
+export const ProjectTaskStepUsage = Schema.Struct({
+  durationMs: NonNegativeInt,
+  runs: NonNegativeInt,
+  inputTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  /** Estimated from list prices; null when no run's model had a known price. */
+  costUsd: Schema.NullOr(Schema.Number),
+});
+export type ProjectTaskStepUsage = typeof ProjectTaskStepUsage.Type;
+
+export const ProjectTaskStepUsages = Schema.Struct({
+  plan: Schema.optionalKey(ProjectTaskStepUsage),
+  implement: Schema.optionalKey(ProjectTaskStepUsage),
+  review: Schema.optionalKey(ProjectTaskStepUsage),
+  fix: Schema.optionalKey(ProjectTaskStepUsage),
+});
+export type ProjectTaskStepUsages = typeof ProjectTaskStepUsages.Type;
+
+/** How big the lead judged the task when it planned it. */
+export const ProjectTaskSize = Schema.Literals(["small", "medium", "large"]);
+export type ProjectTaskSize = typeof ProjectTaskSize.Type;
+
+/** Outcome counts kept per task, to compare model choices later. */
+export const ProjectTaskMetrics = Schema.Struct({
+  size: Schema.NullOr(ProjectTaskSize).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** Finding lines across reviews that were not clean. */
+  reviewFindings: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /** Fix steps handed off with task_delegate(role: "fix"). */
+  fixRounds: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /** Failed pull request checks that woke the lead. */
+  ciFailures: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+});
+export type ProjectTaskMetrics = typeof ProjectTaskMetrics.Type;
+
+export const EMPTY_PROJECT_TASK_METRICS: ProjectTaskMetrics = {
+  size: null,
+  reviewFindings: 0,
+  fixRounds: 0,
+  ciFailures: 0,
+};
 
 export const ProjectTaskOutcome = Schema.Literals([
   "waiting_user",
@@ -346,6 +396,11 @@ export const ProjectTask = Schema.Struct({
   roleModels: ProjectTaskRoleModels.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   /** The model that last ran each role. */
   modelSteps: ProjectTaskModelSteps.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  /** Time, tokens and estimated cost per role. */
+  stepUsage: ProjectTaskStepUsages.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  metrics: ProjectTaskMetrics.pipe(
+    Schema.withDecodingDefault(Effect.succeed(EMPTY_PROJECT_TASK_METRICS)),
+  ),
   stageChangedAt: IsoDateTime,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -532,7 +587,12 @@ export const ProjectTaskSpecVersion = Schema.Struct({
 });
 export type ProjectTaskSpecVersion = typeof ProjectTaskSpecVersion.Type;
 
-export const ProjectTaskSessionRole = Schema.Literals(["lead", "planner", "implementer"]);
+export const ProjectTaskSessionRole = Schema.Literals([
+  "lead",
+  "planner",
+  "implementer",
+  "reviewer",
+]);
 export type ProjectTaskSessionRole = typeof ProjectTaskSessionRole.Type;
 
 /** An agent thread working on a task. Its own subagents are not listed here. */
@@ -783,6 +843,13 @@ export function afkPickOption(options: ReadonlyArray<string>): string | null {
   return options.find((option) => /\(recommended\)/i.test(option)) ?? options[0] ?? null;
 }
 
+/** pm: the PM squash-merges clean Ready pull requests. user: the PM never merges. */
+export const ProjectMergeOwner = Schema.Literals(["pm", "user"]);
+export type ProjectMergeOwner = typeof ProjectMergeOwner.Type;
+
+export const mergeOwnerOf = (settings: { readonly mergeOwner?: ProjectMergeOwner | undefined }) =>
+  settings.mergeOwner ?? "pm";
+
 export const ProjectTeamSettings = Schema.Struct({
   maxConcurrentTasks: ProjectTeamMaxConcurrentTasks.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS)),
@@ -805,6 +872,8 @@ export const ProjectTeamSettings = Schema.Struct({
   autoApprovePlans: Schema.optionalKey(ProjectTeamAfk),
   /** The project's model per role; a task can override each one. */
   roleModels: Schema.optionalKey(ProjectTaskRoleModels),
+  /** Who merges Ready pull requests. Absent means the PM. */
+  mergeOwner: Schema.optionalKey(ProjectMergeOwner),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -1057,8 +1126,13 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
     description:
       "PM only. The task this one is part of; null removes the parent. May be a task in another project.",
   }),
+  size: Schema.optional(ProjectTaskSize).annotate({
+    description:
+      "How big the task is, judged from the plan: small (a few lines, low risk), medium, or large (many files or risky).",
+  }),
 }).check(
   Schema.makeFilter((input) =>
+    input.size !== undefined ||
     input.stage !== undefined ||
     input.planSummary !== undefined ||
     input.resultSummary !== undefined ||
@@ -1068,7 +1142,7 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
     input.waitsOn !== undefined ||
     input.parentTaskId !== undefined
       ? true
-      : "task_update needs at least one of stage, planSummary, resultSummary, prUrl, note, title, waitsOn or parentTaskId.",
+      : "task_update needs at least one of stage, planSummary, resultSummary, prUrl, note, title, waitsOn, parentTaskId or size.",
   ),
 );
 export type ProjectTeamTaskUpdateInput = typeof ProjectTeamTaskUpdateInput.Type;
@@ -1167,8 +1241,13 @@ export const ProjectTeamSettingsUpdateInput = Schema.Struct({
   }),
   taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
   roleModels: Schema.optional(ProjectTaskRoleModelsPatch),
+  mergeOwner: Schema.optional(ProjectMergeOwner).annotate({
+    description:
+      "Who merges Ready pull requests: pm (you squash-merge clean ones) or user (you never merge; you send the user a merge brief).",
+  }),
 }).check(
   Schema.makeFilter((input) =>
+    input.mergeOwner !== undefined ||
     input.roleModels !== undefined ||
     input.maxConcurrentTasks !== undefined ||
     input.sitrepIntervalMinutes !== undefined ||
@@ -1574,6 +1653,7 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
   roleModels: Schema.optional(ProjectTaskRoleModelsPatch),
+  mergeOwner: Schema.optional(ProjectMergeOwner),
   /**
    * User-only: turns AFK on for `hours` (null = until turned off), or off with null.
    * Deliberately absent from team_settings_update so no agent can set it.

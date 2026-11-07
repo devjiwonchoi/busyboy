@@ -37,8 +37,10 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as UsageService from "../usage/UsageService.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import * as ContextCare from "./ContextCare.ts";
+import * as RoleStepReactor from "./RoleStepReactor.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import type { PullRequestText } from "./pullRequestFormat.ts";
@@ -68,8 +70,13 @@ export interface FakeThread {
   messages: Array<OrchestrationV2ConversationMessage>;
   /** Delegated children; only `origin` and `status` matter to the team services. */
   subagents?: Array<Pick<OrchestrationV2Subagent, "origin" | "status">>;
-  /** Provider turns; only `id`, `status` and `tokenUsage` matter to the team services. */
-  providerTurns?: Array<Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage">>;
+  /** Provider turns; `id`, `status`, `tokenUsage`, `runAttemptId` and `turnTokenUsage` matter. */
+  providerTurns?: Array<
+    Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage"> &
+      Partial<Pick<OrchestrationV2ProviderTurn, "runAttemptId" | "turnTokenUsage">>
+  >;
+  /** Run attempts; only `id` and `runId` matter, to tie provider turns to their run. */
+  attempts?: Array<{ readonly id: string; readonly runId: string }>;
   worktreePath?: string | null;
   branch?: string | null;
   /** Parent in the thread lineage, e.g. the lead of a provider subagent. */
@@ -114,6 +121,8 @@ export interface TeamHarness {
   readonly markedReady: Array<string>;
   /** When set, marking a pull request ready for review fails with this message. */
   markReadyRefusal: string | null;
+  /** List price per token the fake usage service charges; null prices nothing. */
+  costPerToken: number | null;
   /** Server messages dispatched to a thread. */
   readonly messagesTo: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<string>>;
 }
@@ -128,6 +137,7 @@ export type TeamServices =
   | StalledTaskSweep.StalledTaskSweep
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
+  | RoleStepReactor.RoleStepReactor
   | FinishedTaskCleanup.FinishedTaskCleanup
   | SqlClient.SqlClient
   | ServerConfig.ServerConfig;
@@ -344,6 +354,7 @@ export const withTeam = <A, E>(
             messages,
             subagents: thread?.subagents ?? [],
             providerTurns: thread?.providerTurns ?? [],
+            attempts: thread?.attempts ?? [],
             turnItems: thread?.turnItems ?? [],
           };
         })) as never,
@@ -379,6 +390,7 @@ export const withTeam = <A, E>(
       StalledTaskSweep.layer,
       DefaultManagerReactor.layer,
       ContextCare.layer,
+      RoleStepReactor.layer,
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
@@ -390,6 +402,18 @@ export const withTeam = <A, E>(
           projectStore,
           providerRegistry,
           ServerSettings.layerTest(),
+          Layer.mock(UsageService.UsageService)({
+            estimateCostUsd: (input) =>
+              Effect.sync(() =>
+                harness.costPerToken === null
+                  ? null
+                  : (input.uncachedInputTokens +
+                      input.cachedInputTokens +
+                      input.cacheCreationTokens +
+                      input.outputTokens) *
+                    harness.costPerToken,
+              ),
+          }),
           NodeCrypto.layer,
           managedProjectFolders,
           Path.layer,
@@ -429,6 +453,7 @@ export const withTeam = <A, E>(
       shipStates,
       markedReady: [],
       markReadyRefusal: null,
+      costPerToken: null,
       checkedOutBranch: () => null,
       worktreeHead: () => null,
       onArchive: () => Effect.void,

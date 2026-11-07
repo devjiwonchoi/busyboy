@@ -132,11 +132,11 @@ const TaskEvidenceSetTool = Tool.make("task_evidence_set", {
 const TaskReviewSetTool = Tool.make("task_review_set", {
   ...shared,
   description:
-    "Record your self-review of the current diff against the base branch. Pass head = `git rev-parse HEAD`, clean = true only when nothing is left to fix, and the findings otherwise. A review that is not clean starts the next Iterate round. In Review needs a clean review on the current HEAD.",
+    "Record a review of the task's current diff against the base branch. For a task lead or the review session it started with task_delegate(role: \"review\"). Pass head = `git rev-parse HEAD`, clean = true only when nothing is left to fix, and the findings otherwise. A review that is not clean starts the next Iterate round. In Review and Ready need a clean review on the current HEAD; when the task has a review model, only the review session's clean review counts.",
   parameters: ProjectTeamTaskReviewSetInput,
   success: ProjectTeamTaskResult,
 })
-  .annotate(Tool.Title, "Record a self-review")
+  .annotate(Tool.Title, "Record a review")
   .annotate(Tool.Destructive, false);
 
 const TaskReadyTool = Tool.make("task_ready", {
@@ -152,7 +152,7 @@ const TaskDelegateTool = Tool.make("task_delegate", {
   ...shared,
   dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "Task lead only. Hand implement, review or fix to the model the user set for that role; without one, the child runs on your own model. The server picks the model and records which one ran the step. Returns the delegated task, like delegate_task; its completion wakes you.",
+    "Task lead only. Hand implement, review or fix to the model the user set for that role; without one, the child runs on your own model. The server picks the model and records which one ran the step, with its time, tokens and estimated cost. A review child records its own result with task_review_set. Returns the delegated task, like delegate_task; its completion wakes you.",
   parameters: ProjectTeamTaskDelegateInput,
   success: OrchestratorMcpDelegateTaskResult,
 })
@@ -219,7 +219,7 @@ const TeamStatusTool = Tool.make("team_status", {
 const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
   ...shared,
   description:
-    "PM only. Change team settings only when the user asks: max concurrent tasks, sitrep interval, sitrep notifications, quiet hours, your name, avatar emoji, or voice (chill, dry, or chatty), and the task key prefix (such as BB for BB-7). A sitrep interval set here is never adjusted automatically.",
+    "PM only. Change team settings only when the user asks: max concurrent tasks, sitrep interval, sitrep notifications, quiet hours, your name, avatar emoji, or voice (chill, dry, or chatty), the task key prefix (such as BB for BB-7), and who merges Ready pull requests (mergeOwner). A sitrep interval set here is never adjusted automatically.",
   parameters: ProjectTeamSettingsUpdateInput,
   success: ProjectTeamSettingsResult,
 })

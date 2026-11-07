@@ -72,8 +72,12 @@ const handlers = {
     Effect.gen(function* () {
       const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* withTeam((team, caller, scope) =>
-        team.delegateStep(caller, input, (delegateInput) =>
-          orchestrator.delegateTask(scope, delegateInput),
+        team.delegateStep(caller, input, (delegateInput, onChildCreated) =>
+          orchestrator.delegateTask(
+            scope,
+            delegateInput,
+            onChildCreated === undefined ? undefined : { onChildCreated },
+          ),
         ),
       );
     }),

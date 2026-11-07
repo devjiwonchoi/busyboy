@@ -3,6 +3,7 @@
 import type {
   ProjectManagerPersona,
   ProjectMemoryEntry,
+  ProjectMergeOwner,
   ProjectTeamSettings,
 } from "@t3tools/contracts";
 import {
@@ -126,6 +127,23 @@ ${memoryPromptSection(memory)}
 export const AFK_AGENT_RULE =
   'The user is away (AFK). Do not wait on the user: take your recommended option and record the assumption in a task note. Questions and plan approvals you still raise are answered for the user after a minute with the "(Recommended)" option, or the first one. Anything irreversible or that only a person can do (merging, secrets, payments, deleting data) still waits: raise it as kind "blocker", which AFK never answers.';
 
+/** What the PM does with a Ready pull request, by who merges in the project. */
+export const mergeOwnerRule = (owner: ProjectMergeOwner): string =>
+  owner === "user"
+    ? "The user merges. Never merge a pull request yourself, even a clean Ready one, and never ask a task lead to. When a task turns Ready, send the user a short merge brief: what changed, the evidence (checks, the review model's clean review, local tests), the risk, and your recommendation (merge, or what to look at first)."
+    : "You merge. When a task turns Ready and its pull request is clean (checks pass, no open threads, no conflict), squash-merge it yourself, then tell the user in one line. Releases still need the user's OK.";
+
+/** The PM prompt section that says who merges. */
+export const mergeOwnerSection = (owner: ProjectMergeOwner): string => `
+### Merging
+
+${mergeOwnerRule(owner)}
+`;
+
+/** The "[Merge owner] …" line telling a live PM the user changed who merges. */
+export const mergeOwnerChangeText = (owner: ProjectMergeOwner): string =>
+  `[Merge owner] The user changed who merges in this project. ${mergeOwnerRule(owner)} Use this from now on.`;
+
 /**
  * The Director's "preferences" memory, for a PM prompt. Read-only for the PM: the user
  * changes it by telling the Director.
@@ -151,6 +169,8 @@ export const personaInstructions = (
     readonly kind?: "pm" | "director";
     /** The Director's "preferences" memory; only a PM's prompt carries it. */
     readonly workspacePreferences?: string | undefined;
+    /** Who merges Ready pull requests; only a PM's prompt carries it. */
+    readonly mergeOwner?: ProjectMergeOwner | undefined;
   },
 ): string => {
   const voice = {
@@ -163,6 +183,7 @@ export const personaInstructions = (
   return (
     (director ? directorInstructions(voice) : projectManagerInstructions(voice)) +
     (!director && preferences ? workspacePreferencesSection(preferences) : "") +
+    (director ? "" : mergeOwnerSection(options?.mergeOwner ?? "pm")) +
     (memory === undefined ? "" : pmMemorySection(memory)) +
     (afkRule === undefined ? "" : `\n### The user is AFK\n\n${afkRule}\n`)
   );

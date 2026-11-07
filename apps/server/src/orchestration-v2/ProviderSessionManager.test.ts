@@ -47,7 +47,12 @@ import {
   projectManagerInstructions,
 } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { defaultPersona, personaInstructions, pmMemorySection } from "../projectTeam/persona.ts";
+import {
+  defaultPersona,
+  mergeOwnerSection,
+  personaInstructions,
+  pmMemorySection,
+} from "../projectTeam/persona.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -2029,7 +2034,9 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
         name: "Juno",
         voice: "Talk like a ship's captain.",
         voiceIsUserWords: true,
-      }) + pmMemorySection([pmMemoryEntry(ProjectId.make("project-provider-session-manager-pm"))]),
+      }) +
+        mergeOwnerSection("pm") +
+        pmMemorySection([pmMemoryEntry(ProjectId.make("project-provider-session-manager-pm"))]),
     );
     assert.include(pm?.teamInstructions ?? "", "### decisions\n2026-01-01 Squash-merge only.");
     assert.include(pm?.teamInstructions ?? "", PROJECT_MANAGER_INSTRUCTIONS);

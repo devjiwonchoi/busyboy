@@ -67,4 +67,17 @@ describe("persona defaults", () => {
     expect(personaInstructions(persona)).not.toContain("### Project memory");
     expect(personaInstructions(persona, [])).toContain("No project memory yet.");
   });
+
+  it("tells the PM who merges, and never to merge when the user does", () => {
+    const persona = { name: "Remy", avatar: { kind: "emoji", emoji: "🦊" }, voice: "dry" } as const;
+    const user = personaInstructions(persona, undefined, undefined, { mergeOwner: "user" });
+    expect(user).toContain("### Merging");
+    expect(user).toContain("Never merge a pull request yourself");
+    expect(user).toContain("merge brief: what changed, the evidence");
+    expect(user).not.toContain("squash-merge it yourself");
+    expect(personaInstructions(persona)).toContain("squash-merge it yourself");
+    expect(personaInstructions(persona, undefined, undefined, { kind: "director" })).not.toContain(
+      "### Merging",
+    );
+  });
 });

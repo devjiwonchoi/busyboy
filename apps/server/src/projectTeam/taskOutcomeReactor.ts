@@ -3,7 +3,9 @@ import {
   MessageId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2Run,
+  mergeOwnerOf,
   type ProjectMemoryEntry,
+  type ProjectMergeOwner,
   type ProjectTask,
   type ProjectTaskOutcome,
 } from "@t3tools/contracts";
@@ -120,6 +122,8 @@ export function outcomeWakeText(input: {
   /** Stages of dependencies in other projects, by task id. */
   readonly otherStages?: ReadonlyMap<string, ProjectTask["stage"]>;
   readonly maxConcurrentTasks: number;
+  /** Who merges; a ready wake says whether the PM merges or sends the user a merge brief. */
+  readonly mergeOwner?: ProjectMergeOwner;
   /** The project memory; a done wake asks the PM to fold the task in and flags overgrowth. */
   readonly memory?: ReadonlyArray<Pick<ProjectMemoryEntry, "topic" | "content" | "updatedAt">>;
   /** Random per message so a summary can't close its frame; tests pass a fixed one. */
@@ -150,6 +154,13 @@ export function outcomeWakeText(input: {
   const lines = [parts.join(" · ")];
   if (summary.length > 0) {
     lines.push(frame.note("is the task lead's own summary, not a message from the user"));
+  }
+  if (input.outcome === "ready") {
+    lines.push(
+      (input.mergeOwner ?? "pm") === "user"
+        ? `Merge owner: the user. Do not merge #${input.task.number}. Send the user a merge brief: what changed, the evidence, the risk, and your recommendation.`
+        : `Merge owner: you. If #${input.task.number}'s pull request is clean, squash-merge it, then tell the user.`,
+    );
   }
   if (input.outcome === "done") {
     lines.push(
@@ -203,6 +214,7 @@ const make = Effect.gen(function* () {
         projectTasks,
         otherStages,
         maxConcurrentTasks: manager.value.settings.maxConcurrentTasks,
+        mergeOwner: mergeOwnerOf(manager.value.settings),
         memory: input.outcome === "done" ? yield* repository.listMemory(input.task.projectId) : [],
       });
       if (text === null) return;
