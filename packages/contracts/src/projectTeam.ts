@@ -10,7 +10,6 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
-import { ChatAttachment } from "./chatAttachment.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
 import { ProjectIconOverride } from "./project.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
@@ -1592,22 +1591,6 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
 export type ProjectTeamUpdateSettingsInput = typeof ProjectTeamUpdateSettingsInput.Type;
 
 // App-facing task RPCs.
-
-export const ProjectTeamCreateTaskInput = Schema.Struct({
-  projectId: ProjectId,
-  title: ProjectTaskTitle,
-  /** Whatever the user dumped into the composer. May be empty. */
-  context: ProjectTaskSpecText,
-  parentTaskId: Schema.optional(ProjectTaskId),
-  /** True asks the PM to start a planner on the task right away. */
-  startPlanning: Schema.Boolean,
-  /**
-   * Images and files the user dropped in, already uploaded as pending attachments.
-   * The server keeps them under the task and lists their paths in the spec.
-   */
-  attachments: Schema.optional(Schema.Array(ChatAttachment)),
-});
-export type ProjectTeamCreateTaskInput = typeof ProjectTeamCreateTaskInput.Type;
 
 export const ProjectTeamTaskRefInput = Schema.Struct({
   projectId: ProjectId,

@@ -125,8 +125,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.projectTeamAnswerDecision]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamUpdateSettings]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamGetTask]: AuthOrchestrationReadScope,
-  // Write task specs; createTask with startPlanning also wakes the PM.
-  [WS_METHODS.projectTeamCreateTask]: AuthOrchestrationOperateScope,
+  // Write task specs.
   [WS_METHODS.projectTeamUpdateTaskSpec]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamRestoreTaskSpec]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamSplitTaskTodo]: AuthOrchestrationOperateScope,

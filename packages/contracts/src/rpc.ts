@@ -347,7 +347,6 @@ import {
   ProjectTeamSettingsResult,
   ProjectTeamSubscribeAttentionInput,
   ProjectTeamUpdateSettingsInput,
-  ProjectTeamCreateTaskInput,
   ProjectTeamRestoreTaskSpecInput,
   ProjectTeamSplitTaskTodoInput,
   ProjectTeamSplitTaskTodoResult,
@@ -522,7 +521,6 @@ export const WS_METHODS = {
   projectTeamRequestSitrep: "projectTeam.requestSitrep",
   projectTeamAnswerDecision: "projectTeam.answerDecision",
   projectTeamUpdateSettings: "projectTeam.updateSettings",
-  projectTeamCreateTask: "projectTeam.createTask",
   projectTeamGetTask: "projectTeam.getTask",
   projectTeamUpdateTaskSpec: "projectTeam.updateTaskSpec",
   projectTeamRestoreTaskSpec: "projectTeam.restoreTaskSpec",
@@ -1838,12 +1836,6 @@ const WsProjectTeamUpdateSettingsRpc = Rpc.make(WS_METHODS.projectTeamUpdateSett
   error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
 });
 
-const WsProjectTeamCreateTaskRpc = Rpc.make(WS_METHODS.projectTeamCreateTask, {
-  payload: ProjectTeamCreateTaskInput,
-  success: ProjectTeamTaskDetail,
-  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
-});
-
 const WsProjectTeamGetTaskRpc = Rpc.make(WS_METHODS.projectTeamGetTask, {
   payload: ProjectTeamTaskRefInput,
   success: ProjectTeamTaskDetail,
@@ -1971,7 +1963,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectTeamRequestSitrepRpc,
   WsProjectTeamAnswerDecisionRpc,
   WsProjectTeamUpdateSettingsRpc,
-  WsProjectTeamCreateTaskRpc,
   WsProjectTeamGetTaskRpc,
   WsProjectTeamUpdateTaskSpecRpc,
   WsProjectTeamRestoreTaskSpecRpc,

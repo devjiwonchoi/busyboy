@@ -14,7 +14,6 @@ const state = vi.hoisted(() => ({
   projects: [] as unknown[],
   groups: [] as unknown[],
   managers: [] as { environmentId: string; summary: ProjectTeamAttentionSummary }[],
-  createTask: (() => undefined) as unknown as (...args: unknown[]) => Promise<unknown>,
 }));
 
 vi.mock(import("../state/server"), async (original) => {
@@ -46,7 +45,6 @@ vi.mock(import("../state/projectTeam"), async (original) => ({
     byPmThreadId: new Map(state.managers.map((m) => [m.summary.pmThreadId, m.summary])),
   })) as never,
   useRequestSitrep: (() => vi.fn()) as never,
-  useCreateTask: (() => state.createTask) as never,
   // The real hook reads the summary from atoms; read it from the test's managers instead.
   useLeadThreadTask: ((ref: { threadId: string }, projectId: string | null) =>
     taskForLeadThread(

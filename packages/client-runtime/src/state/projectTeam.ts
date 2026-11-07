@@ -52,7 +52,6 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
   // Every task write ends with a fresh attention snapshot, which refetches open task details.
   const taskCommand = <
     Tag extends
-      | typeof WS_METHODS.projectTeamCreateTask
       | typeof WS_METHODS.projectTeamUpdateTaskSpec
       | typeof WS_METHODS.projectTeamRestoreTaskSpec
       | typeof WS_METHODS.projectTeamSplitTaskTodo
@@ -78,7 +77,6 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
       tag: WS_METHODS.projectTeamGetTask,
       refreshTrigger: ({ environmentId }) => attention({ environmentId, input: {} }),
     }),
-    createTask: taskCommand("create-task", WS_METHODS.projectTeamCreateTask),
     updateTaskSpec: taskCommand("update-task-spec", WS_METHODS.projectTeamUpdateTaskSpec),
     restoreTaskSpec: taskCommand("restore-task-spec", WS_METHODS.projectTeamRestoreTaskSpec),
     splitTaskTodo: taskCommand("split-task-todo", WS_METHODS.projectTeamSplitTaskTodo),

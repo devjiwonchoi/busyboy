@@ -17,7 +17,6 @@ import type {
   ProjectDecisionCard,
   ProjectId,
   ProjectTeamAnswerDecisionInput,
-  ProjectTeamCreateTaskInput,
   ProjectTeamRestoreTaskSpecInput,
   ProjectTeamSetTaskRoleModelsInput,
   ProjectTeamSplitTaskTodoInput,
@@ -204,13 +203,6 @@ export function useUpdateTeamSettings() {
       environmentId: ref.environmentId,
       input: { ...patch, projectId: ref.projectId },
     });
-}
-
-/** Adds a task from the composer; resolves to its detail so the caller can open its page. */
-export function useCreateTask() {
-  const createTask = useAtomCommand(projectTeamEnvironment.createTask);
-  return (environmentId: EnvironmentId, input: ProjectTeamCreateTaskInput) =>
-    createTask({ environmentId, input });
 }
 
 export function useUpdateTaskSpec() {
