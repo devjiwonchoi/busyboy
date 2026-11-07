@@ -1224,11 +1224,8 @@ it.effect("fresh sign-in to the same identity preserves separate registration pr
         changed
           .methods!.filter((method) => method.id.startsWith("chatgpt-profile:"))
           .map((method) => method.id),
-        [
-          "chatgpt-profile:oaiapp_replacement",
-          "chatgpt-profile:oaiapp_other_account",
-          "chatgpt-profile:oaiapp_test",
-        ],
+        // oaiapp_test is the same account as oaiapp_replacement, so only the newer one shows.
+        ["chatgpt-profile:oaiapp_replacement", "chatgpt-profile:oaiapp_other_account"],
       );
       assert.strictEqual(Option.getOrThrow(yield* h.auth.read).clientId, "oaiapp_replacement");
       const redirectUri = h.authorizationRequests[2]!.searchParams.get("redirect_uri");
