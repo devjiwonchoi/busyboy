@@ -42,6 +42,7 @@ import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import type { PullRequestText } from "./pullRequestFormat.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
+import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
@@ -86,6 +87,8 @@ export interface TeamHarness {
   readonly providers: Array<ServerProvider>;
   /** The branch checked out in a worktree; null when unknown. */
   checkedOutBranch: (worktreePath: string) => string | null;
+  /** The commit checked out in a worktree, read by the review gate; null when unknown. */
+  worktreeHead: (worktreePath: string) => string | null;
   /** Runs after a thread is archived, like the server's worktree cleanup effect. */
   onArchive: (threadId: ThreadId) => Effect.Effect<void>;
   /** Runs after a thread is unarchived with restoreWorktree, like the restore effect. */
@@ -376,6 +379,9 @@ export const withTeam = <A, E>(
           managedProjectFolders,
           Path.layer,
           PullRequestTextReader.layerTest((url) => Option.fromNullishOr(pullRequests.get(url))),
+          WorktreeHeadReader.layerTest((worktreePath) =>
+            Option.fromNullishOr(harness.worktreeHead(worktreePath)),
+          ),
         ),
       ),
       Layer.provideMerge(
@@ -396,6 +402,7 @@ export const withTeam = <A, E>(
       providers,
       pullRequests,
       checkedOutBranch: () => null,
+      worktreeHead: () => null,
       onArchive: () => Effect.void,
       onRestore: () => Effect.void,
       delegate: (input) =>
@@ -514,3 +521,9 @@ export const approvePlan = (lead: ThreadId) =>
     });
     return item;
   });
+
+/** The lead records a clean self-review, which In Review needs. */
+export const reviewClean = (lead: ThreadId, head = "abc1234") =>
+  Effect.flatMap(ProjectTeamService.ProjectTeamService, (team) =>
+    team.setReview(lead, { clean: true, findings: "", head }),
+  );

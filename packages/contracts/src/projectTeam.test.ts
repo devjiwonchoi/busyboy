@@ -27,6 +27,7 @@ import {
   ProjectTeamStatusInput,
   ProjectTeamTaskUpdateInput,
   ProjectTeamUpdateSettingsInput,
+  projectTaskPhase,
 } from "./projectTeam.ts";
 import { WS_METHODS, WsRpcGroup } from "./rpc.ts";
 
@@ -155,9 +156,25 @@ describe("ProjectTask", () => {
       createdAt: "2026-11-04T00:00:00.000Z",
       updatedAt: "2026-11-04T00:00:00.000Z",
     };
-    // Tasks stored before subtasks existed have no parent.
-    expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual({ ...task, parentTaskId: null });
+    // Tasks stored before subtasks or rounds existed have no parent, rounds or review.
+    expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual({
+      ...task,
+      parentTaskId: null,
+      iterateRound: 0,
+      shipRound: 0,
+      review: null,
+    });
     expect(() => Schema.decodeUnknownSync(ProjectTask)({ ...task, stage: "review" })).toThrow();
+  });
+});
+
+describe("projectTaskPhase", () => {
+  it("reads Align, Iterate and Ship from the stage", () => {
+    expect(
+      (["inbox", "planning", "awaiting_approval", "running", "in_review", "done"] as const).map(
+        projectTaskPhase,
+      ),
+    ).toEqual(["align", "align", "align", "iterate", "ship", null]);
   });
 });
 

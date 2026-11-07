@@ -6,9 +6,10 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
-  PROJECT_ID,
   approvePlan,
+  PROJECT_ID,
   readyPlan,
+  reviewClean,
   setUpManager,
   startLead,
   withTeam,
@@ -150,6 +151,7 @@ describe("ProjectTeamService intake and breakdown", () => {
           isDraft: false,
         });
         yield* team.setEvidence(sub, { criterionId: "c1", evidence: "test" }).pipe(Effect.ignore);
+        yield* reviewClean(sub);
         yield* team.updateTask(sub, {
           stage: "in_review",
           prUrl: "https://github.com/o/r/pull/1",
@@ -288,6 +290,7 @@ describe("ProjectTeamService intake and breakdown", () => {
         yield* approvePlan(lead);
         yield* team.setEvidence(lead, { criterionId: "c1", evidence: "unit test passed" });
         const url = "https://github.com/o/r/pull/7";
+        yield* reviewClean(lead);
         const tryReview = () =>
           team.updateTask(lead, { stage: "in_review", prUrl: url }).pipe(Effect.flip);
 

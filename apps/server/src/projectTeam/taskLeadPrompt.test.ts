@@ -31,6 +31,9 @@ const task: ProjectTask = {
   resultSummary: null,
   lastOutcome: null,
   nudgeCount: 0,
+  iterateRound: 0,
+  shipRound: 0,
+  review: null,
   stageChangedAt: at,
   createdAt: at,
   updatedAt: at,
@@ -120,6 +123,12 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("The server refuses running until the user has approved a plan.");
     expect(prompt).toContain("task_evidence_set(criterionId, evidence)");
     expect(prompt).toContain("The server refuses In Review without a pull request");
+    // Align → Iterate → Ship, with a self-review closing every Iterate round.
+    expect(prompt).toContain("1. Align (planning, then awaiting_approval):");
+    expect(prompt).toContain("2. Iterate (running):");
+    expect(prompt).toContain("3. Ship (in_review):");
+    expect(prompt).toContain("task_review_set(clean, findings, head)");
+    expect(prompt).toContain("without a clean self-review of the current HEAD");
     expect(prompt).toContain('"[Spec changed]": the user or the PM changed the spec');
     expect(prompt).not.toContain("## Language");
     // Leads ask the user to approve the plan and read inline review comments.
@@ -134,7 +143,7 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain(
       "### Summary\nThere is no hello script. Running hello.sh prints hello.",
     );
-    expect(prompt).toContain('"Approve and start": go on to running.');
+    expect(prompt).toContain('"Approve and start": go on to Iterate.');
     expect(prompt).not.toContain("Approve only");
     expect(prompt).toContain('"Request changes" or anything else is feedback');
     expect(prompt).toContain("### testing\nUse vp test for changed files only.");
@@ -183,7 +192,7 @@ describe("buildTaskLeadPrompt", () => {
 
   it("skips planning for a task whose plan was already approved", () => {
     const prompt = buildTaskLeadPrompt({ ...base, resume: true, memory: [], otherTasks: [] });
-    expect(prompt).not.toContain("1. planning:");
+    expect(prompt).not.toContain("1. Align (planning, then awaiting_approval):");
     expect(prompt).toContain("The plan above is already approved, so start here");
   });
 

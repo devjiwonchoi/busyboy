@@ -62,6 +62,9 @@ const handlers = {
   task_evidence_set: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.setEvidence(caller, input)),
   ),
+  task_review_set: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.setReview(caller, input)),
+  ),
   task_nudge: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.nudgeTask(caller, input)),
   ),

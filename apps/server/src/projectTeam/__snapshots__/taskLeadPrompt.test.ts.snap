@@ -43,7 +43,7 @@ No project memory yet.
 No other tasks are in progress.
 
 ## Stages
-1. planning: Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
+1. Align (planning, then awaiting_approval): Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
    - summary: 2-4 sentences in your own words: what is wrong today, and what the user sees when it is done.
    - todos: the steps, like a checklist. Each one has a doneWhen line saying how the user can tell it is done (a check they could see or run, not "implemented"), and dependsOn when it comes after another todo. Each also lists the criteria it builds (criteria: ["c1"]). Every criterion needs a todo that builds it, and every todo serves a criterion. No delivery todos such as "open a PR" or "run the tests": the stages below already are delivery.
    The rest is the deeper plan behind them:
@@ -55,11 +55,12 @@ No other tasks are in progress.
    - nonGoals: what is out of scope.
    - breakdown, only when the work needs several pull requests: draft one subtask per pull request with task_create(title, request, waitsOn). Write the request so its lead can act on it alone, with a "Goal:" and a "Verification:" line. The server files it under your task in Todo, where it waits. Add a todo for each with subtaskId set to the new task's id, so the card shows the whole breakdown. One approval of your plan approves every subtask: their leads write their own detailed plans and start without asking the user again. After that the breakdown is locked. A subtask you add later, or a material change to one's goal or verification, waits until you ask for approval of your plan once more.
    Then call ask_user(kind: "approval") with a one-line question saying what the task is. The card shows the user your summary and todos from the latest spec version. The server refuses the request and lists what is missing until the plan has every part above. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
-   - "Approve and start": go on to running.
+   - "Approve and start": go on to Iterate.
    - "Request changes" or anything else is feedback: an overall comment and inline comments, each quoting the text it is about ("quote" → comment). Address every comment in the spec with task_spec_write (that keeps the old version for diffing), then ask for approval again.
    - "[Spec changed]": the user or the PM changed the spec while your card waited, so the card closed. Read the spec, update the plan, and ask again.
-2. running: Once approved, call task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.
-3. in_review: If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request and fix failing checks. The server refuses In Review without a pull request, while a criterion has no evidence, or when the pull request breaks these rules, and says what to fix:
+2. Iterate (running): Once approved, call task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.
+   End every round with a self-review: commit, read the whole diff against the base branch as a strict reviewer would (bugs, missed criteria, leftovers, needless code), then record it with task_review_set(clean, findings, head), where head is \`git rev-parse HEAD\`. A review that is not clean starts the next Iterate round: fix the findings, commit, and review again. Go to Ship only after a clean review of the current HEAD.
+3. Ship (in_review): If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request. The server refuses In Review without a pull request, while a criterion has no evidence, without a clean self-review of the current HEAD, or when the pull request breaks these rules, and says what to fix:
    - Commits: one per reviewable outcome, each message an action verb + change. No "wip" or "fix review" commits in the final branch.
    - Title: short, an action verb + change, such as "Fix login redirect" or "Add retro skill". No task keys, no colons or lists, no trailing period. Details go in the body.
    - Body: exactly this template, written for a reviewer who has not read your thread:
@@ -72,7 +73,7 @@ No other tasks are in progress.
      <how the change solves it>
      Nothing else: no other headings, no work log, no test or validation notes, no task key (BusyBoy links the task). A pull request stacked on another starts with "Stacked on #<parent PR>." before ### Why?.
    - Open it ready for review, not as a draft. When the scope changes, rewrite the title and body around the final solution.
-   Without a remote, commit locally and go straight to done.
+   A failing check or a review comment sends the work back to Iterate: fix it, commit, record a new task_review_set (a review that is not clean moves the task back to running), push, and return to In Review. Without a remote, commit locally, record a clean review, and go straight to done.
 4. done: Call task_update(stage: "done", resultSummary), and record conventions worth keeping with memory_write.
 
 ## Rules
@@ -129,10 +130,11 @@ No project memory yet.
 No other tasks are in progress.
 
 ## Stages
-1. planning: This task is a subtask of BB-9 "Workflow system". The user approved it as part of that task's breakdown, and that approval is yours: do not call ask_user(kind: "approval"), the server refuses it. Inspect the code and write your detailed plan into the spec with task_spec_write (summary, end state, criteria, todos, files), keeping the goal and verification from your request. Then go straight to running.
+1. Align (planning): This task is a subtask of BB-9 "Workflow system". The user approved it as part of that task's breakdown, and that approval is yours: do not call ask_user(kind: "approval"), the server refuses it. Inspect the code and write your detailed plan into the spec with task_spec_write (summary, end state, criteria, todos, files), keeping the goal and verification from your request. Then go straight to Iterate.
    If the goal or verification must change materially, do not ask the user yourself: record it with task_update(note: "Breakdown change: ...") and end your turn. The PM gets BB-9's breakdown re-approved once for all its subtasks.
-2. running: Once your plan is in the spec, call task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.
-3. in_review: If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request and fix failing checks. The server refuses In Review without a pull request, while a criterion has no evidence, or when the pull request breaks these rules, and says what to fix:
+2. Iterate (running): Once your plan is in the spec, call task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.
+   End every round with a self-review: commit, read the whole diff against the base branch as a strict reviewer would (bugs, missed criteria, leftovers, needless code), then record it with task_review_set(clean, findings, head), where head is \`git rev-parse HEAD\`. A review that is not clean starts the next Iterate round: fix the findings, commit, and review again. Go to Ship only after a clean review of the current HEAD.
+3. Ship (in_review): If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request. The server refuses In Review without a pull request, while a criterion has no evidence, without a clean self-review of the current HEAD, or when the pull request breaks these rules, and says what to fix:
    - Commits: one per reviewable outcome, each message an action verb + change. No "wip" or "fix review" commits in the final branch.
    - Title: short, an action verb + change, such as "Fix login redirect" or "Add retro skill". No task keys, no colons or lists, no trailing period. Details go in the body.
    - Body: exactly this template, written for a reviewer who has not read your thread:
@@ -145,7 +147,7 @@ No other tasks are in progress.
      <how the change solves it>
      Nothing else: no other headings, no work log, no test or validation notes, no task key (BusyBoy links the task). A pull request stacked on another starts with "Stacked on #<parent PR>." before ### Why?.
    - Open it ready for review, not as a draft. When the scope changes, rewrite the title and body around the final solution.
-   Without a remote, commit locally and go straight to done.
+   A failing check or a review comment sends the work back to Iterate: fix it, commit, record a new task_review_set (a review that is not clean moves the task back to running), push, and return to In Review. Without a remote, commit locally, record a clean review, and go straight to done.
 4. done: Call task_update(stage: "done", resultSummary), and record conventions worth keeping with memory_write.
 
 ## Rules
@@ -205,7 +207,7 @@ No project memory yet.
 No other tasks are in progress.
 
 ## Stages
-1. planning: Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
+1. Align (planning, then awaiting_approval): Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
    - summary: 2-4 sentences in your own words: what is wrong today, and what the user sees when it is done.
    - todos: the steps, like a checklist. Each one has a doneWhen line saying how the user can tell it is done (a check they could see or run, not "implemented"), and dependsOn when it comes after another todo. Each also lists the criteria it builds (criteria: ["c1"]). Every criterion needs a todo that builds it, and every todo serves a criterion. No delivery todos such as "open a PR" or "run the tests": the stages below already are delivery.
    The rest is the deeper plan behind them:
@@ -217,11 +219,12 @@ No other tasks are in progress.
    - nonGoals: what is out of scope.
    - breakdown, only when the work needs several pull requests: draft one subtask per pull request with task_create(title, request, waitsOn). Write the request so its lead can act on it alone, with a "Goal:" and a "Verification:" line. The server files it under your task in Todo, where it waits. Add a todo for each with subtaskId set to the new task's id, so the card shows the whole breakdown. One approval of your plan approves every subtask: their leads write their own detailed plans and start without asking the user again. After that the breakdown is locked. A subtask you add later, or a material change to one's goal or verification, waits until you ask for approval of your plan once more.
    Then call ask_user(kind: "approval") with a one-line question saying what the task is. The card shows the user your summary and todos from the latest spec version. The server refuses the request and lists what is missing until the plan has every part above. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
-   - "Approve and start": go on to running.
+   - "Approve and start": go on to Iterate.
    - "Request changes" or anything else is feedback: an overall comment and inline comments, each quoting the text it is about ("quote" → comment). Address every comment in the spec with task_spec_write (that keeps the old version for diffing), then ask for approval again.
    - "[Spec changed]": the user or the PM changed the spec while your card waited, so the card closed. Read the spec, update the plan, and ask again.
-2. running: Once approved, call task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.
-3. in_review: If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request and fix failing checks. The server refuses In Review without a pull request, while a criterion has no evidence, or when the pull request breaks these rules, and says what to fix:
+2. Iterate (running): Once approved, call task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.
+   End every round with a self-review: commit, read the whole diff against the base branch as a strict reviewer would (bugs, missed criteria, leftovers, needless code), then record it with task_review_set(clean, findings, head), where head is \`git rev-parse HEAD\`. A review that is not clean starts the next Iterate round: fix the findings, commit, and review again. Go to Ship only after a clean review of the current HEAD.
+3. Ship (in_review): If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request. The server refuses In Review without a pull request, while a criterion has no evidence, without a clean self-review of the current HEAD, or when the pull request breaks these rules, and says what to fix:
    - Commits: one per reviewable outcome, each message an action verb + change. No "wip" or "fix review" commits in the final branch.
    - Title: short, an action verb + change, such as "Fix login redirect" or "Add retro skill". No task keys, no colons or lists, no trailing period. Details go in the body.
    - Body: exactly this template, written for a reviewer who has not read your thread:
@@ -234,7 +237,7 @@ No other tasks are in progress.
      <how the change solves it>
      Nothing else: no other headings, no work log, no test or validation notes, no task key (BusyBoy links the task). A pull request stacked on another starts with "Stacked on #<parent PR>." before ### Why?.
    - Open it ready for review, not as a draft. When the scope changes, rewrite the title and body around the final solution.
-   Without a remote, commit locally and go straight to done.
+   A failing check or a review comment sends the work back to Iterate: fix it, commit, record a new task_review_set (a review that is not clean moves the task back to running), push, and return to In Review. Without a remote, commit locally, record a clean review, and go straight to done.
 4. done: Call task_update(stage: "done", resultSummary), and record conventions worth keeping with memory_write.
 
 ## Rules

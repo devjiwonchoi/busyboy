@@ -19,7 +19,14 @@ import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { defaultPersona, defaultPersonaName } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { nextStepHint } from "./taskLeadPrompt.ts";
-import { PROJECT_ID, setUpManager, startLead, withTeam, approvePlan } from "./testkit.ts";
+import {
+  approvePlan,
+  PROJECT_ID,
+  reviewClean,
+  setUpManager,
+  startLead,
+  withTeam,
+} from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 
@@ -174,6 +181,7 @@ describe("ProjectTeamService", () => {
         assert.include(refused.message, "waits on #1");
 
         const lead = yield* team.startTask(pm, { taskId: first.task.id }, harness.delegate);
+        yield* reviewClean(lead.leadThreadId);
         yield* team.updateTask(lead.leadThreadId, {
           stage: "in_review",
           prUrl: "https://example.test/pr/1",
@@ -349,6 +357,7 @@ describe("ProjectTeamService", () => {
         yield* approvePlan(building.leadThreadId);
         yield* team.updateTask(building.leadThreadId, { stage: "running", planSummary: "Plan." });
         const shipped = yield* start("Shipped");
+        yield* reviewClean(shipped.leadThreadId);
         yield* team.updateTask(shipped.leadThreadId, {
           stage: "in_review",
           prUrl: "https://github.com/acme/app/pull/9",
@@ -666,6 +675,7 @@ describe("ProjectTeamService", () => {
         const second = yield* startLead(pm, "Second", harness.delegate);
         const third = yield* startLead(pm, "Third", harness.delegate);
         const reviewed = yield* startLead(pm, "Reviewed", harness.delegate);
+        yield* reviewClean(reviewed.leadThreadId);
         yield* team.updateTask(reviewed.leadThreadId, {
           stage: "in_review",
           prUrl: "https://github.com/acme/repo/pull/1",
