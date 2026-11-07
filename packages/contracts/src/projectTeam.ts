@@ -1296,13 +1296,17 @@ export const ProjectTeamAskUserInput = Schema.Struct({
       "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card with the spec's summary and todos. blocker: something only a person can unblock.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
-    description: "Self-contained question. For approval, one line saying what the task is.",
+    description:
+      "Self-contained question. For approval, one line saying what the task is. For a decision or blocker, the first line is the question itself, naming the task; the card shows it as the title. Context goes below it and starts folded.",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
       Schema.isMaxLength(10),
     ),
-  ).annotate({ description: "Suggested answers, if any." }),
+  ).annotate({
+    description:
+      'Suggested answers, if any, shown as choices. Write each as "Label — one-line tradeoff" and mark the one you recommend with "(Recommended)".',
+  }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
 
