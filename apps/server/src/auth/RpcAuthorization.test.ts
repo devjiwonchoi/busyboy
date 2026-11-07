@@ -53,6 +53,16 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("keeps the desktop app's update state and install behind maintain scope", () => {
+    for (const method of [
+      WS_METHODS.serverSubscribeDesktopUpdateState,
+      WS_METHODS.serverUpdateServer,
+      WS_METHODS.serverCommitDesktopUpdate,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthEnvironmentMaintainScope);
+    }
+  });
+
   it("keeps webhook delivery logs, which hold request bodies, behind operate scope", () => {
     for (const method of [
       WS_METHODS.scheduledTasksListWebhookDeliveries,

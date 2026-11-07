@@ -2420,6 +2420,8 @@ const layerWsRpc = (
           ),
         [WS_METHODS.serverCommitDesktopUpdate]: (input) =>
           serverSelfUpdate.commitDesktopUpdate(input.requestId),
+        [WS_METHODS.serverSubscribeDesktopUpdateState]: (_input) =>
+          serverSelfUpdate.desktopUpdateStates,
         [WS_METHODS.serverUpsertKeybinding]: (rule) =>
           Effect.gen(function* () {
             const keybindingsConfig = yield* keybindings.upsertKeybindingRule(rule);

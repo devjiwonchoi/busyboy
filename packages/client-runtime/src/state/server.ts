@@ -1134,6 +1134,10 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.subscribeResourceTelemetry,
       idleTtlMs: 0,
     }),
+    desktopUpdateState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:desktop-update-state",
+      tag: WS_METHODS.serverSubscribeDesktopUpdateState,
+    }),
     resourceTelemetryHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:resource-telemetry-history",
       tag: WS_METHODS.serverGetResourceTelemetryHistory,

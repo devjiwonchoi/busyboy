@@ -22,6 +22,7 @@ import {
   ChatGptHandoffState,
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
+import { DesktopUpdateStateSchema } from "./ipc.ts";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
@@ -467,6 +468,7 @@ export const WS_METHODS = {
   serverUpdateServer: "server.updateServer",
   serverUpdateServerWithProgress: "server.updateServerWithProgress",
   serverCommitDesktopUpdate: "server.commitDesktopUpdate",
+  serverSubscribeDesktopUpdateState: "server.subscribeDesktopUpdateState",
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverRemoveKeybinding: "server.removeKeybinding",
   serverRunStorageCleanup: "server.runStorageCleanup",
@@ -736,6 +738,17 @@ const WsServerCommitDesktopUpdateRpc = Rpc.make(WS_METHODS.serverCommitDesktopUp
   success: ServerSelfUpdateResult,
   error: Schema.Union([ServerSelfUpdateError, EnvironmentAuthorizationError]),
 });
+
+/** The desktop app's own update state, or null until it reports one. */
+const WsServerSubscribeDesktopUpdateStateRpc = Rpc.make(
+  WS_METHODS.serverSubscribeDesktopUpdateState,
+  {
+    payload: Schema.Struct({}),
+    success: Schema.NullOr(DesktopUpdateStateSchema),
+    error: EnvironmentAuthorizationError,
+    stream: true,
+  },
+);
 
 const WsServerRunStorageCleanupRpc = Rpc.make(WS_METHODS.serverRunStorageCleanup, {
   payload: Schema.Struct({}),
@@ -2072,6 +2085,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeAuthAccessRpc,
   WsSubscribeBackgroundPolicyRpc,
   WsSubscribeResourceTelemetryRpc,
+  WsServerSubscribeDesktopUpdateStateRpc,
   WsOrchestrationV2DispatchCommandRpc,
   WsOrchestrationV2GetWorkflowScriptRpc,
   WsOrchestrationV2StopWorkflowRpc,

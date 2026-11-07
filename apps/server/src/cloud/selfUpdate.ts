@@ -1,4 +1,5 @@
 import {
+  type DesktopUpdateState,
   ServerSelfUpdateError,
   type ServerSelfUpdateCapability,
   type ServerSelfUpdateInput,
@@ -15,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as Stream from "effect/Stream";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -59,6 +61,8 @@ export class ServerSelfUpdate extends Context.Service<
       requestId: string,
       onHandoffAccepted?: () => Effect.Effect<void>,
     ) => Effect.Effect<never, ServerSelfUpdateError>;
+    /** The local desktop app's update state; a single null when no desktop app runs this server. */
+    readonly desktopUpdateStates: Stream.Stream<DesktopUpdateState | null>;
   }
 >()("t3/cloud/selfUpdate/ServerSelfUpdate") {}
 
@@ -138,6 +142,7 @@ export const withRunningThreadContinuation = Effect.fn(
 
   return ServerSelfUpdate.of({
     update,
+    desktopUpdateStates: input.selfUpdate.desktopUpdateStates,
     commitDesktopUpdate: (requestId) =>
       Effect.gen(function* () {
         const shouldContinue = yield* Ref.modify(desktopContinuationTokens, (tokens) => [
@@ -333,6 +338,7 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
     update,
     commitDesktopUpdate: (requestId, onHandoffAccepted) =>
       desktopAppUpdate.commit(requestId, onHandoffAccepted),
+    desktopUpdateStates: desktopAppUpdate.states,
   });
 });
 
