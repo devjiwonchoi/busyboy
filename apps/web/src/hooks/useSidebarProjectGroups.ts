@@ -1,14 +1,25 @@
 import { orderProjectsForSidebar, pinScratchProjectGroupLast } from "../components/Sidebar.logic";
 import { getProjectOrderKey, selectProjectGroupingSettings } from "../logicalProject";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
-import { useEnvironmentIdentities, usePrimaryEnvironmentId } from "../state/environments";
+import {
+  useEnvironmentIdentities,
+  useEnvironmentIds,
+  usePrimaryEnvironmentId,
+} from "../state/environments";
 import { useProjects } from "../state/entities";
+import { useDirectorProjectKeys } from "../state/director";
 import { useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
 
-/** Project groups in the user's manual order, with "No project" last. */
+/**
+ * Project groups in the user's manual order, with "No project" last. The
+ * Director's hidden system project is left out: it has its own rail entry.
+ */
 export function useSidebarProjectGroups() {
-  const projects = useProjects();
+  const directorKeys = useDirectorProjectKeys(useEnvironmentIds());
+  const projects = useProjects().filter(
+    (project) => !directorKeys.has(`${project.environmentId}:${project.id}`),
+  );
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const groupingSettings = useClientSettings(selectProjectGroupingSettings);
   const environments = useEnvironmentIdentities();

@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  ProjectId,
   ProjectTaskId,
   ProjectTaskReference,
   ProjectTeamAttentionSummary,
@@ -90,4 +91,58 @@ export function buildAllProjectsSections(
       }
       return 0;
     });
+}
+
+export interface EpicChildRow {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+  readonly taskKeyPrefix: string;
+  readonly task: ProjectTaskReference;
+}
+
+export interface EpicGroup {
+  readonly epic: ProjectTaskReference;
+  /** Subtasks from every project, grouped by project, lowest number first. */
+  readonly children: ReadonlyArray<EpicChildRow>;
+}
+
+/**
+ * The Director's epics, open ones first and newest first, each with its subtasks from every project
+ * in the same environment. Finished epics and subtasks hide unless showDone.
+ */
+export function buildEpicGroups(
+  director: {
+    readonly environmentId: EnvironmentId;
+    readonly summary: ProjectTeamAttentionSummary;
+  } | null,
+  projects: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly summary: ProjectTeamAttentionSummary;
+  }>,
+  showDone: boolean,
+): ReadonlyArray<EpicGroup> {
+  if (director === null) return [];
+  const childrenOf = new Map<ProjectTaskId, EpicChildRow[]>();
+  for (const { environmentId, summary } of projects) {
+    if (environmentId !== director.environmentId) continue;
+    for (const task of summary.tasks.toSorted((a, b) => a.number - b.number)) {
+      if (task.parentTaskId === null || (!showDone && isArchivedTask(task))) continue;
+      const row = {
+        environmentId,
+        projectId: summary.projectId,
+        taskKeyPrefix: summary.taskKeyPrefix,
+        task,
+      };
+      childrenOf.set(task.parentTaskId, [...(childrenOf.get(task.parentTaskId) ?? []), row]);
+    }
+  }
+  return director.summary.tasks
+    .filter((epic) => showDone || !isArchivedTask(epic))
+    .toSorted(
+      (a, b) => Number(isArchivedTask(a)) - Number(isArchivedTask(b)) || b.number - a.number,
+    )
+    .map((epic) => ({
+      epic,
+      children: childrenOf.get(epic.id) ?? [],
+    }));
 }

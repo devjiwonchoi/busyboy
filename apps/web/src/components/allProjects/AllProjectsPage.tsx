@@ -19,6 +19,7 @@ import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useEnvironmentIds } from "~/state/environments";
 import { useProjectManagerEntries } from "~/state/projectTeam";
+import { splitDirectorEntry } from "~/state/projectTeam.logic";
 import { taskRouteParams } from "~/taskRoutes";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { formatTaskPullRequestLabel, StatusGlyphWithLabel } from "../sidebar/SidebarRowLine";
@@ -35,13 +36,26 @@ import { SidebarInset } from "../ui/sidebar";
 import { Switch } from "../ui/switch";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { type AllProjectsSection, buildAllProjectsSections } from "./allProjects.logic";
+import { DirectorCard } from "../director/DirectorCard";
+import { useDirectorChat } from "../director/useDirectorChat";
+import {
+  type AllProjectsSection,
+  buildAllProjectsSections,
+  buildEpicGroups,
+  type EpicGroup,
+  isArchivedTask,
+} from "./allProjects.logic";
 
 export const SHOW_DONE_TASKS_STORAGE_KEY = "busyboy:all-projects:show-done";
 
-/** Every project and its tasks in one Linear-style list. Done tasks hide behind a toggle. */
+/**
+ * Every project and its tasks in one Linear-style list, under the Director's
+ * card and its epics. Done tasks hide behind a toggle.
+ */
 export function AllProjectsPage() {
   const entries = useProjectManagerEntries(useEnvironmentIds());
+  const { director: directorEntry, projects: projectEntries } = splitDirectorEntry(entries);
+  const director = useDirectorChat();
   const [showDone, setShowDone] = useLocalStorage(
     SHOW_DONE_TASKS_STORAGE_KEY,
     false,
@@ -49,9 +63,13 @@ export function AllProjectsPage() {
   );
   const showDoneSwitchId = useId();
   const projects = useProjects();
-  const sections = buildAllProjectsSections(entries, showDone);
+  const sections = buildAllProjectsSections(projectEntries, showDone);
+  // The Director's epics are parents of project tasks, so relations span both.
   const relationsIndex = buildTaskRelationsIndex(entries);
-  const doneCount = sections.reduce((total, section) => total + section.doneCount, 0);
+  const epics = buildEpicGroups(directorEntry, projectEntries, showDone);
+  const doneCount =
+    sections.reduce((total, section) => total + section.doneCount, 0) +
+    (directorEntry?.summary.tasks.filter(isArchivedTask).length ?? 0);
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
@@ -74,6 +92,18 @@ export function AllProjectsPage() {
         </WorkspacePageHeader>
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="wide" className="gap-8 px-3 sm:px-6">
+            {director !== null ? (
+              <DirectorCard director={director} projects={projectEntries} />
+            ) : null}
+            {directorEntry !== null && epics.length > 0 ? (
+              <EpicsSection
+                epics={epics}
+                environmentId={directorEntry.environmentId}
+                directorProjectId={directorEntry.summary.projectId}
+                directorKeyPrefix={directorEntry.summary.taskKeyPrefix}
+                relationsIndex={relationsIndex}
+              />
+            ) : null}
             {sections.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 No projects have a project manager yet. Tasks show up here once a project's manager
@@ -99,6 +129,51 @@ export function AllProjectsPage() {
         </ScrollArea>
       </div>
     </SidebarInset>
+  );
+}
+
+/** The Director's epics, each with its subtasks from every project right under it. */
+function EpicsSection(props: {
+  epics: ReadonlyArray<EpicGroup>;
+  environmentId: EnvironmentId;
+  directorProjectId: ProjectId;
+  directorKeyPrefix: string;
+  relationsIndex: TaskRelationsIndex;
+}) {
+  return (
+    <section aria-label="Epics" data-all-projects-epics>
+      <header className="flex items-center gap-2 border-b border-border px-2 pb-2">
+        <h2 className="min-w-0 truncate font-medium text-sm">Epics</h2>
+        <span className="shrink-0 text-muted-foreground text-xs">{props.epics.length}</span>
+      </header>
+      <ul>
+        {props.epics.map(({ epic, children }) => (
+          <li key={epic.id} data-epic={epic.id}>
+            <ul>
+              <TaskListRow
+                environmentId={props.environmentId}
+                projectId={props.directorProjectId}
+                task={epic}
+                depth={0}
+                taskKeyPrefix={props.directorKeyPrefix}
+                relationsIndex={props.relationsIndex}
+              />
+              {children.map((child) => (
+                <TaskListRow
+                  key={child.task.id}
+                  environmentId={child.environmentId}
+                  projectId={child.projectId}
+                  task={child.task}
+                  depth={1}
+                  taskKeyPrefix={child.taskKeyPrefix}
+                  relationsIndex={props.relationsIndex}
+                />
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

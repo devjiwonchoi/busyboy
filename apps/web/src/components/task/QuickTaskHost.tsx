@@ -11,7 +11,7 @@ import { isTerminalFocused } from "~/lib/terminalFocus";
 import { isModelPickerOpen } from "~/modelPickerVisibility";
 import { useProjects, useQuietThreadShell } from "~/state/entities";
 import { useEnvironmentIds } from "~/state/environments";
-import { useProjectManagerEntries } from "~/state/projectTeam";
+import { useProjectOnlyManagerEntries } from "~/state/director";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { resolveThreadRouteTarget } from "~/threadRoutes";
 import { taskRouteParams } from "~/taskRoutes";
@@ -36,7 +36,8 @@ export function QuickTaskHost() {
   const request = useQuickTaskStore((state) => state.request);
   const lastProject = useQuickTaskStore((state) => state.lastProject);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const managers = useProjectManagerEntries(useEnvironmentIds());
+  // The Director routes work itself; tasks are planned in a project.
+  const managers = useProjectOnlyManagerEntries(useEnvironmentIds());
   const allProjects = useProjects();
 
   const params = useParams({ strict: false }) as Record<string, string | undefined>;
