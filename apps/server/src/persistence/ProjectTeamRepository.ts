@@ -34,6 +34,7 @@ import {
   ProjectTaskSpecVersion,
   ProjectTaskStage,
   ProjectTeamSettings,
+  ProjectManagerKind,
   ThreadId,
 } from "@t3tools/contracts";
 
@@ -46,6 +47,7 @@ import {
 export const ProjectManagerRecord = Schema.Struct({
   projectId: ProjectId,
   threadId: ThreadId,
+  kind: ProjectManagerKind,
   settings: ProjectTeamSettings,
   lastUserMessageAt: Schema.NullOr(IsoDateTime),
   lastSitrepAt: Schema.NullOr(IsoDateTime),
@@ -58,6 +60,8 @@ export type ProjectManagerRecord = typeof ProjectManagerRecord.Type;
 export interface UpsertProjectManagerInput {
   readonly projectId: ProjectId;
   readonly threadId: ThreadId;
+  /** Defaults to "pm". */
+  readonly kind?: ProjectManagerKind;
   /** Used only when the project has no manager yet; an existing manager keeps its settings. */
   readonly settings: ProjectTeamSettings;
   readonly now: IsoDateTime;
@@ -372,6 +376,7 @@ export const make = Effect.gen(function* () {
   const managerColumns = sql.literal(`
     project_id AS "projectId",
     thread_id AS "threadId",
+    kind AS "kind",
     settings_json AS "settings",
     last_user_message_at AS "lastUserMessageAt",
     last_sitrep_at AS "lastSitrepAt",
@@ -466,15 +471,17 @@ export const make = Effect.gen(function* () {
     Request: Schema.Struct({
       projectId: ProjectId,
       threadId: ThreadId,
+      kind: ProjectManagerKind,
       settings: SettingsJson,
       now: IsoDateTime,
     }),
     Result: ManagerRow,
-    execute: ({ projectId, threadId, settings, now }) => sql`
-      INSERT INTO project_managers (project_id, thread_id, settings_json, created_at, updated_at)
-      VALUES (${projectId}, ${threadId}, ${settings}, ${now}, ${now})
+    execute: ({ projectId, threadId, kind, settings, now }) => sql`
+      INSERT INTO project_managers (project_id, thread_id, kind, settings_json, created_at, updated_at)
+      VALUES (${projectId}, ${threadId}, ${kind}, ${settings}, ${now}, ${now})
       ON CONFLICT (project_id) DO UPDATE SET
         thread_id = excluded.thread_id,
+        kind = excluded.kind,
         updated_at = excluded.updated_at
       RETURNING ${managerColumns}
     `,
@@ -1072,7 +1079,9 @@ export const make = Effect.gen(function* () {
       ),
     listManagers: () => findManagers({}).pipe(Effect.mapError(toRepositoryError("listManagers"))),
     upsertManager: (input) =>
-      upsertManagerRow(input).pipe(Effect.mapError(toRepositoryError("upsertManager"))),
+      upsertManagerRow({ ...input, kind: input.kind ?? "pm" }).pipe(
+        Effect.mapError(toRepositoryError("upsertManager")),
+      ),
     deleteManager: (projectId) =>
       deleteManagerRow({ projectId }).pipe(Effect.mapError(toRepositoryError("deleteManager"))),
     updateManagerSettings: (input) =>

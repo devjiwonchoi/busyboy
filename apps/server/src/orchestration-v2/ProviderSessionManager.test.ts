@@ -1976,6 +1976,7 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
             ? Option.some({
                 projectId: ProjectId.make("project-provider-session-manager-pm"),
                 threadId,
+                kind: "pm",
                 settings: {
                   ...DEFAULT_PROJECT_TEAM_SETTINGS,
                   persona: {
@@ -2057,6 +2058,7 @@ it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fai
               Option.some({
                 projectId: flakyProjectId,
                 threadId,
+                kind: "pm",
                 settings: DEFAULT_PROJECT_TEAM_SETTINGS,
                 lastUserMessageAt: null,
                 lastSitrepAt: null,

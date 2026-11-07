@@ -898,6 +898,7 @@ it.effect("refuses to archive a project's PM thread on every dispatch path", () 
           ? Option.some({
               projectId: ProjectId.make("project:thread-management:pm"),
               threadId,
+              kind: "pm",
               settings: DEFAULT_PROJECT_TEAM_SETTINGS,
               lastUserMessageAt: null,
               lastSitrepAt: null,

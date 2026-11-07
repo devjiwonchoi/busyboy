@@ -394,6 +394,18 @@ export const ProjectTeamSitrepIntervalMinutes = Schema.Int.check(
   }),
 ).annotate({ description: "Minutes between interval sitreps, 5 to 1440." });
 
+/**
+ * "pm" runs one project. "director" runs the whole workspace from a hidden system
+ * project: it routes work to the projects' PMs and keeps epics, but starts no leads.
+ */
+export const ProjectManagerKind = Schema.Literals(["pm", "director"]);
+export type ProjectManagerKind = typeof ProjectManagerKind.Type;
+
+/** Lines the PM's "summary" memory topic may hold; the Director reads it. */
+export const PROJECT_SUMMARY_MAX_LINES = 5;
+/** Memory topic each PM keeps current for the Director. */
+export const PROJECT_SUMMARY_TOPIC = "summary";
+
 /** Same shape as a project icon, so the icon picker and renderer can be reused. */
 export const ProjectManagerAvatar = ProjectIconOverride;
 export type ProjectManagerAvatar = typeof ProjectManagerAvatar.Type;
@@ -571,6 +583,46 @@ export const ProjectOtherThread = Schema.Struct({
 });
 export type ProjectOtherThread = typeof ProjectOtherThread.Type;
 
+/** One project as the Director sees it. */
+export const ProjectTeamWorkspaceProject = Schema.Struct({
+  projectId: ProjectId,
+  title: Schema.String,
+  /** The PM's name. */
+  pmName: Schema.String,
+  taskKeyPrefix: Schema.String,
+  statusCounts: Schema.Record(ProjectTaskStatus, NonNegativeInt),
+  /** Tasks not done or cancelled. */
+  openTasks: Schema.Array(ProjectTaskBrief),
+  openAttention: Schema.Array(ProjectAttentionItem),
+  /** The PM's "summary" memory topic, or null when it has none yet. */
+  summary: Schema.NullOr(Schema.String),
+});
+export type ProjectTeamWorkspaceProject = typeof ProjectTeamWorkspaceProject.Type;
+
+/** A subtask of an epic, which may live in any project. */
+export const ProjectTeamEpicChild = Schema.Struct({
+  id: ProjectTaskId,
+  projectId: ProjectId,
+  /** Such as BB-7. */
+  key: Schema.String,
+  title: Schema.String,
+  status: ProjectTaskStatus,
+});
+export type ProjectTeamEpicChild = typeof ProjectTeamEpicChild.Type;
+
+export const ProjectTeamEpic = Schema.Struct({
+  task: ProjectTaskBrief,
+  children: Schema.Array(ProjectTeamEpicChild),
+});
+export type ProjectTeamEpic = typeof ProjectTeamEpic.Type;
+
+/** What team_status adds for the Director: every project and every epic. */
+export const ProjectTeamWorkspace = Schema.Struct({
+  projects: Schema.Array(ProjectTeamWorkspaceProject),
+  epics: Schema.Array(ProjectTeamEpic),
+});
+export type ProjectTeamWorkspace = typeof ProjectTeamWorkspace.Type;
+
 export const ProjectTeamStatus = Schema.Struct({
   projectId: ProjectId,
   /** Tasks are written as <prefix>-<number>, such as BB-7. */
@@ -603,6 +655,8 @@ export const ProjectTeamStatus = Schema.Struct({
   ),
   /** Topics of the PM's memory entries. */
   memoryTopics: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  /** Director only: the whole workspace. */
+  workspace: Schema.optional(ProjectTeamWorkspace),
 });
 export type ProjectTeamStatus = typeof ProjectTeamStatus.Type;
 
@@ -613,6 +667,10 @@ const ProjectTeamListLimit = Schema.Int.check(Schema.isBetween({ minimum: 1, max
 export const ProjectTeamTaskCreateInput = Schema.Struct({
   title: ProjectTaskTitle,
   request: ProjectTaskRequest,
+  projectId: Schema.optional(ProjectId).annotate({
+    description:
+      "Director only. The project whose PM gets the task; omit to add an epic to your own project. A PM always adds to its own project.",
+  }),
   waitsOn: Schema.optional(Schema.Array(ProjectTaskId)).annotate({
     description:
       "Tasks that must reach in_review or done before this one starts, such as tasks touching the same files. May be tasks in other projects.",
@@ -1067,6 +1125,8 @@ export function afkAnswerEventBody(question: string, answer: string): string {
 export const ProjectTeamAttentionSummary = Schema.Struct({
   projectId: ProjectId,
   pmThreadId: ThreadId,
+  /** "director": the workspace Director's hidden system project, not a user project. Absent means "pm". */
+  kind: Schema.optional(ProjectManagerKind),
   openCount: NonNegativeInt,
   latestBatchId: Schema.NullOr(ProjectAttentionBatchId),
   latestSitrepId: Schema.NullOr(ProjectSitrepId),

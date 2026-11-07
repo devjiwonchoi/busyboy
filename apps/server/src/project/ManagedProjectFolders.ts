@@ -22,6 +22,7 @@ import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
+import { directorWorkspaceRoot } from "../projectTeam/director.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProjectService from "./ProjectService.ts";
 
@@ -60,6 +61,18 @@ export class ScratchProjectError extends Schema.TaggedError<ScratchProjectError>
 
 export type ScratchError = ScratchUnavailableError | ScratchFolderError | ScratchProjectError;
 
+export class DirectorProjectError extends Schema.TaggedError<DirectorProjectError>()(
+  "DirectorProjectError",
+  {
+    workspaceRoot: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return "Failed to create the Director's project.";
+  }
+}
+
 export class NamedProjectFolderError extends Schema.TaggedError<NamedProjectFolderError>()(
   "NamedProjectFolderError",
   {
@@ -91,6 +104,11 @@ export class ManagedProjectFolders extends Context.Service<
   {
     readonly scratchRoot: Effect.Effect<Option.Option<string>>;
     readonly ensureScratchProject: Effect.Effect<{ readonly projectId: ProjectId }, ScratchError>;
+    /** Creates the Director's system project and its folder once; later calls return it. */
+    readonly ensureDirectorProject: Effect.Effect<
+      { readonly projectId: ProjectId },
+      DirectorProjectError
+    >;
     readonly folderForThread: (input: {
       readonly projectId: ProjectId;
       readonly threadId: ThreadId;
@@ -308,6 +326,35 @@ const make = Effect.gen(function* () {
     },
   );
 
+  const ensureDirectorProject: ManagedProjectFolders["Service"]["ensureDirectorProject"] =
+    Effect.gen(function* () {
+      const workspaceRoot = directorWorkspaceRoot(path, config.baseDir);
+      const fail = (cause: unknown) => new DirectorProjectError({ workspaceRoot, cause });
+      yield* fileSystem
+        .makeDirectory(workspaceRoot, { recursive: true })
+        .pipe(Effect.mapError(fail));
+      const existing = yield* projects
+        .getByWorkspaceRoot(workspaceRoot)
+        .pipe(Effect.mapError(fail));
+      if (Option.isSome(existing)) return { projectId: existing.value.id };
+      const id = yield* crypto.randomUUIDv4().pipe(Effect.mapError(fail));
+      const bootstrapped = yield* projects
+        .bootstrap({
+          commandId: CommandId.make(`director-project:${id}`),
+          projectId: ProjectId.make(id),
+          title: "Director",
+          workspaceRoot,
+        })
+        .pipe(
+          Effect.catchTags({
+            ProjectConflictError: (conflict) =>
+              Effect.succeed({ project: { id: conflict.conflictingProjectId }, created: false }),
+          }),
+          Effect.mapError(fail),
+        );
+      return { projectId: bootstrapped.project.id };
+    });
+
   const isScratchProject = (projectId: ProjectId, root: string) =>
     projects.getById(projectId).pipe(
       Effect.map(
@@ -467,6 +514,7 @@ const make = Effect.gen(function* () {
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
+    ensureDirectorProject,
     folderForThread,
     namedProjectsRoot,
     createNamedProject,
