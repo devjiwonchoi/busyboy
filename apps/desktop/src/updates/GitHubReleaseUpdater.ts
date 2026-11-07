@@ -8,6 +8,7 @@ import * as NodeStream from "node:stream";
 import * as NodeStreamPromises from "node:stream/promises";
 import type * as NodeStreamWeb from "node:stream/web";
 
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
@@ -155,8 +156,13 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
   readonly arch: string;
   readonly stagingDir: string;
   readonly quit: Effect.Effect<void>;
-  /** Calls `listener` when the app quits normally (exit code 0). */
+  /**
+   * Calls `listener` when the app quits normally (exit code 0). The listener
+   * is kept for the life of the process: see the comment where it is added.
+   */
   readonly onQuit: (listener: () => void) => Effect.Effect<void, never, Scope.Scope>;
+  /** Records what installing on quit did. It runs while the app exits, after logging stops. */
+  readonly recordQuitInstall?: (message: string) => void;
   readonly fetch?: typeof globalThis.fetch;
   /** Tests swap these; release builds use the shipped key and codesign. */
   readonly publicKeys?: ReadonlyArray<string>;
@@ -278,15 +284,25 @@ export const make = Effect.fn("desktop.githubRelease.makeUpdater")(function* (in
     installStarted = true;
   };
 
+  const recordQuitInstall = input.recordQuitInstall ?? (() => {});
   // Only a staged app exists here, and it is staged only after verification.
-  yield* input.onQuit(() => {
-    if (!installOnQuit || installStarted || stagedApp === null) return;
-    try {
-      prepareInstall(stagedApp, false);
-    } catch {
-      // The app is quitting; the staged update is offered again next launch.
-    }
-  });
+  // A normal quit tears down the app's layers before Electron emits "quit",
+  // so a listener tied to the layer scope would already be gone. Give it a
+  // scope that is never closed.
+  yield* input
+    .onQuit(() => {
+      if (!installOnQuit || installStarted || stagedApp === null) return;
+      try {
+        prepareInstall(stagedApp, false);
+        recordQuitInstall(`Installing ${stagedApp} on quit.`);
+      } catch (cause) {
+        // The app is quitting; the staged update is offered again next launch.
+        recordQuitInstall(
+          `Could not install ${stagedApp} on quit: ${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+      }
+    })
+    .pipe(Scope.provide(Scope.makeUnsafe()));
 
   return ElectronUpdater.ElectronUpdater.of({
     // The feed is fixed to this repository's stable releases.
@@ -478,6 +494,17 @@ export const layer = Layer.unwrap(
           electronApp.on("quit", (_event: unknown, exitCode: number) => {
             if (exitCode === 0) listener();
           }),
+        recordQuitInstall: (message) => {
+          try {
+            NodeFS.mkdirSync(environment.logDir, { recursive: true });
+            NodeFS.appendFileSync(
+              environment.path.join(environment.logDir, "update-install.log"),
+              `${DateTime.formatIso(DateTime.nowUnsafe())} ${message}\n`,
+            );
+          } catch {
+            // Best effort: the app is exiting.
+          }
+        },
       }),
     );
   }),

@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -9,7 +10,10 @@ import * as DesktopState from "../../app/DesktopState.ts";
 import * as ElectronApp from "../../electron/ElectronApp.ts";
 import * as ElectronTheme from "../../electron/ElectronTheme.ts";
 import * as DesktopAppSettings from "../../settings/DesktopAppSettings.ts";
+import * as DesktopUpdates from "../../updates/DesktopUpdates.ts";
 import * as DesktopWindow from "../../window/DesktopWindow.ts";
+vi.mock("electron-updater", () => ({ autoUpdater: {} }));
+
 import { getLocalEnvironmentEnabled, setLocalEnvironmentEnabled } from "./localEnvironment.ts";
 
 const layerUnusedLifecycleRuntime = Layer.mergeAll(
@@ -24,6 +28,7 @@ const layerUnusedLifecycleRuntime = Layer.mergeAll(
   Layer.mock(DesktopWindow.DesktopWindow, {}),
   Layer.mock(ElectronApp.ElectronApp, {}),
   Layer.mock(ElectronTheme.ElectronTheme, {}),
+  Layer.mock(DesktopUpdates.DesktopUpdates, {}),
 );
 
 describe("local environment IPC", () => {

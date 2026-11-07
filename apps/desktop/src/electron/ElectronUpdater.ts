@@ -195,8 +195,12 @@ export function makeVerified(
   });
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
-export const make = makeFor(autoUpdater);
+/**
+ * @public Service construction is part of the canonical Effect module API.
+ * A function so that importing this module does not load electron-updater's
+ * updater, which reads Electron's app.
+ */
+export const make = (): ElectronUpdater["Service"] => makeFor(autoUpdater);
 
 function makeFor(autoUpdater: AutoUpdater): ElectronUpdater["Service"] {
   return ElectronUpdater.of({
@@ -288,4 +292,4 @@ function makeFor(autoUpdater: AutoUpdater): ElectronUpdater["Service"] {
   });
 }
 
-export const layer = Layer.succeed(ElectronUpdater, make);
+export const layer = Layer.sync(ElectronUpdater, make);
