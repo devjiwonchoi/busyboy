@@ -1,7 +1,6 @@
 export interface PullRequestText {
   readonly title: string;
   readonly body: string;
-  readonly isDraft: boolean;
 }
 
 export const PR_TITLE_MAX_CHARS = 60;
@@ -21,7 +20,7 @@ const EXAMPLE_TITLE = `"Fix login redirect"`;
 
 /** Each problem is one line that says what is wrong AND the exact fix. Empty = conforming. */
 export function pullRequestFormatProblems(pr: PullRequestText): ReadonlyArray<string> {
-  return [...titleProblems(pr.title.trim()), ...draftProblems(pr), ...bodyProblems(pr.body)];
+  return [...titleProblems(pr.title.trim()), ...bodyProblems(pr.body)];
 }
 
 function titleProblems(title: string): Array<string> {
@@ -56,12 +55,6 @@ function titleProblems(title: string): Array<string> {
     );
   }
   return problems;
-}
-
-function draftProblems(pr: PullRequestText): Array<string> {
-  return pr.isDraft
-    ? ["The pull request is a draft: mark it ready for review (gh pr ready <url>)."]
-    : [];
 }
 
 function bodyProblems(rawBody: string): Array<string> {

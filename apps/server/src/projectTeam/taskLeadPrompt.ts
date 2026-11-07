@@ -21,7 +21,7 @@ export function nextStepHint(stage: ProjectTaskStage): string {
     case "running":
       return "Iterate: implement the plan, checking off todos with task_todo_set and fanning out independent parts with delegate_task; record the proof for each criterion with task_evidence_set. End each round with a self-review of the diff recorded with task_review_set; fix and review again until it is clean.";
     case "in_review":
-      return "Ship: watch the pull request with watch_pull_request and fix failing checks or review comments (each fix is a new Iterate round ending in a clean task_review_set), and mark the task done when it is ready.";
+      return "Ship: BusyBoy watches the pull request for you and wakes you on a failed check, a comment or a conflict. Fix each one (a new commit with a clean task_review_set), push, and call task_ready(head, localChecks) once checks pass and every review thread is resolved; the server then marks the pull request ready for review and the task Ready.";
     case "blocked":
       return "Resolve the blocker or ask the user with ask_user(kind: blocker).";
     case "done":
@@ -111,7 +111,7 @@ export const PULL_REQUEST_RULES = `   - Commits: one per reviewable outcome, eac
 
      <how the change solves it>
      Nothing else: no other headings, no work log, no test or validation notes, no task key (BusyBoy links the task). A pull request stacked on another starts with "Stacked on #<parent PR>." before ### Why?.
-   - Open it ready for review, not as a draft. When the scope changes, rewrite the title and body around the final solution.`;
+   - Open it as a draft; task_ready marks it ready for review once it passes the Ready gate. When the scope changes, rewrite the title and body around the final solution.`;
 
 function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
   const planning = `1. Align (planning, then awaiting_approval): Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
@@ -139,7 +139,7 @@ function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
   return [
     ...(covered !== null ? [covered] : resume ? [] : [planning]),
     running,
-    `3. Ship (in_review): If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request. The server refuses In Review without a pull request, while a criterion has no evidence, without a clean self-review of the current HEAD, or when the pull request breaks these rules, and says what to fix:\n${PULL_REQUEST_RULES}\n   A failing check or a review comment sends the work back to Iterate: fix it, commit, record a new task_review_set (a review that is not clean moves the task back to running), push, and return to In Review. Without a remote, commit locally, record a clean review, and go straight to done.`,
+    `3. Ship (in_review): If the repository has a remote, push, open a draft pull request, and call task_update(stage: "in_review", prUrl). BusyBoy then watches it for you and wakes you on each failed check, new comment or conflict; each of those starts a new Ship round and the task stops being Ready. The server refuses In Review without a pull request, while a criterion has no evidence, without a clean self-review of the current HEAD, or when the pull request breaks these rules, and says what to fix:\n${PULL_REQUEST_RULES}\n   Fix what the pull request reports: commit, record a clean task_review_set on the new HEAD (one that is not clean moves the task back to running), and push. When checks pass, every review thread is resolved and the branch merges cleanly, call task_ready(head) with head = \`git rev-parse HEAD\`. A pull request with no checks has no CI, so your local evidence is the gate: evidence on every criterion, plus localChecks with the commands you ran on HEAD (tests, typecheck, lint) and their result. The server refuses Ready and says why until all of that holds, then marks the pull request ready for review and the task Ready, which tells the PM. Without a remote, commit locally, record a clean review, and go straight to done.`,
     `4. done: Call task_update(stage: "done", resultSummary), and record conventions worth keeping with memory_write.`,
   ].join("\n");
 }

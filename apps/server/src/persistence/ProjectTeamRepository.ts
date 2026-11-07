@@ -28,6 +28,7 @@ import {
   ProjectTaskEventKind,
   ProjectTaskId,
   ProjectTaskOutcome,
+  ProjectTaskReady,
   ProjectTaskReview,
   ProjectTaskSession,
   ProjectTaskSessionRole,
@@ -217,16 +218,34 @@ export class ProjectTeamRepository extends Context.Service<
     readonly listTaskSessions: (taskId: ProjectTaskId) => Result<ReadonlyArray<ProjectTaskSession>>;
     /**
      * Updates the given fields. A stage change also sets stage_changed_at and
-     * resets nudge_count to 0, overriding a nudgeCount in the same call. A move into
-     * running starts an Iterate round (resuming from blocked does not, unless none has
-     * started); a move into in_review starts a Ship round.
+     * resets nudge_count to 0, overriding a nudgeCount in the same call, and clears the
+     * ready flag. A move into running starts an Iterate round (resuming from blocked does
+     * not, unless none has started); the first move into in_review starts Ship round 1.
+     * Later Ship rounds come from the watched pull request (`reopenShipRound`).
      */
     readonly updateTask: (input: UpdateProjectTaskInput) => Result<Option.Option<ProjectTask>>;
-    /** Stores the lead's latest self-review; `startsIterateRound` also counts a new round. */
+    /**
+     * Stores the lead's latest self-review and clears the ready flag, since a new review
+     * means new work; `startsIterateRound` also counts a new round.
+     */
     readonly recordTaskReview: (input: {
       readonly id: ProjectTaskId;
       readonly review: ProjectTaskReview;
       readonly startsIterateRound: boolean;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Stores the Ready gate's pass, or clears it with null. */
+    readonly setTaskReady: (input: {
+      readonly id: ProjectTaskId;
+      readonly ready: ProjectTaskReady | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /**
+     * A failed check, new comment or conflict on an in-review task's pull request: starts
+     * the next Ship round and clears the ready flag. None when the task is not in review.
+     */
+    readonly reopenShipRound: (input: {
+      readonly id: ProjectTaskId;
       readonly now: IsoDateTime;
     }) => Result<Option.Option<ProjectTask>>;
     /** Case-insensitive substring match over title, request, plan and result summaries. */
@@ -354,8 +373,10 @@ const TaskRow = Schema.Struct({
   ...ProjectTask.fields,
   waitsOn: Schema.fromJsonString(Schema.Array(ProjectTaskId)),
   review: Schema.NullOr(Schema.fromJsonString(ProjectTaskReview)),
+  ready: Schema.NullOr(Schema.fromJsonString(ProjectTaskReady)),
 });
 const ReviewJson = Schema.fromJsonString(ProjectTaskReview);
+const ReadyJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskReady));
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
   supersededAt: Schema.NullOr(IsoDateTime),
@@ -424,6 +445,7 @@ export const make = Effect.gen(function* () {
     iterate_round AS "iterateRound",
     ship_round AS "shipRound",
     review_json AS "review",
+    ready_json AS "ready",
     stage_changed_at AS "stageChangedAt",
     created_at AS "createdAt",
     updated_at AS "updatedAt"
@@ -648,9 +670,10 @@ export const make = Effect.gen(function* () {
             ELSE iterate_round
           END,
           ship_round = CASE
-            WHEN ${stageChanged} AND ${stage} = 'in_review' THEN ship_round + 1
+            WHEN ${stageChanged} AND ${stage} = 'in_review' AND ship_round = 0 THEN 1
             ELSE ship_round
           END,
+          ready_json = CASE WHEN ${stageChanged} THEN NULL ELSE ready_json END,
           title = COALESCE(${input.title ?? null}, title),
           waits_on_json = COALESCE(${input.waitsOn ?? null}, waits_on_json),
           parent_task_id = CASE
@@ -680,8 +703,32 @@ export const make = Effect.gen(function* () {
       UPDATE project_tasks SET
         review_json = ${review},
         iterate_round = iterate_round + ${startsIterateRound ? 1 : 0},
+        ready_json = NULL,
         updated_at = ${now}
       WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskReady = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, ready: ReadyJson, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, ready, now }) => sql`
+      UPDATE project_tasks SET
+        ready_json = ${ready},
+        updated_at = ${now}
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const reopenShipRoundRow = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, now }) => sql`
+      UPDATE project_tasks SET
+        ship_round = ship_round + 1,
+        ready_json = NULL,
+        updated_at = ${now}
+      WHERE task_id = ${id} AND stage = 'in_review'
       RETURNING ${taskColumns}
     `,
   });
@@ -1221,6 +1268,10 @@ export const make = Effect.gen(function* () {
       updateTaskRow(input).pipe(Effect.mapError(toRepositoryError("updateTask"))),
     recordTaskReview: (input) =>
       updateTaskReview(input).pipe(Effect.mapError(toRepositoryError("recordTaskReview"))),
+    setTaskReady: (input) =>
+      updateTaskReady(input).pipe(Effect.mapError(toRepositoryError("setTaskReady"))),
+    reopenShipRound: (input) =>
+      reopenShipRoundRow(input).pipe(Effect.mapError(toRepositoryError("reopenShipRound"))),
     searchTasks: ({ projectId, query, limit }) =>
       searchTaskRows({ projectId, pattern: `%${escapeLike(query)}%`, limit }).pipe(
         Effect.mapError(toRepositoryError("searchTasks")),

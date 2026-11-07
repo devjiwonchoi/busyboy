@@ -41,6 +41,7 @@ const server = vi.hoisted(() => ({
   stage: "awaiting_approval" as ProjectTaskStage,
   iterateRound: 0,
   shipRound: 0,
+  ready: false,
   versions: [] as Array<{ version: number; spec: ProjectTaskSpec }>,
   answers: [] as ProjectTeamAnswerDecisionInput[],
   listeners: new Set<() => void>(),
@@ -77,6 +78,7 @@ function taskRef(): ProjectTaskReference {
     openBlocker: false,
     iterateRound: server.iterateRound,
     shipRound: server.shipRound,
+    ready: server.ready,
     updatedAt: AT,
   };
 }
@@ -304,6 +306,7 @@ describe.each([
     server.stage = "awaiting_approval";
     server.iterateRound = 0;
     server.shipRound = 0;
+    server.ready = false;
     server.versions = [{ version: 3, spec }];
     server.card = makeCard(spec);
     server.answers = [];
@@ -375,9 +378,10 @@ describe.each([
     await act(async () => notify());
     await vi.waitFor(() => expect(phaseText(card())).toBe("구현·리뷰 · 2회차"));
     expect(phaseSteps(card())).toEqual(["done", "current", "upcoming"]);
-    // In review with the lead idle reads as Ready.
+    // In review reads as Ready once the server's Ready gate passed.
     server.stage = "in_review";
     server.shipRound = 1;
+    server.ready = true;
     await act(async () => notify());
     await vi.waitFor(() => expect(phaseText(card())).toBe("배포 준비됨"));
     expect(phaseSteps(card())).toEqual(["done", "done", "current"]);

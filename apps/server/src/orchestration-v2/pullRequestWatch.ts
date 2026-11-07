@@ -29,7 +29,7 @@ export interface PullRequestWatchReport {
 }
 
 // "action-required" is a finished check that needs someone, so the agent hears about it.
-const isFailedCheck = (check: PullRequestCheck) =>
+export const isFailedCheck = (check: Pick<PullRequestCheck, "status">) =>
   check.status === "failure" || check.status === "cancelled" || check.status === "action-required";
 
 export function evaluatePullRequestWatch(
@@ -210,7 +210,10 @@ export function pullRequestWatchMessage(input: {
   return {
     text,
     notification: {
-      source: { kind: "monitor" },
+      source: {
+        kind: "monitor",
+        pullRequestChanges: [...new Set(changes.map((change) => change.kind))],
+      },
       outcome: failed
         ? "failed"
         : changes.every((change) => change.kind === "checks-passed")

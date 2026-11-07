@@ -1022,6 +1022,15 @@ const CommandNotificationSource = Schema.Struct({ kind: Schema.Literal("command"
  * `background_task` with `work: "subagent"`, a field those clients ignore. Encoding picks the first
  * member that fits, so those come first.
  */
+/** What a pull request watch wake reports. */
+export const PullRequestWatchChangeKind = Schema.Literals([
+  "checks-failed",
+  "checks-passed",
+  "remarks",
+  "conflicting",
+]);
+export type PullRequestWatchChangeKind = typeof PullRequestWatchChangeKind.Type;
+
 export const OrchestrationV2NotificationSource = kindUnionWithFallback(
   [
     Schema.Struct({
@@ -1050,7 +1059,11 @@ export const OrchestrationV2NotificationSource = kindUnionWithFallback(
     Schema.Struct({ kind: Schema.Literal("background_command").transform("command") }),
     SubagentNotificationSource,
     CommandNotificationSource,
-    Schema.Struct({ kind: Schema.Literal("monitor") }),
+    Schema.Struct({
+      kind: Schema.Literal("monitor"),
+      /** For a pull request watch wake: what changed, so the server can react without parsing text. */
+      pullRequestChanges: Schema.optional(Schema.Array(PullRequestWatchChangeKind)),
+    }),
     Schema.Struct({ kind: Schema.Literal("background_task") }),
     Schema.Struct({ kind: Schema.Literal("system") }),
   ],

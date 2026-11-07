@@ -148,7 +148,6 @@ describe("ProjectTeamService intake and breakdown", () => {
         harness.pullRequests.set("https://github.com/o/r/pull/1", {
           title: "Add server gates",
           body: GOOD_BODY,
-          isDraft: false,
         });
         yield* team.setEvidence(sub, { criterionId: "c1", evidence: "test" }).pipe(Effect.ignore);
         yield* reviewClean(sub);
@@ -298,7 +297,6 @@ describe("ProjectTeamService intake and breakdown", () => {
           title:
             "Show task dependencies Linear-style: blocked flags, subtask progress, Structure section (BU-57)",
           body: GOOD_BODY,
-          isDraft: false,
         });
         const longTitle = yield* tryReview();
         assert.include(longTitle.message, "does not follow the PR rules");
@@ -307,7 +305,6 @@ describe("ProjectTeamService intake and breakdown", () => {
         harness.pullRequests.set(url, {
           title: "Add PR gate",
           body: "## What changes\n\nA gate.",
-          isDraft: false,
         });
         const noSections = yield* tryReview();
         assert.include(noSections.message, "### Why?");
@@ -316,13 +313,12 @@ describe("ProjectTeamService intake and breakdown", () => {
         harness.pullRequests.set(url, {
           title: "Add PR gate",
           body: `${GOOD_BODY}\n\n## Test plan\n\n- [x] pnpm test`,
-          isDraft: false,
         });
         const extra = yield* tryReview();
         assert.include(extra.message, "## Test plan");
         assert.include(extra.message.toLowerCase(), "validation");
 
-        harness.pullRequests.set(url, { title: "Add PR gate", body: GOOD_BODY, isDraft: false });
+        harness.pullRequests.set(url, { title: "Add PR gate", body: GOOD_BODY });
         const ok = yield* team.updateTask(lead, { stage: "in_review", prUrl: url });
         assert.strictEqual(ok.task.stage, "in_review");
       }),

@@ -15,7 +15,7 @@ type TaskStatusInput = Pick<
   ProjectTaskReference,
   "stage" | "prUrl" | "lastOutcome" | "openQuestion"
 > &
-  Partial<Pick<ProjectTaskReference, "openBlocker">>;
+  Partial<Pick<ProjectTaskReference, "openBlocker" | "ready">>;
 
 /** A task's status signals from its card state and its lead thread's live state. */
 export function taskStatusSignals(

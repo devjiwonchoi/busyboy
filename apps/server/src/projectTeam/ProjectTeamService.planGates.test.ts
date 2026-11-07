@@ -254,12 +254,14 @@ describe("ProjectTeamService plan gates", () => {
         assert.strictEqual(back.task.stage, "running");
         assert.deepStrictEqual(yield* rounds, [3, 1]);
 
+        // Coming back to In Review is the same Ship round; the watched pull request's
+        // failures and comments start the next ones.
         yield* reviewClean(lead, "a3");
         const shipped = yield* team.updateTask(lead, toReview);
-        assert.deepStrictEqual([shipped.task.iterateRound, shipped.task.shipRound], [3, 2]);
+        assert.deepStrictEqual([shipped.task.iterateRound, shipped.task.shipRound], [3, 1]);
         const brief = yield* team.listTasks(pm, {});
         const row = brief.tasks.find((candidate) => candidate.id === task.id);
-        assert.deepStrictEqual([row?.phase, row?.iterateRound, row?.shipRound], ["ship", 3, 2]);
+        assert.deepStrictEqual([row?.phase, row?.iterateRound, row?.shipRound], ["ship", 3, 1]);
       }),
     ),
   );

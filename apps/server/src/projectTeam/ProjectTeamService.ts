@@ -96,6 +96,7 @@ import {
   type ProjectTeamTaskTodoSetInput,
   type ProjectTeamTaskEvidenceSetInput,
   type ProjectTeamTaskReviewSetInput,
+  type ProjectTeamTaskReadyInput,
   type ProjectTaskSpecVersion,
   defaultTaskKeyPrefix,
   formatTaskKey,
@@ -110,7 +111,9 @@ import {
   afkSetting,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
+import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { normalizeThreadPullRequestKey } from "@t3tools/shared/threadPullRequests";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -129,6 +132,7 @@ import {
 } from "../orchestration-v2/AttachmentClaims.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import { isFailedCheck } from "../orchestration-v2/pullRequestWatch.ts";
 import type { ProjectTeamRepositoryError } from "../persistence/Errors.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
@@ -165,6 +169,7 @@ import {
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import { pullRequestFormatProblems } from "./pullRequestFormat.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
+import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
@@ -448,7 +453,7 @@ export function toTaskBrief(
     phase: projectTaskPhase(task.stage),
     iterateRound: task.iterateRound,
     shipRound: task.shipRound,
-    status: resolveProjectTaskStatus(task, signals),
+    status: resolveProjectTaskStatus({ ...task, ready: task.ready !== null }, signals),
   };
 }
 
@@ -639,6 +644,16 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamTaskReviewSetInput,
     ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
+    /**
+     * task_ready: the Ready gate. The lead's in-review pull request passes when its checks
+     * passed (or, with none, the lead's local evidence covers HEAD), no review thread is
+     * open and it does not conflict. Then the server marks it ready for review and sets
+     * the task's ready flag.
+     */
+    readonly markTaskReady: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamTaskReadyInput,
+    ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
     readonly nudgeTask: (
       callerThreadId: ThreadId,
       input: ProjectTeamTaskNudgeInput,
@@ -740,6 +755,15 @@ export class ProjectTeamService extends Context.Service<
       { readonly task: ProjectTask; readonly event: ProjectTaskEvent },
       ProjectTeamError
     >;
+    /**
+     * A watched pull request reported a failed check, new comment or conflict to the lead
+     * of an in-review task: the next Ship round starts and the task is no longer Ready.
+     * None when the thread leads no in-review task.
+     */
+    readonly recordShipWake: (input: {
+      readonly leadThreadId: ThreadId;
+      readonly summary: string;
+    }) => Effect.Effect<Option.Option<ProjectTask>, ProjectTeamError>;
   }
 >()("t3/projectTeam/ProjectTeamService") {}
 
@@ -796,6 +820,7 @@ const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
+  const shipGate = yield* PullRequestShipGate.PullRequestShipGate;
 
   /** Copies the user's pending uploads under the task so the pending sweep keeps them. */
   const claimTaskAttachments = (
@@ -1890,6 +1915,171 @@ const make = Effect.gen(function* () {
       return { task: updated };
     }).pipe(orTeamError("Could not record the review."));
 
+  /**
+   * Ship watches the pull request for the lead, so a failed check, comment or conflict wakes
+   * it without being asked. A watch that can't start is logged; the lead can still watch.
+   */
+  const watchShippedPullRequest = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      if (task.leadThreadId === null || task.prUrl === null) return;
+      const parsed = parseChangeRequestUrl(task.prUrl);
+      if (parsed === null) return;
+      const key = normalizeThreadPullRequestKey(parsed);
+      yield* threads.dispatch({
+        type: "thread.pull-request.watch",
+        commandId: CommandId.make(`project-team:ship-watch:${yield* newId(task.id)}`),
+        threadId: task.leadThreadId,
+        host: key.host,
+        repository: key.repository,
+        number: key.number,
+        watching: true,
+        link: { url: task.prUrl, source: "agent" },
+      });
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Could not watch the shipped pull request", {
+          taskId: task.id,
+          prUrl: task.prUrl,
+          cause,
+        }),
+      ),
+    );
+
+  /** Why the pull request can't be Ready yet, one fix per line; empty when it passes. */
+  const readyGateProblems = (
+    pr: PullRequestShipGate.PullRequestShipState,
+    head: string,
+    localChecks: string,
+    unproven: ReadonlyArray<string>,
+  ): ReadonlyArray<string> => {
+    if (pr.state !== "open") return [`The pull request is ${pr.state}.`];
+    const problems: Array<string> = [];
+    if (pr.headSha !== null && pr.headSha !== head) {
+      problems.push(
+        `The pull request's head is ${shortSha(pr.headSha)}, not ${shortSha(head)}: push HEAD first.`,
+      );
+    }
+    const failed = pr.checks.filter(isFailedCheck);
+    if (failed.length > 0) {
+      problems.push(
+        `Checks failed: ${failed.map((check) => check.name).join(", ")}. Fix them and push.`,
+      );
+    }
+    const pending = pr.checks.filter((check) => check.status === "pending");
+    if (pending.length > 0) {
+      problems.push(
+        `Checks are still running: ${pending.map((check) => check.name).join(", ")}. End your turn; BusyBoy wakes you when they finish.`,
+      );
+    }
+    if (pr.unresolvedThreads > 0) {
+      problems.push(
+        `${pr.unresolvedThreads} review ${pr.unresolvedThreads === 1 ? "thread is" : "threads are"} unresolved. Address each one and resolve it.`,
+      );
+    }
+    if (pr.mergeability === "conflicting") {
+      problems.push("The branch conflicts with its base. Rebase or merge the base and push.");
+    } else if (pr.mergeability === "unknown") {
+      problems.push(
+        "The host is still checking whether the branch merges cleanly. Try again in a minute.",
+      );
+    }
+    // Without checks, the lead's own evidence on this commit is the CI gate.
+    if (pr.checks.length === 0) {
+      if (unproven.length > 0) {
+        problems.push(
+          `The pull request has no checks, so every criterion needs evidence: ${unproven.join(", ")} has none. Record it with task_evidence_set.`,
+        );
+      }
+      if (localChecks.trim().length === 0) {
+        problems.push(
+          "The pull request has no checks: run the tests, typecheck and lint on HEAD and pass the commands and their result as localChecks.",
+        );
+      }
+    }
+    return problems;
+  };
+
+  const markTaskReady: ProjectTeamService["Service"]["markTaskReady"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["lead"], "task_ready");
+      const taskId = input.taskId ?? role.taskId;
+      if (taskId !== role.taskId) {
+        return yield* teamError("A task lead can only mark its own task ready.", role.projectId);
+      }
+      const task = yield* requireTask(taskId, role.projectId);
+      if (task.stage !== "in_review" || task.prUrl === null) {
+        return yield* teamError(
+          `#${task.number} is ${task.stage}. Only an In Review task with a pull request can be Ready: open it and move to in_review first.`,
+          task.projectId,
+        );
+      }
+      const prUrl = task.prUrl;
+      const worktreeHead = yield* leadHead(task);
+      if (Option.isSome(worktreeHead) && worktreeHead.value !== input.head) {
+        return yield* teamError(
+          `HEAD is ${shortSha(worktreeHead.value)}, not ${shortSha(input.head)}. Pass head = git rev-parse HEAD.`,
+          task.projectId,
+        );
+      }
+      const review = task.review;
+      if (review === null || !review.clean || review.head !== input.head) {
+        return yield* teamError(
+          `#${task.number} has no clean self-review of ${shortSha(input.head)}. Review the diff and record it with task_review_set first.`,
+          task.projectId,
+        );
+      }
+      const pr = yield* shipGate.read({ projectId: task.projectId, url: prUrl });
+      if (Option.isNone(pr)) {
+        return yield* teamError(
+          `Could not read ${prUrl} from the host. Check it yourself and try task_ready again.`,
+          task.projectId,
+        );
+      }
+      const unproven = unprovenCriteria((yield* latestSpec(task)).spec);
+      const problems = readyGateProblems(pr.value, input.head, input.localChecks, unproven);
+      if (problems.length > 0) {
+        return yield* teamError(
+          `#${task.number} is not Ready yet:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+          task.projectId,
+        );
+      }
+      if (pr.value.isDraft) {
+        yield* shipGate
+          .markReady({ projectId: task.projectId, url: prUrl })
+          .pipe(
+            Effect.catch(() =>
+              teamError(
+                `Could not mark ${prUrl} ready for review. Run gh pr ready ${prUrl}, then call task_ready again.`,
+                task.projectId,
+              ),
+            ),
+          );
+      }
+      const gate = pr.value.checks.length === 0 ? "local" : "checks";
+      const now = yield* nowIso;
+      const recorded = yield* repository.setTaskReady({
+        id: task.id,
+        ready: {
+          head: input.head,
+          gate,
+          localChecks: gate === "local" ? input.localChecks.trim() : "",
+          readyAt: now,
+        },
+        now,
+      });
+      if (Option.isNone(recorded)) return yield* teamError(`Task ${task.id} was not found.`);
+      yield* appendEvent(
+        recorded.value,
+        "note",
+        gate === "checks"
+          ? `Ready on ${shortSha(input.head)}: checks passed`
+          : `Ready on ${shortSha(input.head)}: no checks, local evidence\n${clip(input.localChecks.trim(), 2_000)}`,
+        callerThreadId,
+      );
+      yield* router.publish(task.projectId);
+      return { task: recorded.value };
+    }).pipe(orTeamError("Could not mark the task ready."));
+
   /** The user, or AFK while they were away, approved a plan for this task. */
   const hasApprovedPlan = (task: ProjectTask) =>
     repository
@@ -2130,6 +2320,9 @@ const make = Effect.gen(function* () {
         yield* finishedTasks.reviveLead(updated);
       }
       if (stageChanged && updated.stage === "done") yield* finishParentIfDone(updated);
+      if (updated.stage === "in_review" && (stageChanged || updated.prUrl !== task.prUrl)) {
+        yield* watchShippedPullRequest(updated);
+      }
       yield* router.publish(role.projectId);
       return { task: updated };
     }).pipe(orTeamError("Could not update the task."));
@@ -3464,6 +3657,7 @@ const make = Effect.gen(function* () {
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),
               openBlocker: open.some((item) => item.taskId === task.id && item.kind === "blocker"),
+              ready: task.ready !== null,
               updatedAt: task.updatedAt,
               iterateRound: task.iterateRound,
               shipRound: task.shipRound,
@@ -3518,6 +3712,22 @@ const make = Effect.gen(function* () {
       return { task: updated, event };
     }).pipe(orTeamError("Could not record the task outcome.", input.task.projectId));
 
+  const recordShipWake: ProjectTeamService["Service"]["recordShipWake"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* repository.findTaskByLeadThreadId(input.leadThreadId);
+      if (Option.isNone(task) || task.value.stage !== "in_review") return Option.none();
+      const reopened = yield* repository.reopenShipRound({ id: task.value.id, now: yield* nowIso });
+      if (Option.isNone(reopened)) return Option.none();
+      yield* appendEvent(
+        reopened.value,
+        "note",
+        `Ship round ${reopened.value.shipRound}: ${clip(input.summary, 200)}`,
+        null,
+      );
+      yield* router.publish(reopened.value.projectId);
+      return reopened;
+    }).pipe(orTeamError("Could not record the pull request update."));
+
   return {
     ensureManager,
     roleOf,
@@ -3529,6 +3739,7 @@ const make = Effect.gen(function* () {
     setTodo,
     setEvidence,
     setReview,
+    markTaskReady,
     nudgeTask,
     listTasks,
     readTask,
@@ -3553,6 +3764,7 @@ const make = Effect.gen(function* () {
     afkSweep,
     streamAttention,
     recordOutcome,
+    recordShipWake,
   } satisfies ProjectTeamService["Service"];
 });
 
