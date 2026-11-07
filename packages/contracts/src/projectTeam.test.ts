@@ -28,7 +28,11 @@ import {
   ProjectTeamTaskUpdateInput,
   ProjectTeamUpdateSettingsInput,
   projectTaskPhase,
+  applyRoleModelsPatch,
+  effectiveRoleModel,
+  ProjectTaskReference,
 } from "./projectTeam.ts";
+import { ProviderInstanceId } from "./providerInstance.ts";
 import { WS_METHODS, WsRpcGroup } from "./rpc.ts";
 
 describe("ProjectTeamSettings", () => {
@@ -156,7 +160,7 @@ describe("ProjectTask", () => {
       createdAt: "2026-11-04T00:00:00.000Z",
       updatedAt: "2026-11-04T00:00:00.000Z",
     };
-    // Tasks stored before subtasks or rounds existed have no parent, rounds or review.
+    // Tasks stored before subtasks, rounds or role models existed have none of them.
     expect(Schema.decodeUnknownSync(ProjectTask)(task)).toEqual({
       ...task,
       parentTaskId: null,
@@ -164,6 +168,8 @@ describe("ProjectTask", () => {
       shipRound: 0,
       review: null,
       ready: null,
+      roleModels: {},
+      modelSteps: {},
     });
     expect(() => Schema.decodeUnknownSync(ProjectTask)({ ...task, stage: "review" })).toThrow();
   });
@@ -548,5 +554,52 @@ describe("plan approval answers", () => {
     );
     expect(planApprovalOutcome(answer)).toBe("start");
     expect(formatPlanApproval({ overall: " ", comments: [] })).toBe(PLAN_APPROVAL_START);
+  });
+});
+
+describe("role models", () => {
+  const codex = { providerInstanceId: ProviderInstanceId.make("codex"), model: "gpt-5.5" };
+  const claude = {
+    providerInstanceId: ProviderInstanceId.make("claude"),
+    model: "claude-opus-5-5",
+  };
+
+  it("sets, keeps and clears roles from a patch", () => {
+    const decode = Schema.decodeUnknownSync(ProjectTeamUpdateSettingsInput);
+    const input = decode({ projectId: "p", roleModels: { implement: codex, review: null } });
+    const current = Schema.decodeUnknownSync(ProjectTeamSettings)({
+      roleModels: { plan: claude, review: claude },
+    }).roleModels!;
+    expect(applyRoleModelsPatch(current, input.roleModels!)).toEqual({
+      plan: claude,
+      implement: codex,
+    });
+  });
+
+  it("prefers the task's model, then the project's, then none", () => {
+    expect(effectiveRoleModel("implement", { implement: codex }, { implement: claude })).toEqual({
+      target: codex,
+      source: "task",
+    });
+    expect(effectiveRoleModel("implement", {}, { implement: claude })).toEqual({
+      target: claude,
+      source: "project",
+    });
+    expect(effectiveRoleModel("fix", {}, undefined)).toBeNull();
+  });
+
+  it("reads tasks and references from older servers with no models", () => {
+    const reference = Schema.decodeUnknownSync(ProjectTaskReference)({
+      id: "t",
+      number: 1,
+      title: "x",
+      stage: "running",
+      leadThreadId: null,
+    });
+    expect(reference.modelSteps).toEqual({});
+    expect(
+      Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput)({ roleModels: { fix: codex } })
+        .roleModels,
+    ).toEqual({ fix: codex });
   });
 });

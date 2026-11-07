@@ -14,6 +14,7 @@ import {
   PLAN_APPROVAL_START,
   ProjectId,
   type ProjectTaskSpec,
+  ProviderInstanceId,
   type ServerProvider,
   ThreadId,
   type ThreadPullRequestLink,
@@ -53,6 +54,9 @@ import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 export const START = "2026-11-04T00:00:00.000Z";
 export const PROJECT_ID = ProjectId.make("project-1");
 export const SCRATCH_ROOT = "/data/scratch";
+/** The model a delegated child runs on when the call names no target. */
+export const DEFAULT_PROVIDER_INSTANCE_ID = ProviderInstanceId.make("claude");
+export const DEFAULT_MODEL = "claude-opus-5-5";
 
 export interface FakeThread {
   readonly id: ThreadId;
@@ -434,9 +438,12 @@ export const withTeam = <A, E>(
           yield* Ref.update(delegated, (all) => [...all, input]);
           leadCount += 1;
           const childThreadId = ThreadId.make(`lead-${leadCount}`);
+          // Like delegate_task, the child runs on the target, else on the caller's model.
           return {
             taskId: NodeId.make(`node-${leadCount}`),
             childThreadId,
+            providerInstanceId: input.target?.providerInstanceId ?? DEFAULT_PROVIDER_INSTANCE_ID,
+            model: input.target?.model ?? DEFAULT_MODEL,
           } as OrchestratorMcpDelegateTaskResult;
         }),
       addProject: (projectId, title) => {

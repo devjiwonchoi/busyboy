@@ -29,7 +29,11 @@ import {
   ProjectTaskId,
   ProjectTaskOutcome,
   ProjectTaskReady,
+  ProjectTaskModelRole,
+  ProjectTaskModelStep,
+  ProjectTaskModelSteps,
   ProjectTaskReview,
+  ProjectTaskRoleModels,
   ProjectTaskSession,
   ProjectTaskSessionRole,
   ProjectTaskSpec,
@@ -248,6 +252,18 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectTaskId;
       readonly now: IsoDateTime;
     }) => Result<Option.Option<ProjectTask>>;
+    /** Replaces the task's own model per role. */
+    readonly setTaskRoleModels: (input: {
+      readonly id: ProjectTaskId;
+      readonly roleModels: ProjectTaskRoleModels;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Records the model that just ran a role, replacing the role's previous step. */
+    readonly recordModelStep: (input: {
+      readonly id: ProjectTaskId;
+      readonly role: ProjectTaskModelRole;
+      readonly step: ProjectTaskModelStep;
+    }) => Result<Option.Option<ProjectTask>>;
     /** Case-insensitive substring match over title, request, plan and result summaries. */
     readonly searchTasks: (input: {
       readonly projectId: ProjectId;
@@ -374,7 +390,11 @@ const TaskRow = Schema.Struct({
   waitsOn: Schema.fromJsonString(Schema.Array(ProjectTaskId)),
   review: Schema.NullOr(Schema.fromJsonString(ProjectTaskReview)),
   ready: Schema.NullOr(Schema.fromJsonString(ProjectTaskReady)),
+  roleModels: Schema.fromJsonString(ProjectTaskRoleModels),
+  modelSteps: Schema.fromJsonString(ProjectTaskModelSteps),
 });
+const RoleModelsJson = Schema.fromJsonString(ProjectTaskRoleModels);
+const ModelStepJson = Schema.fromJsonString(ProjectTaskModelStep);
 const ReviewJson = Schema.fromJsonString(ProjectTaskReview);
 const ReadyJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskReady));
 const AttentionRow = Schema.Struct({
@@ -446,6 +466,8 @@ export const make = Effect.gen(function* () {
     ship_round AS "shipRound",
     review_json AS "review",
     ready_json AS "ready",
+    role_models_json AS "roleModels",
+    model_steps_json AS "modelSteps",
     stage_changed_at AS "stageChangedAt",
     created_at AS "createdAt",
     updated_at AS "updatedAt"
@@ -729,6 +751,27 @@ export const make = Effect.gen(function* () {
         ready_json = NULL,
         updated_at = ${now}
       WHERE task_id = ${id} AND stage = 'in_review'
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskRoleModels = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, roleModels: RoleModelsJson, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, roleModels, now }) => sql`
+      UPDATE project_tasks SET
+        role_models_json = ${roleModels},
+        updated_at = ${now}
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskModelStep = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, role: ProjectTaskModelRole, step: ModelStepJson }),
+    Result: TaskRow,
+    execute: ({ id, role, step }) => sql`
+      UPDATE project_tasks SET
+        model_steps_json = json_set(model_steps_json, ${`$.${role}`}, json(${step}))
+      WHERE task_id = ${id}
       RETURNING ${taskColumns}
     `,
   });
@@ -1272,6 +1315,10 @@ export const make = Effect.gen(function* () {
       updateTaskReady(input).pipe(Effect.mapError(toRepositoryError("setTaskReady"))),
     reopenShipRound: (input) =>
       reopenShipRoundRow(input).pipe(Effect.mapError(toRepositoryError("reopenShipRound"))),
+    setTaskRoleModels: (input) =>
+      updateTaskRoleModels(input).pipe(Effect.mapError(toRepositoryError("setTaskRoleModels"))),
+    recordModelStep: (input) =>
+      updateTaskModelStep(input).pipe(Effect.mapError(toRepositoryError("recordModelStep"))),
     searchTasks: ({ projectId, query, limit }) =>
       searchTaskRows({ projectId, pattern: `%${escapeLike(query)}%`, limit }).pipe(
         Effect.mapError(toRepositoryError("searchTasks")),

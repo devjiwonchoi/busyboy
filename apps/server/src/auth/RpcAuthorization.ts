@@ -129,6 +129,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.projectTeamUpdateTaskSpec]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamRestoreTaskSpec]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamSplitTaskTodo]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamSetTaskRoleModels]: AuthOrchestrationOperateScope,
 
   [WS_METHODS.pullRequestsList]: AuthOrchestrationReadScope,
   [WS_METHODS.pullRequestsListStats]: AuthOrchestrationReadScope,

@@ -2102,6 +2102,10 @@ const layerWsRpc = (
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.splitTaskTodo(input)),
           ),
+        [WS_METHODS.projectTeamSetTaskRoleModels]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.setTaskRoleModels(input)),
+          ),
         [WS_METHODS.secretsAnswerRequest]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(secretRequests.answer(input)),

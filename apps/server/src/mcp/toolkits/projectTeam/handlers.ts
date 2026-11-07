@@ -68,6 +68,16 @@ const handlers = {
   task_ready: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.markTaskReady(caller, input)),
   ),
+  task_delegate: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
+      return yield* withTeam((team, caller, scope) =>
+        team.delegateStep(caller, input, (delegateInput) =>
+          orchestrator.delegateTask(scope, delegateInput),
+        ),
+      );
+    }),
+  ),
   task_nudge: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.nudgeTask(caller, input)),
   ),
