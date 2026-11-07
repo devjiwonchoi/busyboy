@@ -1,6 +1,7 @@
 import "~/index.css";
 
 import type { ProjectTeamTaskDetail, ProjectTeamUpdateTaskSpecInput } from "@t3tools/contracts";
+import { emptyProjectTaskSpec, newProjectTaskTodo } from "@t3tools/contracts";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { page, userEvent } from "vite-plus/test/browser";
@@ -148,11 +149,12 @@ beforeEach(() => {
         taskId: "task-49",
         version: 1,
         spec: {
+          ...emptyProjectTaskSpec(),
           background: "Plan was on the left.",
           goal: "The plan is a tab in the right sidebar.",
           successCriteria: "Plan, Browser and back.",
           nonGoals: "",
-          todos: [{ id: "t1", text: "Move the plan", done: false, subtaskId: null }],
+          todos: [newProjectTaskTodo("t1", "Move the plan")],
         },
         author: "agent",
         authorThreadId: "lead-1",

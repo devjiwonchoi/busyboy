@@ -11,6 +11,7 @@ import {
   ProjectTaskId,
   ThreadId,
 } from "@t3tools/contracts";
+import { emptyProjectTaskSpec, newProjectTaskTodo } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { act, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -141,7 +142,7 @@ function makeManagers() {
 }
 
 function todo(id: string, text: string) {
-  return { id, text, done: false, subtaskId: null };
+  return newProjectTaskTodo(id, text);
 }
 
 function version(n: number, goal: string, todos: ReturnType<typeof todo>[]) {
@@ -149,6 +150,7 @@ function version(n: number, goal: string, todos: ReturnType<typeof todo>[]) {
     taskId: TASK_ID,
     version: n,
     spec: {
+      ...emptyProjectTaskSpec(),
       background: "Plan approval was removed in #103.",
       goal,
       successCriteria: "- The user can approve from the **PM chat**.",
@@ -267,7 +269,10 @@ async function openReview() {
   await act(async () => root.render(<LiveCard />));
   const card = container.querySelector('[data-decision-card-state="open"]')!;
   // Reads like a doc: "# title", then Goal and Verification.
-  expect(card.querySelector("[data-plan-meta]")?.textContent).toBe("Plan approval · v2");
+  // The task key leads the meta line once the app knows the task.
+  expect(card.querySelector("[data-plan-meta]")?.textContent).toMatch(
+    /^(BU-32 · )?Plan approval · v2$/,
+  );
   expect(card.querySelector("[data-plan-title]")?.textContent).toBe("Plan approval modal");
   expect(card.textContent).toContain("A card in the PM chat");
   await userEvent.click(button("Review plan"));
@@ -366,7 +371,7 @@ describe.each([
     );
     expect(section("Success criteria").querySelector("li strong")?.textContent).toBe("PM chat");
     expect(section("Non-goals").textContent).toBe("Changing how tasks are created.");
-    expect(section("Steps").querySelectorAll("li")).toHaveLength(2);
+    expect(modal().querySelectorAll("[data-plan-todo]")).toHaveLength(2);
     // Full screen on phones, once the open animation settles.
     if (width < 768) {
       await vi.waitFor(() => {
