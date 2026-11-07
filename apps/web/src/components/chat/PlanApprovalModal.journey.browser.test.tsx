@@ -20,6 +20,8 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
+import { longPressSelect, tap } from "../../test-touch-selection";
+
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 
@@ -439,6 +441,29 @@ describe.each([
     await vi.waitFor(() => expect(document.querySelector("[data-plan-review]")).toBeNull());
     const answered = container.querySelector('[data-decision-card-state="answered"]')!;
     expect(answered.textContent).toContain("Changes requested");
+  });
+
+  it.runIf(width < 768)("comments on a touch selection", async () => {
+    await openReview();
+    await longPressSelect(section("End result"), "cursor", "steady");
+
+    // Below the selection, clear of the end handle: the phone's own menu sits above it.
+    const comment = await vi.waitFor(() => button("Comment"));
+    const selected = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
+    expect(comment.getBoundingClientRect().top).toBeGreaterThanOrEqual(selected.bottom + 20);
+
+    // The tap clears the selection before it lands; the button stays and takes it.
+    await tap(comment);
+    await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("new"));
+    await userEvent.type(pill()!.querySelector("textarea")!, "Which cursor?");
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(chipLabel()).toBe("1 comment"));
+
+    await userEvent.click(button("Request changes"));
+    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
+    expect(server.answers[0]!.answer).toContain(
+      '[End result] "cursor position steady" → Which cursor?',
+    );
   });
 
   it("shows where the task sits: parent, blockers, blocked tasks and subtasks", async () => {
