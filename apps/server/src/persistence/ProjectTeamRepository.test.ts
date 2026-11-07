@@ -169,6 +169,54 @@ describe("ProjectTeamRepository", () => {
     }).pipe(Effect.provide(testLayer)),
   );
 
+  it.effect("renames, re-parents and finds tasks waiting on a task in any project", () =>
+    Effect.gen(function* () {
+      const team = yield* repo;
+      const api = yield* team.createTask({
+        id: ProjectTaskId.make("task-api"),
+        projectId: otherProjectId,
+        title: "API",
+        request: "API",
+        waitsOn: [],
+        now: t0,
+      });
+      const ui = yield* team.createTask({
+        id: ProjectTaskId.make("task-ui"),
+        projectId,
+        title: "BU-53 A: UI",
+        request: "UI",
+        waitsOn: [api.id],
+        parentTaskId: api.id,
+        now: t0,
+      });
+      yield* team.createTask({
+        id: ProjectTaskId.make("task-free"),
+        projectId,
+        title: "Free",
+        request: "Free",
+        waitsOn: [],
+        now: t0,
+      });
+      assert.deepStrictEqual(
+        (yield* team.listTasksWaitingOn(api.id)).map((task) => task.id),
+        [ui.id],
+      );
+
+      // Leaving parentTaskId out keeps it; null removes it.
+      const renamed = Option.getOrThrow(
+        yield* team.updateTask({ id: ui.id, now: t1, title: "UI" }),
+      );
+      assert.strictEqual(renamed.title, "UI");
+      assert.strictEqual(renamed.parentTaskId, api.id);
+      const cleared = Option.getOrThrow(
+        yield* team.updateTask({ id: ui.id, now: t2, parentTaskId: null, waitsOn: [] }),
+      );
+      assert.isNull(cleared.parentTaskId);
+      assert.strictEqual(cleared.title, "UI");
+      assert.deepStrictEqual(yield* team.listTasksWaitingOn(api.id), []);
+    }).pipe(Effect.provide(testLayer)),
+  );
+
   it.effect("searches titles, requests and summaries with literal wildcards", () =>
     Effect.gen(function* () {
       const team = yield* repo;

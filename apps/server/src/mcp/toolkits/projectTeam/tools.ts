@@ -51,7 +51,7 @@ const shared = {
 const TaskCreateTool = Tool.make("task_create", {
   ...shared,
   description:
-    "PM only. Add a task to the project's inbox when the user asks for work. Write the request so a task lead can act on it alone. Set waitsOn for tasks touching the same files. Then start it with task_start when a slot is free.",
+    "PM only. Add a task to the project's inbox when the user asks for work. Write the request so a task lead can act on it alone. Set waitsOn for tasks touching the same files and parentTaskId when it is part of a bigger task; both may point at tasks in other projects. Then start it with task_start when a slot is free.",
   parameters: ProjectTeamTaskCreateInput,
   success: ProjectTeamTaskResult,
 })
@@ -73,7 +73,7 @@ const TaskStartTool = Tool.make("task_start", {
 const TaskUpdateTool = Tool.make("task_update", {
   ...shared,
   description:
-    "Record progress on a task: stage, plan, result, PR URL or a note. A task lead updates only its own task and may omit taskId; the PM passes taskId.",
+    "Record progress on a task: stage, plan, result, PR URL or a note. The PM can also rename it and change its waitsOn and parent. A task lead updates only its own task and may omit taskId; the PM passes taskId.",
   parameters: ProjectTeamTaskUpdateInput,
   success: ProjectTeamTaskResult,
 })

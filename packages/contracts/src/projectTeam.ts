@@ -615,7 +615,11 @@ export const ProjectTeamTaskCreateInput = Schema.Struct({
   request: ProjectTaskRequest,
   waitsOn: Schema.optional(Schema.Array(ProjectTaskId)).annotate({
     description:
-      "Tasks that must reach in_review or done before this one starts, such as tasks touching the same files.",
+      "Tasks that must reach in_review or done before this one starts, such as tasks touching the same files. May be tasks in other projects.",
+  }),
+  parentTaskId: Schema.optional(ProjectTaskId).annotate({
+    description:
+      "The task this one is part of, shown as its parent. May be a task in another project.",
   }),
 });
 export type ProjectTeamTaskCreateInput = typeof ProjectTeamTaskCreateInput.Type;
@@ -667,15 +671,29 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
   note: Schema.optional(ProjectTaskSummaryText).annotate({
     description: "Progress note added to the task log.",
   }),
+  title: Schema.optional(ProjectTaskTitle).annotate({
+    description: "PM only. Rename the task.",
+  }),
+  waitsOn: Schema.optional(Schema.Array(ProjectTaskId)).annotate({
+    description:
+      "PM only. Replaces the tasks this one waits on; [] clears them. May be tasks in other projects.",
+  }),
+  parentTaskId: Schema.optional(Schema.NullOr(ProjectTaskId)).annotate({
+    description:
+      "PM only. The task this one is part of; null removes the parent. May be a task in another project.",
+  }),
 }).check(
   Schema.makeFilter((input) =>
     input.stage !== undefined ||
     input.planSummary !== undefined ||
     input.resultSummary !== undefined ||
     input.prUrl !== undefined ||
-    input.note !== undefined
+    input.note !== undefined ||
+    input.title !== undefined ||
+    input.waitsOn !== undefined ||
+    input.parentTaskId !== undefined
       ? true
-      : "task_update needs at least one of stage, planSummary, resultSummary, prUrl or note.",
+      : "task_update needs at least one of stage, planSummary, resultSummary, prUrl, note, title, waitsOn or parentTaskId.",
   ),
 );
 export type ProjectTeamTaskUpdateInput = typeof ProjectTeamTaskUpdateInput.Type;

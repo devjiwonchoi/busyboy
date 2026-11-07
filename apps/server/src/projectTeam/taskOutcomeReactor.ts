@@ -55,12 +55,17 @@ export function classifyTaskOutcome(input: {
 
 /**
  * The inbox task the PM could start next: the lowest-numbered one whose
- * dependencies are done or in review. Null when none is ready.
+ * dependencies are done or in review. Null when none is ready. Dependencies in
+ * other projects are looked up in `otherStages`.
  */
 export function nextInboxTask(
   tasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>,
+  otherStages: ReadonlyMap<string, ProjectTask["stage"]> = new Map(),
 ): Pick<ProjectTask, "number"> | null {
-  const stageById = new Map(tasks.map((task) => [task.id as string, task.stage]));
+  const stageById = new Map<string, ProjectTask["stage"]>([
+    ...otherStages,
+    ...tasks.map((task) => [task.id as string, task.stage] as const),
+  ]);
   const ready = tasks
     .filter((task) => task.stage === "inbox")
     .filter((task) =>
@@ -96,6 +101,8 @@ export function outcomeWakeText(input: {
   /** The task's outcome before this turn. */
   readonly previousOutcome: ProjectTaskOutcome | null;
   readonly projectTasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>;
+  /** Stages of dependencies in other projects, by task id. */
+  readonly otherStages?: ReadonlyMap<string, ProjectTask["stage"]>;
   readonly maxConcurrentTasks: number;
   /** The project memory; a done wake asks the PM to fold the task in and flags overgrowth. */
   readonly memory?: ReadonlyArray<Pick<ProjectMemoryEntry, "topic" | "content" | "updatedAt">>;
@@ -121,7 +128,8 @@ export function outcomeWakeText(input: {
   const active = input.projectTasks.filter((task) =>
     (ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage),
   ).length;
-  const next = active < input.maxConcurrentTasks ? nextInboxTask(input.projectTasks) : null;
+  const next =
+    active < input.maxConcurrentTasks ? nextInboxTask(input.projectTasks, input.otherStages) : null;
   if (next !== null) parts.push(`#${next.number} is next in the inbox`);
   const lines = [parts.join(" · ")];
   if (summary.length > 0) {
@@ -161,11 +169,23 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const manager = yield* repository.getManager(input.task.projectId);
       if (Option.isNone(manager) || !manager.value.settings.enabled) return;
+      const projectTasks = yield* repository.listTasks({ projectId: input.task.projectId });
+      const own = new Set<string>(projectTasks.map((task) => task.id));
+      const otherStages = new Map<string, ProjectTask["stage"]>();
+      for (const task of projectTasks) {
+        if (task.stage !== "inbox") continue;
+        for (const id of task.waitsOn) {
+          if (own.has(id) || otherStages.has(id)) continue;
+          const other = yield* repository.getTask(id);
+          if (Option.isSome(other)) otherStages.set(id, other.value.stage);
+        }
+      }
       const text = outcomeWakeText({
         task: input.task,
         outcome: input.outcome,
         previousOutcome: input.previousOutcome,
-        projectTasks: yield* repository.listTasks({ projectId: input.task.projectId }),
+        projectTasks,
+        otherStages,
         maxConcurrentTasks: manager.value.settings.maxConcurrentTasks,
         memory: input.outcome === "done" ? yield* repository.listMemory(input.task.projectId) : [],
       });
