@@ -7,6 +7,7 @@ import {
   type OrchestrationV2ThreadShell,
   type ScheduledTask,
   ScheduledTaskId,
+  type ScheduledTaskUpsertInput,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -18,7 +19,9 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 
 import {
   DispatchModeLimit,
@@ -2246,6 +2249,135 @@ describe("OrchestratorMcpService provider resolution", () => {
     );
   });
 
+  describe("schedule_task webhooks", () => {
+    const callerId = ThreadId.make("thread:schedule-caller");
+    const callerShell = liveThreadShell(callerId, { runtimeMode: "full-access" });
+    const callerScope: McpInvocationScope = {
+      environmentId: EnvironmentId.make("environment:schedule"),
+      requestNamespace: "provider:schedule",
+      thread: {
+        threadId: callerId,
+        providerSessionId: "provider:schedule",
+        providerInstanceId: callerShell.providerInstanceId,
+      },
+      client: undefined,
+      capabilities: new Set(["orchestration"]),
+      issuedAt: 1,
+    };
+    const scheduleWith = (
+      input: Parameters<
+        OrchestratorMcpService.OrchestratorMcpService["Service"]["scheduleTask"]
+      >[1],
+    ) =>
+      Effect.gen(function* () {
+        const saved = yield* Ref.make<ReadonlyArray<ScheduledTaskUpsertInput>>([]);
+        const result = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+          Effect.flatMap((mcp) => mcp.scheduleTask(callerScope, input)),
+          Effect.result,
+          Effect.provide(
+            layerOrchestratorService.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  NodeServices.layer,
+                  Layer.mock(ThreadManagementService.ThreadManagementService)({
+                    getThreadRecords: () => Effect.succeed(idleThreadProjection(callerShell)),
+                    getThreadShell: () => Effect.succeed(callerShell),
+                  }),
+                  ServerSettings.layerTest(),
+                  Layer.mock(ProviderRegistry.ProviderRegistry)({
+                    getProviders: Effect.succeed([]),
+                  }),
+                  Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({
+                    list: () => Effect.succeed([]),
+                  }),
+                  Layer.mock(ProjectService.ProjectService)({
+                    getById: (id) =>
+                      Effect.succeed(Option.some({ id, defaultModelSelection: null } as never)),
+                  }),
+                  Layer.mock(SecretRequests.SecretRequests)({}),
+                  Layer.mock(ScheduledTaskService.ScheduledTaskService)({
+                    upsert: (upsertInput) =>
+                      Ref.update(saved, (inputs) => [...inputs, upsertInput]).pipe(
+                        Effect.as({
+                          task: {
+                            id: ScheduledTaskId.make("scheduled-task:mcp"),
+                            title: upsertInput.title,
+                            prompt: upsertInput.prompt,
+                            enabled: upsertInput.enabled,
+                            schedule:
+                              upsertInput.schedule.type === "webhook"
+                                ? { type: "webhook", signature: null, allowUnsigned: true }
+                                : upsertInput.schedule,
+                            projectId: upsertInput.projectId,
+                            threadId: upsertInput.threadId ?? null,
+                            workspaceStrategy: upsertInput.workspaceStrategy,
+                            modelSelection: upsertInput.modelSelection,
+                            runtimeMode: upsertInput.runtimeMode,
+                            interactionMode: upsertInput.interactionMode,
+                            createdBy: "agent",
+                            creationSource: "mcp",
+                            createdAt: "2026-10-05T00:00:00.000Z",
+                            updatedAt: "2026-10-05T00:00:00.000Z",
+                            nextRunAt: null,
+                            lastRunAt: null,
+                            lastRunStatus: "never",
+                            lastRunError: null,
+                            runCount: 0,
+                          } satisfies ScheduledTask,
+                        }),
+                      ),
+                  }),
+                ),
+              ),
+            ),
+          ),
+        );
+        return { result, saved: yield* Ref.get(saved) };
+      });
+
+    it.effect("runs a webhook in a fresh thread capped at auto mode", () =>
+      Effect.gen(function* () {
+        const { result, saved } = yield* scheduleWith({
+          prompt: "Triage {{body.issue.title}}",
+          schedule: { type: "webhook", allowUnsigned: true },
+        });
+        assert.isTrue(Result.isSuccess(result));
+        assert.equal(saved.length, 1);
+        assert.equal(saved[0]?.threadId, null);
+        assert.equal(saved[0]?.runtimeMode, "auto");
+        assert.deepEqual(saved[0]?.schedule, { type: "webhook", allowUnsigned: true });
+      }),
+    );
+
+    it.effect("refuses to bind a webhook to the calling thread", () =>
+      Effect.gen(function* () {
+        const { result, saved } = yield* scheduleWith({
+          prompt: "Triage {{body.issue.title}}",
+          schedule: { type: "webhook", allowUnsigned: true },
+          bindToCurrentThread: true,
+        });
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) {
+          assert.equal(result.failure.code, "invalid_request");
+          assert.include(result.failure.message, "fresh thread");
+        }
+        assert.equal(saved.length, 0);
+      }),
+    );
+
+    it.effect("keeps binding timers to the calling thread", () =>
+      Effect.gen(function* () {
+        const { result, saved } = yield* scheduleWith({
+          prompt: "Check in",
+          schedule: { type: "interval", everyMs: 3_600_000 },
+        });
+        assert.isTrue(Result.isSuccess(result));
+        assert.equal(saved[0]?.threadId, callerId);
+        // Timer modes follow the project default (#96); only webhooks get the extra cap.
+      }),
+    );
+  });
+
   describe("resolveRuntimeMode", () => {
     const muse = {
       modelSelection: { instanceId: ProviderInstanceId.make("muse"), model: "muse-model" },
@@ -2273,6 +2405,30 @@ describe("OrchestratorMcpService provider resolution", () => {
         assert.equal(
           yield* OrchestratorMcpService.resolveRuntimeMode("auto", undefined, muse),
           "approval-required",
+        );
+      }),
+    );
+
+    it.effect("starts an unspecified child at the settings default, never above its parent", () =>
+      Effect.gen(function* () {
+        const resolve = OrchestratorMcpService.resolveRuntimeMode;
+        // A full-access parent's child starts in auto unless asked otherwise.
+        assert.equal(yield* resolve("full-access", undefined, undefined, "auto"), "auto");
+        // The user's own full-access default is kept.
+        assert.equal(
+          yield* resolve("full-access", undefined, undefined, "full-access"),
+          "full-access",
+        );
+        // The default never lifts a child above a narrower parent.
+        assert.equal(
+          yield* resolve("approval-required", undefined, undefined, "auto"),
+          "approval-required",
+        );
+        // An explicit inherit or mode still wins over the default.
+        assert.equal(yield* resolve("full-access", "inherit", undefined, "auto"), "full-access");
+        assert.equal(
+          yield* resolve("full-access", "full-access", undefined, "auto"),
+          "full-access",
         );
       }),
     );

@@ -13,6 +13,8 @@ import {
   type Project,
   DEFAULT_PROJECT_TEAM_SETTINGS,
   ProjectId,
+  type ProjectMemoryEntry,
+  ProjectMemoryEntryId,
   ProviderDriverKind,
   ProviderInstanceId,
   type ProviderSessionId,
@@ -45,7 +47,7 @@ import {
   projectManagerInstructions,
 } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { defaultPersona, personaInstructions } from "../projectTeam/persona.ts";
+import { defaultPersona, personaInstructions, pmMemorySection } from "../projectTeam/persona.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -1951,6 +1953,14 @@ it.effect(
     }),
 );
 
+const pmMemoryEntry = (projectId: ProjectId): ProjectMemoryEntry => ({
+  id: ProjectMemoryEntryId.make("memory-provider-session-manager-decisions"),
+  projectId,
+  topic: "decisions",
+  content: "2026-01-01 Squash-merge only.",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+});
+
 it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project's PM thread", () =>
   Effect.gen(function* () {
     const pmThreadId = ThreadId.make("thread-provider-session-manager-pm");
@@ -1983,6 +1993,7 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
               })
             : Option.none(),
         ),
+      listMemory: (projectId) => Effect.succeed([pmMemoryEntry(projectId)]),
     });
     const openFor = Effect.fnUntraced(function* (threadId: ThreadId) {
       const eventSink = yield* EventSink.EventSinkV2;
@@ -2017,8 +2028,9 @@ it.effect("ProviderSessionManagerV2 gives the PM instructions only to a project'
         name: "Juno",
         voice: "Talk like a ship's captain.",
         voiceIsUserWords: true,
-      }),
+      }) + pmMemorySection([pmMemoryEntry(ProjectId.make("project-provider-session-manager-pm"))]),
     );
+    assert.include(pm?.teamInstructions ?? "", "### decisions\n2026-01-01 Squash-merge only.");
     assert.include(pm?.teamInstructions ?? "", PROJECT_MANAGER_INSTRUCTIONS);
     assert.include(pm?.teamInstructions ?? "", "Your name is Juno.");
     assert.equal(other?.threadId, otherThreadId);
@@ -2053,6 +2065,7 @@ it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fai
                 updatedAt: "2026-01-01T00:00:00.000Z",
               }),
             ),
+      listMemory: () => Effect.succeed([]),
     });
 
     yield* Effect.gen(function* () {
@@ -2091,7 +2104,10 @@ it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fai
     const configs = yield* Ref.get(mcpConfigs);
     assert.isAtLeast(configs.length, 2);
     for (const config of configs) {
-      assert.equal(config?.teamInstructions, personaInstructions(defaultPersona(flakyProjectId)));
+      assert.equal(
+        config?.teamInstructions,
+        personaInstructions(defaultPersona(flakyProjectId), []),
+      );
     }
   }),
 );

@@ -1,4 +1,5 @@
 import {
+  type ChatAttachment,
   CommandId,
   DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
@@ -6,11 +7,14 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type IsoDateTime,
   MessageId,
+  type OrchestrationV2ConversationMessage,
   type ModelSelection,
   type OrchestratorMcpDelegateTaskInput,
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
+  PLAN_APPROVAL_START,
+  planApprovalOutcome,
   type ProjectDecisionCard,
   type ProjectSitrep,
   type ProjectId,
@@ -22,6 +26,10 @@ import {
   ProjectMemoryEntryId,
   type ProjectTask,
   type ProjectTaskBrief,
+  ProjectTaskStatus,
+  type ProjectTaskStatusSignals,
+  resolveProjectTaskStatus,
+  storedTaskStatusSignals,
   type ProjectTaskEvent,
   ProjectTaskEventId,
   type ProjectTaskEventKind,
@@ -32,6 +40,7 @@ import {
   type ProjectTaskStage,
   type ProjectTeamAskUserInput,
   type ProjectTeamAttentionAnswerInput,
+  type ProjectTeamAttentionDismissInput,
   type ProjectTeamAttentionItemResult,
   type ProjectTeamAttentionSnapshot,
   type ProjectTeamAttentionSummary,
@@ -76,41 +85,58 @@ import {
   type ProjectTeamTaskSpecResult,
   type ProjectTeamTaskSpecWriteInput,
   type ProjectTeamTaskTodoSetInput,
-  PLAN_APPROVAL_ONLY,
-  PLAN_APPROVAL_START,
   defaultTaskKeyPrefix,
   formatTaskKey,
   ProviderInstanceId,
   ThreadId,
+  AFK_FREE_FORM_ANSWER,
+  AFK_GRACE_MS,
+  MAX_AFK_ANSWERS_IN_SUMMARY,
+  afkActive,
+  afkAnswerEventBody,
+  afkPickOption,
+  afkSetting,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
+import { resolveAttachmentPath } from "../attachmentStore.ts";
+import * as ServerConfig from "../config.ts";
+import {
+  type AttachmentClaimError,
+  claimPendingAttachments,
+  releaseClaimedAttachments,
+} from "../orchestration-v2/AttachmentClaims.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import type { ProjectTeamRepositoryError } from "../persistence/Errors.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
+  isLeadBusy,
   isoFromMillis,
   isoMillis,
   makeIdGenerator,
+  makePeriodicGate,
   nowIso,
   orTeamError,
   teamError,
 } from "./common.ts";
-import { isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
+import { AFK_AGENT_RULE, isUserWordsVoice, resolvePersona, voiceText } from "./persona.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
+import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
@@ -120,11 +146,52 @@ const DEFAULT_TASK_EVENT_LIMIT = 20;
 const PRESENCE_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = [
   "inbox",
   "planning",
+  "awaiting_approval",
   "running",
   "in_review",
 ];
 const DEFAULT_TASK_SEARCH_LIMIT = 20;
 const LEAD_MESSAGE_SUMMARY_MAX_CHARS = 300;
+export const PM_RELAY_NOT_USER_WORDS =
+  "Decision cards need the user's own words. Quote exactly what the user wrote in this chat after the card appeared, or let them click the card.";
+/** Where a person types: messages the user wrote in the app, not ones an agent or the server sent. */
+const USER_TYPED_SOURCES: ReadonlySet<OrchestrationV2ConversationMessage["creationSource"]> =
+  new Set(["web", "mobile"]);
+
+const normalizeWords = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** `part` appears in `whole` with no letter or digit right before or after it. */
+const containsWords = (whole: string, part: string) => {
+  const isWordChar = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}]/u.test(char);
+  for (let at = whole.indexOf(part); at !== -1; at = whole.indexOf(part, at + 1)) {
+    if (!isWordChar(whole[at - 1]) && !isWordChar(whole[at + part.length])) return true;
+  }
+  return false;
+};
+
+/**
+ * True when `answer` is the user's own words: it equals, or after normalizing whitespace and
+ * case appears as whole words in, a message the user typed at or after `sinceMs`. Whole words
+ * keep a one-letter answer like "B" from matching any message that contains a "b".
+ */
+export function isUserChatAnswer(
+  answer: string,
+  messages: ReadonlyArray<OrchestrationV2ConversationMessage>,
+  sinceMs: number,
+): boolean {
+  const trimmed = answer.trim();
+  const normalized = normalizeWords(answer);
+  if (normalized.length === 0) return false;
+  return messages.some(
+    (message) =>
+      message.role === "user" &&
+      message.createdBy === "user" &&
+      USER_TYPED_SOURCES.has(message.creationSource) &&
+      DateTime.toEpochMillis(message.createdAt) >= sinceMs &&
+      (message.text.trim() === trimmed || containsWords(normalizeWords(message.text), normalized)),
+  );
+}
+
 /** Stages whose task lead has work to show; stalled tasks come from these. */
 const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
   "planning",
@@ -134,7 +201,7 @@ const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
 
 export const JOURNAL_LIMIT = 20;
 const JOURNAL_TEXT_MAX_CHARS = 200;
-/** Answered or replaced cards kept in "Waiting on you" after they close. */
+/** Answered or replaced cards kept in the PM chat after they close. */
 const CLOSED_DECISION_CARD_LIMIT = 30;
 
 function clip(text: string, max: number): string {
@@ -152,12 +219,29 @@ export function planRequestedWakeText(
   ].join("\n");
 }
 
+/** The spec background for a user-created task: their context, then the files they attached. */
+export function userTaskBackground(
+  context: string,
+  attachments: ReadonlyArray<{
+    readonly name: string;
+    readonly mimeType: string;
+    readonly path: string;
+  }>,
+): string {
+  if (attachments.length === 0) return context;
+  const list = [
+    "Attachments (read these files):",
+    ...attachments.map((file) => `- ${file.name} (${file.mimeType}): ${file.path}`),
+  ].join("\n");
+  return context.length > 0 ? `${context}\n\n${list}` : list;
+}
+
 const trimJournalText = (text: string): string =>
   text.length <= JOURNAL_TEXT_MAX_CHARS ? text : `${text.slice(0, JOURNAL_TEXT_MAX_CHARS - 1)}…`;
 
 /**
  * The team's recent history for team_status, newest first: tasks that finished or
- * failed, the user's answered questions, and posted sitreps.
+ * failed, leads' plans, the user's answered questions, and posted sitreps.
  */
 export function buildJournal(input: {
   readonly tasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "title">>;
@@ -176,7 +260,16 @@ export function buildJournal(input: {
   const entries: Array<ProjectTeamJournalEntry> = [];
   for (const event of input.endings) {
     const task = event.taskId === null ? undefined : taskById.get(event.taskId);
-    if (event.kind === "outcome") {
+    if (event.kind === "summary") {
+      // A lead's plan: it starts without approval, so the journal is where the PM sees it.
+      entries.push({
+        at: event.createdAt,
+        kind: "decision",
+        text: trimJournalText(
+          `${task === undefined ? "Plan" : `Plan for #${task.number} ${task.title}`}: ${event.body.replace(/^Plan: /, "")}`,
+        ),
+      });
+    } else if (event.kind === "outcome") {
       entries.push({
         at: event.createdAt,
         kind: "failed",
@@ -276,7 +369,10 @@ export type DelegateTaskLead = (
   input: OrchestratorMcpDelegateTaskInput,
 ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
 
-export function toTaskBrief(task: ProjectTask): ProjectTaskBrief {
+export function toTaskBrief(
+  task: ProjectTask,
+  signals: ProjectTaskStatusSignals = storedTaskStatusSignals(task),
+): ProjectTaskBrief {
   return {
     id: task.id,
     number: task.number,
@@ -288,7 +384,19 @@ export function toTaskBrief(task: ProjectTask): ProjectTaskBrief {
     nudgeCount: task.nudgeCount,
     waitsOn: task.waitsOn,
     stageChangedAt: task.stageChangedAt,
+    status: resolveProjectTaskStatus(task, signals),
   };
+}
+
+/** Counts per user-facing status, every status included. */
+export function countTaskStatuses(
+  briefs: ReadonlyArray<Pick<ProjectTaskBrief, "status">>,
+): Record<ProjectTaskStatus, number> {
+  const counts = Object.fromEntries(
+    ProjectTaskStatus.literals.map((status) => [status, 0]),
+  ) as Record<ProjectTaskStatus, number>;
+  for (const brief of briefs) counts[brief.status] += 1;
+  return counts;
 }
 
 /** The title a PM thread had before PMs had names; such threads take the persona's name. */
@@ -323,8 +431,38 @@ export function describeManagerAction(
     case "outcome":
       return `recorded an outcome for ${task}`;
     case "preference_changed":
-      return "changed the sitrep interval";
+      return event.body.startsWith(AFK_EVENT_PREFIX) ||
+        event.body.startsWith(LEGACY_AUTO_APPROVE_PLANS_EVENT_PREFIX)
+        ? "changed AFK"
+        : "changed the sitrep interval";
+    case "afk_answer":
+      return `auto-answered a question for ${task} (AFK)`;
   }
+}
+
+/** Journal text for turning AFK on or off. */
+export const AFK_EVENT_PREFIX = "AFK";
+/** Journal prefix used before AFK replaced "Auto-approve plans". */
+const LEGACY_AUTO_APPROVE_PLANS_EVENT_PREFIX = "Auto-approve plans";
+
+export function afkEventBody(setting: ProjectTeamSettings["afk"]): string {
+  if (setting === undefined) return `${AFK_EVENT_PREFIX} turned off by you`;
+  return setting.until === null
+    ? `${AFK_EVENT_PREFIX} turned on by you until you turn it off`
+    : `${AFK_EVENT_PREFIX} turned on by you until ${setting.until}`;
+}
+
+export function autoApprovedPlanText(task: Pick<ProjectTask, "number" | "title">): string {
+  return `${AttentionRouter.AUTO_APPROVED_PLAN_PREFIX} Your plan for #${task.number} ${task.title} → Approve and start. The task is now running; go on with the todos, and record the assumptions you make.`;
+}
+
+/** What the PM and running leads hear when the user turns AFK on or off. */
+export function afkChangedText(setting: ProjectTeamSettings["afk"]): string {
+  if (setting === undefined) {
+    return `${AttentionRouter.AFK_NOTICE_PREFIX} The user turned AFK off and is back. Questions wait for the user again.`;
+  }
+  const until = setting.until === null ? "until they turn it off" : `until ${setting.until}`;
+  return `${AttentionRouter.AFK_NOTICE_PREFIX} The user turned AFK on ${until}. ${AFK_AGENT_RULE}`;
 }
 
 export interface PersonaPatch {
@@ -451,6 +589,11 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamAttentionAnswerInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+    /** attention_dismiss: the PM, or the lead that asked, closes a question that no longer needs an answer. */
+    readonly dismissAttention: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamAttentionDismissInput,
+    ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
 
     /** projectTeam.createTask RPC: the user adds a task; startPlanning asks the PM to start it. */
     readonly createTaskForUser: (
@@ -495,6 +638,8 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamRequestSitrepInput,
     ) => Effect.Effect<ProjectTeamRequestSitrepResult, ProjectTeamError>;
     readonly attentionSnapshot: Effect.Effect<ProjectTeamAttentionSnapshot, ProjectTeamError>;
+    /** One pass over every project: answers what waited past the grace period while AFK is on. */
+    readonly afkSweep: Effect.Effect<void>;
     /** The current snapshot, then a fresh one after every change. */
     readonly streamAttention: Stream.Stream<ProjectTeamAttentionSnapshot, ProjectTeamError>;
 
@@ -513,6 +658,45 @@ export class ProjectTeamService extends Context.Service<
 const make = Effect.gen(function* () {
   const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
   const threads = yield* ThreadManagement.ThreadManagementService;
+
+  /** Live status signals per task: open questions and the lead thread's state. */
+  const liveTaskSignals = (
+    tasks: ReadonlyArray<ProjectTask>,
+    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId" | "kind">>,
+  ) =>
+    Effect.gen(function* () {
+      const asking = new Set(openAttention.map((item) => item.taskId));
+      const blocked = new Set(
+        openAttention.filter((item) => item.kind === "blocker").map((item) => item.taskId),
+      );
+      const entries = yield* Effect.forEach(
+        tasks,
+        (task) =>
+          Effect.gen(function* () {
+            const lead = task.leadThreadId;
+            const finished = task.stage === "done" || task.stage === "cancelled";
+            const leadRunning =
+              lead === null || finished ? false : yield* isLeadBusy(threads, lead);
+            const leadFailed =
+              lead === null || finished || leadRunning
+                ? false
+                : yield* threads.getThreadShell(lead).pipe(
+                    Effect.map((shell) => shell?.status === "failed"),
+                    Effect.orElseSucceed(() => false),
+                  );
+            const signals: ProjectTaskStatusSignals = {
+              openQuestion: asking.has(task.id),
+              openBlocker: blocked.has(task.id),
+              leadRunning,
+              leadFailed,
+            };
+            return [task.id as string, signals] as const;
+          }),
+        { concurrency: 8 },
+      );
+      const byId = new Map(entries);
+      return (task: ProjectTask) => toTaskBrief(task, byId.get(task.id));
+    });
   const projects = yield* ProjectStore.ProjectStoreV2;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const router = yield* AttentionRouter.AttentionRouter;
@@ -520,6 +704,35 @@ const make = Effect.gen(function* () {
   const finishedTasks = yield* FinishedTaskCleanup.FinishedTaskCleanup;
   const newId = yield* makeIdGenerator;
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
+  const serverConfig = yield* ServerConfig.ServerConfig;
+  const fileSystem = yield* FileSystem.FileSystem;
+
+  /** Copies the user's pending uploads under the task so the pending sweep keeps them. */
+  const claimTaskAttachments = (
+    taskId: ProjectTaskId,
+    projectId: ProjectId,
+    attachments: ReadonlyArray<ChatAttachment>,
+  ) =>
+    claimPendingAttachments({ threadId: taskId, attachments }).pipe(
+      Effect.flatMap((claimed) =>
+        Effect.forEach(claimed.attachments, (attachment) => {
+          const path = resolveAttachmentPath({
+            attachmentsDir: serverConfig.attachmentsDir,
+            attachment,
+          });
+          return path === null
+            ? Effect.fail(
+                teamError(`Attachment '${attachment.name}' has no stored file.`, projectId),
+              )
+            : Effect.succeed({ name: attachment.name, mimeType: attachment.mimeType, path });
+        }).pipe(Effect.onError(() => releaseClaimedAttachments(claimed.claimedPaths))),
+      ),
+      Effect.catchTag("AttachmentClaimError", (error: AttachmentClaimError) =>
+        Effect.fail(teamError(error.message, projectId)),
+      ),
+      Effect.provideService(ServerConfig.ServerConfig, serverConfig),
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+    );
 
   // At boot the provider cache may still be empty, so probe once before giving up.
   const availableModelSelection = Effect.gen(function* () {
@@ -607,6 +820,160 @@ const make = Effect.gen(function* () {
         });
       }
       return updated.value;
+    });
+
+  /**
+   * Approves a plan that waits for approval while the user is AFK: the task moves to
+   * running, the lead hears it, and the journal records it.
+   */
+  const autoApprovePlan = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      if (task.stage !== "awaiting_approval") return task;
+      const running = yield* setTask({ id: task.id, stage: "running" });
+      // The lead hears it below; its open approval card records the same answer.
+      const now = yield* nowIso;
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      for (const item of open) {
+        if (item.kind !== "approval") continue;
+        yield* repository.answerAttentionItem({
+          id: item.id,
+          answer: PLAN_APPROVAL_START,
+          answeredAt: now,
+          answeredBy: "afk",
+        });
+      }
+      yield* appendEvent(running, "stage_changed", "awaiting_approval → running", null);
+      yield* appendEvent(
+        running,
+        "afk_answer",
+        afkAnswerEventBody(
+          `Approve the plan for #${running.number} ${running.title}?`,
+          PLAN_APPROVAL_START,
+        ),
+        running.leadThreadId,
+      );
+      if (running.leadThreadId !== null) {
+        const key = `project-team:auto-approve:${yield* newId(running.id)}`;
+        yield* threads.sendToThread({
+          projectId: running.projectId,
+          commandId: CommandId.make(key),
+          threadId: running.leadThreadId,
+          messageId: MessageId.make(key),
+          text: autoApprovedPlanText(running),
+          attachments: [],
+          mode: "auto",
+          createdBy: "agent",
+          creationSource: "server",
+        });
+      }
+      return running;
+    });
+
+  /** The project's AFK setting when it is on now, else null. */
+  const activeAfk = (settings: ProjectTeamSettings) =>
+    Effect.map(nowIso, (now) => {
+      const setting = afkSetting(settings);
+      return afkActive(setting, Date.parse(now)) ? (setting ?? null) : null;
+    });
+
+  /**
+   * While the user is AFK, answers what has waited longer than the grace period: plan
+   * approvals ("Approve and start") and decision cards (the recommended option, else the
+   * first, else the AFK free-form reply). Blockers always wait for the user.
+   */
+  const afkSweepProject = (manager: ProjectTeamRepository.ProjectManagerRecord) =>
+    Effect.gen(function* () {
+      if ((yield* activeAfk(manager.settings)) === null) return;
+      const projectId = manager.projectId;
+      const nowMs = isoMillis(yield* nowIso);
+      const due = (at: string) => nowMs - isoMillis(at) >= AFK_GRACE_MS;
+      let changed = false;
+      const waitingPlans = yield* repository.listTasks({
+        projectId,
+        stages: ["awaiting_approval"],
+      });
+      for (const task of waitingPlans) {
+        if (!due(task.stageChangedAt)) continue;
+        yield* autoApprovePlan(task);
+        changed = true;
+      }
+      const open = yield* repository.listOpenAttentionItems({ projectId });
+      // Plan cards were answered with their tasks above; blockers wait for the user.
+      for (const item of open) {
+        if (item.kind !== "decision" || !due(item.createdAt)) continue;
+        const answer = afkPickOption(item.options) ?? AFK_FREE_FORM_ANSWER;
+        yield* router.answer({
+          item,
+          answer,
+          senderThreadId: manager.threadId,
+          answeredBy: "afk",
+        });
+        yield* repository.appendTaskEvent({
+          id: ProjectTaskEventId.make(yield* newId("project-event")),
+          projectId,
+          taskId: item.taskId,
+          kind: "afk_answer",
+          body: afkAnswerEventBody(item.question, answer),
+          actorThreadId: item.askerThreadId,
+          createdAt: yield* nowIso,
+        });
+        changed = true;
+      }
+      if (changed) yield* router.publish(projectId);
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("project team AFK sweep failed", {
+          projectId: manager.projectId,
+          cause,
+        }),
+      ),
+    );
+
+  const afkSweep: ProjectTeamService["Service"]["afkSweep"] = repository.listManagers().pipe(
+    Effect.flatMap((managers) => Effect.forEach(managers, afkSweepProject, { discard: true })),
+    Effect.catchCause((cause) => Effect.logWarning("project team AFK sweep failed", { cause })),
+  );
+
+  /** Tells the live PM and every running lead that AFK changed; their prompts predate it. */
+  const announceAfk = (
+    projectId: ProjectId,
+    managerThreadId: ThreadId,
+    setting: ProjectTeamSettings["afk"],
+    now: string,
+  ) =>
+    Effect.gen(function* () {
+      const text = afkChangedText(setting);
+      const tasks = yield* repository.listTasks({
+        projectId,
+        stages: SitrepScheduler.ACTIVE_TASK_STAGES,
+      });
+      const targets = [
+        managerThreadId,
+        ...tasks.flatMap((task) => (task.leadThreadId === null ? [] : [task.leadThreadId])),
+      ];
+      for (const threadId of targets) {
+        const key = `project-team:afk:${threadId}:${now}`;
+        yield* threads
+          .dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make(key),
+            threadId,
+            messageId: MessageId.make(key),
+            text,
+            attachments: [],
+            dispatchMode: { type: "queue_after_active" },
+            createdBy: "system",
+            creationSource: "server",
+          })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("could not tell a thread that AFK changed", { threadId, cause }),
+            ),
+          );
+      }
     });
 
   const activeTasks = (projectId: ProjectId) =>
@@ -806,12 +1173,20 @@ const make = Effect.gen(function* () {
             task.number,
           );
           const spec = yield* latestSpec(task);
-          // A task parked after its plan was approved resumes straight into the work.
-          const approved = task.planSummary !== null;
+          // A task whose plan was already approved resumes straight into the work.
+          const resume = task.planSummary !== null;
           // A restart must not reuse the first lead's request id, or it gets that lead back.
           const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
           const lead = yield* delegate({
-            task: buildTaskLeadPrompt({ task, key, spec, approved, memory, otherTasks: active }),
+            task: buildTaskLeadPrompt({
+              task,
+              key,
+              spec,
+              resume,
+              memory,
+              otherTasks: active,
+              ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
+            }),
             title: `${key} ${task.title}`,
             role: "implementation",
             isolation: "worktree",
@@ -837,7 +1212,7 @@ const make = Effect.gen(function* () {
           yield* repository.addTaskSession({
             taskId: started.id,
             threadId: lead.childThreadId,
-            role: approved ? "implementer" : "lead",
+            role: resume ? "implementer" : "lead",
             createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
@@ -1085,7 +1460,11 @@ const make = Effect.gen(function* () {
         ...(input.stages === undefined ? {} : { stages: input.stages }),
       });
       const limited = input.limit === undefined ? tasks : tasks.slice(0, input.limit);
-      return { tasks: limited.map(toTaskBrief) };
+      const brief = yield* liveTaskSignals(
+        limited,
+        yield* repository.listOpenAttentionItems({ projectId: role.projectId }),
+      );
+      return { tasks: limited.map(brief) };
     }).pipe(orTeamError("Could not list tasks."));
 
   const readTask: ProjectTeamService["Service"]["readTask"] = (callerThreadId, input) =>
@@ -1127,10 +1506,11 @@ const make = Effect.gen(function* () {
         null;
       const sinceMs = since === null ? Number.NEGATIVE_INFINITY : isoMillis(since);
       const tasks = yield* repository.listTasks({ projectId });
-      const briefs = (stage: ProjectTaskStage) =>
-        tasks.filter((task) => task.stage === stage).map(toTaskBrief);
-      const changedSince = (task: ProjectTask) => isoMillis(task.stageChangedAt) > sinceMs;
       const openAttention = yield* repository.listOpenAttentionItems({ projectId });
+      const brief = yield* liveTaskSignals(tasks, openAttention);
+      const briefs = (stage: ProjectTaskStage) =>
+        tasks.filter((task) => task.stage === stage).map(brief);
+      const changedSince = (task: ProjectTask) => isoMillis(task.stageChangedAt) > sinceMs;
       const newAttention: ReadonlyArray<ProjectAttentionItem> =
         since === null
           ? openAttention
@@ -1159,31 +1539,31 @@ const make = Effect.gen(function* () {
         tasks: {
           inbox: briefs("inbox"),
           planning: briefs("planning"),
+          awaiting_approval: briefs("awaiting_approval"),
           running: briefs("running"),
           in_review: briefs("in_review"),
           done: briefs("done"),
           blocked: briefs("blocked"),
           cancelled: briefs("cancelled"),
         },
+        statusCounts: countTaskStatuses(tasks.map(brief)),
         stalled: tasks
           .filter((task) => task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage))
-          .map(toTaskBrief),
+          .map(brief),
         openAttention,
         settings: manager.settings,
         changes: {
           since,
-          done: tasks
-            .filter((task) => task.stage === "done" && changedSince(task))
-            .map(toTaskBrief),
+          done: tasks.filter((task) => task.stage === "done" && changedSince(task)).map(brief),
           prOpened: tasks
             .filter(
               (task) => task.stage === "in_review" && task.prUrl !== null && changedSince(task),
             )
-            .map(toTaskBrief),
+            .map(brief),
           newAttention,
           blocked: tasks
             .filter((task) => task.stage === "blocked" && changedSince(task))
-            .map(toTaskBrief),
+            .map(brief),
           otherThreads: otherThreads.filter((thread) => isoMillis(thread.lastUpdateAt) > sinceMs),
         },
         otherThreads,
@@ -1202,6 +1582,8 @@ const make = Effect.gen(function* () {
       readonly persona?: PersonaPatch | undefined;
       readonly enabled?: boolean | undefined;
       readonly taskKeyPrefix?: string | undefined;
+      /** User-only; updateSettingsAsManager never passes it. */
+      readonly afk?: { readonly hours: number | null } | null | undefined;
     },
     actorThreadId: ThreadId | null,
   ) =>
@@ -1222,7 +1604,27 @@ const make = Effect.gen(function* () {
           const persona = hasPersonaChange(personaPatch)
             ? mergePersona(previousPersona, personaPatch)
             : previousPersona;
-          const { quietHours: _previousQuietHours, ...current } = manager.settings;
+          // The legacy "Auto-approve plans" key is read as AFK and never written back.
+          const {
+            quietHours: _previousQuietHours,
+            afk: _previousAfk,
+            autoApprovePlans: _legacyAutoApprove,
+            ...current
+          } = manager.settings;
+          const afk =
+            patch.afk === undefined
+              ? afkSetting(manager.settings)
+              : patch.afk === null
+                ? undefined
+                : {
+                    since: now,
+                    until:
+                      patch.afk.hours === null
+                        ? null
+                        : DateTime.formatIso(
+                            DateTime.add(DateTime.makeUnsafe(now), { hours: patch.afk.hours }),
+                          ),
+                  };
           const quietHours =
             patch.quietHours === undefined
               ? manager.settings.quietHours
@@ -1240,6 +1642,7 @@ const make = Effect.gen(function* () {
             persona,
             ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
             ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
+            ...(afk === undefined ? {} : { afk }),
             // Only setting the interval by hand stops it adapting, for good; other fields
             // keep the pin as is.
             ...(patch.sitrepIntervalMinutes === undefined ? {} : { intervalPinnedAt: now }),
@@ -1280,6 +1683,20 @@ const make = Effect.gen(function* () {
           createdAt: now,
         });
       }
+      if (patch.afk !== undefined) {
+        yield* repository.appendTaskEvent({
+          id: ProjectTaskEventId.make(yield* newId("project-event")),
+          projectId,
+          taskId: null,
+          kind: "preference_changed",
+          body: afkEventBody(settings.afk),
+          actorThreadId,
+          createdAt: now,
+        });
+        yield* announceAfk(projectId, manager.threadId, settings.afk, now);
+        // Questions that already waited past the grace period are answered now.
+        if (settings.afk !== undefined) yield* afkSweepProject({ ...manager, settings });
+      }
       yield* router.publish(projectId);
       return { projectId, settings };
     }).pipe(orTeamError("Could not update the team settings.", projectId));
@@ -1318,20 +1735,102 @@ const make = Effect.gen(function* () {
     ...patch
   }) => applySettings(projectId, patch, null);
 
+  /**
+   * A plan approval reviews the latest spec version. It replaces the task's older open
+   * approval card and shows the task as Waiting for approval until the user answers.
+   */
+  const askPlanApproval = (
+    callerThreadId: ThreadId,
+    task: ProjectTask,
+    input: ProjectTeamAskUserInput,
+  ) =>
+    Effect.gen(function* () {
+      if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
+        return yield* teamError(`#${task.number} is finished; it needs no plan approval.`);
+      }
+      if (input.goal === undefined || input.verification === undefined) {
+        return yield* teamError(
+          "ask_user(kind: approval) needs goal and verification: 2-4 short markdown bullets each, shown on the card so the user can approve without opening the plan. goal: what changes and the end result (note risky steps or scope cuts). verification: how we'll know it's done (tests, checks, screenshots).",
+        );
+      }
+      const spec = yield* latestSpec(task);
+      const now = yield* nowIso;
+      yield* repository.supersedeOpenAttentionItems({
+        taskId: task.id,
+        kind: "approval",
+        supersededAt: now,
+      });
+      const item = yield* router.ask({
+        task,
+        kind: "approval",
+        question: input.question,
+        // One way to approve: approving always starts the work.
+        options: [PLAN_APPROVAL_START],
+        askerThreadId: callerThreadId,
+        specVersion: spec.version,
+        summary: input.goal,
+        verification: input.verification,
+      });
+      yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
+      yield* appendEvent(
+        task,
+        "note",
+        `Asked the user to approve the plan (spec v${spec.version}).`,
+        callerThreadId,
+      );
+      // While the user is AFK, the AFK sweep approves it after the grace period.
+      return { item };
+    });
+
+  /** Moves a task to a new stage and logs it; no-op when it is already there. */
+  const moveTaskStage = (
+    task: ProjectTask,
+    stage: ProjectTaskStage,
+    actorThreadId: ThreadId | null,
+  ) =>
+    Effect.gen(function* () {
+      if (task.stage === stage) return task;
+      const updated = yield* setTask({ id: task.id, stage });
+      yield* appendEvent(
+        updated,
+        "stage_changed",
+        `${task.stage} → ${updated.stage}`,
+        actorThreadId,
+      );
+      yield* router.publish(task.projectId);
+      return updated;
+    });
+
+  /**
+   * After the user answers a plan approval, the task leaves Waiting for approval:
+   * start → running, approve only → inbox, feedback → planning.
+   */
+  const afterPlanApprovalAnswer = (item: ProjectAttentionItem, actorThreadId: ThreadId | null) =>
+    Effect.gen(function* () {
+      if (item.kind !== "approval" || item.answer === null) return;
+      const task = yield* requireTask(item.taskId, item.projectId);
+      if (task.stage !== "awaiting_approval") return;
+      const outcome = planApprovalOutcome(item.answer);
+      yield* moveTaskStage(
+        task,
+        outcome === "start" ? "running" : outcome === "approve_only" ? "inbox" : "planning",
+        actorThreadId,
+      );
+    });
+
   const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["lead"], "ask_user");
       const task = yield* requireTask(role.taskId, role.projectId);
+      if (input.kind === "approval") return yield* askPlanApproval(callerThreadId, task, input);
       const item = yield* router.ask({
         task,
         kind: input.kind,
         question: input.question,
-        options:
-          input.options ??
-          (input.kind === "approval" ? [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY] : []),
+        options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
-      // The question shows on the task's page and in "Waiting on you"; the PM is not woken.
+      // The question shows on the task's page and above the PM composer; the PM is not woken.
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
       return { item };
     }).pipe(orTeamError("Could not ask the user."));
@@ -1349,13 +1848,61 @@ const make = Effect.gen(function* () {
           role.projectId,
         );
       }
+      // Decisions are the user's call: the PM may only relay words the user
+      // typed in its chat after the card appeared. Blockers carry facts and need no check.
+      // A closed card skips the check so the router reports why it cannot be answered.
+      const open = item.value.answeredAt === null && item.value.supersededAt === null;
+      if (open && item.value.kind !== "blocker") {
+        const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
+          messageRoles: ["user"],
+        });
+        if (!isUserChatAnswer(input.answer, messages, isoMillis(item.value.createdAt))) {
+          return yield* teamError(PM_RELAY_NOT_USER_WORDS, role.projectId);
+        }
+      }
       const answered = yield* router.answer({
         item: item.value,
         answer: input.answer,
         senderThreadId: callerThreadId,
+        answeredBy: "pm",
       });
+      yield* afterPlanApprovalAnswer(answered, callerThreadId);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question."));
+
+  const dismissAttention: ProjectTeamService["Service"]["dismissAttention"] = (
+    callerThreadId,
+    input,
+  ) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "attention_dismiss");
+      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      if (Option.isNone(item) || item.value.projectId !== role.projectId) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} was not found in this project.`,
+          role.projectId,
+        );
+      }
+      if (role.type === "lead" && item.value.askerThreadId !== callerThreadId) {
+        return yield* teamError(
+          "A task lead can only close its own questions. Ask the PM if another question is moot.",
+          role.projectId,
+        );
+      }
+      const dismissed = yield* router.dismiss({
+        item: item.value,
+        reason: input.reason,
+        senderThreadId: callerThreadId,
+        notifyAsker: role.type === "pm",
+      });
+      yield* appendEvent(
+        { id: dismissed.taskId, projectId: dismissed.projectId },
+        "note",
+        `Question closed: ${input.reason}`,
+        callerThreadId,
+      );
+      return { item: dismissed };
+    }).pipe(orTeamError("Could not close the question."));
 
   const taskKeyPrefixFor = (projectId: ProjectId, settings: ProjectTeamSettings) =>
     Effect.gen(function* () {
@@ -1373,7 +1920,7 @@ const make = Effect.gen(function* () {
         key: formatTaskKey(prefix, task.number),
         versions: yield* repository.listSpecVersions(task.id),
         sessions: yield* repository.listTaskSessions(task.id),
-        children: (yield* repository.listChildTasks(task.id)).map(toTaskBrief),
+        children: (yield* repository.listChildTasks(task.id)).map((child) => toTaskBrief(child)),
         openAttention: yield* repository.listOpenAttentionItems({
           projectId: task.projectId,
           taskId: task.id,
@@ -1413,14 +1960,25 @@ const make = Effect.gen(function* () {
         yield* requireTask(input.parentTaskId, input.projectId);
       }
       const context = input.context.trim();
+      const taskId = ProjectTaskId.make(yield* newId("task"));
+      const attachments =
+        input.attachments === undefined || input.attachments.length === 0
+          ? []
+          : yield* claimTaskAttachments(taskId, input.projectId, input.attachments);
       const task = yield* repository.createTask({
-        id: ProjectTaskId.make(yield* newId("task")),
+        id: taskId,
         projectId: input.projectId,
         title: input.title,
         request: context.length > 0 ? context : input.title,
         waitsOn: [],
         parentTaskId: input.parentTaskId,
-        spec: { background: context, goal: "", nonGoals: "", todos: [] },
+        spec: {
+          background: userTaskBackground(context, attachments),
+          goal: "",
+          successCriteria: "",
+          nonGoals: "",
+          todos: [],
+        },
         now: yield* nowIso,
         author: "user",
         authorThreadId: null,
@@ -1503,7 +2061,7 @@ const make = Effect.gen(function* () {
             request: todo.text,
             waitsOn: [],
             parentTaskId: parent.id,
-            spec: { background: todo.text, goal: "", nonGoals: "", todos: [] },
+            spec: { background: todo.text, goal: "", successCriteria: "", nonGoals: "", todos: [] },
             now: yield* nowIso,
             author: "user",
             authorThreadId: null,
@@ -1540,9 +2098,11 @@ const make = Effect.gen(function* () {
         item: item.value,
         answer: input.answer,
         senderThreadId: manager.threadId,
+        answeredBy: "user",
       });
       const task = yield* requireTask(answered.taskId, answered.projectId);
       yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
+      yield* afterPlanApprovalAnswer(answered, null);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
 
@@ -1680,6 +2240,40 @@ const make = Effect.gen(function* () {
         });
     });
 
+  // Reading the PM transcript on every snapshot would be wasteful; the preview only
+  // changes when a run settles or the user writes, which moves these shell fields.
+  const lastMessageCache = new Map<
+    ThreadId,
+    { key: string; value: ProjectTeamAttentionSummary["lastMessage"] }
+  >();
+  const readManagerLastMessage = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const shell = yield* threads.getThreadShell(threadId);
+      if (shell === null) return null;
+      const key = [
+        shell.latestRunId,
+        shell.latestRunCompletedAt === undefined || shell.latestRunCompletedAt === null
+          ? ""
+          : DateTime.toEpochMillis(shell.latestRunCompletedAt),
+        shell.latestUserMessageAt === null ? "" : DateTime.toEpochMillis(shell.latestUserMessageAt),
+        shell.itemCount,
+      ].join("|");
+      const cached = lastMessageCache.get(threadId);
+      if (cached !== undefined && cached.key === key) return cached.value;
+      const { messages } = yield* threads.getThreadRecords(threadId, ["messages"], {
+        messageRoles: ["assistant", "user"],
+      });
+      const value = managerLastMessage(messages);
+      lastMessageCache.set(threadId, { key, value });
+      return value;
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("could not read the PM chat's last message", { threadId, cause }).pipe(
+          Effect.as(null),
+        ),
+      ),
+    );
+
   const attentionSnapshot: ProjectTeamService["Service"]["attentionSnapshot"] = Effect.gen(
     function* () {
       const managers = yield* repository.listManagers();
@@ -1708,6 +2302,20 @@ const make = Effect.gen(function* () {
           const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
           const decisionCards = yield* listDecisionCards(projectId, open);
           const tasks = yield* repository.listTasks({ projectId });
+          const afk = yield* activeAfk(manager.settings);
+          const afkAnswers =
+            afk === null
+              ? []
+              : (yield* repository.listProjectEventsSince({ projectId, since: afk.since }))
+                  .filter((event) => event.kind === "afk_answer")
+                  .slice(-MAX_AFK_ANSWERS_IN_SUMMARY)
+                  .map((event) => ({
+                    id: event.id,
+                    at: event.createdAt,
+                    threadId: event.actorThreadId,
+                    taskId: event.taskId,
+                    text: event.body,
+                  }));
           return {
             projectId,
             pmThreadId: manager.threadId,
@@ -1722,6 +2330,8 @@ const make = Effect.gen(function* () {
             presence,
             decisionCards,
             taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
+            lastMessage: yield* readManagerLastMessage(manager.threadId),
+            afkAnswers,
             tasks: tasks.map((task) => ({
               id: task.id,
               number: task.number,
@@ -1731,6 +2341,9 @@ const make = Effect.gen(function* () {
               leadThreadId: task.leadThreadId,
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
+              openQuestion: open.some((item) => item.taskId === task.id),
+              openBlocker: open.some((item) => item.taskId === task.id && item.kind === "blocker"),
+              updatedAt: task.updatedAt,
             })),
           } satisfies ProjectTeamAttentionSummary;
         }),
@@ -1806,11 +2419,13 @@ const make = Effect.gen(function* () {
     splitTaskTodo,
     answerDecision,
     answerAttention,
+    dismissAttention,
     listMemory,
     writeMemory,
     deleteMemory,
     requestSitrep,
     attentionSnapshot,
+    afkSweep,
     streamAttention,
     recordOutcome,
   } satisfies ProjectTeamService["Service"];
@@ -1823,4 +2438,14 @@ export const layerWithDependencies = layer.pipe(
   Layer.provideMerge(FinishedTaskCleanup.layer),
   Layer.provideMerge(SitrepScheduler.layer),
   Layer.provideMerge(AttentionRouter.layer),
+);
+
+/** Answers questions for an AFK user a little after their grace period ends. */
+export const layerAfkWorker = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService;
+    const scheduler = yield* Scheduler.Scheduler;
+    const every10Seconds = yield* makePeriodicGate(10_000);
+    yield* scheduler.register("project-team-afk-sweep", every10Seconds(team.afkSweep));
+  }),
 );

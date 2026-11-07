@@ -70,6 +70,10 @@ describe("orchestrator MCP tool guidance", () => {
     assert.isAtLeast(schema.properties?.schedule?.anyOf?.length ?? 0, 2);
     assert.include(ScheduleTaskTool.description ?? "", "STRUCTURED OBJECT");
     assert.include(ScheduleTaskTool.description ?? "", "nextRunAt");
+    // Signing secrets arrive only as a request_secret reference.
+    const published = JSON.stringify(schema);
+    assert.include(published, '"secretRef"');
+    assert.notInclude(published, '"secret"');
   });
 
   it("publishes thread metadata actions from an object-root schema", () => {

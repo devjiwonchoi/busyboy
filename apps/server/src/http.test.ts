@@ -137,6 +137,44 @@ describe("untraced requests", () => {
       ),
     );
   });
+
+  it.effect("redacts the WebSocket ticket from the HTTP server span URL", () => {
+    const spans: Array<Tracer.NativeSpan> = [];
+    return Effect.gen(function* () {
+      const layerRoutes = Layer.effectDiscard(
+        Effect.gen(function* () {
+          const router = yield* HttpRouter.HttpRouter;
+          yield* router.add("GET", "/ws", HttpServerResponse.empty());
+        }),
+      );
+      const services = yield* Layer.build(
+        withUntracedRequests(HttpRouter.serve(layerRoutes, { disableListenLog: true })).pipe(
+          Layer.provideMerge(NodeHttpServer.layerTest),
+        ),
+      );
+      const client = Context.get(services, HttpClient.HttpClient);
+
+      yield* client.get("/ws?wsTicket=secret-ticket-value&clientSurface=web");
+      const [span] = spans;
+      const full = String(span?.attributes.get("url.full"));
+      const query = String(span?.attributes.get("url.query"));
+      expect(full).not.toContain("secret-ticket-value");
+      expect(query).not.toContain("secret-ticket-value");
+      expect(query).toBe("wsTicket=REDACTED&clientSurface=web");
+    }).pipe(
+      Effect.scoped,
+      Effect.provideService(
+        Tracer.Tracer,
+        Tracer.make({
+          span: (options) => {
+            const span = new Tracer.NativeSpan(options);
+            if (options.kind === "server") spans.push(span);
+            return span;
+          },
+        }),
+      ),
+    );
+  });
 });
 
 describe("browser API CORS", () => {

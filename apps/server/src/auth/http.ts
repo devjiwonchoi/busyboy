@@ -24,6 +24,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Cookies from "effect/http/Cookies";
 import * as HttpEffect from "effect/http/HttpEffect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -241,12 +242,18 @@ export const layer = HttpApiBuilder.group(
                 : undefined,
             );
             const cookieName = result.cookieName ?? sessions.cookieName;
+            // HTTPS directly or through a TLS proxy such as Tailscale serve.
+            const secure = Option.exists(
+              HttpServerRequest.toURL(request),
+              (url) => url.protocol === "https:",
+            );
             const selectedCookie = yield* Effect.fromResult(
               Cookies.set(Cookies.empty, cookieName, result.sessionToken, {
                 expires: DateTime.toDate(result.response.expiresAt),
                 httpOnly: true,
                 path: "/",
                 sameSite: "lax",
+                secure,
               }),
             ).pipe(Effect.catch(() => failEnvironmentInternal("browser_session_cookie_failed")));
             const sessionCookies = result.expireNormalCookie
@@ -255,6 +262,7 @@ export const layer = HttpApiBuilder.group(
                     httpOnly: true,
                     path: "/",
                     sameSite: "lax",
+                    secure,
                   }),
                 ).pipe(Effect.catch(() => failEnvironmentInternal("browser_session_cookie_failed")))
               : selectedCookie;

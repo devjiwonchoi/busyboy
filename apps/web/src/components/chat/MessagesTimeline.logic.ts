@@ -8,6 +8,7 @@ import {
   collectAssistantCitations,
 } from "@t3tools/shared/assistantCitations";
 import { shallow } from "zustand/vanilla/shallow";
+import { isBackgroundCompactionMessageId } from "@t3tools/shared/claudeCompaction";
 import { renderCodexDirectivesForCopy } from "@t3tools/shared/codexMarkdownDirectives";
 import {
   commandDisplayText,
@@ -1380,6 +1381,11 @@ export function deriveMessagesTimelineRows(input: {
   supportsConversationRollback: boolean;
   liveAgentTaskIds?: ReadonlySet<string> | undefined;
   worktreeSetup?: WorktreeSetupSnapshot | null;
+  /**
+   * One uninterrupted conversation (the PM chat): no "cut off by a steer" folds and no
+   * context compaction markers.
+   */
+  seamless?: boolean;
 }): MessagesTimelineRow[] {
   const timelineEntries = timelineRowEntries(input.timelineEntries);
   const turnDiffSummaryByAssistantMessageId = new Map<MessageId, TurnDiffSummary>();
@@ -1403,12 +1409,14 @@ export function deriveMessagesTimelineRows(input: {
   const failedRunIds = failedTimelineRunIds(timelineEntries, input.latestRun ?? null);
   const liveSubagentEntryIds = liveSubagentCardEntryIds(timelineEntries);
   const completeSupersededReplyIds = completeSupersededReplyEntryIds(timelineEntries);
-  const supersededFoldsByAnchorEntryId = deriveSupersededAttemptFolds(
-    timelineEntries,
-    failedRunIds,
-    liveSubagentEntryIds,
-    completeSupersededReplyIds,
-  );
+  const supersededFoldsByAnchorEntryId = input.seamless
+    ? new Map<string, SupersededAttemptFold>()
+    : deriveSupersededAttemptFolds(
+        timelineEntries,
+        failedRunIds,
+        liveSubagentEntryIds,
+        completeSupersededReplyIds,
+      );
   const activeVisualResponseRunIds = deriveActiveVisualResponseRunIds({
     timelineEntries: timelineEntries,
     unsettledRunId,
@@ -1612,6 +1620,7 @@ export function deriveMessagesTimelineRows(input: {
     ) {
       const active = workEntryIsInActiveRun(timelineEntry.entry);
       hasActiveCompaction ||= active;
+      if (input.seamless) continue;
       nextRows.push({
         kind: "context-compaction",
         id: timelineEntry.id,
@@ -1829,6 +1838,14 @@ export function deriveMessagesTimelineRows(input: {
         createdAt: timelineEntry.createdAt,
         projectedItem: timelineEntry.projectedItem,
       });
+      continue;
+    }
+
+    // The server's own idle "/compact" shows only as the compaction marker.
+    if (
+      timelineEntry.message.role === "user" &&
+      isBackgroundCompactionMessageId(timelineEntry.message.id)
+    ) {
       continue;
     }
 
@@ -2326,7 +2343,6 @@ export function shouldCollapseUserMessage(text: string): boolean {
 // ── Project manager threads ─────────────────────────────────────────
 
 const PM_SITREP_MESSAGE_PREFIX = "project-team:sitrep:";
-const PM_COMPACT_MESSAGE_PREFIX = "project-team:compact:";
 const PM_EVENT_LINE_MAX_LENGTH = 120;
 const SITREP_DUE_SINCE = /^\[Sitrep due\] since (\S+?)\.?(?:\s|$)/;
 const TRAILING_TEAM_STATUS_HINT = /\.?\s*Check team_status\.?$/;
@@ -2346,9 +2362,6 @@ export function pmSitrepSince(text: string): string | null {
 export function pmEventLineText(message: Pick<ChatMessage, "id" | "text">): string {
   if (isPmSitrepRequestMessage(message)) {
     return message.text.includes("The user asked for this sitrep") ? "Sitrep requested" : "Sitrep";
-  }
-  if (message.id.startsWith(PM_COMPACT_MESSAGE_PREFIX) && message.text.trim() === "/compact") {
-    return "Tidying up context · notes kept";
   }
   if (/^Delegated tasks? .* reached (?:a )?terminal states?\./.test(message.text)) {
     const taskNumber = TASK_NUMBER.exec(message.text)?.[0];

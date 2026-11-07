@@ -35,6 +35,7 @@ import {
   type CodexFeedbackSubmission,
 } from "@t3tools/client-runtime/state/threads";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
+import { isBackgroundCompactionMessageId } from "@t3tools/shared/claudeCompaction";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
 import { composerContextSendBlockReason, reidentifyComposerContext } from "../lib/composerContext";
 import { uuidv4 } from "../lib/uuid";
@@ -377,6 +378,8 @@ export function useThreadComposerState() {
       ({ item }) =>
         item.runId === activeRunId &&
         item.type === "user_message" &&
+        // A compaction the server started on its own does not block the composer.
+        !isBackgroundCompactionMessageId(item.messageId) &&
         item.text.trim().toLowerCase() === "/compact" &&
         item.attachments.length === 0,
     );

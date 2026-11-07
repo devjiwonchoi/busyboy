@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
@@ -14,6 +15,7 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
+import * as DesktopSecretStoreKey from "./DesktopSecretStoreKey.ts";
 import * as DesktopServerExposure from "./DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 
@@ -33,13 +35,21 @@ const isDesktopBackendObservabilitySettingsReadError = Schema.is(
   DesktopBackendConfiguration.DesktopBackendObservabilitySettingsReadError,
 );
 
+const TEST_SECRET_STORE_KEY = Buffer.alloc(32, 7).toString("base64");
+
 const layerShellEnvironment = (prepared = true) =>
   Layer.succeed(DesktopShellEnvironment.DesktopShellEnvironment, {
     installIntoProcess: Effect.succeed(prepared),
   });
 
-const layerBackendConfiguration = (prepared = true) =>
-  DesktopBackendConfiguration.layer.pipe(Layer.provide(layerShellEnvironment(prepared)));
+const layerBackendConfiguration = (
+  prepared = true,
+  secretStoreKey: Option.Option<string> = Option.none(),
+) =>
+  DesktopBackendConfiguration.layer.pipe(
+    Layer.provide(layerShellEnvironment(prepared)),
+    Layer.provide(DesktopSecretStoreKey.layerTest(secretStoreKey)),
+  );
 
 const layerServerExposure = Layer.succeed(DesktopServerExposure.DesktopServerExposure, {
   getState: Effect.die("unexpected getState"),
@@ -111,6 +121,7 @@ const withHarness = <A, E, R>(
     | DesktopBackendConfiguration.DesktopBackendConfiguration
   >,
   prepared = true,
+  secretStoreKey: Option.Option<string> = Option.none(),
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -120,7 +131,7 @@ const withHarness = <A, E, R>(
 
     return yield* effect.pipe(
       Effect.provide(
-        layerBackendConfiguration(prepared).pipe(
+        layerBackendConfiguration(prepared, secretStoreKey).pipe(
           Layer.provideMerge(layerServerExposure),
           Layer.provideMerge(DesktopAppSettings.layerTest()),
           Layer.provideMerge(layerEnvironment(baseDir)),
@@ -190,6 +201,30 @@ describe("DesktopBackendConfiguration", () => {
         assert.equal(primary.bootstrap.shellEnvironmentPrepared, false);
       }),
       false,
+    ),
+  );
+
+  it.effect("passes the secret store key only through the bootstrap payload", () =>
+    withHarness(
+      Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const primary = yield* configuration.resolvePrimary;
+        assert.equal(primary.bootstrap.secretStoreKey, TEST_SECRET_STORE_KEY);
+        assert.notInclude(primary.args.join(" "), TEST_SECRET_STORE_KEY);
+        assert.notInclude(Object.values(primary.env).join(" "), TEST_SECRET_STORE_KEY);
+      }),
+      true,
+      Option.some(TEST_SECRET_STORE_KEY),
+    ),
+  );
+
+  it.effect("omits the secret store key when none is available", () =>
+    withHarness(
+      Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const primary = yield* configuration.resolvePrimary;
+        assert.isFalse("secretStoreKey" in primary.bootstrap);
+      }),
     ),
   );
 

@@ -863,6 +863,108 @@ it.effect("memory shell snapshots scope to one project", () =>
   ),
 );
 
+// Seeds a thread for shell tests; each added run carries its own user message.
+const backgroundCompactionShellThread = Effect.fn("backgroundCompactionShellThread")(function* (
+  suffix: string,
+) {
+  const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+  const now = yield* DateTime.now;
+  const threadId = ThreadId.make(`thread:background-compaction:${suffix}`);
+  yield* projectionStore.apply({
+    id: EventId.make(`event:background-compaction:${suffix}:thread`),
+    type: "thread.created",
+    threadId,
+    occurredAt: now,
+    payload: {
+      createdBy: "user",
+      creationSource: "web",
+      id: threadId,
+      projectId: ProjectId.make("project:background-compaction"),
+      title: "Background compaction shell",
+      providerInstanceId,
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      activeProviderThreadId: null,
+      lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+      forkedFrom: null,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+      lastVisitedAt: null,
+      deletedAt: null,
+    },
+  });
+  const addRun = Effect.fn("addRun")(function* (input: {
+    readonly ordinal: number;
+    readonly messageId: string;
+    readonly status: "running" | "completed" | "failed";
+    readonly at: DateTime.Utc;
+  }) {
+    const runId = RunId.make(`run:background-compaction:${suffix}:${input.ordinal}`);
+    const userMessageId = MessageId.make(input.messageId);
+    yield* projectionStore.apply({
+      id: EventId.make(`event:background-compaction:${suffix}:message:${input.ordinal}`),
+      type: "message.updated",
+      threadId,
+      runId,
+      driver,
+      occurredAt: input.at,
+      payload: {
+        createdBy: "user",
+        creationSource: "web",
+        id: userMessageId,
+        threadId,
+        runId,
+        nodeId: null,
+        role: "user",
+        text: "/compact",
+        attachments: [],
+        streaming: false,
+        createdAt: input.at,
+        updatedAt: input.at,
+      },
+    });
+    yield* projectionStore.apply({
+      id: EventId.make(`event:background-compaction:${suffix}:run:${input.ordinal}`),
+      type: "run.created",
+      threadId,
+      runId,
+      driver,
+      occurredAt: input.at,
+      payload: {
+        id: runId,
+        threadId,
+        ordinal: input.ordinal,
+        providerInstanceId,
+        modelSelection,
+        providerThreadId: null,
+        userMessageId,
+        rootNodeId: null,
+        activeAttemptId: null,
+        status: input.status,
+        requestedAt: input.at,
+        startedAt: input.at,
+        completedAt: input.status === "running" ? null : input.at,
+        checkpointId: null,
+        contextHandoffId: null,
+      },
+    });
+    return runId;
+  });
+  // The SQL snapshot and the in-memory projection must agree.
+  const shells = Effect.gen(function* () {
+    const sqlShell = (yield* projectionStore.getShellSnapshot()).threads.find(
+      (thread) => thread.id === threadId,
+    )!;
+    const projection = yield* projectionStore.getThreadProjection(threadId);
+    return [sqlShell, ProjectionStore.threadShellFromProjection(projection)] as const;
+  });
+  return { now, addRun, shells };
+});
+
 it.layer(layerTest)("ProjectionStoreV2", (it) => {
   it.effect(
     "SQL recovery selects unfinished runless native subagents",
@@ -2887,6 +2989,84 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
       const projection = yield* projectionStore.getThreadProjection(threadId);
       assert.deepEqual(projection.runs[0]?.delegatedCompletion, run.delegatedCompletion);
       assert.deepEqual(projection.subagents[0]?.completionDelivery, task.completionDelivery);
+    }),
+  );
+
+  it.effect("keeps a finished background compaction out of the shell's latest run", () =>
+    Effect.gen(function* () {
+      const { now, addRun, shells } = yield* backgroundCompactionShellThread("finished");
+      const later = DateTime.add(now, { minutes: 5 });
+      const normalRunId = yield* addRun({
+        ordinal: 1,
+        messageId: "message:background-compaction:finished:user",
+        status: "completed",
+        at: now,
+      });
+      for (const status of ["completed", "failed"] as const) {
+        yield* addRun({
+          ordinal: 2,
+          messageId: "context-care:compact:finished",
+          status,
+          at: later,
+        });
+        for (const shell of yield* shells) {
+          assert.equal(shell.latestRunId, normalRunId);
+          assert.equal(shell.status, "completed");
+          assert.equal(
+            DateTime.toEpochMillis(shell.latestRunCompletedAt!),
+            DateTime.toEpochMillis(now),
+          );
+          assert.equal(
+            DateTime.toEpochMillis(shell.latestUserMessageAt!),
+            DateTime.toEpochMillis(now),
+          );
+          assert.isNull(shell.activeRunId);
+          assert.isNull(shell.activityRunStatus);
+        }
+      }
+    }),
+  );
+
+  it.effect("does not show a running background compaction as thread work", () =>
+    Effect.gen(function* () {
+      const { now, addRun, shells } = yield* backgroundCompactionShellThread("running");
+      const compactionRunId = yield* addRun({
+        ordinal: 1,
+        messageId: "project-team:compact:running",
+        status: "running",
+        at: now,
+      });
+      for (const shell of yield* shells) {
+        assert.isNull(shell.latestRunId);
+        assert.equal(shell.status, "idle");
+        assert.isNull(shell.activityRunStatus);
+        assert.isNull(shell.activityRunStartedAt);
+        assert.isNull(shell.latestUserMessageAt);
+        // Server-side idleness and queueing still see the compaction.
+        assert.equal(shell.activeRunId, compactionRunId);
+      }
+    }),
+  );
+
+  it.effect("presents a user-typed /compact like any other run", () =>
+    Effect.gen(function* () {
+      const { now, addRun, shells } = yield* backgroundCompactionShellThread("typed");
+      const runId = yield* addRun({
+        ordinal: 1,
+        messageId: "message:background-compaction:typed:compact",
+        status: "running",
+        at: now,
+      });
+      for (const shell of yield* shells) {
+        assert.equal(shell.latestRunId, runId);
+        assert.equal(shell.status, "running");
+        assert.equal(shell.activityRunStatus, "running");
+        assert.equal(shell.activeRunId, runId);
+        assert.equal(
+          DateTime.toEpochMillis(shell.latestUserMessageAt!),
+          DateTime.toEpochMillis(now),
+        );
+      }
     }),
   );
 

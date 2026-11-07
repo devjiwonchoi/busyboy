@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const AT = "2026-11-06T09:00:00.000Z";
@@ -101,12 +101,6 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
   };
 });
 
-vi.mock(import("../ChatView"), () => ({
-  default: ((props: { threadId: string }) => (
-    <div data-testid="chat-stub">chat {props.threadId}</div>
-  )) as never,
-}));
-
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
   Link: (({
@@ -124,7 +118,7 @@ vi.mock(import("@tanstack/react-router"), async (original) => ({
   )) as never,
 }));
 
-import { TaskPage } from "./TaskPage";
+import { TaskPlan } from "./TaskPlan";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -160,7 +154,13 @@ beforeEach(() => {
       {
         taskId: "task-7",
         version: 1,
-        spec: { background: "The list jumps.", goal: "", nonGoals: "", todos: [] },
+        spec: {
+          background: "The list jumps.",
+          goal: "",
+          successCriteria: "",
+          nonGoals: "",
+          todos: [],
+        },
         author: "user",
         authorThreadId: null,
         note: "Created",
@@ -172,6 +172,7 @@ beforeEach(() => {
         spec: {
           background: "The list jumps.",
           goal: "Keep the scroll position.",
+          successCriteria: "",
           nonGoals: "",
           todos: [todo("t1", "Add a journey test"), todo("t2", "Keep scrollTop")],
         },
@@ -199,7 +200,7 @@ function render() {
   return act(async () =>
     root.render(
       <div style={{ display: "flex", height: 800, width: 1200 }}>
-        <TaskPage
+        <TaskPlan
           environmentId={"env-1" as never}
           projectId={"project-1" as never}
           taskId={"task-7" as never}
@@ -214,15 +215,70 @@ const button = (name: string) =>
     (element) => element.textContent?.trim() === name,
   )!;
 
-describe("TaskPage", () => {
+const header = () => container.querySelector<HTMLElement>('[data-testid="task-status"]')!;
+
+describe("TaskPlan status", () => {
+  it("shows the task's status, and Ask question once the task waits on the user", async () => {
+    await render();
+    expect(header().dataset.status).toBe("planning");
+    expect(header().textContent).toBe("Planning");
+
+    state.detail = {
+      ...state.detail,
+      openAttention: [
+        {
+          id: "attention-1",
+          projectId: "project-1",
+          taskId: "task-7",
+          kind: "decision",
+          question: "Which list library?",
+          options: ["Keep ours", "Switch"],
+          answer: null,
+          answeredAt: null,
+          askerThreadId: "lead-1",
+          batchId: "batch-1",
+          createdAt: AT,
+          supersededAt: null,
+          answeredBy: null,
+        },
+      ] as never,
+    };
+    await act(async () => publish());
+    await vi.waitFor(() => expect(header().textContent).toBe("Ask question"));
+  });
+
+  it("shows a PR task as Ready while its lead is idle", async () => {
+    state.detail = {
+      ...state.detail,
+      task: {
+        ...state.detail.task,
+        stage: "in_review",
+        prUrl: "https://github.com/acme/busyboy/pull/81",
+      },
+    };
+    await render();
+    expect(header().textContent).toBe("Ready · PR #81");
+    const link = [...container.querySelectorAll("a")].find((a) => a.textContent === "Pull request");
+    expect(link?.getAttribute("href")).toBe("https://github.com/acme/busyboy/pull/81");
+  });
+
+  it("shows a finished task as Done and archived, at phone width too", async () => {
+    await page.viewport(390, 844);
+    state.detail = { ...state.detail, task: { ...state.detail.task, stage: "cancelled" } };
+    await render();
+    expect(header().textContent).toBe("Done · cancelled");
+    expect(header().getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(container.textContent).toContain("Archived.");
+  });
+});
+
+describe("TaskPlan", () => {
   it("shapes a task's spec, browses versions, restores one and splits a todo", async () => {
     await render();
-    const page = container.querySelector('[data-testid="task-page"]')!;
+    const page = container.querySelector('[data-testid="task-plan"]')!;
     expect(page.textContent).toContain("BB-7");
     expect(page.textContent).toContain("Fix drag scroll");
     expect(page.textContent).toContain("Keep the scroll position.");
-    // The planner's session is open on the right.
-    expect(container.querySelector('[data-testid="chat-stub"]')?.textContent).toBe("chat lead-1");
     // v2 added the goal and the todos, so they are marked as changed.
     expect(container.querySelectorAll("[data-changed]").length).toBe(3);
 
@@ -244,14 +300,19 @@ describe("TaskPage", () => {
       "Run lint",
     ]);
 
-    // Edit the goal.
+    // Edit the end result and success criteria.
     await userEvent.click(button("Edit"));
-    const goal = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Goal"]')!;
+    const goal = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="End result"]')!;
     await userEvent.clear(goal);
     await userEvent.type(goal, "Dragging never jumps.");
+    await userEvent.type(
+      container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Success criteria"]')!,
+      "No jump.",
+    );
     await userEvent.click(button("Save"));
     await vi.waitFor(() => expect(state.updates).toHaveLength(3));
     expect(state.updates[2]?.spec.goal).toBe("Dragging never jumps.");
+    expect(state.updates[2]?.spec.successCriteria).toBe("No jump.");
     expect(state.updates[2]?.note).toBe("Edited by the user");
     await vi.waitFor(() => expect(page.textContent).toContain("Dragging never jumps."));
 
@@ -274,7 +335,6 @@ describe("TaskPage", () => {
     expect(state.detail.versions.at(-1)?.note).toBe("Restored v1");
 
     // Back to a version with todos via History, restore it, then split a todo.
-    await userEvent.click(button("History"));
     expect(container.querySelector('[aria-label="Spec history"]')?.textContent).toContain(
       "Restored v1",
     );

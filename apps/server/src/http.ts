@@ -24,6 +24,7 @@ import {
   HttpServerResponse,
   HttpServerRequest,
   HttpServerRespondable,
+  UrlParams,
 } from "effect/http";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { OtlpTracer, OtlpSerialization } from "effect/observability";
@@ -395,7 +396,22 @@ const layerUntracedRequests = Layer.succeed(HttpMiddleware.TracerDisabledWhen)((
   return UNTRACED_REQUEST_PATHS.has(path) || path.startsWith(`${WEBHOOK_ROUTE_PREFIX}/`);
 });
 
-export const withUntracedRequests = Layer.provide(layerUntracedRequests);
+// Query parameters that carry credentials. The HTTP server span records the
+// request URL, so these values are replaced with REDACTED there.
+const REDACTED_QUERY_PARAMS: ReadonlyArray<string> = [
+  EnvironmentAuth.WEBSOCKET_TICKET_QUERY_PARAM,
+  "token",
+  "access_token",
+];
+
+const layerRedactedQueryParams = Layer.succeed(UrlParams.CurrentRedactedNames)([
+  ...UrlParams.CurrentRedactedNames.defaultValue(),
+  ...REDACTED_QUERY_PARAMS,
+]);
+
+export const withUntracedRequests = Layer.provide(
+  Layer.merge(layerUntracedRequests, layerRedactedQueryParams),
+);
 
 export const layerAssetRoute = HttpRouter.add(
   "GET",

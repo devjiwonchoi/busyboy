@@ -1,4 +1,4 @@
-import { assert, it } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import {
   CommandId,
   MessageId,
@@ -174,6 +174,132 @@ it.each(["/compact", " /LOGOUT "])("queues a steer sent while %s runs", (text) =
     ),
     { type: "restart_active", targetRunId: activeRunId },
   );
+});
+
+describe("project manager user messages", () => {
+  const runSelection = { instanceId: ProviderInstanceId.make("claudeAgent"), model: "opus" };
+  const busyManager = (
+    status: "preparing" | "starting" | "running" | "waiting" = "running",
+    sessionCapabilities: OrchestrationV2ProviderCapabilities = baseCapabilities,
+  ) => {
+    const projection = dispatchProjection(sessionCapabilities);
+    return {
+      ...projection,
+      runs: projection.runs.map((run) => ({
+        ...run,
+        status,
+        modelSelection: runSelection,
+        activeAttemptId: "attempt",
+      })),
+      providerTurns: [{ runAttemptId: "attempt", status: "running" }],
+    } as unknown as OrchestrationV2ThreadProjection;
+  };
+
+  it.each([
+    { type: "queue_after_active" },
+    { type: "start_immediately" },
+    { type: "steer_active", targetRunId: activeRunId },
+    { type: "restart_active", targetRunId: activeRunId },
+  ] as const)("joins the running turn gently when the client asks for $type", (mode) => {
+    assert.deepEqual(
+      CommandPolicy.resolveProjectManagerUserDispatch(busyManager(), mode, runSelection),
+      { mode: { type: "steer_active", targetRunId: activeRunId }, gentle: true },
+    );
+  });
+
+  it("starts a run normally when the manager is idle", () => {
+    assert.deepEqual(
+      CommandPolicy.resolveProjectManagerUserDispatch(
+        dispatchProjection(),
+        { type: "start_immediately" },
+        runSelection,
+      ),
+      { mode: { type: "start_immediately" }, gentle: false },
+    );
+  });
+
+  it.each(["preparing", "starting", "waiting"] as const)(
+    "queues instead of steering or restarting a %s run",
+    (status) => {
+      for (const mode of [
+        { type: "steer_active", targetRunId: activeRunId },
+        { type: "restart_active", targetRunId: activeRunId },
+      ] as const) {
+        assert.deepEqual(
+          CommandPolicy.resolveProjectManagerUserDispatch(busyManager(status), mode, runSelection),
+          { mode: { type: "queue_after_active" }, gentle: false },
+        );
+      }
+      assert.deepEqual(
+        CommandPolicy.resolveProjectManagerUserDispatch(
+          busyManager(status),
+          { type: "queue_after_active" },
+          runSelection,
+        ),
+        { mode: { type: "queue_after_active" }, gentle: false },
+      );
+    },
+  );
+
+  it("queues while compaction runs", () => {
+    const projection = {
+      ...busyManager(),
+      messages: [{ id: userMessageId, text: "/compact", attachments: [] }],
+    } as unknown as OrchestrationV2ThreadProjection;
+    assert.deepEqual(
+      CommandPolicy.resolveProjectManagerUserDispatch(
+        projection,
+        { type: "steer_active", targetRunId: activeRunId },
+        runSelection,
+      ),
+      { mode: { type: "queue_after_active" }, gentle: false },
+    );
+  });
+
+  it("queues when only a restart could take the message", () => {
+    const restartOnly = capabilities((current) => ({
+      ...current,
+      turns: {
+        ...current.turns,
+        supportsActiveSteering: false,
+        supportsSteeringByInterruptRestart: true,
+      },
+    }));
+    assert.deepEqual(
+      CommandPolicy.resolveProjectManagerUserDispatch(
+        busyManager("running", restartOnly),
+        { type: "restart_active", targetRunId: activeRunId },
+        runSelection,
+      ),
+      { mode: { type: "queue_after_active" }, gentle: false },
+    );
+  });
+
+  it("queues between turns, when there is no running turn to join", () => {
+    const projection = {
+      ...busyManager(),
+      providerTurns: [{ runAttemptId: "attempt", status: "completed" }],
+    } as unknown as OrchestrationV2ThreadProjection;
+    assert.deepEqual(
+      CommandPolicy.resolveProjectManagerUserDispatch(
+        projection,
+        { type: "start_immediately" },
+        runSelection,
+      ),
+      { mode: { type: "queue_after_active" }, gentle: false },
+    );
+  });
+
+  it("queues a model change, which could force a restart", () => {
+    assert.deepEqual(
+      CommandPolicy.resolveProjectManagerUserDispatch(
+        busyManager(),
+        { type: "steer_active", targetRunId: activeRunId },
+        { ...runSelection, model: "sonnet" },
+      ),
+      { mode: { type: "queue_after_active" }, gentle: false },
+    );
+  });
 });
 
 const layer = it.layer(CommandPolicy.layer);

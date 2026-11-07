@@ -22,6 +22,8 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
   readonly updatedAt: string;
+  /** Finished context compactions in the thread so far. */
+  readonly compactionCount?: number;
 };
 
 /** Newest usage report across a thread's provider turns. Snapshots order turns
@@ -41,6 +43,26 @@ export function latestProviderTurnTokenUsage(
 }
 
 export function deriveLatestContextWindowSnapshot(
+  entries: ReadonlyArray<{
+    readonly item: OrchestrationV2TurnItem;
+  }>,
+  liveUsage?: OrchestrationV2ProviderTurnTokenUsage | null,
+  providerThread?: Pick<OrchestrationV2ProviderThread, "contextUsage" | "updatedAt"> | null,
+): ContextWindowSnapshot | null {
+  const snapshot = deriveLatestUsageSnapshot(entries, liveUsage, providerThread);
+  if (snapshot === null) return null;
+  const compactionCount = countFinishedCompactions(entries);
+  return compactionCount === 0 ? snapshot : { ...snapshot, compactionCount };
+}
+
+export function countFinishedCompactions(
+  entries: ReadonlyArray<{ readonly item: OrchestrationV2TurnItem }>,
+): number {
+  return entries.filter(({ item }) => item.type === "compaction" && item.status === "completed")
+    .length;
+}
+
+function deriveLatestUsageSnapshot(
   entries: ReadonlyArray<{
     readonly item: OrchestrationV2TurnItem;
   }>,

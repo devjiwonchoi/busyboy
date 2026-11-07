@@ -9,6 +9,8 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 import {
   IsoDateTime,
   NonNegativeInt,
+  PositiveInt,
+  ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
   ProjectAttentionItem,
   ProjectAttentionItemId,
@@ -118,6 +120,12 @@ export interface CreateProjectAttentionItemInput {
   readonly askerThreadId: ThreadId | null;
   readonly batchId: ProjectAttentionBatchId;
   readonly createdAt: IsoDateTime;
+  /** For a plan approval: the spec version under review. */
+  readonly specVersion?: number | null;
+  /** For a plan approval: the card's Goal section. */
+  readonly summary?: string | null;
+  /** For a plan approval: the card's Verification section. */
+  readonly verification?: string | null;
 }
 
 export interface CreateProjectSitrepInput {
@@ -219,7 +227,7 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly since: IsoDateTime;
     }) => Result<ReadonlyArray<ProjectTaskEvent>>;
-    /** The newest stage changes to done and failed outcomes, newest first. */
+    /** The newest stage changes to done, failed outcomes and leads' plans, newest first. */
     readonly listRecentTaskEndings: (input: {
       readonly projectId: ProjectId;
       readonly limit: number;
@@ -236,6 +244,12 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectAttentionItemId;
       readonly answer: string;
       readonly answeredAt: IsoDateTime;
+      readonly answeredBy: ProjectAttentionAnsweredBy;
+    }) => Result<Option.Option<ProjectAttentionItem>>;
+    /** Closes one item without an answer. None when it does not exist or is already closed. */
+    readonly supersedeAttentionItem: (input: {
+      readonly id: ProjectAttentionItemId;
+      readonly supersededAt: IsoDateTime;
     }) => Result<Option.Option<ProjectAttentionItem>>;
     /** Closes the task's open items (of one kind, or all) without an answer; returns the closed items. */
     readonly supersedeOpenAttentionItems: (input: {
@@ -314,6 +328,10 @@ const TaskRow = Schema.Struct({
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
   supersededAt: Schema.NullOr(IsoDateTime),
+  answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy),
+  specVersion: Schema.NullOr(PositiveInt),
+  summary: Schema.NullOr(Schema.String),
+  verification: Schema.NullOr(Schema.String),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
 });
 const SpecVersionRow = Schema.Struct({
@@ -396,7 +414,11 @@ export const make = Effect.gen(function* () {
     asker_thread_id AS "askerThreadId",
     batch_id AS "batchId",
     created_at AS "createdAt",
-    superseded_at AS "supersededAt"
+    superseded_at AS "supersededAt",
+    answered_by AS "answeredBy",
+    spec_version AS "specVersion",
+    summary AS "summary",
+    verification AS "verification"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -761,6 +783,7 @@ export const make = Effect.gen(function* () {
         AND (
           (kind = 'stage_changed' AND body LIKE '% → done')
           OR (kind = 'outcome' AND body LIKE 'failed%')
+          OR (kind = 'summary' AND body LIKE 'Plan: %')
         )
       ORDER BY created_at DESC, rowid DESC
       LIMIT ${limit}
@@ -780,16 +803,20 @@ export const make = Effect.gen(function* () {
       askerThreadId: Schema.NullOr(ThreadId),
       batchId: ProjectAttentionBatchId,
       createdAt: IsoDateTime,
+      specVersion: Schema.NullOr(PositiveInt),
+      summary: Schema.NullOr(Schema.String),
+      verification: Schema.NullOr(Schema.String),
     }),
     Result: AttentionRow,
     execute: (item) => sql`
       INSERT INTO project_attention_items (
         item_id, project_id, task_id, kind, question, options_json,
-        asker_thread_id, batch_id, created_at
+        asker_thread_id, batch_id, created_at, spec_version, summary, verification
       )
       VALUES (
         ${item.id}, ${item.projectId}, ${item.taskId}, ${item.kind}, ${item.question},
-        ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt}
+        ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt},
+        ${item.specVersion}, ${item.summary}, ${item.verification}
       )
       RETURNING ${attentionColumns}
     `,
@@ -805,11 +832,22 @@ export const make = Effect.gen(function* () {
       id: ProjectAttentionItemId,
       answer: Schema.String,
       answeredAt: IsoDateTime,
+      answeredBy: ProjectAttentionAnsweredBy,
     }),
     Result: AttentionRow,
-    execute: ({ id, answer, answeredAt }) => sql`
+    execute: ({ id, answer, answeredAt, answeredBy }) => sql`
       UPDATE project_attention_items
-      SET answer = ${answer}, answered_at = ${answeredAt}
+      SET answer = ${answer}, answered_at = ${answeredAt}, answered_by = ${answeredBy}
+      WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
+      RETURNING ${attentionColumns}
+    `,
+  });
+  const supersedeAttentionRow = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectAttentionItemId, supersededAt: IsoDateTime }),
+    Result: AttentionRow,
+    execute: ({ id, supersededAt }) => sql`
+      UPDATE project_attention_items
+      SET superseded_at = ${supersededAt}
       WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
       RETURNING ${attentionColumns}
     `,
@@ -1039,7 +1077,13 @@ export const make = Effect.gen(function* () {
         });
         yield* insertSpecVersion({
           taskId: task.id,
-          spec: input.spec ?? { background: input.request, goal: "", nonGoals: "", todos: [] },
+          spec: input.spec ?? {
+            background: input.request,
+            goal: "",
+            successCriteria: "",
+            nonGoals: "",
+            todos: [],
+          },
           author: input.author ?? "pm",
           authorThreadId: input.authorThreadId ?? null,
           note: "Created",
@@ -1097,11 +1141,20 @@ export const make = Effect.gen(function* () {
       ),
 
     createAttentionItem: (input) =>
-      insertAttention(input).pipe(Effect.mapError(toRepositoryError("createAttentionItem"))),
+      insertAttention({
+        ...input,
+        specVersion: input.specVersion ?? null,
+        summary: input.summary ?? null,
+        verification: input.verification ?? null,
+      }).pipe(Effect.mapError(toRepositoryError("createAttentionItem"))),
     getAttentionItem: (id) =>
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),
     answerAttentionItem: (input) =>
       answerAttentionRow(input).pipe(Effect.mapError(toRepositoryError("answerAttentionItem"))),
+    supersedeAttentionItem: (input) =>
+      supersedeAttentionRow(input).pipe(
+        Effect.mapError(toRepositoryError("supersedeAttentionItem")),
+      ),
     supersedeOpenAttentionItems: (input) =>
       supersedeAttentionRows(input).pipe(
         Effect.mapError(toRepositoryError("supersedeOpenAttentionItems")),

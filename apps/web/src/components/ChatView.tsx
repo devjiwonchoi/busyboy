@@ -228,9 +228,15 @@ import {
   useRightPanelStore,
 } from "../rightPanelStore";
 import { useSideChatStore } from "../sideChatStore";
-import { useDockedDecisionCards } from "../state/projectTeam";
-import { DockedDecisionCards } from "./chat/DockedDecisionCards";
+import {
+  useIsProjectManagerThread,
+  useLeadThreadTask,
+  useThreadDecisionCards,
+} from "../state/projectTeam";
+import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
+import { PendingActionsNudge } from "./chat/PendingActionsNudge";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
+import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -473,6 +479,7 @@ import {
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
   deriveCommittedServerUserMessageIds,
+  deriveSeamlessPendingUserMessages,
   deriveComposerSendState,
   dismissBranchMismatchForSession,
   hasEnvironmentReconnectWarningGraceElapsed,
@@ -1294,20 +1301,11 @@ export default function ChatView(props: ChatViewProps) {
   const [restingComposerControlsHost, setRestingComposerControlsHost] =
     useState<HTMLDivElement | null>(null);
   const [restingComposerControlsVisible, setRestingComposerControlsVisible] = useState(false);
-  const citeAssistantText = (
-    citation: AssistantCitation,
-    sourceAnchor: AssistantCitationSourceAnchor,
-  ) => {
-    const inserted = composerRef.current?.citeAssistantText(citation, sourceAnchor) ?? false;
-    if (!inserted) {
-      toastManager.add({
-        type: "warning",
-        title: "The composer is not ready",
-        description: "Try citing the selection after the connection or pending input is resolved.",
-      });
-    }
-    return inserted;
-  };
+  const chatAnnotations = useChatAnnotations(composerDraftTarget);
+  const [annotationHost, setAnnotationHost] = useState<HTMLDivElement | null>(null);
+  // "Add to chat" pins the selection and opens its comment pill; the quote is sent with the
+  // next message.
+  const citeAssistantText = (citation: AssistantCitation) => chatAnnotations.add(citation);
   const citeAssistantTextStable = useStableCallback(citeAssistantText);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
@@ -1486,6 +1484,9 @@ export default function ChatView(props: ChatViewProps) {
     : undefined;
   const isServerThread = serverThread !== null;
   const activeThread = isServerThread ? serverThread : localDraftThread;
+  // The PM chat reads as one uninterrupted agent: follow-ups sent while it works join the
+  // running turn and show as plain bubbles, with no steer/queue/compaction UI.
+  const seamlessChat = useIsProjectManagerThread(isServerThread ? routeThreadRef : null);
   const serverLatestRun =
     serverProjection === null ? null : deriveLatestThreadRun(serverProjection);
   const serverActivityRun =
@@ -1604,6 +1605,12 @@ export default function ChatView(props: ChatViewProps) {
     widthStorageKey: `t3code:preview-panel-width:${activeThreadKey}`,
   });
   const activeThreadShell = useQuietThreadShell(isServerThread ? activeThreadRef : null);
+  const leadTask = useLeadThreadTask(
+    !sideChat && isServerThread ? activeThreadRef : null,
+    activeThreadShell?.projectId ?? null,
+  );
+  const isTaskLeadThread = leadTask !== null;
+  useOpenTaskPlanOnEntry(isServerThread ? activeThreadRef : null, isTaskLeadThread);
   const timelineThreadError =
     serverRuntime?.status === "failed" &&
     serverRuntime.lastErrorClass === "usage_limit" &&
@@ -2810,14 +2817,17 @@ export default function ChatView(props: ChatViewProps) {
     }
     return urls;
   })();
-  const anchoredTimelineMessages = feedbackSubmissions.flatMap((submission) =>
-    submission.status === "interrupted"
-      ? []
-      : [
-          { ...codexFeedbackMessage(submission), runId: null },
-          { ...codexFeedbackMessage(submission, "assistant"), runId: null },
-        ],
-  );
+  const anchoredTimelineMessages = [
+    ...feedbackSubmissions.flatMap((submission) =>
+      submission.status === "interrupted"
+        ? []
+        : [
+            { ...codexFeedbackMessage(submission), runId: null },
+            { ...codexFeedbackMessage(submission, "assistant"), runId: null },
+          ],
+    ),
+    ...(seamlessChat ? deriveSeamlessPendingUserMessages(serverProjection) : []),
+  ];
   const serverTimelineEntries = useIncrementalTimelineEntries(activeThreadKey, {
     visibleTurnItems: serverVisibleTurnItems,
     optimisticMessages: optimisticUserMessages,
@@ -3319,8 +3329,12 @@ export default function ChatView(props: ChatViewProps) {
     composerRef.current?.focusAtEnd();
   };
   const focusComposerStable = useStableCallback(focusComposer);
+  // The PM chat has no Stop: it reads as one agent that never halts, and stopping it
+  // used to stop every task lead with it.
   const canInterruptRunningThread =
-    canOperateThread && deriveCanInterruptRunningThread(activeThread !== undefined, activeRuntime);
+    canOperateThread &&
+    !seamlessChat &&
+    deriveCanInterruptRunningThread(activeThread !== undefined, activeRuntime);
   const onInterrupt = async () => {
     if (
       !activeThread ||
@@ -3558,7 +3572,8 @@ export default function ChatView(props: ChatViewProps) {
       {
         id: "chat-code-block",
         name: "Chat code block",
-        command,
+        // Enter after each line runs a multi-line block line by line.
+        command: command.replaceAll("\n", "\r"),
         icon: "play",
         runOnWorktreeCreate: false,
       },
@@ -3665,6 +3680,11 @@ export default function ChatView(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "pull-requests");
   };
   const addPullRequestsSurfaceStable = useStableCallback(addPullRequestsSurface);
+  const addTaskPlanSurface = () => {
+    if (!activeThreadRef || !isTaskLeadThread) return;
+    useRightPanelStore.getState().open(activeThreadRef, "task-plan");
+  };
+  const addTaskPlanSurfaceStable = useStableCallback(addTaskPlanSurface);
   useAgentOpenedPreviews({
     threadRef: activeThreadRef,
     previewState: activePreviewState,
@@ -6059,11 +6079,14 @@ export default function ChatView(props: ChatViewProps) {
       });
     // A direct "send annotation" writes the draft and sends in the same tick; the reference
     // must be in the text now, not after the next render.
-    const promptForSend = directAnnotation
-      ? ensureInlineContextReferences(promptRef.current, [
-          previewAnnotationContextReference(directAnnotation.annotation),
-        ])
-      : promptRef.current;
+    const promptForSend = withComposerAnnotations(
+      directAnnotation
+        ? ensureInlineContextReferences(promptRef.current, [
+            previewAnnotationContextReference(directAnnotation.annotation),
+          ])
+        : promptRef.current,
+      useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.annotations ?? [],
+    );
     if (queuedRunEdit.isEditing) {
       // Edit mode repurposes the composer: sending saves the queued message
       // in place instead of dispatching a new turn.
@@ -6173,7 +6196,7 @@ export default function ChatView(props: ChatViewProps) {
       if (composerRef.current?.validateProviderInput(outgoingFollowUpText) === false) {
         return;
       }
-      const followUpPromptSnapshot = promptRef.current;
+      const followUpPromptSnapshot = promptForSend;
       const followUpTerminalContexts = [...sendableComposerTerminalContexts];
       const followUpReviewComments = [...composerReviewComments];
       const followUpPreviewAnnotations = [...composerPreviewAnnotations];
@@ -6734,7 +6757,7 @@ export default function ChatView(props: ChatViewProps) {
             ...(attachment.source ? { source: attachment.source } : {}),
           },
     );
-    if (!shouldQueueBehindActiveRun) {
+    if (!shouldQueueBehindActiveRun || seamlessChat) {
       isAtEndRef.current = true;
       timelineScrollModeRef.current = "anchoring-new-turn";
       liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
@@ -6760,8 +6783,11 @@ export default function ChatView(props: ChatViewProps) {
         createdAt: messageCreatedAt,
         updatedAt: messageCreatedAt,
         streaming: false,
+        // The PM chat has no queue UI, so a held-back message stays a timeline bubble.
         ...(shouldQueueBehindActiveRun
-          ? { inputIntent: "queued_turn" as const }
+          ? seamlessChat
+            ? {}
+            : { inputIntent: "queued_turn" as const }
           : phase === "running" && dispatchMode === "steer"
             ? { inputIntent: "steer" as const }
             : {}),
@@ -7522,21 +7548,11 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
-  // The task page pins a task's questions under its spec, so its chat doesn't dock them again.
-  const dockedDecisionCards = useDockedDecisionCards(
-    isServerThread && !sideChat ? routeThreadRef : null,
-  );
-  const decisionCardsDock =
-    dockedDecisionCards.length > 0 ? (
-      <DockedDecisionCards
-        cards={dockedDecisionCards}
-        environmentId={environmentId}
-        threadRef={routeThreadRef}
-        cwd={gitCwd ?? undefined}
-      />
-    ) : null;
+  // The task page pins a task's open questions under its spec, so its chat doesn't repeat them.
+  const decisionCards = useThreadDecisionCards(isServerThread && !sideChat ? routeThreadRef : null);
+  // The PM chat has no queue UI: a message the server holds back still shows as a bubble.
   const queuedRunsControl =
-    isServerThread && activeThread ? (
+    isServerThread && activeThread && !seamlessChat ? (
       <QueuedRunsControl
         ref={queuedRunsControlRef}
         steerShortcutLabel={shortcutLabelForCommand(keybindings, "thread.steerQueuedMessage", {
@@ -7549,6 +7565,7 @@ export default function ChatView(props: ChatViewProps) {
         threadId={activeThread.id}
         optimisticMessages={optimisticUserMessages}
         editingRunId={queuedRunEdit.editingRunId}
+        compacting={isCompacting}
         onEditQueuedRun={queuedRunEdit.beginEdit}
         onCancelEdit={queuedRunEdit.cancelEdit}
       />
@@ -7766,6 +7783,7 @@ export default function ChatView(props: ChatViewProps) {
   const panelToggleControls = (
     <PanelLayoutControls
       {...panelToggleControlProps}
+      showNewTaskControl
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
     />
   );
@@ -7927,7 +7945,11 @@ export default function ChatView(props: ChatViewProps) {
                 }}
               />
             </div>
-            <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+            <div
+              ref={setAnnotationHost}
+              className="relative flex min-h-0 flex-1 flex-col bg-background"
+            >
+              {chatAnnotations.overlay(annotationHost)}
               <MessagesTimeline
                 citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
                 citationHistoryLoading={threadDetailLoading}
@@ -7976,6 +7998,7 @@ export default function ChatView(props: ChatViewProps) {
                 }
                 listRef={legendListRef}
                 timelineEntries={displayedTimeline.entries}
+                decisionCards={paintOnlyDisplayedTimeline ? undefined : decisionCards}
                 runs={paintOnlyDisplayedTimeline ? [] : (serverProjection?.runs ?? [])}
                 latestRun={paintOnlyDisplayedTimeline ? null : activeActivityRun}
                 runningRunId={paintOnlyDisplayedTimeline ? null : activeRunningTurnId}
@@ -8045,25 +8068,34 @@ export default function ChatView(props: ChatViewProps) {
                   : { historyControls: threadHistoryControls })}
               />
 
-              {showScrollToBottom && !isThreadFindActive && (
+              {!isThreadFindActive && (
                 <div
-                  className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex justify-center py-1.5"
+                  className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex flex-wrap justify-center gap-2 py-1.5"
                   style={{ bottom: scrollToEndClearance + 4 }}
                 >
-                  <Button
-                    aria-label="Scroll to end"
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      composerRef.current?.restoreAfterTimelineReachedEnd();
-                      scrollToEnd(true);
-                    }}
-                    className="pointer-events-auto"
-                    size="xs"
-                    variant="glass"
-                  >
-                    <ChevronDownIcon className="size-3.5" />
-                    Scroll to end
-                  </Button>
+                  {paintOnlyDisplayedTimeline ? null : (
+                    <PendingActionsNudge
+                      cards={decisionCards}
+                      listRef={legendListRef}
+                      onNavigate={cancelTimelineLiveFollowForUserNavigationStable}
+                    />
+                  )}
+                  {showScrollToBottom && (
+                    <Button
+                      aria-label="Scroll to end"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        composerRef.current?.restoreAfterTimelineReachedEnd();
+                        scrollToEnd(true);
+                      }}
+                      className="pointer-events-auto"
+                      size="xs"
+                      variant="glass"
+                    >
+                      <ChevronDownIcon className="size-3.5" />
+                      Scroll to end
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -8203,7 +8235,6 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
-                              decisionCardsDock={decisionCardsDock}
                               bannerItems={composerBannerItems}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
@@ -8533,6 +8564,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddSideChat={startSideChatStable}
+          onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
@@ -8584,6 +8616,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
             onAddSideChat={startSideChatStable}
+            onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}

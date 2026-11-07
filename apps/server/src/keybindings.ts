@@ -116,6 +116,19 @@ const LATE_DEFAULT_KEYBINDINGS: ReadonlyArray<{
   },
 ];
 
+// Default shortcuts a release took away from one command and gave to another.
+// An untouched old default is dropped once, so the new default can take the key.
+// A user who changed the rule keeps it.
+const MOVED_DEFAULT_KEYBINDINGS: ReadonlyArray<{
+  readonly id: string;
+  readonly previous: KeybindingRule;
+}> = [
+  {
+    id: "task.new:mod+n",
+    previous: { key: "mod+n", command: "chat.new", when: "!terminalFocus" },
+  },
+];
+
 // Commands a release removed. Their entries, usually old defaults written on
 // first run, are dropped without an issue so they cannot block the default sync.
 const RETIRED_KEYBINDING_COMMANDS: ReadonlySet<unknown> = new Set(["thread.settle"]);
@@ -476,13 +489,17 @@ const make = Effect.gen(function* () {
       const pendingLateDefaults = LATE_DEFAULT_KEYBINDINGS.filter(
         (late) => !appliedMigrationIds.has(late.id),
       );
+      const pendingMovedDefaults = MOVED_DEFAULT_KEYBINDINGS.filter(
+        (moved) => !appliedMigrationIds.has(moved.id),
+      );
       const configExists = yield* readConfigExists;
       if (!configExists) {
         yield* writeConfigAtomically(DEFAULT_KEYBINDINGS);
-        if (pendingLateDefaults.length > 0) {
+        if (pendingLateDefaults.length > 0 || pendingMovedDefaults.length > 0) {
           yield* recordAppliedMigrations([
             ...appliedMigrationIds,
             ...LATE_DEFAULT_KEYBINDINGS.map((late) => late.id),
+            ...MOVED_DEFAULT_KEYBINDINGS.map((moved) => moved.id),
           ]);
         }
         yield* Cache.invalidate(resolvedConfigCache, resolvedConfigCacheKey);
@@ -501,7 +518,10 @@ const make = Effect.gen(function* () {
         yield* Cache.invalidate(resolvedConfigCache, resolvedConfigCacheKey);
         return;
       }
-      const customConfig = runtimeConfig.keybindings;
+      const movedOut = runtimeConfig.keybindings.filter((entry) =>
+        pendingMovedDefaults.some((moved) => isSameKeybindingRule(entry, moved.previous)),
+      );
+      const customConfig = runtimeConfig.keybindings.filter((entry) => !movedOut.includes(entry));
       const existingCommands = new Set(customConfig.map((entry) => entry.command));
       const missingDefaults: KeybindingRule[] = [];
       const shortcutConflictWarnings: Array<{
@@ -573,16 +593,17 @@ const make = Effect.gen(function* () {
         });
       }
       // Rewriting also drops retired entries, which `customConfig` leaves out.
-      if (defaultsToAppend.length > 0 || runtimeConfig.hasRetiredEntries) {
+      if (defaultsToAppend.length > 0 || movedOut.length > 0 || runtimeConfig.hasRetiredEntries) {
         yield* writeConfigAtomically([...defaultsToAppend, ...customConfig]);
       }
       const settledLateDefaults = pendingLateDefaults.filter(
         (late) => !skippedDefaults.includes(late.rule),
       );
-      if (settledLateDefaults.length > 0) {
+      if (settledLateDefaults.length > 0 || pendingMovedDefaults.length > 0) {
         yield* recordAppliedMigrations([
           ...appliedMigrationIds,
           ...settledLateDefaults.map((late) => late.id),
+          ...pendingMovedDefaults.map((moved) => moved.id),
         ]);
       }
       yield* Cache.invalidate(resolvedConfigCache, resolvedConfigCacheKey);

@@ -157,6 +157,11 @@ export interface ComposerPromptEditorProps {
   containerClassName?: string;
   className?: string;
   placeholderClassName?: string;
+  /**
+   * Makes the placeholder tappable. Phones have no Tab key, so a suggestion
+   * shown as the placeholder is accepted by tapping it instead.
+   */
+  onPlaceholderActivate?: (() => void) | undefined;
   onChange: (
     nextValue: string,
     nextCursor: number,
@@ -898,6 +903,7 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
     containerClassName,
     className,
     placeholderClassName,
+    onPlaceholderActivate,
     onChange,
     onVisibleSelectionChange,
     onCommandKeyDown,
@@ -1765,9 +1771,22 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
             {isEmpty && contextRecords.size === 0 && placeholder ? (
               <div
                 className={cn(
-                  "pointer-events-none absolute inset-0 leading-relaxed text-placeholder/75",
+                  "absolute inset-0 leading-relaxed text-placeholder/75",
+                  onPlaceholderActivate ? "cursor-pointer" : "pointer-events-none",
                   placeholderClassName,
                 )}
+                {...(onPlaceholderActivate
+                  ? {
+                      role: "button",
+                      "data-composer-placeholder-action": "true",
+                      onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
+                      onClick: () => {
+                        onPlaceholderActivate();
+                        // Focus inside the tap so phones raise the keyboard.
+                        editor?.view.focus();
+                      },
+                    }
+                  : {})}
               >
                 {placeholder}
               </div>

@@ -1,7 +1,13 @@
 /** Default names, avatars, and voices for a project's PM. */
 
-import type { ProjectManagerPersona, ProjectTeamSettings } from "@t3tools/contracts";
+import type {
+  ProjectManagerPersona,
+  ProjectMemoryEntry,
+  ProjectTeamSettings,
+} from "@t3tools/contracts";
 import { projectManagerInstructions } from "@t3tools/provider-core/server/orchestrationInstructions";
+
+import { memoryPromptSection } from "./memoryPrompt.ts";
 
 const DEFAULT_NAMES = [
   "Remy",
@@ -91,10 +97,33 @@ export const resolvePersona = (
   settings: Pick<ProjectTeamSettings, "persona">,
 ): ProjectManagerPersona => settings.persona ?? defaultPersona(projectId);
 
-/** The PM instructions for a persona. */
-export const personaInstructions = (persona: ProjectManagerPersona): string =>
+/**
+ * The PM's copy of the project memory, taken when its session opens. It is part of the
+ * system prompt, so it survives context compaction.
+ */
+export const pmMemorySection = (memory: ReadonlyArray<ProjectMemoryEntry>): string => `
+### Project memory
+
+The project's memory when this session started. Your own memory_write and memory_delete calls since then are newer than this copy.
+
+${memoryPromptSection(memory)}
+`;
+
+/** The rule agents follow while the user is AFK; also part of the lead and PM prompts. */
+export const AFK_AGENT_RULE =
+  'The user is away (AFK). Do not wait on the user: take your recommended option and record the assumption in a task note. Questions and plan approvals you still raise are answered for the user after a minute with the "(Recommended)" option, or the first one. Anything irreversible or that only a person can do (merging, secrets, payments, deleting data) still waits: raise it as kind "blocker", which AFK never answers.';
+
+/** The PM instructions for a persona, then the project memory and the AFK rule when given. */
+export const personaInstructions = (
+  persona: ProjectManagerPersona,
+  memory?: ReadonlyArray<ProjectMemoryEntry>,
+  /** The AFK rule while the user is away when the session opens. */
+  afkRule?: string,
+): string =>
   projectManagerInstructions({
     name: persona.name,
     voice: voiceText(persona.voice, persona.voiceCustom),
     voiceIsUserWords: isUserWordsVoice(persona.voice, persona.voiceCustom),
-  });
+  }) +
+  (memory === undefined ? "" : pmMemorySection(memory)) +
+  (afkRule === undefined ? "" : `\n### The user is AFK\n\n${afkRule}\n`);

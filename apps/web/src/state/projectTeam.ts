@@ -14,6 +14,7 @@ import {
 } from "@t3tools/client-runtime/state/project-team";
 import type {
   EnvironmentId,
+  ProjectDecisionCard,
   ProjectId,
   ProjectTeamAnswerDecisionInput,
   ProjectTeamCreateTaskInput,
@@ -33,8 +34,7 @@ import { AsyncResult, Atom } from "effect/reactivity";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useThreadShell } from "./entities";
 import {
-  type DockedDecisionCard,
-  dockedDecisionCardsForThread,
+  decisionCardsForThread,
   type LeadThreadTask,
   taskForLeadThread,
   taskReferencesForThread,
@@ -163,17 +163,17 @@ export function useProjectManagerForThread(
   );
 }
 
-/** Open decision cards to dock above this thread's composer. */
-export function useDockedDecisionCards(
+/** The question cards this thread shows inline, open or closed, oldest first. */
+export function useThreadDecisionCards(
   ref: ScopedThreadRef | null,
-): ReadonlyArray<DockedDecisionCard> {
+): ReadonlyArray<ProjectDecisionCard> {
   const index = useAtomValue(
     ref === null
       ? EMPTY_ATTENTION_INDEX_ATOM
       : environmentProjectTeamAttentionAtom(ref.environmentId),
   );
   if (ref === null) return [];
-  return dockedDecisionCardsForThread(index.byProjectId.values(), ref.threadId);
+  return decisionCardsForThread(index.byProjectId.values(), ref.threadId);
 }
 
 export function useIsProjectManagerThread(ref: ScopedThreadRef | null): boolean {
@@ -248,11 +248,11 @@ export function useThreadTaskReferences(
 
 /** The task this thread leads, with whether it waits on the user; null for other threads. */
 export function useLeadThreadTask(
-  ref: ScopedThreadRef,
+  ref: ScopedThreadRef | null,
   projectId: ProjectId | null,
 ): LeadThreadTask | null {
   const summary = useProjectManager(
-    projectId === null ? null : scopeProjectRef(ref.environmentId, projectId),
+    ref === null || projectId === null ? null : scopeProjectRef(ref.environmentId, projectId),
   );
-  return taskForLeadThread(summary, ref.threadId);
+  return ref === null ? null : taskForLeadThread(summary, ref.threadId);
 }

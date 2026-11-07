@@ -368,6 +368,8 @@ export const make = Effect.gen(function* () {
   const activeUpdateActionRef = yield* Ref.make<Option.Option<UpdateAction>>(Option.none());
   const finishedUpdateActions = yield* PubSub.unbounded<UpdateAction>();
   const updaterConfiguredRef = yield* Ref.make(false);
+  // Background downloads run here so they outlive the request that started them.
+  const backgroundScopeRef = yield* Ref.make(Option.none<Scope.Scope>());
   const lastLoggedDownloadMilestoneRef = yield* Ref.make(-1);
   const notAppliedVersionRef = yield* Ref.make(Option.none<string>());
   const updateStateRef = yield* Ref.make<DesktopUpdateState>(
@@ -538,6 +540,7 @@ export const make = Effect.gen(function* () {
       : check.pipe(
           Effect.onInterrupt(() => setState(state)),
           Effect.ensuring(finishUpdateAction("check")),
+          Effect.tap(() => startAutoDownload),
         );
   });
 
@@ -600,6 +603,17 @@ export const make = Effect.gen(function* () {
       Effect.ensuring(finishUpdateAction("download")),
     );
   }).pipe(Effect.withSpan("desktop.updates.downloadAvailableUpdate"));
+
+  // Starts downloading a newly found update in the background. A failed
+  // download keeps its error until the next check finds the update again.
+  const startAutoDownload = Effect.gen(function* () {
+    const scope = yield* Ref.get(backgroundScopeRef);
+    if (Option.isNone(scope) || (yield* Ref.get(desktopState.quitting))) return;
+    const state = yield* Ref.get(updateStateRef);
+    if (state.status !== "available" || state.errorContext !== null) return;
+    if (Option.isSome(yield* activeUpdateAction)) return;
+    yield* downloadAvailableUpdate.pipe(Effect.forkIn(scope.value));
+  }).pipe(Effect.withSpan("desktop.updates.startAutoDownload"));
 
   const updateRestartMarkerDir = environment.path.join(environment.baseDir, "runtime");
   const updateRestartMarkerPath = environment.path.join(
@@ -890,6 +904,8 @@ export const make = Effect.gen(function* () {
             releaseNoteGroups: releaseNotes.length,
             omittedReleaseCount,
           });
+          // Usually the check is still running and starts it when it ends.
+          yield* startAutoDownload;
         }),
       ),
       Effect.catchCause((cause) => {
@@ -1061,8 +1077,11 @@ export const make = Effect.gen(function* () {
       }
       yield* Ref.set(updaterConfiguredRef, true);
 
+      yield* Ref.set(backgroundScopeRef, Option.some(yield* Effect.scope));
+      // Downloads go through downloadAvailableUpdate so they share the action
+      // lock; updaters install only verified downloads on quit.
       yield* electronUpdater.setAutoDownload(false);
-      yield* electronUpdater.setAutoInstallOnAppQuit(false);
+      yield* electronUpdater.setAutoInstallOnAppQuit(true);
       yield* applyAutoUpdaterChannel(settings.updateChannel);
       yield* electronUpdater.setDisableDifferentialDownload(
         isArm64HostRunningIntelBuild(environment.runtimeInfo),
@@ -1139,7 +1158,10 @@ export const make = Effect.gen(function* () {
           Effect.ensuring(electronUpdater.setAllowDowngrade(allowDowngrade).pipe(Effect.ignore)),
         );
         return yield* Ref.get(updateStateRef);
-      }).pipe(Effect.ensuring(finishUpdateAction("channel")));
+      }).pipe(
+        Effect.ensuring(finishUpdateAction("channel")),
+        Effect.tap(() => startAutoDownload),
+      );
     }),
     check: Effect.fn("desktop.updates.check")(function* (reason: string) {
       yield* Effect.annotateCurrentSpan({ reason });

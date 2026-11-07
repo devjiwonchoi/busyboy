@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
-import { relayedAnswerText } from "./AttentionRouter.ts";
+import { dismissedQuestionText, relayedAnswerText } from "./AttentionRouter.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
+import { PROJECT_ID, setUpManager, startLead, userSays, withTeam } from "./testkit.ts";
 
 describe("AttentionRouter", () => {
   it.effect("closes a task's open cards when it is cancelled or done", () =>
@@ -16,9 +16,9 @@ describe("AttentionRouter", () => {
         const cancelled = yield* startLead(pm, "Group sidebar tasks", harness.delegate);
         const finished = yield* startLead(pm, "Hello", harness.delegate);
         const kept = yield* startLead(pm, "Goodbye", harness.delegate);
-        const approval = yield* team.askUser(cancelled.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+        const first = yield* team.askUser(cancelled.leadThreadId, {
+          kind: "decision",
+          question: "Which login provider?",
         });
         yield* team.askUser(cancelled.leadThreadId, { kind: "decision", question: "Which?" });
         yield* team.askUser(finished.leadThreadId, { kind: "blocker", question: "Token?" });
@@ -38,7 +38,7 @@ describe("AttentionRouter", () => {
         );
         // The PM gets a clear refusal instead of a failed relay to a stopped lead.
         const answer = yield* team
-          .answerAttention(pm, { attentionItemId: approval.item.id, answer: "Yes." })
+          .answerAttention(pm, { attentionItemId: first.item.id, answer: "Yes." })
           .pipe(Effect.flip);
         assert.include(answer.message, "its task ended");
       }),
@@ -54,12 +54,12 @@ describe("AttentionRouter", () => {
         const b = yield* startLead(pm, "Goodbye", harness.delegate);
 
         const first = yield* team.askUser(a.leadThreadId, {
-          kind: "approval",
+          kind: "decision",
           question: "Plan A?",
         });
         yield* TestClock.adjust("1 minute");
         const second = yield* team.askUser(b.leadThreadId, {
-          kind: "approval",
+          kind: "decision",
           question: "Plan B?",
         });
         yield* TestClock.adjust("90 seconds");
@@ -94,22 +94,24 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Ship the fix today?",
         });
+        userSays(harness, pm, "Yes, go ahead.");
 
         const answered = yield* team.answerAttention(pm, {
           attentionItemId: item.id,
           answer: "Yes, go ahead.",
         });
         assert.strictEqual(answered.item.answer, "Yes, go ahead.");
+        assert.strictEqual(answered.item.answeredBy, "pm");
         const [relay] = yield* Ref.get(harness.sent);
         assert.strictEqual(relay?.threadId, lead.leadThreadId);
         assert.strictEqual(relay?.senderThreadId, pm);
         assert.strictEqual(relay?.mode, "auto");
         assert.strictEqual(
           relay?.text,
-          "[User answer via BusyBoy PM] Approve the plan? → Yes, go ahead.",
+          "[User's chat answer, relayed by BusyBoy PM] Ship the fix today? → Yes, go ahead.",
         );
         assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
 
@@ -125,6 +127,98 @@ describe("AttentionRouter", () => {
     ),
   );
 
+  it.effect("lets the PM close a moot question and tells the lead that asked", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "Ship the fix today?",
+        });
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 1);
+
+        const dismissed = yield* team.dismissAttention(pm, {
+          attentionItemId: item.id,
+          reason: "The user decided to ship tomorrow",
+        });
+        assert.isNotNull(dismissed.item.supersededAt);
+        assert.isNull(dismissed.item.answer);
+        assert.isNull(dismissed.item.answeredAt);
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
+        const [notice] = yield* Ref.get(harness.sent);
+        assert.strictEqual(notice?.threadId, lead.leadThreadId);
+        assert.strictEqual(notice?.senderThreadId, pm);
+        assert.strictEqual(
+          notice?.text,
+          dismissedQuestionText("Ship the fix today?", "The user decided to ship tomorrow"),
+        );
+        assert.include(notice?.text ?? "", "[Question closed by BusyBoy PM]");
+        const task = yield* team.readTask(pm, { taskId: lead.task.id });
+        assert.include(
+          task.events.map((event) => event.body),
+          "Question closed: The user decided to ship tomorrow",
+        );
+
+        const again = yield* team
+          .dismissAttention(pm, { attentionItemId: item.id, reason: "Again" })
+          .pipe(Effect.flip);
+        assert.include(again.message, "is closed");
+        const answer = yield* team
+          .answerAttention(pm, { attentionItemId: item.id, answer: "Yes." })
+          .pipe(Effect.flip);
+        assert.include(answer.message, "it was dismissed");
+      }),
+    ),
+  );
+
+  it.effect("lets a lead withdraw only its own open question", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const asker = yield* startLead(pm, "Hello", harness.delegate);
+        const other = yield* startLead(pm, "Goodbye", harness.delegate);
+        const own = yield* team.askUser(asker.leadThreadId, {
+          kind: "decision",
+          question: "Tabs or spaces?",
+        });
+        const answered = yield* team.askUser(asker.leadThreadId, {
+          kind: "blocker",
+          question: "Need a token.",
+        });
+        yield* team.answerAttention(pm, { attentionItemId: answered.item.id, answer: "Done." });
+        const sentBefore = (yield* Ref.get(harness.sent)).length;
+
+        const refused = yield* team
+          .dismissAttention(other.leadThreadId, {
+            attentionItemId: own.item.id,
+            reason: "Not needed",
+          })
+          .pipe(Effect.flip);
+        assert.include(refused.message, "only close its own questions");
+
+        const closedAnswered = yield* team
+          .dismissAttention(asker.leadThreadId, {
+            attentionItemId: answered.item.id,
+            reason: "Not needed",
+          })
+          .pipe(Effect.flip);
+        assert.include(closedAnswered.message, "already answered");
+
+        const withdrawn = yield* team.dismissAttention(asker.leadThreadId, {
+          attentionItemId: own.item.id,
+          reason: "Found the style guide",
+        });
+        assert.isNotNull(withdrawn.item.supersededAt);
+        assert.isNull(withdrawn.item.answer);
+        assert.strictEqual((yield* Ref.get(harness.sent)).length, sentBefore);
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 0);
+      }),
+    ),
+  );
+
   it.effect("keeps the question open when relaying the answer fails", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -132,9 +226,10 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Ship the fix today?",
         });
+        userSays(harness, pm, "Yes.");
 
         harness.sendFailures.remaining = 1;
         yield* team
@@ -157,50 +252,6 @@ describe("AttentionRouter", () => {
     ),
   );
 
-  it.effect(
-    "shows each question as a card and replaces an unanswered approval with the newer plan",
-    () =>
-      withTeam((harness) =>
-        Effect.gen(function* () {
-          const team = yield* ProjectTeamService.ProjectTeamService;
-          const pm = yield* setUpManager;
-          const lead = yield* startLead(pm, "Fix login", harness.delegate);
-          const first = yield* team.askUser(lead.leadThreadId, {
-            kind: "approval",
-            question: "Plan v1?",
-          });
-          yield* TestClock.adjust("1 minute");
-          const second = yield* team.askUser(lead.leadThreadId, {
-            kind: "approval",
-            question: "Plan v2?",
-          });
-
-          const summary = (yield* team.attentionSnapshot).projects[0];
-          assert.strictEqual(summary?.openCount, 1);
-          assert.deepStrictEqual(
-            summary?.decisionCards.map((card) => [
-              card.taskTitle,
-              card.item.question,
-              card.item.supersededAt === null,
-            ]),
-            [
-              ["Fix login", "Plan v1?", false],
-              ["Fix login", "Plan v2?", true],
-            ],
-          );
-          const stale = yield* team
-            .answerDecision({ projectId: PROJECT_ID, attentionItemId: first.item.id, answer: "Ok" })
-            .pipe(Effect.flip);
-          assert.include(stale.message, "a newer question replaced it");
-          assert.strictEqual(second.item.supersededAt, null);
-
-          // Cards show on the task page and in "Waiting on you"; the PM is not woken for them.
-          const toPm = yield* harness.messagesTo(pm);
-          assert.isFalse(toPm.some((text) => text.includes("Plan v2?")));
-        }),
-      ),
-  );
-
   it.effect("sends a card answer straight to the task lead without waking the PM", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -208,8 +259,8 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Fix login", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Ship the fix today?",
           options: ["Approve", "Request changes"],
         });
 
@@ -219,12 +270,13 @@ describe("AttentionRouter", () => {
           answer: "Approve\nNote: keep it small",
         });
         assert.strictEqual(answered.item.answer, "Approve\nNote: keep it small");
+        assert.strictEqual(answered.item.answeredBy, "user");
         const [relay] = yield* Ref.get(harness.sent);
         assert.strictEqual(relay?.threadId, lead.leadThreadId);
         assert.strictEqual(relay?.senderThreadId, pm);
         assert.strictEqual(
           relay?.text,
-          "[User answer via BusyBoy PM] Approve the plan? → Approve\nNote: keep it small",
+          "[User answer via BusyBoy] Ship the fix today? → Approve\nNote: keep it small",
         );
         const summary = (yield* team.attentionSnapshot).projects[0];
         assert.strictEqual(summary?.openCount, 0);
@@ -234,8 +286,107 @@ describe("AttentionRouter", () => {
     ),
   );
 
+  it.effect("rejects a PM answer on a decision card the user did not write", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        // Written before the card appeared, so it cannot answer it.
+        userSays(harness, pm, "Use Postgres", { id: "early" });
+        yield* TestClock.adjust("1 minute");
+        const database = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "Which database?",
+          options: ["Use Postgres", "Use SQLite"],
+        });
+        const decision = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "Tabs or spaces?",
+          options: ["tabs", "spaces"],
+        });
+        const later = "2026-11-04T00:02:00.000Z";
+        // An agent or the server writing as the user does not count either.
+        userSays(harness, pm, "Use Postgres", {
+          id: "from-agent",
+          createdAt: later,
+          createdBy: "agent",
+          creationSource: "mcp",
+        });
+        userSays(harness, pm, "spaces", {
+          id: "from-server",
+          createdAt: later,
+          creationSource: "server",
+        });
+
+        for (const [item, answer] of [
+          [database.item, "Use Postgres"],
+          [decision.item, "spaces"],
+        ] as const) {
+          const error = yield* team
+            .answerAttention(pm, { attentionItemId: item.id, answer })
+            .pipe(Effect.flip);
+          assert.strictEqual(error.message, ProjectTeamService.PM_RELAY_NOT_USER_WORDS);
+        }
+        assert.deepStrictEqual(yield* Ref.get(harness.sent), []);
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 2);
+      }),
+    ),
+  );
+
+  it.effect("accepts a PM answer quoted from the user's chat, ignoring case and spacing", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "Ship the fix today?",
+        });
+        userSays(harness, pm, "좋아요.\n  전부   승인 해주세요");
+
+        const answered = yield* team.answerAttention(pm, {
+          attentionItemId: item.id,
+          answer: " 전부 승인 ",
+        });
+        assert.strictEqual(answered.item.answeredBy, "pm");
+        const [relay] = yield* Ref.get(harness.sent);
+        assert.strictEqual(
+          relay?.text,
+          "[User's chat answer, relayed by BusyBoy PM] Ship the fix today? →  전부 승인 ",
+        );
+      }),
+    ),
+  );
+
+  it.effect("lets the PM answer a blocker without quoting the user", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "blocker",
+          question: "Need a token.",
+        });
+
+        const answered = yield* team.answerAttention(pm, {
+          attentionItemId: item.id,
+          answer: "The token is in the vault.",
+        });
+        assert.strictEqual(answered.item.answeredBy, "pm");
+        const [relay] = yield* Ref.get(harness.sent);
+        assert.strictEqual(
+          relay?.text,
+          "[User's chat answer, relayed by BusyBoy PM] Need a token. → The token is in the vault.",
+        );
+      }),
+    ),
+  );
+
   it("shortens long questions in the relayed answer", () => {
-    const text = relayedAnswerText("q".repeat(600), "ok");
-    assert.strictEqual(text, `[User answer via BusyBoy PM] ${"q".repeat(500)}… → ok`);
+    const text = relayedAnswerText("q".repeat(600), "ok", "user");
+    assert.strictEqual(text, `[User answer via BusyBoy] ${"q".repeat(500)}… → ok`);
   });
 });

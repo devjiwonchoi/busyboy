@@ -1,9 +1,9 @@
 import "~/index.css";
 
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import type { ProjectTeamAttentionSummary } from "@t3tools/contracts";
+import type { ProjectTaskReference, ProjectTeamAttentionSummary } from "@t3tools/contracts";
 import { act } from "react";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -143,29 +143,56 @@ function projectGroup(id: string, title: string) {
 let root: Root;
 let container: HTMLDivElement;
 
-// One task lead per stage, plus the sub-states that matter.
-const TASKS = [
+// One task lead per user-facing status, plus the stored states that fold into one.
+type LeadRuntime = "running" | "failed";
+const TASKS: ReadonlyArray<{
+  number: number;
+  stage: ProjectTaskReference["stage"];
+  prUrl?: string;
+  lastOutcome?: ProjectTaskReference["lastOutcome"];
+  openQuestion?: boolean;
+  openBlocker?: boolean;
+  lead?: LeadRuntime;
+}> = [
   { number: 1, stage: "inbox" },
   { number: 2, stage: "planning" },
-  { number: 3, stage: "running" },
-  { number: 4, stage: "in_review", prUrl: "https://github.com/acme/busyboy/pull/81" },
-  { number: 5, stage: "done" },
-  { number: 6, stage: "blocked" },
-  { number: 7, stage: "cancelled" },
-  { number: 8, stage: "running", lastOutcome: "stalled" },
-  { number: 9, stage: "planning" },
-] as const;
+  { number: 3, stage: "awaiting_approval" },
+  { number: 4, stage: "running", lead: "running" },
+  {
+    number: 5,
+    stage: "in_review",
+    prUrl: "https://github.com/acme/busyboy/pull/81",
+    lead: "running",
+  },
+  { number: 6, stage: "in_review", prUrl: "https://github.com/acme/busyboy/pull/82" },
+  { number: 7, stage: "planning", openQuestion: true },
+  { number: 8, stage: "running", lead: "failed" },
+  { number: 9, stage: "done" },
+  { number: 10, stage: "cancelled" },
+  { number: 11, stage: "running", lastOutcome: "stalled" },
+  { number: 12, stage: "blocked" },
+  // The PM's nudges ran out and raised a blocker card.
+  { number: 13, stage: "running", lastOutcome: "stalled", openQuestion: true, openBlocker: true },
+];
 
-function leadThread(number: number): EnvironmentThreadShell {
-  const thread = threadShell(`lead-${number}`, "busyboy", `2026-11-05T08:${10 + number}:00.000Z`);
+function leadThread(task: (typeof TASKS)[number]): EnvironmentThreadShell {
+  const thread = threadShell(
+    `lead-${task.number}`,
+    "busyboy",
+    `2026-11-05T08:${10 + task.number}:00.000Z`,
+  );
   return {
     ...thread,
-    title: `Task ${number}`,
+    title: `Task ${task.number}`,
     lineage: {
       rootThreadId: "pm-thread",
       parentThreadId: "pm-thread",
       relationshipToParent: "subagent",
     } as never,
+    runtime:
+      task.lead === undefined
+        ? null
+        : ({ status: task.lead, lastErrorClass: null, activeRunId: null } as never),
   };
 }
 
@@ -175,7 +202,7 @@ beforeEach(() => {
   state.groups = [projectGroup("busyboy", "busyboy")];
   state.threads = [
     threadShell("pm-thread", "busyboy", "2026-11-05T08:59:00.000Z"),
-    ...TASKS.map((task) => leadThread(task.number)),
+    ...TASKS.map(leadThread),
   ];
   state.managers = [
     {
@@ -190,27 +217,34 @@ beforeEach(() => {
           title: `Task ${task.number}`,
           stage: task.stage,
           leadThreadId: `lead-${task.number}` as never,
-          prUrl: "prUrl" in task ? task.prUrl : null,
-          lastOutcome: "lastOutcome" in task ? task.lastOutcome : null,
+          prUrl: task.prUrl ?? null,
+          lastOutcome: task.lastOutcome ?? null,
+          openQuestion: task.openQuestion ?? false,
+          openBlocker: task.openBlocker ?? false,
+          updatedAt: null,
         })),
-        // Task 9 asked the user to approve its plan.
+        // Task 7 asked the user a question.
         decisionCards: [
           {
-            taskNumber: 9,
-            taskTitle: "Task 9",
+            taskNumber: 7,
+            taskTitle: "Task 7",
             item: {
-              id: "attention-9" as never,
+              id: "attention-7" as never,
               projectId: "busyboy" as never,
-              taskId: "task-9" as never,
-              kind: "approval",
-              question: "Approve the plan?",
+              taskId: "task-7" as never,
+              kind: "decision",
+              question: "Which login provider?",
               options: [],
               answer: null,
               answeredAt: null,
-              askerThreadId: "lead-9" as never,
+              askerThreadId: "lead-7" as never,
               batchId: "batch-1" as never,
               createdAt: NOW as never,
               supersededAt: null,
+              answeredBy: null,
+              specVersion: null,
+              summary: null,
+              verification: null,
             },
           },
         ],
@@ -275,48 +309,65 @@ function rowStatus(number: number) {
   };
 }
 
-describe("sidebar task status", () => {
-  it("shows a status icon and label on every task row, whatever its stage", async () => {
-    await renderSidebarApp().render();
-    await vi.waitFor(() => expect(rowStatus(1).icon).toBe("inbox"));
+const EXPECTED: Record<number, { icon: string; label: string }> = {
+  1: { icon: "task-todo", label: "Todo" },
+  2: { icon: "task-planning", label: "Planning" },
+  3: { icon: "task-waiting_for_approval", label: "Waiting for approval" },
+  4: { icon: "task-in_progress", label: "In Progress" },
+  5: { icon: "task-in_review", label: "In Review · PR #81" },
+  6: { icon: "task-ready", label: "Ready · PR #82" },
+  7: { icon: "task-ask_question", label: "Ask question" },
+  8: { icon: "task-fatal", label: "Fatal" },
+  9: { icon: "task-done", label: "Done" },
+  10: { icon: "task-done", label: "Done · cancelled" },
+  // A quiet turn is normal work: In Progress, with the idle hint in the label.
+  11: { icon: "task-in_progress", label: "In Progress · idle" },
+  12: { icon: "task-fatal", label: "Fatal" },
+  13: { icon: "task-fatal", label: "Fatal" },
+};
 
-    const expected: Record<number, { icon: string; label: string }> = {
-      1: { icon: "inbox", label: "Inbox" },
-      2: { icon: "planning", label: "Planning" },
-      3: { icon: "running", label: "Running" },
-      4: { icon: "review", label: "In review · PR #81" },
-      5: { icon: "done", label: "Done" },
-      6: { icon: "blocked", label: "Blocked" },
-      7: { icon: "cancelled", label: "Cancelled" },
-      8: { icon: "stalled", label: "Stalled · Running" },
-      9: { icon: "input", label: "Needs you" },
-    };
-    for (const [number, { icon, label }] of Object.entries(expected)) {
-      const status = rowStatus(Number(number));
-      expect(status.icon, `task ${number}`).toBe(icon);
-      expect(status.label, `task ${number}`).toBe(label);
-      // Screen readers hear the status as part of the row.
-      expect(status.rowLabel, `task ${number}`).toContain(label);
-    }
+async function expectEveryStatus() {
+  await vi.waitFor(() => expect(rowStatus(1).icon).toBe("task-todo"));
+  for (const [number, { icon, label }] of Object.entries(EXPECTED)) {
+    const status = rowStatus(Number(number));
+    expect(status.icon, `task ${number}`).toBe(icon);
+    expect(status.label, `task ${number}`).toBe(label);
+    // Screen readers hear the status as part of the row.
+    expect(status.rowLabel, `task ${number}`).toContain(label);
+  }
+}
+
+describe("sidebar task status", () => {
+  it("shows one status icon and label per task, the same for every stage that maps to it", async () => {
+    await renderSidebarApp().render();
+    await expectEveryStatus();
   });
 
-  it("shows the in-review task's PR in a tooltip when hovering its title", async () => {
+  it("shows every status at phone width", async () => {
+    await page.viewport(390, 844);
     await renderSidebarApp().render();
-    await vi.waitFor(() => expect(rowStatus(4).icon).toBe("review"));
+    await expectEveryStatus();
+    const icon = taskRow(6).querySelector<HTMLElement>('[data-testid="sidebar-row-status"] svg');
+    expect(icon?.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
 
-    const title = taskRow(4).querySelector<HTMLElement>("span[aria-hidden]")!;
+  it("shows the task's status in a tooltip when hovering its title", async () => {
+    await renderSidebarApp().render();
+    await vi.waitFor(() => expect(rowStatus(5).icon).toBe("task-in_review"));
+
+    const title = taskRow(5).querySelector<HTMLElement>("span[aria-hidden]")!;
     await userEvent.hover(title);
     await vi.waitFor(() =>
       expect(
         document.querySelector('[data-testid="sidebar-task-status-tooltip"]')?.textContent,
-      ).toBe("In review · PR #81"),
+      ).toBe("In Review · PR #81"),
     );
   });
 
   it("leaves ordinary thread rows without a task status", async () => {
     state.threads.push(threadShell("plain", "busyboy", "2026-11-05T08:00:00.000Z"));
     await renderSidebarApp().render();
-    await vi.waitFor(() => expect(rowStatus(1).icon).toBe("inbox"));
+    await vi.waitFor(() => expect(rowStatus(1).icon).toBe("task-todo"));
     const plain = [
       ...container.querySelectorAll<HTMLElement>('[data-testid="sidebar-row-card"]'),
     ].find((card) => card.querySelector("span.sr-only")?.textContent === "plain");

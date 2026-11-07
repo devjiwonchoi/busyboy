@@ -93,13 +93,18 @@ export type VerifyDownload = (input: {
 
 type Updater = Pick<
   AutoUpdater,
-  "checkForUpdates" | "downloadUpdate" | "quitAndInstall" | "on" | "removeListener"
+  | "checkForUpdates"
+  | "downloadUpdate"
+  | "quitAndInstall"
+  | "on"
+  | "removeListener"
+  | "autoInstallOnAppQuit"
 >;
 
 /**
  * Wraps electron-updater so that a download counts only once `verifyDownload`
- * accepts it: until then "update-downloaded" is held back and quitAndInstall
- * refuses. A refused download is deleted.
+ * accepts it: until then "update-downloaded" is held back, quitAndInstall
+ * refuses and install-on-quit stays off. A refused download is deleted.
  */
 export function makeVerified(
   verifyDownload: VerifyDownload,
@@ -110,12 +115,27 @@ export function makeVerified(
   let offeredVersion: string | null = null;
   let downloadedInfo: unknown = null;
   let verified = false;
+  let installOnQuit = false;
+  // electron-updater only arms its quit handler if the flag is on when the
+  // download finishes, which is before verification, so arm it ourselves.
+  const applyInstallOnQuit = () => {
+    updater.autoInstallOnAppQuit = installOnQuit && verified;
+    if (updater.autoInstallOnAppQuit) {
+      (updater as { addQuitHandler?: () => void }).addQuitHandler?.();
+    }
+  };
+  applyInstallOnQuit();
   updater.on("update-downloaded", (info) => {
     downloadedInfo = info;
   });
 
   return ElectronUpdater.of({
     ...base,
+    setAutoInstallOnAppQuit: (value) =>
+      Effect.sync(() => {
+        installOnQuit = value;
+        applyInstallOnQuit();
+      }),
     checkForUpdates: Effect.tryPromise({
       try: async () => {
         const result = await updater.checkForUpdates();
@@ -126,6 +146,7 @@ export function makeVerified(
     downloadUpdate: Effect.tryPromise({
       try: async () => {
         verified = false;
+        applyInstallOnQuit();
         downloadedInfo = null;
         const files = await updater.downloadUpdate();
         try {
@@ -141,6 +162,7 @@ export function makeVerified(
           throw cause;
         }
         verified = true;
+        applyInstallOnQuit();
         for (const listener of downloadedListeners) {
           listener(downloadedInfo ?? { version: offeredVersion });
         }

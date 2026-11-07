@@ -159,6 +159,8 @@ async function renderHeading(
     pmThreadRef,
     pmThreadWorking: false,
     isActive: false,
+    expanded: true,
+    onToggle: vi.fn(),
     onOpenThread: vi.fn(),
     onNewThread: vi.fn(),
     ...overrides,
@@ -167,6 +169,8 @@ async function renderHeading(
   return props;
 }
 
+const rowToggle = () =>
+  container.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-manager-toggle"]')!;
 const button = (name: string) =>
   [...container.querySelectorAll("button")].find(
     (candidate) =>
@@ -174,7 +178,7 @@ const button = (name: string) =>
   );
 
 describe("project manager sidebar heading", () => {
-  it("shows the PM avatar, project and PM name, and opens the PM thread on click", async () => {
+  it("shows the PM avatar, project and PM name; from elsewhere the row opens the PM", async () => {
     const props = await renderHeading({
       summary: summary({ openCount: 2, unreadSitrepCount: 1, presence: { running: 1 } }),
     });
@@ -185,17 +189,44 @@ describe("project manager sidebar heading", () => {
     expect(heading.querySelector('[aria-label="Needs you: 2"]')?.textContent).toBe("2");
     expect(heading.querySelector('[aria-label="Unread sitrep"]')).not.toBeNull();
 
-    await act(async () => button("🦝busyboyRemy")!.click());
+    // Already unfolded: open the PM chat, leave the fold alone.
+    await act(async () => rowToggle().click());
     expect(props.onOpenThread).toHaveBeenCalledExactlyOnceWith(pmThreadRef);
-    expect(button("New thread in busyboy")).toBeDefined();
-    // The section is always open, so the heading has no collapse control.
-    expect(heading.querySelector("[aria-expanded]")).toBeNull();
+    expect(props.onToggle).not.toHaveBeenCalled();
+    expect(button("Add to busyboy")).toBeDefined();
   });
 
-  it("marks the heading current while the PM thread is open and shows a working avatar", async () => {
-    await renderHeading({ isActive: true, pmThreadWorking: true });
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain("Remy");
+  it("unfolds a folded section when it opens the PM chat", async () => {
+    const props = await renderHeading({ expanded: false });
+    await act(async () => rowToggle().click());
+    expect(props.onOpenThread).toHaveBeenCalledExactlyOnceWith(pmThreadRef);
+    expect(props.onToggle).toHaveBeenCalledOnce();
+  });
+
+  it("only folds and unfolds while the PM thread is open, and shows a working avatar", async () => {
+    const props = await renderHeading({ isActive: true, pmThreadWorking: true });
+    expect(container.querySelector('[aria-current="page"]')).toBe(rowToggle());
     expect(container.querySelector('[aria-label="Remy, working"]')).not.toBeNull();
+    await act(async () => rowToggle().click());
+    expect(props.onToggle).toHaveBeenCalledOnce();
+    expect(props.onOpenThread).not.toHaveBeenCalled();
+  });
+
+  it("puts New task and New thread behind one + menu", async () => {
+    const onNewTask = vi.fn();
+    const props = await renderHeading({ onNewTask });
+    await act(async () => button("Add to busyboy")!.click());
+    const item = (name: string) =>
+      [...document.querySelectorAll<HTMLElement>('[data-slot="menu-item"]')].find(
+        (candidate) => candidate.textContent === name,
+      );
+    await vi.waitFor(() => expect(item("New thread")).toBeDefined());
+    await act(async () => item("New thread")!.click());
+    expect(props.onNewThread).toHaveBeenCalledOnce();
+    await act(async () => button("Add to busyboy")!.click());
+    await vi.waitFor(() => expect(item("New task")).toBeDefined());
+    await act(async () => item("New task")!.click());
+    expect(onNewTask).toHaveBeenCalledOnce();
   });
 
   it("has no tasks fold: task leads are ordinary rows below the heading", async () => {

@@ -60,6 +60,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -87,6 +88,7 @@ import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import { capWebhookRuntimeMode } from "../scheduledTasks/Schedule.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
@@ -112,6 +114,8 @@ const DEFAULT_THREAD_LIST_LIMIT = 50;
 const DEFAULT_THREAD_READ_LIMIT = 50;
 const DEFAULT_THREAD_RUN_LIMIT = 10;
 const DEFAULT_THREAD_ITEM_MAX_CHARS = 20_000;
+const WEBHOOK_BIND_REFUSED =
+  "A webhook task always runs in a fresh thread; it cannot be bound to an existing thread.";
 
 interface ResolvedTarget {
   readonly modelSelection: ModelSelection;
@@ -577,13 +581,29 @@ function interactionModeRank(mode: ProviderInteractionMode): number {
   return mode === "plan" ? 0 : 1;
 }
 
+/** The narrower of two runtime modes. */
+export function narrowerRuntimeMode(left: RuntimeMode, right: RuntimeMode): RuntimeMode {
+  return runtimeModeRank(left) <= runtimeModeRank(right) ? left : right;
+}
+
+/**
+ * With no runtimeMode requested, a new thread starts in `defaultMode` (the
+ * settings default), never broader than its parent. An explicit "inherit"
+ * still takes the parent's mode.
+ */
 export function resolveRuntimeMode(
   parentMode: RuntimeMode,
   requested: OrchestratorMcpRuntimeMode | undefined,
   target?: Pick<ResolvedTarget, "modelSelection" | "supportedRuntimeModes">,
+  defaultMode?: RuntimeMode,
 ): Effect.Effect<RuntimeMode, OrchestratorMcpFailure> {
   const inherited = requested === undefined || requested === "inherit";
-  const resolved = inherited ? parentMode : requested;
+  const resolved =
+    requested === undefined && defaultMode !== undefined
+      ? narrowerRuntimeMode(parentMode, defaultMode)
+      : inherited
+        ? parentMode
+        : requested;
   if (runtimeModeRank(resolved) > runtimeModeRank(parentMode)) {
     return Effect.fail(
       failure(
@@ -916,6 +936,14 @@ const make = Effect.gen(function* () {
   const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+
+  const defaultRuntimeModeFor = (projectId: ProjectId) =>
+    serverSettings.getSettings.pipe(
+      Effect.map(
+        (settings) => resolveProjectSettings(settings, projectId).settings.defaultRuntimeMode,
+      ),
+      Effect.mapError(() => failure("orchestration_error", "Unable to read server settings.")),
+    );
 
   const requireProject = (projectId: ProjectId) =>
     projects.getById(projectId).pipe(
@@ -1622,9 +1650,15 @@ const make = Effect.gen(function* () {
         const projectId = yield* resolveProjectTarget(parent, input.projectId);
         yield* assertLiveCallerForOtherProject(scope, parent, projectId);
         const project = yield* requireProject(projectId);
+        const isWebhook = input.schedule.type === "webhook";
+        // Webhook runs act on text from whoever calls the URL, so they always
+        // start in a fresh thread instead of the caller's (often the PM's).
+        if (isWebhook && input.bindToCurrentThread === true) {
+          return yield* failure("invalid_request", WEBHOOK_BIND_REFUSED);
+        }
         const bindToCurrentThread =
           input.bindToCurrentThread ??
-          (parent !== undefined && parent.thread.projectId === projectId);
+          (!isWebhook && parent !== undefined && parent.thread.projectId === projectId);
         if (
           bindToCurrentThread &&
           (parent === undefined || parent.thread.projectId !== projectId)
@@ -1641,6 +1675,10 @@ const make = Effect.gen(function* () {
         const derivedTitle = input.prompt.split("\n")[0]?.trim() ?? "";
         const title =
           input.title ?? (derivedTitle.length > 0 ? derivedTitle.slice(0, 80) : "Scheduled task");
+        const runtimeMode = narrowerRuntimeMode(
+          limits.runtimeMode,
+          yield* defaultRuntimeModeFor(projectId),
+        );
         const upsertInput: ScheduledTaskUpsertInput = {
           title,
           prompt: input.prompt,
@@ -1650,7 +1688,7 @@ const make = Effect.gen(function* () {
           threadId: bindToCurrentThread && parent !== undefined ? parent.thread.id : null,
           workspaceStrategy: scheduledTaskWorkspaceStrategy(bindToCurrentThread),
           modelSelection,
-          runtimeMode: limits.runtimeMode,
+          runtimeMode: isWebhook ? capWebhookRuntimeMode(runtimeMode) : runtimeMode,
           interactionMode: limits.interactionMode,
           createdBy: "agent",
           creationSource: "mcp",
@@ -1715,6 +1753,19 @@ const make = Effect.gen(function* () {
             : input.bindToCurrentThread && parent !== undefined
               ? parent.thread.id
               : null;
+        // Refuse new bindings only: binding now, or turning a bound timer into
+        // a webhook. A webhook bound before this rule stays editable.
+        const becomesWebhook =
+          input.schedule?.type === "webhook" && existing.schedule.type !== "webhook";
+        if (
+          (input.schedule ?? existing.schedule).type === "webhook" &&
+          (input.bindToCurrentThread === true || (becomesWebhook && threadId !== null))
+        ) {
+          return yield* failure(
+            "invalid_request",
+            `${WEBHOOK_BIND_REFUSED} Pass bindToCurrentThread: false.`,
+          );
+        }
         // Rebinding changes where runs execute, so the workspace strategy must
         // follow: unbinding a root-strategy task would otherwise run loose
         // prompts in the shared project checkout.
@@ -1978,6 +2029,7 @@ const make = Effect.gen(function* () {
           parent.thread.runtimeMode,
           input.runtimeMode,
           target,
+          yield* defaultRuntimeModeFor(parent.thread.projectId),
         );
         const interactionMode = yield* resolveInteractionMode(
           parent.thread.interactionMode,
@@ -2298,6 +2350,7 @@ const make = Effect.gen(function* () {
                 parent.thread.runtimeMode,
                 request.runtimeMode,
                 target,
+                yield* defaultRuntimeModeFor(parent.thread.projectId),
               );
               const interactionMode = yield* resolveInteractionMode(
                 parent.thread.interactionMode,

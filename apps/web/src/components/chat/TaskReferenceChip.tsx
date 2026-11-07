@@ -3,7 +3,8 @@ import { Link } from "@tanstack/react-router";
 
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
-import { resolveTaskStageStatus, StatusGlyph } from "../sidebar/SidebarRowLine";
+import { StatusGlyph } from "../sidebar/SidebarRowLine";
+import { useLiveTaskStatus } from "../task/taskStatus";
 
 const CHIP_CLASS_NAME =
   "inline-flex max-w-[18em] items-baseline gap-[0.3em] rounded-sm bg-muted px-[0.35em] align-baseline text-foreground no-underline hover:bg-accent";
@@ -21,7 +22,7 @@ export function TaskReferenceChip(props: {
     </>
   );
   const label = `#${task.number} ${task.title}`;
-  const status = resolveTaskStageStatus(task);
+  const status = useLiveTaskStatus(environmentId, task);
   return (
     <Tooltip>
       <TooltipTrigger

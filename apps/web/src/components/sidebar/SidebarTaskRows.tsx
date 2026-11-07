@@ -6,7 +6,8 @@ import {
 } from "@t3tools/contracts";
 
 import { cn } from "~/lib/utils";
-import { resolveTaskStageStatus, SidebarRowLine } from "./SidebarRowLine";
+import { resolveLiveTaskStatus } from "../task/taskStatus";
+import { SidebarRowLine } from "./SidebarRowLine";
 
 const HIDDEN_STAGES: ReadonlySet<ProjectTaskReference["stage"]> = new Set(["done", "cancelled"]);
 
@@ -39,7 +40,7 @@ export function selectSidebarTasksWithoutSession(
   return rows;
 }
 
-/** One task row with no session: its stage icon, key and title; opens the task page. */
+/** One task row with no session: its status icon, key and title; opens the task page. */
 export function SidebarTaskRow(props: {
   task: ProjectTaskReference;
   taskKeyPrefix: string;
@@ -49,7 +50,8 @@ export function SidebarTaskRow(props: {
 }) {
   const { task } = props;
   const key = formatTaskKey(props.taskKeyPrefix, task.number);
-  const status = resolveTaskStageStatus(task);
+  // These tasks have no lead thread, so only the stored state counts.
+  const status = resolveLiveTaskStatus(task, null);
   return (
     <li
       data-task-item={task.id}

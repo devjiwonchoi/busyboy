@@ -213,7 +213,7 @@ describe("ProjectTeamService", () => {
         assert.strictEqual(message?.threadId, leadThreadId);
         assert.strictEqual(
           message?.text,
-          "[PM nudge] Continue. Current stage: planning. Next step: Write the plan into the spec with task_spec_write, then ask for approval with ask_user(kind: approval). Write the plan.",
+          '[PM nudge] Continue. Current stage: planning. Next step: Write the plan into the spec with task_spec_write, then call task_update(stage: "running", planSummary) and start implementing. Write the plan.',
         );
         const second = yield* team.nudgeTask(pm, { taskId: task.id });
         assert.strictEqual(second.task.nudgeCount, 2);
@@ -258,8 +258,8 @@ describe("ProjectTeamService", () => {
         const asking = yield* team.createTask(pm, { title: "Ask", request: "Ask the user." });
         const askingLead = yield* team.startTask(pm, { taskId: asking.task.id }, harness.delegate);
         yield* team.askUser(askingLead.leadThreadId, {
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Which login provider?",
         });
         const blocked = yield* team.createTask(pm, { title: "Stuck", request: "Get stuck." });
         const blockedLead = yield* team.startTask(
@@ -281,12 +281,77 @@ describe("ProjectTeamService", () => {
         );
         assert.deepStrictEqual(
           status.openAttention.map((item) => item.question),
-          ["Approve the plan?"],
+          ["Which login provider?"],
         );
         assert.strictEqual(status.changes.newAttention.length, 1);
         assert.deepStrictEqual(
           status.changes.blocked.map((task) => task.title),
           ["Stuck"],
+        );
+      }),
+    ),
+  );
+
+  it.effect("gives every task the status the user sees in team_status and task_list", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const start = (title: string) =>
+          Effect.gen(function* () {
+            const { task } = yield* team.createTask(pm, { title, request: `${title}.` });
+            return yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+          });
+        yield* team.createTask(pm, { title: "Queued", request: "Later." });
+        yield* start("Planning");
+        const approval = yield* start("Approval");
+        yield* team.updateTask(approval.leadThreadId, { stage: "awaiting_approval" });
+        const building = yield* start("Building");
+        yield* team.updateTask(building.leadThreadId, { stage: "running", planSummary: "Plan." });
+        const shipped = yield* start("Shipped");
+        yield* team.updateTask(shipped.leadThreadId, {
+          stage: "in_review",
+          prUrl: "https://github.com/acme/app/pull/9",
+        });
+        const asking = yield* start("Asking");
+        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Which one?" });
+        const stuck = yield* start("Stuck");
+        yield* team.updateTask(stuck.leadThreadId, { stage: "blocked" });
+        const finished = yield* start("Finished");
+        yield* team.updateTask(finished.leadThreadId, { stage: "done", resultSummary: "Done." });
+
+        const status = yield* team.teamStatus(pm, {});
+        const byTitle = new Map(
+          Object.values(status.tasks)
+            .flat()
+            .map((task) => [task.title, task.status]),
+        );
+        assert.deepStrictEqual(Object.fromEntries(byTitle), {
+          Queued: "todo",
+          Planning: "planning",
+          Approval: "waiting_for_approval",
+          Building: "in_progress",
+          Shipped: "ready",
+          Asking: "ask_question",
+          Stuck: "fatal",
+          Finished: "done",
+        });
+        assert.deepStrictEqual(status.statusCounts, {
+          todo: 1,
+          planning: 1,
+          waiting_for_approval: 1,
+          in_progress: 1,
+          in_review: 0,
+          ready: 1,
+          ask_question: 1,
+          fatal: 1,
+          done: 1,
+        });
+
+        const listed = yield* team.listTasks(pm, {});
+        assert.strictEqual(
+          listed.tasks.find((task) => task.title === "Asking")?.status,
+          "ask_question",
         );
       }),
     ),
@@ -592,6 +657,23 @@ describe("ProjectTeamService", () => {
     ),
   );
 
+  it.effect("sends each task's last-update time in the snapshot", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const created = yield* team.createTask(pm, { title: "Later", request: "Later." });
+        const before = (yield* team.attentionSnapshot).projects[0]!.tasks[0]!;
+        assert.strictEqual(before.updatedAt, created.task.updatedAt);
+
+        yield* TestClock.adjust("5 minutes");
+        yield* team.updateTask(pm, { taskId: created.task.id, stage: "cancelled" });
+        const after = (yield* team.attentionSnapshot).projects[0]!.tasks[0]!;
+        assert.strictEqual(after.updatedAt, "2026-11-04T00:05:00.000Z");
+      }),
+    ),
+  );
+
   it.effect("streams a fresh snapshot when the PM creates a task", () =>
     withTeam(() =>
       Effect.gen(function* () {
@@ -622,6 +704,11 @@ describe("ProjectTeamService", () => {
         const fragile = yield* startLead(pm, "Fragile", harness.delegate);
         yield* team.writeMemory(pm, { topic: "decisions", content: "Use pnpm." });
 
+        // A lead's plan needs no approval: it starts running and the plan shows in the journal.
+        yield* team.updateTask(shipped.leadThreadId, {
+          stage: "running",
+          planSummary: "Add the button, then a journey test.",
+        });
         yield* TestClock.adjust("1 minute");
         yield* team.updateTask(shipped.leadThreadId, { stage: "done" });
         yield* TestClock.adjust("1 minute");
@@ -658,6 +745,7 @@ describe("ProjectTeamService", () => {
             ["decision", `Decided on #2: ${blocker.question} → Retry once.`],
             ["failed", "#2 failed: Fragile"],
             ["done", "#1 Ship it done"],
+            ["decision", "Plan for #1 Ship it: Add the button, then a journey test."],
           ],
         );
         assert.deepStrictEqual(

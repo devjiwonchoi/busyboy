@@ -2,6 +2,7 @@ import {
   OrchestratorMcpFailure,
   ProjectTeamAskUserInput,
   ProjectTeamAttentionAnswerInput,
+  ProjectTeamAttentionDismissInput,
   ProjectTeamAttentionItemResult,
   ProjectTeamMemoryDeleteInput,
   ProjectTeamMemoryDeleteResult,
@@ -72,7 +73,7 @@ const TaskStartTool = Tool.make("task_start", {
 const TaskUpdateTool = Tool.make("task_update", {
   ...shared,
   description:
-    "Record progress on a task: stage, approved plan, result, PR URL or a note. A task lead updates only its own task and may omit taskId; the PM passes taskId.",
+    "Record progress on a task: stage, plan, result, PR URL or a note. A task lead updates only its own task and may omit taskId; the PM passes taskId.",
   parameters: ProjectTeamTaskUpdateInput,
   success: ProjectTeamTaskResult,
 })
@@ -182,7 +183,7 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
   description:
-    'Task lead only. The only way a task lead reaches the user: a decision, plan approval, or blocker only a person can resolve. Ask once with a self-contained question, then end your turn; the answer arrives as a message. A plan approval without options offers "Approve and start" and "Approve only".',
+    'Task lead only. The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers "Approve and start" or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.',
   parameters: ProjectTeamAskUserInput,
   success: ProjectTeamAttentionItemResult,
 })
@@ -192,11 +193,21 @@ const AskUserTool = Tool.make("ask_user", {
 const AttentionAnswerTool = Tool.make("attention_answer", {
   ...shared,
   description:
-    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's.",
+    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's. Approval and decision cards need the user's own words: the answer must quote exactly what the user wrote in this chat after the card appeared, or the call fails; otherwise let the user click the card. Blocker answers are not checked.",
   parameters: ProjectTeamAttentionAnswerInput,
   success: ProjectTeamAttentionItemResult,
 })
   .annotate(Tool.Title, "Answer a question for the user")
+  .annotate(Tool.Destructive, false);
+
+const AttentionDismissTool = Tool.make("attention_dismiss", {
+  ...shared,
+  description:
+    "Close an open question that no longer needs an answer, with a short reason: the user decided it another way, or it no longer applies. It stops counting as waiting. The PM can close any question in its project, and the task lead that asked is told why. A task lead can close only its own questions.",
+  parameters: ProjectTeamAttentionDismissInput,
+  success: ProjectTeamAttentionItemResult,
+})
+  .annotate(Tool.Title, "Close a question")
   .annotate(Tool.Destructive, false);
 
 const MemoryListTool = Tool.make("memory_list", {
@@ -212,7 +223,7 @@ const MemoryListTool = Tool.make("memory_list", {
 const MemoryWriteTool = Tool.make("memory_write", {
   ...shared,
   description:
-    "Save or replace a core memory topic, such as when the user says to remember something. Every future task lead sees it.",
+    "Save or replace a whole core memory topic, such as when the user says to remember something. The PM and every future task lead see it in their prompt.",
   parameters: ProjectTeamMemoryWriteInput,
   success: ProjectTeamMemoryWriteResult,
 })
@@ -245,6 +256,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TeamSettingsUpdateTool,
   AskUserTool,
   AttentionAnswerTool,
+  AttentionDismissTool,
   MemoryListTool,
   MemoryWriteTool,
   MemoryDeleteTool,

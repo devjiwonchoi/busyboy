@@ -83,6 +83,9 @@ describe("taskReferencesForThread", () => {
         leadThreadId: ThreadId.make("lead-1"),
         prUrl: null,
         lastOutcome: null,
+        openQuestion: false,
+        openBlocker: false,
+        updatedAt: null,
       },
       {
         id: "task-2" as never,
@@ -93,6 +96,9 @@ describe("taskReferencesForThread", () => {
         leadThreadId: null,
         prUrl: null,
         lastOutcome: null,
+        openQuestion: false,
+        openBlocker: false,
+        updatedAt: null,
       },
     ],
   };

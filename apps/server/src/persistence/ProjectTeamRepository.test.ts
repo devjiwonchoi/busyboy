@@ -272,8 +272,8 @@ describe("ProjectTeamRepository", () => {
         id: ProjectAttentionItemId.make("item-1"),
         projectId,
         taskId: task.id,
-        kind: "approval",
-        question: "Approve the plan?",
+        kind: "decision",
+        question: "Which database?",
         options: ["yes", "no"],
         askerThreadId: leadThreadId,
         batchId,
@@ -300,11 +300,18 @@ describe("ProjectTeamRepository", () => {
         id: approval.id,
         answer: "yes",
         answeredAt: t2,
+        answeredBy: "user",
       });
       assert.strictEqual(Option.getOrThrow(answered).answer, "yes");
+      assert.strictEqual(Option.getOrThrow(answered).answeredBy, "user");
       assert.isTrue(
         Option.isNone(
-          yield* team.answerAttentionItem({ id: approval.id, answer: "no", answeredAt: t2 }),
+          yield* team.answerAttentionItem({
+            id: approval.id,
+            answer: "no",
+            answeredAt: t2,
+            answeredBy: "pm",
+          }),
         ),
       );
       assert.strictEqual(
@@ -338,8 +345,8 @@ describe("ProjectTeamRepository", () => {
           id: ProjectAttentionItemId.make(id),
           projectId,
           taskId,
-          kind: "approval",
-          question: "Approve the plan?",
+          kind: "decision",
+          question: "Which database?",
           options: [],
           askerThreadId: leadThreadId,
           batchId: ProjectAttentionBatchId.make("batch-1"),

@@ -282,6 +282,8 @@ import {
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { SitrepIntervalPicker, SitrepSettingsContent } from "./SitrepIntervalPicker";
+import { AfkBanner } from "./Afk";
+import { CollapsedComposerAction } from "./CollapsedComposerAction";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
@@ -1053,6 +1055,7 @@ import {
 } from "lucide-react";
 import { proposedPlanTitle } from "@t3tools/shared/proposedPlanText";
 import { hasProviderSetup } from "./ProviderStatusBanner";
+import { useChatAnnotations } from "./useChatAnnotations";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -1355,6 +1358,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   showEscapeToStopHint: boolean;
   followUpBehavior: "queue" | "steer";
   canSteer: boolean;
+  seamless: boolean;
   alternateShortcutLabel: string | null;
   showPlanFollowUpPrompt: boolean;
   promptHasText: boolean;
@@ -1406,6 +1410,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         canInterrupt={props.canInterrupt}
         followUpBehavior={props.followUpBehavior}
         canSteer={props.canSteer}
+        seamless={props.seamless}
         alternateShortcutLabel={props.alternateShortcutLabel}
         showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
         promptHasText={props.promptHasText}
@@ -1611,8 +1616,6 @@ export interface ChatComposerProps {
   onPageScrollRelease: () => void;
 
   queuedRunsControl?: ReactNode;
-  /** Open decision cards, docked right above the composer until answered. */
-  decisionCardsDock?: ReactNode;
   editingQueuedAttachments: ReadonlyArray<{
     readonly attachment: ContractChatAttachment;
     readonly url: string | null;
@@ -2040,6 +2043,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const projectManagerRef = projectManager
     ? scopeProjectRef(environmentId, projectManager.projectId)
     : null;
+  // The PM chat reads as one uninterrupted conversation: follow-ups sent while it works join
+  // the running turn, with no steer/queue choice or compaction prompt in the composer.
+  const seamless = projectManager !== null;
   const requestSitrep = useRequestSitrep();
   const requestSitrepNow = useStableCallback(() => {
     if (
@@ -2052,6 +2058,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     void requestSitrep(projectManagerRef);
   });
   const composerDraft = useComposerThreadDraft(composerDraftTarget);
+  const composerAnnotations = useChatAnnotations(composerDraftTarget);
   const composerDraftTargetKeyRef = useRef("");
   useLayoutEffect(() => {
     composerDraftTargetKeyRef.current = composerDraftTargetKey;
@@ -2434,6 +2441,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const isMobileViewport = useMediaQuery("max-sm");
+  const isCoarsePointer = useMediaQuery({ pointer: "coarse" });
+  // Phones have no Tab key, so suggestions are accepted by tapping them.
+  const acceptsSuggestionByTap = isMobileViewport || isCoarsePointer;
   const {
     isComposerFocused,
     setIsComposerFocused,
@@ -2536,7 +2546,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     prompt,
     imageCount: composerImages.length + composerFiles.length,
     terminalContexts: composerTerminalContexts,
-    elementContextCount: composerPreviewAnnotations.length + composerReviewComments.length,
+    elementContextCount:
+      composerPreviewAnnotations.length +
+      composerReviewComments.length +
+      composerAnnotations.annotations.length,
   });
   const composerTriggerKind = composerTrigger?.kind ?? null;
   const pathTriggerQuery = composerTrigger?.kind === "path" ? composerTrigger.query : "";
@@ -2943,7 +2956,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const showResumeAction =
     canResume && !composerDraftHasUserContent(composerDraft) && !isEditingQueuedMessage;
   const collapsedComposerPrimaryActionDisabled =
-    phase === "running" ||
+    (phase === "running" && !seamless) ||
     isSendBusy ||
     isSendDisabled ||
     isConnecting ||
@@ -2953,9 +2966,23 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (!composerSendState.hasSendableContent && !showResumeAction);
   const collapsedComposerPrimaryActionLabel = showResumeAction
     ? "Resume thread"
-    : props.resumeCompactionTokens !== null && !props.keepFullHistory
+    : !seamless && props.resumeCompactionTokens !== null && !props.keepFullHistory
       ? "Open composer to compact and send"
       : "Send message";
+  // Sitrep can take the collapsed mobile row's arrow in the PM chat when
+  // nothing is running, resumable or being answered.
+  const collapsedComposerSitrep =
+    projectManager !== null &&
+    !canInterrupt &&
+    !showResumeAction &&
+    !isEditingQueuedMessage &&
+    activePendingProgress === null
+      ? {
+          inProgress: projectManager.sitrepInProgress,
+          disabled: !canOperateThread || environmentUnavailable !== null,
+          onRequest: requestSitrepNow,
+        }
+      : null;
   const showMobilePendingAnswerActions =
     isMobileViewport && !isComposerCollapsedMobile && pendingPrimaryAction !== null;
 
@@ -4041,6 +4068,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               alternateModifier: false,
               activeTurnDefault: settings.followUpBehavior,
               canSteer: !isCompacting,
+              seamless,
             }),
           submissionIntent,
         );
@@ -4064,6 +4092,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         alternateModifier: event.metaKey || event.ctrlKey,
         activeTurnDefault: settings.followUpBehavior,
         canSteer: !isCompacting,
+        seamless,
       }),
     );
   };
@@ -4076,6 +4105,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         alternateModifier: false,
         activeTurnDefault: settings.followUpBehavior,
         canSteer: !isCompacting,
+        seamless,
       }),
     );
   };
@@ -4240,6 +4270,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           alternateModifier: submissionIntent === "alternate",
           activeTurnDefault: settings.followUpBehavior,
           canSteer: !isCompacting,
+          seamless,
         }),
         submissionIntent,
       );
@@ -5760,6 +5791,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // render, which during a stream is every delta.
   const onComposerPasteStable = useStableCallback(onComposerPaste);
   const onComposerCommandKeyStable = useStableCallback(onComposerCommandKey);
+  const acceptPromptSuggestionStable = useStableCallback(() => {
+    if (visiblePromptSuggestion === null || promptRef.current.length > 0) return;
+    replacePromptFromHistory(visiblePromptSuggestion);
+  });
   const isPathQueryActiveStable = useStableCallback(
     () => resolveActiveComposerTrigger().trigger?.kind === "path",
   );
@@ -6449,6 +6484,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
+      {projectManager && projectManagerRef ? (
+        <AfkBanner projectRef={projectManagerRef} summary={projectManager} />
+      ) : null}
       {composerControlsCollapsed && restingControlsHost
         ? createPortal(
             <div
@@ -6481,7 +6519,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               </ComposerBanner.Root>
             </ComposerBanner.Attachment>
           ) : null}
-          {props.decisionCardsDock}
           {showComposerTopDrawer && (!isTasksDrawerOpen || hasBlockingComposerTopDrawer) ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root
@@ -6685,7 +6722,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : "text-placeholder",
                   )}
                   onPointerDown={(event) => event.preventDefault()}
-                  onClick={isChoiceOnlyPendingQuestion ? undefined : expandMobileComposerStable}
+                  onClick={
+                    isChoiceOnlyPendingQuestion
+                      ? undefined
+                      : () => {
+                          // A tap on the suggestion accepts it, as Tab does on desktop.
+                          acceptPromptSuggestionStable();
+                          expandMobileComposerStable();
+                        }
+                  }
                   disabled={isChoiceOnlyPendingQuestion}
                   aria-label="Expand composer"
                 >
@@ -6697,38 +6742,33 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : prompt.trim() ||
                       (showProviderUnavailable
                         ? "Enable a provider in Settings"
-                        : "Ask anything...")}
+                        : visiblePromptSuggestion !== null
+                          ? `${visiblePromptSuggestion}  (tap)`
+                          : "Ask anything...")}
                 </button>
                 {collapsedComposerImagePreviews}
-                <button
-                  type="button"
-                  data-chat-composer-transition-actions="true"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-message-action text-message-action-foreground hover:bg-message-action-hover disabled:opacity-64"
+                {composerAnnotations.annotations.length > 0 ? (
+                  <div data-composer-annotations className="shrink-0">
+                    {composerAnnotations.chip}
+                  </div>
+                ) : null}
+                <CollapsedComposerAction
+                  sitrep={collapsedComposerSitrep}
+                  hasSendableContent={composerSendState.hasSendableContent}
+                  showResume={showResumeAction}
                   disabled={collapsedComposerPrimaryActionDisabled}
-                  aria-label={collapsedComposerPrimaryActionLabel}
-                  onPointerDown={(event) => event.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation();
+                  label={collapsedComposerPrimaryActionLabel}
+                  onPrimary={() => {
                     if (showResumeAction) onResume();
-                    else if (props.resumeCompactionTokens !== null && !props.keepFullHistory)
+                    else if (
+                      !seamless &&
+                      props.resumeCompactionTokens !== null &&
+                      !props.keepFullHistory
+                    )
                       expandMobileComposer();
                     else submitComposer();
                   }}
-                >
-                  {showResumeAction ? (
-                    <PlayIcon className="size-4 fill-current" aria-hidden="true" />
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path
-                        d="M8 3L8 13M8 3L4 7M8 3L12 7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </button>
+                />
               </div>
             ) : null}
 
@@ -6821,6 +6861,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     ))}
                   </div>
                 )}
+
+              {!isComposerCollapsedMobile &&
+              !isComposerApprovalState &&
+              composerAnnotations.annotations.length > 0 ? (
+                <div data-composer-annotations className="mb-2 flex">
+                  {composerAnnotations.chip}
+                </div>
+              ) : null}
 
               {!isComposerCollapsedMobile &&
                 !isComposerApprovalState &&
@@ -7232,6 +7280,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       isComposerResting &&
                         "flex items-center overflow-hidden whitespace-nowrap leading-8",
                     )}
+                    onPlaceholderActivate={
+                      acceptsSuggestionByTap && visiblePromptSuggestion !== null
+                        ? acceptPromptSuggestionStable
+                        : undefined
+                    }
                     onChange={onPromptChangeStable}
                     onVisibleSelectionChange={expandComposerForEditorChangeStable}
                     onCommandKeyDown={onComposerCommandKeyStable}
@@ -7257,7 +7310,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                 : phase === "disconnected"
                                   ? DISCONNECTED_COMPOSER_PLACEHOLDER
                                   : visiblePromptSuggestion !== null
-                                    ? `${visiblePromptSuggestion}  (Tab)`
+                                    ? `${visiblePromptSuggestion}  (${acceptsSuggestionByTap ? "tap" : "Tab"})`
                                     : "Ask anything, @tag files/folders, $use skills, or / for commands"
                     }
                     disabled={
@@ -7394,6 +7447,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     showEscapeToStopHint={showEscapeToStopHint}
                     followUpBehavior={settings.followUpBehavior}
                     canSteer={!isCompacting}
+                    seamless={seamless}
                     alternateShortcutLabel={shortcutLabelForCommand(
                       keybindings,
                       "composer.sendAlternate",
@@ -7427,7 +7481,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                     onInterrupt={handleInterruptPrimaryActionStable}
                     onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryActionStable}
-                    compactBeforeSendTokens={props.resumeCompactionTokens}
+                    compactBeforeSendTokens={seamless ? null : props.resumeCompactionTokens}
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
                     {...(projectManager

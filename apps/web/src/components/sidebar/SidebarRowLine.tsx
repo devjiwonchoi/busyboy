@@ -1,4 +1,8 @@
-import type { ProjectTaskReference } from "@t3tools/contracts";
+import {
+  PROJECT_TASK_STATUS_LABELS,
+  type ProjectTaskReference,
+  type ProjectTaskStatus,
+} from "@t3tools/contracts";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
@@ -6,20 +10,26 @@ import {
   CircleDotDashedIcon,
   CircleEllipsisIcon,
   CircleIcon,
-  CirclePauseIcon,
-  CircleSlashIcon,
-  CircleXIcon,
+  ClipboardCheckIcon,
+  GitMergeIcon,
   GitPullRequestArrowIcon,
   MessageCircleQuestionIcon,
+  OctagonAlertIcon,
   ShieldQuestionIcon,
 } from "lucide-react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 
 import { cn } from "~/lib/utils";
-import { TASK_STAGE_LABELS } from "../chat/taskReferences.logic";
 import type { SidebarThreadStatus } from "../Sidebar.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
+/** A plain thread's live state, or a task's user-facing status (prefixed "task-"). */
 export type SidebarRowStatusIcon =
   | "working"
   | "waiting"
@@ -27,14 +37,7 @@ export type SidebarRowStatusIcon =
   | "approval"
   | "failed"
   | "done"
-  // Task stages, for a project manager's task-lead rows.
-  | "inbox"
-  | "planning"
-  | "running"
-  | "review"
-  | "stalled"
-  | "blocked"
-  | "cancelled";
+  | `task-${ProjectTaskStatus}`;
 
 export interface SidebarRowStatus {
   readonly label: string;
@@ -73,78 +76,48 @@ export function resolveSidebarRowStatus(input: {
   }
 }
 
-const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskReference["stage"]> = new Set([
-  "planning",
-  "running",
-  "in_review",
-]);
-
 /** "PR #81" for a GitHub-style pull request URL, otherwise "PR". */
 export function formatTaskPullRequestLabel(prUrl: string): string {
   const number = /\/pull\/(\d+)(?:[/?#]|$)/u.exec(prUrl)?.[1];
   return number === undefined ? "PR" : `PR #${number}`;
 }
 
-/**
- * The status of a task stage alone, e.g. "In review · PR #81". Every stage has an
- * icon, so a task never looks idle or stuck.
- */
-export function resolveTaskStageStatus(
-  task: Pick<ProjectTaskReference, "stage" | "prUrl" | "lastOutcome">,
-): SidebarRowStatus {
-  if (task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage)) {
-    return {
-      label: `Stalled · ${TASK_STAGE_LABELS[task.stage]}`,
-      icon: "stalled",
-      className: "text-warning",
-    };
-  }
-  const label = TASK_STAGE_LABELS[task.stage];
-  switch (task.stage) {
-    case "inbox":
-      return { label, icon: "inbox", className: "text-muted-foreground" };
-    case "planning":
-      return { label, icon: "planning", className: "text-info" };
-    case "running":
-      return { label, icon: "running", className: "text-info" };
-    case "in_review":
-      return {
-        label: task.prUrl === null ? label : `${label} · ${formatTaskPullRequestLabel(task.prUrl)}`,
-        icon: "review",
-        className: "text-violet-600 dark:text-violet-300",
-      };
-    case "done":
-      return { label, icon: "done", className: "text-success" };
-    case "blocked":
-      return { label, icon: "blocked", className: "text-warning" };
-    case "cancelled":
-      return { label, icon: "cancelled", className: "text-muted-foreground/70" };
-  }
-}
+const TASK_STATUS_CLASS_NAMES: Record<ProjectTaskStatus, string> = {
+  todo: "text-muted-foreground",
+  planning: "text-orange-600 dark:text-orange-300",
+  waiting_for_approval: "text-warning-foreground",
+  in_progress: "text-info",
+  in_review: "text-violet-600 dark:text-violet-300",
+  ready: "text-success",
+  ask_question: "text-indigo-600 dark:text-indigo-300",
+  fatal: "text-error",
+  done: "text-muted-foreground/70",
+};
 
 /**
- * A task lead's row: what asks something of the user first, then live thread
- * activity, then the task's stage. Never null.
+ * How a task's status looks: one icon and color per status, and a label such as
+ * "Ready · PR #81". A cancelled task is Done too, labeled "Done · cancelled".
  */
-export function resolveSidebarTaskRowStatus(input: {
-  readonly threadStatus: SidebarRowStatus | null;
-  readonly task: Pick<ProjectTaskReference, "stage" | "prUrl" | "lastOutcome">;
-  readonly waitingOnUser: boolean;
-}): SidebarRowStatus {
-  const { threadStatus } = input;
-  if (threadStatus?.icon === "approval" || threadStatus?.icon === "input") return threadStatus;
-  if (input.waitingOnUser) {
-    return { label: "Needs you", icon: "input", className: "text-indigo-600 dark:text-indigo-300" };
-  }
-  if (threadStatus?.icon === "working" || threadStatus?.icon === "failed") return threadStatus;
-  return resolveTaskStageStatus(input.task);
+export function describeTaskStatus(
+  status: ProjectTaskStatus,
+  task: Pick<ProjectTaskReference, "stage" | "prUrl">,
+): SidebarRowStatus {
+  const base = PROJECT_TASK_STATUS_LABELS[status];
+  const withPr =
+    (status === "in_review" || status === "ready") && task.prUrl !== null
+      ? `${base} · ${formatTaskPullRequestLabel(task.prUrl)}`
+      : base;
+  const label = status === "done" && task.stage === "cancelled" ? `${base} · cancelled` : withPr;
+  return { label, icon: `task-${status}`, className: TASK_STATUS_CLASS_NAMES[status] };
 }
 
 const statusIconClassName = "size-4 shrink-0";
 
 export function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
   switch (props.icon) {
+    // An in-progress task spins like a working thread: both mean an agent is at work.
     case "working":
+    case "task-in_progress":
       return (
         <CircleDashedIcon
           aria-hidden
@@ -164,25 +137,96 @@ export function StatusGlyph(props: { icon: SidebarRowStatusIcon }) {
       return <CircleAlertIcon aria-hidden className={statusIconClassName} />;
     case "done":
       return <CircleCheckIcon aria-hidden className={statusIconClassName} />;
-    case "inbox":
+    case "task-todo":
       return <CircleIcon aria-hidden className={statusIconClassName} />;
-    case "planning":
+    case "task-planning":
       return <CircleEllipsisIcon aria-hidden className={statusIconClassName} />;
-    case "running":
-      return <CircleDashedIcon aria-hidden className={statusIconClassName} />;
-    case "review":
+    case "task-waiting_for_approval":
+      return <ClipboardCheckIcon aria-hidden className={statusIconClassName} />;
+    case "task-in_review":
       return <GitPullRequestArrowIcon aria-hidden className={statusIconClassName} />;
-    case "stalled":
-      return <CirclePauseIcon aria-hidden className={statusIconClassName} />;
-    case "blocked":
-      return <CircleSlashIcon aria-hidden className={statusIconClassName} />;
-    case "cancelled":
-      return <CircleXIcon aria-hidden className={statusIconClassName} />;
+    case "task-ready":
+      return <GitMergeIcon aria-hidden className={statusIconClassName} />;
+    case "task-ask_question":
+      return <MessageCircleQuestionIcon aria-hidden className={statusIconClassName} />;
+    case "task-fatal":
+      return <OctagonAlertIcon aria-hidden className={statusIconClassName} />;
+    case "task-done":
+      return <CircleCheckIcon aria-hidden className={statusIconClassName} />;
   }
+}
+
+const LONG_PRESS_MS = 500;
+const TOUCH_LABEL_MS = 2000;
+
+/**
+ * A status icon that names itself: the label shows on hover, and on a phone on
+ * long-press. A long-press only shows the label; it doesn't click the row.
+ */
+export function StatusGlyphWithLabel(props: { status: SidebarRowStatus }) {
+  const [open, setOpen] = useState(false);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  const clearPress = () => {
+    if (pressTimer.current !== null) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  };
+  useEffect(
+    () => () => {
+      clearPress();
+      if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+    },
+    [],
+  );
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger
+        render={
+          <span
+            data-testid="status-glyph-trigger"
+            className="pointer-events-auto inline-flex select-none [-webkit-touch-callout:none]"
+            onPointerDown={(event) => {
+              longPressed.current = false;
+              if (event.pointerType === "mouse") return;
+              clearPress();
+              pressTimer.current = setTimeout(() => {
+                longPressed.current = true;
+                setOpen(true);
+                if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+                hideTimer.current = setTimeout(() => setOpen(false), TOUCH_LABEL_MS);
+              }, LONG_PRESS_MS);
+            }}
+            onPointerUp={clearPress}
+            onPointerCancel={clearPress}
+            onPointerLeave={clearPress}
+            // Phones open a context menu on long-press; the label replaces it.
+            onContextMenu={(event) => {
+              if (pressTimer.current !== null || longPressed.current) event.preventDefault();
+            }}
+            onClick={(event) => {
+              if (!longPressed.current) return;
+              longPressed.current = false;
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+          />
+        }
+      >
+        <StatusGlyph icon={props.status.icon} />
+      </TooltipTrigger>
+      <TooltipPopup side="top">{props.status.label}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+function isTaskStatus(status: SidebarRowStatus): boolean {
+  return status.icon.startsWith("task-");
 }
 
 // A fixed-width slot at the row's far right so titles align whether or not a
 // row has a status. The label stays in the accessibility tree as the live region.
+// A task's icon also names its status on hover and long-press.
 export function SidebarRowStatusSlot(props: { status: SidebarRowStatus | null }) {
   const { status } = props;
   return (
@@ -193,7 +237,11 @@ export function SidebarRowStatusSlot(props: { status: SidebarRowStatus | null })
     >
       {status ? (
         <>
-          <StatusGlyph icon={status.icon} />
+          {isTaskStatus(status) ? (
+            <StatusGlyphWithLabel status={status} />
+          ) : (
+            <StatusGlyph icon={status.icon} />
+          )}
           <span role="status" className="sr-only">
             {status.label}
           </span>
@@ -253,6 +301,17 @@ export function SidebarRowLine(props: {
               )}
             >
               {props.actions}
+              {/* A task's status stays in place on hover, so its label is still one hover away. */}
+              {props.status !== null && isTaskStatus(props.status) ? (
+                <span
+                  className={cn(
+                    "ml-0.5 inline-flex size-4 shrink-0 items-center justify-center self-center",
+                    props.status.className,
+                  )}
+                >
+                  <StatusGlyphWithLabel status={props.status} />
+                </span>
+              ) : null}
             </span>
           ) : null}
         </span>

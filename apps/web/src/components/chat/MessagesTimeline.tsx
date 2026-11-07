@@ -185,7 +185,6 @@ import { ChangedFilesCard } from "./ChangedFilesTree";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useProject, useThreadShell } from "../../state/entities";
 import { useProjectManagerForThread } from "../../state/projectTeam";
-import { isOpenDecisionCard } from "../../state/projectTeam.logic";
 import {
   PmAuthorHeader,
   PmEventLine,
@@ -376,7 +375,10 @@ interface TimelineRowSharedState {
 
 interface TimelineRowActivityState {
   isWorking: boolean;
+  /** A compaction runs but its marker row has not arrived yet. */
   isCompacting: boolean;
+  /** A compaction runs; its marker is the only sign of activity. */
+  compactionRunning: boolean;
   isRevertingCheckpoint: boolean;
   activeTurnInProgress: boolean;
   awaitingUser: boolean;
@@ -485,6 +487,8 @@ interface MessagesTimelineProps {
 
   listRef: React.RefObject<LegendListRef | null>;
   timelineEntries: ReadonlyArray<TimelineEntry>;
+  /** Question cards placed inline by when they were asked, open or closed. */
+  decisionCards?: ReadonlyArray<ProjectDecisionCard> | undefined;
   latestRun: TimelineLatestRun | null;
   runningRunId?: RunId | null;
   turnDiffSummaries: ReadonlyArray<TurnDiffSummary>;
@@ -585,6 +589,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   awaitingUser = false,
   listRef,
   timelineEntries,
+  decisionCards,
   findExpanded = false,
   findQuery = "",
   activeFindMatch = null,
@@ -672,6 +677,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
   const citationThreadRef = parseScopedThreadKey(routeThreadKey);
   const openPullRequest = useOpenPrLink(citationThreadRef ?? undefined);
   const projectManager = useProjectManagerForThread(citationThreadRef);
+  // The PM chat reads as one uninterrupted agent: no steer folds, no compaction markers.
+  const seamless = projectManager !== null;
   const expandCitedRun = (runId: RunId) => {
     setExpandedRunIds((current) => (current.has(runId) ? current : new Set([...current, runId])));
   };
@@ -878,14 +885,11 @@ const ConversationTimeline = memo(function ConversationTimeline({
     turnDiffSummaries,
     supportsConversationRollback,
     worktreeSetup,
+    seamless,
   });
   const stableRows = useStableRows(rawRows, listIdentityKey);
-  // Open questions dock above the composer; answered ones stay here as the record, placed
-  // by when they were asked.
-  const rows = mergeDecisionCardRows(
-    stableRows,
-    closedDecisionCards(projectManager?.decisionCards),
-  );
+  // Question cards stay where they were asked: open ones wait there, closed ones are the record.
+  const rows = mergeDecisionCardRows(stableRows, decisionCards);
   const pmTimelineState = useStablePmTimelineState(
     projectManager?.persona ?? null,
     rows,
@@ -1285,7 +1289,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
     workGroupViewState,
   };
   const compactionAwaitingRow =
-    isCompacting && !rows.some((row) => row.kind === "context-compaction" && row.active);
+    !seamless &&
+    isCompacting &&
+    !rows.some((row) => row.kind === "context-compaction" && row.active);
   const backgroundWorktreeSetup =
     worktreeSetup !== null &&
     worktreeSetup.phase === "running" &&
@@ -1296,6 +1302,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   const activityState: TimelineRowActivityState = {
     isWorking,
     isCompacting: compactionAwaitingRow,
+    compactionRunning: isCompacting,
     isRevertingCheckpoint,
     backgroundWorktreeSetup,
     activeTurnInProgress,
@@ -2040,30 +2047,54 @@ function ContextCompactionTimelineRow({
   row: Extract<TimelineRow, { kind: "context-compaction" }>;
 }) {
   return (
+    <ContextCompactionMarker label={row.label} active={row.active} createdAt={row.createdAt} />
+  );
+}
+
+/**
+ * Compaction is housekeeping, so it shows as a small icon rather than a
+ * divider. Hovering or focusing it reveals what happened and when.
+ */
+function ContextCompactionMarker({
+  label,
+  active,
+  createdAt,
+}: {
+  label: string;
+  active: boolean;
+  createdAt: string | null;
+}) {
+  const ctx = use(TimelineRowCtx);
+  return (
     <div
-      role="separator"
-      aria-label={row.label}
-      className="mx-auto flex w-full max-w-(--chat-content-max-width) items-center gap-3 py-1 text-muted-foreground text-xs"
+      data-timeline-compaction-marker={active ? "active" : "done"}
+      className="mx-auto flex w-full max-w-(--chat-content-max-width) py-0.5"
     >
-      <span className="h-px flex-1 bg-border/70" />
-      <span
-        ref={row.active ? observeVisibleAnimation : undefined}
-        className="relative shrink-0 overflow-hidden"
-      >
-        <span className="flex items-center gap-1.5">
-          <Minimize2Icon aria-hidden="true" className="size-3" />
-          {row.label}
-        </span>
-        {row.active ? (
-          <ActivityShimmerOverlay>
-            <span className="flex items-center gap-1.5">
-              <Minimize2Icon aria-hidden="true" className="size-3" />
-              {row.label}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label={label}
+              className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground/50 transition-colors hover:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          }
+        >
+          <Minimize2Icon
+            aria-hidden="true"
+            className={cn("size-3", active && "animate-pulse text-muted-foreground")}
+          />
+        </TooltipTrigger>
+        <TooltipPopup>
+          {label}
+          {createdAt ? (
+            <span className="text-muted-foreground">
+              {" · "}
+              {formatChatTimestampTooltip(createdAt, ctx.timestampFormat)}
             </span>
-          </ActivityShimmerOverlay>
-        ) : null}
-      </span>
-      <span className="h-px flex-1 bg-border/70" />
+          ) : null}
+        </TooltipPopup>
+      </Tooltip>
     </div>
   );
 }
@@ -2129,6 +2160,8 @@ function UserOrPmEventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
 
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
+  // The PM chat shows follow-ups as plain bubbles, without a steer/queue badge.
+  const pm = use(PmTimelineCtx);
   const { onImageExpand, onFileOpen } = ctx;
   const senderThreadId = row.message.senderThreadId;
   const resources = selectMessageImageResources(row.message.attachments);
@@ -2298,7 +2331,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           )}
         </p>
       ) : null}
-      {row.message.inputIntent && row.message.inputIntent !== "turn_start" ? (
+      {pm === null && row.message.inputIntent && row.message.inputIntent !== "turn_start" ? (
         <UserMessageIntentMarker intent={row.message.inputIntent} />
       ) : null}
       <div className="relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
@@ -3603,13 +3636,16 @@ function toolIconAcceptsTint(toolIcon: ToolActivityIcon | undefined): boolean {
 }
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
-  const { isCompacting, isPreparingWorktree, backgroundWorktreeSetup } =
+  const { isCompacting, compactionRunning, isPreparingWorktree, backgroundWorktreeSetup } =
     use(TimelineRowActivityCtx);
-  const shimmer = isPreparingWorktree || isCompacting;
+  if (compactionRunning && !isPreparingWorktree) {
+    return isCompacting ? (
+      <ContextCompactionMarker label="Compacting context" active createdAt={null} />
+    ) : null;
+  }
+  const shimmer = isPreparingWorktree;
   const label = isPreparingWorktree ? (
     "Setting up worktree…"
-  ) : isCompacting ? (
-    <CompactingLabel />
   ) : row.createdAt ? (
     <>
       Working for <WorkingTimer createdAt={row.createdAt} />
@@ -3666,15 +3702,6 @@ function BackgroundWorktreeSetupChip({ snapshot }: { snapshot: WorktreeSetupSnap
         />
       </PopoverPopup>
     </Popover>
-  );
-}
-
-function CompactingLabel() {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <Minimize2Icon aria-hidden="true" className="size-3" />
-      Compacting…
-    </span>
   );
 }
 
@@ -5716,24 +5743,6 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ) : null}
     </WorkLogRow>
   );
-}
-
-const closedDecisionCardsCache = new WeakMap<
-  ReadonlyArray<ProjectDecisionCard>,
-  ReadonlyArray<ProjectDecisionCard>
->();
-
-/** Cards no longer waiting on the user; the same input array keeps the same result. */
-function closedDecisionCards(
-  cards: ReadonlyArray<ProjectDecisionCard> | undefined,
-): ReadonlyArray<ProjectDecisionCard> | undefined {
-  if (cards === undefined) return undefined;
-  let closed = closedDecisionCardsCache.get(cards);
-  if (closed === undefined) {
-    closed = cards.filter((card) => !isOpenDecisionCard(card));
-    closedDecisionCardsCache.set(cards, closed);
-  }
-  return closed;
 }
 
 function DecisionCardTimelineRow({

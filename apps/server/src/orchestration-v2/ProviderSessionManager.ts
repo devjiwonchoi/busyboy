@@ -12,6 +12,8 @@ import {
   ProviderSessionId,
   ThreadId,
   type ProviderThreadId,
+  afkActive,
+  afkSetting,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -45,7 +47,7 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import type * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { personaInstructions, resolvePersona } from "../projectTeam/persona.ts";
+import { AFK_AGENT_RULE, personaInstructions, resolvePersona } from "../projectTeam/persona.ts";
 import { computerUseCapabilityAvailable } from "../computerUse/ComputerUseCapability.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -401,15 +403,27 @@ export const layerWithOptions = (
       const teamInstructionsFor = Effect.fn("ProviderSessionManagerV2.teamInstructionsFor")(
         function* (threadId: ThreadId) {
           if (Option.isNone(projectTeamRepository)) return Option.some(undefined);
-          return yield* projectTeamRepository.value.getManagerByThreadId(threadId).pipe(
-            Effect.map((manager) =>
-              Option.some(
-                Option.isSome(manager)
-                  ? personaInstructions(
-                      resolvePersona(manager.value.projectId, manager.value.settings),
-                    )
-                  : undefined,
-              ),
+          const repository = projectTeamRepository.value;
+          return yield* repository.getManagerByThreadId(threadId).pipe(
+            Effect.flatMap((manager) =>
+              Option.isNone(manager)
+                ? Effect.succeed(Option.some<string | undefined>(undefined))
+                : Effect.all([
+                    repository.listMemory(manager.value.projectId),
+                    Clock.currentTimeMillis,
+                  ]).pipe(
+                    Effect.map(([memory, nowMs]) =>
+                      Option.some<string | undefined>(
+                        personaInstructions(
+                          resolvePersona(manager.value.projectId, manager.value.settings),
+                          memory,
+                          afkActive(afkSetting(manager.value.settings), nowMs)
+                            ? AFK_AGENT_RULE
+                            : undefined,
+                        ),
+                      ),
+                    ),
+                  ),
             ),
             Effect.catch((cause) =>
               Effect.logWarning("Could not read the thread's team role.", {

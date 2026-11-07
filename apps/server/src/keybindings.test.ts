@@ -370,6 +370,32 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     }).pipe(Effect.provide(layerKeybindings())),
   );
 
+  it.effect("moves an untouched mod+n from new thread to new task once", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      const keybindings = yield* Keybindings.Keybindings;
+      const oldNewThread = { key: "mod+n", command: "chat.new", when: "!terminalFocus" } as const;
+      const otherNewThread = {
+        key: "mod+shift+o",
+        command: "chat.new",
+        when: "!terminalFocus",
+      } as const;
+      const newTask = { key: "mod+n", command: "task.new", when: "!terminalFocus" } as const;
+      const relevant = Effect.map(readKeybindingsConfig(keybindingsConfigPath), (rules) =>
+        rules.filter((entry) => entry.command === "chat.new" || entry.command === "task.new"),
+      );
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [oldNewThread, otherNewThread]);
+
+      yield* keybindings.syncDefaultKeybindingsOnStartup;
+      assert.deepStrictEqual(yield* relevant, [newTask, otherNewThread]);
+
+      // A user who puts it back keeps it.
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [oldNewThread, otherNewThread]);
+      yield* keybindings.syncDefaultKeybindingsOnStartup;
+      assert.deepStrictEqual(yield* relevant, [oldNewThread, otherNewThread]);
+    }).pipe(Effect.provide(layerKeybindings())),
+  );
+
   it.effect("leaves a customized command without the late default", () =>
     Effect.gen(function* () {
       const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;

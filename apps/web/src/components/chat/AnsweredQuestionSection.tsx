@@ -17,10 +17,13 @@ export function AnsweredQuestionSection({
   questions,
   answer,
   renderAttachments,
+  answeredLabel = "Answered",
 }: {
   questions: ReadonlyArray<OrchestrationV2UserInputQuestion>;
   answer: UserInputAttachmentAnswerPayload;
   renderAttachments?: (questionId: string) => ReactNode;
+  /** Who answered, e.g. "Auto-answered (AFK)". */
+  answeredLabel?: string;
 }) {
   const questionIds = [
     ...new Set([
@@ -50,7 +53,7 @@ export function AnsweredQuestionSection({
             <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
               <MessageCircleIcon className="size-3.5 shrink-0" />
               <span className="font-medium">{question?.header ?? "Question"}</span>
-              <span>· Answered</span>
+              <span>· {answeredLabel}</span>
             </div>
             <p className="whitespace-pre-wrap text-foreground/85 text-sm">
               {question?.question ?? answer.questionTextById?.[questionId] ?? questionId}

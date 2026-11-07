@@ -14,6 +14,10 @@ import {
   usageLimitRunPresentedAsLatest,
 } from "@t3tools/shared/orchestrationV2ThreadError";
 import { threadPullRequestsOf } from "@t3tools/shared/threadPullRequests";
+import {
+  BACKGROUND_COMPACTION_MESSAGE_PREFIXES,
+  isBackgroundCompactionMessageId,
+} from "@t3tools/shared/claudeCompaction";
 import type {
   OrchestrationV2AppThread,
   OrchestrationV2CheckpointScope,
@@ -1388,18 +1392,24 @@ export function threadShellFromProjection(
         (left, right) =>
           DateTime.toEpochMillis(right.updatedAt) - DateTime.toEpochMillis(left.updatedAt),
       )[0] ?? null;
+  // Background compaction runs stay out of everything the thread presents
+  // (latest run, status, working state, recency) so they finish silently.
+  // activeRunId still includes them: server logic must see the thread as busy.
+  const presentedRuns = projection.runs.filter(
+    (run) => !isBackgroundCompactionMessageId(run.userMessageId),
+  );
   const latestRun =
     usageLimitRunPresentedAsLatest(
-      projection.runs,
+      presentedRuns,
       projection.turnItems,
       providerSession?.lastError ?? null,
-    ) ?? latestUnheldRun(projection.runs);
+    ) ?? latestUnheldRun(presentedRuns);
   const activeRun =
     projection.runs
       .filter(isInterruptibleRunForShell)
       .toSorted((left, right) => right.ordinal - left.ordinal)[0] ?? null;
   const activityRun =
-    projection.runs
+    presentedRuns
       .filter(isActivityRunForShell)
       .toSorted((left, right) => right.ordinal - left.ordinal)[0] ?? null;
   const liveRunIds = new Set(projection.runs.filter(isActivityRunForShell).map((run) => run.id));
@@ -1425,7 +1435,7 @@ export function threadShellFromProjection(
         )[0] ?? null,
     );
   const userMessages = projection.messages
-    .filter((message) => message.role === "user")
+    .filter((message) => message.role === "user" && !isBackgroundCompactionMessageId(message.id))
     .toSorted(
       (left, right) =>
         DateTime.toEpochMillis(right.updatedAt) - DateTime.toEpochMillis(left.updatedAt),
@@ -5168,6 +5178,21 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           ),
         );
 
+    // SQL form of isBackgroundCompactionMessageId, so stored shells match threadShellFromProjection.
+    const isNotBackgroundCompactionId = (column: Statement.Fragment) =>
+      sql.and(
+        BACKGROUND_COMPACTION_MESSAGE_PREFIXES.map(
+          (prefix) => sql`substr(${column}, 1, ${prefix.length}) <> ${prefix}`,
+        ),
+      );
+    const presentedRun = isNotBackgroundCompactionId(
+      sql`json_extract(r.payload_json, '$.userMessageId')`,
+    );
+    const presentedCandidate = isNotBackgroundCompactionId(
+      sql`json_extract(candidate.payload_json, '$.userMessageId')`,
+    );
+    const presentedUserMessage = isNotBackgroundCompactionId(sql`message.message_id`);
+
     const selectShellThreadRows = (
       threadId?: ThreadId,
       { location, projectId }: ShellSnapshotOptions = {},
@@ -5199,6 +5224,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 FROM orchestration_v2_projection_runs r
                 WHERE r.thread_id = t.thread_id
                   AND r.status IN ('preparing', 'starting', 'running', 'waiting')
+                  AND ${presentedRun}
                 ORDER BY r.ordinal DESC, r.run_id DESC
                 LIMIT 1
               ) AS activity_run_status,
@@ -5212,6 +5238,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 FROM orchestration_v2_projection_runs r
                 WHERE r.thread_id = t.thread_id
                   AND r.status IN ('preparing', 'starting', 'running', 'waiting')
+                  AND ${presentedRun}
                 ORDER BY r.ordinal DESC, r.run_id DESC
                 LIMIT 1
               ) AS activity_run_started_at,
@@ -5279,6 +5306,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 FROM orchestration_v2_projection_messages message
                 WHERE message.thread_id = t.thread_id
                   AND message.role = 'user'
+                  AND ${presentedUserMessage}
                 ORDER BY message.updated_at DESC, message.message_id DESC
                 LIMIT 1
               ) AS latest_user_message_at,
@@ -5288,6 +5316,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 WHERE message.thread_id = t.thread_id
                   AND message.role = 'user'
                   AND json_extract(message.payload_json, '$.createdBy') = 'user'
+                  AND ${presentedUserMessage}
                 ORDER BY message.updated_at DESC, message.message_id DESC
                 LIMIT 1
               ) AS latest_user_authored_message_at,
@@ -5324,6 +5353,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               SELECT candidate.run_id
               FROM orchestration_v2_projection_runs candidate
               WHERE candidate.thread_id = t.thread_id
+                AND ${presentedCandidate}
                 AND NOT (
                   candidate.status = 'queued'
                   AND json_extract(candidate.payload_json, '$.queueHeld') IS 1
@@ -5336,6 +5366,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               FROM orchestration_v2_projection_runs candidate
               WHERE candidate.thread_id = t.thread_id
                 AND candidate.status <> 'queued'
+                AND ${presentedCandidate}
                 AND NOT (
                   candidate.status = 'cancelled'
                   AND json_extract(candidate.payload_json, '$.startedAt') IS NULL

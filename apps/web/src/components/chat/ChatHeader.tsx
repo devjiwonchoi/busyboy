@@ -20,7 +20,8 @@ import {
 } from "react";
 import { isTrailingDoubleClick, resolveSidebarThreadStatus } from "../Sidebar.logic";
 import { useThreadShell } from "../../state/entities";
-import { useProjectManagerForThread } from "../../state/projectTeam";
+import { useLeadThreadTask, useProjectManagerForThread } from "../../state/projectTeam";
+import { TaskPlanToggle } from "../task/TaskPlanSurface";
 import { ProjectManagerHeaderIdentity } from "./ProjectManagerHeaderIdentity";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
@@ -91,6 +92,11 @@ export const ChatHeader = memo(function ChatHeader({
   const activeThreadRef = scopeThreadRef(activeThreadEnvironmentId, activeThreadId);
   const projectManager = useProjectManagerForThread(isServerThread ? activeThreadRef : null);
   const projectManagerThread = useThreadShell(projectManager ? activeThreadRef : null);
+  const activeThreadShell = useThreadShell(isServerThread ? activeThreadRef : null);
+  const leadTask = useLeadThreadTask(
+    isServerThread ? activeThreadRef : null,
+    activeThreadShell?.projectId ?? null,
+  );
   const canOperateThread = useEnvironmentScope(
     activeThreadEnvironmentId,
     AuthOrchestrationOperateScope,
@@ -277,10 +283,12 @@ export const ChatHeader = memo(function ChatHeader({
       ref={breadcrumbContainerRef}
       className={cn(
         "flex min-w-0 flex-1 items-center gap-2 sm:gap-3",
-        rightPanelOpen ? "pr-10" : "pr-24",
+        // Phones also show the "New task" button in the controls.
+        rightPanelOpen ? "pr-10 max-md:pr-20" : "pr-24 max-md:pr-36",
       )}
       onContextMenu={handleHeaderContextMenu}
     >
+      {leadTask === null ? null : <TaskPlanToggle threadRef={activeThreadRef} />}
       <WorkspaceBreadcrumb
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"

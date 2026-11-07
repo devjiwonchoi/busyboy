@@ -2,10 +2,12 @@ import type { DesktopBridge, DesktopUpdateState } from "@t3tools/contracts";
 import { ArrowRightIcon } from "lucide-react";
 
 import {
+  getDesktopUpdateActionError,
   getDesktopUpdateDownloadedVersion,
+  getDesktopUpdateReadyDescription,
   getDesktopUpdateReleaseUrl,
 } from "./desktopUpdate.logic";
-import { toastManager } from "./ui/toast";
+import { stackedThreadToast, toastManager } from "./ui/toast";
 
 type DesktopUpdateShell = Pick<DesktopBridge, "openExternal">;
 
@@ -44,19 +46,81 @@ function ReleaseNotesLink({
   );
 }
 
-export function showDesktopUpdateDownloadedToast(
-  shell: DesktopUpdateShell,
+export type ReportDesktopUpdateError = (title: string, description: string) => void;
+
+const toastUpdateError: ReportDesktopUpdateError = (title, description) => {
+  toastManager.add(stackedThreadToast({ type: "error", title, description }));
+};
+
+/** Installs the downloaded update, which restarts the app. Resolves false on failure. */
+export async function installDesktopUpdate(
+  bridge: Pick<DesktopBridge, "installUpdate">,
+  reportError: ReportDesktopUpdateError = toastUpdateError,
+): Promise<boolean> {
+  try {
+    const result = await bridge.installUpdate();
+    if (!result.accepted) {
+      reportError(
+        "Could not install update",
+        result.state.message ?? "The update is not ready to install yet.",
+      );
+      return false;
+    }
+    const actionError = getDesktopUpdateActionError(result);
+    if (!actionError) return true;
+    reportError("Could not install update", actionError);
+    return false;
+  } catch (error) {
+    reportError(
+      "Could not install update",
+      error instanceof Error ? error.message : "An unexpected error occurred.",
+    );
+    return false;
+  }
+}
+
+// `undefined` until the first prompt, so a versionless update still prompts once.
+let promptedVersion: string | null | undefined;
+let promptToastId: string | null = null;
+
+/** Shows the restart prompt for the downloaded update, replacing any open one. */
+export function showDesktopUpdateReadyPrompt(
+  bridge: DesktopUpdateShell & Pick<DesktopBridge, "installUpdate">,
   state: DesktopUpdateState,
 ): void {
-  const releaseUrl = getDesktopUpdateReleaseUrl(getDesktopUpdateDownloadedVersion(state));
-  toastManager.add({
-    type: "success",
-    title: "Update downloaded",
-    description: (
-      <>
-        Restart the app from the update button to install it.
-        {releaseUrl ? <ReleaseNotesLink releaseUrl={releaseUrl} shell={shell} /> : null}
-      </>
-    ),
-  });
+  const version = getDesktopUpdateDownloadedVersion(state);
+  const releaseUrl = getDesktopUpdateReleaseUrl(version);
+  promptedVersion = version;
+  if (promptToastId !== null) toastManager.close(promptToastId);
+  const toastId = toastManager.add(
+    stackedThreadToast({
+      type: "success",
+      title: version ? `Update ${version} is ready` : "Update is ready",
+      description: (
+        <>
+          {getDesktopUpdateReadyDescription(state)}
+          {releaseUrl ? <ReleaseNotesLink releaseUrl={releaseUrl} shell={bridge} /> : null}
+        </>
+      ),
+      timeout: 0,
+      actionProps: {
+        children: "Restart",
+        onClick: () => {
+          toastManager.close(toastId);
+          void installDesktopUpdate(bridge);
+        },
+      },
+    }),
+  );
+  promptToastId = toastId;
+}
+
+/** Prompts once per downloaded version per session. */
+export function promptDesktopUpdateReadyOnce(
+  bridge: DesktopUpdateShell & Pick<DesktopBridge, "installUpdate">,
+  state: DesktopUpdateState,
+): void {
+  if (state.status !== "downloaded") return;
+  if (getDesktopUpdateDownloadedVersion(state) === promptedVersion) return;
+  showDesktopUpdateReadyPrompt(bridge, state);
 }

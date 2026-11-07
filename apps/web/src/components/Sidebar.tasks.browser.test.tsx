@@ -77,6 +77,7 @@ import {
 import { taskForLeadThread } from "../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
 import Sidebar from "./Sidebar";
+import { QuickTaskHost } from "./task/QuickTaskHost";
 import { SidebarProvider } from "./ui/sidebar";
 
 function threadShell(id: string, projectId: string, updatedAt: string): EnvironmentThreadShell {
@@ -173,12 +174,16 @@ function task(
     leadThreadId: null,
     prUrl: null,
     lastOutcome: null,
+    openQuestion: false,
+    openBlocker: false,
+    updatedAt: null,
     ...overrides,
   };
 }
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  localStorage.removeItem("busyboy:sidebar:collapsed-projects");
   state.projects = [project("busyboy", "busyboy")];
   state.groups = [projectGroup("busyboy", "busyboy")];
   state.threads = [
@@ -236,15 +241,13 @@ function renderSidebarApp() {
           <Sidebar />
         </div>
         <Outlet />
+        <QuickTaskHost />
       </SidebarProvider>
     ),
   });
-  const routes = [
-    "/",
-    "/$environmentId/$threadId",
-    "/tasks/$environmentId/$projectId/$taskId",
-    "/inbox",
-  ].map((path) => createRoute({ getParentRoute: () => rootRoute, path, component: () => null }));
+  const routes = ["/", "/$environmentId/$threadId", "/tasks/$environmentId/$projectId/$taskId"].map(
+    (path) => createRoute({ getParentRoute: () => rootRoute, path, component: () => null }),
+  );
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
     history: createMemoryHistory({ initialEntries: ["/"] }),
@@ -276,10 +279,10 @@ describe("sidebar tasks", () => {
     // Tasks with no session yet show by key, with subtasks under their parent.
     await vi.waitFor(() => expect(taskRowButton("BB-3 Clean up build warnings")).not.toBeNull());
     expect(taskRowButton("BB-3")?.getAttribute("aria-label")).toBe(
-      "BB-3 Clean up build warnings, Inbox",
+      "BB-3 Clean up build warnings, Todo",
     );
     expect(taskRowButton("BB-4")?.closest("li")?.className).toContain("pl-10");
-    // Nothing waits on the user, so there is no "Waiting on you" entry.
+    // Questions are answered in the PM chat, so the sidebar has no "Waiting on you" entry.
     expect(container.textContent).not.toContain("Waiting on you");
     // Done tasks and a task's earlier sessions stay out of the list.
     expect(taskRowButton("BB-1")).toBeNull();
@@ -292,98 +295,93 @@ describe("sidebar tasks", () => {
     );
     expect(taskRowButton("BB-3")?.getAttribute("aria-current")).toBe("page");
 
-    // The current lead's row stands for its task, so it opens the task page too.
+    // The current lead's row opens the lead's chat, which shows the task's plan beside it.
     await userEvent.click(threadRow("BB-2 Fix drag scroll")!);
-    await vi.waitFor(() =>
-      expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-2"),
-    );
+    await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/lead-2"));
     expect(threadRow("BB-2 Fix drag scroll")?.getAttribute("aria-current")).toBe("page");
 
-    // Quick dump from the PM heading: title, context, save to the inbox.
+    // The PM heading's "+" menu has "New task", which opens the quick task modal on that project.
     await userEvent.hover(
       container.querySelector('[data-testid="sidebar-project-manager-heading"]')!,
     );
     await userEvent.click(
-      container.querySelector<HTMLElement>('button[aria-label="New task in busyboy"]')!,
+      container.querySelector<HTMLElement>('button[aria-label="Add to busyboy"]')!,
     );
-    const title = await vi.waitFor(() => {
-      const input = document.querySelector<HTMLInputElement>('input[aria-label="Task title"]');
-      expect(input).not.toBeNull();
-      return input!;
+    await userEvent.click(
+      await vi.waitFor(() => {
+        const item = [...document.querySelectorAll<HTMLElement>('[data-slot="menu-item"]')].find(
+          (candidate) => candidate.textContent === "New task",
+        );
+        expect(item).toBeDefined();
+        return item!;
+      }),
+    );
+    const context = await vi.waitFor(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Task context"]',
+      );
+      expect(textarea).not.toBeNull();
+      return textarea!;
     });
-    await userEvent.type(title, "Dark mode");
-    await userEvent.type(
-      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Context"]')!,
-      "The settings page is too bright at night.",
-    );
+    // No title: the first line becomes the title, and planning starts right away.
+    await userEvent.type(context, "Dark mode{Enter}The settings page is too bright at night.");
     await userEvent.click(
-      [...document.querySelectorAll<HTMLElement>("button")].find(
-        (button) => button.textContent === "Save to inbox",
-      )!,
-    );
-    await userEvent.click(
-      [...document.querySelectorAll<HTMLElement>("button")].find(
-        (button) => button.textContent === "Create task",
+      [...document.querySelectorAll<HTMLElement>("button")].find((button) =>
+        button.textContent?.startsWith("Create task"),
       )!,
     );
 
     await vi.waitFor(() =>
-      expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-5"),
+      expect(state.createTask).toHaveBeenCalledWith("env-1", {
+        projectId: "busyboy",
+        title: "Dark mode",
+        context: "Dark mode\nThe settings page is too bright at night.",
+        startPlanning: true,
+      }),
     );
-    expect(state.createTask).toHaveBeenCalledWith("env-1", {
-      projectId: "busyboy",
-      title: "Dark mode",
-      context: "The settings page is too bright at night.",
-      startPlanning: false,
-    });
-    // The composer closes once the task exists.
+    // The modal closes and the user stays where they were.
     await vi.waitFor(() =>
-      expect(document.querySelector('input[aria-label="Task title"]')).toBeNull(),
+      expect(document.querySelector('textarea[aria-label="Task context"]')).toBeNull(),
     );
+    expect(app.router.state.location.pathname).toBe("/env-1/lead-2");
   });
-  it("shows how many questions wait on the user and opens Waiting on you", async () => {
-    // The planner of BB-2 asks for plan approval.
-    const summary = state.managers[0]!.summary;
-    state.managers = [
-      {
-        environmentId: "env-1",
-        summary: {
-          ...summary,
-          decisionCards: [
-            {
-              taskNumber: 2,
-              taskTitle: "Fix drag scroll",
-              item: {
-                id: "attention-2" as never,
-                projectId: "busyboy" as never,
-                taskId: "task-2" as never,
-                kind: "approval",
-                question: "Approve the plan in the spec?",
-                options: ["Approve and start", "Approve only"],
-                answer: null,
-                answeredAt: null,
-                askerThreadId: "lead-2" as never,
-                batchId: "batch-1" as never,
-                createdAt: NOW as never,
-                supersededAt: null,
-              },
-            },
-          ],
-        },
-      },
-    ];
+  it("opens the PM chat from its heading, then folds the PM section from it", async () => {
     const app = renderSidebarApp();
     await app.render();
-    const entry = await vi.waitFor(() => {
-      const button = [...container.querySelectorAll<HTMLElement>("button")].find((candidate) =>
-        candidate.textContent?.startsWith("Waiting on you"),
-      );
-      expect(button).toBeDefined();
-      return button!;
-    });
-    expect(entry.textContent).toBe("Waiting on you1");
-    await userEvent.click(entry);
-    await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/inbox"));
-    expect(entry.getAttribute("aria-current")).toBe("page");
+    await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
+    const heading = () =>
+      container.querySelector<HTMLElement>('[data-testid="sidebar-project-manager-heading"]')!;
+    const toggle = () => heading().querySelector<HTMLElement>("button[aria-expanded]")!;
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+
+    // From elsewhere, the heading opens the PM chat and leaves the section open.
+    await userEvent.click(toggle());
+    await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+
+    // On the PM chat, clicking it folds the tasks and threads under it.
+    await userEvent.click(toggle());
+    await vi.waitFor(() => expect(taskRowButton("BB-3")).toBeNull());
+    expect(threadRow("BB-2 Fix drag scroll")).toBeNull();
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(app.router.state.location.pathname).toBe("/env-1/pm-thread");
+    // No chevron: the heading keeps the same look.
+    expect(heading().querySelector("svg.lucide-chevron-right")).toBeNull();
+
+    // The fold survives a reload.
+    await act(() => root.unmount());
+    root = createRoot(container);
+    const reloaded = renderSidebarApp();
+    await reloaded.render();
+    await vi.waitFor(() => expect(toggle().getAttribute("aria-expanded")).toBe("false"));
+    expect(taskRowButton("BB-3")).toBeNull();
+
+    // From elsewhere again, the folded heading opens the PM chat and unfolds.
+    await userEvent.click(toggle());
+    await vi.waitFor(() =>
+      expect(reloaded.router.state.location.pathname).toBe("/env-1/pm-thread"),
+    );
+    await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
+    expect(threadRow("BB-2 Fix drag scroll")).not.toBeNull();
   });
 });

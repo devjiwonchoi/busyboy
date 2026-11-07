@@ -48,6 +48,7 @@ import * as DesktopCliCommand from "./app/DesktopCliCommand.ts";
 import * as DesktopApplicationMenu from "./window/DesktopApplicationMenu.ts";
 import * as DesktopAssets from "./app/DesktopAssets.ts";
 import * as DesktopBackendConfiguration from "./backend/DesktopBackendConfiguration.ts";
+import * as DesktopSecretStoreKey from "./backend/DesktopSecretStoreKey.ts";
 import * as DesktopBackendPool from "./backend/DesktopBackendPool.ts";
 import * as DesktopLocalEnvironmentAuth from "./backend/DesktopLocalEnvironmentAuth.ts";
 import * as DesktopNetworkInterfaces from "./backend/DesktopNetworkInterfaces.ts";
@@ -158,7 +159,13 @@ const layerElectron = Layer.mergeAll(
   ElectronTheme.layer,
   ElectronUpdater.layer,
   ElectronWindow.layer,
-  DesktopIpc.layer(Electron.ipcMain),
+  DesktopIpc.layer(
+    Electron.ipcMain,
+    // Same development switch as DesktopConfig's VITE_DEV_SERVER_URL.
+    DesktopIpc.appWindowSenderPolicy(
+      ElectronProtocol.getDesktopUrl(Boolean(process.env.VITE_DEV_SERVER_URL?.trim())),
+    ),
+  ),
 );
 
 const layerDesktopFoundation = Layer.mergeAll(
@@ -211,6 +218,7 @@ const layerDesktopAppActivation = DesktopAppActivation.layer.pipe(
 const layerDesktopBackend = DesktopBackendPool.layer.pipe(
   Layer.provideMerge(DesktopAppIdentity.layer),
   Layer.provideMerge(DesktopBackendConfiguration.layer),
+  Layer.provideMerge(DesktopSecretStoreKey.layer),
   Layer.provideMerge(DesktopShellEnvironment.layer),
   Layer.provideMerge(DesktopTelemetryPublisher.layer),
   Layer.provideMerge(ComputerUseChannelHost.layer),

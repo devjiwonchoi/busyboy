@@ -65,6 +65,7 @@ import {
   buildExpiredTerminalContextToastCopy,
   createLocalDispatchSnapshot,
   deriveCommittedServerUserMessageIds,
+  deriveSeamlessPendingUserMessages,
   deriveComposerSendState,
   deriveLockedProvider,
   dismissBranchMismatchForSession,
@@ -2131,5 +2132,50 @@ describe("mergeDirectPreviewAnnotation", () => {
       direct: { annotation: annotation("a"), image: null },
     });
     expect(result.previewAnnotations).toBe(existing);
+  });
+});
+
+describe("deriveSeamlessPendingUserMessages", () => {
+  const at = DateTime.makeUnsafe("2026-11-07T10:00:00.000Z");
+  const run = (id: string, status: string, userMessageId: string) =>
+    ({ id: RunId.make(id), status, userMessageId: MessageId.make(userMessageId) }) as never;
+  const userMessage = (id: string, runId: string, createdBy = "user") =>
+    ({
+      id: MessageId.make(id),
+      role: "user",
+      text: id,
+      runId: RunId.make(runId),
+      attachments: [],
+      createdBy,
+      creationSource: createdBy === "user" ? "web" : "server",
+      streaming: false,
+      createdAt: at,
+      updatedAt: at,
+    }) as never;
+
+  it("keeps the user's held-back messages as plain or steer bubbles, never server wakes", () => {
+    const projection = {
+      runs: [
+        run("run-active", "running", "m-start"),
+        run("run-queued", "queued", "m-queued"),
+        run("run-wake", "queued", "m-wake"),
+        run("run-done", "completed", "m-done"),
+      ],
+      messages: [
+        userMessage("m-start", "run-active"),
+        userMessage("m-steer", "run-active"),
+        userMessage("m-queued", "run-queued"),
+        userMessage("m-wake", "run-wake", "system"),
+        userMessage("m-done", "run-done"),
+      ],
+    };
+    const pending = deriveSeamlessPendingUserMessages(projection);
+    expect(pending.map((message) => [message.id, message.inputIntent])).toEqual([
+      ["m-start", undefined],
+      ["m-steer", "steer"],
+      ["m-queued", undefined],
+    ]);
+    // Same server message, same row, so the timeline can reuse it across stream events.
+    expect(deriveSeamlessPendingUserMessages(projection)[1]).toBe(pending[1]);
   });
 });

@@ -3,6 +3,7 @@ import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
+import * as HttpMiddleware from "effect/http/HttpMiddleware";
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -28,7 +29,8 @@ export const layer = HttpApiBuilder.group(
 
     /**
      * The endpoint is raw so the signature is checked over the exact body
-     * bytes; the service checks the token and signature.
+     * bytes; the service checks the token and signature. The path carries
+     * the hook's secret token, so the HTTP request logger skips it.
      */
     const handler = ({
       params,
@@ -100,7 +102,7 @@ export const layer = HttpApiBuilder.group(
           case "error":
             return json(500, { error: "internal_error" }, "error");
         }
-      });
+      }).pipe(HttpMiddleware.withLoggerDisabled);
     return handlers
       .handleRaw("webhookPost", handler)
       .handleRaw("webhookPut", handler)

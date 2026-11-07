@@ -1,6 +1,5 @@
 // @effect-diagnostics globalDate:off globalTimers:off - This isolated Electron preload does not run inside an Effect runtime.
-import { ipcRenderer } from "electron";
-import { getElementContext } from "react-grab/primitives";
+import { contextBridge, ipcRenderer } from "electron";
 import type {
   DesktopPreviewAnnotationTheme,
   PickedElementPayload,
@@ -26,6 +25,7 @@ import {
   ELEMENT_PICKED_CHANNEL,
   HUMAN_INPUT_CHANNEL,
   MOUSE_NAVIGATE_CHANNEL,
+  PREVIEW_ELEMENT_CONTEXT_KEY,
   RECORDING_CURSOR_CHANNEL,
   RECORDING_POINTER_CHANNEL,
   RECORDING_KEY_CHANNEL,
@@ -382,18 +382,51 @@ function updateSelectedVisual(target: SelectedElement): void {
   target.label.style.transform = `translate(${Math.max(4, rect.x)}px, ${Math.max(4, rect.y - 22)}px)`;
 }
 
-function toStackFrame(frame: {
-  functionName?: string;
-  fileName?: string;
-  lineNumber?: number;
-  columnNumber?: number;
-}): PickedElementStackFrame {
+interface ElementContext {
+  readonly selector: string | null;
+  readonly htmlPreview: string;
+  readonly componentName: string | null;
+  readonly styles: string;
+  readonly stack: ReadonlyArray<PickedElementStackFrame>;
+}
+
+const stringOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const numberOrNull = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+const field = (value: unknown, key: string): unknown =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+
+/** The page answered, so nothing about its shape is trusted. */
+function toElementContext(value: unknown): ElementContext | null {
+  if (typeof value !== "object" || value === null) return null;
+  const stack = field(value, "stack");
   return {
-    functionName: frame.functionName ?? null,
-    fileName: frame.fileName ?? null,
-    lineNumber: frame.lineNumber ?? null,
-    columnNumber: frame.columnNumber ?? null,
+    selector: stringOrNull(field(value, "selector")),
+    htmlPreview: stringOrNull(field(value, "htmlPreview")) ?? "",
+    componentName: stringOrNull(field(value, "componentName")),
+    styles: stringOrNull(field(value, "styles")) ?? "",
+    stack: (Array.isArray(stack) ? stack : []).map((frame: unknown) => ({
+      functionName: stringOrNull(field(frame, "functionName")),
+      fileName: stringOrNull(field(frame, "fileName")),
+      lineNumber: numberOrNull(field(frame, "lineNumber")),
+      columnNumber: numberOrNull(field(frame, "columnNumber")),
+    })),
   };
+}
+
+/**
+ * react-grab must run in the page's own world to see React's internals, so the picker asks the
+ * helper that preview-pick-preload installed there (PreviewMainWorld.ts).
+ */
+function readElementContext(element: Element): Promise<ElementContext | null> {
+  const answer: unknown = contextBridge.executeInMainWorld({
+    func: (key: string, target: Element) => {
+      const read = (globalThis as unknown as Record<symbol, unknown>)[Symbol.for(key)];
+      return typeof read === "function" ? read(target) : null;
+    },
+    args: [PREVIEW_ELEMENT_CONTEXT_KEY, element],
+  });
+  return Promise.resolve(answer).then(toElementContext);
 }
 
 /**
@@ -427,19 +460,19 @@ async function captureElement(element: Element): Promise<PickedElementPayload> {
   };
   try {
     const context = await withCaptureTimeout(
-      Promise.resolve(getElementContext(element)),
+      readElementContext(element),
       ELEMENT_CONTEXT_TIMEOUT_MS,
     );
     if (context) {
-      const stack = (context.stack ?? []).map(toStackFrame);
+      const stack = [...context.stack];
       return {
         ...base,
         selector: context.selector,
-        htmlPreview: context.htmlPreview ?? "",
+        htmlPreview: context.htmlPreview,
         componentName: context.componentName,
         source: stack[0] ?? null,
         stack,
-        styles: context.styles ?? "",
+        styles: context.styles,
       };
     }
   } catch {}

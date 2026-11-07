@@ -23,6 +23,7 @@ import { PullRequestDetailPanel } from "../pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
+import { TaskPlanSurface } from "../task/TaskPlanSurface";
 import { SideChatPanel } from "./SideChatPanel";
 
 const PreviewPanel = lazy(() =>
@@ -165,6 +166,8 @@ export function RightPanelSurfaceContent(props: {
     }
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
+    case "task-plan":
+      return <TaskPlanSurface threadRef={threadRef} />;
     case "side-chat":
       return (
         <SideChatPanel

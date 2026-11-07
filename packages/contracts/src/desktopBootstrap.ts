@@ -18,6 +18,10 @@ export const DesktopBackendBootstrap = Schema.Struct({
   // `desktopBootstrapToken` for its whole run. See
   // `@t3tools/shared/desktopBootstrapToken`.
   desktopBootstrapSecret: Schema.optionalKey(Schema.String),
+  // Standard base64 of a 32-byte key that encrypts the backend's secret store
+  // at rest. The desktop keeps it in the OS keychain (safeStorage) and sends it
+  // only when a keychain is available.
+  secretStoreKey: Schema.optionalKey(Schema.String),
   // Set only when the desktop already merged the user's shell environment into
   // the environment it hands this backend. Absent means the backend hydrates
   // PATH itself, which older desktops rely on.

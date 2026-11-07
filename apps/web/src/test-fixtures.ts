@@ -241,8 +241,10 @@ export function makeProjectManagerSummaryFixture(
     persona: { name: "Remy", avatar: { kind: "emoji", emoji: "🦝" }, voice: "chill" },
     enabled: true,
     decisionCards: [],
+    afkAnswers: [],
     tasks: [],
     taskKeyPrefix: "T",
+    lastMessage: null,
     ...rest,
     presence: {
       running: 0,

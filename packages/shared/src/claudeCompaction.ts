@@ -24,3 +24,19 @@ const CLAUDE_RESUME_COMPACTION_QUESTION_PATTERN =
 export function isClaudeResumeCompactionQuestion(question: string): boolean {
   return CLAUDE_RESUME_COMPACTION_QUESTION_PATTERN.test(question);
 }
+
+/**
+ * Message ids of the "/compact" the server sends on its own while a thread is
+ * idle. Clients hide these messages and keep the run out of the thread's
+ * status. The PM prefix is kept so older PM compactions stay recognized.
+ */
+export const BACKGROUND_COMPACTION_MESSAGE_PREFIX = "context-care:compact:";
+const LEGACY_PM_COMPACTION_MESSAGE_PREFIX = "project-team:compact:";
+export const BACKGROUND_COMPACTION_MESSAGE_PREFIXES = [
+  BACKGROUND_COMPACTION_MESSAGE_PREFIX,
+  LEGACY_PM_COMPACTION_MESSAGE_PREFIX,
+] as const;
+
+export function isBackgroundCompactionMessageId(messageId: string): boolean {
+  return BACKGROUND_COMPACTION_MESSAGE_PREFIXES.some((prefix) => messageId.startsWith(prefix));
+}

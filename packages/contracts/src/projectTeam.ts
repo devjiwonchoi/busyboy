@@ -10,6 +10,7 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
+import { ChatAttachment } from "./chatAttachment.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
 import { ProjectIconOverride } from "./project.ts";
 
@@ -45,6 +46,8 @@ export const MAX_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES = 480;
 export const ProjectTaskStage = Schema.Literals([
   "inbox",
   "planning",
+  /** The plan is written and waits for the user's approval. */
+  "awaiting_approval",
   "running",
   "in_review",
   "done",
@@ -61,6 +64,93 @@ export const ProjectTaskOutcome = Schema.Literals([
   "stalled",
 ]);
 export type ProjectTaskOutcome = typeof ProjectTaskOutcome.Type;
+
+/**
+ * The one status the user sees for a task. Stages are what agents store; the status
+ * also reads live signals (an open question, the lead's turn) so it is derived, never stored.
+ */
+export const ProjectTaskStatus = Schema.Literals([
+  "todo",
+  "planning",
+  "waiting_for_approval",
+  "in_progress",
+  "in_review",
+  "ready",
+  "ask_question",
+  "fatal",
+  "done",
+]);
+export type ProjectTaskStatus = typeof ProjectTaskStatus.Type;
+
+export const PROJECT_TASK_STATUS_LABELS: Record<ProjectTaskStatus, string> = {
+  todo: "Todo",
+  planning: "Planning",
+  waiting_for_approval: "Waiting for approval",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  ready: "Ready",
+  ask_question: "Ask question",
+  fatal: "Fatal",
+  done: "Done",
+};
+
+/** Live signals that refine a task's stage into its status. */
+export interface ProjectTaskStatusSignals {
+  /** An open question or blocker from this task waits on the user. */
+  readonly openQuestion: boolean;
+  /**
+   * A blocker card from this task is open: only a person can unblock it, as after the
+   * PM's nudges ran out or a failed turn. Optional for callers that predate it.
+   */
+  readonly openBlocker?: boolean;
+  /** The lead's current turn is running, or it waits on its own subagents or background work. */
+  readonly leadRunning: boolean;
+  /** The lead's latest turn failed. */
+  readonly leadFailed: boolean;
+}
+
+/** Signals known from the stored task alone: its last turn's outcome. */
+export function storedTaskStatusSignals(
+  task: Pick<ProjectTask, "lastOutcome">,
+): ProjectTaskStatusSignals {
+  return {
+    openQuestion: task.lastOutcome === "waiting_user",
+    leadRunning: false,
+    leadFailed: false,
+  };
+}
+
+/**
+ * The user-facing status. First match wins: Done, a failure, Waiting for approval,
+ * an open blocker card, an open question, blocked, then the stage.
+ * A stalled turn alone is not Fatal: leads end quiet turns all the time. It turns Fatal
+ * only once the PM's nudges ran out and raised a blocker card.
+ */
+export function resolveProjectTaskStatus(
+  task: Pick<ProjectTask, "stage" | "lastOutcome">,
+  signals: ProjectTaskStatusSignals,
+): ProjectTaskStatus {
+  if (task.stage === "done" || task.stage === "cancelled") return "done";
+  // A running turn means someone already restarted the lead after the failure.
+  if ((signals.leadFailed || task.lastOutcome === "failed") && !signals.leadRunning) {
+    return "fatal";
+  }
+  if (task.stage === "awaiting_approval") return "waiting_for_approval";
+  // A working lead is past the blocker; the open card still asks the user.
+  if (signals.openBlocker === true && !signals.leadRunning) return "fatal";
+  if (signals.openQuestion) return "ask_question";
+  if (task.stage === "blocked") return "fatal";
+  switch (task.stage) {
+    case "inbox":
+      return "todo";
+    case "planning":
+      return "planning";
+    case "running":
+      return "in_progress";
+    case "in_review":
+      return signals.leadRunning ? "in_review" : "ready";
+  }
+}
 
 const ProjectTaskTitle = TrimmedNonEmptyString.check(Schema.isMaxLength(512)).annotate({
   description: "Short task title.",
@@ -107,6 +197,8 @@ export const ProjectTaskBrief = Schema.Struct({
   nudgeCount: NonNegativeInt,
   waitsOn: Schema.Array(ProjectTaskId),
   stageChangedAt: IsoDateTime,
+  /** What the user sees; use these names when talking to the user. */
+  status: ProjectTaskStatus,
 });
 export type ProjectTaskBrief = typeof ProjectTaskBrief.Type;
 
@@ -118,6 +210,8 @@ export const ProjectTaskEventKind = Schema.Literals([
   "note",
   "summary",
   "preference_changed",
+  /** The server answered a question for the user while AFK was on. */
+  "afk_answer",
 ]);
 export type ProjectTaskEventKind = typeof ProjectTaskEventKind.Type;
 
@@ -149,7 +243,10 @@ export type ProjectTaskTodo = typeof ProjectTaskTodo.Type;
 /** The written spec of a task. Every change is kept as a new version. */
 export const ProjectTaskSpec = Schema.Struct({
   background: ProjectTaskSpecText,
+  /** What the end result looks like. */
   goal: ProjectTaskSpecText,
+  /** How to tell the work is done. Older specs have none. */
+  successCriteria: ProjectTaskSpecText.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   nonGoals: ProjectTaskSpecText,
   todos: Schema.Array(ProjectTaskTodo).check(Schema.isMaxLength(200)),
 }).check(
@@ -218,6 +315,10 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
 export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
+/** "afk": the server answered for the user while AFK was on. */
+export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm", "afk"]);
+export type ProjectAttentionAnsweredBy = typeof ProjectAttentionAnsweredBy.Type;
+
 export const ProjectAttentionItem = Schema.Struct({
   id: ProjectAttentionItemId,
   projectId: ProjectId,
@@ -231,8 +332,27 @@ export const ProjectAttentionItem = Schema.Struct({
   askerThreadId: Schema.NullOr(ThreadId),
   batchId: ProjectAttentionBatchId,
   createdAt: IsoDateTime,
-  /** Set when a newer question from the same task replaced this one before it was answered. */
+  /**
+   * Set when the item closed without an answer: a newer question replaced it, its task
+   * ended, or the PM or asking lead dismissed it with attention_dismiss.
+   */
   supersededAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /**
+   * Who answered: "user" clicked the card, "pm" relayed the user's chat words after the
+   * server checked them, "afk" the server answered while the user's AFK setting was on. Null while open and for items answered before this was recorded.
+   */
+  answeredBy: Schema.NullOr(ProjectAttentionAnsweredBy).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /** For a plan approval: the spec version the user reviews. Null for other kinds. */
+  specVersion: Schema.NullOr(PositiveInt).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /**
+   * For a plan approval: the card's Goal section (markdown). Older cards hold a single
+   * free-form summary here, shown as Goal only. Null for other kinds.
+   */
+  summary: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** For a plan approval: the card's Verification section (markdown). Null for other kinds and older cards. */
+  verification: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
@@ -296,6 +416,51 @@ export const ProjectManagerPersona = Schema.Struct({
 });
 export type ProjectManagerPersona = typeof ProjectManagerPersona.Type;
 
+/**
+ * AFK: while on, the server answers questions and approves plans on the user's behalf
+ * with the recommended option, so agents keep working. It replaced "Auto-approve plans".
+ * Only the user can set it, through the app; agent tools never accept it.
+ */
+export const ProjectTeamAfk = Schema.Struct({
+  since: IsoDateTime,
+  /** null: on until the user turns it off. */
+  until: Schema.NullOr(IsoDateTime),
+});
+export type ProjectTeamAfk = typeof ProjectTeamAfk.Type;
+
+/** Longest AFK window the app offers, in hours. */
+export const MAX_AFK_HOURS = 24 * 7;
+
+/** How long a question waits for the user before AFK answers it. */
+export const AFK_GRACE_MS = 60_000;
+
+/** The answer AFK gives a question that offers no options. */
+export const AFK_FREE_FORM_ANSWER =
+  "User is AFK: proceed with your recommended option and record the assumption.";
+
+/** The project's AFK setting; settings saved before AFK carry "Auto-approve plans" over. */
+export function afkSetting(
+  settings: Pick<ProjectTeamSettings, "afk" | "autoApprovePlans">,
+): ProjectTeamAfk | undefined {
+  return settings.afk ?? settings.autoApprovePlans;
+}
+
+/** Whether AFK is on at `nowMs`. An expired window counts as off. */
+export function afkActive(setting: ProjectTeamAfk | undefined, nowMs: number): boolean {
+  if (setting === undefined) return false;
+  if (setting.until === null) return true;
+  const until = Date.parse(setting.until);
+  return Number.isFinite(until) && until > nowMs;
+}
+
+/**
+ * The option AFK picks: the one labelled "(Recommended)", else the first. Null when
+ * there are no options, so the caller sends AFK_FREE_FORM_ANSWER.
+ */
+export function afkPickOption(options: ReadonlyArray<string>): string | null {
+  return options.find((option) => /\(recommended\)/i.test(option)) ?? options[0] ?? null;
+}
+
 export const ProjectTeamSettings = Schema.Struct({
   maxConcurrentTasks: ProjectTeamMaxConcurrentTasks.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS)),
@@ -312,6 +477,10 @@ export const ProjectTeamSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /** Absent until the user picks one; the server derives it from the project's name. */
   taskKeyPrefix: Schema.optionalKey(ProjectTaskKeyPrefix),
+  /** Absent when off. Only the user can set it, through the app. */
+  afk: Schema.optionalKey(ProjectTeamAfk),
+  /** Before AFK: "Auto-approve plans". Read as AFK by afkSetting; never written again. */
+  autoApprovePlans: Schema.optionalKey(ProjectTeamAfk),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -346,6 +515,9 @@ export type ProjectSitrep = typeof ProjectSitrep.Type;
 export const ProjectTeamTasksByStage = Schema.Struct({
   inbox: Schema.Array(ProjectTaskBrief),
   planning: Schema.Array(ProjectTaskBrief),
+  awaiting_approval: Schema.Array(ProjectTaskBrief).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   running: Schema.Array(ProjectTaskBrief),
   in_review: Schema.Array(ProjectTaskBrief),
   done: Schema.Array(ProjectTaskBrief),
@@ -404,6 +576,8 @@ export const ProjectTeamStatus = Schema.Struct({
   /** Tasks are written as <prefix>-<number>, such as BB-7. */
   taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
   tasks: ProjectTeamTasksByStage,
+  /** How many tasks have each user-facing status. */
+  statusCounts: Schema.optional(Schema.Record(ProjectTaskStatus, NonNegativeInt)),
   stalled: Schema.Array(ProjectTaskBrief),
   openAttention: Schema.Array(ProjectAttentionItem),
   settings: ProjectTeamSettings,
@@ -470,13 +644,21 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
     description: "Task to update. A task lead may omit it to update its own task.",
   }),
   stage: Schema.optional(
-    Schema.Literals(["inbox", "running", "in_review", "done", "blocked", "cancelled"]).annotate({
+    Schema.Literals([
+      "inbox",
+      "awaiting_approval",
+      "running",
+      "in_review",
+      "done",
+      "blocked",
+      "cancelled",
+    ]).annotate({
       description:
-        'New stage. "inbox" parks a task whose plan was approved without starting the work.',
+        'New stage. "inbox" parks a task without starting the work. "awaiting_approval": the plan is written and waits for the user\'s approval.',
     }),
   ),
   planSummary: Schema.optional(ProjectTaskSummaryText).annotate({
-    description: "The approved plan, in short.",
+    description: "The plan, in short.",
   }),
   resultSummary: Schema.optional(ProjectTaskSummaryText).annotate({
     description: "What was delivered.",
@@ -612,10 +794,18 @@ export type ProjectTeamSettingsResult = typeof ProjectTeamSettingsResult.Type;
 export const ProjectTeamAskUserInput = Schema.Struct({
   kind: ProjectAttentionKind.annotate({
     description:
-      "decision: a choice only the user can make. approval: sign-off on a plan. blocker: something only a person can unblock.",
+      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card. blocker: something only a person can unblock.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
-    description: "Self-contained question. For approval, include the plan summary.",
+    description: "Self-contained question. For approval, one line saying what the task is.",
+  }),
+  goal: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
+    description:
+      "Required for approval: the card's Goal section. 2-4 short markdown bullets: what changes and what the end result looks like, plus anything notable such as risky steps or scope cuts.",
+  }),
+  verification: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate({
+    description:
+      "Required for approval: the card's Verification section. 2-4 short markdown bullets: how we'll know it's done (tests, checks, screenshots).",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -625,9 +815,70 @@ export const ProjectTeamAskUserInput = Schema.Struct({
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
 
-/** Answers a plan approval offers when the task lead gives none. */
+/** Plan approval answers. Anything else is feedback on the plan. */
 export const PLAN_APPROVAL_START = "Approve and start";
+/** No longer offered; older cards may still carry this answer. */
 export const PLAN_APPROVAL_ONLY = "Approve only";
+/** First line of feedback sent from the plan review; comments follow. */
+export const PLAN_CHANGES_REQUESTED = "Request changes";
+
+export type PlanApprovalOutcome = "start" | "approve_only" | "changes";
+
+/** What an answer to a plan approval card means. */
+export function planApprovalOutcome(answer: string): PlanApprovalOutcome {
+  const first = answer.trim().split("\n", 1)[0]?.trim() ?? "";
+  if (first === PLAN_APPROVAL_START) return "start";
+  if (first === PLAN_APPROVAL_ONLY) return "approve_only";
+  return "changes";
+}
+
+/** A comment on text the user selected in the plan review. */
+export interface PlanReviewComment {
+  /** The plan section, such as "End result". */
+  readonly section: string;
+  /** The exact text the user selected. */
+  readonly quote: string;
+  readonly comment: string;
+}
+
+/** The answer the plan review sends when the user asks for changes. */
+export function formatPlanReviewFeedback(input: {
+  readonly specVersion: number | null;
+  readonly comments: ReadonlyArray<PlanReviewComment>;
+  readonly overall: string;
+}): string {
+  const head =
+    input.specVersion === null
+      ? PLAN_CHANGES_REQUESTED
+      : `${PLAN_CHANGES_REQUESTED} (review of spec v${input.specVersion})`;
+  return [head, ...planReviewNotes(input)].join("\n");
+}
+
+/** An approval that carries the reviewer's notes; it still reads as "start". */
+export function formatPlanApproval(input: {
+  readonly comments: ReadonlyArray<PlanReviewComment>;
+  readonly overall: string;
+}): string {
+  return [PLAN_APPROVAL_START, ...planReviewNotes(input)].join("\n");
+}
+
+function planReviewNotes(input: {
+  readonly comments: ReadonlyArray<PlanReviewComment>;
+  readonly overall: string;
+}): string[] {
+  const lines: string[] = [];
+  const overall = input.overall.trim();
+  if (overall.length > 0) lines.push("", "Overall:", overall);
+  if (input.comments.length > 0) {
+    lines.push("", "Inline comments:");
+    input.comments.forEach((entry, index) => {
+      const quote = entry.quote.replace(/\s+/g, " ").trim();
+      const comment = entry.comment.trim();
+      lines.push(`${index + 1}. [${entry.section}] "${quote}"${comment ? ` → ${comment}` : ""}`);
+    });
+  }
+  return lines;
+}
 
 const ProjectTeamOwnTaskId = Schema.optional(ProjectTaskId).annotate({
   description: "Task to use. A task lead may omit it for its own task; the PM passes it.",
@@ -677,6 +928,15 @@ export const ProjectTeamAttentionAnswerInput = Schema.Struct({
   }),
 });
 export type ProjectTeamAttentionAnswerInput = typeof ProjectTeamAttentionAnswerInput.Type;
+
+export const ProjectTeamAttentionDismissInput = Schema.Struct({
+  attentionItemId: ProjectAttentionItemId,
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(500)).annotate({
+    description:
+      'Why the question no longer needs an answer, such as "The user chose option B in chat".',
+  }),
+});
+export type ProjectTeamAttentionDismissInput = typeof ProjectTeamAttentionDismissInput.Type;
 
 export const ProjectTeamMemoryListInput = Schema.Struct({});
 export type ProjectTeamMemoryListInput = typeof ProjectTeamMemoryListInput.Type;
@@ -746,8 +1006,45 @@ export const ProjectTaskReference = Schema.Struct({
   lastOutcome: Schema.NullOr(ProjectTaskOutcome).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /** An open question or blocker from this task waits on the user. */
+  openQuestion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** One of those is a blocker card, which only a person can unblock; the task shows Fatal. */
+  openBlocker: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** When the task last changed; null from servers that predate the field. */
+  updatedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
+
+/** One-line preview of the PM chat's latest message, shown on the sidebar manager row. */
+export const ProjectManagerLastMessage = Schema.Struct({
+  role: Schema.Literals(["assistant", "user"]),
+  text: Schema.String,
+  at: IsoDateTime,
+});
+export type ProjectManagerLastMessage = typeof ProjectManagerLastMessage.Type;
+
+/**
+ * One question AFK answered for the user. `threadId` is the thread that asked, `taskId`
+ * the task it belongs to (null for a thread outside any task).
+ */
+export const ProjectAfkAnswer = Schema.Struct({
+  id: ProjectTaskEventId,
+  at: IsoDateTime,
+  threadId: Schema.NullOr(ThreadId),
+  taskId: Schema.NullOr(ProjectTaskId),
+  /** "question → answer", as logged. */
+  text: Schema.String,
+});
+export type ProjectAfkAnswer = typeof ProjectAfkAnswer.Type;
+
+/** Most AFK answers a summary carries; the newest are kept. */
+export const MAX_AFK_ANSWERS_IN_SUMMARY = 50;
+
+/** Log body of an AFK answer. */
+export function afkAnswerEventBody(question: string, answer: string): string {
+  const trimmed = question.length > 300 ? `${question.slice(0, 300)}…` : question;
+  return `${trimmed} → ${answer}`;
+}
 
 export const ProjectTeamAttentionSummary = Schema.Struct({
   projectId: ProjectId,
@@ -771,6 +1068,12 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   tasks: Schema.Array(ProjectTaskReference),
   /** Resolved task ID prefix, such as BB for BB-7. */
   taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
+  /** The PM chat's latest message the user would see, or null before the first one. */
+  lastMessage: Schema.NullOr(ProjectManagerLastMessage).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /** Questions AFK answered since it was last turned on, oldest first. Empty while off. */
+  afkAnswers: Schema.Array(ProjectAfkAnswer).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
@@ -813,6 +1116,19 @@ export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   ),
   enabled: Schema.optional(Schema.Boolean),
   taskKeyPrefix: Schema.optional(ProjectTaskKeyPrefix),
+  /**
+   * User-only: turns AFK on for `hours` (null = until turned off), or off with null.
+   * Deliberately absent from team_settings_update so no agent can set it.
+   */
+  afk: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        hours: Schema.NullOr(
+          Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_AFK_HOURS })),
+        ),
+      }),
+    ),
+  ),
 });
 export type ProjectTeamUpdateSettingsInput = typeof ProjectTeamUpdateSettingsInput.Type;
 
@@ -826,6 +1142,11 @@ export const ProjectTeamCreateTaskInput = Schema.Struct({
   parentTaskId: Schema.optional(ProjectTaskId),
   /** True asks the PM to start a planner on the task right away. */
   startPlanning: Schema.Boolean,
+  /**
+   * Images and files the user dropped in, already uploaded as pending attachments.
+   * The server keeps them under the task and lists their paths in the spec.
+   */
+  attachments: Schema.optional(Schema.Array(ChatAttachment)),
 });
 export type ProjectTeamCreateTaskInput = typeof ProjectTeamCreateTaskInput.Type;
 
@@ -843,7 +1164,7 @@ export const ProjectTeamTaskDetail = Schema.Struct({
   versions: Schema.Array(ProjectTaskSpecVersion),
   sessions: Schema.Array(ProjectTaskSession),
   children: Schema.Array(ProjectTaskBrief),
-  /** Open questions and approvals pinned on the task. */
+  /** Open questions pinned on the task. */
   openAttention: Schema.Array(ProjectAttentionItem),
 });
 export type ProjectTeamTaskDetail = typeof ProjectTeamTaskDetail.Type;

@@ -6,13 +6,13 @@ import {
   getArm64IntelBuildWarningDescription,
   getDesktopUpdateActionError,
   getDesktopUpdateButtonTooltip,
-  getDesktopUpdateInstallConfirmationMessage,
+  getDesktopUpdateReadyDescription,
   getDesktopUpdateReleaseHistoryUrl,
   getDesktopUpdateReleaseUrl,
   isDesktopUpdateButtonDisabled,
+  isDesktopUpdatePreparing,
   resolveDesktopUpdateButtonAction,
   shouldShowArm64IntelBuildWarning,
-  shouldToastDesktopUpdateActionResult,
 } from "./desktopUpdate.logic";
 
 const baseState: DesktopUpdateState = {
@@ -35,13 +35,47 @@ const baseState: DesktopUpdateState = {
 };
 
 describe("desktop update button state", () => {
-  it("shows a download action when an update is available", () => {
+  it("shows a download in progress, not a download action, when an update is available", () => {
     const state: DesktopUpdateState = {
       ...baseState,
       status: "available",
       availableVersion: "1.1.0",
     };
+    expect(resolveDesktopUpdateButtonAction(state)).toBe("none");
+    expect(isDesktopUpdatePreparing(state)).toBe(true);
+    expect(isDesktopUpdateButtonDisabled(state)).toBe(true);
+    expect(getDesktopUpdateButtonTooltip(state)).toBe("Downloading update…");
+  });
+
+  it("offers a download retry after a failed automatic download", () => {
+    const state: DesktopUpdateState = {
+      ...baseState,
+      status: "available",
+      availableVersion: "1.1.0",
+      message: "signature mismatch",
+      errorContext: "download",
+      canRetry: true,
+    };
     expect(resolveDesktopUpdateButtonAction(state)).toBe("download");
+    expect(isDesktopUpdatePreparing(state)).toBe(false);
+    expect(isDesktopUpdateButtonDisabled(state)).toBe(false);
+    expect(getDesktopUpdateButtonTooltip(state)).toBe("Download failed — click to retry");
+  });
+
+  it("says a downloaded update is ready and installs on quit", () => {
+    const state: DesktopUpdateState = {
+      ...baseState,
+      status: "downloaded",
+      availableVersion: "1.1.0",
+      downloadedVersion: "1.1.0",
+    };
+    expect(resolveDesktopUpdateButtonAction(state)).toBe("install");
+    expect(getDesktopUpdateButtonTooltip(state)).toBe(
+      "Update 1.1.0 ready — restart to update, or it installs when you quit",
+    );
+    expect(getDesktopUpdateButtonTooltip({ ...state, localApp: true })).toBe(
+      "Update 1.1.0 ready — restart to update",
+    );
   });
 
   it("keeps retry action available after a download error", () => {
@@ -54,7 +88,7 @@ describe("desktop update button state", () => {
       canRetry: true,
     };
     expect(resolveDesktopUpdateButtonAction(state)).toBe("download");
-    expect(getDesktopUpdateButtonTooltip(state)).toContain("Click to retry");
+    expect(getDesktopUpdateButtonTooltip(state)).toBe("Download failed — click to retry");
   });
 
   it("says when the same version did not apply before", () => {
@@ -74,7 +108,7 @@ describe("desktop update button state", () => {
         availableVersion: "1.2.0",
         downloadedVersion: "1.2.0",
       }),
-    ).toContain("1.2.0 downloaded");
+    ).toContain("1.2.0 ready");
   });
 
   it("keeps install action available after an install error", () => {
@@ -102,7 +136,7 @@ describe("desktop update button state", () => {
       canRetry: true,
     };
     expect(resolveDesktopUpdateButtonAction(state)).toBe("install");
-    expect(getDesktopUpdateButtonTooltip(state)).toContain("Click to restart and install");
+    expect(getDesktopUpdateButtonTooltip(state)).toContain("restart to update");
   });
 
   it("prefers a newly available release over a stale downloaded version", () => {
@@ -112,7 +146,8 @@ describe("desktop update button state", () => {
       availableVersion: "1.2.0",
       downloadedVersion: "1.1.0",
     };
-    expect(resolveDesktopUpdateButtonAction(state)).toBe("download");
+    expect(resolveDesktopUpdateButtonAction(state)).toBe("none");
+    expect(isDesktopUpdatePreparing(state)).toBe(true);
   });
 
   it("hides the install action while checking for a newer release", () => {
@@ -223,30 +258,6 @@ describe("desktop update UI helpers", () => {
     );
   });
 
-  it("toasts only for actionable updater errors", () => {
-    expect(
-      shouldToastDesktopUpdateActionResult({
-        accepted: true,
-        completed: false,
-        state: { ...baseState, message: "checksum mismatch" },
-      }),
-    ).toBe(true);
-    expect(
-      shouldToastDesktopUpdateActionResult({
-        accepted: true,
-        completed: false,
-        state: { ...baseState, message: null },
-      }),
-    ).toBe(false);
-    expect(
-      shouldToastDesktopUpdateActionResult({
-        accepted: true,
-        completed: true,
-        state: { ...baseState, message: "checksum mismatch" },
-      }),
-    ).toBe(false);
-  });
-
   it("shows an Apple Silicon warning for Intel builds under Rosetta", () => {
     const state: DesktopUpdateState = {
       ...baseState,
@@ -260,7 +271,7 @@ describe("desktop update UI helpers", () => {
     expect(getArm64IntelBuildWarningDescription(state)).toContain("Intel build");
   });
 
-  it("changes the warning copy when a native build update is ready to download", () => {
+  it("changes the warning copy while the native build downloads", () => {
     const state: DesktopUpdateState = {
       ...baseState,
       hostArch: "arm64",
@@ -270,35 +281,15 @@ describe("desktop update UI helpers", () => {
       availableVersion: "1.1.0",
     };
 
-    expect(getArm64IntelBuildWarningDescription(state)).toContain("Download the available update");
+    expect(getArm64IntelBuildWarningDescription(state)).toContain("downloading now");
   });
 
-  it("includes the downloaded version in the install confirmation copy", () => {
-    expect(
-      getDesktopUpdateInstallConfirmationMessage({
-        availableVersion: "1.1.0",
-        downloadedVersion: "1.1.1",
-      }),
-    ).toContain("Install update 1.1.1 and restart BusyBoy?");
-  });
-
-  it("falls back to generic install confirmation copy when no version is available", () => {
-    expect(
-      getDesktopUpdateInstallConfirmationMessage({
-        availableVersion: null,
-        downloadedVersion: null,
-      }),
-    ).toContain("Install update and restart BusyBoy?");
-  });
-
-  it("keeps the same install confirmation copy across desktop platforms", () => {
-    expect(
-      getDesktopUpdateInstallConfirmationMessage({
-        availableVersion: "1.1.0",
-        downloadedVersion: "1.1.0",
-      }),
-    ).toBe(
-      "Install update 1.1.0 and restart BusyBoy?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.",
+  it("says when a ready update installs", () => {
+    expect(getDesktopUpdateReadyDescription({})).toBe(
+      "Restart to install it now. Otherwise it installs when you quit BusyBoy.",
+    );
+    expect(getDesktopUpdateReadyDescription({ localApp: true })).toBe(
+      "Restart to install it now. Otherwise it installs the next time BusyBoy restarts.",
     );
   });
 });

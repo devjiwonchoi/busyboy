@@ -8,15 +8,8 @@ import {
   ProjectTaskId,
   ThreadId,
 } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { AsyncResult } from "effect/reactivity";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} from "@tanstack/react-router";
 import { act, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
@@ -25,7 +18,8 @@ import { userEvent } from "vite-plus/test/browser";
 import "~/index.css";
 
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
-import { WaitingOnYouPage } from "../inbox/WaitingOnYouPage";
+import { useProjectManagerEntries } from "../../state/projectTeam";
+import { DecisionCard } from "./DecisionCard";
 
 const PROJECT_ID = ProjectId.make("project-1");
 const PM_THREAD_ID = ThreadId.make("pm-thread");
@@ -50,23 +44,22 @@ async function answerDecision(input: ProjectTeamAnswerDecisionInput) {
   server.answers.push(input);
   const current = server.summary!;
   const card = current.decisionCards.find((entry) => entry.item.id === input.attentionItemId)!;
-  server.leadMessages.push(`[User answer via BusyBoy PM] ${card.item.question} → ${input.answer}`);
+  server.leadMessages.push(`[User answer via BusyBoy] ${card.item.question} → ${input.answer}`);
   publish({
     ...current,
     openCount: current.openCount - 1,
     decisionCards: current.decisionCards.map((entry) =>
       entry === card
-        ? { ...entry, item: { ...entry.item, answer: input.answer, answeredAt: ASKED_AT } }
+        ? {
+            ...entry,
+            item: { ...entry.item, answer: input.answer, answeredAt: ASKED_AT, answeredBy: "user" },
+          }
         : entry,
     ),
   });
   return AsyncResult.success({ item: card.item });
 }
 
-vi.mock(import("../../state/environments"), async (original) => ({
-  ...(await original()),
-  useEnvironmentIds: (() => ["environment-local"]) as never,
-}));
 vi.mock(import("../../state/projectTeam"), async (original) => ({
   ...(await original()),
   useProjectManagerEntries: (() => {
@@ -91,7 +84,7 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
       id: ProjectAttentionItemId.make("attention-plan"),
       projectId: PROJECT_ID,
       taskId: ProjectTaskId.make("task-3"),
-      kind: "approval",
+      kind: "decision",
       question: "Plan: move the redirect into the auth guard and add a regression test.",
       options: ["Approve", "Request changes"],
       answer: null,
@@ -100,27 +93,32 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
       batchId: ProjectAttentionBatchId.make("batch-1"),
       createdAt: ASKED_AT,
       supersededAt: null,
+      answeredBy: null,
+      specVersion: null,
+      summary: null,
+      verification: null,
       ...overrides,
     },
   };
 }
 
-/** The inbox page inside a router, since its task links need one. */
-function renderInbox() {
-  const rootRoute = createRootRoute({ component: () => <Outlet /> });
-  const routes = [
-    createRoute({ getParentRoute: () => rootRoute, path: "/inbox", component: WaitingOnYouPage }),
-    createRoute({
-      getParentRoute: () => rootRoute,
-      path: "/tasks/$environmentId/$projectId/$taskId",
-      component: () => null,
-    }),
-  ];
-  const router = createRouter({
-    routeTree: rootRoute.addChildren(routes),
-    history: createMemoryHistory({ initialEntries: ["/inbox"] }),
-  });
-  return act(async () => root.render(<RouterProvider router={router} />));
+/** The team's cards as the task page shows them, answered through the PM's thread. */
+function TeamCards() {
+  return useProjectManagerEntries([]).flatMap(({ environmentId, summary }) =>
+    summary.decisionCards.map((entry) => (
+      <DecisionCard
+        key={entry.item.id}
+        card={entry}
+        environmentId={environmentId}
+        threadRef={scopeThreadRef(environmentId, summary.pmThreadId)}
+        cwd={undefined}
+      />
+    )),
+  );
+}
+
+function renderCards() {
+  return act(async () => root.render(<TeamCards />));
 }
 
 let root: Root;
@@ -140,7 +138,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function cardElement(state: "open" | "answered" | "superseded") {
+function cardElement(state: "open" | "answered" | "resolved") {
   return container.querySelector<HTMLElement>(`[data-decision-card-state="${state}"]`);
 }
 
@@ -152,30 +150,20 @@ function buttonIn(element: HTMLElement, text: string) {
   return button!;
 }
 
-it("shows a task lead's approval in Waiting on you, and Approve goes straight to the lead", async () => {
-  await renderInbox();
-  await vi.waitFor(() =>
-    expect(container.querySelector('[data-testid="waiting-on-you-empty"]')).not.toBeNull(),
-  );
+it("shows a task lead's question, and a pick goes straight to the lead", async () => {
+  await renderCards();
   expect(cardElement("open")).toBeNull();
 
-  // A task lead asks for plan approval: the card appears without the PM saying anything.
+  // A task lead asks the user: the card appears without the PM saying anything.
   await act(async () => publish({ ...server.summary!, openCount: 1, decisionCards: [card()] }));
   const open = await vi.waitFor(() => {
     const element = cardElement("open");
     expect(element).not.toBeNull();
     return element!;
   });
-  expect(open.textContent).toContain("Plan approval · Fix the login redirect");
+  expect(open.textContent).toContain("Decision · Fix the login redirect");
   expect(open.textContent).toContain("move the redirect into the auth guard");
   expect(open.textContent).not.toContain("#3");
-  // Grouped under its task's key, with a link to the task page.
-  const group = open.closest<HTMLElement>("[data-task-group]")!;
-  expect(group.dataset.taskGroup).toBe("T-3");
-  expect(group.textContent).toContain("T-3Fix the login redirect");
-  expect(group.querySelector("a")?.getAttribute("href")).toBe(
-    "/tasks/environment-local/project-1/task-3",
-  );
   buttonIn(open, "Request changes");
   // Number keys stay with the composer, not every card on screen.
   expect(open.querySelector("kbd")).toBeNull();
@@ -188,27 +176,17 @@ it("shows a task lead's approval in Waiting on you, and Approve goes straight to
     answer: "Approve",
   });
   expect(server.leadMessages).toEqual([
-    "[User answer via BusyBoy PM] Plan: move the redirect into the auth guard and add a regression test. → Approve",
+    "[User answer via BusyBoy] Plan: move the redirect into the auth guard and add a regression test. → Approve",
   ]);
 
-  // Nothing is left waiting; the card moves to "Recently answered" with the pick checked.
-  await vi.waitFor(() =>
-    expect(container.querySelector('[data-testid="waiting-on-you-empty"]')).not.toBeNull(),
-  );
-  const closed = container.querySelector<HTMLDetailsElement>(
-    '[data-testid="waiting-on-you-closed"]',
-  )!;
-  expect(closed.open).toBe(false);
-  await act(async () => closed.querySelector("summary")!.click());
-  expect(closed.open).toBe(true);
+  // The card stays where it was, answered, with the pick checked.
   const answered = await vi.waitFor(() => {
     const element = cardElement("answered");
     expect(element).not.toBeNull();
     return element!;
   });
   expect(cardElement("open")).toBeNull();
-  expect(closed.contains(answered)).toBe(true);
-  expect(answered.textContent).toContain("Plan approval · Fix the login redirect");
+  expect(answered.textContent).toContain("Decision · Fix the login redirect");
   expect(answered.textContent).toContain("move the redirect into the auth guard");
   const picked = [...answered.querySelectorAll("[data-selected=true]")].map(
     (element) => element.textContent,
@@ -216,7 +194,7 @@ it("shows a task lead's approval in Waiting on you, and Approve goes straight to
   expect(picked).toEqual([expect.stringContaining("Approve")]);
 });
 
-it("sends a note with the choice and shows a replaced plan as one quiet line", async () => {
+it("sends a note with the choice and shows a closed card as no longer needed", async () => {
   const stale = card({
     id: ProjectAttentionItemId.make("attention-old-plan"),
     question: "Plan v1: rewrite the whole router.",
@@ -224,14 +202,15 @@ it("sends a note with the choice and shows a replaced plan as one quiet line", a
     supersededAt: ASKED_AT,
   });
   server.summary = { ...server.summary!, openCount: 1, decisionCards: [stale, card()] };
-  await renderInbox();
+  await renderCards();
 
   const replaced = await vi.waitFor(() => {
-    const element = cardElement("superseded");
+    const element = cardElement("resolved");
     expect(element).not.toBeNull();
     return element!;
   });
-  expect(replaced.textContent).toContain("replaced by a newer plan");
+  expect(replaced.textContent).toContain("No longer needed");
+  expect(replaced.textContent).toContain("Plan v1: rewrite the whole router.");
   expect(replaced.querySelector("button")).toBeNull();
 
   const open = cardElement("open")!;
@@ -269,7 +248,7 @@ it("opens a long plan full screen, and a pick with a note made there reaches the
     openCount: 1,
     decisionCards: [card({ question: longPlan })],
   };
-  await renderInbox();
+  await renderCards();
   const open = await vi.waitFor(() => {
     const element = cardElement("open");
     expect(element).not.toBeNull();
@@ -294,7 +273,7 @@ it("opens a long plan full screen, and a pick with a note made there reaches the
   });
 
   // Full screen, the whole plan is readable in a view much taller than the inline box.
-  expect(expanded.textContent).toContain("Plan approval · Fix the login redirect");
+  expect(expanded.textContent).toContain("Decision · Fix the login redirect");
   expect(expanded.textContent).toContain("Last line of the plan.");
   const expandedScroll = expanded.querySelector<HTMLElement>("[data-slot=scroll-area-viewport]")!;
   expect(expandedScroll.getBoundingClientRect().height).toBeGreaterThan(
@@ -332,7 +311,7 @@ it("opens a long plan full screen, and a pick with a note made there reaches the
   await vi.waitFor(() => expect(server.answers).toHaveLength(1));
   expect(server.answers[0]?.answer).toBe("Request changes\nNote: Split step 12 into two");
   expect(server.leadMessages).toEqual([
-    `[User answer via BusyBoy PM] ${longPlan} → Request changes\nNote: Split step 12 into two`,
+    `[User answer via BusyBoy] ${longPlan} → Request changes\nNote: Split step 12 into two`,
   ]);
   // The answered card replaces the open one, and the full-screen view closes with it.
   await vi.waitFor(() => expect(cardElement("answered")).not.toBeNull());

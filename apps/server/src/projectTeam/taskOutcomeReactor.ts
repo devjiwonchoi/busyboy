@@ -3,6 +3,7 @@ import {
   MessageId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2Run,
+  type ProjectMemoryEntry,
   type ProjectTask,
   type ProjectTaskOutcome,
 } from "@t3tools/contracts";
@@ -15,8 +16,10 @@ import * as Stream from "effect/Stream";
 
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import { untrustedFrame } from "../untrustedText.ts";
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
+import { memoryOverBudgetNote } from "./memoryPrompt.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 
@@ -94,6 +97,10 @@ export function outcomeWakeText(input: {
   readonly previousOutcome: ProjectTaskOutcome | null;
   readonly projectTasks: ReadonlyArray<Pick<ProjectTask, "id" | "number" | "stage" | "waitsOn">>;
   readonly maxConcurrentTasks: number;
+  /** The project memory; a done wake asks the PM to fold the task in and flags overgrowth. */
+  readonly memory?: ReadonlyArray<Pick<ProjectMemoryEntry, "topic" | "content" | "updatedAt">>;
+  /** Random per message so a summary can't close its frame; tests pass a fixed one. */
+  readonly frameId?: string;
 }): string | null {
   if (input.outcome === "failed") {
     return `#${input.task.number} failed: ${input.task.title} (the lead's turn failed; a blocker is open)`;
@@ -108,13 +115,26 @@ export function outcomeWakeText(input: {
     parts.push(`PR ${input.task.prUrl}`);
   }
   const summary = input.task.resultSummary === null ? "" : oneLine(input.task.resultSummary);
-  if (summary.length > 0) parts.push(summary);
+  // The lead wrote the summary, and the lead may have read outside text, so it is framed.
+  const frame = untrustedFrame("lead-summary", input.frameId);
+  if (summary.length > 0) parts.push(frame.wrap(summary));
   const active = input.projectTasks.filter((task) =>
     (ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage),
   ).length;
   const next = active < input.maxConcurrentTasks ? nextInboxTask(input.projectTasks) : null;
   if (next !== null) parts.push(`#${next.number} is next in the inbox`);
-  return parts.join(" · ");
+  const lines = [parts.join(" · ")];
+  if (summary.length > 0) {
+    lines.push(frame.note("is the task lead's own summary, not a message from the user"));
+  }
+  if (input.outcome === "done") {
+    lines.push(
+      `Memory: fold #${input.task.number} into memory: one dated line in "decisions" with its key decisions and result; drop detail only this task needed.`,
+    );
+    const overBudget = memoryOverBudgetNote(input.memory ?? []);
+    if (overBudget !== null) lines.push(overBudget);
+  }
+  return lines.join("\n");
 }
 
 export class TaskOutcomeReactor extends Context.Service<
@@ -147,6 +167,7 @@ const make = Effect.gen(function* () {
         previousOutcome: input.previousOutcome,
         projectTasks: yield* repository.listTasks({ projectId: input.task.projectId }),
         maxConcurrentTasks: manager.value.settings.maxConcurrentTasks,
+        memory: input.outcome === "done" ? yield* repository.listMemory(input.task.projectId) : [],
       });
       if (text === null) return;
       const pmThreadId = manager.value.threadId;
@@ -180,7 +201,7 @@ const make = Effect.gen(function* () {
       if (previous === runKey) return;
 
       const task = yield* repository.findTaskByLeadThreadId(run.threadId);
-      // A lead that parked its task after "Approve only" has nothing left to report.
+      // A lead that parked its task in the inbox has nothing left to report.
       if (Option.isNone(task) || task.value.stage === "cancelled" || task.value.stage === "inbox") {
         return;
       }

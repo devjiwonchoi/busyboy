@@ -646,6 +646,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   ::highlight(t3-assistant-citation-comment) {
     background-color: color-mix(in oklab, var(--primary) 45%, transparent);
   }
+  ::highlight(t3-annotation) {
+    background-color: color-mix(in oklab, var(--color-blue-500) 32%, transparent);
+  }
   :root {
     /* Keep the original T3 Code artwork palettes as the defaults. Built-in
        themes override them with their own pigments in the components layer. */
@@ -1743,7 +1746,9 @@ code {
 .drag-region input,
 .drag-region textarea,
 .drag-region select,
-.drag-region a {
+.drag-region a,
+.drag-region label,
+.drag-region [role="switch"] {
   -webkit-app-region: no-drag;
 }
 
@@ -2372,5 +2377,19 @@ code {
   }
   [data-side-chat] [data-chat-canvas] .messages-timeline-scroll {
     padding-inline: calc(0.75rem - var(--chat-timeline-gutter, 0px));
+  }
+}
+
+/* The question card the "N actions waiting" pill just scrolled to. */
+[data-decision-card-highlighted] {
+  animation: decision-card-highlight 1.8s ease-out;
+}
+@keyframes decision-card-highlight {
+  0%,
+  45% {
+    box-shadow: 0 0 0 2px var(--primary);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
   }
 }

@@ -8,6 +8,10 @@ import Migration0004 from "./Migrations/004_ProjectTeam.ts";
 import Migration0005 from "./Migrations/005_ProjectAttentionSuperseded.ts";
 import Migration0006 from "./Migrations/006_ProjectTaskSpecs.ts";
 import Migration0007 from "./Migrations/007_CloseFinishedTaskAttention.ts";
+import Migration0008 from "./Migrations/008_ProjectAttentionAnsweredBy.ts";
+import Migration0009 from "./Migrations/009_ProjectAttentionSpecVersion.ts";
+import Migration0010 from "./Migrations/010_ProjectAttentionSummary.ts";
+import Migration0011 from "./Migrations/011_ProjectAttentionVerification.ts";
 
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
@@ -17,6 +21,10 @@ export const migrationEntries = [
   [5, "ProjectAttentionSuperseded", Migration0005],
   [6, "ProjectTaskSpecs", Migration0006],
   [7, "CloseFinishedTaskAttention", Migration0007],
+  [8, "ProjectAttentionAnsweredBy", Migration0008],
+  [9, "ProjectAttentionSpecVersion", Migration0009],
+  [10, "ProjectAttentionSummary", Migration0010],
+  [11, "ProjectAttentionVerification", Migration0011],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

@@ -6,7 +6,6 @@ import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime
 import { isElectron } from "../../env";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { cn } from "../../lib/utils";
-import { ensureLocalApi } from "../../localApi";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
@@ -15,13 +14,12 @@ import {
   getDesktopUpdateActionError,
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateDownloadedVersion,
-  getDesktopUpdateInstallConfirmationMessage,
   isDesktopUpdateButtonDisabled,
+  isDesktopUpdatePreparing,
   resolveDesktopUpdateButtonAction,
   shouldShowArm64IntelBuildWarning,
-  shouldToastDesktopUpdateActionResult,
 } from "../desktopUpdate.logic";
-import { showDesktopUpdateDownloadedToast } from "../desktopUpdate.toast";
+import { installDesktopUpdate, showDesktopUpdateReadyPrompt } from "../desktopUpdate.toast";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Popover, PopoverCreateHandle, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { SidebarMenuItem } from "../ui/sidebar";
@@ -133,51 +131,19 @@ const toastUpdateError: ReportLocalUpdateError = (title, description) => {
   toastManager.add(stackedThreadToast({ type: "error", title, description }));
 };
 
-async function downloadLocalUpdate(
+/** Retries a failed download; a successful check downloads on its own. */
+async function retryLocalUpdateDownload(
   bridge: DesktopBridge,
-  {
-    notifyDownloaded,
-    reportError = toastUpdateError,
-  }: { readonly notifyDownloaded: boolean; readonly reportError?: ReportLocalUpdateError },
+  reportError: ReportLocalUpdateError = toastUpdateError,
 ): Promise<boolean> {
   try {
     const result = await bridge.downloadUpdate();
-    if (result.completed && notifyDownloaded) {
-      showDesktopUpdateDownloadedToast(bridge, result.state);
-    }
-    const actionError = shouldToastDesktopUpdateActionResult(result)
-      ? getDesktopUpdateActionError(result)
-      : null;
+    const actionError = getDesktopUpdateActionError(result);
     if (actionError) reportError("Could not download update", actionError);
     return result.completed;
   } catch (error) {
     reportError(
       "Could not start update download",
-      error instanceof Error ? error.message : "An unexpected error occurred.",
-    );
-    return false;
-  }
-}
-
-async function installLocalUpdate(
-  bridge: DesktopBridge,
-  reportError: ReportLocalUpdateError = toastUpdateError,
-): Promise<boolean> {
-  try {
-    const result = await bridge.installUpdate();
-    if (!result.accepted) {
-      showDesktopUpdateDownloadedToast(bridge, result.state);
-      return false;
-    }
-    const actionError = shouldToastDesktopUpdateActionResult(result)
-      ? getDesktopUpdateActionError(result)
-      : null;
-    if (!actionError) return true;
-    reportError("Could not install update", actionError);
-    return false;
-  } catch (error) {
-    reportError(
-      "Could not install update",
       error instanceof Error ? error.message : "An unexpected error occurred.",
     );
     return false;
@@ -217,7 +183,7 @@ function SidebarUpdateControl() {
   }
 
   const action = state ? resolveDesktopUpdateButtonAction(state) : "none";
-  const isDownloading = state?.status === "downloading";
+  const isDownloading = isDesktopUpdatePreparing(state);
   const localUpdateVersion =
     state && action !== "none" ? getDesktopUpdateDownloadedVersion(state) : null;
   const everything = useUpdateEverything(localUpdateVersion);
@@ -278,37 +244,16 @@ function SidebarUpdateControl() {
     }
 
     if (!bridge || !state) return;
-    setIsActionPending(true);
 
-    if (action === "download") {
-      void downloadLocalUpdate(bridge, { notifyDownloaded: true }).finally(() =>
-        setIsActionPending(false),
-      );
+    if (action === "install") {
+      showDesktopUpdateReadyPrompt(bridge, state);
       return;
     }
 
-    if (action === "install") {
-      let confirmed = false;
-      try {
-        confirmed = await ensureLocalApi().dialogs.confirm(
-          getDesktopUpdateInstallConfirmationMessage(state),
-        );
-      } catch (error) {
-        setIsActionPending(false);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not confirm update",
-            description: error instanceof Error ? error.message : "Update confirmation failed.",
-          }),
-        );
-        return;
-      }
-      if (!confirmed) {
-        setIsActionPending(false);
-        return;
-      }
-      void installLocalUpdate(bridge).finally(() => setIsActionPending(false));
+    setIsActionPending(true);
+
+    if (action === "download") {
+      void retryLocalUpdateDownload(bridge).finally(() => setIsActionPending(false));
       return;
     }
 
@@ -349,12 +294,11 @@ function SidebarUpdateControl() {
       everything.run({
         ...(bridge && action === "download"
           ? {
-              downloadLocal: (reportError) =>
-                downloadLocalUpdate(bridge, { notifyDownloaded: false, reportError }),
+              downloadLocal: (reportError) => retryLocalUpdateDownload(bridge, reportError),
             }
           : {}),
         ...(bridge && action !== "none"
-          ? { installLocal: (reportError) => installLocalUpdate(bridge, reportError) }
+          ? { installLocal: (reportError) => installDesktopUpdate(bridge, reportError) }
           : {}),
       }),
     );
@@ -407,7 +351,7 @@ function SidebarUpdateControl() {
     const local: UpdateRunLocalState =
       run.localVersion === null
         ? null
-        : state?.status === "downloading"
+        : state && isDownloading
           ? { status: "downloading", percent: state.downloadPercent }
           : { status: "waiting" };
     return (
@@ -426,7 +370,7 @@ function SidebarUpdateControl() {
                     failures: [],
                     restarting: [],
                   });
-                  if (!(await installLocalUpdate(window.desktopBridge!))) {
+                  if (!(await installDesktopUpdate(window.desktopBridge!))) {
                     clearSavedUpdateEverythingResult();
                   }
                 },

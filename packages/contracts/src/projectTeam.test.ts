@@ -2,6 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  afkActive,
+  afkPickOption,
+  afkSetting,
   DEFAULT_PROJECT_TEAM_SETTINGS,
   ProjectAttentionItem,
   ProjectManagerPresence,
@@ -9,6 +12,11 @@ import {
   ProjectTaskSpec,
   defaultTaskKeyPrefix,
   formatTaskKey,
+  formatPlanApproval,
+  formatPlanReviewFeedback,
+  PLAN_APPROVAL_ONLY,
+  PLAN_APPROVAL_START,
+  planApprovalOutcome,
   ProjectTeamAskUserInput,
   ProjectTeamSettings,
   ProjectTeamSettingsUpdateInput,
@@ -170,6 +178,17 @@ describe("task keys", () => {
       }),
     ).toThrow("Each todo needs its own id.");
   });
+
+  it("reads specs saved before success criteria as having none", () => {
+    expect(
+      Schema.decodeUnknownSync(ProjectTaskSpec)({
+        background: "",
+        goal: "Done.",
+        nonGoals: "",
+        todos: [],
+      }).successCriteria,
+    ).toBe("");
+  });
 });
 
 describe("ProjectAttentionItem", () => {
@@ -187,10 +206,15 @@ describe("ProjectAttentionItem", () => {
       batchId: "batch-1",
       createdAt: "2026-11-04T00:00:00.000Z",
     };
-    // Items stored before cards could be replaced decode as never replaced.
+    // Items stored before cards could be replaced, before the answerer was recorded, or
+    // before plan approvals pinned a spec version decode as never replaced, no answerer, no version.
     expect(Schema.decodeUnknownSync(ProjectAttentionItem)(item)).toEqual({
       ...item,
       supersededAt: null,
+      answeredBy: null,
+      specVersion: null,
+      summary: null,
+      verification: null,
     });
   });
 });
@@ -242,7 +266,11 @@ describe("MCP inputs", () => {
 
   it("validates ask_user kinds", () => {
     const decode = Schema.decodeUnknownSync(ProjectTeamAskUserInput);
-    expect(decode({ kind: "approval", question: "  Approve the plan?  " })).toEqual({
+    expect(decode({ kind: "blocker", question: "  Which account?  " })).toEqual({
+      kind: "blocker",
+      question: "Which account?",
+    });
+    expect(decode({ kind: "approval", question: "Approve the plan?" })).toEqual({
       kind: "approval",
       question: "Approve the plan?",
     });
@@ -322,5 +350,101 @@ describe("project team RPCs", () => {
     ]) {
       expect(WsRpcGroup.requests.has(method)).toBe(true);
     }
+  });
+});
+
+describe("AFK", () => {
+  const now = Date.parse("2026-11-07T10:00:00.000Z");
+
+  it("is on until the end of its window and off without a setting", () => {
+    expect(afkActive(undefined, now)).toBe(false);
+    expect(afkActive({ since: "2026-11-07T09:00:00.000Z", until: null }, now)).toBe(true);
+    expect(
+      afkActive({ since: "2026-11-07T09:00:00.000Z", until: "2026-11-07T11:00:00.000Z" }, now),
+    ).toBe(true);
+    expect(
+      afkActive({ since: "2026-11-07T01:00:00.000Z", until: "2026-11-07T09:00:00.000Z" }, now),
+    ).toBe(false);
+  });
+
+  it("carries a saved Auto-approve plans setting over as AFK", () => {
+    const settings = Schema.decodeUnknownSync(ProjectTeamSettings)({
+      autoApprovePlans: { since: "2026-11-07T09:00:00.000Z", until: null },
+    });
+    expect(afkSetting(settings)).toEqual({ since: "2026-11-07T09:00:00.000Z", until: null });
+  });
+
+  it("picks the recommended option, else the first, else none", () => {
+    expect(afkPickOption(["Keep it", "Split it (Recommended)"])).toBe("Split it (Recommended)");
+    expect(afkPickOption(["Keep it", "Split it"])).toBe("Keep it");
+    expect(afkPickOption([])).toBeNull();
+  });
+
+  it("can be set by the app but not by the PM's team_settings_update", () => {
+    expect(
+      Schema.decodeUnknownSync(ProjectTeamUpdateSettingsInput)({
+        projectId: "project-1",
+        afk: { hours: 8 },
+      }).afk,
+    ).toEqual({ hours: 8 });
+    const pmInput = Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput)({
+      sitrepNotify: true,
+      afk: { hours: null },
+    });
+    expect("afk" in pmInput).toBe(false);
+  });
+});
+
+describe("plan approval answers", () => {
+  it("reads approve, approve only and anything else as feedback", () => {
+    expect(planApprovalOutcome(PLAN_APPROVAL_START)).toBe("start");
+    expect(planApprovalOutcome(`${PLAN_APPROVAL_ONLY}\nNote: later`)).toBe("approve_only");
+    expect(planApprovalOutcome("Request changes\nOverall:\nShorter")).toBe("changes");
+    expect(planApprovalOutcome("Approve and start the redesign instead")).toBe("changes");
+  });
+
+  it("formats review feedback with the overall comment and quoted inline comments", () => {
+    expect(
+      formatPlanReviewFeedback({
+        specVersion: 3,
+        overall: " Looks close. ",
+        comments: [
+          { section: "End result", quote: "keeps the\n scroll", comment: "Which list? " },
+          { section: "Steps", quote: "Add a test", comment: "Journey test, please." },
+        ],
+      }),
+    ).toBe(
+      [
+        "Request changes (review of spec v3)",
+        "",
+        "Overall:",
+        "Looks close.",
+        "",
+        "Inline comments:",
+        '1. [End result] "keeps the scroll" → Which list?',
+        '2. [Steps] "Add a test" → Journey test, please.',
+      ].join("\n"),
+    );
+  });
+
+  it("formats an approval with notes that still reads as approve and start", () => {
+    const answer = formatPlanApproval({
+      overall: "",
+      comments: [
+        { section: "Goal", quote: "big title", comment: "" },
+        { section: "Steps", quote: "Add a test", comment: "On phones too." },
+      ],
+    });
+    expect(answer).toBe(
+      [
+        "Approve and start",
+        "",
+        "Inline comments:",
+        '1. [Goal] "big title"',
+        '2. [Steps] "Add a test" → On phones too.',
+      ].join("\n"),
+    );
+    expect(planApprovalOutcome(answer)).toBe("start");
+    expect(formatPlanApproval({ overall: " ", comments: [] })).toBe(PLAN_APPROVAL_START);
   });
 });

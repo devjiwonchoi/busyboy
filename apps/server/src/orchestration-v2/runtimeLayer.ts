@@ -228,6 +228,8 @@ const layerOrchestratorProvided = Orchestrator.layer.pipe(
       layerProviderSwitchServiceProvided,
       layerRunExecutionServiceProvided,
       ThreadForkService.layer,
+      // Lets dispatch tell a project's PM thread, whose turns are never cut off.
+      ProjectTeamRepository.layer,
     ),
   ),
 );

@@ -1,4 +1,5 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   MessageId,
   NodeId,
@@ -21,8 +22,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
+import type * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as ServerConfig from "../config.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
@@ -103,7 +106,9 @@ export type TeamServices =
   | StalledTaskSweep.StalledTaskSweep
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
-  | FinishedTaskCleanup.FinishedTaskCleanup;
+  | FinishedTaskCleanup.FinishedTaskCleanup
+  | SqlClient.SqlClient
+  | ServerConfig.ServerConfig;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -128,6 +133,44 @@ export function assistantMessage(input: {
     updatedAt: at,
   };
 }
+
+/** A message the user typed in a thread, such as the PM's chat. */
+export function userMessage(input: {
+  readonly threadId: ThreadId;
+  readonly text: string;
+  readonly id?: string;
+  readonly createdAt?: string;
+  readonly createdBy?: OrchestrationV2ConversationMessage["createdBy"];
+  readonly creationSource?: OrchestrationV2ConversationMessage["creationSource"];
+}): OrchestrationV2ConversationMessage {
+  const at = DateTime.makeUnsafe(input.createdAt ?? START);
+  return {
+    createdBy: input.createdBy ?? "user",
+    creationSource: input.creationSource ?? "web",
+    id: MessageId.make(input.id ?? `user-message:${input.text}`),
+    threadId: input.threadId,
+    runId: null,
+    nodeId: null,
+    role: "user",
+    text: input.text,
+    attachments: [],
+    streaming: false,
+    createdAt: at,
+    updatedAt: at,
+  };
+}
+
+/** Adds a message the user typed in `threadId`'s chat. */
+export const userSays = (
+  harness: TeamHarness,
+  threadId: ThreadId,
+  text: string,
+  options: Omit<Parameters<typeof userMessage>[0], "threadId" | "text"> = {},
+) => {
+  const thread = harness.threads.get(threadId);
+  if (thread === undefined) throw new Error(`No fake thread ${threadId}.`);
+  thread.messages.push(userMessage({ threadId, text, ...options }));
+};
 
 const makeProject = (projectId: ProjectId, title: string): ProjectStore.ProjectRow => ({
   projectId,
@@ -314,7 +357,7 @@ export const withTeam = <A, E>(
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
-      Layer.provide(SqlitePersistence.layerMemory),
+      Layer.provideMerge(SqlitePersistence.layerMemory),
       Layer.provide(
         Layer.mergeAll(
           threadManagement,
@@ -325,6 +368,11 @@ export const withTeam = <A, E>(
           NodeCrypto.layer,
           managedProjectFolders,
           Path.layer,
+        ),
+      ),
+      Layer.provideMerge(
+        ServerConfig.layerTest(process.cwd(), { prefix: "t3-project-team-" }).pipe(
+          Layer.provideMerge(NodeServices.layer),
         ),
       ),
     );

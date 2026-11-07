@@ -20,7 +20,7 @@ import {
 import {
   ScheduledTaskRunStatus,
   ScheduledTaskSchedule,
-  ScheduledTaskUpsertSchedule,
+  ScheduledTaskAgentUpsertSchedule,
 } from "./scheduledTask.ts";
 import { ProviderInteractionMode, RuntimeMode } from "./providerPolicy.ts";
 import { ThreadLinkedPullRequest } from "./threadPullRequest.ts";
@@ -54,18 +54,18 @@ const OrchestratorMcpClientRequestId = TrimmedNonEmptyString.check(
  * that compatibility shape at the tool boundary and decoding it immediately.
  */
 const OrchestratorMcpScheduleFromJsonString = Schema.fromJsonString(
-  ScheduledTaskUpsertSchedule,
+  ScheduledTaskAgentUpsertSchedule,
 ).annotate({
   description:
     "Compatibility-only JSON encoding of the schedule object. Prefer a structured object.",
 });
 
 const OrchestratorMcpSchedule = Schema.Union([
-  ScheduledTaskUpsertSchedule,
+  ScheduledTaskAgentUpsertSchedule,
   OrchestratorMcpScheduleFromJsonString,
 ]).annotate({
   description:
-    "Trigger object: {type:'interval', everyMs}, {type:'fixed_time', timeOfDay, weekdays?}, or {type:'webhook'} to run on each request to a generated URL. Never stringify it unless the provider requires the compatibility form.",
+    "Trigger object: {type:'interval', everyMs}, {type:'fixed_time', timeOfDay, weekdays?}, or {type:'webhook', signature} to run on each request to a generated URL (signature required unless allowUnsigned is true). Never stringify it unless the provider requires the compatibility form.",
 });
 
 const OrchestratorMcpTargetOptionsFromRecord = Schema.Record(
@@ -181,7 +181,7 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
   runtimeMode: Schema.optional(
     OrchestratorMcpRuntimeMode.annotate({
       description:
-        "Defaults to inherit; omit it unless the user asks for a supervised child. A narrower mode is not a read-only switch: on most providers, approval-required and auto-accept-edits pause the child at each action that needs approval until a person approves it in the child's thread, which this thread cannot do. To limit what the child does, say so in the task. A mode ranked above this thread's is rejected; that ranking does not promise the child's provider permissions are narrower than this thread's.",
+        "When omitted, the child starts in the project's default permission mode (auto unless the user changed it), never broader than this thread's; pass inherit to take this thread's mode. Omit it unless the user asks for a supervised child. A narrower mode is not a read-only switch: on most providers, approval-required and auto-accept-edits pause the child at each action that needs approval until a person approves it in the child's thread, which this thread cannot do. To limit what the child does, say so in the task. A mode ranked above this thread's is rejected; that ranking does not promise the child's provider permissions are narrower than this thread's.",
     }),
   ),
   interactionMode: Schema.optional(OrchestratorMcpInteractionMode),
@@ -515,7 +515,7 @@ export const OrchestratorMcpScheduleTaskInput = Schema.Struct({
   bindToCurrentThread: Schema.optional(
     Schema.Boolean.annotate({
       description:
-        "True (default) posts each run into this thread; false creates a fresh top-level thread per run.",
+        "For timers, true (default) posts each run into this thread; false creates a fresh top-level thread per run. Webhook tasks always use a fresh thread and refuse true.",
     }),
   ),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),

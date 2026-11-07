@@ -262,20 +262,20 @@ import {
   useComboboxFilter,
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
+import { SidebarRowSwipe, type SidebarRowSwipeAction } from "./sidebar/SidebarRowSwipe";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
-import { NewTaskDialog, type NewTaskTarget } from "./sidebar/NewTaskDialog";
+import { openQuickTask } from "./task/quickTaskStore";
 import { selectSidebarTasksWithoutSession, SidebarTaskRow } from "./sidebar/SidebarTaskRows";
-import { SidebarWaitingOnYouRow } from "./sidebar/SidebarWaitingOnYouRow";
 import { taskRouteParams } from "../taskRoutes";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import {
   resolveSidebarRowStatus,
-  resolveSidebarTaskRowStatus,
   SidebarRowActionButton,
   SidebarRowLine,
 } from "./sidebar/SidebarRowLine";
+import { resolveLiveTaskStatus } from "./task/taskStatus";
 import { MiddleTruncate } from "./ui/middle-truncate";
 import {
   composerDraftHasUserContent,
@@ -505,11 +505,7 @@ function useSidebarThreads(input: {
       });
     }
   }
-  // A manager's section has no collapse control, so a key stored before it had a
-  // manager must not keep it collapsed.
-  const collapsedProjectKeys = new Set(
-    collapsedProjectKeyList.filter((projectKey) => !projectManagerByProjectKey.has(projectKey)),
-  );
+  const collapsedProjectKeys = new Set(collapsedProjectKeyList);
   const partition = partitionSidebarThreads({
     threads,
     scopedProjectKeys,
@@ -1172,6 +1168,8 @@ function SidebarProjectHeader(props: {
             resolveSidebarThreadStatus(pm.manager.thread) === "working"
           }
           isActive={pm.isActive}
+          expanded={props.expanded}
+          onToggle={props.onToggle}
           onOpenThread={pm.onOpenThread}
           onNewThread={props.onNewThread}
           onNewTask={pm.onNewTask}
@@ -1501,16 +1499,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isUnread,
     goalActive: thread.goal?.status === "active",
   });
-  // A task lead's row also shows its task's stage, so it never looks idle.
+  // A task lead's row shows its task's status instead, so it never looks idle.
   const leadTask = useLeadThreadTask(threadRef, thread.projectId);
-  const topStatus =
-    leadTask === null
-      ? threadStatus
-      : resolveSidebarTaskRowStatus({
-          threadStatus,
-          task: leadTask.task,
-          waitingOnUser: leadTask.waitingOnUser,
-        });
+  const topStatus = leadTask === null ? threadStatus : resolveLiveTaskStatus(leadTask.task, status);
 
   const handleClick = (event: ReactMouseEvent) => {
     onThreadClick(event, threadRef);
@@ -1597,6 +1588,15 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     event.stopPropagation();
     onArchive(threadRef);
   };
+  // Phones have no hover, so a left swipe uncovers the same actions.
+  const { isMobile } = useSidebar();
+  const swipeActions: SidebarRowSwipeAction[] = [];
+  if (showPinButton) swipeActions.push({ kind: "pin", onSelect: () => onPin(threadRef) });
+  if (props.isPinned && props.pinningSupported && canOperateThread) {
+    swipeActions.push({ kind: "unpin", onSelect: () => onUnpin(threadRef) });
+  }
+  if (showArchiveButton)
+    swipeActions.push({ kind: "archive", onSelect: () => onArchive(threadRef) });
 
   const rowSurfaceClassName = cn(
     "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -1772,45 +1772,51 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         sortable?.isDragging && "relative z-20",
       )}
     >
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={accessibility.label}
-        aria-current={accessibility.current}
-        data-testid="sidebar-row-card"
-        aria-busy={isRegeneratingTitle || undefined}
-        className={rowSurfaceClassName}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-        onKeyDown={handleKeyDown}
-        onContextMenu={handleContextMenu}
+      <SidebarRowSwipe
+        enabled={isMobile}
+        paused={isRenaming || sortable?.isDragging}
+        actions={swipeActions}
       >
-        {accessibleTitle}
-        <SidebarRowLine
-          title={
-            <>
-              {title}
-              {isRegeneratingTitle ? (
-                <span role="status" className="sr-only">
-                  Regenerating title
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={accessibility.label}
+          aria-current={accessibility.current}
+          data-testid="sidebar-row-card"
+          aria-busy={isRegeneratingTitle || undefined}
+          className={rowSurfaceClassName}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+          onKeyDown={handleKeyDown}
+          onContextMenu={handleContextMenu}
+        >
+          {accessibleTitle}
+          <SidebarRowLine
+            title={
+              <>
+                {title}
+                {isRegeneratingTitle ? (
+                  <span role="status" className="sr-only">
+                    Regenerating title
+                  </span>
+                ) : null}
+              </>
+            }
+            status={topStatus}
+            indicators={indicators}
+            actions={actions}
+            trailingOverride={
+              sortable?.isDragging ? (
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {pinIndicator}
+                  {dragDestination}
                 </span>
-              ) : null}
-            </>
-          }
-          status={topStatus}
-          indicators={indicators}
-          actions={actions}
-          trailingOverride={
-            sortable?.isDragging ? (
-              <span className="flex shrink-0 items-center gap-1.5">
-                {pinIndicator}
-                {dragDestination}
-              </span>
-            ) : undefined
-          }
-        />
-        {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
-      </div>
+              ) : undefined
+            }
+          />
+          {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
+        </div>
+      </SidebarRowSwipe>
     </li>
   );
 });
@@ -1976,7 +1982,8 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
-export default function Sidebar() {
+/** `withChromeHeader={false}` when the caller draws the header, as the view rail layout does. */
+export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?: boolean } = {}) {
   const {
     projects,
     serverConfigs,
@@ -2333,13 +2340,7 @@ export default function Sidebar() {
     if (isMobile) {
       setOpenMobile(false);
     }
-    // A task's lead row stands for the task: open its page, with the lead's chat beside the spec.
-    const leadTask = taskByLeadKey.get(scopedThreadKey(threadRef));
-    if (leadTask !== undefined) {
-      return router.navigate(
-        taskRouteParams(leadTask.environmentId, leadTask.projectId, leadTask.taskId),
-      );
-    }
+    // A task lead's chat is the task: it opens like any thread, with the plan beside it.
     return router.navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(threadRef),
@@ -2355,7 +2356,6 @@ export default function Sidebar() {
     }
     return router.navigate(taskRouteParams(environmentId, projectId, taskId));
   };
-  const [newTaskTarget, setNewTaskTarget] = useState<NewTaskTarget | null>(null);
 
   const handleThreadFileDrop = async (threadRef: ScopedThreadRef, files: File[]) => {
     const dropId = queuePendingFileDrop({ threadRef, files });
@@ -3550,7 +3550,7 @@ export default function Sidebar() {
   return (
     <>
       <ThreadContextDragGhost />
-      <SidebarChromeHeader isElectron={isElectron} />
+      {withChromeHeader ? <SidebarChromeHeader isElectron={isElectron} /> : null}
       <SidebarContent
         className="min-h-full"
         fixedHeader={
@@ -3874,10 +3874,6 @@ export default function Sidebar() {
                       };
                       const from = isContextDrag ? null : (dragState?.activeSection ?? null);
                       const items: ReactNode[] = [
-                        <SidebarWaitingOnYouRow
-                          key="waiting-on-you"
-                          onNavigate={() => (isMobile ? setOpenMobile(false) : undefined)}
-                        />,
                         <SidebarDraftBlock
                           key="draft-sessions"
                           projectByKey={projectByKey}
@@ -3990,10 +3986,9 @@ export default function Sidebar() {
                                         isActive: routeThreadKey === manager.threadKey,
                                         onOpenThread: navigateToThread,
                                         onNewTask: () =>
-                                          setNewTaskTarget({
+                                          openQuickTask({
                                             environmentId: manager.entry.environmentId,
                                             projectId: manager.entry.summary.projectId,
-                                            projectName: projectGroup?.displayName ?? "",
                                           }),
                                         jumpLabel: showJumpHints
                                           ? (jumpLabelByKey.get(manager.threadKey) ?? null)
@@ -4057,17 +4052,6 @@ export default function Sidebar() {
           ) : null}
         </SidebarGroup>
       </SidebarContent>
-      <NewTaskDialog
-        target={newTaskTarget}
-        onClose={() => setNewTaskTarget(null)}
-        onCreated={(detail) => {
-          const target = newTaskTarget;
-          setNewTaskTarget(null);
-          if (target !== null) {
-            void navigateToTask(target.environmentId, detail.task.projectId, detail.task.id);
-          }
-        }}
-      />
       <SidebarChromeFooter />
     </>
   );

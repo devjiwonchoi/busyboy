@@ -8,6 +8,7 @@ import {
   QrCodeIcon,
   RouteIcon,
   TerminalIcon,
+  TriangleAlertIcon,
 } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
 import {
@@ -122,7 +123,7 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/men
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { Alert, AlertDescription } from "../ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import { AnimatedHeight } from "../AnimatedHeight";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
@@ -2722,6 +2723,11 @@ export function ConnectionsSettings() {
       status={
         desktopServerExposureError ? (
           <span className="block text-destructive">{desktopServerExposureError}</span>
+        ) : isLocalBackendNetworkAccessible ? (
+          <span className="block text-warning-foreground">
+            Unencrypted. Anyone on your network can see traffic. Use Tailscale HTTPS for an
+            encrypted connection.
+          </span>
         ) : null
       }
       control={renderNetworkAccessToggle()}
@@ -2946,6 +2952,17 @@ export function ConnectionsSettings() {
                     ? "Let your other devices connect to BusyBoy over the network. Pair devices to give them access. BusyBoy will restart."
                     : "Devices connected over your local network will disconnect. Tailscale HTTPS keeps working. BusyBoy will restart."}
                 </AlertDialogDescription>
+                {pendingDesktopServerExposureMode === "network-accessible" ? (
+                  <Alert variant="warning" controlAlignment="first-line" className="text-left">
+                    <TriangleAlertIcon />
+                    <AlertTitle>This connection is not encrypted</AlertTitle>
+                    <AlertDescription>
+                      Anyone on the same Wi-Fi or network can see the traffic, including your
+                      sign-in, and take over BusyBoy. Use it only on networks you trust. For an
+                      encrypted connection, use Tailscale HTTPS.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogClose

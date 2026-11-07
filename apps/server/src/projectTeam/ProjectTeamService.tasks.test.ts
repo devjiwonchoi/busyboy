@@ -1,21 +1,74 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+
 import { assert, describe, it } from "@effect/vitest";
 import {
-  PLAN_APPROVAL_ONLY,
+  ChatAttachmentId,
   PLAN_APPROVAL_START,
   ProjectTaskId,
   ThreadId,
+  formatPlanReviewFeedback,
 } from "@t3tools/contracts";
 import * as Ref from "effect/Ref";
 import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 
+import { createPendingAttachmentId } from "../attachmentStore.ts";
+import * as ServerConfig from "../config.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { PROJECT_ID, setUpManager, withTeam } from "./testkit.ts";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import { PROJECT_ID, setUpManager, userMessage, withTeam } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 
 const todo = (id: string, text: string) => ({ id, text, done: false, subtaskId: null });
 
 describe("ProjectTeamService tasks as specs", () => {
+  it.effect("keeps files the user attached to a new task and lists them in its spec", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        yield* setUpManager;
+        const { attachmentsDir } = yield* ServerConfig.ServerConfig;
+        const pendingId = createPendingAttachmentId("png")!;
+        const bytes = new Uint8Array([1, 2, 3]);
+        NodeFS.mkdirSync(attachmentsDir, { recursive: true });
+        NodeFS.writeFileSync(NodePath.join(attachmentsDir, `${pendingId}.png`), bytes);
+
+        const created = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          title: "Fix the broken header",
+          context: "The header overlaps the sidebar.",
+          startPlanning: false,
+          attachments: [
+            {
+              type: "image",
+              id: ChatAttachmentId.make(pendingId),
+              name: "screenshot.png",
+              mimeType: "image/png",
+              sizeBytes: bytes.byteLength,
+            },
+          ],
+        });
+
+        const background = created.versions[0]?.spec.background ?? "";
+        const [context, list] = background.split("\n\n");
+        assert.strictEqual(context, "The header overlaps the sidebar.");
+        const match =
+          /^Attachments \(read these files\):\n- screenshot\.png \(image\/png\): (\/.+)$/.exec(
+            list ?? "",
+          );
+        assert.isNotNull(match);
+        const path = match![1]!;
+        assert.notInclude(path, "pending");
+        assert.isTrue(NodeFS.existsSync(path));
+        assert.deepStrictEqual([...NodeFS.readFileSync(path)], [1, 2, 3]);
+        assert.strictEqual(created.task.request, "The header overlaps the sidebar.");
+      }),
+    ),
+  );
+
   it.effect("lets the user dump a task, shape its spec, restore a version and split a todo", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -47,6 +100,7 @@ describe("ProjectTeamService tasks as specs", () => {
           spec: {
             background: "Dragging a project up jumps the list to the top.",
             goal: "Dragging keeps the scroll position.",
+            successCriteria: "",
             nonGoals: "",
             todos: [todo("t1", "Add a journey test"), todo("t2", "Keep scrollTop on drag start")],
           },
@@ -62,7 +116,7 @@ describe("ProjectTeamService tasks as specs", () => {
             projectId: PROJECT_ID,
             taskId: created.task.id,
             baseVersion: 1,
-            spec: { background: "", goal: "", nonGoals: "", todos: [] },
+            spec: { background: "", goal: "", successCriteria: "", nonGoals: "", todos: [] },
           })
           .pipe(Effect.flip);
         assert.include(stale.message, "changed to v2");
@@ -211,27 +265,29 @@ describe("ProjectTeamService tasks as specs", () => {
         const foreign = yield* team.readSpec(planner, { taskId: other.task.id }).pipe(Effect.flip);
         assert.include(foreign.message, "only use its own task's spec");
 
-        // A plan approval offers both answers by default.
-        const { item } = yield* team.askUser(planner, {
-          kind: "approval",
-          question: "Fix drag scroll: approve the plan in the spec?",
+        // No approval card: the planner starts running with its plan recorded.
+        const running = yield* team.updateTask(planner, {
+          stage: "running",
+          planSummary: "Keep scrollTop.",
         });
-        assert.deepStrictEqual(item.options, [PLAN_APPROVAL_START, PLAN_APPROVAL_ONLY]);
-        yield* team.answerDecision({
+        assert.strictEqual(running.task.stage, "running");
+        const afterPlan = yield* team.getTaskDetail({
           projectId: PROJECT_ID,
-          attentionItemId: item.id,
-          answer: PLAN_APPROVAL_ONLY,
+          taskId: created.task.id,
         });
+        assert.deepStrictEqual(afterPlan.openAttention, []);
+        assert.isFalse(
+          (yield* harness.messagesTo(pm)).some((text) => text.includes("[Decision card]")),
+        );
 
-        // "Approve only": the lead parks the task with the plan recorded.
-        yield* team.updateTask(planner, { stage: "inbox", planSummary: "Keep scrollTop." });
-
-        // Starting it again opens an implementer that skips planning.
+        // A stopped lead parks the task; starting it again opens an implementer that skips planning.
+        yield* team.updateTask(planner, { stage: "inbox" });
         const resumed = yield* team.startTask(pm, { taskId: created.task.id }, harness.delegate);
         assert.notStrictEqual(resumed.leadThreadId, planner);
         const second = (yield* Ref.get(harness.delegated))[1];
         assert.strictEqual(second?.clientRequestId, `task-start:${created.task.id}:2`);
         assert.include(second?.task, "The plan above is already approved");
+        assert.notInclude(second?.task, "1. planning:");
         assert.include(second?.task, "- [ ] t1: Add a journey test");
 
         // The implementer checks todos off as it works; a repeat check adds no version.
@@ -260,6 +316,169 @@ describe("ProjectTeamService tasks as specs", () => {
       }),
     ),
   );
+  it.effect("waits for plan approval, sends review feedback back, and starts on approval", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId: lead } = yield* team.startTask(
+          pm,
+          { taskId: task.id },
+          harness.delegate,
+        );
+        assert.include((yield* Ref.get(harness.delegated))[0]?.task, 'ask_user(kind: "approval")');
+
+        const read = yield* team.readSpec(lead, {});
+        yield* team.writeSpec(lead, {
+          baseVersion: read.current.version,
+          spec: {
+            ...read.current.spec,
+            goal: "Dragging keeps the scroll position.",
+            successCriteria: "- The list never jumps.",
+          },
+          note: "Plan",
+        });
+
+        // An approval needs both card sections: goal and verification.
+        const noSections = yield* team
+          .askUser(lead, { kind: "approval", question: "Plan: keep it.", goal: "- Keep it." })
+          .pipe(Effect.flip);
+        assert.include(noSections.message, "needs goal and verification");
+
+        // Asking for approval pins spec v2 and shows the task as Waiting for approval.
+        const first = yield* team.askUser(lead, {
+          kind: "approval",
+          question: "Plan: keep it.",
+          goal: "- Keep the scroll position while dragging.",
+          verification: "- A journey test drags and checks scrollTop.",
+          // Leads can't bring back "Approve only": approving always starts the work.
+          options: ["Approve and start", "Approve only"],
+        });
+        assert.strictEqual(first.item.kind, "approval");
+        assert.strictEqual(first.item.summary, "- Keep the scroll position while dragging.");
+        assert.strictEqual(first.item.verification, "- A journey test drags and checks scrollTop.");
+        assert.strictEqual(first.item.specVersion, 2);
+        assert.deepStrictEqual(first.item.options, ["Approve and start"]);
+        const waiting = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(waiting.task.stage, "awaiting_approval");
+
+        // Feedback from the review goes to the lead and moves the task back to planning.
+        const feedback = formatPlanReviewFeedback({
+          specVersion: 2,
+          comments: [
+            { section: "End result", quote: "scroll position", comment: "Say which list." },
+          ],
+          overall: "Looks close.",
+        });
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: first.item.id,
+          answer: feedback,
+        });
+        const replanning = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(replanning.task.stage, "planning");
+        const relayed =
+          (yield* Ref.get(harness.sent)).findLast((input) => input.threadId === lead)?.text ?? "";
+        assert.include(relayed, "[User answer via BusyBoy]");
+        assert.include(relayed, '[End result] "scroll position" → Say which list.');
+        assert.include(relayed, "Looks close.");
+
+        // The next version asks again; an older open card is replaced, not left waiting.
+        const second = yield* team.askUser(lead, {
+          kind: "approval",
+          question: "Plan v3.",
+          goal: "- Short plan.",
+          verification: "- A test.",
+        });
+        const third = yield* team.askUser(lead, {
+          kind: "approval",
+          question: "Plan v3 again.",
+          goal: "- Short plan.",
+          verification: "- A test.",
+        });
+        const replaced = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.deepStrictEqual(
+          replaced.openAttention.map((item) => item.id),
+          [third.item.id],
+        );
+        assert.notStrictEqual(second.item.id, third.item.id);
+
+        // The PM cannot approve on its own words.
+        const pmApproval = yield* team
+          .answerAttention(pm, { attentionItemId: third.item.id, answer: PLAN_APPROVAL_START })
+          .pipe(Effect.flip);
+        assert.include(pmApproval.message, "user");
+
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: third.item.id,
+          answer: PLAN_APPROVAL_START,
+        });
+        const started = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(started.task.stage, "running");
+        assert.deepStrictEqual(started.openAttention, []);
+      }),
+    ),
+  );
+
+  it.effect("approves plan cards for the user a minute after they ask while AFK is on", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const first = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const second = yield* team.createTask(pm, { title: "Fix drop", request: "Fix drop." });
+        const { leadThreadId: leadA } = yield* team.startTask(
+          pm,
+          { taskId: first.task.id },
+          harness.delegate,
+        );
+        const { leadThreadId: leadB } = yield* team.startTask(
+          pm,
+          { taskId: second.task.id },
+          harness.delegate,
+        );
+
+        // A card that already waited past the grace period is answered when AFK comes on.
+        const waiting = yield* team.askUser(leadA, {
+          kind: "approval",
+          question: "Plan A.",
+          goal: "- Short plan.",
+          verification: "- A test.",
+        });
+        yield* TestClock.adjust("2 minutes");
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
+        const a = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: first.task.id });
+        assert.strictEqual(a.task.stage, "running");
+        assert.deepStrictEqual(a.openAttention, []);
+        const cards = (yield* team.attentionSnapshot).projects[0]?.decisionCards ?? [];
+        const answeredA = cards.find((card) => card.item.id === waiting.item.id)?.item;
+        assert.strictEqual(answeredA?.answer ?? null, PLAN_APPROVAL_START);
+        assert.strictEqual(answeredA?.answeredBy ?? null, "afk");
+
+        // A new card waits through the grace period, then the sweep approves it.
+        const asked = yield* team.askUser(leadB, {
+          kind: "approval",
+          question: "Plan B.",
+          goal: "- Short plan.",
+          verification: "- A test.",
+        });
+        assert.isNull(asked.item.answer);
+        yield* team.afkSweep;
+        const early = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: second.task.id });
+        assert.strictEqual(early.task.stage, "awaiting_approval");
+        yield* TestClock.adjust("61 seconds");
+        yield* team.afkSweep;
+        const b = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: second.task.id });
+        assert.strictEqual(b.task.stage, "running");
+        assert.deepStrictEqual(b.openAttention, []);
+        const toLeadB = (yield* Ref.get(harness.sent)).filter((input) => input.threadId === leadB);
+        assert.include(toLeadB.map((input) => input.text).join("\n"), "auto-approved (AFK)");
+      }),
+    ),
+  );
+
   it.effect("lets the PM change the task key prefix on the user's word", () =>
     withTeam(() =>
       Effect.gen(function* () {
@@ -273,4 +492,215 @@ describe("ProjectTeamService tasks as specs", () => {
       }),
     ),
   );
+
+  it.effect("plans again when a parked task has no plan yet", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* team.updateTask(leadThreadId, { stage: "inbox" });
+        yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        const restarted = (yield* Ref.get(harness.delegated))[1]?.task ?? "";
+        assert.include(restarted, "1. planning:");
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.deepStrictEqual(
+          detail.sessions.map((session) => session.role),
+          ["lead", "lead"],
+        );
+      }),
+    ),
+  );
+});
+
+describe("AFK", () => {
+  const journal = Effect.gen(function* () {
+    const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+    const events = yield* repository.listProjectEventsSince({
+      projectId: PROJECT_ID,
+      since: "2000-01-01T00:00:00.000Z",
+    });
+    return events.map((event) => event.body);
+  });
+
+  it.effect("answers a decision card with the recommended option after the grace period", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+
+        const on = yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 8 } });
+        assert.strictEqual(on.settings.afk?.until, "2026-11-04T08:00:00.000Z");
+        // The PM and the running lead hear that the user is away.
+        assert.isTrue((yield* harness.messagesTo(pm)).some((text) => text.startsWith("[AFK]")));
+        assert.isTrue(
+          (yield* harness.messagesTo(leadThreadId)).some((text) => text.startsWith("[AFK]")),
+        );
+
+        yield* team.askUser(leadThreadId, {
+          kind: "decision",
+          question: "Which list?",
+          options: ["Flat", "Grouped (Recommended)"],
+        });
+        const blocker = yield* team.askUser(leadThreadId, {
+          kind: "blocker",
+          question: "Merge PR #9?",
+        });
+        yield* team.askUser(leadThreadId, {
+          kind: "decision",
+          question: "Any naming preference?",
+        });
+
+        // The user gets a minute to answer first.
+        yield* TestClock.adjust("30 seconds");
+        yield* team.afkSweep;
+        let open = (yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id }))
+          .openAttention;
+        assert.strictEqual(open.length, 3);
+
+        yield* TestClock.adjust("31 seconds");
+        yield* team.afkSweep;
+        open = (yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id }))
+          .openAttention;
+        // Blockers wait for the user even while AFK.
+        assert.deepStrictEqual(
+          open.map((item) => item.id),
+          [blocker.item.id],
+        );
+        const toLead = (yield* Ref.get(harness.sent))
+          .filter((input) => input.threadId === leadThreadId)
+          .map((input) => input.text);
+        assert.include(
+          toLead,
+          "[Auto-answered (AFK): the user is away] Which list? → Grouped (Recommended)",
+        );
+        assert.include(
+          toLead,
+          "[Auto-answered (AFK): the user is away] Any naming preference? → User is AFK: proceed with your recommended option and record the assumption.",
+        );
+
+        // The banner's list shows both answers.
+        const summary = (yield* team.attentionSnapshot).projects[0];
+        assert.deepStrictEqual(
+          summary?.afkAnswers.map((answer) => answer.text),
+          [
+            "Which list? → Grouped (Recommended)",
+            "Any naming preference? → User is AFK: proceed with your recommended option and record the assumption.",
+          ],
+        );
+        assert.strictEqual(summary?.afkAnswers[0]?.threadId, leadThreadId);
+      }),
+    ),
+  );
+
+  it.effect("lets the user's own answer win inside the grace period", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
+        const asked = yield* team.askUser(leadThreadId, {
+          kind: "decision",
+          question: "Which list?",
+          options: ["Flat", "Grouped (Recommended)"],
+        });
+        yield* TestClock.adjust("20 seconds");
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: asked.item.id,
+          answer: "Flat",
+        });
+        yield* TestClock.adjust("2 minutes");
+        yield* team.afkSweep;
+        const card = (yield* team.attentionSnapshot).projects[0]?.decisionCards.find(
+          (entry) => entry.item.id === asked.item.id,
+        );
+        assert.strictEqual(card?.item.answer, "Flat");
+        assert.strictEqual(card?.item.answeredBy, "user");
+        assert.deepStrictEqual((yield* team.attentionSnapshot).projects[0]?.afkAnswers, []);
+      }),
+    ),
+  );
+
+  it.effect("stops answering when its window ends or the user turns it off", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 1 } });
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* TestClock.adjust("2 hours");
+        yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
+        yield* TestClock.adjust("2 minutes");
+        yield* team.afkSweep;
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.task.stage, "awaiting_approval");
+
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
+        const off = yield* team.updateSettings({ projectId: PROJECT_ID, afk: null });
+        assert.isUndefined(off.settings.afk);
+        const bodies = yield* journal;
+        assert.include(bodies, "AFK turned on by you until 2026-11-04T01:00:00.000Z");
+        assert.include(bodies, "AFK turned off by you");
+      }),
+    ),
+  );
+
+  it.effect("carries Auto-approve plans over as AFK, and the PM's tool cannot turn it on", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        // Extra keys are dropped by the tool's schema; even passed through, the PM path ignores them.
+        const asPm = yield* team.updateSettingsAsManager(pm, {
+          sitrepNotify: true,
+          afk: { hours: null },
+          autoApprovePlans: { hours: null },
+        } as never);
+        assert.isUndefined(asPm.settings.afk);
+
+        // A setting saved before AFK still counts as AFK.
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const manager = yield* repository.getManager(PROJECT_ID);
+        assert.isTrue(manager._tag === "Some");
+        if (manager._tag !== "Some") return;
+        yield* repository.updateManagerSettings({
+          projectId: PROJECT_ID,
+          settings: {
+            ...manager.value.settings,
+            autoApprovePlans: { since: "2026-11-04T00:00:00.000Z", until: null },
+          },
+          now: "2026-11-04T00:00:00.000Z",
+        });
+        const { task } = yield* team.createTask(pm, { title: "Fix drag", request: "Fix drag." });
+        const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
+        yield* TestClock.adjust("61 seconds");
+        yield* team.afkSweep;
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.task.stage, "running");
+      }),
+    ),
+  );
+});
+
+describe("isUserChatAnswer", () => {
+  const thread = "thread:pm" as Parameters<typeof userMessage>[0]["threadId"];
+  const said = (text: string) => [userMessage({ threadId: thread, text })];
+
+  it("matches the user's words as whole words, ignoring case and spacing", () => {
+    assert.isTrue(ProjectTeamService.isUserChatAnswer("전부 승인", said("네,  전부 승인"), 0));
+    assert.isTrue(ProjectTeamService.isUserChatAnswer("option b", said("Go with Option B."), 0));
+  });
+
+  it("doesn't let a short answer match part of a longer word", () => {
+    assert.isFalse(ProjectTeamService.isUserChatAnswer("B", said("maybe later"), 0));
+    assert.isFalse(ProjectTeamService.isUserChatAnswer("approve", said("I don't approved it"), 0));
+  });
 });
