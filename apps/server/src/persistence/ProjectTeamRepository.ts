@@ -28,6 +28,7 @@ import {
   ProjectTaskEventKind,
   ProjectTaskId,
   ProjectTaskOutcome,
+  ProjectTaskReview,
   ProjectTaskSession,
   ProjectTaskSessionRole,
   ProjectTaskSpec,
@@ -216,9 +217,18 @@ export class ProjectTeamRepository extends Context.Service<
     readonly listTaskSessions: (taskId: ProjectTaskId) => Result<ReadonlyArray<ProjectTaskSession>>;
     /**
      * Updates the given fields. A stage change also sets stage_changed_at and
-     * resets nudge_count to 0, overriding a nudgeCount in the same call.
+     * resets nudge_count to 0, overriding a nudgeCount in the same call. A move into
+     * running starts an Iterate round (resuming from blocked does not, unless none has
+     * started); a move into in_review starts a Ship round.
      */
     readonly updateTask: (input: UpdateProjectTaskInput) => Result<Option.Option<ProjectTask>>;
+    /** Stores the lead's latest self-review; `startsIterateRound` also counts a new round. */
+    readonly recordTaskReview: (input: {
+      readonly id: ProjectTaskId;
+      readonly review: ProjectTaskReview;
+      readonly startsIterateRound: boolean;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
     /** Case-insensitive substring match over title, request, plan and result summaries. */
     readonly searchTasks: (input: {
       readonly projectId: ProjectId;
@@ -343,7 +353,9 @@ const ManagerRow = Schema.Struct({
 const TaskRow = Schema.Struct({
   ...ProjectTask.fields,
   waitsOn: Schema.fromJsonString(Schema.Array(ProjectTaskId)),
+  review: Schema.NullOr(Schema.fromJsonString(ProjectTaskReview)),
 });
+const ReviewJson = Schema.fromJsonString(ProjectTaskReview);
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
   supersededAt: Schema.NullOr(IsoDateTime),
@@ -409,6 +421,9 @@ export const make = Effect.gen(function* () {
     result_summary AS "resultSummary",
     last_outcome AS "lastOutcome",
     nudge_count AS "nudgeCount",
+    iterate_round AS "iterateRound",
+    ship_round AS "shipRound",
+    review_json AS "review",
     stage_changed_at AS "stageChangedAt",
     created_at AS "createdAt",
     updated_at AS "updatedAt"
@@ -627,6 +642,15 @@ export const make = Effect.gen(function* () {
             WHEN ${stageChanged} THEN 0
             ELSE COALESCE(${input.nudgeCount ?? null}, nudge_count)
           END,
+          iterate_round = CASE
+            WHEN ${stageChanged} AND ${stage} = 'running' AND (stage <> 'blocked' OR iterate_round = 0)
+              THEN iterate_round + 1
+            ELSE iterate_round
+          END,
+          ship_round = CASE
+            WHEN ${stageChanged} AND ${stage} = 'in_review' THEN ship_round + 1
+            ELSE ship_round
+          END,
           title = COALESCE(${input.title ?? null}, title),
           waits_on_json = COALESCE(${input.waitsOn ?? null}, waits_on_json),
           parent_task_id = CASE
@@ -643,6 +667,23 @@ export const make = Effect.gen(function* () {
         RETURNING ${taskColumns}
       `;
     },
+  });
+  const updateTaskReview = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectTaskId,
+      review: ReviewJson,
+      startsIterateRound: Schema.Boolean,
+      now: IsoDateTime,
+    }),
+    Result: TaskRow,
+    execute: ({ id, review, startsIterateRound, now }) => sql`
+      UPDATE project_tasks SET
+        review_json = ${review},
+        iterate_round = iterate_round + ${startsIterateRound ? 1 : 0},
+        updated_at = ${now}
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
   });
   const findChildTasks = SqlSchema.findAll({
     Request: Schema.Struct({ parentTaskId: ProjectTaskId }),
@@ -1178,6 +1219,8 @@ export const make = Effect.gen(function* () {
       findTaskSessions({ taskId }).pipe(Effect.mapError(toRepositoryError("listTaskSessions"))),
     updateTask: (input) =>
       updateTaskRow(input).pipe(Effect.mapError(toRepositoryError("updateTask"))),
+    recordTaskReview: (input) =>
+      updateTaskReview(input).pipe(Effect.mapError(toRepositoryError("recordTaskReview"))),
     searchTasks: ({ projectId, query, limit }) =>
       searchTaskRows({ projectId, pattern: `%${escapeLike(query)}%`, limit }).pipe(
         Effect.mapError(toRepositoryError("searchTasks")),

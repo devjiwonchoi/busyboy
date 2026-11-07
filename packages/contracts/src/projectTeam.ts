@@ -56,6 +56,47 @@ export const ProjectTaskStage = Schema.Literals([
 ]);
 export type ProjectTaskStage = typeof ProjectTaskStage.Type;
 
+/**
+ * The lead's workflow phase, read from the stage: Align agrees on the plan, Iterate
+ * builds and self-reviews it, Ship takes the pull request through review.
+ */
+export const ProjectTaskPhase = Schema.Literals(["align", "iterate", "ship"]);
+export type ProjectTaskPhase = typeof ProjectTaskPhase.Type;
+
+/** The phase of a stage; null once the task is blocked or finished. */
+export function projectTaskPhase(stage: ProjectTaskStage): ProjectTaskPhase | null {
+  switch (stage) {
+    case "inbox":
+    case "planning":
+    case "awaiting_approval":
+      return "align";
+    case "running":
+      return "iterate";
+    case "in_review":
+      return "ship";
+    case "done":
+    case "blocked":
+    case "cancelled":
+      return null;
+  }
+}
+
+const ReviewHead = TrimmedNonEmptyString.check(Schema.isMaxLength(200)).annotate({
+  description: "The commit the review covers: the output of `git rev-parse HEAD` in your worktree.",
+});
+const ReviewFindings = Schema.String.check(Schema.isMaxLength(20_000)).annotate({
+  description: "What the review found, one per line; empty when clean.",
+});
+
+/** The lead's latest self-review of its diff. */
+export const ProjectTaskReview = Schema.Struct({
+  clean: Schema.Boolean,
+  findings: ReviewFindings,
+  head: ReviewHead,
+  reviewedAt: IsoDateTime,
+});
+export type ProjectTaskReview = typeof ProjectTaskReview.Type;
+
 export const ProjectTaskOutcome = Schema.Literals([
   "waiting_user",
   "in_review",
@@ -179,6 +220,12 @@ export const ProjectTask = Schema.Struct({
   resultSummary: Schema.NullOr(Schema.String),
   lastOutcome: Schema.NullOr(ProjectTaskOutcome),
   nudgeCount: NonNegativeInt,
+  /** Iterate rounds so far: entering running, or a review that was not clean, starts one. */
+  iterateRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /** Ship rounds so far: each move into in_review starts one. */
+  shipRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /** The lead's latest self-review, recorded with task_review_set. */
+  review: Schema.NullOr(ProjectTaskReview).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   stageChangedAt: IsoDateTime,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -197,6 +244,9 @@ export const ProjectTaskBrief = Schema.Struct({
   nudgeCount: NonNegativeInt,
   waitsOn: Schema.Array(ProjectTaskId),
   stageChangedAt: IsoDateTime,
+  phase: Schema.NullOr(ProjectTaskPhase).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  iterateRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  shipRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
   /** What the user sees; use these names when talking to the user. */
   status: ProjectTaskStatus,
 });
@@ -1139,6 +1189,16 @@ export const ProjectTeamTaskEvidenceSetInput = Schema.Struct({
   }),
 });
 export type ProjectTeamTaskEvidenceSetInput = typeof ProjectTeamTaskEvidenceSetInput.Type;
+
+export const ProjectTeamTaskReviewSetInput = Schema.Struct({
+  taskId: ProjectTeamOwnTaskId,
+  clean: Schema.Boolean.annotate({
+    description: "True when the review found nothing left to fix in the diff.",
+  }),
+  findings: ReviewFindings,
+  head: ReviewHead,
+});
+export type ProjectTeamTaskReviewSetInput = typeof ProjectTeamTaskReviewSetInput.Type;
 
 export const ProjectTeamAttentionItemResult = Schema.Struct({
   item: ProjectAttentionItem,

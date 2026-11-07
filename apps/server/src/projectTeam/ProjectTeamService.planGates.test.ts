@@ -8,6 +8,7 @@ import {
   PROJECT_ID,
   approvePlan,
   readyPlan,
+  reviewClean,
   setUpManager,
   startLead,
   userSays,
@@ -136,6 +137,7 @@ describe("ProjectTeamService plan gates", () => {
           evidence: "hello.test.sh passed",
         });
         assert.strictEqual(proven.current.spec.criteria[0]?.evidence, "hello.test.sh passed");
+        yield* reviewClean(lead);
         const review = yield* team.updateTask(lead, {
           stage: "in_review",
           prUrl: "https://github.com/acme/app/pull/1",
@@ -155,11 +157,109 @@ describe("ProjectTeamService plan gates", () => {
         const team = yield* service;
         const pm = yield* setUpManager;
         const { leadThreadId: lead } = yield* startLead(pm, "Legacy", harness.delegate);
+        yield* reviewClean(lead);
         const review = yield* team.updateTask(lead, {
           stage: "in_review",
           prUrl: "https://github.com/acme/app/pull/2",
         });
         assert.strictEqual(review.task.stage, "in_review");
+      }),
+    ),
+  );
+
+  it.effect("needs a clean self-review of the current HEAD for In Review", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead } = yield* startLead(pm, "Review gate", harness.delegate);
+        harness.addThread(lead).worktreePath = "/worktrees/review-gate";
+        let head = "aaa1111";
+        harness.worktreeHead = (worktreePath) =>
+          worktreePath === "/worktrees/review-gate" ? head : null;
+        yield* approvePlan(lead);
+        yield* team.setEvidence(lead, { criterionId: "c1", evidence: "hello.test.sh passed" });
+        const toReview = {
+          stage: "in_review",
+          prUrl: "https://github.com/acme/app/pull/3",
+        } as const;
+
+        const noReview = yield* team.updateTask(lead, toReview).pipe(Effect.flip);
+        assert.include(noReview.message, "has no self-review yet");
+
+        const wrongHead = yield* team
+          .setReview(lead, { clean: true, findings: "", head: "bbb2222" })
+          .pipe(Effect.flip);
+        assert.include(wrongHead.message, "HEAD is aaa1111");
+        const noFindings = yield* team
+          .setReview(lead, { clean: false, findings: " ", head })
+          .pipe(Effect.flip);
+        assert.include(noFindings.message, "needs its findings");
+
+        yield* team.setReview(lead, { clean: false, findings: "Unused import", head });
+        const notClean = yield* team.updateTask(lead, toReview).pipe(Effect.flip);
+        assert.include(notClean.message, "latest self-review is not clean");
+
+        yield* reviewClean(lead, head);
+        head = "ccc3333";
+        const stale = yield* team.updateTask(lead, toReview).pipe(Effect.flip);
+        assert.include(stale.message, "covers aaa1111, but HEAD is now ccc3333");
+
+        yield* reviewClean(lead, head);
+        const shipped = yield* team.updateTask(lead, toReview);
+        assert.strictEqual(shipped.task.stage, "in_review");
+        assert.deepStrictEqual(shipped.task.review?.head, "ccc3333");
+      }),
+    ),
+  );
+
+  it.effect("counts Iterate and Ship rounds", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Rounds", harness.delegate);
+        const rounds = Effect.map(
+          team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id }),
+          ({ task }) => [task.iterateRound, task.shipRound],
+        );
+        assert.deepStrictEqual(yield* rounds, [0, 0]);
+
+        yield* approvePlan(lead);
+        assert.deepStrictEqual(yield* rounds, [1, 0]);
+        yield* team.setEvidence(lead, { criterionId: "c1", evidence: "hello.test.sh passed" });
+
+        // Findings start the next Iterate round.
+        yield* team.setReview(lead, { clean: false, findings: "Missing test", head: "a1" });
+        assert.deepStrictEqual(yield* rounds, [2, 0]);
+        // Being blocked and resuming is the same round.
+        yield* team.updateTask(lead, { stage: "blocked" });
+        yield* team.updateTask(lead, { stage: "running" });
+        assert.deepStrictEqual(yield* rounds, [2, 0]);
+
+        yield* reviewClean(lead, "a2");
+        const toReview = {
+          stage: "in_review",
+          prUrl: "https://github.com/acme/app/pull/4",
+        } as const;
+        yield* team.updateTask(lead, toReview);
+        assert.deepStrictEqual(yield* rounds, [2, 1]);
+
+        // Findings in Ship send the task back to Iterate once.
+        const back = yield* team.setReview(lead, {
+          clean: false,
+          findings: "CI fails",
+          head: "a2",
+        });
+        assert.strictEqual(back.task.stage, "running");
+        assert.deepStrictEqual(yield* rounds, [3, 1]);
+
+        yield* reviewClean(lead, "a3");
+        const shipped = yield* team.updateTask(lead, toReview);
+        assert.deepStrictEqual([shipped.task.iterateRound, shipped.task.shipRound], [3, 2]);
+        const brief = yield* team.listTasks(pm, {});
+        const row = brief.tasks.find((candidate) => candidate.id === task.id);
+        assert.deepStrictEqual([row?.phase, row?.iterateRound, row?.shipRound], ["ship", 3, 2]);
       }),
     ),
   );

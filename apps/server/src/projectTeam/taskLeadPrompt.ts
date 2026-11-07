@@ -19,9 +19,9 @@ export function nextStepHint(stage: ProjectTaskStage): string {
     case "awaiting_approval":
       return "Wait for the user's plan approval, or the server's auto-approval if the user turned it on; if they request changes, write the next spec version and ask again.";
     case "running":
-      return "Implement the plan, checking off todos with task_todo_set and fanning out independent parts with delegate_task; record the proof for each criterion with task_evidence_set.";
+      return "Iterate: implement the plan, checking off todos with task_todo_set and fanning out independent parts with delegate_task; record the proof for each criterion with task_evidence_set. End each round with a self-review of the diff recorded with task_review_set; fix and review again until it is clean.";
     case "in_review":
-      return "Watch the pull request with watch_pull_request, fix failing checks, and mark the task done when it is ready.";
+      return "Ship: watch the pull request with watch_pull_request and fix failing checks or review comments (each fix is a new Iterate round ending in a clean task_review_set), and mark the task done when it is ready.";
     case "blocked":
       return "Resolve the blocker or ask the user with ask_user(kind: blocker).";
     case "done":
@@ -114,7 +114,7 @@ export const PULL_REQUEST_RULES = `   - Commits: one per reviewable outcome, eac
    - Open it ready for review, not as a draft. When the scope changes, rewrite the title and body around the final solution.`;
 
 function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
-  const planning = `1. planning: Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
+  const planning = `1. Align (planning, then awaiting_approval): Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
    - summary: 2-4 sentences in your own words: what is wrong today, and what the user sees when it is done.
    - todos: the steps, like a checklist. Each one has a doneWhen line saying how the user can tell it is done (a check they could see or run, not "implemented"), and dependsOn when it comes after another todo. Each also lists the criteria it builds (criteria: ["c1"]). Every criterion needs a todo that builds it, and every todo serves a criterion. No delivery todos such as "open a PR" or "run the tests": the stages below already are delivery.
    The rest is the deeper plan behind them:
@@ -126,19 +126,20 @@ function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
    - nonGoals: what is out of scope.
    - breakdown, only when the work needs several pull requests: draft one subtask per pull request with task_create(title, request, waitsOn). Write the request so its lead can act on it alone, with a "Goal:" and a "Verification:" line. The server files it under your task in Todo, where it waits. Add a todo for each with subtaskId set to the new task's id, so the card shows the whole breakdown. One approval of your plan approves every subtask: their leads write their own detailed plans and start without asking the user again. After that the breakdown is locked. A subtask you add later, or a material change to one's goal or verification, waits until you ask for approval of your plan once more.
    Then call ask_user(kind: "approval") with a one-line question saying what the task is. The card shows the user your summary and todos from the latest spec version. The server refuses the request and lists what is missing until the plan has every part above. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
-   - "${PLAN_APPROVAL_START}": go on to running.
+   - "${PLAN_APPROVAL_START}": go on to Iterate.
    - "${PLAN_CHANGES_REQUESTED}" or anything else is feedback: an overall comment and inline comments, each quoting the text it is about ("quote" → comment). Address every comment in the spec with task_spec_write (that keeps the old version for diffing), then ask for approval again.
    - "${SPEC_CHANGED_PREFIX}": the user or the PM changed the spec while your card waited, so the card closed. Read the spec, update the plan, and ask again.`;
   const covered =
     coveredBy === undefined
       ? null
-      : `1. planning: This task is a subtask of ${coveredBy.key} "${coveredBy.title}". The user approved it as part of that task's breakdown, and that approval is yours: do not call ask_user(kind: "approval"), the server refuses it. Inspect the code and write your detailed plan into the spec with task_spec_write (summary, end state, criteria, todos, files), keeping the goal and verification from your request. Then go straight to running.
+      : `1. Align (planning): This task is a subtask of ${coveredBy.key} "${coveredBy.title}". The user approved it as part of that task's breakdown, and that approval is yours: do not call ask_user(kind: "approval"), the server refuses it. Inspect the code and write your detailed plan into the spec with task_spec_write (summary, end state, criteria, todos, files), keeping the goal and verification from your request. Then go straight to Iterate.
    If the goal or verification must change materially, do not ask the user yourself: record it with task_update(note: "Breakdown change: ...") and end your turn. The PM gets ${coveredBy.key}'s breakdown re-approved once for all its subtasks.`;
-  const running = `2. running: ${covered !== null ? "Once your plan is in the spec, call" : resume ? "The plan above is already approved, so start here: call" : "Once approved, call"} task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.`;
+  const running = `2. Iterate (running): ${covered !== null ? "Once your plan is in the spec, call" : resume ? "The plan above is already approved, so start here: call" : "Once approved, call"} task_update(stage: "running", planSummary) with the plan in a few sentences. The server refuses running until the user has approved a plan. Work through the todos, checking each off with task_todo_set as it is done. Run independent todos at the same time with delegate_task, merge their results, then run the tests for what changed. When a criterion is proven, record the proof with task_evidence_set(criterionId, evidence): the test that passed, the check you ran, or a screenshot link.
+   End every round with a self-review: commit, read the whole diff against the base branch as a strict reviewer would (bugs, missed criteria, leftovers, needless code), then record it with task_review_set(clean, findings, head), where head is \`git rev-parse HEAD\`. A review that is not clean starts the next Iterate round: fix the findings, commit, and review again. Go to Ship only after a clean review of the current HEAD.`;
   return [
     ...(covered !== null ? [covered] : resume ? [] : [planning]),
     running,
-    `3. in_review: If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request and fix failing checks. The server refuses In Review without a pull request, while a criterion has no evidence, or when the pull request breaks these rules, and says what to fix:\n${PULL_REQUEST_RULES}\n   Without a remote, commit locally and go straight to done.`,
+    `3. Ship (in_review): If the repository has a remote, open a pull request, call task_update(stage: "in_review", prUrl), then watch it with watch_pull_request. The server refuses In Review without a pull request, while a criterion has no evidence, without a clean self-review of the current HEAD, or when the pull request breaks these rules, and says what to fix:\n${PULL_REQUEST_RULES}\n   A failing check or a review comment sends the work back to Iterate: fix it, commit, record a new task_review_set (a review that is not clean moves the task back to running), push, and return to In Review. Without a remote, commit locally, record a clean review, and go straight to done.`,
     `4. done: Call task_update(stage: "done", resultSummary), and record conventions worth keeping with memory_write.`,
   ].join("\n");
 }

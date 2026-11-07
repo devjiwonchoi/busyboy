@@ -34,6 +34,7 @@ import {
   ProjectTaskStatus,
   type ProjectTaskStatusSignals,
   resolveProjectTaskStatus,
+  projectTaskPhase,
   storedTaskStatusSignals,
   type ProjectTaskEvent,
   ProjectTaskEventId,
@@ -94,6 +95,7 @@ import {
   type ProjectTeamTaskSpecWriteInput,
   type ProjectTeamTaskTodoSetInput,
   type ProjectTeamTaskEvidenceSetInput,
+  type ProjectTeamTaskReviewSetInput,
   type ProjectTaskSpecVersion,
   defaultTaskKeyPrefix,
   formatTaskKey,
@@ -163,6 +165,7 @@ import {
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import { pullRequestFormatProblems } from "./pullRequestFormat.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
+import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
@@ -442,6 +445,9 @@ export function toTaskBrief(
     nudgeCount: task.nudgeCount,
     waitsOn: task.waitsOn,
     stageChangedAt: task.stageChangedAt,
+    phase: projectTaskPhase(task.stage),
+    iterateRound: task.iterateRound,
+    shipRound: task.shipRound,
     status: resolveProjectTaskStatus(task, signals),
   };
 }
@@ -625,6 +631,14 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamTaskEvidenceSetInput,
     ) => Effect.Effect<ProjectTeamTaskSpecResult, ProjectTeamError>;
+    /**
+     * task_review_set: the lead records its self-review of the current diff. One that
+     * is not clean starts the next Iterate round, taking an In Review task back to running.
+     */
+    readonly setReview: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamTaskReviewSetInput,
+    ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
     readonly nudgeTask: (
       callerThreadId: ThreadId,
       input: ProjectTeamTaskNudgeInput,
@@ -781,6 +795,7 @@ const make = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
+  const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
 
   /** Copies the user's pending uploads under the task so the pending sweep keeps them. */
   const claimTaskAttachments = (
@@ -1808,6 +1823,73 @@ const make = Effect.gen(function* () {
       return yield* specResult(task, version);
     }).pipe(orTeamError("Could not record the evidence."));
 
+  /** The commit checked out in the lead's worktree; None when there is none or it can't be read. */
+  const leadHead = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      if (task.leadThreadId === null) return Option.none<string>();
+      const shell = yield* threads
+        .getThreadShell(task.leadThreadId)
+        .pipe(Effect.orElseSucceed(() => null));
+      if (shell === null || shell.worktreePath === null) return Option.none<string>();
+      return yield* worktreeHeads.read(shell.worktreePath);
+    });
+
+  const shortSha = (sha: string) => sha.slice(0, 7);
+
+  const setReview: ProjectTeamService["Service"]["setReview"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["lead"], "task_review_set");
+      const taskId = input.taskId ?? role.taskId;
+      if (taskId !== role.taskId) {
+        return yield* teamError("A task lead can only review its own task.", role.projectId);
+      }
+      const task = yield* requireTask(taskId, role.projectId);
+      if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
+        return yield* teamError(
+          `#${task.number} is ${task.stage}; there is nothing to review.`,
+          task.projectId,
+        );
+      }
+      const head = yield* leadHead(task);
+      if (Option.isSome(head) && head.value !== input.head) {
+        return yield* teamError(
+          `HEAD is ${shortSha(head.value)}, not ${shortSha(input.head)}. Review the diff at HEAD and pass head = git rev-parse HEAD.`,
+          task.projectId,
+        );
+      }
+      const findings = input.findings.trim();
+      if (!input.clean && findings.length === 0) {
+        return yield* teamError(
+          "A review that is not clean needs its findings, so the next round knows what to fix.",
+          task.projectId,
+        );
+      }
+      // Findings in review send the work back to Iterate; moving to running counts that round.
+      const reopened = !input.clean && task.stage === "in_review";
+      if (reopened) {
+        const back = yield* setTask({ id: task.id, stage: "running" });
+        yield* appendEvent(back, "stage_changed", `${task.stage} → ${back.stage}`, callerThreadId);
+      }
+      const recorded = yield* repository.recordTaskReview({
+        id: task.id,
+        review: { clean: input.clean, findings, head: input.head, reviewedAt: yield* nowIso },
+        startsIterateRound: !input.clean && task.stage === "running",
+        now: yield* nowIso,
+      });
+      if (Option.isNone(recorded)) return yield* teamError(`Task ${task.id} was not found.`);
+      const updated = recorded.value;
+      yield* appendEvent(
+        updated,
+        "note",
+        input.clean
+          ? `Self-review on ${shortSha(input.head)}: clean`
+          : `Self-review on ${shortSha(input.head)}: not clean, Iterate round ${updated.iterateRound}\n${clip(findings, 2_000)}`,
+        callerThreadId,
+      );
+      yield* router.publish(task.projectId);
+      return { task: updated };
+    }).pipe(orTeamError("Could not record the review."));
+
   /** The user, or AFK while they were away, approved a plan for this task. */
   const hasApprovedPlan = (task: ProjectTask) =>
     repository
@@ -1899,6 +1981,27 @@ const make = Effect.gen(function* () {
         if (unproven.length > 0) {
           return yield* teamError(
             `#${task.number} has success criteria without evidence: ${unproven.join(", ")}. Prove each one, then record it with task_evidence_set.`,
+            task.projectId,
+          );
+        }
+        // Ship starts from the lead's clean self-review of the commit being shipped.
+        const review = task.review;
+        if (task.leadThreadId !== null && review === null) {
+          return yield* teamError(
+            `#${task.number} has no self-review yet. Review your diff against the base branch, fix what you find, then record a clean review with task_review_set(clean, findings, head).`,
+            task.projectId,
+          );
+        }
+        if (review !== null && !review.clean) {
+          return yield* teamError(
+            `#${task.number}'s latest self-review is not clean. Fix its findings, review again, and record a clean review with task_review_set.`,
+            task.projectId,
+          );
+        }
+        const head = yield* leadHead(task);
+        if (review !== null && Option.isSome(head) && head.value !== review.head) {
+          return yield* teamError(
+            `#${task.number}'s clean self-review covers ${shortSha(review.head)}, but HEAD is now ${shortSha(head.value)}. Review the new commits and record it again with task_review_set.`,
             task.projectId,
           );
         }
@@ -3423,6 +3526,7 @@ const make = Effect.gen(function* () {
     writeSpec,
     setTodo,
     setEvidence,
+    setReview,
     nudgeTask,
     listTasks,
     readTask,

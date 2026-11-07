@@ -25,11 +25,12 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import {
   PROJECT_ID,
   readyPlan,
-  writeReadyPlan,
+  reviewClean,
   setUpManager,
   startLead,
   userMessage,
   withTeam,
+  writeReadyPlan,
 } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
@@ -336,7 +337,7 @@ describe("ProjectTeamService tasks as specs", () => {
         const second = (yield* Ref.get(harness.delegated))[1];
         assert.strictEqual(second?.clientRequestId, `task-start:${created.task.id}:2`);
         assert.include(second?.task, "The plan above is already approved");
-        assert.notInclude(second?.task, "1. planning:");
+        assert.notInclude(second?.task, "1. Align (planning, then awaiting_approval):");
         assert.include(second?.task, "- [ ] t1: Add a journey test");
 
         // The implementer checks todos off as it works; a repeat check adds no version.
@@ -574,7 +575,7 @@ describe("ProjectTeamService tasks as specs", () => {
         yield* team.updateTask(leadThreadId, { stage: "inbox" });
         yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         const restarted = (yield* Ref.get(harness.delegated))[1]?.task ?? "";
-        assert.include(restarted, "1. planning:");
+        assert.include(restarted, "1. Align (planning, then awaiting_approval):");
         const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
         assert.deepStrictEqual(
           detail.sessions.map((session) => session.role),
@@ -967,6 +968,7 @@ describe("task dependencies", () => {
         const before = (yield* harness.messagesTo(pm)).length;
 
         // One of two dependencies clears: still blocked.
+        yield* reviewClean(api.leadThreadId);
         yield* team.updateTask(api.leadThreadId, {
           stage: "in_review",
           prUrl: "https://github.com/acme/web/pull/1",

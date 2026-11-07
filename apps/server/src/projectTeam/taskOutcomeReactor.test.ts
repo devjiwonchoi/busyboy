@@ -17,7 +17,14 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { classifyTaskOutcome, nextInboxTask, TaskOutcomeReactor } from "./taskOutcomeReactor.ts";
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
-import { PROJECT_ID, setUpManager, startLead, withTeam, approvePlan } from "./testkit.ts";
+import {
+  approvePlan,
+  PROJECT_ID,
+  reviewClean,
+  setUpManager,
+  startLead,
+  withTeam,
+} from "./testkit.ts";
 
 const foldLine = (number: number) =>
   `Memory: fold #${number} into memory: one dated line in "decisions" with its key decisions and result; drop detail only this task needed.`;
@@ -467,6 +474,7 @@ describe("TaskOutcomeReactor", () => {
         const pm = yield* setUpManager;
         const reviewed = yield* startLead(pm, "Reviewed", harness.delegate);
         yield* team.createTask(pm, { intake: "New work.", title: "Next", request: "Next." });
+        yield* reviewClean(reviewed.leadThreadId);
         yield* team.updateTask(reviewed.leadThreadId, {
           stage: "in_review",
           prUrl: "https://github.com/acme/repo/pull/1",

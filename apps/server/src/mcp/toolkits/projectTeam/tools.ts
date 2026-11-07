@@ -31,6 +31,7 @@ import {
   ProjectTeamTaskSpecWriteInput,
   ProjectTeamTaskTodoSetInput,
   ProjectTeamTaskEvidenceSetInput,
+  ProjectTeamTaskReviewSetInput,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -124,6 +125,16 @@ const TaskEvidenceSetTool = Tool.make("task_evidence_set", {
   .annotate(Tool.Title, "Record evidence for a criterion")
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
+
+const TaskReviewSetTool = Tool.make("task_review_set", {
+  ...shared,
+  description:
+    "Record your self-review of the current diff against the base branch. Pass head = `git rev-parse HEAD`, clean = true only when nothing is left to fix, and the findings otherwise. A review that is not clean starts the next Iterate round. In Review needs a clean review on the current HEAD.",
+  parameters: ProjectTeamTaskReviewSetInput,
+  success: ProjectTeamTaskResult,
+})
+  .annotate(Tool.Title, "Record a self-review")
+  .annotate(Tool.Destructive, false);
 
 const TaskNudgeTool = Tool.make("task_nudge", {
   ...shared,
@@ -261,6 +272,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TaskSpecWriteTool,
   TaskTodoSetTool,
   TaskEvidenceSetTool,
+  TaskReviewSetTool,
   TaskNudgeTool,
   TaskListTool,
   TaskReadTool,
