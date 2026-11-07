@@ -88,6 +88,7 @@ describe("taskReferencesForThread", () => {
         openBlocker: false,
         iterateRound: 0,
         shipRound: 0,
+        modelSteps: {},
         updatedAt: null,
       },
       {
@@ -104,6 +105,7 @@ describe("taskReferencesForThread", () => {
         openBlocker: false,
         iterateRound: 0,
         shipRound: 0,
+        modelSteps: {},
         updatedAt: null,
       },
     ],

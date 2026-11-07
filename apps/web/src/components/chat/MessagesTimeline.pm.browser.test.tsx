@@ -30,6 +30,7 @@ const PROJECT_TASKS = {
       openBlocker: false,
       iterateRound: 2,
       shipRound: 0,
+      modelSteps: {},
       updatedAt: null,
     },
     {
@@ -46,6 +47,7 @@ const PROJECT_TASKS = {
       openBlocker: false,
       iterateRound: 0,
       shipRound: 0,
+      modelSteps: {},
       updatedAt: null,
     },
   ],

@@ -15,6 +15,7 @@ import { useAnswerDecision, useTaskDetail } from "~/state/projectTeam";
 
 import { PlanTodoList } from "../plan/PlanTodoList";
 import { planProgressLabel, type PlanTodoLike } from "../plan/planView.logic";
+import { TaskModelSteps } from "../task/TaskModelSteps";
 import { LiveTaskPhaseBadge } from "../task/TaskPhaseBadge";
 import { TaskStructureLine, useRelatedTask, useTaskRelations } from "../task/TaskRelations";
 import { Button } from "../ui/button";
@@ -248,6 +249,14 @@ function LivePlanBoard(props: {
     props.task === null ? null : (
       <LiveTaskPhaseBadge environmentId={props.environmentId} task={props.task} />
     );
+  const steps =
+    props.task === null ? null : (
+      <TaskModelSteps
+        environmentId={props.environmentId}
+        steps={props.task.modelSteps}
+        className="basis-full justify-end"
+      />
+    );
   if (!live) {
     // Done reads from the phase badge; a cancelled task has no phase, so it says so.
     return (
@@ -256,11 +265,12 @@ function LivePlanBoard(props: {
         afk={props.afk}
         onViewDetails={props.onViewDetails}
         phase={phase}
+        steps={steps}
         status={stage === "done" ? "" : stage === "cancelled" ? "Cancelled" : null}
       />
     );
   }
-  return <LiveTodos {...props} stage={stage} phase={phase} />;
+  return <LiveTodos {...props} stage={stage} phase={phase} steps={steps} />;
 }
 
 function LiveTodos(props: {
@@ -269,6 +279,7 @@ function LiveTodos(props: {
   pinned: ProjectApprovalPlan;
   stage: ProjectTaskStage | null;
   phase: ReactNode;
+  steps: ReactNode;
   afk: boolean;
   onViewDetails: () => void;
 }) {
@@ -286,6 +297,7 @@ function LiveTodos(props: {
         afk={props.afk}
         onViewDetails={props.onViewDetails}
         phase={props.phase}
+        steps={props.steps}
         status={null}
       />
     </>
@@ -297,6 +309,8 @@ function BoardFooter(props: {
   afk: boolean;
   onViewDetails: () => void;
   phase: ReactNode;
+  /** The model that ran each role, on its own line under the phase. */
+  steps: ReactNode;
   /** Replaces the step count; "" shows none. */
   status: string | null;
 }) {
@@ -316,6 +330,7 @@ function BoardFooter(props: {
           </span>
         )}
       </span>
+      {props.steps}
     </div>
   );
 }

@@ -55,7 +55,8 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
       | typeof WS_METHODS.projectTeamCreateTask
       | typeof WS_METHODS.projectTeamUpdateTaskSpec
       | typeof WS_METHODS.projectTeamRestoreTaskSpec
-      | typeof WS_METHODS.projectTeamSplitTaskTodo,
+      | typeof WS_METHODS.projectTeamSplitTaskTodo
+      | typeof WS_METHODS.projectTeamSetTaskRoleModels,
   >(
     label: string,
     tag: Tag,
@@ -81,6 +82,7 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
     updateTaskSpec: taskCommand("update-task-spec", WS_METHODS.projectTeamUpdateTaskSpec),
     restoreTaskSpec: taskCommand("restore-task-spec", WS_METHODS.projectTeamRestoreTaskSpec),
     splitTaskTodo: taskCommand("split-task-todo", WS_METHODS.projectTeamSplitTaskTodo),
+    setTaskRoleModels: taskCommand("set-task-role-models", WS_METHODS.projectTeamSetTaskRoleModels),
     // The attention stream carries the result, so no command updates state itself.
     requestSitrep: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:request-sitrep",

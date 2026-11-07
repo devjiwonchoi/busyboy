@@ -32,7 +32,11 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
       );
       return { data: detail, error: null } as never;
     }) as never,
-    useProjectManager: (() => ({ pmThreadId: "pm-thread", persona: { name: "Jota" } })) as never,
+    useProjectManager: (() => ({
+      pmThreadId: "pm-thread",
+      persona: { name: "Jota" },
+      settings: {},
+    })) as never,
     useProjectManagerEntries: (() => state.managers) as never,
     useLeadThreadTask: ((ref: { threadId: string } | null) =>
       ref?.threadId === "lead-1" ? { task: state.detail.task } : null) as never,
@@ -142,6 +146,8 @@ beforeEach(() => {
       nudgeCount: 0,
       iterateRound: 0,
       shipRound: 0,
+      roleModels: {},
+      modelSteps: {},
       review: null,
       ready: null,
       stageChangedAt: AT,

@@ -73,6 +73,7 @@ vi.mock(import("../../state/projectTeam"), async (original) => {
     useProjectManager: (() => ({
       pmThreadId: "pm-thread",
       persona: { name: "Jota" },
+      settings: {},
     })) as never,
     useUpdateTaskSpec: (() => (_env: string, input: ProjectTeamUpdateTaskSpecInput) => {
       state.updates.push(input);
@@ -149,6 +150,8 @@ beforeEach(() => {
       nudgeCount: 0,
       iterateRound: 0,
       shipRound: 0,
+      roleModels: {},
+      modelSteps: {},
       review: null,
       ready: null,
       stageChangedAt: AT,

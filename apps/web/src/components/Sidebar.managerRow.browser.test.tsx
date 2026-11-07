@@ -195,6 +195,7 @@ function manager(patch: Parameters<typeof makeProjectManagerSummaryFixture>[0] =
         openBlocker: false,
         iterateRound: 0,
         shipRound: 0,
+        modelSteps: {},
         updatedAt: null,
       })),
       ...patch,
