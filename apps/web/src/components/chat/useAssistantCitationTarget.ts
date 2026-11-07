@@ -87,8 +87,8 @@ export function useAssistantCitationTarget({
       setFinishedKey(navigation.target.key);
       toastManager.add({ type: "warning", title, description });
     };
-    // Plan approval cards are timeline rows, not messages in the history.
-    if (rows.some((row) => isCitedPlanCard(row, navigation.target.citation.messageId))) {
+    // Decision cards are timeline rows, not messages in the history.
+    if (rows.some((row) => isCitedDecisionCard(row, navigation.target.citation.messageId))) {
       if (listLoaded && listRef.current) {
         setReady(navigation.target);
       }
@@ -194,7 +194,7 @@ export function useAssistantCitationTarget({
       ? rows.find(
           (row) =>
             (row.kind === "message" && row.message.id === target.citation.messageId) ||
-            isCitedPlanCard(row, target.citation.messageId),
+            isCitedDecisionCard(row, target.citation.messageId),
         )
       : undefined;
   return {
@@ -205,10 +205,6 @@ export function useAssistantCitationTarget({
   };
 }
 
-function isCitedPlanCard(row: MessagesTimelineRow, messageId: string): boolean {
-  return (
-    row.kind === "decision-card" &&
-    row.card.item.kind === "approval" &&
-    row.card.item.id === messageId
-  );
+function isCitedDecisionCard(row: MessagesTimelineRow, messageId: string): boolean {
+  return row.kind === "decision-card" && row.card.item.id === messageId;
 }
