@@ -158,8 +158,9 @@ export interface ComposerPromptEditorProps {
   className?: string;
   placeholderClassName?: string;
   /**
-   * Makes the placeholder tappable. Phones have no Tab key, so a suggestion
-   * shown as the placeholder is accepted by tapping it instead.
+   * Makes the placeholder text tappable. Phones have no Tab key, so a
+   * suggestion shown as the placeholder is accepted by tapping it instead,
+   * once the composer has focus.
    */
   onPlaceholderActivate?: (() => void) | undefined;
   onChange: (
@@ -1771,24 +1772,31 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
             {isEmpty && contextRecords.size === 0 && placeholder ? (
               <div
                 className={cn(
-                  "absolute inset-0 leading-relaxed text-placeholder/75",
-                  onPlaceholderActivate ? "cursor-pointer" : "pointer-events-none",
+                  "pointer-events-none absolute inset-0 leading-relaxed text-placeholder/75",
                   placeholderClassName,
                 )}
-                {...(onPlaceholderActivate
-                  ? {
-                      role: "button",
-                      "data-composer-placeholder-action": "true",
-                      onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
-                      onClick: () => {
-                        onPlaceholderActivate();
-                        // Focus inside the tap so phones raise the keyboard.
-                        editor?.view.focus();
-                      },
-                    }
-                  : {})}
               >
-                {placeholder}
+                {onPlaceholderActivate ? (
+                  // Only the suggestion text takes taps; the rest of the box
+                  // stays the editor's.
+                  <span
+                    role="button"
+                    data-composer-placeholder-action="true"
+                    className="pointer-events-auto cursor-pointer"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      // The tap that focuses the composer only focuses it; a
+                      // tap once it has focus accepts the suggestion.
+                      if (editor?.view.hasFocus()) onPlaceholderActivate();
+                      // Focus inside the tap so phones raise the keyboard.
+                      editor?.view.focus();
+                    }}
+                  >
+                    {placeholder}
+                  </span>
+                ) : (
+                  placeholder
+                )}
               </div>
             ) : null}
           </div>

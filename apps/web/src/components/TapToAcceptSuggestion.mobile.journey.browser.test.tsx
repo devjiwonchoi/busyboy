@@ -61,6 +61,7 @@ function SuggestingComposer(props: { tappable: boolean }) {
     <ComposerPromptEditor
       editorRef={createRef<ComposerPromptEditorHandle>()}
       ariaLabel="Message"
+      className="min-h-24"
       value={value}
       cursor={value.length}
       contextRecords={new Map()}
@@ -80,13 +81,58 @@ function editorElement() {
   return element;
 }
 
+/** Width of `text` in the input's font, as laid out from the input's left padding. */
+function textWidth(input: HTMLInputElement, text: string) {
+  const context = document.createElement("canvas").getContext("2d")!;
+  context.font = getComputedStyle(input).font;
+  return context.measureText(text).width;
+}
+
+/** A touch tap `x` pixels into the input's text. */
+function tapInputAt(input: HTMLInputElement, x: number) {
+  const rect = input.getBoundingClientRect();
+  const clientX = rect.left + parseFloat(getComputedStyle(input).paddingLeft) + x;
+  input.dispatchEvent(
+    new PointerEvent("pointerup", {
+      bubbles: true,
+      pointerType: "touch",
+      clientX,
+      clientY: rect.top + rect.height / 2,
+    }),
+  );
+}
+
 describe("tap to accept a suggestion at phone width", () => {
-  it("fills the composer when the suggestion text is tapped", async () => {
+  it("only focuses an unfocused composer; the suggestion is not accepted", async () => {
     await act(async () => root.render(<SuggestingComposer tappable />));
+    expect(document.activeElement).not.toBe(editorElement());
+
+    await userEvent.click(page.getByRole("button", { name: `${SUGGESTION} (tap)` }));
+
+    await expect.poll(() => document.activeElement).toBe(editorElement());
+    expect(editorElement().textContent).toBe("");
+    await expect.element(page.getByRole("button", { name: `${SUGGESTION} (tap)` })).toBeVisible();
+  });
+
+  it("fills the composer when the suggestion text is tapped while focused", async () => {
+    await act(async () => root.render(<SuggestingComposer tappable />));
+    await act(async () => editorElement().focus());
 
     await userEvent.click(page.getByRole("button", { name: `${SUGGESTION} (tap)` }));
 
     await expect.poll(() => editorElement().textContent).toBe(SUGGESTION);
+    expect(document.activeElement).toBe(editorElement());
+  });
+
+  it("does not accept when a focused composer is tapped away from the suggestion", async () => {
+    await act(async () => root.render(<SuggestingComposer tappable />));
+    await act(async () => editorElement().focus());
+    const box = editorElement().getBoundingClientRect();
+
+    // Low in the input box, well below the one-line suggestion text.
+    await userEvent.click(editorElement(), { position: { x: 300, y: box.height - 10 } });
+
+    expect(editorElement().textContent).toBe("");
     expect(document.activeElement).toBe(editorElement());
   });
 
@@ -154,9 +200,14 @@ describe("tap to accept a suggestion at phone width", () => {
     await expect.poll(() => input.value).toBe("example.com/");
     expect(input.selectionStart).toBe(3);
 
-    await act(async () => {
-      input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
-    });
+    // A tap on the typed "exa" leaves the completion pending.
+    await act(async () => tapInputAt(input, textWidth(input, "e") / 2));
+    expect(input.value).toBe("example.com/");
+    expect(input.selectionStart).toBe(3);
+    expect(input.selectionEnd).toBe("example.com/".length);
+
+    // A tap on the completed "mple.com/" accepts it.
+    await act(async () => tapInputAt(input, textWidth(input, "example")));
 
     await expect.poll(() => input.selectionStart).toBe("example.com/".length);
     expect(input.selectionEnd).toBe("example.com/".length);
