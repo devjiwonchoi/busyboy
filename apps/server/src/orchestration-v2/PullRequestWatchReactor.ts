@@ -348,10 +348,10 @@ export const make = Effect.gen(function* () {
       Effect.tap(() => ended(target, "closed")),
     );
 
-  const endsWithoutRead = ({ thread, link }: WatchTarget): WatchEndReason | undefined =>
+  const endsWithoutRead = ({ thread, link, watch }: WatchTarget): WatchEndReason | undefined =>
     link.snapshot?.state === "merged"
       ? "merged"
-      : thread.lineage.relationshipToParent === "subagent"
+      : thread.lineage.relationshipToParent === "subagent" && watch.forTaskLead !== true
         ? "subagent"
         : undefined;
 

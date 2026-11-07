@@ -1933,6 +1933,7 @@ const make = Effect.gen(function* () {
         repository: key.repository,
         number: key.number,
         watching: true,
+        forTaskLead: true,
         link: { url: task.prUrl, source: "agent" },
       });
     }).pipe(

@@ -95,6 +95,11 @@ export const ThreadPullRequestWatch = Schema.Struct({
   conflicting: Schema.Boolean,
   /** Comment-only wakes in a row. Watching stops at a limit, so bots cannot loop it. */
   wakes: NonNegativeInt,
+  /**
+   * Started by the server for a project task's lead, which runs as a delegated subagent but
+   * owns its task's pull request, so the subagent rule does not end this watch.
+   */
+  forTaskLead: Schema.optional(Schema.Boolean),
 });
 export type ThreadPullRequestWatch = typeof ThreadPullRequestWatch.Type;
 

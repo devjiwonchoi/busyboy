@@ -2126,6 +2126,106 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
+  it.effect("lets the server watch for a task lead even though it runs as a subagent", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const now = yield* DateTime.now;
+      const projectId = ProjectId.make("pr-watch-lead-project");
+      const pmThreadId = ThreadId.make("runtime-pull-request-watch-pm");
+      const leadThreadId = ThreadId.make("runtime-pull-request-watch-lead");
+      yield* seedProject({
+        projectId,
+        title: "Watch lead",
+        workspaceRoot: "/workspace/watch-lead",
+        defaultModelSelection: null,
+        createdAt: "2026-10-01T00:00:00.000Z",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("pr-watch-lead-create-pm"),
+        threadId: pmThreadId,
+        projectId,
+        title: "PM",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      const pm = yield* orchestrator.getThreadProjection(pmThreadId);
+      yield* eventSink.write({
+        commandId: CommandId.make("pr-watch-lead-seed"),
+        events: [
+          {
+            id: EventId.make("pr-watch-lead-created"),
+            type: "thread.created",
+            threadId: leadThreadId,
+            providerInstanceId: modelSelection.instanceId,
+            occurredAt: now,
+            payload: {
+              ...pm.thread,
+              id: leadThreadId,
+              title: "Task lead",
+              creationSource: "server",
+              activeProviderThreadId: null,
+              lineage: {
+                parentThreadId: pmThreadId,
+                relationshipToParent: "subagent",
+                rootThreadId: pmThreadId,
+              },
+              createdAt: now,
+              updatedAt: now,
+            },
+          },
+        ],
+      });
+      const watch = {
+        type: "thread.pull-request.watch" as const,
+        threadId: leadThreadId,
+        host: "github.com",
+        repository: "pingdotgg/t3code",
+        number: 9,
+        watching: true,
+        link: { url: "https://github.com/pingdotgg/t3code/pull/9", source: "agent" as const },
+      };
+      const watchOf = Effect.map(
+        orchestrator.getThreadShell(leadThreadId),
+        (thread) => thread?.pullRequests?.[0]?.watch,
+      );
+
+      // A subagent's own watch is still refused.
+      const refused = yield* orchestrator
+        .dispatch({ ...watch, commandId: CommandId.make("pr-watch-lead-own") })
+        .pipe(Effect.flip);
+      assert.equal(refused._tag, "OrchestratorDispatchError");
+
+      yield* orchestrator.dispatch({
+        ...watch,
+        forTaskLead: true,
+        commandId: CommandId.make("pr-watch-lead-server"),
+      });
+      assert.isTrue((yield* watchOf)?.forTaskLead);
+
+      // The sweep keeps it instead of ending it as a subagent's watch.
+      const reactor = yield* PullRequestWatchReactor.make.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            NodeServices.layer,
+            Layer.mock(PullRequestService.PullRequestService)({
+              detail: () => Effect.die("host unreachable"),
+              activity: () => Effect.die("host unreachable"),
+            }),
+          ),
+        ),
+      );
+      yield* reactor.sweep;
+      assert.isTrue((yield* watchOf)?.forTaskLead);
+    }),
+  );
+
   it.effect("ends a watch it cannot read, and tells the agent", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;

@@ -2462,6 +2462,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     if (
       command.type === "thread.pull-request.watch" &&
       command.watching &&
+      command.forTaskLead !== true &&
       thread.lineage.relationshipToParent === "subagent"
     ) {
       return yield* new OrchestratorDispatchError({
@@ -2918,6 +2919,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                     remarkIds: [],
                     conflicting: false,
                     wakes: 0,
+                    ...(command.forTaskLead === true ? { forTaskLead: true } : {}),
                   });
           if (watch === existing.watch && links === linked) return thread;
           return {

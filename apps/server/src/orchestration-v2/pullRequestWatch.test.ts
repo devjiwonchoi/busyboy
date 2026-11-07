@@ -62,6 +62,16 @@ const remark = (
 const noRemarks: ReadonlyArray<PullRequestComment> = [];
 
 describe("evaluatePullRequestWatch", () => {
+  it("keeps a task lead's watch marked as one", () => {
+    const report = evaluatePullRequestWatch(
+      watch({ forTaskLead: true }),
+      detail({ checks: [check("lint", "failure")] }),
+      [],
+    );
+    assert.isTrue(report.next.forTaskLead);
+    assert.isUndefined(evaluatePullRequestWatch(watch(), detail(), []).next.forTaskLead);
+  });
+
   it("reports each failure at once, even while another check never finishes", () => {
     const bot = check("CodeRabbit", "pending");
     const first = detail({ checks: [check("lint", "failure"), check("test", "pending"), bot] });
