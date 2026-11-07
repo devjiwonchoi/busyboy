@@ -6722,15 +6722,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : "text-placeholder",
                   )}
                   onPointerDown={(event) => event.preventDefault()}
-                  onClick={
-                    isChoiceOnlyPendingQuestion
-                      ? undefined
-                      : () => {
-                          // A tap on the suggestion accepts it, as Tab does on desktop.
-                          acceptPromptSuggestionStable();
-                          expandMobileComposerStable();
-                        }
-                  }
+                  // Expanding only focuses; the suggestion is accepted by a later tap on it.
+                  onClick={isChoiceOnlyPendingQuestion ? undefined : expandMobileComposerStable}
                   disabled={isChoiceOnlyPendingQuestion}
                   aria-label="Expand composer"
                 >
@@ -6742,9 +6735,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : prompt.trim() ||
                       (showProviderUnavailable
                         ? "Enable a provider in Settings"
-                        : visiblePromptSuggestion !== null
-                          ? `${visiblePromptSuggestion}  (tap)`
-                          : "Ask anything...")}
+                        : (visiblePromptSuggestion ?? "Ask anything..."))}
                 </button>
                 {collapsedComposerImagePreviews}
                 {composerAnnotations.annotations.length > 0 ? (

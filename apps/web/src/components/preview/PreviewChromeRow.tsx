@@ -81,6 +81,23 @@ interface Props {
 
 const NOOP = () => {};
 
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
+/** Whether a tap at `clientX` lands past the typed `draft`, on the completed text. */
+function isTapOnCompletion(input: HTMLInputElement, clientX: number, draft: string): boolean {
+  measureContext ??= document.createElement("canvas").getContext("2d");
+  if (!measureContext) return true;
+  const style = getComputedStyle(input);
+  measureContext.font = style.font;
+  const textX =
+    clientX -
+    input.getBoundingClientRect().left -
+    parseFloat(style.borderLeftWidth) -
+    parseFloat(style.paddingLeft) +
+    input.scrollLeft;
+  return textX >= measureContext.measureText(draft).width;
+}
+
 export function PreviewChromeRow({
   url,
   loading,
@@ -410,8 +427,10 @@ export function PreviewChromeRow({
                   }}
                   onKeyDown={handleKeyDown}
                   onPointerUp={(event) => {
-                    // Phones have no Tab key: tapping the input accepts the completion.
+                    // Phones have no Tab key: tapping the completed text accepts it.
+                    // A tap on the typed text leaves the completion pending.
                     if (event.pointerType === "mouse" || !showingCompletion) return;
+                    if (!isTapOnCompletion(event.currentTarget, event.clientX, draft)) return;
                     const end = draft.length + completionSuffix.length;
                     commitCompletion();
                     queueMicrotask(() => inputRef.current?.setSelectionRange(end, end));
