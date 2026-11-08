@@ -1,8 +1,9 @@
-import type {
-  ProjectDecisionCard,
-  ProjectTaskReference,
-  ProjectTeamAttentionSummary,
-  ThreadId,
+import {
+  formatTaskKey,
+  type ProjectDecisionCard,
+  type ProjectTaskReference,
+  type ProjectTeamAttentionSummary,
+  type ThreadId,
 } from "@t3tools/contracts";
 
 import { formatRelativeElapsed, formatRelativeTimeLabel } from "../timestampFormat";
@@ -87,15 +88,19 @@ const taskMapBySummary = new WeakMap<
 
 export interface LeadThreadTask {
   readonly task: ProjectTaskReference;
+  /** The task's key, such as "BU-82". */
+  readonly key: string;
 }
 
 /** The task this thread leads, or null when it leads none. */
 export function taskForLeadThread(
-  summary: Pick<ProjectTeamAttentionSummary, "tasks"> | null,
+  summary: Pick<ProjectTeamAttentionSummary, "tasks" | "taskKeyPrefix"> | null,
   threadId: ThreadId,
 ): LeadThreadTask | null {
   const task = summary?.tasks.find((candidate) => candidate.leadThreadId === threadId);
-  return task === undefined ? null : { task };
+  return summary == null || task === undefined
+    ? null
+    : { task, key: formatTaskKey(summary.taskKeyPrefix, task.number) };
 }
 
 export const isOpenDecisionCard = (card: ProjectDecisionCard): boolean =>

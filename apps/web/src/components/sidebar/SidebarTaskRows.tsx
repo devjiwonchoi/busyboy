@@ -10,7 +10,7 @@ import { cn } from "~/lib/utils";
 import { TaskRowMarkers, useTaskRelations } from "../task/TaskRelations";
 import { blockedByLabel } from "../task/taskRelations.logic";
 import { resolveLiveTaskStatus } from "../task/taskStatus";
-import { SidebarRowLine } from "./SidebarRowLine";
+import { SidebarRowLine, SidebarTaskKey } from "./SidebarRowLine";
 
 const HIDDEN_STAGES: ReadonlySet<ProjectTaskReference["stage"]> = new Set(["done", "cancelled"]);
 
@@ -81,9 +81,7 @@ export function SidebarTaskRow(props: {
         <SidebarRowLine
           title={
             <span aria-hidden className="flex min-w-0 flex-1 items-center gap-1.5">
-              <span className="shrink-0 font-mono text-2xs text-sidebar-muted-foreground">
-                {key}
-              </span>
+              <SidebarTaskKey taskKey={key} />
               <span className="min-w-0 truncate text-sm font-medium">{task.title}</span>
               <TaskRowMarkers relations={relations} />
             </span>
