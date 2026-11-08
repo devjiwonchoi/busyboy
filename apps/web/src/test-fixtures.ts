@@ -242,6 +242,7 @@ export function makeProjectManagerSummaryFixture(
     enabled: true,
     decisionCards: [],
     afkAnswers: [],
+    waitingThreads: [],
     tasks: [],
     taskKeyPrefix: "T",
     lastMessage: null,

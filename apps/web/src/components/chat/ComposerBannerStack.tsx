@@ -13,7 +13,8 @@ const DISMISS_TRANSITION_MS = 220;
 export interface ComposerBannerStackItem {
   readonly id: string;
   readonly variant: ComposerBannerVariant;
-  readonly priority?: "urgent" | "activity" | "notice";
+  /** "attention": something waits on the user; it goes in front of everything else. */
+  readonly priority?: "attention" | "urgent" | "activity" | "notice";
   readonly icon: ReactNode;
   readonly title: ReactNode;
   readonly description?: ReactNode;
@@ -31,6 +32,9 @@ export type ComposerBannerStackContent = Pick<
 type ComposerBannerStackEntry = ComposerBannerStackItem | ComposerBannerStackContent;
 
 function bannerPriority(item: ComposerBannerStackEntry) {
+  if (item.priority === "attention") {
+    return -1;
+  }
   if (item.priority === "activity") {
     return 0;
   }
@@ -346,7 +350,11 @@ function ComposerBannerStackAlert({
       variant={item.variant}
       density="comfortable"
     >
-      <ComposerBanner.Row layout={item.priority === "activity" ? "inline" : "wrap-actions"}>
+      <ComposerBanner.Row
+        layout={
+          item.priority === "activity" || item.priority === "attention" ? "inline" : "wrap-actions"
+        }
+      >
         <ComposerBanner.Icon className="h-(--composer-banner-icon-column) self-start">
           {item.icon}
         </ComposerBanner.Icon>

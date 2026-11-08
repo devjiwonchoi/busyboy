@@ -1,8 +1,10 @@
 import {
   formatTaskKey,
+  type ProjectAttentionKind,
   type ProjectDecisionCard,
   type ProjectTaskReference,
   type ProjectTeamAttentionSummary,
+  type ProjectWaitingThread,
   type ThreadId,
 } from "@t3tools/contracts";
 
@@ -105,6 +107,43 @@ export function taskForLeadThread(
 
 export const isOpenDecisionCard = (card: ProjectDecisionCard): boolean =>
   card.item.answeredAt === null && card.item.supersededAt === null;
+
+/** Something waiting on the user, as the pending bar above the composer lists it. */
+export type PendingActionItem =
+  | { readonly kind: "card"; readonly id: string; readonly label: string }
+  | { readonly kind: "thread"; readonly threadId: ThreadId; readonly label: string };
+
+const CARD_LABEL: Record<ProjectAttentionKind, string> = {
+  approval: "승인 대기",
+  decision: "결정 필요",
+  blocker: "블로커",
+  proposal: "태스크 제안",
+};
+
+const THREAD_LABEL: Record<ProjectWaitingThread["kind"], string> = {
+  question: "답 기다림",
+  approval: "허용 요청",
+  plan: "계획 승인",
+};
+
+/** Open cards first, oldest first, then the other threads waiting on the user. */
+export function pendingActionItems(input: {
+  readonly cards: ReadonlyArray<ProjectDecisionCard>;
+  readonly waitingThreads: ReadonlyArray<ProjectWaitingThread>;
+}): ReadonlyArray<PendingActionItem> {
+  return [
+    ...input.cards.filter(isOpenDecisionCard).map((card): PendingActionItem => ({
+      kind: "card",
+      id: card.item.id,
+      label: `${CARD_LABEL[card.item.kind]}: ${card.taskTitle}`,
+    })),
+    ...input.waitingThreads.map((thread): PendingActionItem => ({
+      kind: "thread",
+      threadId: thread.threadId,
+      label: `${thread.title} · ${THREAD_LABEL[thread.kind]}`,
+    })),
+  ];
+}
 
 /**
  * The question cards a thread shows in its timeline, open or closed, oldest first: every

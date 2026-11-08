@@ -29,7 +29,12 @@ import { decisionCardsForThread } from "../../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { MessagesTimeline } from "./MessagesTimeline";
 import { PlanApprovalCard } from "./PlanApprovalCard";
-import { PendingActionsNudge } from "./PendingActionsNudge";
+import {
+  PendingBar,
+  followPendingAction,
+  pendingBar,
+  pendingBarIcon,
+} from "./PendingActionsBar.testing";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
@@ -262,7 +267,7 @@ const timelineProps: Omit<TimelineProps, "timelineEntries"> = {
   onManualNavigation: () => {},
 };
 
-/** The PM chat: the real timeline and pill. */
+/** The PM chat: the real timeline and the pending bar above the composer. */
 function PmChat() {
   const summary = useServerSummary();
   const cards = summary === null ? [] : decisionCardsForThread([summary], PM_THREAD_ID);
@@ -271,9 +276,7 @@ function PmChat() {
       <div data-testid="timeline" className="flex min-h-0 flex-1 flex-col">
         <MessagesTimeline {...timelineProps} timelineEntries={ENTRIES} decisionCards={cards} />
       </div>
-      <div className="flex justify-center py-1.5">
-        <PendingActionsNudge cards={cards} listRef={listRef} onNavigate={() => {}} />
-      </div>
+      <PendingBar cards={cards} listRef={listRef} />
     </>
   );
 }
@@ -304,7 +307,6 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const nudge = () => container.querySelector<HTMLElement>("[data-pending-actions-nudge]");
 const cardIn = (id: string) => container.querySelector<HTMLElement>(`[data-decision-card="${id}"]`);
 const taskStatus = (taskId: string) =>
   PROJECT_TASK_STATUS_LABELS[
@@ -322,9 +324,9 @@ function buttonIn(element: HTMLElement, name: string): HTMLButtonElement {
   return match!;
 }
 
-/** Jumps to the card with the pill, as the user does from the end of the chat. */
+/** Jumps to the card from the pending bar, as the user does from the end of the chat. */
 async function jumpTo(id: string) {
-  await act(async () => nudge()!.click());
+  await followPendingAction(id);
   return vi.waitFor(
     () => {
       const element = cardIn(id);
@@ -342,7 +344,7 @@ for (const viewport of [
   it(`approves a plan from its card without opening the review (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
     await act(async () => root.render(<PmChat />));
-    await vi.waitFor(() => expect(nudge()?.textContent).toBe("2 actions waiting"));
+    await vi.waitFor(() => expect(pendingBar()?.textContent).toContain("기다리는 일 2개"));
     expect(taskStatus("task-3")).toBe("Waiting for approval");
 
     const login = await jumpTo("attention-login");
@@ -425,12 +427,12 @@ for (const viewport of [
     expect(document.querySelector("[data-plan-review]")).toBeNull();
     expect(taskStatus("task-3")).toBe("In Progress");
 
-    // The card records the outcome and drops off the pill's count.
+    // The card records the outcome and drops off the pending bar.
     await vi.waitFor(() => {
       const answered = cardIn("attention-login")!;
       expect(answered.dataset.decisionCardState).toBe("answered");
       expect(answered.textContent).toContain("Approved and started");
-      expect(nudge()?.textContent).toBe("1 action waiting");
+      expect(pendingBar()?.textContent).toContain("승인 대기: Task page cache");
     });
 
     // An older card's single summary shows as Goal only, and approving it starts too.
@@ -446,7 +448,7 @@ for (const viewport of [
     expect(taskStatus("task-9")).toBe("In Progress");
     await vi.waitFor(() => {
       expect(cardIn("attention-cache")?.textContent).toContain("Approved and started");
-      expect(nudge()).toBeNull();
+      expect(pendingBarIcon()).toBeNull();
     });
   });
 }

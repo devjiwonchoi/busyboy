@@ -4089,7 +4089,7 @@ const make = Effect.gen(function* () {
           const latestSitrep = yield* repository.getLatestSitrep(projectId);
           const latestPosted = yield* repository.getLatestPostedSitrep(projectId);
           // Questions waiting in threads outside the task board count as "Needs you" too.
-          const otherThreadsWaiting = (yield* readOtherThreads({
+          const waitingThreads = (yield* readOtherThreads({
             threads,
             repository,
             projectId,
@@ -4102,7 +4102,18 @@ const make = Effect.gen(function* () {
                 cause,
               }).pipe(Effect.as([])),
             ),
-          )).filter(isWaitingOnUser).length;
+          )).flatMap((thread) =>
+            isWaitingOnUser(thread)
+              ? [
+                  {
+                    threadId: thread.threadId,
+                    title: thread.title,
+                    kind: thread.pendingRequest.kind,
+                  },
+                ]
+              : [],
+          );
+          const otherThreadsWaiting = waitingThreads.length;
           const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
           const decisionCards = yield* listDecisionCards(projectId, open);
           const tasks = yield* repository.listTasks({ projectId });
@@ -4161,6 +4172,7 @@ const make = Effect.gen(function* () {
             afkAnswers,
             direction:
               directionEntry === undefined ? null : projectDirectionLine(directionEntry.content),
+            waitingThreads,
             tasks: tasks.map((task) => ({
               id: task.id,
               number: task.number,

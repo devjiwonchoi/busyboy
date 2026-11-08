@@ -112,6 +112,10 @@ describe("PM status covers threads outside the task board", () => {
           const needsYou = (yield* team.attentionSnapshot).projects[0];
           assert.strictEqual(needsYou?.openCount, 1);
           assert.strictEqual(needsYou?.presence.waitingOnUser, 1);
+          // The PM chat's pending bar lists the thread so the user can open it.
+          assert.deepStrictEqual(needsYou?.waitingThreads, [
+            { threadId: userThread.id, title: "REA 조사와 활용 개선 방법", kind: "question" },
+          ]);
 
           // The PM is woken once, with the thread's title and its question.
           yield* sitreps.check;
@@ -135,6 +139,7 @@ describe("PM status covers threads outside the task board", () => {
           const answered = (yield* team.attentionSnapshot).projects[0];
           assert.strictEqual(answered?.openCount, 0);
           assert.strictEqual(answered?.presence.waitingOnUser, 0);
+          assert.deepStrictEqual(answered?.waitingThreads, []);
 
           // After the user has left, the thread ends its turn asking them to reply "ready".
           yield* TestClock.adjust("10 minutes");

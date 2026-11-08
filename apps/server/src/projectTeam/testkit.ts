@@ -526,11 +526,10 @@ export const startLead = (
     if (role.type !== "pm") {
       throw new Error("A task lead fixture needs its project's PM.");
     }
-    const { task } = yield* team.createTaskForUser({
-      projectId: role.projectId,
+    const { task } = yield* createAcceptedTask(pm, {
       title,
-      context: `${title}.`,
-      startPlanning: false,
+      request: `${title}.`,
+      intake: "New work.",
     });
     return yield* team.startTask(pm, { taskId: task.id }, delegate);
   });

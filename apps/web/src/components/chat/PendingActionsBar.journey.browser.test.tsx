@@ -8,6 +8,7 @@ import {
   type ProjectTeamAnswerDecisionInput,
   type ProjectTeamAttentionSummary,
   ProjectTaskId,
+  type ProjectWaitingThread,
   ThreadId,
 } from "@t3tools/contracts";
 import type { LegendListRef } from "@legendapp/list/react";
@@ -15,14 +16,21 @@ import { AsyncResult } from "effect/reactivity";
 import { act, createRef, type ComponentProps, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
 import { decisionCardsForThread } from "../../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { MessagesTimeline } from "./MessagesTimeline";
-import { PendingActionsNudge } from "./PendingActionsNudge";
+import { Button } from "../ui/button";
+import type { ComposerBannerStackItem } from "./ComposerBannerStack";
+import {
+  PendingBar,
+  followPendingAction,
+  pendingBar,
+  pendingBarIcon,
+} from "./PendingActionsBar.testing";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
@@ -34,6 +42,8 @@ const server = vi.hoisted(() => ({
   summary: null as ProjectTeamAttentionSummary | null,
   listeners: new Set<() => void>(),
   answers: [] as ProjectTeamAnswerDecisionInput[],
+  opened: [] as ThreadId[],
+  subagentRunning: true,
 }));
 
 function publish(summary: ProjectTeamAttentionSummary) {
@@ -84,6 +94,7 @@ function card(
   taskTitle: string,
   question: string,
   createdAt: string,
+  kind: ProjectDecisionCard["item"]["kind"] = "decision",
 ): ProjectDecisionCard {
   return {
     taskNumber,
@@ -94,7 +105,7 @@ function card(
       id: ProjectAttentionItemId.make(id),
       projectId: PROJECT_ID,
       taskId: ProjectTaskId.make(`task-${taskNumber}`),
-      kind: "decision",
+      kind,
       question,
       options: ["Approve", "Request changes"],
       answer: null,
@@ -135,14 +146,15 @@ function message(index: number): Entry {
   };
 }
 
-/** An hour of chat; the three questions were asked 20 minutes apart. */
+/** An hour of chat; the blocker was raised at its start, far above the end. */
 const ENTRIES = Array.from({ length: 60 }, (_, index) => message(index));
-const loginPlan = card(
+const loginBlocker = card(
   "attention-login",
   3,
   "Fix the login redirect",
-  "Plan: move the redirect into the auth guard.",
+  "The staging login needs a person to sign in once.",
   minute(0, 30),
+  "blocker",
 );
 const dragPlan = card(
   "attention-drag",
@@ -158,6 +170,26 @@ const cachePlan = card(
   "Plan: keep the last 5 pages.",
   minute(40, 30),
 );
+const CU_THREAD_ID = ThreadId.make("thread-cu-eval");
+const cuThread: ProjectWaitingThread = {
+  threadId: CU_THREAD_ID,
+  title: "CU eval chrome-form #1",
+  kind: "approval",
+};
+
+/** What the composer showed in the screenshot: a subagent the PM is waiting on. */
+const SUBAGENT_BANNER: ComposerBannerStackItem = {
+  id: "background-work",
+  variant: "default",
+  priority: "activity",
+  icon: <span data-subagent-banner style={{ width: 6, height: 6, borderRadius: 9 }} />,
+  title: "Waiting on subagent BU-79 project map review",
+  actions: (
+    <Button size="xs" variant="ghost">
+      Stop
+    </Button>
+  ),
+};
 
 const listRef = createRef<LegendListRef | null>();
 
@@ -191,8 +223,8 @@ const timelineProps: Omit<TimelineProps, "timelineEntries"> = {
   onManualNavigation: () => {},
 };
 
-/** The PM chat: the real timeline and pill, with a plain textarea standing in for the composer. */
-function PmChat() {
+/** The PM chat: the real timeline, the composer's banner stack and a stand-in composer. */
+function PmChat({ subagentRunning }: { subagentRunning: boolean }) {
   const summary = useServerSummary();
   const cards = summary === null ? [] : decisionCardsForThread([summary], PM_THREAD_ID);
   return (
@@ -200,12 +232,21 @@ function PmChat() {
       <div data-testid="timeline" className="flex min-h-0 flex-1 flex-col">
         <MessagesTimeline {...timelineProps} timelineEntries={ENTRIES} decisionCards={cards} />
       </div>
-      <div className="flex justify-center py-1.5">
-        <PendingActionsNudge cards={cards} listRef={listRef} onNavigate={() => {}} />
+      <div style={{ padding: "0 12px 12px" }}>
+        <PendingBar
+          cards={cards}
+          waitingThreads={summary?.waitingThreads ?? []}
+          listRef={listRef}
+          onOpenThread={(threadId) => server.opened.push(threadId)}
+          otherItems={subagentRunning ? [SUBAGENT_BANNER] : []}
+        />
+        <form
+          data-testid="composer"
+          style={{ maxWidth: 720, margin: "0 auto", border: "1px solid #ddd", borderRadius: 16 }}
+        >
+          <textarea aria-label="Message the PM" style={{ width: "100%", border: 0, padding: 12 }} />
+        </form>
       </div>
-      <form data-testid="composer">
-        <textarea aria-label="Message the PM" />
-      </form>
     </>
   );
 }
@@ -219,6 +260,8 @@ beforeEach(() => {
     taskKeyPrefix: "BB",
   });
   server.answers = [];
+  server.opened = [];
+  server.subagentRunning = true;
   container = document.body.appendChild(document.createElement("div"));
   container.style.cssText = "height: 100dvh; width: 100%; display: flex; flex-direction: column;";
   root = createRoot(container);
@@ -229,12 +272,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const render = () => act(async () => root.render(<PmChat />));
-const composer = () => container.querySelector<HTMLElement>('[data-testid="composer"]')!;
+const render = () =>
+  act(async () => root.render(<PmChat subagentRunning={server.subagentRunning} />));
 const timeline = () => container.querySelector<HTMLElement>('[data-testid="timeline"]')!;
-const nudge = () => container.querySelector<HTMLElement>("[data-pending-actions-nudge]");
 const cardIn = (id: string) =>
   timeline().querySelector<HTMLElement>(`[data-decision-card="${id}"]`);
+/** The banner attached to the composer: the one the user sees first. */
+const frontBanner = () =>
+  container.querySelector<HTMLElement>("[data-composer-banner-drawer] [role=alert]");
 
 function buttonIn(element: HTMLElement, text: string) {
   const button = [...element.querySelectorAll<HTMLElement>("button, [role=button]")].find(
@@ -250,12 +295,11 @@ function inViewport(element: HTMLElement) {
   return rect.top >= viewport.top - 1 && rect.top < viewport.bottom;
 }
 
-/** Clicks the pill and waits until the card it jumps to is on screen and flashing. */
-async function followNudge(expectedId: string) {
-  await act(async () => nudge()!.click());
+/** Waits until the card the bar jumped to is on screen and flashing. */
+function expectRevealed(id: string) {
   return vi.waitFor(
     () => {
-      const element = cardIn(expectedId);
+      const element = cardIn(id);
       expect(element).not.toBeNull();
       expect(inViewport(element!)).toBe(true);
       expect(element!.dataset.decisionCardHighlighted).toBe("true");
@@ -265,103 +309,141 @@ async function followNudge(expectedId: string) {
   );
 }
 
-async function pmChatWithThreeOpenCards() {
-  server.summary = {
-    ...server.summary!,
-    openCount: 3,
-    decisionCards: [cachePlan, loginPlan, dragPlan],
-  };
+async function openPmChat(summary: Partial<ProjectTeamAttentionSummary>) {
+  server.summary = { ...server.summary!, ...summary };
   await render();
   await vi.waitFor(() => expect(timeline().textContent).toContain("Update 59"));
-  // Nothing docks on the composer any more.
-  expect(composer().querySelector("[data-decision-card]")).toBeNull();
+}
+
+function expectInsideViewport(element: HTMLElement, width: number) {
+  const rect = element.getBoundingClientRect();
+  expect(rect.left).toBeGreaterThanOrEqual(0);
+  expect(rect.right).toBeLessThanOrEqual(width + 0.5);
 }
 
 for (const viewport of [
   { name: "desktop", width: 1100, height: 800 },
   { name: "phone", width: 390, height: 844 },
 ]) {
-  it(`counts waiting cards, jumps to the oldest, and drops resolved ones (${viewport.name})`, async () => {
+  it(`shows an out-of-view blocker in front of the subagent status and jumps to it (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
-    await pmChatWithThreeOpenCards();
+    await openPmChat({ openCount: 1, decisionCards: [loginBlocker] });
 
-    // The chat sits at its end, so all three questions are out of view.
-    const pill = await vi.waitFor(() => {
-      expect(nudge()?.textContent).toBe("3 actions waiting");
-      return nudge()!;
+    // The chat sits at its end, so the blocker is far out of view; the bar still names it,
+    // in front of the subagent status.
+    const front = await vi.waitFor(() => {
+      expect(frontBanner()?.textContent).toContain("블로커: Fix the login redirect");
+      return frontBanner()!;
     });
-    const pillRect = pill.getBoundingClientRect();
-    expect(pillRect.left).toBeGreaterThanOrEqual(0);
-    expect(pillRect.right).toBeLessThanOrEqual(viewport.width);
-
-    // The pill lands on the oldest question, inline where it was asked.
-    const login = await followNudge("attention-login");
-    expect(login.dataset.decisionCardState).toBe("open");
-    expect(login.textContent).toContain("move the redirect into the auth guard");
-    // The other two are still out of view.
-    expect(nudge()?.textContent).toBe("3 actions waiting");
-
-    // Answering it there drops it from the count; it stays as the record.
-    await act(async () => buttonIn(login, "Approve").click());
-    await act(async () => buttonIn(login, "Submit").click());
-    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
-    expect(server.answers[0]).toEqual({
-      projectId: PROJECT_ID,
-      attentionItemId: "attention-login",
-      answer: "Approve",
-    });
-    await vi.waitFor(() => {
-      expect(cardIn("attention-login")?.dataset.decisionCardState).toBe("answered");
-      expect(nudge()?.textContent).toBe("2 actions waiting");
-    });
-
-    // Next stop: the next oldest.
-    await followNudge("attention-drag");
-
-    // The PM closes it because the conversation settled it: it shows as no longer needed.
-    await act(async () =>
-      publish({
-        ...server.summary!,
-        openCount: 1,
-        decisionCards: server.summary!.decisionCards.map((entry) =>
-          entry.item.id === dragPlan.item.id
-            ? { ...entry, item: { ...entry.item, supersededAt: minute(59) } }
-            : entry,
-        ),
-      }),
+    expect(pendingBarIcon()?.dataset.pendingActionsBar).toBe("1");
+    expect(cardIn("attention-login") === null || !inViewport(cardIn("attention-login")!)).toBe(
+      true,
     );
-    await vi.waitFor(() => {
-      const drag = cardIn("attention-drag")!;
-      expect(drag.dataset.decisionCardState).toBe("resolved");
-      expect(drag.textContent).toContain("No longer needed");
-      expect(drag.querySelector("button")).toBeNull();
-      expect(nudge()?.textContent).toBe("1 action waiting");
-    });
+    expectInsideViewport(front, viewport.width);
+    expect(container.textContent).not.toContain("action waiting");
 
-    // Its task is cancelled: nothing waits, so the pill goes away.
+    // Tapping 보기 scrolls to the card where it was asked and flashes it.
+    await followPendingAction("attention-login");
+    const login = await expectRevealed("attention-login");
+    expect(login.dataset.decisionCardState).toBe("open");
+
+    // On screen or not, the bar stays while the blocker is open.
+    expect(pendingBar()?.textContent).toContain("블로커: Fix the login redirect");
+
+    // The blocker resolves: the bar goes away and the subagent status is in front again.
     await act(async () =>
       publish({
         ...server.summary!,
         openCount: 0,
-        decisionCards: server.summary!.decisionCards.map((entry) =>
-          entry.item.id === cachePlan.item.id
-            ? { ...entry, item: { ...entry.item, supersededAt: minute(59) } }
-            : entry,
-        ),
+        decisionCards: [
+          { ...loginBlocker, item: { ...loginBlocker.item, supersededAt: minute(59) } },
+        ],
       }),
     );
-    await vi.waitFor(() => expect(nudge()).toBeNull());
-    expect(server.answers).toHaveLength(1);
+    await vi.waitFor(() => {
+      expect(pendingBarIcon()).toBeNull();
+      expect(frontBanner()?.textContent).toContain("Waiting on subagent");
+    });
+  });
+
+  it(`shows another thread waiting on the user and opens it (${viewport.name})`, async () => {
+    await page.viewport(viewport.width, viewport.height);
+    await openPmChat({ openCount: 1, waitingThreads: [cuThread] });
+
+    await vi.waitFor(() =>
+      expect(frontBanner()?.textContent).toContain("CU eval chrome-form #1 · 허용 요청"),
+    );
+    expectInsideViewport(frontBanner()!, viewport.width);
+    await followPendingAction(CU_THREAD_ID);
+    expect(server.opened).toEqual([CU_THREAD_ID]);
+  });
+
+  it(`counts several waiting items and lists them (${viewport.name})`, async () => {
+    await page.viewport(viewport.width, viewport.height);
+    await openPmChat({
+      openCount: 3,
+      decisionCards: [cachePlan, loginBlocker],
+      waitingThreads: [cuThread],
+    });
+
+    await vi.waitFor(() => expect(frontBanner()?.textContent).toContain("기다리는 일 3개"));
+    expect(pendingBarIcon()?.dataset.pendingActionsBar).toBe("3");
+    expectInsideViewport(frontBanner()!, viewport.width);
+
+    // The list: cards oldest first, then the waiting thread.
+    await act(async () =>
+      userEvent.click(document.querySelector<HTMLElement>('[aria-label="기다리는 일 목록"]')!),
+    );
+    const labels = await vi.waitFor(() => {
+      const items = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")];
+      expect(items).toHaveLength(3);
+      return items.map((item) => item.textContent);
+    });
+    expect(labels).toEqual([
+      "블로커: Fix the login redirect",
+      "결정 필요: Cache task pages",
+      "CU eval chrome-form #1 · 허용 요청",
+    ]);
+    for (const item of document.querySelectorAll<HTMLElement>("[role=menuitem]")) {
+      expectInsideViewport(item, viewport.width);
+    }
+    await act(async () => userEvent.keyboard("{Escape}"));
+
+    // Picking a card from the list jumps to it; picking the thread opens it.
+    await followPendingAction("attention-cache");
+    await expectRevealed("attention-cache");
+    await followPendingAction(CU_THREAD_ID);
+    expect(server.opened).toEqual([CU_THREAD_ID]);
   });
 }
 
-it("hides the pill while every waiting card is on screen", async () => {
+it("hides the bar when nothing waits, leaving the subagent status", async () => {
   await page.viewport(1100, 800);
-  server.summary = { ...server.summary!, openCount: 1, decisionCards: [loginPlan] };
+  await openPmChat({
+    openCount: 0,
+    decisionCards: [{ ...dragPlan, item: { ...dragPlan.item, answeredAt: minute(30) } }],
+  });
+  await vi.waitFor(() => expect(frontBanner()?.textContent).toContain("Waiting on subagent"));
+  expect(pendingBarIcon()).toBeNull();
+
+  // The subagent finishes too: nothing is left above the composer.
+  server.subagentRunning = false;
   await render();
-  await vi.waitFor(() => expect(nudge()?.textContent).toBe("1 action waiting"));
-  await followNudge("attention-login");
-  await vi.waitFor(() => expect(nudge()).toBeNull());
+  await vi.waitFor(() => expect(frontBanner()).toBeNull());
+  expect(pendingBarIcon()).toBeNull();
+});
+
+it("answering the last card from the timeline clears the bar", async () => {
+  await page.viewport(1100, 800);
+  server.subagentRunning = false;
+  await openPmChat({ openCount: 1, decisionCards: [dragPlan] });
+  await vi.waitFor(() => expect(pendingBar()?.textContent).toContain("결정 필요: Fix drag scroll"));
+  await followPendingAction("attention-drag");
+  const drag = await expectRevealed("attention-drag");
+  await act(async () => buttonIn(drag, "Approve").click());
+  await act(async () => buttonIn(drag, "Submit").click());
+  await vi.waitFor(() => expect(server.answers).toHaveLength(1));
+  await vi.waitFor(() => expect(pendingBarIcon()).toBeNull());
 });
 
 it("shows a task lead's own questions in its thread, and every question in the PM thread", () => {
@@ -369,7 +451,7 @@ it("shows a task lead's own questions in its thread, and every question in the P
     ...server.summary!,
     decisionCards: [
       dragPlan,
-      loginPlan,
+      loginBlocker,
       { ...cachePlan, item: { ...cachePlan.item, answeredAt: minute(50) } },
     ],
   };

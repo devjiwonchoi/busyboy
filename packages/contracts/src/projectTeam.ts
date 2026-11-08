@@ -1006,6 +1006,14 @@ export const ProjectOtherThread = Schema.Struct({
 });
 export type ProjectOtherThread = typeof ProjectOtherThread.Type;
 
+/** A thread outside the task board that waits on the user, shown in the PM chat's pending bar. */
+export const ProjectWaitingThread = Schema.Struct({
+  threadId: ThreadId,
+  title: Schema.String,
+  kind: Schema.Literals(["question", "approval", "plan"]),
+});
+export type ProjectWaitingThread = typeof ProjectWaitingThread.Type;
+
 /** One project as the Director sees it. */
 export const ProjectTeamWorkspaceProject = Schema.Struct({
   projectId: ProjectId,
@@ -1696,6 +1704,10 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   afkAnswers: Schema.Array(ProjectAfkAnswer).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   /** The first line of the PM's "direction" memory, or null when there is none. */
   direction: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** Threads outside the task board waiting on the user, newest first. */
+  waitingThreads: Schema.Array(ProjectWaitingThread).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
