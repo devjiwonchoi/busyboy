@@ -260,6 +260,18 @@ export function SidebarRowStatusSlot(props: { status: SidebarRowStatus | null })
   );
 }
 
+/** A task's key, such as "BU-82": one style on every task row, whatever its status. */
+export function SidebarTaskKey(props: { taskKey: string; className?: string }) {
+  return (
+    <span
+      data-testid="sidebar-task-key"
+      className={cn("shrink-0 font-mono text-2xs text-sidebar-muted-foreground", props.className)}
+    >
+      {props.taskKey}
+    </span>
+  );
+}
+
 // One sidebar row line: the title owns every pixel on the left, everything else
 // sits in one trailing slot at the right. The slot stacks two layers in the same
 // grid cell, both right-aligned: at rest, the passive indicators and the status

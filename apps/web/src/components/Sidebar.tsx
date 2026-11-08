@@ -273,6 +273,7 @@ import {
   resolveSidebarRowStatus,
   SidebarRowActionButton,
   SidebarRowLine,
+  SidebarTaskKey,
 } from "./sidebar/SidebarRowLine";
 import { resolveLiveTaskStatus } from "./task/taskStatus";
 import { TaskRowMarkers, useTaskRelations } from "./task/TaskRelations";
@@ -1655,6 +1656,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isActive: props.isActive,
   });
 
+  // A lead thread is titled "BU-82 <task title>"; its key shows apart, like every task row's.
+  const leadKeyPrefix = leadTask === null ? null : `${leadTask.key} `;
+  const visibleTitle =
+    leadKeyPrefix !== null && thread.title.startsWith(leadKeyPrefix)
+      ? thread.title.slice(leadKeyPrefix.length)
+      : thread.title;
   const titleText = (
     <span
       aria-hidden
@@ -1672,7 +1679,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         isRegeneratingTitle && "opacity-55",
       )}
     >
-      {thread.title}
+      {visibleTitle}
     </span>
   );
   const title =
@@ -1693,6 +1700,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       titleText
     ) : (
       <>
+        <SidebarTaskKey taskKey={leadTask.key} className="mr-1.5" />
         {/* The status icon gives way to row actions on hover, so the task's status shows here. */}
         <Tooltip>
           <TooltipTrigger render={titleText} />
