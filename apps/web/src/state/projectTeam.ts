@@ -25,6 +25,7 @@ import type {
   ProjectTaskReference,
   ProjectTeamAttentionSummary,
   ProjectTeamUpdateSettingsInput,
+  ProjectWaitingThread,
   ScopedProjectRef,
   ScopedThreadRef,
 } from "@t3tools/contracts";
@@ -174,6 +175,15 @@ export function useThreadDecisionCards(
   );
   if (ref === null) return [];
   return decisionCardsForThread(index.byProjectId.values(), ref.threadId);
+}
+
+const NO_WAITING_THREADS: ReadonlyArray<ProjectWaitingThread> = [];
+
+/** Other threads waiting on the user; only the PM chat lists them. */
+export function useThreadWaitingThreads(
+  ref: ScopedThreadRef | null,
+): ReadonlyArray<ProjectWaitingThread> {
+  return useProjectManagerForThread(ref)?.waitingThreads ?? NO_WAITING_THREADS;
 }
 
 export function useIsProjectManagerThread(ref: ScopedThreadRef | null): boolean {

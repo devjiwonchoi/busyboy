@@ -232,9 +232,11 @@ import {
   useIsProjectManagerThread,
   useLeadThreadTask,
   useThreadDecisionCards,
+  useThreadWaitingThreads,
 } from "../state/projectTeam";
+import { pendingActionItems } from "../state/projectTeam.logic";
 import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
-import { PendingActionsNudge } from "./chat/PendingActionsNudge";
+import { pendingActionsBannerItem, revealDecisionCard } from "./chat/PendingActionsBar";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
 import {
@@ -5226,9 +5228,27 @@ export default function ChatView(props: ChatViewProps) {
           },
         })
       : null;
+  // A side chat leaves question cards to the thread it sits beside.
+  const decisionCards = useThreadDecisionCards(isServerThread && !sideChat ? routeThreadRef : null);
+  const waitingThreads = useThreadWaitingThreads(
+    isServerThread && !sideChat ? routeThreadRef : null,
+  );
+  const revealDecisionCardInTimeline = (cardId: string) => {
+    cancelTimelineLiveFollowForUserNavigationStable();
+    revealDecisionCard(legendListRef.current, cardId);
+  };
+  const pendingActionsBanner = paintOnlyDisplayedTimeline
+    ? null
+    : pendingActionsBannerItem({
+        id: `pending-actions:${routeThreadKey}`,
+        items: pendingActionItems({ cards: decisionCards, waitingThreads }),
+        onRevealCard: revealDecisionCardInTimeline,
+        onOpenThread: onOpenRelatedThreadStable,
+      });
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [
+      pendingActionsBanner,
       childInputBannerItem,
       goalBannerItem,
       backgroundWorkBannerItem,
@@ -7548,8 +7568,6 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
-  // The task page pins a task's open questions under its spec, so its chat doesn't repeat them.
-  const decisionCards = useThreadDecisionCards(isServerThread && !sideChat ? routeThreadRef : null);
   // The PM chat has no queue UI: a message the server holds back still shows as a bubble.
   const queuedRunsControl =
     isServerThread && activeThread && !seamlessChat ? (
@@ -8072,13 +8090,6 @@ export default function ChatView(props: ChatViewProps) {
                   className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex flex-wrap justify-center gap-2 py-1.5"
                   style={{ bottom: scrollToEndClearance + 4 }}
                 >
-                  {paintOnlyDisplayedTimeline ? null : (
-                    <PendingActionsNudge
-                      cards={decisionCards}
-                      listRef={legendListRef}
-                      onNavigate={cancelTimelineLiveFollowForUserNavigationStable}
-                    />
-                  )}
                   {showScrollToBottom && (
                     <Button
                       aria-label="Scroll to end"
