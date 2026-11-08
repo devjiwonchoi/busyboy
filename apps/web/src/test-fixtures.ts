@@ -245,6 +245,7 @@ export function makeProjectManagerSummaryFixture(
     tasks: [],
     taskKeyPrefix: "T",
     lastMessage: null,
+    direction: null,
     ...rest,
     presence: {
       running: 0,

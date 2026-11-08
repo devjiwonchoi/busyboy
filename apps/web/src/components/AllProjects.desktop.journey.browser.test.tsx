@@ -15,16 +15,15 @@ vi.mock(import("../env"), async (original) => ({ ...(await original()), isElectr
 vi.mock(import("../state/entities"), async (original) => ({
   ...(await original()),
   useThreadShells: (() => []) as never,
-  useProjects: (() => [
-    {
-      id: "busyboy",
+  useProjects: (() =>
+    ["busyboy", "site", "docs"].map((id) => ({
+      id,
       environmentId: "env-1",
-      title: "busyboy",
-      workspaceRoot: "/repo/busyboy",
+      title: id,
+      workspaceRoot: `/repo/${id}`,
       createdAt: "2026-11-05T09:00:00.000Z",
       updatedAt: "2026-11-05T09:00:00.000Z",
-    },
-  ]) as never,
+    }))) as never,
 }));
 vi.mock(import("../state/projectTeam"), async (original) => ({
   ...(await original()),
@@ -50,7 +49,7 @@ import {
 } from "@tanstack/react-router";
 
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
-import { AllProjectsPage, SHOW_DONE_TASKS_STORAGE_KEY } from "./allProjects/AllProjectsPage";
+import { AllProjectsPage } from "./allProjects/AllProjectsPage";
 import { SidebarProvider } from "./ui/sidebar";
 
 function task(
@@ -74,44 +73,64 @@ function task(
     iterateRound: 0,
     shipRound: 0,
     modelSteps: {},
-    updatedAt: "2026-11-05T09:00:00.000Z",
+    updatedAt: new Date().toISOString(),
+    checks: [{ text: "check", passed: false }],
     ...overrides,
   };
 }
 
 let root: Root;
 let container: HTMLDivElement;
-let showDoneWrites: string[];
+
+function manager(projectId: string, tasks: ProjectTaskReference[]) {
+  return {
+    environmentId: "env-1",
+    summary: makeProjectManagerSummaryFixture({
+      projectId: projectId as never,
+      pmThreadId: `pm-${projectId}` as never,
+      taskKeyPrefix: projectId.slice(0, 2).toUpperCase(),
+      tasks,
+      ...(projectId === "busyboy"
+        ? {
+            decisionCards: [
+              {
+                taskNumber: 1,
+                taskTitle: "Map",
+                plan: null,
+                proposal: null,
+                item: {
+                  id: "card-1" as never,
+                  projectId: "busyboy" as never,
+                  taskId: "bb-1" as never,
+                  kind: "approval" as const,
+                  question: "?",
+                  options: [],
+                  answer: null,
+                  answeredAt: null,
+                  askerThreadId: null,
+                  batchId: "batch" as never,
+                  createdAt: "2026-11-05T09:00:00.000Z",
+                  supersededAt: null,
+                  answeredBy: null,
+                  specVersion: null,
+                  summary: null,
+                  verification: null,
+                },
+              },
+            ],
+          }
+        : {}),
+    }),
+  };
+}
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  localStorage.removeItem(SHOW_DONE_TASKS_STORAGE_KEY);
   state.managers = [
-    {
-      environmentId: "env-1",
-      summary: makeProjectManagerSummaryFixture({
-        projectId: "busyboy" as never,
-        pmThreadId: "pm-thread" as never,
-        taskKeyPrefix: "BB",
-        tasks: [
-          task("task-1", 1, "Shipped work", { stage: "done" }),
-          task("task-2", 2, "Dropped idea", { stage: "cancelled" }),
-          task("task-3", 3, "Current work"),
-        ],
-      }),
-    },
+    manager("busyboy", [task("bb-1", 1, "Project map")]),
+    manager("site", [task("si-1", 1, "Launch page", { waitsOn: ["bb-1" as never] })]),
+    manager("docs", [task("do-1", 1, "Guides", { stage: "inbox" })]),
   ];
-  // Record each write of the setting, so a double flip on one click shows up.
-  showDoneWrites = [];
-  const setItem = Storage.prototype.setItem;
-  vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (key === SHOW_DONE_TASKS_STORAGE_KEY) showDoneWrites.push(value);
-    setItem.call(this, key, value);
-  });
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -147,21 +166,22 @@ async function openAllProjects() {
         path: "/tasks/$environmentId/$projectId/$taskId",
         component: () => null,
       }),
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: "/$environmentId/$threadId",
+        component: () => null,
+      }),
     ]),
     history: createMemoryHistory({ initialEntries: ["/all-projects"] }),
   });
   await act(async () => root.render(<RouterProvider router={router} />));
-  await vi.waitFor(() => expect(row("task-3")).not.toBeNull());
+  await vi.waitFor(() => expect(container.querySelector("[data-project-card]")).not.toBeNull());
+  return router;
 }
 
-const row = (id: string) =>
-  container.querySelector<HTMLElement>(`[data-all-projects-task="${id}"]`);
-const showDoneSwitch = () =>
-  page.getByRole("switch", { name: /Show done/ }).element() as HTMLElement;
-const showDoneText = () =>
-  [...container.querySelectorAll<HTMLElement>("label")].find((label) =>
-    label.textContent?.startsWith("Show done"),
-  )!;
+const card = (projectId: string) =>
+  container.querySelector<HTMLElement>(`[data-project-card="${projectId}"]`)!;
+const arrow = () => container.querySelector<SVGPathElement>("[data-map-arrow]")!;
 
 /**
  * The desktop app drags the window from title bars. A click reaches the page
@@ -175,49 +195,32 @@ function appRegionAt(element: HTMLElement): string {
   return "none";
 }
 
-async function toggleShowsAndHidesDoneTasks() {
-  await openAllProjects();
-  expect(row("task-1")).toBeNull();
-  expect(row("task-2")).toBeNull();
-  expect(showDoneText().textContent).toBe("Show done (2)");
-
-  // The header drags the window; the switch and its text opt out, so clicks land.
-  expect(appRegionAt(showDoneSwitch().closest("header")!)).toBe("drag");
-  expect(appRegionAt(showDoneSwitch())).toBe("no-drag");
-  expect(appRegionAt(showDoneText())).toBe("no-drag");
-
-  // One click on the switch is one flip: Done and cancelled tasks appear.
-  await userEvent.click(showDoneSwitch());
-  await vi.waitFor(() => expect(row("task-1")).not.toBeNull());
-  expect(row("task-2")).not.toBeNull();
-  expect(showDoneSwitch().getAttribute("aria-checked")).toBe("true");
-  expect(showDoneWrites).toEqual(["true"]);
-
-  // Clicking the text flips it back.
-  await userEvent.click(showDoneText());
-  await vi.waitFor(() => expect(row("task-1")).toBeNull());
-  expect(row("task-2")).toBeNull();
-  expect(showDoneSwitch().getAttribute("aria-checked")).toBe("false");
-  expect(showDoneWrites).toEqual(["true", "false"]);
-
-  // The choice is remembered on the next visit.
-  await userEvent.click(showDoneSwitch());
-  await vi.waitFor(() => expect(row("task-1")).not.toBeNull());
-  await act(() => root.unmount());
-  root = createRoot(container);
-  await openAllProjects();
-  expect(row("task-1")).not.toBeNull();
-  expect(showDoneSwitch().getAttribute("aria-checked")).toBe("true");
-}
-
 describe("All projects in the desktop app", () => {
-  it("shows and hides Done tasks with one click, and remembers it", async () => {
+  it("keeps the header's buttons clickable and highlights one card's arrows on hover", async () => {
     await page.viewport(1280, 800);
-    await toggleShowsAndHidesDoneTasks();
-  });
+    const router = await openAllProjects();
 
-  it("does the same in a narrow window", async () => {
-    await page.viewport(390, 844);
-    await toggleShowsAndHidesDoneTasks();
+    // The header drags the window; the "나를 기다림" pill opts out, so clicks land.
+    const pill = container.querySelector<HTMLElement>("[data-needs-you-total]")!;
+    expect(pill.textContent).toBe("나를 기다림 1");
+    expect(appRegionAt(pill.closest("header")!)).toBe("drag");
+    expect(appRegionAt(pill)).toBe("no-drag");
+
+    // site waits on busyboy: one dashed arrow between their goals.
+    await vi.waitFor(() => expect(arrow()).not.toBeNull());
+    expect(arrow().getAttribute("data-from")).toBe("si-1");
+    expect(arrow().getAttribute("data-to")).toBe("bb-1");
+    expect(arrow().getAttribute("d")).toMatch(/^M[\d.-]+,[\d.-]+ C/);
+
+    // Hovering a card keeps its arrows strong and fades the rest.
+    await userEvent.hover(card("docs"));
+    await vi.waitFor(() => expect(arrow().getAttribute("opacity")).toBe("0.25"));
+    await userEvent.hover(card("site"));
+    await vi.waitFor(() => expect(arrow().getAttribute("opacity")).toBe("1"));
+    expect(card("docs").className).toContain("opacity-60");
+    expect(card("busyboy").className).not.toContain("opacity-60");
+
+    await userEvent.click(pill);
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/pm-busyboy"));
   });
 });

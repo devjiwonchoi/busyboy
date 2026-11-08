@@ -1,300 +1,174 @@
-import {
-  type EnvironmentId,
-  formatTaskKey,
-  PROJECT_TASK_STATUS_LABELS,
-  type ProjectId,
-  type ProjectTaskReference,
-} from "@t3tools/contracts";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { Link } from "@tanstack/react-router";
-import { HourglassIcon } from "lucide-react";
-import * as Schema from "effect/Schema";
-import { useId } from "react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
+import { useRef, useState } from "react";
 
 import { isElectron } from "~/env";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { useRelativeTimeState } from "~/hooks/useRelativeTimeState";
-import { useOpenPrLink } from "~/lib/openPullRequestLink";
-import { cn } from "~/lib/utils";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
+import { useNowMinute } from "~/hooks/useNowMinute";
 import { useProjects } from "~/state/entities";
 import { useEnvironmentIds } from "~/state/environments";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { splitDirectorEntry } from "~/state/projectTeam.logic";
-import { taskRouteParams } from "~/taskRoutes";
-import { ProjectFavicon } from "../ProjectFavicon";
-import { formatTaskPullRequestLabel, StatusGlyphWithLabel } from "../sidebar/SidebarRowLine";
-import { SubtaskProgressBadge, WaitingMarker } from "../task/TaskRelations";
-import {
-  blockedByShortLabel,
-  buildTaskRelationsIndex,
-  type TaskRelationsIndex,
-  taskRelations,
-} from "../task/taskRelations.logic";
-import { useLiveTaskStatus } from "../task/taskStatus";
+import { buildThreadRouteParams } from "~/threadRoutes";
+import { buildTaskRelationsIndex } from "../task/taskRelations.logic";
 import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
-import { Switch } from "../ui/switch";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { DirectorCard } from "../director/DirectorCard";
 import { useDirectorChat } from "../director/useDirectorChat";
 import {
-  type AllProjectsSection,
-  buildAllProjectsSections,
-  buildEpicGroups,
-  type EpicGroup,
-  isArchivedTask,
+  buildMapArrows,
+  buildProjectMap,
+  longestWaiting,
+  type MapArrow,
+  type MapProject,
+  needsYouOf,
+  projectKey,
 } from "./allProjects.logic";
-
-export const SHOW_DONE_TASKS_STORAGE_KEY = "busyboy:all-projects:show-done";
+import { ProjectMapArrows } from "./ProjectMapArrows";
+import { type MapWaitingLine, ProjectMapCard } from "./ProjectMapCard";
 
 /**
- * Every project and its tasks in one Linear-style list, under the Director's
- * card and its epics. Done tasks hide behind a toggle.
+ * Every project at a glance: one card per project with its direction, checks
+ * passed, goals and what waits on the user, and arrows where projects wait on
+ * each other. The task lists live in the sidebar.
  */
 export function AllProjectsPage() {
   const entries = useProjectManagerEntries(useEnvironmentIds());
   const { director: directorEntry, projects: projectEntries } = splitDirectorEntry(entries);
   const director = useDirectorChat();
-  const [showDone, setShowDone] = useLocalStorage(
-    SHOW_DONE_TASKS_STORAGE_KEY,
-    false,
-    Schema.Boolean,
-  );
-  const showDoneSwitchId = useId();
-  const projects = useProjects();
-  const sections = buildAllProjectsSections(projectEntries, showDone);
+  const projectInfos = useProjects();
+  const navigate = useNavigate();
+  const nowMinute = useNowMinute();
+  const mapRef = useRef<HTMLDivElement>(null);
+  const wide = useMediaQuery("sm");
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+
+  const map = buildProjectMap(projectEntries, Date.parse(`${nowMinute}:00.000Z`));
   // The Director's epics are parents of project tasks, so relations span both.
-  const relationsIndex = buildTaskRelationsIndex(entries);
-  const epics = buildEpicGroups(directorEntry, projectEntries, showDone);
-  const doneCount =
-    sections.reduce((total, section) => total + section.doneCount, 0) +
-    (directorEntry?.summary.tasks.filter(isArchivedTask).length ?? 0);
+  const arrows = buildMapArrows(map, buildTaskRelationsIndex(entries));
+  // The Director's open cards (its task proposals) wait on the user too.
+  const waitingChats = [
+    ...map.map((project) => ({
+      environmentId: project.environmentId,
+      threadId: project.summary.pmThreadId,
+      needsYou: project.needsYou,
+    })),
+    ...(directorEntry === null
+      ? []
+      : [
+          {
+            environmentId: directorEntry.environmentId,
+            threadId: directorEntry.summary.pmThreadId,
+            needsYou: needsYouOf(directorEntry.summary),
+          },
+        ]),
+  ];
+  const needsYouTotal = waitingChats.reduce((total, chat) => total + chat.needsYou.total, 0);
+  const longestWaitingChat = longestWaiting(waitingChats);
+  const keyOf = (project: MapProject) =>
+    projectKey(project.environmentId, project.summary.projectId);
+  // Hover only matters while arrows show, and only for a card still on the map.
+  const focusKey =
+    wide && hoveredKey !== null && map.some((project) => keyOf(project) === hoveredKey)
+      ? hoveredKey
+      : null;
+
+  const infoOf = (project: MapProject) =>
+    projectInfos.find(
+      (candidate) =>
+        candidate.environmentId === project.environmentId &&
+        candidate.id === project.summary.projectId,
+    ) ?? null;
+  const openChat = (environmentId: EnvironmentId, threadId: ThreadId) =>
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(scopeThreadRef(environmentId, threadId)),
+    });
+  const waitingLines = (project: MapProject): MapWaitingLine[] =>
+    arrows
+      .filter(
+        (arrow) =>
+          arrow.from.environmentId === project.environmentId &&
+          arrow.from.projectId === project.summary.projectId,
+      )
+      .map((arrow: MapArrow) => {
+        const awaited = map.find(
+          (candidate) =>
+            candidate.environmentId === arrow.to.environmentId &&
+            candidate.summary.projectId === arrow.to.projectId,
+        );
+        const awaitedTitle =
+          awaited === undefined ? "프로젝트" : (infoOf(awaited)?.title ?? "프로젝트");
+        return {
+          key: `${arrow.from.taskId}->${arrow.to.taskId}`,
+          text: `${awaitedTitle} · ${arrow.toGoalTitle} 기다리는 중`,
+        };
+      });
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <h1 className="min-w-0 flex-1 truncate font-medium text-sm">All projects</h1>
-          {/* A sibling label, not a wrapper: a wrapping label can re-send the
-              switch's click and flip it straight back. */}
-          <div className="flex shrink-0 items-center gap-2 text-muted-foreground text-xs">
-            <label htmlFor={showDoneSwitchId} className="cursor-pointer">
-              Show done ({doneCount})
-            </label>
-            <Switch
-              id={showDoneSwitchId}
-              size="sm"
-              checked={showDone}
-              onCheckedChange={(next) => setShowDone(next)}
-            />
-          </div>
+          {needsYouTotal > 0 && longestWaitingChat !== null ? (
+            <button
+              type="button"
+              data-needs-you-total={needsYouTotal}
+              onClick={() =>
+                openChat(longestWaitingChat.environmentId, longestWaitingChat.threadId)
+              }
+              className="shrink-0 rounded-full bg-warning/16 px-2.5 py-1 font-medium text-warning text-xs outline-none hover:bg-warning/24 focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              나를 기다림 {needsYouTotal}
+            </button>
+          ) : null}
         </WorkspacePageHeader>
         <ScrollArea className="min-h-0 flex-1">
-          <WorkspacePageContainer width="wide" className="gap-8 px-3 sm:px-6">
-            {director !== null ? (
-              <DirectorCard director={director} projects={projectEntries} />
-            ) : null}
-            {directorEntry !== null && epics.length > 0 ? (
-              <EpicsSection
-                epics={epics}
-                environmentId={directorEntry.environmentId}
-                directorProjectId={directorEntry.summary.projectId}
-                directorKeyPrefix={directorEntry.summary.taskKeyPrefix}
-                relationsIndex={relationsIndex}
-              />
-            ) : null}
-            {sections.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                No projects have a project manager yet. Tasks show up here once a project's manager
-                creates them.
-              </p>
+          <WorkspacePageContainer width="wide" className="gap-4 px-3 sm:px-6">
+            {director !== null ? <DirectorCard director={director} /> : null}
+            {map.length === 0 ? (
+              <p className="text-muted-foreground text-sm">아직 PM이 있는 프로젝트가 없어요.</p>
             ) : (
-              sections.map((section) => (
-                <ProjectSection
-                  key={`${section.environmentId}:${section.summary.projectId}`}
-                  project={
-                    projects.find(
-                      (candidate) =>
-                        candidate.environmentId === section.environmentId &&
-                        candidate.id === section.summary.projectId,
-                    ) ?? null
-                  }
-                  section={section}
-                  relationsIndex={relationsIndex}
-                />
-              ))
+              <div
+                ref={mapRef}
+                data-project-map
+                className="relative grid grid-cols-1 items-start gap-3 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3"
+              >
+                {map.map((project) => {
+                  const key = keyOf(project);
+                  const related =
+                    focusKey !== null &&
+                    arrows.some((arrow) => {
+                      const from = projectKey(arrow.from.environmentId, arrow.from.projectId);
+                      const to = projectKey(arrow.to.environmentId, arrow.to.projectId);
+                      return (from === focusKey && to === key) || (to === focusKey && from === key);
+                    });
+                  return (
+                    <ProjectMapCard
+                      key={key}
+                      project={project}
+                      info={infoOf(project)}
+                      waiting={waitingLines(project)}
+                      highlighted={focusKey === key}
+                      dimmed={focusKey !== null && focusKey !== key && !related}
+                      onHoverChange={(hovered) =>
+                        setHoveredKey((current) =>
+                          hovered ? key : current === key ? null : current,
+                        )
+                      }
+                      onOpenChat={() => openChat(project.environmentId, project.summary.pmThreadId)}
+                    />
+                  );
+                })}
+                <ProjectMapArrows containerRef={mapRef} arrows={arrows} focusKey={focusKey} />
+              </div>
             )}
           </WorkspacePageContainer>
         </ScrollArea>
       </div>
     </SidebarInset>
-  );
-}
-
-/** The Director's epics, each with its subtasks from every project right under it. */
-function EpicsSection(props: {
-  epics: ReadonlyArray<EpicGroup>;
-  environmentId: EnvironmentId;
-  directorProjectId: ProjectId;
-  directorKeyPrefix: string;
-  relationsIndex: TaskRelationsIndex;
-}) {
-  return (
-    <section aria-label="Epics" data-all-projects-epics>
-      <header className="flex items-center gap-2 border-b border-border px-2 pb-2">
-        <h2 className="min-w-0 truncate font-medium text-sm">Epics</h2>
-        <span className="shrink-0 text-muted-foreground text-xs">{props.epics.length}</span>
-      </header>
-      <ul>
-        {props.epics.map(({ epic, children }) => (
-          <li key={epic.id} data-epic={epic.id}>
-            <ul>
-              <TaskListRow
-                environmentId={props.environmentId}
-                projectId={props.directorProjectId}
-                task={epic}
-                depth={0}
-                taskKeyPrefix={props.directorKeyPrefix}
-                relationsIndex={props.relationsIndex}
-              />
-              {children.map((child) => (
-                <TaskListRow
-                  key={child.task.id}
-                  environmentId={child.environmentId}
-                  projectId={child.projectId}
-                  task={child.task}
-                  depth={1}
-                  taskKeyPrefix={child.taskKeyPrefix}
-                  relationsIndex={props.relationsIndex}
-                />
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function ProjectSection(props: {
-  project: EnvironmentProject | null;
-  section: AllProjectsSection;
-  relationsIndex: TaskRelationsIndex;
-}) {
-  const { section, project } = props;
-  const { environmentId, summary } = section;
-  const title = project?.title ?? "Project";
-  return (
-    <section aria-label={title} data-all-projects-section={summary.projectId}>
-      <header className="flex items-center gap-2 border-b border-border px-2 pb-2">
-        {project !== null ? <ProjectFavicon project={project} className="size-4" /> : null}
-        <h2 className="min-w-0 truncate font-medium text-sm">{title}</h2>
-        <span className="shrink-0 text-muted-foreground text-xs">
-          {section.openCount} open
-          {section.doneCount > 0 ? ` · ${section.doneCount} done` : ""}
-        </span>
-      </header>
-      {section.rows.length === 0 ? (
-        <p className="px-2 py-3 text-muted-foreground text-sm">
-          {summary.tasks.length === 0 ? "No tasks yet." : "No open tasks."}
-        </p>
-      ) : (
-        <ul>
-          {section.rows.map(({ task, depth }) => (
-            <TaskListRow
-              key={task.id}
-              environmentId={environmentId}
-              projectId={summary.projectId}
-              task={task}
-              depth={depth}
-              taskKeyPrefix={summary.taskKeyPrefix}
-              relationsIndex={props.relationsIndex}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function TaskListRow(props: {
-  environmentId: EnvironmentId;
-  projectId: ProjectId;
-  task: ProjectTaskReference;
-  depth: number;
-  taskKeyPrefix: string;
-  relationsIndex: TaskRelationsIndex;
-}) {
-  const { environmentId, task } = props;
-  const relations = taskRelations(props.relationsIndex, environmentId, task.id);
-  const status = useLiveTaskStatus(environmentId, task);
-  const openPrLink = useOpenPrLink();
-  const updated = useRelativeTimeState(task.updatedAt);
-  const key = formatTaskKey(props.taskKeyPrefix, task.number);
-  // The PR has its own column, so the status label leaves it out.
-  const statusLabel =
-    task.stage === "cancelled" ? status.label : PROJECT_TASK_STATUS_LABELS[status.status];
-  return (
-    <li
-      data-all-projects-task={task.id}
-      data-task-status={status.status}
-      data-blocked={relations.blockedBy.length > 0 || undefined}
-      className="relative flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b border-border/60 px-2 py-2 hover:bg-accent/50 sm:flex-nowrap"
-    >
-      <div
-        className={cn("flex min-w-0 basis-full items-center gap-2 sm:flex-1 sm:basis-auto")}
-        style={{ paddingLeft: `${props.depth * 1.25}rem` }}
-      >
-        <span className={cn("relative z-10 inline-flex shrink-0", status.className)}>
-          <StatusGlyphWithLabel status={status} />
-        </span>
-        <span className="shrink-0 font-mono text-muted-foreground text-xs">{key}</span>
-        {/* The title link covers the whole row; the PR link sits above it. */}
-        <Link
-          {...taskRouteParams(environmentId, props.projectId, task.id)}
-          className="min-w-0 text-sm break-words outline-none sm:truncate after:absolute after:inset-0 focus-visible:underline"
-        >
-          {task.title}
-        </Link>
-        {relations.progress !== null ? (
-          <SubtaskProgressBadge progress={relations.progress} />
-        ) : null}
-        <WaitingMarker blockedBy={relations.blockedBy} className="hidden sm:inline-flex" />
-      </div>
-      <div className="flex shrink-0 items-center gap-3 pl-6 text-muted-foreground text-xs sm:pl-0">
-        <span className={cn("sm:w-28 sm:truncate", status.className)}>{statusLabel}</span>
-        {/* Phones have no hover, so the blocked marker names its blocker in the row. */}
-        {relations.blockedBy.length > 0 ? (
-          <span
-            data-blocked-label
-            className="inline-flex items-center gap-1 text-orange-500 sm:hidden dark:text-orange-400"
-          >
-            <HourglassIcon aria-hidden className="size-3.5" />
-            {blockedByShortLabel(relations.blockedBy)}
-          </span>
-        ) : null}
-        <span className="sm:w-16">
-          {task.prUrl !== null ? (
-            <a
-              href={task.prUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => openPrLink(event, task.prUrl!)}
-              className="relative z-10 hover:text-foreground hover:underline"
-            >
-              {formatTaskPullRequestLabel(task.prUrl)}
-            </a>
-          ) : null}
-        </span>
-        <span className="sm:w-16 sm:text-right" title={task.updatedAt ?? undefined}>
-          {updated.status === "relative"
-            ? updated.suffix
-              ? `${updated.value} ${updated.suffix}`
-              : updated.value
-            : ""}
-        </span>
-      </div>
-    </li>
   );
 }

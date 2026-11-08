@@ -208,6 +208,10 @@ export class ProjectTeamRepository extends Context.Service<
     readonly getLatestSpecVersion: (
       taskId: ProjectTaskId,
     ) => Result<Option.Option<ProjectTaskSpecVersion>>;
+    /** Each of the project's tasks with a spec, and its latest version number, without reading the specs. */
+    readonly listLatestSpecVersionNumbers: (
+      projectId: ProjectId,
+    ) => Result<ReadonlyMap<ProjectTaskId, number>>;
     readonly getSpecVersion: (input: {
       readonly taskId: ProjectTaskId;
       readonly version: number;
@@ -1097,6 +1101,17 @@ export const make = Effect.gen(function* () {
       LIMIT 1
     `,
   });
+  const findLatestSpecVersionNumbers = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId }),
+    Result: Schema.Struct({ taskId: ProjectTaskId, version: Schema.Number }),
+    execute: ({ projectId }) => sql`
+      SELECT versions.task_id AS "taskId", MAX(versions.version) AS "version"
+      FROM project_task_spec_versions AS versions
+      JOIN project_tasks AS tasks ON tasks.task_id = versions.task_id
+      WHERE tasks.project_id = ${projectId}
+      GROUP BY versions.task_id
+    `,
+  });
   const insertTaskSession = SqlSchema.void({
     Request: ProjectTaskSession,
     execute: ({ taskId, threadId, role, createdAt }) => sql`
@@ -1539,6 +1554,11 @@ export const make = Effect.gen(function* () {
     getLatestSpecVersion: (taskId) =>
       findLatestSpecVersion({ taskId }).pipe(
         Effect.mapError(toRepositoryError("getLatestSpecVersion")),
+      ),
+    listLatestSpecVersionNumbers: (projectId) =>
+      findLatestSpecVersionNumbers({ projectId }).pipe(
+        Effect.map((rows) => new Map(rows.map((row) => [row.taskId, row.version]))),
+        Effect.mapError(toRepositoryError("listLatestSpecVersionNumbers")),
       ),
     appendSpecVersion: (input) =>
       insertSpecVersion(input).pipe(Effect.mapError(toRepositoryError("appendSpecVersion"))),

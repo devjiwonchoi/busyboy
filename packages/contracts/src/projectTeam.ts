@@ -1555,6 +1555,13 @@ export const ProjectManagerPresence = Schema.Struct({
 });
 export type ProjectManagerPresence = typeof ProjectManagerPresence.Type;
 
+/** One success criterion of a goal, as All projects shows it: passed once evidence is recorded. */
+export const ProjectTaskCheck = Schema.Struct({
+  text: Schema.String,
+  passed: Schema.Boolean,
+});
+export type ProjectTaskCheck = typeof ProjectTaskCheck.Type;
+
 /** Enough of a task for the app to show "#N" as a named chip. */
 export const ProjectTaskReference = Schema.Struct({
   id: ProjectTaskId,
@@ -1585,6 +1592,11 @@ export const ProjectTaskReference = Schema.Struct({
   shipRound: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
   /** The model that last ran each role, shown on the plan card. */
   modelSteps: ProjectTaskModelSteps.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  /**
+   * For a top-level task (a goal): its latest spec's success criteria. Null for subtasks;
+   * absent from servers that predate the field.
+   */
+  checks: Schema.optional(Schema.NullOr(Schema.Array(ProjectTaskCheck))),
 });
 export type ProjectTaskReference = typeof ProjectTaskReference.Type;
 
@@ -1649,6 +1661,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   ),
   /** Questions AFK answered since it was last turned on, oldest first. Empty while off. */
   afkAnswers: Schema.Array(ProjectAfkAnswer).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  /** The first line of the PM's "direction" memory, or null when there is none. */
+  direction: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 
