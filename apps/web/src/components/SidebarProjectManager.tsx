@@ -76,7 +76,7 @@ export function SidebarSitrepButton(props: {
 }
 
 /** The second line of a manager row: the PM chat's latest message, or a hint before the first one. */
-export function projectManagerPreview(summary: ProjectTeamAttentionSummary): string {
+function projectManagerPreview(summary: ProjectTeamAttentionSummary): string {
   const last = summary.lastMessage;
   if (last === null) return "No messages yet";
   return last.role === "user" ? `You: ${last.text}` : last.text;

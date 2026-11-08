@@ -7,8 +7,9 @@ import { page, userEvent } from "vite-plus/test/browser";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-// The Director: the workspace-wide PM in a hidden system project. Its epics
-// group tasks from every project; its card and rail avatar sit above them.
+// The Director: the workspace-wide PM in a hidden system project. Its epics'
+// subtasks show as goals on each project's card; its input line and rail
+// avatar sit above them.
 
 const NOW = "2026-11-05T09:00:00.000Z";
 
@@ -82,7 +83,7 @@ import {
 
 import { taskForLeadThread } from "../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
-import { AllProjectsPage, SHOW_DONE_TASKS_STORAGE_KEY } from "./allProjects/AllProjectsPage";
+import { AllProjectsPage } from "./allProjects/AllProjectsPage";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { ThreadSidebarWithRail } from "./sidebar/ThreadSidebarWithRail";
 import { SidebarProvider } from "./ui/sidebar";
@@ -170,7 +171,6 @@ const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  localStorage.removeItem(SHOW_DONE_TASKS_STORAGE_KEY);
   localStorage.removeItem("busyboy:sidebar:collapsed-projects");
   state.startTurn.mockClear();
   state.projects = [
@@ -298,12 +298,14 @@ const railEntry = (label: string) =>
   )!;
 const directorAvatar = () => rail().querySelector<HTMLElement>("[data-director-rail]")!;
 const card = () => container.querySelector<HTMLElement>("[data-director-card]");
-const epicIds = () =>
-  [...container.querySelectorAll("[data-all-projects-epics] [data-all-projects-task]")].map(
-    (item) => item.getAttribute("data-all-projects-task"),
+const projectCards = () =>
+  [...container.querySelectorAll("[data-project-card]")].map((item) =>
+    item.getAttribute("data-project-card"),
   );
-const sectionTitles = () =>
-  [...container.querySelectorAll("[data-all-projects-section] h2")].map((h) => h.textContent);
+const goal = (projectId: string, taskId: string) =>
+  container.querySelector<HTMLElement>(
+    `[data-project-card="${projectId}"] [data-goal="${taskId}"]`,
+  );
 
 async function walkThroughDirector(app: ReturnType<typeof renderApp>) {
   await app.render();
@@ -324,42 +326,25 @@ async function walkThroughDirector(app: ReturnType<typeof renderApp>) {
   expect(directorAvatar().getAttribute("aria-current")).toBe("page");
   expect(railEntry("Chat").getAttribute("aria-current")).toBeNull();
 
-  // All projects: the Director's card on top, with its digest and waiting actions.
+  // All projects: the Director's one-line input on top, no digest.
   await userEvent.click(railEntry("All projects"));
   await vi.waitFor(() => expect(card()).not.toBeNull());
   expect(directorAvatar().getAttribute("aria-current")).toBeNull();
-  expect(card()!.querySelector("[data-director-digest]")!.textContent).toContain(
-    "Launch is on track",
+  expect(card()!.querySelector("textarea")!.placeholder).toBe(
+    "Atlas에게 말하기… (여러 프로젝트에 걸친 일)",
   );
-  expect(card()!.querySelector("[data-director-waiting]")!.textContent).toBe("2 actions waiting");
-  expect(card()!.textContent).toContain("2 projects · 1 in progress");
+  expect(card()!.textContent).not.toContain("Launch is on track");
 
-  // Epics group their subtasks from every project, with each project's key.
-  expect(epicIds()).toEqual(["epic-1", "task-1"]);
-  const epicRow = container.querySelector<HTMLElement>(
-    "[data-all-projects-epics] [data-all-projects-task='epic-1']",
-  )!;
-  expect(epicRow.textContent).toContain("DI-1");
-  expect(
-    epicRow.querySelector("[data-subtask-progress]")!.getAttribute("data-subtask-progress"),
-  ).toBe("1/2");
-  expect(
-    container.querySelector("[data-all-projects-epics] [data-all-projects-task='task-1']")!
-      .textContent,
-  ).toContain("BB-1");
-  // Show done brings back finished epics and subtasks.
-  await userEvent.click(page.getByRole("switch", { name: /Show done/ }).element() as HTMLElement);
-  await vi.waitFor(() => expect(epicIds()).toEqual(["epic-1", "site-1", "task-1", "epic-0"]));
-  await userEvent.click(page.getByRole("switch", { name: /Show done/ }).element() as HTMLElement);
-  await vi.waitFor(() => expect(epicIds()).toEqual(["epic-1", "task-1"]));
+  // The Director is not a project card; its epics' subtasks are goals on their projects.
+  await vi.waitFor(() => expect(projectCards()).toEqual(["busyboy", "site"]));
+  expect(container.querySelector("[data-all-projects-epics]")).toBeNull();
+  expect(goal("busyboy", "task-1")).not.toBeNull();
+  expect(goal("site", "site-1")!.getAttribute("data-goal-phase")).toBe("done");
 
-  // The Director is not a project section.
-  expect(sectionTitles()).not.toContain("Director");
-  expect(sectionTitles()).toEqual(expect.arrayContaining(["busyboy", "site"]));
-
-  // Clicking an epic's subtask opens it in its own project.
+  // An epic's subtask opens in its own project.
+  await userEvent.click(goal("busyboy", "task-1")!.querySelector("button")!);
   await userEvent.click(
-    container.querySelector("[data-all-projects-epics] [data-all-projects-task='task-1'] a")!,
+    goal("busyboy", "task-1")!.querySelector<HTMLElement>("[data-goal-checklist] a")!,
   );
   await vi.waitFor(() =>
     expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-1"),
@@ -368,7 +353,7 @@ async function walkThroughDirector(app: ReturnType<typeof renderApp>) {
   // Messaging the Director from the card sends to its chat and opens it.
   await userEvent.click(railEntry("All projects"));
   await vi.waitFor(() => expect(card()).not.toBeNull());
-  const input = page.getByRole("textbox", { name: "Message Atlas" });
+  const input = page.getByRole("textbox", { name: "Atlas에게 메시지" });
   await userEvent.click(input);
   await userEvent.keyboard("Ship the launch this week");
   await userEvent.keyboard("{Enter}");
@@ -392,7 +377,7 @@ async function walkThroughDirector(app: ReturnType<typeof renderApp>) {
 }
 
 describe("Director", () => {
-  it("rail avatar, All projects card, composer and epics on desktop", async () => {
+  it("rail avatar, All projects input line and goals on desktop", async () => {
     await page.viewport(1280, 800);
     const app = renderApp();
     await walkThroughDirector(app);

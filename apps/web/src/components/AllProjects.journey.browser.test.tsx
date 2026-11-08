@@ -73,7 +73,7 @@ import {
 
 import { taskForLeadThread } from "../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
-import { AllProjectsPage, SHOW_DONE_TASKS_STORAGE_KEY } from "./allProjects/AllProjectsPage";
+import { AllProjectsPage } from "./allProjects/AllProjectsPage";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { ThreadSidebarWithRail } from "./sidebar/ThreadSidebarWithRail";
 import { SidebarProvider } from "./ui/sidebar";
@@ -173,9 +173,35 @@ function task(
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
+function decisionCard(id: string, kind: "approval" | "decision", createdAt: string) {
+  return {
+    taskNumber: 3,
+    taskTitle: "Clean up build warnings",
+    plan: null,
+    proposal: null,
+    item: {
+      id: id as never,
+      projectId: "busyboy" as never,
+      taskId: "task-3" as never,
+      kind,
+      question: "?",
+      options: [],
+      answer: null,
+      answeredAt: null,
+      askerThreadId: null,
+      batchId: "batch" as never,
+      createdAt,
+      supersededAt: null,
+      answeredBy: null,
+      specVersion: null,
+      summary: null,
+      verification: null,
+    },
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  localStorage.removeItem(SHOW_DONE_TASKS_STORAGE_KEY);
   localStorage.removeItem("busyboy:sidebar:collapsed-projects");
   state.projects = [project("busyboy", "busyboy"), project("site", "site")];
   state.groups = [projectGroup("busyboy", "busyboy"), projectGroup("site", "site")];
@@ -190,7 +216,20 @@ beforeEach(() => {
         projectId: "site" as never,
         pmThreadId: "pm-site" as never,
         taskKeyPrefix: "SI",
-        tasks: [task("site-1", 1, "Launch page", { updatedAt: minutesAgo(60 * 24 * 3) })],
+        presence: { running: 1 },
+        tasks: [
+          task("site-1", 1, "Launch page", {
+            checks: [{ text: "페이지가 열린다", passed: false }],
+            updatedAt: minutesAgo(60 * 24 * 3),
+          }),
+          // Waits on a goal in another project: an arrow on desktop, a line on phones.
+          task("site-2", 2, "Wire the map", {
+            stage: "running",
+            checks: [],
+            waitsOn: ["task-3" as never],
+            updatedAt: minutesAgo(60),
+          }),
+        ],
       }),
     },
     {
@@ -199,25 +238,48 @@ beforeEach(() => {
         projectId: "busyboy" as never,
         pmThreadId: "pm-thread" as never,
         taskKeyPrefix: "BB",
+        direction: "어려운 프로젝트에서도 자동으로 높은 기준",
+        presence: { running: 2 },
+        decisionCards: [
+          decisionCard("card-1", "approval", minutesAgo(20)),
+          decisionCard("card-2", "decision", minutesAgo(10)),
+        ],
         tasks: [
-          task("task-1", 1, "Old work", { stage: "done", updatedAt: minutesAgo(60 * 24) }),
+          task("task-0", 10, "Dropped idea", { stage: "cancelled", checks: [] }),
+          task("task-1", 1, "Old work", {
+            stage: "done",
+            checks: [{ text: "old", passed: true }],
+            updatedAt: minutesAgo(60 * 24 * 8),
+          }),
           task("task-2", 2, "Fix drag scroll", {
             stage: "in_review",
             prUrl: "https://github.com/acme/busyboy/pull/81",
+            checks: [
+              { text: "끌어서 스크롤된다", passed: true },
+              { text: "폰에서도", passed: true },
+            ],
             updatedAt: minutesAgo(5),
           }),
-          task("task-3", 3, "Clean up build warnings", { updatedAt: minutesAgo(90) }),
+          task("task-3", 3, "Clean up build warnings", {
+            stage: "running",
+            checks: [
+              { text: "경고 0개", passed: true },
+              { text: "CI 통과", passed: false },
+            ],
+            updatedAt: minutesAgo(90),
+          }),
           task("task-4", 4, "Silence tsc warnings", {
             parentTaskId: "task-3" as never,
             stage: "planning",
             openQuestion: true,
+            checks: null,
             updatedAt: minutesAgo(30),
           }),
-          // Waits on a task in another project that isn't done yet.
-          task("task-5", 5, "Wire the launch page", {
-            parentTaskId: "task-3" as never,
-            waitsOn: ["site-1" as never],
-            updatedAt: minutesAgo(45),
+          task("task-6", 6, "Docs refresh", { stage: "planning", checks: [] }),
+          task("task-7", 7, "Recently shipped", {
+            stage: "done",
+            checks: [{ text: "출시됨", passed: true }],
+            updatedAt: minutesAgo(60 * 24),
           }),
         ],
       }),
@@ -289,14 +351,19 @@ const railEntry = (label: string) =>
   [...rail().querySelectorAll<HTMLElement>("button")].find(
     (button) => (button.getAttribute("aria-label") ?? button.textContent) === label,
   )!;
-const row = (id: string) =>
-  container.querySelector<HTMLElement>(`[data-all-projects-task="${id}"]`);
-const sectionTitles = () =>
-  [...container.querySelectorAll("[data-all-projects-section] h2")].map((h) => h.textContent);
-const showDoneSwitch = () =>
-  page.getByRole("switch", { name: /Show done/ }).element() as HTMLElement;
+const card = (projectId: string) =>
+  container.querySelector<HTMLElement>(`[data-project-card="${projectId}"]`)!;
+const goal = (projectId: string, taskId: string) =>
+  card(projectId).querySelector<HTMLElement>(`[data-goal="${taskId}"]`);
+const goalIds = (projectId: string) =>
+  [...card(projectId).querySelectorAll("[data-goal]")].map((item) =>
+    item.getAttribute("data-goal"),
+  );
+const arrowsSvg = () => container.querySelector<SVGElement>("[data-map-arrows]");
+const isShown = (element: Element) => getComputedStyle(element).display !== "none";
 
 async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
+  const phone = window.innerWidth < 640;
   await app.render();
   await vi.waitFor(() => expect(rail()).not.toBeNull());
   expect(railEntry("Chat").getAttribute("aria-current")).toBe("page");
@@ -304,114 +371,127 @@ async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
   // The rail opens All projects.
   await userEvent.click(railEntry("All projects"));
   await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/all-projects"));
-  await vi.waitFor(() => expect(row("task-2")).not.toBeNull());
+  await vi.waitFor(() => expect(container.querySelector("[data-project-card]")).not.toBeNull());
   expect(railEntry("All projects").getAttribute("aria-current")).toBe("page");
-  expect(railEntry("Chat").getAttribute("aria-current")).toBeNull();
 
-  // Most recently active project first; newest task first, subtasks under their parent.
-  expect(sectionTitles()).toEqual(["busyboy", "site"]);
-  const ids = [
-    ...container.querySelectorAll("[data-all-projects-section='busyboy'] [data-all-projects-task]"),
-  ].map((item) => item.getAttribute("data-all-projects-task"));
-  expect(ids).toEqual(["task-3", "task-4", "task-5", "task-2"]);
-
-  // Linear-style structure: the parent counts its subtasks, a waiting task an hourglass.
-  expect(
-    row("task-3")!.querySelector("[data-subtask-progress]")!.getAttribute("data-subtask-progress"),
-  ).toBe("0/2");
-  expect(row("task-5")!.getAttribute("data-blocked")).toBe("true");
-  expect(row("task-4")!.getAttribute("data-blocked")).toBeNull();
-  if (window.innerWidth < 640) {
-    // No hover on a phone: the row names the blocker itself.
-    const label = row("task-5")!.querySelector<HTMLElement>("[data-blocked-label]")!;
-    expect(label.offsetParent).not.toBeNull();
-    expect(label.textContent).toBe("SI-1 끝나야 시작");
-    expect(label.querySelector(".lucide-hourglass")).not.toBeNull();
+  // One card per project; the one waiting on the user first.
+  const cards = [...container.querySelectorAll<HTMLElement>("[data-project-card]")];
+  expect(cards.map((item) => item.getAttribute("data-project-card"))).toEqual(["busyboy", "site"]);
+  // Desktop lays cards side by side, a phone stacks them.
+  const [first, second] = cards.map((item) => item.getBoundingClientRect());
+  if (phone) {
+    expect(second!.left).toBe(first!.left);
+    expect(second!.top).toBeGreaterThan(first!.bottom);
   } else {
-    expect(
-      row("task-5")!.querySelector<HTMLElement>("[data-blocked-label]")!.offsetParent,
-    ).toBeNull();
-    const marker = row("task-5")!.querySelector<HTMLElement>("[data-waiting-marker]")!;
-    expect(marker.querySelector("[aria-hidden]")?.textContent).toBe("SI-1");
-    await userEvent.hover(row("task-5")!.querySelector("[data-testid='waiting-marker-trigger']")!);
-    await vi.waitFor(() =>
-      expect(document.body.textContent).toContain("SI-1 끝나야 시작 · Launch page"),
-    );
-    await userEvent.unhover(
-      row("task-5")!.querySelector("[data-testid='waiting-marker-trigger']")!,
-    );
+    expect(second!.left).toBeGreaterThan(first!.right);
   }
 
-  expect(container.querySelector(".lucide-flag")).toBeNull();
+  // The task list is gone: no task rows, epics or Show done toggle.
+  expect(container.querySelector("[data-all-projects-task]")).toBeNull();
+  expect(container.querySelector("[data-all-projects-epics]")).toBeNull();
+  expect(container.textContent).not.toContain("Show done");
 
-  // Each row: status, key, title, PR link and last update.
-  expect(row("task-2")!.textContent).toContain("BB-2");
-  expect(row("task-2")!.textContent).toContain("Fix drag scroll");
-  // In review with no lead turn running is Ready; the PR shows in its own column.
-  expect(row("task-2")!.getAttribute("data-task-status")).toBe("ready");
-  expect(row("task-2")!.textContent).toContain("Ready");
-  expect(row("task-2")!.textContent).toContain("5m ago");
-  const pr = row("task-2")!.querySelector<HTMLAnchorElement>("a[href^='https://github.com']")!;
-  expect(pr.textContent).toBe("PR #81");
-  expect(pr.href).toBe("https://github.com/acme/busyboy/pull/81");
-  expect(row("task-4")!.getAttribute("data-task-status")).toBe("ask_question");
-  expect(row("task-4")!.textContent).toContain("30m ago");
-  expect(row("site-1")!.textContent).toContain("3d ago");
+  // Head, direction, progress, now / next / needs-you.
+  const busyboy = card("busyboy");
+  expect(busyboy.textContent).toContain("● 작업 중 2");
+  expect(busyboy.querySelector("[data-project-direction]")!.textContent).toBe(
+    "어려운 프로젝트에서도 자동으로 높은 기준",
+  );
+  // Cancelled and week-old goals are gone; the planning goal adds no checks.
+  expect(busyboy.querySelector("[data-project-progress]")!.textContent).toContain("체크 4/5 통과");
+  expect(busyboy.querySelector("[data-project-progress]")!.textContent).toContain("80%");
+  expect(busyboy.querySelector("[data-project-now]")!.textContent).toBe(
+    "Fix drag scroll · Clean up build warnings",
+  );
+  expect(busyboy.querySelector("[data-project-next]")!.textContent).toBe("Docs refresh");
+  expect(busyboy.querySelector("[data-project-needs-you]")!.textContent).toBe(
+    "플랜 승인 1 · 질문 1 →",
+  );
+  expect(card("site").querySelector("[data-project-direction]")!.textContent).toBe(
+    "방향 미정 — PM에게 알려주세요",
+  );
+  expect(card("site").querySelector("[data-project-needs-you]")!.textContent).toBe("—");
 
-  // Done tasks are archived: hidden until the toggle, which is remembered.
-  expect(row("task-1")).toBeNull();
-  expect(container.textContent).toContain("Show done (1)");
-  await userEvent.click(showDoneSwitch());
-  await vi.waitFor(() => expect(row("task-1")).not.toBeNull());
-  expect(row("task-1")!.textContent).toContain("Done");
-  expect(localStorage.getItem(SHOW_DONE_TASKS_STORAGE_KEY)).toBe("true");
-  await userEvent.click(showDoneSwitch());
-  await vi.waitFor(() => expect(row("task-1")).toBeNull());
+  // Goals: in progress, then planning, then done (struck through). Phones show two at first.
+  const allGoals = ["task-2", "task-3", "task-6", "task-7"];
+  if (phone) {
+    expect(goalIds("busyboy")).toEqual(allGoals.slice(0, 2));
+    await userEvent.click(busyboy.querySelector<HTMLElement>("[data-goals-more]")!);
+    await vi.waitFor(() => expect(goalIds("busyboy")).toEqual(allGoals));
+  } else {
+    expect(goalIds("busyboy")).toEqual(allGoals);
+    expect(busyboy.querySelector("[data-goals-more]")).toBeNull();
+  }
+  expect(goal("busyboy", "task-6")!.textContent).toContain("계획 중");
+  // In progress but no checks yet: still marked as being planned.
+  expect(goal("site", "site-2")!.textContent).toContain("계획 중");
+  expect(goal("busyboy", "task-3")!.textContent).toContain("1/2");
+  expect(
+    getComputedStyle(goal("busyboy", "task-7")!.querySelector("span.line-through")!)
+      .textDecorationLine,
+  ).toBe("line-through");
 
-  // Clicking a row opens its task page.
-  await userEvent.click(row("task-3")!.querySelector("a")!);
+  // Waiting on another project: an arrow on desktop, a line on the card everywhere.
+  const waiting = card("site").querySelector<HTMLElement>("[data-waiting-line]")!;
+  expect(waiting.textContent).toBe("⏳ busyboy · Clean up build warnings 기다리는 중");
+  expect(waiting.offsetParent).not.toBeNull();
+  await vi.waitFor(() => expect(arrowsSvg()).not.toBeNull());
+  const arrow = arrowsSvg()!.querySelector("[data-map-arrow]")!;
+  expect(arrow.getAttribute("data-from")).toBe("site-2");
+  expect(arrow.getAttribute("data-to")).toBe("task-3");
+  expect(arrow.getAttribute("stroke-dasharray")).toBe("5 4");
+  expect(isShown(arrowsSvg()!)).toBe(!phone);
+
+  // A goal unfolds into its checklist, which links to the task page.
+  await userEvent.click(goal("busyboy", "task-3")!.querySelector("button")!);
+  await vi.waitFor(() =>
+    expect(goal("busyboy", "task-3")!.querySelector("[data-goal-checklist]")).not.toBeNull(),
+  );
+  const checklist = goal("busyboy", "task-3")!.querySelector<HTMLElement>("[data-goal-checklist]")!;
+  expect([...checklist.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+    "✓ 경고 0개",
+    "○ CI 통과",
+  ]);
+  await userEvent.click(page.getByRole("link", { name: "열기 →" }).element() as HTMLElement);
   await vi.waitFor(() =>
     expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-3"),
   );
   expect(railEntry("Chat").getAttribute("aria-current")).toBe("page");
 
-  // Chat goes back to the last chat page, from All projects.
+  // "나를 기다림" adds up every open card and opens the chat whose card waited longest.
   await userEvent.click(railEntry("All projects"));
   await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/all-projects"));
-  await userEvent.click(railEntry("Chat"));
-  await vi.waitFor(() =>
-    expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-3"),
+  const pill = await vi.waitFor(() => {
+    const element = container.querySelector<HTMLElement>("[data-needs-you-total]");
+    expect(element).not.toBeNull();
+    return element!;
+  });
+  expect(pill.textContent).toBe("나를 기다림 2");
+  await userEvent.click(pill);
+  await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
+
+  // A project's name opens its PM chat.
+  await userEvent.click(railEntry("All projects"));
+  await vi.waitFor(() => expect(container.querySelector("[data-project-card]")).not.toBeNull());
+  await userEvent.click(
+    card("site").querySelector<HTMLElement>("[data-project-card-head] button")!,
   );
+  await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-site"));
 }
 
 describe("All projects", () => {
-  it("opens from the rail and lists every project's tasks on desktop", async () => {
+  it("shows every project as a card on the map on desktop", async () => {
     await page.viewport(1280, 800);
     const app = renderApp();
     await walkThroughAllProjects(app);
     expect(rail().getAttribute("data-workspace-rail")).toBe("column");
-    // Desktop rows stay one line, Linear-style.
-    await userEvent.click(railEntry("All projects"));
-    await vi.waitFor(() => expect(row("task-2")).not.toBeNull());
-    expect(getComputedStyle(row("task-2")!.querySelector("a")!).whiteSpace).toBe("nowrap");
   });
 
-  it("works as tabs on a phone, with rows that wrap instead of clipping", async () => {
+  it("stacks the same cards on a phone, with waiting lines instead of arrows", async () => {
     await page.viewport(390, 844);
     const app = renderApp();
-    await app.render();
-    await vi.waitFor(() => expect(rail()).not.toBeNull());
+    await walkThroughAllProjects(app);
     expect(rail().getAttribute("data-workspace-rail")).toBe("tabs");
     expect(railEntry("All projects").textContent).toBe("All projects");
-    await act(() => root.unmount());
-    root = createRoot(container);
-    await walkThroughAllProjects(renderApp());
-    // The title gets its own line, so a long title is not squeezed by the details.
-    await userEvent.click(railEntry("All projects"));
-    await vi.waitFor(() => expect(row("task-2")).not.toBeNull());
-    const title = row("task-2")!.querySelector("a")!;
-    expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
-    // Long titles wrap on phones rather than ending in "…".
-    expect(getComputedStyle(title).whiteSpace).not.toBe("nowrap");
   });
 });
