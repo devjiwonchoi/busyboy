@@ -1,3 +1,4 @@
+import * as CodexManagedTokenBroker from "../provider/CodexManagedTokenBroker.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -103,6 +104,9 @@ const layerProviderInstanceRegistry = ProviderInstanceRegistryHydration.layer.pi
       ),
       ProviderLatestVersions.layer,
       ModelManifest.layerTest,
+      Layer.mock(CodexManagedTokenBroker.CodexManagedTokenBroker)({
+        endpoint: Effect.succeed("unused-private-pipe"),
+      }),
       Layer.mock(CodexInstallation.CodexInstallation)({
         managedDirectory: "unused-managed-installation",
       }),

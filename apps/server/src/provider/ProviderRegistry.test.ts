@@ -1,3 +1,4 @@
+import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CodexInstallation from "./CodexInstallation.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -389,6 +390,9 @@ const awaitPersistedProvider = (
   );
 
 const layerTestNodeServices = Layer.mergeAll(
+  Layer.mock(CodexManagedTokenBroker.CodexManagedTokenBroker)({
+    endpoint: Effect.succeed("unused-private-pipe"),
+  }),
   NodeServices.layer,
   Layer.mock(CodexInstallation.CodexInstallation)({
     managedDirectory: "unused-managed-installation",

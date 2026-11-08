@@ -1,3 +1,4 @@
+import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CodexInstallation from "./CodexInstallation.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -157,6 +158,11 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
   const layerBaseDeps = ServerConfig.layerTest(process.cwd(), {
     prefix: "provider-instance-registry-test",
   }).pipe(
+    Layer.provideMerge(
+      Layer.mock(CodexManagedTokenBroker.CodexManagedTokenBroker)({
+        endpoint: Effect.succeed("unused-private-pipe"),
+      }),
+    ),
     Layer.provideMerge(NodeServices.layer),
     Layer.provideMerge(
       Layer.mock(CodexInstallation.CodexInstallation)({
@@ -561,6 +567,11 @@ describe("ProviderInstanceRegistry — all drivers slice", () => {
     ),
   );
   const layerBaseDeps = ServerSecretStore.layer.pipe(
+    Layer.provideMerge(
+      Layer.mock(CodexManagedTokenBroker.CodexManagedTokenBroker)({
+        endpoint: Effect.succeed("unused-private-pipe"),
+      }),
+    ),
     Layer.provideMerge(
       ServerConfig.layerTest(process.cwd(), {
         prefix: "provider-instance-registry-all-drivers-test",
