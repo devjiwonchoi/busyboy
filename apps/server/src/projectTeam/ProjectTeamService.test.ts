@@ -20,6 +20,7 @@ import { defaultPersona, defaultPersonaName } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { nextStepHint } from "./taskLeadPrompt.ts";
 import {
+  createAcceptedTask,
   approvePlan,
   PROJECT_ID,
   reviewClean,
@@ -105,10 +106,11 @@ describe("ProjectTeamService", () => {
           topic: "testing",
           content: "Run vp test for changed files.",
         });
-        const { task } = yield* team.createTask(pm, {
-          intake: "New work.",
+        const { task } = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Add hello.sh",
-          request: "Add hello.sh with a test.",
+          context: "Add hello.sh with a test.",
         });
         assert.strictEqual(task.stage, "inbox");
 
@@ -140,10 +142,11 @@ describe("ProjectTeamService", () => {
         const pm = yield* setUpManager;
         yield* team.updateSettingsAsManager(pm, { maxConcurrentTasks: 2 });
         const tasks = yield* Effect.forEach([1, 2, 3], (n) =>
-          team.createTask(pm, {
-            intake: "New work.",
+          team.createTaskForUser({
+            projectId: PROJECT_ID,
+            startPlanning: false,
             title: `Task ${n}`,
-            request: `Do task ${n}.`,
+            context: `Do task ${n}.`,
           }),
         );
         yield* team.startTask(pm, { taskId: tasks[0]!.task.id }, harness.delegate);
@@ -164,12 +167,13 @@ describe("ProjectTeamService", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const first = yield* team.createTask(pm, {
-          intake: "New work.",
+        const first = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Schema",
-          request: "Add the schema.",
+          context: "Add the schema.",
         });
-        const second = yield* team.createTask(pm, {
+        const second = yield* createAcceptedTask(pm, {
           intake: "New work.",
           title: "Use schema",
           request: "Use it.",
@@ -205,8 +209,18 @@ describe("ProjectTeamService", () => {
             .pipe(Effect.flip);
           assert.include(denied.message, "only for a project's PM or task leads");
 
-          const a = yield* team.createTask(pm, { intake: "New work.", title: "A", request: "a" });
-          const b = yield* team.createTask(pm, { intake: "New work.", title: "B", request: "b" });
+          const a = yield* team.createTaskForUser({
+            projectId: PROJECT_ID,
+            startPlanning: false,
+            title: "A",
+            context: "a",
+          });
+          const b = yield* team.createTaskForUser({
+            projectId: PROJECT_ID,
+            startPlanning: false,
+            title: "B",
+            context: "b",
+          });
           const leadA = yield* team.startTask(pm, { taskId: a.task.id }, harness.delegate);
           const notOwn = yield* team
             .updateTask(leadA.leadThreadId, { taskId: b.task.id, note: "hi" })
@@ -226,10 +240,11 @@ describe("ProjectTeamService", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTask(pm, {
-          intake: "New work.",
+        const { task } = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Hello",
-          request: "Add hello.sh.",
+          context: "Add hello.sh.",
         });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
 
@@ -268,10 +283,11 @@ describe("ProjectTeamService", () => {
         const team = yield* service;
         const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
         const pm = yield* setUpManager;
-        const old = yield* team.createTask(pm, {
-          intake: "New work.",
+        const old = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Old",
-          request: "Done before.",
+          context: "Done before.",
         });
         const oldLead = yield* team.startTask(pm, { taskId: old.task.id }, harness.delegate);
         yield* team.updateTask(oldLead.leadThreadId, { stage: "done", resultSummary: "Shipped." });
@@ -283,27 +299,30 @@ describe("ProjectTeamService", () => {
         });
         yield* TestClock.adjust("1 minute");
 
-        const done = yield* team.createTask(pm, {
-          intake: "New work.",
+        const done = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Done",
-          request: "Finish it.",
+          context: "Finish it.",
         });
         const doneLead = yield* team.startTask(pm, { taskId: done.task.id }, harness.delegate);
         yield* team.updateTask(doneLead.leadThreadId, { stage: "done", resultSummary: "Did it." });
-        const asking = yield* team.createTask(pm, {
-          intake: "New work.",
+        const asking = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Ask",
-          request: "Ask the user.",
+          context: "Ask the user.",
         });
         const askingLead = yield* team.startTask(pm, { taskId: asking.task.id }, harness.delegate);
         yield* team.askUser(askingLead.leadThreadId, {
           kind: "decision",
           question: "Which login provider?",
         });
-        const blocked = yield* team.createTask(pm, {
-          intake: "New work.",
+        const blocked = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Stuck",
-          request: "Get stuck.",
+          context: "Get stuck.",
         });
         const blockedLead = yield* team.startTask(
           pm,
@@ -342,14 +361,20 @@ describe("ProjectTeamService", () => {
         const pm = yield* setUpManager;
         const start = (title: string) =>
           Effect.gen(function* () {
-            const { task } = yield* team.createTask(pm, {
-              intake: "New work.",
+            const { task } = yield* team.createTaskForUser({
+              projectId: PROJECT_ID,
+              startPlanning: false,
               title,
-              request: `${title}.`,
+              context: `${title}.`,
             });
             return yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
           });
-        yield* team.createTask(pm, { intake: "New work.", title: "Queued", request: "Later." });
+        yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
+          title: "Queued",
+          context: "Later.",
+        });
         yield* start("Planning");
         const approval = yield* start("Approval");
         yield* team.updateTask(approval.leadThreadId, { stage: "awaiting_approval" });
@@ -380,7 +405,7 @@ describe("ProjectTeamService", () => {
           Planning: "planning",
           Approval: "waiting_for_approval",
           Building: "in_progress",
-          Shipped: "ready",
+          Shipped: "in_review",
           Asking: "ask_question",
           Stuck: "fatal",
           Finished: "done",
@@ -390,8 +415,8 @@ describe("ProjectTeamService", () => {
           planning: 1,
           waiting_for_approval: 1,
           in_progress: 1,
-          in_review: 0,
-          ready: 1,
+          in_review: 1,
+          ready: 0,
           ask_question: 1,
           fatal: 1,
           done: 1,
@@ -411,10 +436,11 @@ describe("ProjectTeamService", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTask(pm, {
-          intake: "New work.",
+        const { task } = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Cache",
-          request: "Speed it up.",
+          context: "Speed it up.",
         });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* approvePlan(leadThreadId);
@@ -680,7 +706,12 @@ describe("ProjectTeamService", () => {
           stage: "in_review",
           prUrl: "https://github.com/acme/repo/pull/1",
         });
-        yield* team.createTask(pm, { intake: "New work.", title: "Later", request: "Later." });
+        yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
+          title: "Later",
+          context: "Later.",
+        });
         yield* team.recordOutcome({ task: second.task, outcome: "stalled" });
         yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which way?" });
         yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which color?" });
@@ -717,10 +748,11 @@ describe("ProjectTeamService", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const created = yield* team.createTask(pm, {
-          intake: "New work.",
+        const created = yield* team.createTaskForUser({
+          projectId: PROJECT_ID,
+          startPlanning: false,
           title: "Later",
-          request: "Later.",
+          context: "Later.",
         });
         const before = (yield* team.attentionSnapshot).projects[0]!.tasks[0]!;
         assert.strictEqual(before.updatedAt, created.task.updatedAt);
@@ -733,7 +765,7 @@ describe("ProjectTeamService", () => {
     ),
   );
 
-  it.effect("streams a fresh snapshot when the PM creates a task", () =>
+  it.effect("streams a fresh snapshot when the PM proposes a task", () =>
     withTeam(() =>
       Effect.gen(function* () {
         const team = yield* service;
@@ -744,13 +776,21 @@ describe("ProjectTeamService", () => {
           Effect.forkChild,
         );
         for (let index = 0; index < 50; index++) yield* Effect.yieldNow;
-        yield* team.createTask(pm, { intake: "New work.", title: "Later", request: "Later." });
+        yield* team.createTask(pm, {
+          intake: "New work.",
+          title: "Later",
+          request: "Later.",
+          goal: "Deliver it later.",
+          verification: "Check the result.",
+        });
         const snapshots = Array.from(yield* Fiber.join(fiber));
         assert.strictEqual(snapshots[0]?.projects[0]?.presence.inbox, 0);
-        assert.strictEqual(snapshots[1]?.projects[0]?.presence.inbox, 1);
+        assert.strictEqual(snapshots[1]?.projects[0]?.presence.inbox, 0);
+        assert.strictEqual(snapshots[1]?.projects[0]?.decisionCards[0]?.item.kind, "proposal");
+        assert.strictEqual(snapshots[1]?.projects[0]?.decisionCards[0]?.taskTitle, "Later");
         assert.strictEqual(
           snapshots[1]?.projects[0]?.presence.lastAction?.text,
-          "created #1 Later",
+          "noted on #1 Later",
         );
       }),
     ),

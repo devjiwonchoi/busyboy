@@ -249,6 +249,7 @@ function makeDetail(): ProjectTeamTaskDetail {
 const planCard: ProjectDecisionCard = {
   taskNumber: 7,
   taskTitle: "Fix drag scroll",
+  proposal: null,
   plan: approvalPlanOf(spec),
   item: {
     id: ProjectAttentionItemId.make("attention-plan"),

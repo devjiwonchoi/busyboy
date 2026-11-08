@@ -336,7 +336,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_thread_send_attachments: tool(["Send", "Sending", "Sent", "attachments"], "attachment-send"),
   html_preview: tool(["Preview", "Previewing", "Previewed", "an HTML page"], "html-preview"),
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
-  task_create: tool(["Create", "Creating", "Created", "a team task"], "team-task-create"),
+  task_create: tool(["Propose", "Proposing", "Proposed", "a task"], "team-task-create"),
   task_start: tool(["Start", "Starting", "Started", "a team task"], "team-task-start"),
   task_update: tool(["Update", "Updating", "Updated", "a team task"], "team-task-update"),
   task_spec_read: tool(["Read", "Reading", "Read", "a task spec"], "team-task-read"),

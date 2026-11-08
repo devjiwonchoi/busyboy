@@ -80,6 +80,8 @@ export class AttentionRouter extends Context.Service<
       readonly question: string;
       readonly options: ReadonlyArray<string>;
       readonly askerThreadId: ThreadId | null;
+      /** The project whose chat shows the card. Defaults to the task's project. */
+      readonly projectId?: ProjectId;
       /** For a plan approval: the spec version under review. */
       readonly specVersion?: number;
       /** For a plan approval: the card's Goal section. */
@@ -94,6 +96,8 @@ export class AttentionRouter extends Context.Service<
       readonly senderThreadId: ThreadId;
       /** "user" for a card click; "pm" for a relay the caller already checked; "afk" for the AFK sweep. */
       readonly answeredBy: ProjectAttentionAnsweredBy;
+      /** What the asker hears instead of the usual relayed answer. */
+      readonly relayText?: string;
     }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /**
      * Closes an open item without an answer. When `notifyAsker` is set, tells the
@@ -122,7 +126,7 @@ const make = Effect.gen(function* () {
 
   const ask: AttentionRouter["Service"]["ask"] = (input) =>
     Effect.gen(function* () {
-      const projectId = input.task.projectId;
+      const projectId = input.projectId ?? input.task.projectId;
       const now = yield* nowIso;
       const latest = yield* repository.getLatestAttentionItem(projectId);
       const batchId =
@@ -174,7 +178,7 @@ const make = Effect.gen(function* () {
           threadId: item.askerThreadId,
           messageId: MessageId.make(key),
           senderThreadId: input.senderThreadId,
-          text: relayedAnswerText(item.question, input.answer, input.answeredBy),
+          text: input.relayText ?? relayedAnswerText(item.question, input.answer, input.answeredBy),
           attachments: [],
           mode: "auto",
           createdBy: "agent",

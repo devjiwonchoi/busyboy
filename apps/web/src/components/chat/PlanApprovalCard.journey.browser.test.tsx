@@ -157,6 +157,7 @@ function planCard(
   return {
     taskNumber,
     taskTitle: title,
+    proposal: null,
     plan: null,
     item: {
       id: ProjectAttentionItemId.make(id),

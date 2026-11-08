@@ -241,6 +241,7 @@ beforeEach(() => {
           {
             taskNumber: 7,
             taskTitle: "Task 7",
+            proposal: null,
             plan: null,
             item: {
               id: "attention-7" as never,

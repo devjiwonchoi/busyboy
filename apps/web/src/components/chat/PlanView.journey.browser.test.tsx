@@ -232,6 +232,7 @@ function makeCard(spec: ProjectTaskSpec): ProjectDecisionCard {
   return {
     taskNumber: 62,
     taskTitle: "Plan view",
+    proposal: null,
     plan: approvalPlanOf(spec),
     item: {
       id: ProjectAttentionItemId.make("attention-plan"),

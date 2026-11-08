@@ -10,7 +10,14 @@ import * as ServerConfig from "../config.ts";
 import { directorWorkspaceRoot, epicStage } from "./director.ts";
 import { personaInstructions } from "./persona.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { PROJECT_ID, START, setUpManager, withTeam, type TeamHarness } from "./testkit.ts";
+import {
+  createAcceptedTask,
+  PROJECT_ID,
+  START,
+  setUpManager,
+  withTeam,
+  type TeamHarness,
+} from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 const SECOND = ProjectId.make("project-2");
@@ -55,20 +62,20 @@ describe("ProjectTeamService Director", () => {
           projectId: DIRECTOR,
         });
 
-        const { task: epic } = yield* team.createTask(director.threadId, {
+        const { task: epic } = yield* createAcceptedTask(director.threadId, {
           intake: "New work.",
           title: "Dark mode everywhere",
           request: "Ship dark mode in both apps.",
         });
         assert.strictEqual(epic.projectId, DIRECTOR);
-        const { task: first } = yield* team.createTask(director.threadId, {
+        const { task: first } = yield* createAcceptedTask(director.threadId, {
           intake: "New work.",
           title: "Dark mode in the first app",
           request: "Add a dark theme.",
           projectId: PROJECT_ID,
           parentTaskId: epic.id,
         });
-        const { task: second } = yield* team.createTask(director.threadId, {
+        const { task: second } = yield* createAcceptedTask(director.threadId, {
           intake: "New work.",
           title: "Dark mode in the second app",
           request: "Add a dark theme.",
@@ -112,12 +119,12 @@ describe("ProjectTeamService Director", () => {
           topic: "summary",
           content: "Web app.\nIn flight: login.\nNext: billing.",
         });
-        const { task: epic } = yield* team.createTask(director.threadId, {
+        const { task: epic } = yield* createAcceptedTask(director.threadId, {
           intake: "New work.",
           title: "Shared auth",
           request: "One login across apps.",
         });
-        const { task: child } = yield* team.createTask(director.threadId, {
+        const { task: child } = yield* createAcceptedTask(director.threadId, {
           intake: "New work.",
           title: "Login page",
           request: "Build it.",
@@ -163,7 +170,7 @@ describe("ProjectTeamService Director", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const { firstPm, director } = yield* setUpWorkspace(harness);
-        const { task: epic } = yield* team.createTask(director.threadId, {
+        const { task: epic } = yield* createAcceptedTask(director.threadId, {
           intake: "New work.",
           title: "Epic",
           request: "Spans projects.",
@@ -175,7 +182,7 @@ describe("ProjectTeamService Director", () => {
         assert.include(start.message, "not available to the Director");
 
         const crossProject = yield* Effect.flip(
-          team.createTask(firstPm, {
+          createAcceptedTask(firstPm, {
             intake: "New work.",
             title: "Elsewhere",
             request: "No.",
@@ -185,7 +192,7 @@ describe("ProjectTeamService Director", () => {
         assert.include(crossProject.message, "own project");
 
         const toDirector = yield* Effect.flip(
-          team.createTask(director.threadId, {
+          createAcceptedTask(director.threadId, {
             intake: "New work.",
             title: "Bad",
             request: "No PM there.",
