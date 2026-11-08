@@ -38,6 +38,7 @@ import {
   resolveProjectTaskStatus,
   projectTaskPhase,
   storedTaskStatusSignals,
+  type ProjectTaskCheck,
   type ProjectTaskEvent,
   ProjectTaskEventId,
   type ProjectTaskEventKind,
@@ -175,6 +176,7 @@ import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
+import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import {
   DELEGATE_ROLE,
@@ -1498,7 +1500,13 @@ const make = Effect.gen(function* () {
           outcome === "dismiss"
             ? `[제안 빠짐] ${proposal.title}\nThe user removed this proposal. Don't propose it again unless they ask.`
             : `[제안 피드백] ${proposal.title}\n${answer}\nThe proposal is closed. Post a new task_create proposal if it still makes sense.`;
-        return yield* router.answer({ item, answer, senderThreadId, answeredBy: "user", relayText });
+        return yield* router.answer({
+          item,
+          answer,
+          senderThreadId,
+          answeredBy: "user",
+          relayText,
+        });
       }
       const key = yield* keyOf(proposal);
       const routed = proposal.projectId !== item.projectId;
@@ -2042,7 +2050,8 @@ const make = Effect.gen(function* () {
   const reviewModelOf = (task: ProjectTask) =>
     Effect.map(
       requireManager(task.projectId),
-      (manager) => resolveRoleModels(task.roleModels, manager.settings.roleModels).review?.target ?? null,
+      (manager) =>
+        resolveRoleModels(task.roleModels, manager.settings.roleModels).review?.target ?? null,
     );
 
   /**
@@ -2060,13 +2069,14 @@ const make = Effect.gen(function* () {
         .pipe(orTeamError("Could not read the review session."));
       if (Option.isNone(session) || session.value.role !== "reviewer") {
         return yield* teamError(
-          "task_review_set is only for a task lead or the review session it started with task_delegate(role: \"review\").",
+          'task_review_set is only for a task lead or the review session it started with task_delegate(role: "review").',
         );
       }
       const task = yield* repository
         .getTask(session.value.taskId)
         .pipe(orTeamError("Could not read the task."));
-      if (Option.isNone(task)) return yield* teamError(`Task ${session.value.taskId} was not found.`);
+      if (Option.isNone(task))
+        return yield* teamError(`Task ${session.value.taskId} was not found.`);
       const run = yield* repository
         .findModelRunByThreadId(callerThreadId)
         .pipe(orTeamError("Could not read the review session."));
@@ -2099,10 +2109,7 @@ const make = Effect.gen(function* () {
   const setReview: ProjectTeamService["Service"]["setReview"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const reviewer = yield* reviewerOf(callerThreadId);
-      const task = yield* requireTask(
-        reviewer.taskId,
-        reviewer.projectId,
-      );
+      const task = yield* requireTask(reviewer.taskId, reviewer.projectId);
       if (input.taskId !== undefined && input.taskId !== task.id) {
         return yield* teamError(
           "task_review_set records a review of your own task only.",
@@ -2167,7 +2174,9 @@ const make = Effect.gen(function* () {
               () => recorded.value,
             );
       const who =
-        reviewer.by === "lead" ? "Self-review" : `Review by ${reviewer.model ?? "the review model"}`;
+        reviewer.by === "lead"
+          ? "Self-review"
+          : `Review by ${reviewer.model ?? "the review model"}`;
       yield* appendEvent(
         updated,
         "note",
@@ -3710,6 +3719,8 @@ const make = Effect.gen(function* () {
         content: input.content,
         updatedAt: yield* nowIso,
       });
+      // All projects shows the direction, so its change goes out with a new snapshot.
+      if (input.topic === PROJECT_DIRECTION_TOPIC) yield* router.publish(role.projectId);
       return { entry };
     }).pipe(orTeamError("Could not write the project memory."));
 
@@ -3720,6 +3731,7 @@ const make = Effect.gen(function* () {
         projectId: role.projectId,
         topic: input.topic,
       });
+      if (deleted && input.topic === PROJECT_DIRECTION_TOPIC) yield* router.publish(role.projectId);
       return { topic: input.topic, deleted };
     }).pipe(orTeamError("Could not delete the project memory."));
 
@@ -3877,6 +3889,33 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  // A goal's checks change only when its spec gains a version, so the full spec is read
+  // once per version; every other snapshot reads just the version numbers, one query a project.
+  const checksCache = new Map<
+    ProjectTaskId,
+    { version: number; value: ReadonlyArray<ProjectTaskCheck> }
+  >();
+  const readTaskChecks = (taskId: ProjectTaskId, latestVersion: number | undefined) =>
+    Effect.gen(function* () {
+      if (latestVersion === undefined) return [];
+      const cached = checksCache.get(taskId);
+      if (cached !== undefined && cached.version === latestVersion) return cached.value;
+      const version = yield* repository.getLatestSpecVersion(taskId);
+      if (Option.isNone(version)) return [];
+      const value = version.value.spec.criteria.map((criterion) => ({
+        text: criterion.text,
+        passed: criterion.evidence !== null && criterion.evidence.trim() !== "",
+      }));
+      checksCache.set(taskId, { version: version.value.version, value });
+      return value;
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("could not read the task's success criteria", { taskId, cause }).pipe(
+          Effect.as<ReadonlyArray<ProjectTaskCheck>>([]),
+        ),
+      ),
+    );
+
   const attentionSnapshot: ProjectTeamService["Service"]["attentionSnapshot"] = Effect.gen(
     function* () {
       const managers = yield* repository.listManagers();
@@ -3905,6 +3944,28 @@ const make = Effect.gen(function* () {
           const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
           const decisionCards = yield* listDecisionCards(projectId, open);
           const tasks = yield* repository.listTasks({ projectId });
+          const projectTaskIds = new Set(tasks.map((task) => task.id));
+          // Top-level tasks are the goals: no parent, or a parent outside this project.
+          const latestVersions = yield* repository.listLatestSpecVersionNumbers(projectId);
+          // Cancelled goals and unadded proposals never show on the map, so their specs aren't read.
+          const checksByTask = new Map(
+            yield* Effect.forEach(
+              tasks.filter(
+                (task) =>
+                  task.stage !== "cancelled" &&
+                  task.stage !== "proposed" &&
+                  (task.parentTaskId === null || !projectTaskIds.has(task.parentTaskId)),
+              ),
+              (task) =>
+                Effect.map(
+                  readTaskChecks(task.id, latestVersions.get(task.id)),
+                  (checks) => [task.id, checks] as const,
+                ),
+            ),
+          );
+          const directionEntry = (yield* repository.listMemory(projectId)).find(
+            (entry) => entry.topic === PROJECT_DIRECTION_TOPIC,
+          );
           const afk = yield* activeAfk(manager.settings);
           const afkAnswers =
             afk === null
@@ -3936,6 +3997,8 @@ const make = Effect.gen(function* () {
             taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
             lastMessage: yield* readManagerLastMessage(manager.threadId),
             afkAnswers,
+            direction:
+              directionEntry === undefined ? null : projectDirectionLine(directionEntry.content),
             tasks: tasks.map((task) => ({
               id: task.id,
               number: task.number,
@@ -3953,6 +4016,7 @@ const make = Effect.gen(function* () {
               iterateRound: task.iterateRound,
               shipRound: task.shipRound,
               modelSteps: task.modelSteps,
+              checks: checksByTask.get(task.id) ?? null,
             })),
           } satisfies ProjectTeamAttentionSummary;
         }),
@@ -4005,10 +4069,9 @@ const make = Effect.gen(function* () {
     }).pipe(orTeamError("Could not record the task outcome.", input.task.projectId));
 
   const modelSessionOf: ProjectTeamService["Service"]["modelSessionOf"] = (threadId) =>
-    repository.findModelRunByThreadId(threadId).pipe(
-      Effect.map(Option.getOrNull),
-      orTeamError("Could not read the model session."),
-    );
+    repository
+      .findModelRunByThreadId(threadId)
+      .pipe(Effect.map(Option.getOrNull), orTeamError("Could not read the model session."));
 
   const recordRunUsage: ProjectTeamService["Service"]["recordRunUsage"] = (input) =>
     Effect.gen(function* () {
