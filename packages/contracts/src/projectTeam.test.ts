@@ -2,6 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  isTurnFailedBlocker,
+  turnFailedReason,
+  TURN_FAILED_OPTIONS,
   approvalPlanOf,
   emptyProjectTaskSpec,
   newProjectTaskTodo,
@@ -610,5 +613,45 @@ describe("role models", () => {
       Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput)({ roleModels: { fix: codex } })
         .roleModels,
     ).toEqual({ fix: codex });
+  });
+});
+
+describe("failed-turn blockers", () => {
+  it.each([
+    ["unexpected status 401 Unauthorized: token_expired", "로그인 만료 401"],
+    ["authentication failed", "로그인 만료 401"],
+    ["TOKEN EXPIRED", "로그인 만료 401"],
+    ["429", "사용량 한도 429"],
+    ["rate-limit", "사용량 한도 429"],
+    ["usage limit", "사용량 한도 429"],
+    ["quota", "사용량 한도 429"],
+    ...[
+      "network",
+      "ECONNRESET",
+      "ENOTFOUND",
+      "ETIMEDOUT",
+      "fetch failed",
+      "socket hang up",
+      "timed out",
+      "timeout",
+    ].map((detail) => [detail, "네트워크 오류"] as const),
+    ["unknown failure", null],
+    ["1401", null],
+    [undefined, null],
+  ] as const)("maps %s to %s", (detail, reason) => {
+    expect(turnFailedReason(detail)).toBe(reason);
+  });
+
+  it("recognizes only the exact blocker options", () => {
+    expect(isTurnFailedBlocker({ kind: "blocker", options: TURN_FAILED_OPTIONS })).toBe(true);
+    for (const options of [
+      [],
+      [...TURN_FAILED_OPTIONS].reverse(),
+      [TURN_FAILED_OPTIONS[0]],
+      [...TURN_FAILED_OPTIONS, "Other"],
+    ]) {
+      expect(isTurnFailedBlocker({ kind: "blocker", options })).toBe(false);
+    }
+    expect(isTurnFailedBlocker({ kind: "decision", options: TURN_FAILED_OPTIONS })).toBe(false);
   });
 });

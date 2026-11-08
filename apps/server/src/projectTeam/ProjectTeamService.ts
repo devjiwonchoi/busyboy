@@ -1,4 +1,9 @@
 import {
+  isTurnFailedBlocker,
+  TURN_FAILED_CANCEL,
+  TURN_FAILED_OPTIONS,
+  TURN_FAILED_RETRY,
+  turnFailedReason,
   approvalPlanOf,
   emptyProjectTaskSpec,
   CommandId,
@@ -46,7 +51,7 @@ import {
   type ProjectTaskOutcome,
   type ServerProvider,
   isProviderAvailable,
-  type ProjectTaskStage,
+  ProjectTaskStage,
   type ProjectTeamAskUserInput,
   type ProjectTeamAttentionAnswerInput,
   type ProjectTeamAttentionDismissInput,
@@ -130,6 +135,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
@@ -1010,7 +1016,10 @@ const make = Effect.gen(function* () {
       });
     });
 
-  const setTask = (input: Omit<ProjectTeamRepository.UpdateProjectTaskInput, "now">) =>
+  const setTask = (
+    input: Omit<ProjectTeamRepository.UpdateProjectTaskInput, "now">,
+    answeringItem?: ProjectAttentionItem,
+  ) =>
     Effect.gen(function* () {
       const now = yield* nowIso;
       // Only a move into in_review/done can clear tasks waiting on this one; a new
@@ -1031,10 +1040,23 @@ const make = Effect.gen(function* () {
       }
       // A finished task's questions can no longer be answered, so close them.
       if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
-        yield* repository.supersedeOpenAttentionItems({
-          taskId: updated.value.id,
-          supersededAt: now,
-        });
+        if (answeringItem === undefined) {
+          yield* repository.supersedeOpenAttentionItems({
+            taskId: updated.value.id,
+            supersededAt: now,
+          });
+        } else {
+          // Keep the cancellation card open until the stage update succeeds and its answer is saved.
+          const open = yield* repository.listOpenAttentionItems({
+            projectId: updated.value.projectId,
+            taskId: updated.value.id,
+          });
+          for (const item of open) {
+            if (item.id !== answeringItem.id) {
+              yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: now });
+            }
+          }
+        }
       }
       // An epic's stage follows its subtasks: re-add them up when one moves or changes parent.
       const previous = Option.isSome(before) ? before.value : undefined;
@@ -2491,7 +2513,11 @@ const make = Effect.gen(function* () {
       }
     });
 
-  const updateTask: ProjectTeamService["Service"]["updateTask"] = (callerThreadId, input) =>
+  const updateTask = (
+    callerThreadId: ThreadId,
+    input: ProjectTeamTaskUpdateInput,
+    answeringItem?: ProjectAttentionItem,
+  ) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm", "lead", "director"], "task_update");
       const taskId = input.taskId ?? (role.type === "lead" ? role.taskId : undefined);
@@ -2539,16 +2565,19 @@ const make = Effect.gen(function* () {
           .pipe(orTeamError("Could not record the task size.", role.projectId));
         yield* appendEvent(task, "note", `Size: ${input.size}`, callerThreadId);
       }
-      const updated = yield* setTask({
-        id: task.id,
-        ...(input.title === undefined ? {} : { title: input.title }),
-        ...(dependencies === undefined ? {} : { waitsOn: dependencies.map((dep) => dep.id) }),
-        ...(parent === undefined ? {} : { parentTaskId: parent === null ? null : parent.id }),
-        ...(input.stage === undefined ? {} : { stage: input.stage }),
-        ...(input.planSummary === undefined ? {} : { planSummary: input.planSummary }),
-        ...(input.resultSummary === undefined ? {} : { resultSummary: input.resultSummary }),
-        ...(input.prUrl === undefined ? {} : { prUrl: input.prUrl }),
-      });
+      const updated = yield* setTask(
+        {
+          id: task.id,
+          ...(input.title === undefined ? {} : { title: input.title }),
+          ...(dependencies === undefined ? {} : { waitsOn: dependencies.map((dep) => dep.id) }),
+          ...(parent === undefined ? {} : { parentTaskId: parent === null ? null : parent.id }),
+          ...(input.stage === undefined ? {} : { stage: input.stage }),
+          ...(input.planSummary === undefined ? {} : { planSummary: input.planSummary }),
+          ...(input.resultSummary === undefined ? {} : { resultSummary: input.resultSummary }),
+          ...(input.prUrl === undefined ? {} : { prUrl: input.prUrl }),
+        },
+        answeringItem,
+      );
       const stageChanged = updated.stage !== task.stage;
       if (stageChanged) {
         yield* appendEvent(
@@ -3294,6 +3323,75 @@ const make = Effect.gen(function* () {
       return { item };
     }).pipe(orTeamError("Could not ask the user."));
 
+  // Restore before relaying so even an immediately failed retry can open a new blocker.
+  const restoreFailedTurnStage = (item: ProjectAttentionItem, answer: string) =>
+    Effect.gen(function* () {
+      if (
+        !isTurnFailedBlocker(item) ||
+        item.answeredAt !== null ||
+        item.supersededAt !== null ||
+        answer.split("\nNote:")[0]?.trim() !== TURN_FAILED_RETRY
+      ) {
+        return;
+      }
+      const task = yield* requireTask(item.taskId, item.projectId);
+      if (task.stage !== "blocked") {
+        return;
+      }
+      const events = yield* repository.listTaskEvents({
+        taskId: task.id,
+        limit: Number.MAX_SAFE_INTEGER,
+      });
+      let blockedIndex = events.findLastIndex(
+        (event) => event.kind === "stage_changed" && event.body.endsWith(" → blocked"),
+      );
+      // Failed delivery can leave restore/rollback pairs after the original failure.
+      // Only cross system-written pairs; a lead's deliberate stage change stops the walk.
+      while (blockedIndex >= 0) {
+        const blocked = events[blockedIndex]!;
+        if (events[blockedIndex - 1]?.kind === "outcome") {
+          break;
+        }
+        const restoreIndex = events.findLastIndex(
+          (event, index) => index < blockedIndex && event.kind === "stage_changed",
+        );
+        const restore = events[restoreIndex];
+        const previousBlockIndex = events.findLastIndex(
+          (event, index) => index < restoreIndex && event.kind === "stage_changed",
+        );
+        const previousBlock = events[previousBlockIndex];
+        const stage = blocked.body.split(" → ")[0];
+        if (
+          blocked.actorThreadId !== null ||
+          restore?.actorThreadId !== null ||
+          restore.body !== `blocked → ${stage}` ||
+          previousBlock?.actorThreadId !== null ||
+          previousBlock.body !== blocked.body
+        ) {
+          break;
+        }
+        blockedIndex = previousBlockIndex;
+      }
+      const blocked = events[blockedIndex];
+      const outcome = events[blockedIndex - 1];
+      // Only undo a block written alongside a failed outcome, never a lead's deliberate block.
+      if (
+        blocked === undefined ||
+        blocked.actorThreadId !== null ||
+        outcome?.kind !== "outcome" ||
+        !(outcome.body === "failed" || outcome.body.startsWith("failed:"))
+      ) {
+        return;
+      }
+      const previous = blocked.body.split(" → ")[0];
+      const stage =
+        Schema.is(ProjectTaskStage)(previous) && previous !== "blocked" ? previous : "running";
+      const restored = yield* setTask({ id: task.id, stage });
+      yield* appendEvent(restored, "stage_changed", `blocked → ${stage}`, null);
+      yield* router.publish(task.projectId);
+      return restored;
+    });
+
   const answerAttention: ProjectTeamService["Service"]["answerAttention"] = (
     callerThreadId,
     input,
@@ -3325,12 +3423,44 @@ const make = Effect.gen(function* () {
           return yield* teamError(PM_RELAY_NOT_USER_WORDS, role.projectId);
         }
       }
-      const answered = yield* router.answer({
-        item: item.value,
-        answer: input.answer,
-        senderThreadId: callerThreadId,
-        answeredBy: "pm",
-      });
+      // Cancelling must stop the lead without starting another turn with the answer.
+      const cancel =
+        item.value.answeredAt === null &&
+        item.value.supersededAt === null &&
+        isTurnFailedBlocker(item.value) &&
+        input.answer.split("\nNote:")[0]?.trim() === TURN_FAILED_CANCEL;
+      if (cancel) {
+        yield* updateTask(
+          callerThreadId,
+          {
+            taskId: item.value.taskId,
+            stage: "cancelled",
+            note: "사용자가 실패 블로커에서 태스크를 취소했어요.",
+          },
+          item.value,
+        );
+      }
+      const restored = yield* restoreFailedTurnStage(item.value, input.answer);
+      const answered = yield* router
+        .answer({
+          item: item.value,
+          answer: input.answer,
+          senderThreadId: callerThreadId,
+          relay: !cancel,
+          answeredBy: "pm",
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.gen(function* () {
+              if (restored !== undefined) {
+                // The retried turn may already have failed and blocked the task again.
+                const current = yield* requireTask(restored.id, restored.projectId);
+                yield* moveTaskStage(current, "blocked", null);
+              }
+              return yield* Effect.failCause(cause);
+            }),
+          ),
+        );
       yield* afterPlanApprovalAnswer(answered, callerThreadId);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question."));
@@ -3533,12 +3663,44 @@ const make = Effect.gen(function* () {
       if (item.value.kind === "proposal") {
         return { item: yield* answerProposal(item.value, input.answer, manager.threadId) };
       }
-      const answered = yield* router.answer({
-        item: item.value,
-        answer: input.answer,
-        senderThreadId: manager.threadId,
-        answeredBy: "user",
-      });
+      // Cancelling must stop the lead without starting another turn with the answer.
+      const cancel =
+        item.value.answeredAt === null &&
+        item.value.supersededAt === null &&
+        isTurnFailedBlocker(item.value) &&
+        input.answer.split("\nNote:")[0]?.trim() === TURN_FAILED_CANCEL;
+      if (cancel) {
+        yield* updateTask(
+          manager.threadId,
+          {
+            taskId: item.value.taskId,
+            stage: "cancelled",
+            note: "사용자가 실패 블로커에서 태스크를 취소했어요.",
+          },
+          item.value,
+        );
+      }
+      const restored = yield* restoreFailedTurnStage(item.value, input.answer);
+      const answered = yield* router
+        .answer({
+          item: item.value,
+          answer: input.answer,
+          senderThreadId: manager.threadId,
+          relay: !cancel,
+          answeredBy: "user",
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.gen(function* () {
+              if (restored !== undefined) {
+                // The retried turn may already have failed and blocked the task again.
+                const current = yield* requireTask(restored.id, restored.projectId);
+                yield* moveTaskStage(current, "blocked", null);
+              }
+              return yield* Effect.failCause(cause);
+            }),
+          ),
+        );
       const task = yield* requireTask(answered.taskId, answered.projectId);
       yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
       yield* afterPlanApprovalAnswer(answered, null);
@@ -4055,14 +4217,46 @@ const make = Effect.gen(function* () {
       );
       if (failed && task.stage !== "blocked") {
         yield* appendEvent(updated, "stage_changed", `${task.stage} → blocked`, null);
+        yield* noteIdleMilestone(task.projectId, task.stage);
+      }
+      const open = failed
+        ? yield* repository.listOpenAttentionItems({ projectId: task.projectId, taskId: task.id })
+        : [];
+      const events = failed
+        ? yield* repository.listTaskEvents({ taskId: task.id, limit: Number.MAX_SAFE_INTEGER })
+        : [];
+      const retry = events.findLast(
+        (event) => event.kind === "stage_changed" && event.body.startsWith("blocked → "),
+      );
+      // A retry's previous card can still be open while its answer is being relayed.
+      const stale = (item: ProjectAttentionItem) =>
+        isTurnFailedBlocker(item) &&
+        retry !== undefined &&
+        isoMillis(item.createdAt) < isoMillis(retry.createdAt);
+      if (failed && !open.some((item) => isTurnFailedBlocker(item) && !stale(item))) {
+        // Replace server escalations, but preserve questions the lead asked itself.
+        for (const item of open) {
+          const nudgeLimit =
+            item.kind === "blocker" &&
+            item.options.length === 0 &&
+            item.question.startsWith(
+              `#${task.number} ${task.title} made no progress after ${MAX_TASK_NUDGES} nudges. Last message:`,
+            );
+          if (stale(item) || nudgeLimit) {
+            yield* repository.supersedeAttentionItem({
+              id: item.id,
+              supersededAt: yield* nowIso,
+            });
+          }
+        }
+        const reason = turnFailedReason(input.detail);
         yield* router.ask({
           task: updated,
           kind: "blocker",
-          question: `#${task.number} ${task.title}: the task lead's turn failed${input.detail === undefined ? "" : ` (${input.detail})`}. Decide whether to retry, change the plan, or cancel the task.`,
-          options: [],
+          question: `#${task.number} ${task.title}: 리드 작업이 실패했어요${reason ? ` (${reason})` : ""}${input.detail ? `\n\n오류: ${input.detail}` : ""}\n\n다시 시도하면 리드가 멈춘 곳부터 이어서 해요. 리드에게 전할 말이 있으면 함께 적어 주세요.`,
+          options: [...TURN_FAILED_OPTIONS],
           askerThreadId: task.leadThreadId,
         });
-        yield* noteIdleMilestone(task.projectId, task.stage);
       }
       yield* router.publish(task.projectId);
       return { task: updated, event };

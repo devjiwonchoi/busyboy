@@ -290,3 +290,66 @@ it.each([
     );
   },
 );
+
+const decisionContext = "Keep the login redirect inside the auth guard until the router is ready.";
+const decision: ProjectDecisionCard = {
+  ...card,
+  plan: null,
+  item: {
+    ...card.item,
+    kind: "decision",
+    question: `How far should the redirect fix go?\n\n${decisionContext}`,
+    options: ["Guard first — Ship today (Recommended)", "Whole router — Takes three days"],
+  },
+};
+
+describe.each([
+  { name: "desktop", width: 900, height: 900 },
+  { name: "phone", width: 390, height: 844 },
+])("decision citations on $name", ({ width, height }) => {
+  it("adds a context quote, sends it, and highlights its decision source", async () => {
+    await page.viewport(width, height);
+    const toast = vi.spyOn(toastManager, "add");
+    await act(() => root.render(<ChatPage cards={[decision]} />));
+    await vi.waitFor(() => expect(source()?.textContent).toContain(decisionContext));
+    if (width < 768) {
+      await longPressSelect(page.getByText(decisionContext).element(), "login", "guard");
+      await tap(
+        await vi.waitFor(() => page.getByRole("button", { name: "Add to chat" }).element()),
+      );
+    } else {
+      await userEvent.tripleClick(page.getByText(decisionContext));
+      await userEvent.click(page.getByRole("button", { name: "Add to chat" }));
+    }
+    await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("new"));
+    await userEvent.click(page.getByRole("button", { name: "Save annotation" }));
+    await userEvent.click(page.getByRole("button", { name: "Send", exact: true }));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain("t3-citation://v1/");
+    expect(sent[0]).toContain("login+redirect+inside+the+auth+guard");
+    expect(savedCitation?.messageId).toBe(MessageId.make(decision.item.id));
+    await userEvent.click(page.getByRole("button", { name: "Open sent quote" }));
+    await vi.waitFor(() => expect(source()?.dataset.citationHighlighted).toBe("true"));
+    expect(toast.mock.calls).toEqual([]);
+  });
+
+  it("lets the user pick, write a note, and submit without selection actions", async () => {
+    await page.viewport(width, height);
+    await act(() => root.render(<ChatPage cards={[decision]} />));
+    await userEvent.click(page.getByRole("radio", { name: /Guard first/ }));
+    expect(mocks.answer.mock.calls).toEqual([]);
+    await userEvent.type(
+      page.getByRole("textbox", { name: "Note for your answer" }),
+      "Keep the flag",
+    );
+    await userEvent.click(page.getByRole("button", { name: "Submit", exact: true }));
+    await vi.waitFor(() =>
+      expect(mocks.answer).toHaveBeenCalledWith(environmentId, {
+        projectId: decision.item.projectId,
+        attentionItemId: decision.item.id,
+        answer: `${decision.item.options[0]}\nNote: Keep the flag`,
+      }),
+    );
+    expect(document.querySelector('[aria-label="Selection actions"]')).toBeNull();
+  });
+});

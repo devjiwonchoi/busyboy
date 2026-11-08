@@ -5761,22 +5761,18 @@ function DecisionCardTimelineRow({
     />
   );
 
-  // Plan cards share message selection, annotations, and citation navigation in every state.
-  if (row.card.item.kind === "approval") {
-    return (
-      <AssistantCitationSource
-        messageId={MessageId.make(row.card.item.id)}
-        threadRef={ctx.threadRef}
-        itemKey={row.id}
-        request={ctx.citationRequest}
-        listRef={ctx.listRef}
-      >
-        {card}
-      </AssistantCitationSource>
-    );
-  }
-
-  return card;
+  // Decision cards share message selection, annotations, and citation navigation in every state.
+  return (
+    <AssistantCitationSource
+      messageId={MessageId.make(row.card.item.id)}
+      threadRef={ctx.threadRef}
+      itemKey={row.id}
+      request={ctx.citationRequest}
+      listRef={ctx.listRef}
+    >
+      {card}
+    </AssistantCitationSource>
+  );
 }
 
 function AnsweredQuestionTimelineRow({ entry }: { entry: WorkLogEntry }) {

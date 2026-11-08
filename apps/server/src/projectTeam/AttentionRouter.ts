@@ -1,5 +1,7 @@
 import {
   CommandId,
+  isTurnFailedBlocker,
+  TURN_FAILED_RETRY,
   MessageId,
   type ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
@@ -98,6 +100,8 @@ export class AttentionRouter extends Context.Service<
       readonly answeredBy: ProjectAttentionAnsweredBy;
       /** What the asker hears instead of the usual relayed answer. */
       readonly relayText?: string;
+      /** False saves the answer without telling the asker, e.g. when the task is cancelled. */
+      readonly relay?: boolean;
     }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /**
      * Closes an open item without an answer. When `notifyAsker` is set, tells the
@@ -170,7 +174,7 @@ const make = Effect.gen(function* () {
       yield* requireOpen(item);
       // Relay before saving: a failed relay leaves the item open for a retry, and the
       // fixed command id keeps a retried relay from reaching the lead twice.
-      if (item.askerThreadId !== null) {
+      if (input.relay !== false && item.askerThreadId !== null) {
         const key = `project-team:answer:${item.id}`;
         yield* threads.sendToThread({
           projectId: item.projectId,
@@ -192,6 +196,16 @@ const make = Effect.gen(function* () {
         answeredBy: input.answeredBy,
       });
       if (Option.isNone(answered)) {
+        // A retry can fail during the relay and replace this card before its answer is saved.
+        if (
+          isTurnFailedBlocker(item) &&
+          input.answer.split("\nNote:")[0]?.trim() === TURN_FAILED_RETRY
+        ) {
+          const current = yield* repository.getAttentionItem(item.id);
+          if (Option.isSome(current) && current.value.supersededAt !== null) {
+            return current.value;
+          }
+        }
         return yield* teamError(`Attention item ${item.id} is already answered.`, item.projectId);
       }
       yield* publish(item.projectId);
