@@ -679,6 +679,35 @@ export const ProjectAttentionItem = Schema.Struct({
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
+// Exact options distinguish actionable turn failures from existing free-form blockers.
+export const TURN_FAILED_RETRY = "다시 시도";
+export const TURN_FAILED_CANCEL = "태스크 취소";
+export const TURN_FAILED_OPTIONS = [TURN_FAILED_RETRY, TURN_FAILED_CANCEL] as const;
+
+export function isTurnFailedBlocker(item: Pick<ProjectAttentionItem, "kind" | "options">): boolean {
+  return (
+    item.kind === "blocker" &&
+    item.options.length === TURN_FAILED_OPTIONS.length &&
+    item.options.every((option, index) => option === TURN_FAILED_OPTIONS[index])
+  );
+}
+
+export function turnFailedReason(detail: string | undefined): string | null {
+  if (detail === undefined) {
+    return null;
+  }
+  if (/\b401\b|unauthorized|token[_ ]expired|authentication/i.test(detail)) {
+    return "로그인 만료 401";
+  }
+  if (/\b429\b|rate.?limit|usage limit|quota/i.test(detail)) {
+    return "사용량 한도 429";
+  }
+  if (/network|ECONN|ENOTFOUND|ETIMEDOUT|fetch failed|socket hang up|timed? ?out/i.test(detail)) {
+    return "네트워크 오류";
+  }
+  return null;
+}
+
 /** One step on a plan approval card: what gets done and how to tell it is done. */
 export const ProjectApprovalPlanTodo = Schema.Struct({
   id: Schema.String,

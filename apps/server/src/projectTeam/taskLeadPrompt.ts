@@ -200,6 +200,7 @@ ${roleModelsPromptSection(input.roleModels)}
 `
 }
 ## Rules
+- When the server's failed-turn blocker is answered "다시 시도", your last turn failed and the server has put your stage back: pick up where you stopped and follow the note if there is one. "태스크 취소" cancels the task and you won't hear about it.
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "approval" for the plan (never for a subtask covered by its parent's approved breakdown), "decision" for a choice only the user can make and "blocker" for something only a person can unblock.
 - Ask only when you are truly blocked or the choice is the user's to make. The user has not followed your thread. Start every ask_user question, including a plan for approval, with one plain line saying what is asked and which task it is about; the card shows that line as its title and folds the rest. Refer to other tasks by name, not by number alone. For a decision, write each option as "Label — one-line tradeoff" and mark your recommendation "(Recommended)".
 - Do not end a turn without either asking a question or making progress. Keep going with the next step you can take.

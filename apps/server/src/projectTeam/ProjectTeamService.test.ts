@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 import {
+  TURN_FAILED_OPTIONS,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -16,6 +18,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
+import { PersistenceSqlError } from "../persistence/Errors.ts";
 import { defaultPersona, defaultPersonaName } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { nextStepHint } from "./taskLeadPrompt.ts";
@@ -28,6 +31,9 @@ import {
   startLead,
   withTeam,
 } from "./testkit.ts";
+
+// Keep the real Ref operations while allowing interception inside sendToThread.
+vi.mock("effect/Ref", { spy: true });
 
 const service = ProjectTeamService.ProjectTeamService;
 
@@ -792,6 +798,413 @@ describe("ProjectTeamService", () => {
           snapshots[1]?.projects[0]?.presence.lastAction?.text,
           "noted on #1 Later",
         );
+      }),
+    ),
+  );
+
+  it.effect(
+    "keeps an already blocked task blocked when retrying without failure stage history",
+    () =>
+      withTeam((harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+          const pm = yield* setUpManager;
+          const lead = yield* startLead(pm, "Already blocked", harness.delegate);
+          const blocked = Option.getOrThrow(
+            yield* repository.updateTask({
+              id: lead.task.id,
+              stage: "blocked",
+              now: lead.task.updatedAt,
+            }),
+          );
+          yield* team.recordOutcome({ task: blocked, outcome: "failed" });
+          const open = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+          assert.strictEqual(open.length, 1);
+          yield* team.answerDecision({
+            projectId: PROJECT_ID,
+            attentionItemId: open[0]!.id,
+            answer: "다시 시도",
+          });
+          assert.strictEqual(
+            Option.getOrThrow(yield* repository.getTask(lead.task.id)).stage,
+            "blocked",
+          );
+        }),
+      ),
+  );
+
+  // Exercise both user clicks and PM relays through the real task lifecycle.
+  for (const via of ["user", "pm"] as const) {
+    for (const answer of [
+      "다시 시도\nNote: 테스트부터",
+      "태스크 취소",
+      "태스크 취소\nNote: 무시할 메모",
+    ]) {
+      it.effect(`${via} answers a failed-turn blocker with ${answer}`, () =>
+        withTeam((harness) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+            const pm = yield* setUpManager;
+            const lead = yield* startLead(pm, "Fragile", harness.delegate);
+            harness.addThread(lead.leadThreadId);
+            yield* approvePlan(lead.leadThreadId);
+            const running = Option.getOrThrow(yield* repository.getTask(lead.task.id));
+            assert.strictEqual(running.stage, "running");
+            yield* team.recordOutcome({
+              task: running,
+              outcome: "failed",
+              detail: "unexpected status 401 Unauthorized: token_expired",
+            });
+            const blocker = (yield* repository.listOpenAttentionItems({
+              projectId: PROJECT_ID,
+            }))[0]!;
+            assert.strictEqual(
+              blocker.question.split("\n")[0],
+              `#${lead.task.number} Fragile: 리드 작업이 실패했어요 (로그인 만료 401)`,
+            );
+            assert.deepStrictEqual(blocker.options, TURN_FAILED_OPTIONS);
+            // Repeated failures while the card is open must not duplicate it.
+            yield* team.recordOutcome({
+              task: Option.getOrThrow(yield* repository.getTask(lead.task.id)),
+              outcome: "failed",
+            });
+            assert.deepStrictEqual(
+              (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID })).map(
+                (item) => item.id,
+              ),
+              [blocker.id],
+            );
+            const before = yield* Effect.map(Ref.get(harness.sent), (messages) =>
+              messages
+                .filter((message) => message.threadId === lead.leadThreadId)
+                .map((message) => message.text),
+            );
+            if (via === "user") {
+              yield* team.answerDecision({
+                projectId: PROJECT_ID,
+                attentionItemId: blocker.id,
+                answer,
+              });
+            } else {
+              yield* team.answerAttention(pm, { attentionItemId: blocker.id, answer });
+            }
+            const messages = yield* Effect.map(Ref.get(harness.sent), (messages) =>
+              messages
+                .filter((message) => message.threadId === lead.leadThreadId)
+                .map((message) => message.text),
+            );
+            const task = yield* repository.getTask(lead.task.id);
+            assert.isTrue(Option.isSome(task));
+            if (answer.startsWith("태스크 취소")) {
+              assert.deepStrictEqual(messages, before);
+              assert.strictEqual(Option.getOrThrow(task).stage, "cancelled");
+              assert.isNotNull(harness.threads.get(lead.leadThreadId)!.archivedAt);
+              const answered = Option.getOrThrow(yield* repository.getAttentionItem(blocker.id));
+              assert.isNotNull(answered.answeredAt);
+              assert.strictEqual(answered.answer, answer);
+              assert.isNull(answered.supersededAt);
+            } else {
+              assert.strictEqual(Option.getOrThrow(task).stage, "running");
+              const events = yield* repository.listTaskEvents({ taskId: lead.task.id, limit: 100 });
+              assert.strictEqual(
+                events.findLast((event) => event.kind === "stage_changed")?.body,
+                "blocked → running",
+              );
+              const prefix =
+                via === "user"
+                  ? "[User answer via BusyBoy]"
+                  : "[User's chat answer, relayed by BusyBoy PM]";
+              assert.deepStrictEqual(messages.slice(before.length), [
+                `${prefix} ${blocker.question} → ${answer}`,
+              ]);
+              // An immediate second failure after retry gets a fresh actionable card.
+              const failed = yield* team.recordOutcome({
+                task: Option.getOrThrow(task),
+                outcome: "failed",
+              });
+              const reopened = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+              assert.strictEqual(reopened.length, 1);
+              assert.notStrictEqual(reopened[0]!.id, blocker.id);
+              assert.strictEqual(failed.task.stage, "blocked");
+              yield* team.recordOutcome({ task: failed.task, outcome: "failed" });
+              assert.deepStrictEqual(
+                (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID })).map(
+                  (item) => item.id,
+                ),
+                [reopened[0]!.id],
+              );
+            }
+          }),
+        ),
+      );
+    }
+  }
+
+  // The retry must remain actionable even when delivery fails or the next turn fails immediately.
+  for (const via of ["user", "pm"] as const) {
+    for (const duringRelay of ["failed turn", "failed relay", "failed turn and relay"] as const) {
+      it.effect(`${via} preserves a blocker after a ${duringRelay} during retry`, () =>
+        withTeam((harness) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+            const pm = yield* setUpManager;
+            const lead = yield* startLead(pm, "Retry", harness.delegate);
+            harness.addThread(lead.leadThreadId);
+            yield* approvePlan(lead.leadThreadId);
+            const running = Option.getOrThrow(yield* repository.getTask(lead.task.id));
+            yield* team.recordOutcome({ task: running, outcome: "failed" });
+            const blocker = (yield* repository.listOpenAttentionItems({
+              projectId: PROJECT_ID,
+            }))[0]!;
+            yield* TestClock.adjust("1 second");
+
+            // sendToThread writes this ref before returning to the router's answer save.
+            const { update } = yield* Effect.promise(() =>
+              vi.importActual<typeof Ref>("effect/Ref"),
+            );
+            const relay = vi.spyOn(Ref, "update").mockImplementation(((
+              ref: Ref.Ref<unknown>,
+              change: (value: unknown) => unknown,
+            ) => {
+              const sent = update(ref, change);
+              if (ref !== harness.sent) {
+                return sent;
+              }
+              relay.mockRestore();
+              return sent.pipe(
+                Effect.andThen(
+                  Effect.gen(function* () {
+                    if (duringRelay !== "failed relay") {
+                      yield* team.recordOutcome({
+                        task: Option.getOrThrow(yield* repository.getTask(lead.task.id)),
+                        outcome: "failed",
+                      });
+                      if (duringRelay === "failed turn and relay") {
+                        return yield* Effect.fail(
+                          new PersistenceSqlError({
+                            operation: "relay",
+                            detail: "Relay failed after the turn failed",
+                          }),
+                        );
+                      }
+                    }
+                  }),
+                ),
+              );
+            }) as typeof Ref.update);
+            if (duringRelay === "failed relay") {
+              harness.sendFailures.remaining = 1;
+            }
+            const result = yield* (
+              via === "user"
+                ? team.answerDecision({
+                    projectId: PROJECT_ID,
+                    attentionItemId: blocker.id,
+                    answer: "다시 시도",
+                  })
+                : team.answerAttention(pm, { attentionItemId: blocker.id, answer: "다시 시도" })
+            ).pipe(Effect.exit, Effect.ensuring(Effect.sync(() => relay.mockRestore())));
+            assert.strictEqual(result._tag, duringRelay === "failed turn" ? "Success" : "Failure");
+            const open = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+            assert.strictEqual(open.length, 1);
+            assert.deepStrictEqual(open[0]!.options, TURN_FAILED_OPTIONS);
+            assert.strictEqual(
+              Option.getOrThrow(yield* repository.getTask(lead.task.id)).stage,
+              "blocked",
+            );
+            const original = Option.getOrThrow(yield* repository.getAttentionItem(blocker.id));
+            assert.isNull(original.answer);
+            assert.isNull(original.answeredAt);
+            if (duringRelay !== "failed relay") {
+              assert.isNotNull(original.supersededAt);
+              assert.isFalse(open[0]!.id === blocker.id);
+              // The replacement survives another failure in the same clock tick.
+              yield* team.recordOutcome({
+                task: Option.getOrThrow(yield* repository.getTask(lead.task.id)),
+                outcome: "failed",
+              });
+              assert.deepStrictEqual(
+                (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID })).map(
+                  (item) => item.id,
+                ),
+                [open[0]!.id],
+              );
+            } else {
+              assert.isNull(original.supersededAt);
+              assert.strictEqual(open[0]!.id, blocker.id);
+            }
+
+            // A failed turn supplies its own block; rollback must not duplicate it.
+            const events = yield* repository.listTaskEvents({ taskId: lead.task.id, limit: 100 });
+            assert.strictEqual(
+              events.filter(
+                (event) => event.kind === "stage_changed" && event.body === "running → blocked",
+              ).length,
+              2,
+            );
+
+            // The next answer must restore the stage and reach the lead on the actionable card.
+            const before = (yield* Ref.get(harness.sent)).length;
+            if (via === "user") {
+              yield* team.answerDecision({
+                projectId: PROJECT_ID,
+                attentionItemId: open[0]!.id,
+                answer: "다시 시도",
+              });
+            } else {
+              yield* team.answerAttention(pm, {
+                attentionItemId: open[0]!.id,
+                answer: "다시 시도",
+              });
+            }
+            assert.strictEqual(
+              Option.getOrThrow(yield* repository.getTask(lead.task.id)).stage,
+              running.stage,
+            );
+            const messages = (yield* Ref.get(harness.sent)).slice(before);
+            assert.isTrue(
+              messages.some(
+                (message) =>
+                  message.threadId === lead.leadThreadId &&
+                  message.text.includes(`${open[0]!.question} → 다시 시도`),
+              ),
+            );
+            const answered = Option.getOrThrow(yield* repository.getAttentionItem(open[0]!.id));
+            assert.strictEqual(answered.answer, "다시 시도");
+            assert.isNotNull(answered.answeredAt);
+          }),
+        ),
+      );
+    }
+
+    it.effect(`${via} leaves a failed cancellation unanswered`, () =>
+      withTeam((harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+          const pm = yield* setUpManager;
+          const lead = yield* startLead(pm, "Cancel", harness.delegate);
+          yield* team.recordOutcome({ task: lead.task, outcome: "failed" });
+          const blocker = (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID }))[0]!;
+          const write = vi
+            .spyOn(repository, "updateTask")
+            .mockReturnValueOnce(
+              Effect.fail(
+                new PersistenceSqlError({ operation: "updateTask", detail: "cancel failed" }),
+              ),
+            );
+          const result = yield* (
+            via === "user"
+              ? team.answerDecision({
+                  projectId: PROJECT_ID,
+                  attentionItemId: blocker.id,
+                  answer: "태스크 취소",
+                })
+              : team.answerAttention(pm, { attentionItemId: blocker.id, answer: "태스크 취소" })
+          ).pipe(Effect.exit, Effect.ensuring(Effect.sync(() => write.mockRestore())));
+          assert.strictEqual(result._tag, "Failure");
+          const item = Option.getOrThrow(yield* repository.getAttentionItem(blocker.id));
+          assert.isNull(item.answer);
+          assert.isNull(item.answeredAt);
+          assert.isNull(item.supersededAt);
+          assert.strictEqual(
+            Option.getOrThrow(yield* repository.getTask(lead.task.id)).stage,
+            "blocked",
+          );
+        }),
+      ),
+    );
+  }
+
+  it.effect("does not restore a lead's deliberate block on retry", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Deliberate block", harness.delegate);
+        harness.addThread(lead.leadThreadId);
+        yield* approvePlan(lead.leadThreadId);
+        yield* team.updateTask(lead.leadThreadId, { stage: "blocked" });
+        yield* team.recordOutcome({
+          task: Option.getOrThrow(yield* repository.getTask(lead.task.id)),
+          outcome: "failed",
+        });
+        const blocker = (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID }))[0]!;
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: blocker.id,
+          answer: "다시 시도",
+        });
+        assert.strictEqual(
+          Option.getOrThrow(yield* repository.getTask(lead.task.id)).stage,
+          "blocked",
+        );
+        assert.isTrue(
+          (yield* Ref.get(harness.sent)).some(
+            (message) =>
+              message.threadId === lead.leadThreadId && message.text.endsWith("→ 다시 시도"),
+          ),
+        );
+      }),
+    ),
+  );
+
+  it.effect("replaces a nudge-limit blocker on failure and preserves the lead's own blocker", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Nudged", harness.delegate);
+        harness.addThread(lead.leadThreadId);
+        yield* team.nudgeTask(pm, { taskId: lead.task.id });
+        yield* team.nudgeTask(pm, { taskId: lead.task.id });
+        const escalation = yield* team.nudgeTask(pm, { taskId: lead.task.id });
+        assert.strictEqual(escalation.status, "escalated");
+        const own = yield* team.askUser(lead.leadThreadId, {
+          kind: "blocker",
+          question: "Need credentials",
+        });
+        yield* team.recordOutcome({
+          task: Option.getOrThrow(yield* repository.getTask(lead.task.id)),
+          outcome: "failed",
+        });
+        const open = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+        assert.strictEqual(open.length, 2);
+        assert.isTrue(open.some((item) => item.id === own.item.id));
+        assert.strictEqual(open.filter((item) => item.options.length === 2).length, 1);
+        const replaced = Option.getOrThrow(
+          yield* repository.getAttentionItem(escalation.attentionItem!.id),
+        );
+        assert.isNotNull(replaced.supersededAt);
+        assert.isNull(replaced.answeredAt);
+      }),
+    ),
+  );
+
+  it.effect("keeps unknown failure detail out of the headline", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Fragile", harness.delegate);
+        harness.addThread(lead.leadThreadId);
+        yield* team.recordOutcome({
+          task: lead.task,
+          outcome: "failed",
+          detail: "mysterious failure",
+        });
+        const blocker = (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID }))[0]!;
+        assert.strictEqual(
+          blocker.question.split("\n")[0],
+          `#${lead.task.number} Fragile: 리드 작업이 실패했어요`,
+        );
+        assert.include(blocker.question, "오류: mysterious failure");
       }),
     ),
   );

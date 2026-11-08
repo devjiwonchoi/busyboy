@@ -1,4 +1,5 @@
 import {
+  TURN_FAILED_OPTIONS,
   ProjectAttentionBatchId,
   ProjectAttentionItemId,
   type ProjectDecisionCard,
@@ -205,6 +206,67 @@ describe.each([
   const radiosIn = (element: HTMLElement) => [
     ...element.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
   ];
+
+  const failedQuestion =
+    "#3 Fix the login redirect: 리드 작업이 실패했어요 (로그인 만료 401)\n\n오류: unexpected status 401 Unauthorized: token_expired\n\n다시 시도하면 리드가 멈춘 곳부터 이어서 해요. 리드에게 전할 말이 있으면 함께 적어 주세요.";
+  const failedCard = {
+    kind: "blocker" as const,
+    options: [...TURN_FAILED_OPTIONS],
+    question: failedQuestion,
+  };
+
+  it.each([
+    { note: "", cancel: false, enter: false, expected: "다시 시도" },
+    { note: "테스트부터", cancel: false, enter: true, expected: "다시 시도\nNote: 테스트부터" },
+    { note: "무시할 메모", cancel: true, enter: false, expected: "태스크 취소" },
+  ])("answers failed turns with $expected", async ({ note, cancel, enter, expected }) => {
+    const open = await openCard(failedCard);
+    expect(open.dataset.decisionCardVariant).toBe("turn-failed");
+    expect(open.querySelector("[data-decision-card-headline]")?.textContent).toBe(
+      failedQuestion.split("\n")[0]!,
+    );
+    expect(open.querySelector('[role="radiogroup"]')).toBeNull();
+    expect(noteIn(open).getAttribute("aria-label")).toBe("리드에게 전할 말");
+    const retry = buttonIn(open, "다시 시도");
+    const cancelButton = buttonIn(open, "태스크 취소");
+    const bounds = open.getBoundingClientRect();
+    for (const element of [retry, cancelButton, noteIn(open)]) {
+      expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+      expect(element.getBoundingClientRect().left).toBeGreaterThanOrEqual(bounds.left);
+    }
+    if (note) {
+      await userEvent.type(noteIn(open), note);
+    }
+    if (enter) {
+      await userEvent.keyboard("{Enter}");
+    } else {
+      await userEvent.click(cancel ? cancelButton : retry);
+    }
+    await vi.waitFor(() =>
+      expect(server.answers.map((answer) => answer.answer)).toEqual([expected]),
+    );
+    expect(cardElement("answered")).toBeTruthy();
+  });
+
+  it("preserves a failed retry's note and shares the variant in full screen", async () => {
+    const open = await openCard(failedCard);
+    server.fail = true;
+    await userEvent.type(noteIn(open), "테스트부터");
+    await userEvent.click(buttonIn(open, "다시 시도"));
+    await vi.waitFor(() =>
+      expect((buttonIn(open, "다시 시도") as HTMLButtonElement).disabled).toBe(false),
+    );
+    expect(noteIn(open).value).toBe("테스트부터");
+    expect((buttonIn(open, "태스크 취소") as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(open.querySelector<HTMLButtonElement>("[data-decision-card-expand]")!);
+    const expanded = document.querySelector<HTMLElement>("[data-decision-card-expanded]")!;
+    expect(expanded.dataset.decisionCardVariant).toBe("turn-failed");
+    expect(expanded.querySelector('[role="radiogroup"]')).toBeNull();
+    expect(noteIn(expanded).value).toBe("테스트부터");
+    server.fail = false;
+    await userEvent.click(buttonIn(expanded, "다시 시도"));
+    await vi.waitFor(() => expect(server.answers[0]?.answer).toBe("다시 시도\nNote: 테스트부터"));
+  });
 
   it("shows a clear question, then relays the explicit pick and note to the lead", async () => {
     const open = await openCard(undefined);

@@ -1,4 +1,7 @@
 import {
+  isTurnFailedBlocker,
+  TURN_FAILED_RETRY,
+  TURN_FAILED_CANCEL,
   type EnvironmentId,
   type OrchestrationV2UserInputQuestion,
   type ProjectDecisionCard,
@@ -151,15 +154,19 @@ export function OpenDecisionCard({
   const [fullScreen, setFullScreen] = useState(false);
   const { headline, context } = splitDecisionQuestion(card.item.question);
   const options = card.item.options.map(parseDecisionOption);
-  const canSubmit = !sending && (options.length > 0 ? picked !== null : note.trim().length > 0);
+  const turnFailed = isTurnFailedBlocker(card.item);
+  const canSubmit =
+    !sending && (turnFailed || (options.length > 0 ? picked !== null : note.trim().length > 0));
 
-  const submit = () => {
+  const submit = (choice: string | undefined) => {
     if (!canSubmit) {
       return;
     }
     const answer = resolvePendingUserInputAnswer(question, {
-      selectedOptionValues: [picked ?? "Give feedback"],
-      note,
+      selectedOptionValues: [
+        choice ?? (turnFailed ? TURN_FAILED_RETRY : (picked ?? "Give feedback")),
+      ],
+      note: choice === TURN_FAILED_CANCEL ? "" : note,
     });
     setSending(true);
     void answerDecision(environmentId, {
@@ -199,7 +206,7 @@ export function OpenDecisionCard({
       {context ? (
         <DecisionContext context={context} expanded={expanded} cwd={cwd} threadRef={threadRef} />
       ) : null}
-      {options.length > 0 ? (
+      {!turnFailed && options.length > 0 ? (
         <div role="radiogroup" aria-label={headline} className="flex min-w-0 flex-col gap-2">
           {options.map((option, index) => (
             <button
@@ -273,8 +280,14 @@ export function OpenDecisionCard({
         </div>
       ) : null}
       <textarea
-        aria-label="Note for your answer"
-        placeholder={options.length > 0 ? "Add a note (optional)" : "Write your answer"}
+        aria-label={turnFailed ? "리드에게 전할 말" : "Note for your answer"}
+        placeholder={
+          turnFailed
+            ? "리드에게 전할 말 (선택)"
+            : options.length > 0
+              ? "Add a note (optional)"
+              : "Write your answer"
+        }
         data-decision-card-note
         rows={2}
         value={note}
@@ -284,14 +297,41 @@ export function OpenDecisionCard({
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
-            submit();
+            submit(undefined);
           }
         }}
       />
-      <div>
-        <Button size="sm" data-decision-card-submit disabled={!canSubmit} onClick={submit}>
-          Submit
-        </Button>
+      <div className="flex flex-wrap gap-2">
+        {turnFailed ? (
+          <>
+            <Button
+              size="sm"
+              data-decision-card-retry
+              disabled={sending}
+              onClick={() => submit(TURN_FAILED_RETRY)}
+            >
+              {TURN_FAILED_RETRY}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost-destructive"
+              data-decision-card-cancel
+              disabled={sending}
+              onClick={() => submit(TURN_FAILED_CANCEL)}
+            >
+              {TURN_FAILED_CANCEL}
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="sm"
+            data-decision-card-submit
+            disabled={!canSubmit}
+            onClick={() => submit(undefined)}
+          >
+            Submit
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -300,7 +340,8 @@ export function OpenDecisionCard({
     <div
       data-decision-card={card.item.id}
       data-decision-card-state="open"
-      className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5"
+      data-decision-card-variant={turnFailed ? "turn-failed" : undefined}
+      className={`flex min-w-0 flex-col gap-2 rounded-xl border ${turnFailed ? "border-destructive/40" : "border-border/70"} bg-card/60 px-3 py-2.5`}
     >
       {panel(false)}
       {/* Once answered, the card leaves the open state and this view closes with it. */}
@@ -308,8 +349,9 @@ export function OpenDecisionCard({
         <DialogPopup
           showCloseButton={false}
           bottomStickOnMobile={false}
-          className="max-h-[90dvh] w-[min(92vw,64rem)] max-w-none"
+          className={`max-h-[90dvh] w-[min(92vw,64rem)] max-w-none ${turnFailed ? "border-destructive/40" : ""}`}
           data-decision-card-expanded={card.item.id}
+          data-decision-card-variant={turnFailed ? "turn-failed" : undefined}
         >
           <DialogTitle className="sr-only">{headline}</DialogTitle>
           <div className="max-h-[90dvh] overflow-y-auto">{panel(true)}</div>
