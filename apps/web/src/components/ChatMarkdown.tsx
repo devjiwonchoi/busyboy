@@ -111,7 +111,7 @@ import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
 import { TaskReferenceChip } from "./chat/TaskReferenceChip";
 import { parseTaskReferenceHref, remarkTaskReferences } from "./chat/taskReferences.logic";
-import { useThreadTaskReferences } from "../state/projectTeam";
+import { useTaskReferenceLinkContext, useThreadTaskReferences } from "../state/projectTeam";
 import {
   artifactTemplateFromHastProperties,
   renderCodexInlineDirectivesAsMarkdown,
@@ -3296,6 +3296,9 @@ function ChatMarkdown({
     closeLocalMediaPreview,
   } = useChatMarkdownState({ text, ...props });
   const { taskReferences } = componentState;
+  const taskLinkContext = useTaskReferenceLinkContext(
+    taskReferences === null ? null : (props.threadRef ?? null),
+  );
   const incrementalParsing =
     props.isStreaming === true &&
     extraRemarkPlugins.length === 0 &&
@@ -3307,9 +3310,10 @@ function ChatMarkdown({
     ...(taskReferences === null
       ? []
       : [
-          [remarkTaskReferences, { tasks: taskReferences }] satisfies NonNullable<
-            ReactMarkdownOptions["remarkPlugins"]
-          >[number],
+          [
+            remarkTaskReferences,
+            { tasks: taskReferences, ...taskLinkContext },
+          ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>[number],
         ]),
     ...(incrementalParsing ? [createIncrementalMarkdownPlugin()] : []),
   ];

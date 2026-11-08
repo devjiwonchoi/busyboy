@@ -34,6 +34,7 @@ import { AsyncResult, Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useThreadShell } from "./entities";
+import { environmentThreadShells } from "./threads";
 import {
   decisionCardsForThread,
   type LeadThreadTask,
@@ -254,6 +255,51 @@ export function useThreadTaskReferences(
     ref === null || projectId === null ? null : scopeProjectRef(ref.environmentId, projectId),
   );
   return taskReferencesForThread(summary, ref?.threadId ?? null);
+}
+
+const NO_THREAD_TITLES: ReadonlyArray<string> = [];
+const EMPTY_THREAD_TITLES_ATOM = Atom.make(NO_THREAD_TITLES).pipe(
+  Atom.withLabel("web-project-team:numbered-thread-titles:empty"),
+);
+
+/**
+ * Titles of the project's threads that contain "#N", such as "CU eval chrome-form #1".
+ * The same titles keep the same array, so markdown doesn't re-render on unrelated changes.
+ */
+const numberedThreadTitlesAtom = Atom.family((key: string) => {
+  const ref = parseScopedProjectKey(key);
+  let previous = NO_THREAD_TITLES;
+  return Atom.make((get): ReadonlyArray<string> => {
+    if (ref === null) return NO_THREAD_TITLES;
+    const titles = get(environmentThreadShells.threadShellsAtom)
+      .filter(
+        (shell) =>
+          shell.environmentId === ref.environmentId &&
+          shell.projectId === ref.projectId &&
+          /#\d/u.test(shell.title),
+      )
+      .map((shell) => shell.title)
+      .toSorted();
+    if (previous.join("\0") !== titles.join("\0")) previous = titles;
+    return previous;
+  }).pipe(Atom.withLabel(`web-project-team:numbered-thread-titles:${key}`));
+});
+
+/** What the task-reference linker needs besides the tasks: the key prefix and thread titles. */
+export function useTaskReferenceLinkContext(ref: ScopedThreadRef | null): {
+  readonly taskKeyPrefix: string | null;
+  readonly threadTitles: ReadonlyArray<string>;
+} {
+  const projectId = useThreadShell(ref)?.projectId ?? null;
+  const projectRef =
+    ref === null || projectId === null ? null : scopeProjectRef(ref.environmentId, projectId);
+  const summary = useProjectManager(projectRef);
+  const threadTitles = useAtomValue(
+    projectRef === null
+      ? EMPTY_THREAD_TITLES_ATOM
+      : numberedThreadTitlesAtom(scopedProjectKey(projectRef)),
+  );
+  return { taskKeyPrefix: summary?.taskKeyPrefix ?? null, threadTitles };
 }
 
 /** The task this thread leads, with whether it waits on the user; null for other threads. */
