@@ -189,5 +189,10 @@ export const readOtherThreads = (input: {
  * Counts toward the PM's "Needs you": an open question, approval or plan. A finished
  * turn waiting for a reply does not, since the sidebar already shows it as ready.
  */
-export const isWaitingOnUser = (thread: ProjectOtherThread): boolean =>
-  thread.pendingRequest !== null && thread.pendingRequest.kind !== "reply";
+export const isWaitingOnUser = <T extends ProjectOtherThread>(
+  thread: T,
+): thread is T & {
+  readonly pendingRequest: ProjectOtherThreadRequest & {
+    readonly kind: Exclude<ProjectOtherThreadRequest["kind"], "reply">;
+  };
+} => thread.pendingRequest !== null && thread.pendingRequest.kind !== "reply";
