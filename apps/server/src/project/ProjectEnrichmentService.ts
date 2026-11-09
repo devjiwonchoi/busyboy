@@ -7,11 +7,14 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import type * as Scope from "effect/Scope";
 
+import * as ServerConfig from "../config.ts";
+import { directorWorkspaceRoot } from "../projectTeam/director.ts";
 import * as ProjectFaviconResolver from "./ProjectFaviconResolver.ts";
 import * as RepositoryIdentityResolver from "./RepositoryIdentityResolver.ts";
 
@@ -44,6 +47,11 @@ export interface ProjectEnrichmentServiceOptions {
   readonly successTtl?: Duration.Input;
   readonly faviconTtl?: Duration.Input;
   readonly failureTtl?: Duration.Input;
+  /**
+   * App-owned folders, such as the Director's, that never belong to a repository. Without
+   * this, one inside a checkout would be grouped with that repository's project.
+   */
+  readonly systemWorkspaceRoots?: ReadonlyArray<string>;
 }
 
 export class ProjectEnrichmentService extends Context.Service<
@@ -95,9 +103,13 @@ export const make = Effect.fn("ProjectEnrichmentService.make")(function* (
   const successTtl = options.successTtl ?? DEFAULT_SUCCESS_TTL;
   const failureTtl = options.failureTtl ?? DEFAULT_FAILURE_TTL;
   const faviconTtl = options.faviconTtl ?? DEFAULT_FAVICON_TTL;
+  const systemWorkspaceRoots = new Set(options.systemWorkspaceRoots ?? []);
 
   const repositoryIdentityCache = yield* Cache.makeWith(
-    (workspaceRoot: string) => Effect.exit(repositoryIdentityResolver.resolve(workspaceRoot)),
+    (workspaceRoot: string) =>
+      systemWorkspaceRoots.has(workspaceRoot)
+        ? Effect.exit(Effect.succeed(null))
+        : Effect.exit(repositoryIdentityResolver.resolve(workspaceRoot)),
     {
       capacity: cacheCapacity,
       timeToLive: Exit.match({
@@ -299,4 +311,16 @@ export const make = Effect.fn("ProjectEnrichmentService.make")(function* (
   });
 });
 
-export const layer = Layer.effect(ProjectEnrichmentService, make());
+export const layer = Layer.effect(
+  ProjectEnrichmentService,
+  Effect.gen(function* () {
+    const config = yield* Effect.serviceOption(ServerConfig.ServerConfig);
+    const path = yield* Effect.serviceOption(Path.Path);
+    return yield* make({
+      systemWorkspaceRoots:
+        Option.isSome(config) && Option.isSome(path)
+          ? [directorWorkspaceRoot(path.value, config.value.baseDir)]
+          : [],
+    });
+  }),
+);

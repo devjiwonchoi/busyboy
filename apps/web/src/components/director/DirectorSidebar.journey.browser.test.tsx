@@ -264,3 +264,29 @@ it("puts the Director first, keeps a dragged order, and follows that order for C
   await pressJump("2");
   await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/director-thread"));
 });
+
+it("keeps the Director a top-level manager when its folder sits inside another project's repository", async () => {
+  const repositoryIdentity = {
+    canonicalKey: "github.com/devjiwonchoi/busyboy",
+    locator: { source: "git-remote", remoteName: "origin", remoteUrl: "git@github.com:x/y.git" },
+    rootPath: "/repo",
+  };
+  state.projects = [
+    { ...project("busyboy", "프로젝트"), workspaceRoot: "/repo", repositoryIdentity },
+    {
+      ...project("director", "시스템 프로젝트"),
+      workspaceRoot: "/repo/.busyboy/director",
+      repositoryIdentity,
+    },
+  ];
+  await page.viewport(1280, 800);
+  const app = renderSidebarApp();
+  await app.render();
+  await vi.waitFor(() => expect(headings()).toHaveLength(2));
+  expect(headings()[0]!.textContent).toContain("총괄");
+  expect(headings()[1]!.textContent).toContain("프로젝트");
+  const directorLeft = header("총괄").getBoundingClientRect().left;
+  const pmLeft = header("프로젝트").getBoundingClientRect().left;
+  // Same indentation as the PM row: not drawn as a child row under it.
+  expect(directorLeft).toBe(pmLeft);
+});
