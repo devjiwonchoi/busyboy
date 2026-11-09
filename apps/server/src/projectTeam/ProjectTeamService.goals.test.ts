@@ -1,6 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { ProjectTaskId, WorkspaceGoalId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import * as TestClock from "effect/testing/TestClock";
+
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
@@ -164,6 +168,207 @@ describe("ProjectTeamService workspace goals", () => {
         assert.include(missingTask.message, "was not found");
         const empty = yield* Effect.flip(team.goalLink(director.threadId, { goalId: goal.id }));
         assert.include(empty.message, "needs projects or tasks");
+      }),
+    ),
+  );
+
+  it.effect("links the Director's goal proposal to its goal once the user adds it", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const { firstPm, director } = yield* setUpWorkspace(harness);
+        const { goal } = yield* team.goalWrite(director.threadId, { title: "문서 정리" });
+        const propose = (title: string) =>
+          team.createTask(director.threadId, {
+            projectId: SECOND_PROJECT_ID,
+            title,
+            request: `${title}.`,
+            intake: "Goal has no open work.",
+            goal: "문서가 정리된다",
+            verification: "문서를 연다",
+            goalId: goal.id,
+          });
+
+        const { task: proposed } = yield* propose("Write the docs");
+        const [card] = yield* repository.listOpenAttentionItems({
+          projectId: DIRECTOR_PROJECT_ID,
+          taskId: proposed.id,
+        });
+        assert.strictEqual(card?.kind, "proposal");
+        // Until the user adds it, the goal still has no open work.
+        assert.deepStrictEqual((yield* directorSummary).goalAlignment!.goalsWithoutOpenWork, [
+          goal.id,
+        ]);
+
+        yield* team.answerDecision({
+          projectId: DIRECTOR_PROJECT_ID,
+          attentionItemId: card!.id,
+          answer: "태스크로 추가",
+        });
+        const alignment = (yield* directorSummary).goalAlignment!;
+        assert.deepStrictEqual(alignment.goals, [
+          { goalId: goal.id, projectIds: [SECOND_PROJECT_ID], taskIds: [proposed.id] },
+        ]);
+        assert.deepStrictEqual(alignment.goalsWithoutOpenWork, []);
+
+        // A dropped proposal leaves no link behind.
+        const { task: dropped } = yield* propose("Write more docs");
+        const [dropCard] = yield* repository.listOpenAttentionItems({
+          projectId: DIRECTOR_PROJECT_ID,
+          taskId: dropped.id,
+        });
+        yield* team.answerDecision({
+          projectId: DIRECTOR_PROJECT_ID,
+          attentionItemId: dropCard!.id,
+          answer: "빼기",
+        });
+        const { workspace } = yield* team.teamStatus(director.threadId, {});
+        assert.deepStrictEqual(workspace!.goals[0]!.links, [
+          { projectId: SECOND_PROJECT_ID, taskId: proposed.id },
+        ]);
+
+        const fromPm = yield* Effect.flip(
+          team.createTask(firstPm, {
+            title: "PM work",
+            request: "Do it.",
+            intake: "New.",
+            goal: "끝",
+            verification: "확인",
+            goalId: goal.id,
+          }),
+        );
+        assert.include(fromPm.message, "Only the Director links proposals to goals");
+        yield* team.goalWrite(director.threadId, { goalId: goal.id, status: "done" });
+        const toDone = yield* Effect.flip(propose("Late docs"));
+        assert.include(toDone.message, "is done");
+      }),
+    ),
+  );
+
+  it.effect("nudges a PM about a stuck task at most once a day", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const { firstPm, director } = yield* setUpWorkspace(harness);
+        const { task } = yield* createAcceptedTask(firstPm, {
+          intake: "New work.",
+          title: "Payments API",
+          request: "Build the API.",
+        });
+        const nudges = harness
+          .messagesTo(firstPm)
+          .pipe(Effect.map((texts) => texts.filter((text) => text.startsWith("[디렉터]"))));
+        const nudge = () =>
+          team.pmNudge(director.threadId, {
+            projectId: PROJECT_ID,
+            taskId: task.id,
+            message: "결제 출시 목표가 이 일을 기다립니다. 시작해 주세요.",
+          });
+
+        assert.deepStrictEqual(yield* nudge(), { status: "sent", nextAllowedAt: null });
+        const [sent] = yield* nudges;
+        assert.match(sent!, /^\[디렉터\] \S+ Payments API\n결제 출시 목표가 이 일을 기다립니다/);
+
+        const again = yield* nudge();
+        assert.strictEqual(again.status, "skipped");
+        assert.strictEqual(again.nextAllowedAt, "2026-11-05T00:00:00.000Z");
+        assert.lengthOf(yield* nudges, 1);
+
+        yield* TestClock.adjust("24 hours");
+        assert.strictEqual((yield* nudge()).status, "sent");
+        assert.lengthOf(yield* nudges, 2);
+
+        const fromPm = yield* Effect.flip(
+          team.pmNudge(firstPm, { projectId: PROJECT_ID, taskId: task.id, message: "x" }),
+        );
+        assert.include(fromPm.message, "pm_nudge is not available to a PM");
+        const wrongProject = yield* Effect.flip(
+          team.pmNudge(director.threadId, {
+            projectId: SECOND_PROJECT_ID,
+            taskId: task.id,
+            message: "x",
+          }),
+        );
+        assert.include(wrongProject.message, "is not in project");
+      }),
+    ),
+  );
+
+  it.effect("shows the Director's decision card in its chat and answers the Director", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const { firstPm, director } = yield* setUpWorkspace(harness);
+        const { task } = yield* createAcceptedTask(firstPm, {
+          intake: "New work.",
+          title: "Payments API",
+          request: "Build the API.",
+        });
+        yield* team.pmNudge(director.threadId, {
+          projectId: PROJECT_ID,
+          taskId: task.id,
+          message: "막혔어요.",
+        });
+
+        const { item } = yield* team.askUser(director.threadId, {
+          kind: "decision",
+          taskId: task.id,
+          question: "결제 API는 어느 목표인가요?\n목표가 없는 열린 일입니다.",
+          options: ["결제 출시 (Recommended)", "문서 정리"],
+        });
+        assert.strictEqual(item.projectId, DIRECTOR_PROJECT_ID);
+        assert.strictEqual(item.askerThreadId, director.threadId);
+        const card = (yield* directorSummary).decisionCards.find(
+          (entry) => entry.item.id === item.id,
+        );
+        assert.strictEqual(card?.taskTitle, "Payments API");
+        // The PM's chat does not show it.
+        const pmSummary = (yield* team.attentionSnapshot).projects.find(
+          (entry) => entry.projectId === PROJECT_ID,
+        )!;
+        assert.isFalse(pmSummary.decisionCards.some((entry) => entry.item.id === item.id));
+
+        yield* TestClock.adjust("1 minute");
+        yield* team.answerDecision({
+          projectId: DIRECTOR_PROJECT_ID,
+          attentionItemId: item.id,
+          answer: "결제 출시 (Recommended)",
+        });
+        const relayed = (yield* Ref.get(harness.sent)).filter(
+          (input) => input.threadId === director.threadId,
+        );
+        assert.lengthOf(relayed, 1);
+        assert.include(relayed[0]!.text, "결제 출시 (Recommended)");
+
+        // The answer is news, so the Director may pass it on the same day.
+        const relay = yield* team.pmNudge(director.threadId, {
+          projectId: PROJECT_ID,
+          taskId: task.id,
+          message: "사용자가 결제 출시 목표로 정했습니다.",
+        });
+        assert.strictEqual(relay.status, "sent");
+
+        // The Director closes its own card when it no longer needs the answer.
+        const { item: stale } = yield* team.askUser(director.threadId, {
+          kind: "decision",
+          taskId: task.id,
+          question: "아직 필요한가요?",
+        });
+        const closed = yield* team.dismissAttention(director.threadId, {
+          attentionItemId: stale.id,
+          reason: "PM이 이미 처리함",
+        });
+        assert.isNotNull(closed.item.supersededAt);
+
+        const approval = yield* Effect.flip(
+          team.askUser(director.threadId, { kind: "approval", taskId: task.id, question: "OK?" }),
+        );
+        assert.include(approval.message, "only for decisions");
+        const noTask = yield* Effect.flip(
+          team.askUser(director.threadId, { kind: "decision", question: "어느 쪽?" }),
+        );
+        assert.include(noTask.message, "needs taskId");
       }),
     ),
   );

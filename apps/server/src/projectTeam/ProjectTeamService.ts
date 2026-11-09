@@ -127,7 +127,10 @@ import {
   type ProjectTeamGoalLinkInput,
   type ProjectTeamGoalResult,
   type ProjectTeamGoalWriteInput,
+  type ProjectTeamPmNudgeInput,
+  type ProjectTeamPmNudgeResult,
   type WorkspaceGoal,
+  type WorkspaceGoalAlignment,
   type WorkspaceGoalLink,
   WorkspaceGoalId,
 } from "@t3tools/contracts";
@@ -446,6 +449,25 @@ export type DelegateStep = (
   input: OrchestratorMcpDelegateTaskInput,
   onChildCreated?: (child: DelegatedChild) => Effect.Effect<void>,
 ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
+
+/** Starts the task log note pm_nudge leaves; the daily limit reads it back. */
+export const PM_NUDGE_NOTE_PREFIX = "Director nudged the PM: ";
+/** pm_nudge sends one message per task within this window. */
+export const PM_NUDGE_INTERVAL_MS = 24 * 60 * MINUTE_MS;
+/** Recent closed Director cards read to tell whether a nudge relays a new answer. */
+const PM_NUDGE_ANSWER_LOOKBACK = 50;
+
+/** The workspace's goal alignment as the Director's goal check reads it. */
+export interface GoalAlignmentReport {
+  readonly director: ProjectTeamRepository.ProjectManagerRecord;
+  readonly goals: ReadonlyArray<WorkspaceGoal>;
+  readonly alignment: WorkspaceGoalAlignment;
+  /** Key, title and project title of every live task, epics included. */
+  readonly tasks: ReadonlyMap<
+    string,
+    { readonly key: string; readonly title: string; readonly projectTitle: string }
+  >;
+}
 
 /** A task as goal alignment reads it, with its project's open cards. */
 function toAlignableTask(
@@ -786,6 +808,17 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamGoalLinkInput,
     ) => Effect.Effect<ProjectTeamGoalResult, ProjectTeamError>;
+
+    /** pm_nudge: the Director tells a project's PM about one stuck task, once a day per task. */
+    readonly pmNudge: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamPmNudgeInput,
+    ) => Effect.Effect<ProjectTeamPmNudgeResult, ProjectTeamError>;
+    /** The workspace's goal alignment, or none when there is no Director. */
+    readonly goalAlignmentReport: Effect.Effect<
+      Option.Option<GoalAlignmentReport>,
+      ProjectTeamError
+    >;
 
     /** projectTeam.requestSitrep RPC. */
     readonly requestSitrep: (
@@ -1508,6 +1541,18 @@ const make = Effect.gen(function* () {
       if (input.parentTaskId !== undefined) {
         yield* checkParent(null, input.parentTaskId, projectId);
       }
+      if (input.goalId !== undefined && role.type !== "director") {
+        return yield* teamError(
+          "Only the Director links proposals to goals; leave goalId out.",
+          role.projectId,
+        );
+      }
+      if (input.goalId !== undefined) {
+        const goal = yield* requireGoal(input.goalId, role.projectId);
+        if (goal.status !== "active") {
+          return yield* teamError(`Goal ${goal.id} is ${goal.status}.`, role.projectId);
+        }
+      }
       // A proposal, not a task: it stays out of every list until the user adds it from its card.
       const task = yield* repository.createTask({
         id: ProjectTaskId.make(yield* newId("task")),
@@ -1523,6 +1568,21 @@ const make = Effect.gen(function* () {
       });
       yield* appendEvent(task, "note", `Intake: ${intake}`, callerThreadId);
       yield* appendEvent(task, "note", "Proposed; waits for the user to add it.", callerThreadId);
+      // Alignment ignores proposals, so the link counts only once the user adds the task.
+      if (input.goalId !== undefined) {
+        const goalId = input.goalId;
+        yield* goalLocks.withLock(
+          "goals",
+          Effect.gen(function* () {
+            const goal = yield* requireGoal(goalId, role.projectId);
+            yield* repository.saveWorkspaceGoal({
+              ...goal,
+              links: [...goal.links, { projectId: task.projectId, taskId: task.id }],
+              updatedAt: yield* nowIso,
+            });
+          }),
+        );
+      }
       // The card shows in the proposer's chat, which for the Director is its own project.
       yield* router.ask({
         task,
@@ -1559,6 +1619,7 @@ const make = Effect.gen(function* () {
           outcome === "dismiss"
             ? `[제안 빠짐] ${proposal.title}\nThe user removed this proposal. Don't propose it again unless they ask.`
             : `[제안 피드백] ${proposal.title}\n${answer}\nThe proposal is closed. Post a new task_create proposal if it still makes sense.`;
+        yield* unlinkFromGoals(proposal.id);
         return yield* router.answer({
           item,
           answer,
@@ -3365,7 +3426,8 @@ const make = Effect.gen(function* () {
 
   const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["lead"], "ask_user");
+      const role = yield* requireRole(callerThreadId, ["lead", "director"], "ask_user");
+      if (role.type === "director") return yield* askAsDirector(callerThreadId, role, input);
       const task = yield* requireTask(role.taskId, role.projectId);
       if (input.kind === "approval") return yield* askPlanApproval(callerThreadId, task, input);
       const item = yield* router.ask({
@@ -3379,6 +3441,41 @@ const make = Effect.gen(function* () {
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
       return { item };
     }).pipe(orTeamError("Could not ask the user."));
+
+  /**
+   * The Director's decision card: about a task in any project, shown in the Director's
+   * chat, answered back to the Director, who relays it to that project's PM.
+   */
+  const askAsDirector = (
+    callerThreadId: ThreadId,
+    role: Extract<ProjectTeamRole, { readonly type: "director" }>,
+    input: ProjectTeamAskUserInput,
+  ) =>
+    Effect.gen(function* () {
+      if (input.kind !== "decision") {
+        return yield* teamError(
+          "The Director asks the user only for decisions (kind: decision). Plan approvals and blockers come from task leads.",
+          role.projectId,
+        );
+      }
+      if (input.taskId === undefined) {
+        return yield* teamError(
+          "The Director's ask_user needs taskId: the task the decision is mainly about.",
+          role.projectId,
+        );
+      }
+      const task = yield* requireAnyTask(input.taskId, role.projectId);
+      const item = yield* router.ask({
+        task,
+        projectId: role.projectId,
+        kind: "decision",
+        question: input.question,
+        options: input.options ?? [],
+        askerThreadId: callerThreadId,
+      });
+      yield* appendEvent(task, "note", "The Director asked the user (decision).", callerThreadId);
+      return { item };
+    });
 
   // Restore before relaying so even an immediately failed retry can open a new blocker.
   const restoreFailedTurnStage = (item: ProjectAttentionItem, answer: string) =>
@@ -3527,7 +3624,11 @@ const make = Effect.gen(function* () {
     input,
   ) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm", "lead"], "attention_dismiss");
+      const role = yield* requireRole(
+        callerThreadId,
+        ["pm", "lead", "director"],
+        "attention_dismiss",
+      );
       const item = yield* repository.getAttentionItem(input.attentionItemId);
       if (Option.isNone(item) || item.value.projectId !== role.projectId) {
         return yield* teamError(
@@ -3535,9 +3636,11 @@ const make = Effect.gen(function* () {
           role.projectId,
         );
       }
-      if (role.type === "lead" && item.value.askerThreadId !== callerThreadId) {
+      if (role.type !== "pm" && item.value.askerThreadId !== callerThreadId) {
         return yield* teamError(
-          "A task lead can only close its own questions. Ask the PM if another question is moot.",
+          role.type === "lead"
+            ? "A task lead can only close its own questions. Ask the PM if another question is moot."
+            : "The Director can only close its own decision cards.",
           role.projectId,
         );
       }
@@ -3758,7 +3861,8 @@ const make = Effect.gen(function* () {
             }),
           ),
         );
-      const task = yield* requireTask(answered.taskId, answered.projectId);
+      // The Director's cards are about tasks in other projects.
+      const task = yield* requireAnyTask(answered.taskId, answered.projectId);
       yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
       yield* afterPlanApprovalAnswer(answered, null);
       return { item: answered };
@@ -4055,6 +4159,126 @@ const make = Effect.gen(function* () {
       return yield* saveGoal({ ...goal, links, updatedAt: yield* nowIso }, projectId);
     });
 
+  /** A dropped proposal leaves no goal link behind. */
+  const unlinkFromGoals = (taskId: ProjectTaskId) =>
+    goalLocks.withLock(
+      "goals",
+      Effect.gen(function* () {
+        for (const goal of yield* repository.listWorkspaceGoals()) {
+          if (!goal.links.some((link) => link.taskId === taskId)) continue;
+          yield* repository.saveWorkspaceGoal({
+            ...goal,
+            links: goal.links.filter((link) => link.taskId !== taskId),
+            updatedAt: yield* nowIso,
+          });
+        }
+      }),
+    );
+
+  const pmNudge: ProjectTeamService["Service"]["pmNudge"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["director"], "pm_nudge");
+      const task = yield* requireAnyTask(input.taskId, role.projectId);
+      if (task.projectId !== input.projectId) {
+        return yield* teamError(
+          `Task ${task.id} is not in project ${input.projectId}.`,
+          role.projectId,
+        );
+      }
+      const manager = yield* repository.getManager(input.projectId);
+      if (Option.isNone(manager) || manager.value.kind !== "pm") {
+        return yield* teamError(`Project ${input.projectId} has no PM.`, role.projectId);
+      }
+      if (!manager.value.settings.enabled) {
+        return yield* teamError(`The PM of ${input.projectId} is turned off.`, role.projectId);
+      }
+      const now = yield* nowIso;
+      const events = yield* repository.listTaskEvents({
+        taskId: task.id,
+        limit: Number.MAX_SAFE_INTEGER,
+      });
+      const last = events.findLast(
+        (event) => event.kind === "note" && event.body.startsWith(PM_NUDGE_NOTE_PREFIX),
+      );
+      // The user answering one of the Director's decision cards since then is news to relay.
+      const answeredSince =
+        last !== undefined &&
+        (yield* repository.listRecentClosedAttentionItems({
+          projectId: role.projectId,
+          limit: PM_NUDGE_ANSWER_LOOKBACK,
+        })).some(
+          (item) =>
+            item.kind === "decision" &&
+            item.answeredAt !== null &&
+            isoMillis(item.answeredAt) > isoMillis(last.createdAt),
+        );
+      if (
+        last !== undefined &&
+        !answeredSince &&
+        isoMillis(now) - isoMillis(last.createdAt) < PM_NUDGE_INTERVAL_MS
+      ) {
+        return {
+          status: "skipped",
+          nextAllowedAt: isoFromMillis(isoMillis(last.createdAt) + PM_NUDGE_INTERVAL_MS),
+        } satisfies ProjectTeamPmNudgeResult;
+      }
+      const key = `project-team:pm-nudge:${yield* newId(task.id)}`;
+      yield* threads.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make(key),
+        threadId: manager.value.threadId,
+        messageId: MessageId.make(key),
+        text: `[디렉터] ${yield* keyOf(task)} ${task.title}\n${input.message}`,
+        attachments: [],
+        dispatchMode: { type: "queue_after_active" },
+        createdBy: "system",
+        creationSource: "server",
+      });
+      yield* appendEvent(task, "note", `${PM_NUDGE_NOTE_PREFIX}${input.message}`, callerThreadId);
+      return { status: "sent", nextAllowedAt: null } satisfies ProjectTeamPmNudgeResult;
+    }).pipe(orTeamError("Could not nudge the PM."));
+
+  const goalAlignmentReport: ProjectTeamService["Service"]["goalAlignmentReport"] = Effect.gen(
+    function* () {
+      const managers = yield* repository.listManagers();
+      const director = managers.find((manager) => manager.kind === "director");
+      if (director === undefined) return Option.none();
+      const alignable: Array<AlignableTask> = [];
+      const projectIds: Array<ProjectId> = [];
+      const tasks = new Map<string, { key: string; title: string; projectTitle: string }>();
+      // Same projects as team_status: the Director's own and every PM's project not deleted.
+      for (const manager of managers) {
+        if (manager.kind !== "pm" && manager !== director) continue;
+        const project = yield* projects.get(manager.projectId);
+        if (manager.kind === "pm" && (Option.isNone(project) || project.value.deletedAt !== null)) {
+          continue;
+        }
+        projectIds.push(manager.projectId);
+        const projectTasks = yield* repository.listTasks({ projectId: manager.projectId });
+        const openAttention = yield* repository.listOpenAttentionItems({
+          projectId: manager.projectId,
+        });
+        alignable.push(...projectTasks.map((task) => toAlignableTask(task, openAttention)));
+        const prefix = yield* taskKeyPrefixFor(manager.projectId, manager.settings);
+        const projectTitle = Option.isSome(project) ? project.value.title : manager.projectId;
+        for (const task of projectTasks) {
+          tasks.set(task.id, {
+            key: formatTaskKey(prefix, task.number),
+            title: task.title,
+            projectTitle,
+          });
+        }
+      }
+      const goals = yield* repository.listWorkspaceGoals();
+      return Option.some({
+        director,
+        goals,
+        alignment: alignWorkspaceGoals({ goals, tasks: alignable, projectIds }),
+        tasks,
+      } satisfies GoalAlignmentReport);
+    },
+  ).pipe(orTeamError("Could not read the goal alignment."));
+
   const requestSitrep: ProjectTeamService["Service"]["requestSitrep"] = ({ projectId }) =>
     sitreps.request(projectId).pipe(Effect.map((sitrepId) => ({ sitrepId })));
 
@@ -4132,11 +4356,10 @@ const make = Effect.gen(function* () {
       );
       return yield* Effect.forEach(items, (item) =>
         Effect.gen(function* () {
-          // Proposals are left out of task lists, and the Director's go to other projects.
+          // Proposals are left out of task lists, and the Director's cards may be about
+          // tasks in other projects.
           const task =
-            item.kind === "proposal"
-              ? Option.getOrUndefined(yield* repository.getTask(item.taskId))
-              : tasks.get(item.taskId);
+            tasks.get(item.taskId) ?? Option.getOrUndefined(yield* repository.getTask(item.taskId));
           if (task === undefined) return [];
           const card: ProjectDecisionCard = {
             item,
@@ -4530,6 +4753,8 @@ const make = Effect.gen(function* () {
     deleteMemory,
     goalWrite,
     goalLink,
+    pmNudge,
+    goalAlignmentReport,
     requestSitrep,
     attentionSnapshot,
     afkSweep,

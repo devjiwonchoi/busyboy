@@ -14,6 +14,7 @@ import * as ManagerLastMessage from "./projectTeam/managerLastMessage.ts";
 import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
 import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
 import * as StalledTaskSweep from "./projectTeam/StalledTaskSweep.ts";
+import * as GoalAlignmentReactor from "./projectTeam/GoalAlignmentReactor.ts";
 import * as TaskOutcomeReactor from "./projectTeam/taskOutcomeReactor.ts";
 import * as RoleStepReactor from "./projectTeam/RoleStepReactor.ts";
 import * as ShipWakeReactor from "./projectTeam/ShipWakeReactor.ts";
@@ -467,6 +468,7 @@ const layerProjectTeam = Layer.mergeAll(
   RoleStepReactor.layerWorker,
   ShipWakeReactor.layerWorker,
   StalledTaskSweep.layerWorker,
+  GoalAlignmentReactor.layerWorker,
   ProjectTeamService.layerAfkWorker,
   // Needs the team's AttentionRouter, so it starts here rather than beside DelegatedTaskQuestionReactor.
   AfkReactor.layerWorker,

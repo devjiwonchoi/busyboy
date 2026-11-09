@@ -163,6 +163,17 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "`workspace.alignment`");
   });
 
+  it("has the Director act on goal checks without approving, adding or starting work", () => {
+    const text = directorInstructions({ name: "Nova", voice: "Calm." });
+    assert.include(text, "### Working from goals");
+    assert.include(text, 'When you receive "[목표 점검]"');
+    assert.include(text, "`task_create` and that goal's `goalId`");
+    assert.include(text, "`pm_nudge` with `projectId`, `taskId` and the reason");
+    assert.include(text, "어느 목표인가요?");
+    assert.include(text, "gather everything the user must decide into one `ask_user`");
+    assert.include(text, "You never approve plans, add tasks or start leads");
+  });
+
   it("quotes a custom voice as the user's words", () => {
     const text = projectManagerInstructions({
       name: "Remy",

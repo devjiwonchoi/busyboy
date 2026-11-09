@@ -1214,6 +1214,10 @@ export const ProjectTeamTaskCreateInput = Schema.Struct({
     description:
       "PM and Director, required: how to check it is done, in the user's language. Shown on the proposal card as 확인 방법.",
   }),
+  goalId: Schema.optional(WorkspaceGoalId).annotate({
+    description:
+      "Director only. The workspace goal this work serves; once the user adds the task it is linked to that goal.",
+  }),
 });
 export type ProjectTeamTaskCreateInput = typeof ProjectTeamTaskCreateInput.Type;
 
@@ -1435,6 +1439,10 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   ).annotate({
     description:
       'Suggested answers, if any, shown as choices. Write each as "Label — one-line tradeoff" and mark the one you recommend with "(Recommended)".',
+  }),
+  taskId: Schema.optional(ProjectTaskId).annotate({
+    description:
+      "Director only, required: the task (in any project) the decision is mainly about. The card shows in your own chat and the answer comes back to you. A task lead leaves it out.",
   }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
@@ -1711,6 +1719,30 @@ export const ProjectTeamGoalResult = Schema.Struct({
   goal: WorkspaceGoal,
 });
 export type ProjectTeamGoalResult = typeof ProjectTeamGoalResult.Type;
+
+export const ProjectTeamPmNudgeInput = Schema.Struct({
+  projectId: ProjectId.annotate({ description: "The project whose PM gets the message." }),
+  taskId: ProjectTaskId.annotate({
+    description:
+      "The stuck task in that project. Each task is nudged at most once a day, unless the user answered one of your decision cards since the last nudge.",
+  }),
+  message: ProjectTaskSummaryText.annotate({
+    description:
+      "Why it is stuck and what you ask the PM to do, in the user's language. The task's key and title are added for you.",
+  }),
+});
+export type ProjectTeamPmNudgeInput = typeof ProjectTeamPmNudgeInput.Type;
+
+export const ProjectTeamPmNudgeResult = Schema.Struct({
+  status: Schema.Literals(["sent", "skipped"]).annotate({
+    description:
+      "sent: the PM got the message. skipped: this task was already nudged in the last 24 hours, so nothing was sent.",
+  }),
+  nextAllowedAt: Schema.NullOr(IsoDateTime).annotate({
+    description: "When skipped: when this task can be nudged again.",
+  }),
+});
+export type ProjectTeamPmNudgeResult = typeof ProjectTeamPmNudgeResult.Type;
 
 // Client RPCs.
 

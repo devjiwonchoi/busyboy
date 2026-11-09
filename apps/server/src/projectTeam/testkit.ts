@@ -56,6 +56,7 @@ import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ShipWakeReactor from "./ShipWakeReactor.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
+import * as GoalAlignmentReactor from "./GoalAlignmentReactor.ts";
 import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 
 export const START = "2026-11-04T00:00:00.000Z";
@@ -140,6 +141,7 @@ export type TeamServices =
   | TaskOutcomeReactor.TaskOutcomeReactor
   | ShipWakeReactor.ShipWakeReactor
   | StalledTaskSweep.StalledTaskSweep
+  | GoalAlignmentReactor.GoalAlignmentReactor
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
   | RoleStepReactor.RoleStepReactor
@@ -393,6 +395,7 @@ export const withTeam = <A, E>(
       TaskOutcomeReactor.layer,
       ShipWakeReactor.layer,
       StalledTaskSweep.layer,
+      GoalAlignmentReactor.layer,
       DefaultManagerReactor.layer,
       ContextCare.layer,
       RoleStepReactor.layer,
