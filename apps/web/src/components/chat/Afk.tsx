@@ -133,12 +133,13 @@ export function AfkBanner({ projectRef, summary }: AfkProps) {
   if (!active || setting === undefined) return null;
   const answers = [...summary.afkAnswers].reverse();
 
+  // Composite the warning tint over the canvas so timeline text cannot bleed through.
   return (
     <div
       role="status"
       aria-label="AFK"
       data-afk-banner
-      className="mb-1.5 flex flex-col rounded-lg border border-warning/32 bg-warning-surface px-2.5 py-1 text-warning-foreground text-xs"
+      className="mb-1.5 flex flex-col rounded-lg border border-warning/32 [background:linear-gradient(var(--warning-surface),var(--warning-surface)),var(--background)] px-2.5 py-1 text-warning-foreground text-xs"
     >
       <div className="flex items-center gap-2">
         <CoffeeIcon aria-hidden className="size-3.5 shrink-0" />
