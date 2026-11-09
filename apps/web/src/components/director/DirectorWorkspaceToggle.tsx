@@ -1,27 +1,7 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { LayoutGridIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
 
 import { selectActiveRightPanel, useRightPanelStore } from "~/rightPanelStore";
-
-/** Open once per entry, then respect panel and tab choices until the user returns. */
-export function useOpenDirectorWorkspaceOnEntry(
-  threadRef: ScopedThreadRef | null,
-  isDirector: boolean,
-) {
-  const enteredFor = useRef<string | null>(null);
-  const key =
-    threadRef === null || !isDirector ? null : `${threadRef.environmentId}:${threadRef.threadId}`;
-  useEffect(() => {
-    if (enteredFor.current === key) {
-      return;
-    }
-    enteredFor.current = key;
-    if (threadRef !== null && key !== null) {
-      useRightPanelStore.getState().open(threadRef, "director-workspace");
-    }
-  }, [key, threadRef]);
-}
 
 export function DirectorWorkspaceToggle(props: { threadRef: ScopedThreadRef }) {
   const showing = useRightPanelStore(
