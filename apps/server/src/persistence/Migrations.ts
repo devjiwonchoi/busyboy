@@ -20,6 +20,7 @@ import Migration0016 from "./Migrations/016_ProjectTaskModelRuns.ts";
 import Migration0017 from "./Migrations/017_WorkspaceGoals.ts";
 
 import Migration0018 from "./Migrations/018_ProjectAttentionContext.ts";
+import Migration0019 from "./Migrations/019_RemoveTaskProposals.ts";
 
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
@@ -40,6 +41,7 @@ export const migrationEntries = [
   [16, "ProjectTaskModelRuns", Migration0016],
   [17, "WorkspaceGoals", Migration0017],
   [18, "ProjectAttentionContext", Migration0018],
+  [19, "RemoveTaskProposals", Migration0019],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
