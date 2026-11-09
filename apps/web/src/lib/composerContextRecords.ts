@@ -16,6 +16,8 @@ import type {
   ReviewCommentContextRecord,
   ScopedThreadRef,
   TerminalContextRecord,
+  LinkedContextRecord,
+  ProjectContextRecord,
   ThreadContextRecord,
   ThreadId,
 } from "@t3tools/contracts";
@@ -154,8 +156,27 @@ function threadContextId(threadId: ThreadId): ComposerContextId {
   return toKindScopedComposerContextId("thread", threadId);
 }
 
-export function threadContextReference(record: ThreadContextRecord): ComposerContextReference {
-  return { kind: "thread", contextId: record.contextId, label: record.label };
+export function linkedContextReference(record: LinkedContextRecord): ComposerContextReference {
+  return { kind: record.kind, contextId: record.contextId, label: record.label };
+}
+
+export function projectContextRecord(project: {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectContextRecord["projectId"];
+  readonly title: string;
+  readonly workspaceRoot: string;
+}): ProjectContextRecord {
+  const label = sanitizeComposerContextLabel(project.title, "project");
+  return {
+    version: 1,
+    kind: "project",
+    contextId: toKindScopedComposerContextId("project", project.projectId),
+    label,
+    environmentId: project.environmentId,
+    projectId: project.projectId,
+    title: label,
+    workspaceRoot: project.workspaceRoot,
+  };
 }
 
 export function threadContextRecord(ref: ScopedThreadRef, title: string): ThreadContextRecord {
@@ -310,7 +331,7 @@ export function buildMessageContext(input: {
   terminalContexts: ReadonlyArray<TerminalContextDraft>;
   reviewComments: ReadonlyArray<ReviewCommentContext>;
   previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
-  threadContexts?: ReadonlyArray<ThreadContextRecord>;
+  threadContexts?: ReadonlyArray<LinkedContextRecord>;
   attachments?: ReadonlyArray<BoundComposerAttachment>;
 }): OrchestrationMessageContext | undefined {
   const screenshotAttachmentIds = new Set(

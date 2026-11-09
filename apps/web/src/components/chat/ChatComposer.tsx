@@ -31,7 +31,7 @@ import type {
   PullRequestListInput,
   PreviewAnnotationPayload,
   ProviderApprovalDecision,
-  ThreadContextRecord,
+  LinkedContextRecord,
   ProviderInteractionMode,
   ResolvedKeybindingsConfig,
   RuntimeMode,
@@ -247,12 +247,14 @@ import {
   terminalContextDraftFromRecord,
   terminalContextReference,
   terminalContextRecord,
+  projectContextRecord,
   threadContextRecord,
-  threadContextReference,
+  linkedContextReference,
 } from "~/lib/composerContextRecords";
+import { matchComposerProjectItems } from "@t3tools/client-runtime/composerProjectItems";
 import { matchComposerThreadItems } from "@t3tools/client-runtime/composerThreadItems";
 import { useThreadContextDrop, threadContextDropTargetProps } from "./threadContextDrag";
-import { readThreadShell, useThreadShells } from "~/state/entities";
+import { readThreadShell, useProjects, useThreadShells } from "~/state/entities";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
 import type {
@@ -1483,7 +1485,7 @@ export interface ChatComposerHandle {
     terminalContexts: TerminalContextDraft[];
     previewAnnotations: PreviewAnnotationPayload[];
     reviewComments: ReviewCommentContext[];
-    threadContexts: ThreadContextRecord[];
+    threadContexts: LinkedContextRecord[];
     selectedPromptEffort: string | null;
     selectedModelOptionsForDispatch: unknown;
     selectedModelSelection: ModelSelection;
@@ -2567,6 +2569,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pullRequestTextQuery === debouncedPullRequestTextQuery ? pullRequestTextQuery : null;
   const isPathTrigger = composerTriggerKind === "path";
   const environmentThreadShells = useThreadShells(isPathTrigger);
+  const environmentProjects = useProjects();
   const workspaceEntries = useComposerPathSearch({
     environmentId,
     cwd: isPathTrigger ? gitCwd : null,
@@ -2645,6 +2648,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
       return [
+        ...matchComposerProjectItems({
+          projects: environmentProjects,
+          environmentId,
+          query: composerTrigger.query,
+        }),
         ...matchComposerThreadItems({
           shells: environmentThreadShells,
           environmentId,
@@ -3243,7 +3251,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             ? reviewCommentContextRecord(existing.record)
             : existing?.kind === "preview-annotation"
               ? previewAnnotationContextRecord(existing.record)
-              : existing?.kind === "thread"
+              : existing?.kind === "thread" || existing?.kind === "project"
                 ? existing.record
                 : existing
                   ? (uploadedContextRecordFromDraft(existing) ?? undefined)
@@ -3292,8 +3300,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           rewritten.set(record.contextId, previewAnnotationContextId(annotation.id));
           break;
         }
-        case "thread": {
-          // The agent can only read threads on its own server; a pasted foreign one is dropped.
+        case "thread":
+        case "project": {
+          // The agent can only reach threads and projects on its own server; a pasted foreign
+          // one is dropped.
           if (record.environmentId !== environmentId) break;
           addComposerDraftThreadContexts(attachmentDraftTarget, [record], {
             appendReference: false,
@@ -3575,7 +3585,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const removedContextPayloadsRef = useRef<{
     terminals: Map<string, TerminalContextDraft>;
     reviewComments: Map<string, ReviewCommentContext>;
-    threads: Map<string, ThreadContextRecord>;
+    threads: Map<string, LinkedContextRecord>;
   }>({ terminals: new Map(), reviewComments: new Map(), threads: new Map() });
   const removedAttachmentContextPayloadsRef = useRef<RetainedAttachmentContextPayloads>({
     files: new Map(),
@@ -3931,12 +3941,32 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }
       return;
     }
+    if (item.type === "project") {
+      if (trigger.kind !== "path") return;
+      const record = projectContextRecord(item.project);
+      const replacement = `${formatInlineContextReference(linkedContextReference(record))} `;
+      const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+        snapshot.value,
+        trigger.rangeEnd,
+        replacement,
+      );
+      const applied = applyPromptReplacement(trigger.rangeStart, replacementRangeEnd, replacement, {
+        expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
+      });
+      if (applied) {
+        addComposerDraftThreadContexts(attachmentDraftTarget, [record], {
+          appendReference: false,
+        });
+        setComposerHighlightedItemId(null);
+      }
+      return;
+    }
     if (item.type === "thread") {
       if (trigger.kind !== "path") return;
       const shell = readThreadShell(item.thread);
       if (!shell) return;
       const record = threadContextRecord(item.thread, shell.title);
-      const replacement = `${formatInlineContextReference(threadContextReference(record))} `;
+      const replacement = `${formatInlineContextReference(linkedContextReference(record))} `;
       const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
         snapshot.value,
         trigger.rangeEnd,
@@ -5979,7 +6009,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         !activePendingIsResponding &&
         activePendingProgress?.activeQuestion?.allowCustomAnswer !== false;
       const text = `${records
-        .map((record) => formatInlineContextReference(threadContextReference(record)))
+        .map((record) => formatInlineContextReference(linkedContextReference(record)))
         .join(" ")} `;
       const snapshot = readComposerSnapshotStable();
       const cursor = snapshot.expandedCursor;

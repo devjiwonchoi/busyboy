@@ -1,7 +1,11 @@
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { formatInlineContextReference } from "./lib/composerContextReferences";
-import { threadContextRecord, threadContextReference } from "./lib/composerContextRecords";
+import {
+  linkedContextReference,
+  projectContextRecord,
+  threadContextRecord,
+} from "./lib/composerContextRecords";
 
 import {
   buildPendingUserInputAnswers,
@@ -25,9 +29,22 @@ describe("projectPendingUserInputAnswer", () => {
   );
 
   it("sends thread chips as readable links with the actual thread ID", () => {
-    const answer = `Compare ${formatInlineContextReference(threadContextReference(record))}`;
+    const answer = `Compare ${formatInlineContextReference(linkedContextReference(record))}`;
     expect(projectPendingUserInputAnswer(answer, [record])).toBe(
       "Compare [Reference work](t3-thread://v1/reference-thread)",
+    );
+  });
+
+  it("sends project chips as the name with its project ID and path", () => {
+    const project = projectContextRecord({
+      environmentId: EnvironmentId.make("env-answer"),
+      projectId: ProjectId.make("p-next-bot"),
+      title: "next-bot",
+      workspaceRoot: "/code/next-bot",
+    });
+    const answer = `Use ${formatInlineContextReference(linkedContextReference(project))}`;
+    expect(projectPendingUserInputAnswer(answer, [project])).toBe(
+      "Use next-bot (projectId: p-next-bot, path: /code/next-bot)",
     );
   });
 

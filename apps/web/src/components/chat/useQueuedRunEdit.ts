@@ -8,7 +8,7 @@ import {
   type PreviewAnnotationPayload,
   type RunId,
   type ScopedThreadRef,
-  type ThreadContextRecord,
+  type LinkedContextRecord,
   type ThreadId,
 } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
@@ -60,7 +60,7 @@ export interface QueuedRunEditContent {
   readonly terminalContexts: ReadonlyArray<TerminalContextDraft>;
   readonly reviewComments: ReadonlyArray<ReviewCommentContext>;
   readonly previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
-  readonly threadContexts: ReadonlyArray<ThreadContextRecord>;
+  readonly threadContexts: ReadonlyArray<LinkedContextRecord>;
 }
 
 /** Draft id for editing a queued run of the route thread. */

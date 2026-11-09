@@ -120,6 +120,15 @@ const knownRecords: Record<(typeof COMPOSER_CONTEXT_KINDS)[number], Record<strin
     threadId: "thread-1",
     title: "Fix login flow",
   },
+  project: {
+    ...base,
+    kind: "project",
+    label: "next-bot",
+    environmentId: "environment-1",
+    projectId: "project-1",
+    title: "next-bot",
+    workspaceRoot: "/Users/me/code/next-bot",
+  },
 };
 
 describe("ComposerContextRecord", () => {

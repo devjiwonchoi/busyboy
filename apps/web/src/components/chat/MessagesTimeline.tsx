@@ -125,6 +125,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, RootContent } from "mdast";
 import { T3Wordmark } from "../T3Wordmark";
+import { ProjectContextChip } from "../ProjectContextChip";
 import { ThreadContextChip } from "../ThreadContextChip";
 import {
   BotIcon,
@@ -4415,6 +4416,16 @@ const userMessageContextPresentationRegistry = createContextPresentationRegistry
       render: (record, context) =>
         record.kind === "thread" ? (
           <ThreadContextChip record={record} copyMarkdown={context.copyMarkdown} />
+        ) : (
+          <UnavailableUserMessageContextChip {...context} />
+        ),
+    },
+    {
+      kind: "project",
+      canRender: (record) => record.kind === "project",
+      render: (record, context) =>
+        record.kind === "project" ? (
+          <ProjectContextChip record={record} copyMarkdown={context.copyMarkdown} />
         ) : (
           <UnavailableUserMessageContextChip {...context} />
         ),

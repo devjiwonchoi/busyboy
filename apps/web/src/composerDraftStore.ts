@@ -17,7 +17,7 @@ import {
   PastedTextAttachmentSource,
   type PreviewAnnotationPayload,
   RuntimeMode,
-  ThreadContextRecord,
+  LinkedContextRecord,
   type ServerProvider,
   type ScopedProjectRef,
   type ScopedThreadRef,
@@ -66,7 +66,7 @@ import {
   reviewCommentContextId,
   reviewCommentContextReference,
   terminalContextReference,
-  threadContextReference,
+  linkedContextReference,
 } from "./lib/composerContextRecords";
 import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
@@ -84,7 +84,7 @@ import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewC
 const isRuntimeMode = Schema.is(RuntimeMode);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
 const isReviewCommentContext = Schema.is(ReviewCommentContextSchema);
-const isThreadContextRecord = Schema.is(ThreadContextRecord);
+const isLinkedContextRecord = Schema.is(LinkedContextRecord);
 const isSnapShotSource = Schema.is(SnapShotSource);
 const isPreviewAnnotationPayload = Schema.is(PreviewAnnotationPayloadSchema);
 
@@ -236,7 +236,7 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   terminalContexts: Schema.optionalKey(Schema.Array(PersistedTerminalContextDraft)),
   previewAnnotations: Schema.optionalKey(Schema.Array(PreviewAnnotationPayloadSchema)),
   reviewComments: Schema.optionalKey(Schema.Array(ReviewCommentContextSchema)),
-  threadContexts: Schema.optionalKey(Schema.Array(ThreadContextRecord)),
+  threadContexts: Schema.optionalKey(Schema.Array(LinkedContextRecord)),
   annotations: Schema.optionalKey(Schema.Array(ComposerAnnotationSchema)),
   // The record's value schema is NOT wrapped in `Schema.optionalKey`: that
   // helper is only meaningful on property signatures with a known key set, and
@@ -328,7 +328,7 @@ export interface ComposerThreadDraftState {
   terminalContexts: TerminalContextDraft[];
   previewAnnotations: PreviewAnnotationPayload[];
   reviewComments: ReviewCommentContext[];
-  threadContexts: ThreadContextRecord[];
+  threadContexts: LinkedContextRecord[];
   annotations: ReadonlyArray<ComposerAnnotation>;
   modelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>>;
   activeProvider: ProviderInstanceId | null;
@@ -571,12 +571,12 @@ interface ComposerDraftStoreState {
   ) => void;
   addThreadContexts: (
     threadRef: ComposerThreadTarget,
-    records: ReadonlyArray<ThreadContextRecord>,
+    records: ReadonlyArray<LinkedContextRecord>,
     options?: ComposerContextAddOptions,
   ) => void;
   setThreadContexts: (
     threadRef: ComposerThreadTarget,
-    records: ReadonlyArray<ThreadContextRecord>,
+    records: ReadonlyArray<LinkedContextRecord>,
   ) => void;
   clearPersistedAttachments: (threadRef: ComposerThreadTarget) => void;
   syncPersistedAttachments: (
@@ -682,7 +682,7 @@ const EMPTY_PERSISTED_ATTACHMENTS: PersistedComposerImageAttachment[] = [];
 const EMPTY_TERMINAL_CONTEXTS: TerminalContextDraft[] = [];
 const EMPTY_PREVIEW_ANNOTATIONS: PreviewAnnotationPayload[] = [];
 const EMPTY_REVIEW_COMMENTS: ReviewCommentContext[] = [];
-const EMPTY_THREAD_CONTEXTS: ThreadContextRecord[] = [];
+const EMPTY_THREAD_CONTEXTS: LinkedContextRecord[] = [];
 const EMPTY_ANNOTATIONS: ReadonlyArray<ComposerAnnotation> = Object.freeze([]);
 Object.freeze(EMPTY_IMAGES);
 Object.freeze(EMPTY_FILES);
@@ -1580,7 +1580,7 @@ function normalizePersistedDraftsByThreadId(
       ? draftCandidate.reviewComments.filter(isReviewCommentContext)
       : [];
     const threadContexts = Array.isArray(draftCandidate.threadContexts)
-      ? draftCandidate.threadContexts.filter(isThreadContextRecord)
+      ? draftCandidate.threadContexts.filter(isLinkedContextRecord)
       : [];
     const previewAnnotations = Array.isArray(draftCandidate.previewAnnotations)
       ? draftCandidate.previewAnnotations.filter(isPreviewAnnotationPayload)
@@ -2030,7 +2030,7 @@ function toHydratedThreadDraft(
     prompt: ensureInlineContextReferences(persistedDraft.prompt, [
       ...(persistedDraft.reviewComments ?? []).map(reviewCommentContextReference),
       ...(persistedDraft.previewAnnotations ?? []).map(previewAnnotationContextReference),
-      ...(persistedDraft.threadContexts ?? []).map(threadContextReference),
+      ...(persistedDraft.threadContexts ?? []).map(linkedContextReference),
       ...files.map(fileContextReference),
     ]),
     images: hydrateImagesFromPersisted(persistedDraft.attachments),
@@ -3501,7 +3501,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             return true;
           });
           if (incoming.length === 0) return;
-          const references = incoming.map(threadContextReference);
+          const references = incoming.map(linkedContextReference);
           const placedAtCaret =
             options?.appendReference !== false &&
             options?.insertAtCaret !== false &&
@@ -3521,7 +3521,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                       ? existing.prompt
                       : ensureInlineContextReferences(
                           existing.prompt,
-                          accepted.map(threadContextReference),
+                          accepted.map(linkedContextReference),
                         ),
                   threadContexts: [...existing.threadContexts, ...accepted],
                 },
@@ -3533,7 +3533,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
           const threadKey = resolveComposerDraftKey(get(), threadRef);
           if (!threadKey) return;
           const threadContexts = records
-            .filter(isThreadContextRecord)
+            .filter(isLinkedContextRecord)
             .map((record) => ({ ...record }));
           set((state) => {
             const existing = state.draftsByThreadKey[threadKey] ?? createEmptyThreadDraft();
@@ -3545,7 +3545,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             }
             prompt = ensureInlineContextReferences(
               prompt,
-              threadContexts.map(threadContextReference),
+              threadContexts.map(linkedContextReference),
             );
             const nextDraft = { ...existing, prompt, threadContexts };
             const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
@@ -3691,7 +3691,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               prompt: ensureInlineContextReferences("", [
                 ...current.terminalContexts.map(terminalContextReference),
                 ...current.reviewComments.map(reviewCommentContextReference),
-                ...current.threadContexts.map(threadContextReference),
+                ...current.threadContexts.map(linkedContextReference),
                 ...current.previewAnnotations.map(previewAnnotationContextReference),
               ]),
               images: [],

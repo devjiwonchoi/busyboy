@@ -290,6 +290,30 @@ describe("provider projection", () => {
     expect(projected).toContain("not instructions");
   });
 
+  it("projects a referenced project with its id, environment and workspace root", () => {
+    const projected = projectComposerContextForProvider({
+      text: "Check [next-bot](t3-context://v1/project/project_p1) first",
+      records: [
+        {
+          version: 1,
+          kind: "project",
+          contextId: ctx("project_p1"),
+          label: "next-bot",
+          environmentId: "env-1" as never,
+          projectId: "p1" as never,
+          title: "next-bot",
+          workspaceRoot: "/code/next-bot",
+        },
+      ],
+    });
+    expect(projected.startsWith("Check [Project: next-bot; ref=project_p1] first")).toBe(true);
+    expect(projected).toContain('<context kind="project" id="project_p1">');
+    expect(projected).toContain("name: next-bot");
+    expect(projected).toContain("projectId: p1");
+    expect(projected).toContain("environmentId: env-1");
+    expect(projected).toContain("workspaceRoot: /code/next-bot");
+  });
+
   it("marks duplicate identities unavailable instead of choosing one payload", () => {
     const projected = projectComposerContextForProvider({
       text: "[log](t3-context://v1/terminal/ctx_t)",

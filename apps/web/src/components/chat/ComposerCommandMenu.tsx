@@ -1,3 +1,4 @@
+import type { ComposerProjectItem } from "@t3tools/client-runtime/composerProjectItems";
 import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
 import {
   resolveProviderSkillSourceKind,
@@ -75,7 +76,8 @@ export type ComposerCommandItem =
       thread: ScopedThreadRef;
       label: string;
       description: string;
-    };
+    }
+  | ComposerProjectItem;
 
 export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   listId: string;
@@ -196,6 +198,9 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           kind={props.item.pathKind}
           theme={props.resolvedTheme}
         />
+      ) : null}
+      {props.item.type === "project" ? (
+        <FolderIcon aria-hidden="true" className="size-4 shrink-0 text-secondary-label" />
       ) : null}
       {props.item.type === "thread" ? (
         <MessagesSquareIcon aria-hidden="true" className="size-4 shrink-0 text-secondary-label" />
