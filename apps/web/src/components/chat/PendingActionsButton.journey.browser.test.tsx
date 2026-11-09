@@ -97,7 +97,6 @@ function card(
   return {
     taskNumber,
     taskTitle,
-    proposal: null,
     plan: null,
     item: {
       id: ProjectAttentionItemId.make(id),

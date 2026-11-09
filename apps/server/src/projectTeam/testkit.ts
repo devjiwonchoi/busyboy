@@ -585,31 +585,14 @@ export const startLead = (
     return yield* team.startTask(pm, { taskId: task.id }, delegate);
   });
 
-/** Existing task fixtures go through the same proposal and user acceptance as the chat. */
+/** A task in Todo, created the way task_create does but without starting its lead. */
 export const createAcceptedTask = (caller: ThreadId, input: ProjectTeamTaskCreateInput) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
-    const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
     const { task } = yield* team.createTask(caller, {
       goal: input.request,
       verification: "Check the requested result.",
       ...input,
-    });
-    const role = yield* team.roleOf(caller);
-    if (role.type === "none") {
-      throw new Error("The proposer must have a team role.");
-    }
-    const [item] = yield* repository.listOpenAttentionItems({
-      projectId: role.projectId,
-      taskId: task.id,
-    });
-    if (item === undefined) {
-      throw new Error("The task proposal card is missing.");
-    }
-    yield* team.answerDecision({
-      projectId: item.projectId,
-      attentionItemId: item.id,
-      answer: "태스크로 추가",
     });
     return yield* team.readTask(caller, { taskId: task.id });
   });

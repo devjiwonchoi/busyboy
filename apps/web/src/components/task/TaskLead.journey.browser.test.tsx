@@ -310,7 +310,7 @@ async function openPlanFromHeader() {
   );
 }
 
-/** The lead saves a new plan version, and a new subtask and proposal card show up. */
+/** The lead saves a new plan version, and a new subtask and decision card show up. */
 async function arriveNewWork() {
   await act(() => {
     state.detail = {
@@ -319,7 +319,9 @@ async function arriveNewWork() {
         ...state.detail.versions,
         { ...state.detail.versions.at(-1)!, version: state.detail.versions.length + 1 },
       ],
-      openAttention: [{ id: "card-new", kind: "proposal" }] as never,
+      openAttention: [
+        { id: "card-new", kind: "decision", question: "새 질문", options: [] },
+      ] as never,
     };
     state.managers = [
       {

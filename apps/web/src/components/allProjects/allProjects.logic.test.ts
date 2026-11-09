@@ -55,7 +55,6 @@ function card(id: string, kind: string, createdAt: string, closed = false): Proj
     taskNumber: 1,
     taskTitle: "Task 1",
     plan: null,
-    proposal: null,
     item: {
       id: id as never,
       projectId: "p" as never,
@@ -106,8 +105,6 @@ describe("selectGoals", () => {
         task("sub", 7, { parentTaskId: "running" as never }),
         // A Director epic's subtask: its parent lives in another project.
         task("epic-child", 8, { parentTaskId: "epic-elsewhere" as never, stage: "in_review" }),
-        // A proposal the user hasn't added yet.
-        task("proposal", 9, { stage: "proposed" }),
       ],
       NOW,
     );
@@ -151,13 +148,12 @@ describe("needsYouOf", () => {
         card("1", "approval", "2026-11-08T10:00:00.000Z"),
         card("2", "decision", "2026-11-08T09:00:00.000Z"),
         card("3", "decision", "2026-11-08T11:00:00.000Z"),
-        card("4", "proposal", "2026-11-08T11:30:00.000Z"),
         card("5", "approval", "2026-11-08T08:00:00.000Z", true),
       ],
     });
     expect(needs).toEqual({
-      total: 4,
-      label: "플랜 승인 1 · 질문 2 · 제안 1",
+      total: 3,
+      label: "플랜 승인 1 · 질문 2",
       oldestAt: "2026-11-08T09:00:00.000Z",
     });
   });
@@ -207,29 +203,6 @@ describe("buildMapArrows", () => {
         toGoalTitle: "API 목표",
       },
     ]);
-  });
-
-  it("ignores proposals the user hasn't added, on either end", () => {
-    const entries = [
-      project("web", [
-        task("web-goal", 1),
-        task("web-proposal", 2, {
-          parentTaskId: "web-goal" as never,
-          stage: "proposed",
-          waitsOn: ["api-goal" as never],
-        }),
-        task("web-sub", 3, {
-          parentTaskId: "web-goal" as never,
-          waitsOn: ["api-proposal" as never],
-        }),
-      ]),
-      project("api", [
-        task("api-goal", 1),
-        task("api-proposal", 2, { parentTaskId: "api-goal" as never, stage: "proposed" }),
-      ]),
-    ];
-    const map = buildProjectMap(entries, NOW);
-    expect(buildMapArrows(map, buildTaskRelationsIndex(entries))).toEqual([]);
   });
 
   it("draws nothing once the awaited task is finished", () => {

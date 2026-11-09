@@ -10,14 +10,13 @@ import {
 
 const build = () => buildGoalGraph({ entries: goalGraphFixture(), nowMs: GRAPH_NOW });
 describe("goal graph", () => {
-  it("aligns goals, descendants, proposals, recent completions and unaligned work", () => {
+  it("aligns goals, descendants, recent completions and unaligned work", () => {
     const graph = build();
     expect(graph.goals.map((goal) => goal.id)).toEqual(["goal-1", "goal-2", "goal-3", "goal:none"]);
     expect(graph.goals[0]).toMatchObject({
       done: 2,
       total: 5,
       blocked: true,
-      proposals: [{ item: { taskId: "proposal" } }],
     });
     expect(graph.goals[2]?.missingWork).toBe(true);
     expect(graph.projects.map((project) => project.projectId)).toEqual(["a", "b"]);
@@ -109,7 +108,7 @@ describe("goal graph", () => {
     expect(layout.paths.length).toBe(graph.edges.length);
     expect(layout.paths.every((edge) => /^M.* C/.test(edge.d))).toBe(true);
   });
-  it("handles fatal blockers, finished dependencies and proposal ancestry", () => {
+  it("handles fatal blockers and finished dependencies", () => {
     const entries = goalGraphFixture();
     entries[0]!.summary = {
       ...entries[0]!.summary,
@@ -141,8 +140,8 @@ describe("live graph signals", () => {
       decisionCards: [
         ...entries[0]!.summary.decisionCards,
         {
-          ...graphCard("a-1", false),
-          item: { ...graphCard("a-1", false).item, id: "second-card" as never },
+          ...graphCard("a-1"),
+          item: { ...graphCard("a-1").item, id: "second-card" as never },
         },
       ],
     };
@@ -265,24 +264,24 @@ describe("live graph signals", () => {
 describe("goal graph panel summaries", () => {
   it("keeps global attention chronological and independent of goals and recent filtering", () => {
     const entries = goalGraphFixture();
-    const firstBase = graphCard("old", false);
+    const firstBase = graphCard("old");
     const first = {
       ...firstBase,
       item: { ...firstBase.item, createdAt: "2026-11-01T00:00:00.000Z" },
     };
-    const lastBase = graphCard("new", false);
+    const lastBase = graphCard("new");
     const last = { ...lastBase, item: { ...lastBase.item, createdAt: "2026-11-03T00:00:00.000Z" } };
-    const middleBase = graphCard("middle", false);
+    const middleBase = graphCard("middle");
     const middle = {
       ...middleBase,
       item: { ...middleBase.item, createdAt: "2026-11-02T00:00:00.000Z" },
     };
-    const answeredBase = graphCard("answered", false);
+    const answeredBase = graphCard("answered");
     const answered = {
       ...answeredBase,
       item: { ...answeredBase.item, answeredAt: "2026-11-04T00:00:00.000Z" },
     };
-    const withdrawnBase = graphCard("withdrawn", false);
+    const withdrawnBase = graphCard("withdrawn");
     const withdrawn = {
       ...withdrawnBase,
       item: { ...withdrawnBase.item, supersededAt: "2026-11-04T00:00:00.000Z" },

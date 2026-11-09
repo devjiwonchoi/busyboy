@@ -20,9 +20,6 @@ import {
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
   PLAN_APPROVAL_START,
-  TASK_PROPOSAL_ACCEPT,
-  TASK_PROPOSAL_DISMISS,
-  taskProposalOutcome,
   planApprovalOutcome,
   type ProjectDecisionCard,
   type ProjectSitrep,
@@ -302,7 +299,7 @@ export function directorAddedTaskWakeText(
 ): string {
   return [
     `[Director added task] ${key} ${task.title}`,
-    `The Director put it in your inbox on the user's behalf. Treat it as the user's request: start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user in one line if it has to wait.`,
+    `The Director put it in your Todo on the user's behalf. Treat it as the user's request and start it now with task_start (taskId: ${task.id}). If every slot is busy or a waitsOn task is unfinished, it waits in Todo until you can start it; tell the user in one line.`,
   ].join("\n");
 }
 
@@ -668,9 +665,14 @@ export class ProjectTeamService extends Context.Service<
     ) => Effect.Effect<ProjectTeamRepository.ProjectManagerRecord, ProjectTeamError>;
     readonly roleOf: (threadId: ThreadId) => Effect.Effect<ProjectTeamRole, ProjectTeamError>;
 
+    /**
+     * task_create. A PM's task starts at once through `delegate` when a slot is free;
+     * without `delegate` it only lands in Todo.
+     */
     readonly createTask: (
       callerThreadId: ThreadId,
       input: ProjectTeamTaskCreateInput,
+      delegate?: DelegateTaskLead,
     ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
     readonly startTask: (
       callerThreadId: ThreadId,
@@ -1036,21 +1038,10 @@ const make = Effect.gen(function* () {
       orTeamError("Could not read the task.", projectId),
       Effect.flatMap((task) =>
         Option.isSome(task) && task.value.projectId === projectId
-          ? refuseProposal(task.value, projectId)
+          ? Effect.succeed(task.value)
           : Effect.fail(teamError(`Task ${taskId} was not found in this project.`, projectId)),
       ),
     );
-
-  /** A proposal is not a task until the user adds it from its card, so no tool may act on it. */
-  const refuseProposal = (task: ProjectTask, projectId: ProjectId) =>
-    task.stage === "proposed"
-      ? Effect.fail(
-          teamError(
-            `#${task.number} ${task.title} is a proposal the user has not added yet. Only the user can add it, with 태스크로 추가 on its card; you are woken when they do.`,
-            projectId,
-          ),
-        )
-      : Effect.succeed(task);
 
   /** A task in any project: waitsOn and parents may cross projects. */
   const requireAnyTask = (taskId: ProjectTaskId, projectId: ProjectId) =>
@@ -1059,7 +1050,7 @@ const make = Effect.gen(function* () {
       Effect.flatMap(
         Option.match({
           onNone: () => Effect.fail(teamError(`Task ${taskId} was not found.`, projectId)),
-          onSome: (task) => refuseProposal(task, projectId),
+          onSome: (task) => Effect.succeed(task),
         }),
       ),
     );
@@ -1288,7 +1279,7 @@ const make = Effect.gen(function* () {
         changed = true;
       }
       const open = yield* repository.listOpenAttentionItems({ projectId });
-      // Plan cards were answered with their tasks above; blockers and task proposals wait for the user.
+      // Plan cards were answered with their tasks above; blockers wait for the user.
       for (const item of open) {
         if (item.kind !== "decision" || !due(item.createdAt)) continue;
         const answer = afkPickOption(item.options) ?? AFK_FREE_FORM_ANSWER;
@@ -1587,7 +1578,11 @@ const make = Effect.gen(function* () {
       return { task };
     });
 
-  const createTask: ProjectTeamService["Service"]["createTask"] = (callerThreadId, input) =>
+  const createTask: ProjectTeamService["Service"]["createTask"] = (
+    callerThreadId,
+    input,
+    delegate,
+  ) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm", "director", "lead"], "task_create");
       if (role.type === "lead") return yield* draftSubtask(callerThreadId, role, input);
@@ -1596,7 +1591,7 @@ const make = Effect.gen(function* () {
       const verification = input.verification?.trim() ?? "";
       if (goal.length === 0 || verification.length === 0) {
         return yield* teamError(
-          "task_create needs goal and verification: the end state and how to check it, in the user's language. They go on the proposal card the user adds the task from.",
+          "task_create needs goal and verification: the end state and how to check it, in the user's language. They go into the request the task lead plans from.",
           role.projectId,
         );
       }
@@ -1616,7 +1611,7 @@ const make = Effect.gen(function* () {
       }
       if (input.goalId !== undefined && role.type !== "director") {
         return yield* teamError(
-          "Only the Director links proposals to goals; leave goalId out.",
+          "Only the Director links tasks to goals; leave goalId out.",
           role.projectId,
         );
       }
@@ -1626,7 +1621,7 @@ const make = Effect.gen(function* () {
           return yield* teamError(`Goal ${goal.id} is ${goal.status}.`, role.projectId);
         }
       }
-      // A proposal, not a task: it stays out of every list until the user adds it from its card.
+      // The task goes straight to Todo; the user shapes its scope at plan approval.
       const task = yield* repository.createTask({
         id: ProjectTaskId.make(yield* newId("task")),
         projectId,
@@ -1634,14 +1629,12 @@ const make = Effect.gen(function* () {
         request: `${input.request}\n\nGoal: ${goal}\n\nVerification: ${verification}`,
         waitsOn,
         parentTaskId: input.parentTaskId,
-        stage: "proposed",
         now: yield* nowIso,
         author: "pm",
         authorThreadId: callerThreadId,
       });
+      yield* appendEvent(task, "created", task.title, callerThreadId);
       yield* appendEvent(task, "note", `Intake: ${intake}`, callerThreadId);
-      yield* appendEvent(task, "note", "Proposed; waits for the user to add it.", callerThreadId);
-      // Alignment ignores proposals, so the link counts only once the user adds the task.
       if (input.goalId !== undefined) {
         const goalId = input.goalId;
         yield* goalLocks.withLock(
@@ -1656,89 +1649,53 @@ const make = Effect.gen(function* () {
           }),
         );
       }
-      // The card shows in the proposer's chat, which for the Director is its own project.
-      yield* router.ask({
-        task,
-        projectId: role.projectId,
-        kind: "proposal",
-        question: task.title,
-        options: [TASK_PROPOSAL_ACCEPT, TASK_PROPOSAL_DISMISS],
-        askerThreadId: callerThreadId,
-        summary: goal,
-        verification,
-      });
-      return { task };
-    }).pipe(orTeamError("Could not propose the task."));
+      if (task.parentTaskId !== null) {
+        yield* syncEpic(task.parentTaskId);
+      }
+      yield* router.publish(task.projectId);
+      if (task.projectId !== role.projectId) {
+        // The Director routed it: that project's PM starts it.
+        yield* wakeManagerWith(
+          task.projectId,
+          `project-team:director-added:${task.id}`,
+          directorAddedTaskWakeText(yield* keyOf(task), task),
+        );
+        return { task };
+      }
+      // A PM's task starts right away; without a free slot it waits in Todo.
+      if (role.type !== "pm" || delegate === undefined) return { task };
+      return yield* startTask(callerThreadId, { taskId: task.id }, delegate).pipe(
+        Effect.map((started): ProjectTeamTaskResult => ({ task: started.task })),
+        // Only a full slot or an unfinished dependency means "wait"; other failures surface.
+        Effect.catch((failure) =>
+          Effect.gen(function* () {
+            const current = yield* requireTask(task.id, task.projectId);
+            const reason = current.stage === "inbox" ? yield* startWaitReason(current) : null;
+            if (reason === null) return yield* Effect.fail(failure);
+            const waiting = `Waiting in Todo: ${reason}`;
+            yield* appendEvent(current, "note", waiting, callerThreadId);
+            return { task: current, waiting };
+          }),
+        ),
+      );
+    }).pipe(orTeamError("Could not create the task."));
 
-  /**
-   * The user answered a proposal card. Add: the proposal becomes an inbox task and the
-   * proposer hears it (for the Director's proposal to a project, that project's PM too).
-   * Remove or feedback: the card closes, the proposal stays hidden, and the proposer hears why.
-   */
-  const answerProposal = (item: ProjectAttentionItem, answer: string, senderThreadId: ThreadId) =>
+  /** Why an inbox task cannot start yet: every lead slot is busy or a dependency is unfinished. */
+  const startWaitReason = (task: ProjectTask) =>
     Effect.gen(function* () {
-      const found = yield* repository.getTask(item.taskId);
-      const outcome = taskProposalOutcome(answer);
-      if (
-        Option.isNone(found) ||
-        (found.value.stage !== "proposed" &&
-          !(outcome === "accept" && found.value.stage === "inbox" && item.answeredAt === null))
-      ) {
-        return yield* teamError("This proposal is no longer open.", item.projectId);
+      const manager = yield* requireManager(task.projectId);
+      const active = yield* activeTasks(task.projectId);
+      const limit = manager.settings.maxConcurrentTasks;
+      if (active.length >= limit) {
+        return `${active.length} of ${limit} task leads are already running.`;
       }
-      const proposal = found.value;
-      if (outcome !== "accept") {
-        const relayText =
-          outcome === "dismiss"
-            ? `[제안 빠짐] ${proposal.title}\nThe user removed this proposal. Don't propose it again unless they ask.`
-            : `[제안 피드백] ${proposal.title}\n${answer}\nThe proposal is closed. Post a new task_create proposal if it still makes sense.`;
-        const closed = yield* router.answer({
-          item,
-          answer,
-          senderThreadId,
-          answeredBy: "user",
-          relayText,
-        });
-        // After the answer lands: a failed relay keeps the card open with its goal link.
-        yield* unlinkFromGoals(proposal.id);
-        return closed;
-      }
-      const key = yield* keyOf(proposal);
-      const routed = proposal.projectId !== item.projectId;
-      const manager = yield* repository.getManager(item.projectId);
-      const epic = !routed && Option.isSome(manager) && manager.value.kind === "director";
-
-      // Make the task runnable before the proposer hears approval. A retry after a relay
-      // failure can finish answering the open card without repeating the stage events.
-      if (proposal.stage === "proposed") {
-        const task = yield* setTask({ id: proposal.id, stage: "inbox" });
-        yield* appendEvent(task, "created", task.title, null);
-        yield* appendEvent(task, "note", "The user added it from its proposal card.", null);
-        if (task.parentTaskId !== null) {
-          yield* syncEpic(task.parentTaskId);
+      for (const dependencyId of task.waitsOn) {
+        const dependency = yield* requireAnyTask(dependencyId, task.projectId);
+        if (!isDependencyCleared(dependency.stage)) {
+          return `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`;
         }
       }
-      const answered = yield* router.answer({
-        item,
-        answer,
-        senderThreadId,
-        answeredBy: "user",
-        relayText: routed
-          ? `[제안 승인됨] ${key} ${proposal.title}\nThe user added it to that project's Todo, and its PM was told to start it with task_start.`
-          : epic
-            ? `[제안 승인됨] ${key} ${proposal.title}\nThe user added this epic. Now propose one task per project with task_create(projectId, parentTaskId: ${proposal.id}).`
-            : `[제안 승인됨] ${key} ${proposal.title}\nThe user added it to Todo. Start it with task_start (taskId: ${proposal.id}) when a slot is free.`,
-      });
-      if (routed) {
-        yield* wakeManagerWith(
-          proposal.projectId,
-          `project-team:director-added:${proposal.id}`,
-          directorAddedTaskWakeText(key, proposal),
-        );
-      }
-      yield* router.publish(proposal.projectId);
-      yield* router.publish(item.projectId);
-      return answered;
+      return null;
     });
 
   /**
@@ -3679,12 +3636,6 @@ const make = Effect.gen(function* () {
           role.projectId,
         );
       }
-      if (item.value.kind === "proposal") {
-        return yield* teamError(
-          "Only the user can add a proposed task: they press 태스크로 추가 on its card.",
-          role.projectId,
-        );
-      }
       // Decisions are the user's call: the PM may only relay words the user
       // typed in its chat after the card appeared. Blockers carry facts and need no check.
       // A closed card skips the check so the router reports why it cannot be answered.
@@ -3765,10 +3716,7 @@ const make = Effect.gen(function* () {
         );
       }
       if (role.type === "director" && item.value.kind !== "decision") {
-        return yield* teamError(
-          "The Director can only close decision cards. Only the user can resolve proposals.",
-          role.projectId,
-        );
+        return yield* teamError("The Director can only close decision cards.", role.projectId);
       }
       const task =
         role.type === "director"
@@ -3780,12 +3728,7 @@ const make = Effect.gen(function* () {
         senderThreadId: callerThreadId,
         notifyAsker: role.type === "pm",
       });
-      yield* appendEvent(
-        task,
-        "note",
-        `Question closed: ${input.reason}`,
-        callerThreadId,
-      );
+      yield* appendEvent(task, "note", `Question closed: ${input.reason}`, callerThreadId);
       return { item: dismissed };
     }).pipe(orTeamError("Could not close the question."));
 
@@ -3950,9 +3893,6 @@ const make = Effect.gen(function* () {
           input.projectId,
         );
       }
-      if (item.value.kind === "proposal") {
-        return { item: yield* answerProposal(item.value, input.answer, manager.threadId) };
-      }
       // Cancelling must stop the lead without starting another turn with the answer.
       const cancel =
         item.value.answeredAt === null &&
@@ -4005,12 +3945,6 @@ const make = Effect.gen(function* () {
       if (Option.isNone(item) || item.value.projectId !== input.projectId) {
         return yield* teamError(
           `Attention item ${input.attentionItemId} was not found in this project.`,
-          input.projectId,
-        );
-      }
-      if (item.value.kind === "proposal") {
-        return yield* teamError(
-          `Attention item ${input.attentionItemId} is a task proposal; it has no task lead to ask.`,
           input.projectId,
         );
       }
@@ -4351,22 +4285,6 @@ const make = Effect.gen(function* () {
       return yield* saveGoal({ ...goal, links, updatedAt: yield* nowIso }, projectId);
     });
 
-  /** A dropped proposal leaves no goal link behind. */
-  const unlinkFromGoals = (taskId: ProjectTaskId) =>
-    goalLocks.withLock(
-      "goals",
-      Effect.gen(function* () {
-        for (const goal of yield* repository.listWorkspaceGoals()) {
-          if (!goal.links.some((link) => link.taskId === taskId)) continue;
-          yield* repository.saveWorkspaceGoal({
-            ...goal,
-            links: goal.links.filter((link) => link.taskId !== taskId),
-            updatedAt: yield* nowIso,
-          });
-        }
-      }),
-    );
-
   const pmNudge: ProjectTeamService["Service"]["pmNudge"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["director"], "pm_nudge");
@@ -4552,8 +4470,7 @@ const make = Effect.gen(function* () {
       );
       return yield* Effect.forEach(items, (item) =>
         Effect.gen(function* () {
-          // Proposals are left out of task lists, and the Director's cards may be about
-          // tasks in other projects.
+          // The Director's cards may be about tasks in other projects.
           const task =
             tasks.get(item.taskId) ?? Option.getOrUndefined(yield* repository.getTask(item.taskId));
           if (task === undefined) return [];
@@ -4562,7 +4479,6 @@ const make = Effect.gen(function* () {
             taskNumber: task.number,
             taskTitle: task.title,
             plan: yield* approvalPlanFor(item),
-            proposal: item.kind === "proposal" ? { projectId: task.projectId } : null,
           };
           return [card];
         }),
@@ -4698,13 +4614,12 @@ const make = Effect.gen(function* () {
           const projectTaskIds = new Set(tasks.map((task) => task.id));
           // Top-level tasks are the goals: no parent, or a parent outside this project.
           const latestVersions = yield* repository.listLatestSpecVersionNumbers(projectId);
-          // Cancelled goals and unadded proposals never show on the map, so their specs aren't read.
+          // Cancelled goals never show on the map, so their specs aren't read.
           const checksByTask = new Map(
             yield* Effect.forEach(
               tasks.filter(
                 (task) =>
                   task.stage !== "cancelled" &&
-                  task.stage !== "proposed" &&
                   (task.parentTaskId === null || !projectTaskIds.has(task.parentTaskId)),
               ),
               (task) =>

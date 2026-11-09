@@ -88,17 +88,7 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
                 나를 기다림 {goal.needsYou}
               </button>
             ) : null}
-            <GoalChips
-              goal={goal}
-              onProposals={() => {
-                if (graph.director !== null) {
-                  openChat({
-                    environmentId: graph.director.environmentId,
-                    pmThreadId: graph.director.summary.pmThreadId,
-                  });
-                }
-              }}
-            />
+            <GoalChips goal={goal} />
           </div>
           {expanded.has(goal.id)
             ? graph.projects

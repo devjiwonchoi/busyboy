@@ -44,8 +44,6 @@ export const MIN_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES = 15;
 export const MAX_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES = 480;
 
 export const ProjectTaskStage = Schema.Literals([
-  /** A PM's or the Director's proposal; it becomes a task only when the user adds it. */
-  "proposed",
   "inbox",
   "planning",
   /** The plan is written and waits for the user's approval. */
@@ -76,7 +74,6 @@ export function projectTaskPhase(stage: ProjectTaskStage): ProjectTaskPhase | nu
       return "iterate";
     case "in_review":
       return "ship";
-    case "proposed":
     case "done":
     case "blocked":
     case "cancelled":
@@ -346,8 +343,6 @@ export function resolveProjectTaskStatus(
   if (signals.openQuestion) return "ask_question";
   if (task.stage === "blocked") return "fatal";
   switch (task.stage) {
-    // A proposal never reaches a task list; read it as Todo if one does.
-    case "proposed":
     case "inbox":
       return "todo";
     case "planning":
@@ -634,13 +629,7 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
   return `${prefix}-${taskNumber}`;
 }
 
-/** "proposal": a PM's or the Director's task proposal; only the user's click adds it. */
-export const ProjectAttentionKind = Schema.Literals([
-  "decision",
-  "approval",
-  "blocker",
-  "proposal",
-]);
+export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
 /** "afk": the server answered for the user while AFK was on. */
@@ -792,13 +781,6 @@ export const ProjectDecisionCard = Schema.Struct({
   taskTitle: Schema.String,
   /** For a plan approval: the plan it asks about. Null for other kinds and missing versions. */
   plan: Schema.NullOr(ProjectApprovalPlan).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
-  /**
-   * For a task proposal: the project the task goes to, which for the Director is not
-   * the card's project. Null for other kinds.
-   */
-  proposal: Schema.NullOr(Schema.Struct({ projectId: ProjectId })).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null)),
-  ),
 });
 export type ProjectDecisionCard = typeof ProjectDecisionCard.Type;
 
@@ -1233,21 +1215,23 @@ export const ProjectTeamTaskCreateInput = Schema.Struct({
   }),
   goal: Schema.optional(ProjectTaskRequest).annotate({
     description:
-      "PM and Director, required: the end state the task delivers, in the user's language. Shown on the proposal card as 목표.",
+      "PM and Director, required: the end state the task delivers, in the user's language. It goes into the request the task lead plans from.",
   }),
   verification: Schema.optional(ProjectTaskRequest).annotate({
     description:
-      "PM and Director, required: how to check it is done, in the user's language. Shown on the proposal card as 확인 방법.",
+      "PM and Director, required: how to check it is done, in the user's language. It goes into the request the task lead plans from.",
   }),
   goalId: Schema.optional(WorkspaceGoalId).annotate({
     description:
-      "Director only. The workspace goal this work serves; once the user adds the task it is linked to that goal.",
+      "Director only. The workspace goal this work serves; the task is linked to it right away.",
   }),
 });
 export type ProjectTeamTaskCreateInput = typeof ProjectTeamTaskCreateInput.Type;
 
 export const ProjectTeamTaskResult = Schema.Struct({
   task: ProjectTask,
+  /** task_create: why the new task waits in Todo instead of starting now. */
+  waiting: Schema.optional(Schema.String),
 });
 export type ProjectTeamTaskResult = typeof ProjectTeamTaskResult.Type;
 
@@ -1475,24 +1459,6 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
-
-/** Task proposal answers. Anything else is the user's feedback on the proposal. */
-export const TASK_PROPOSAL_ACCEPT = "태스크로 추가";
-export const TASK_PROPOSAL_DISMISS = "빼기";
-
-export type TaskProposalOutcome = "accept" | "dismiss" | "feedback";
-
-/** What an answer to a task proposal card means. */
-export function taskProposalOutcome(answer: string): TaskProposalOutcome {
-  const trimmed = answer.trim();
-  if (trimmed === TASK_PROPOSAL_ACCEPT) {
-    return "accept";
-  }
-  if (trimmed === TASK_PROPOSAL_DISMISS) {
-    return "dismiss";
-  }
-  return "feedback";
-}
 
 /** Plan approval answers. Anything else is feedback on the plan. */
 export const PLAN_APPROVAL_START = "Approve and start";

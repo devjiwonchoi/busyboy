@@ -176,7 +176,6 @@ function decisionCard(id: string, kind: "approval" | "decision", createdAt: stri
     taskNumber: 3,
     taskTitle: "Clean up build warnings",
     plan: null,
-    proposal: null,
     item: {
       id: id as never,
       projectId: "busyboy" as never,

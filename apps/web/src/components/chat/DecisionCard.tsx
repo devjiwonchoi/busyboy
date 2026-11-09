@@ -21,7 +21,6 @@ import ChatMarkdown from "../ChatMarkdown";
 import { Button } from "../ui/button";
 import { decisionQuestionPresentation, parseDecisionOption } from "./DecisionCard.logic";
 import { AFK_ANSWERED_LABEL } from "./Afk";
-import { ProposalCard } from "./ProposalCard";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 import { AttentionContext, AttentionTaskLink, useAttentionTask } from "./AttentionContext";
 import { CardDetailWithSideChat, type CardDetailTab, CardSideChat } from "./CardSideChat";
@@ -32,7 +31,6 @@ const KIND_LABEL: Record<ProjectDecisionCard["item"]["kind"], string> = {
   decision: "Decision",
   approval: "Plan approval",
   blocker: "Blocker",
-  proposal: "태스크 제안",
 };
 
 /** Questions asked without options still need something to pick; the note carries the detail. */
@@ -95,9 +93,6 @@ export function DecisionCard({
   cwd: string | undefined;
 }) {
   const { related, projectTitle } = useAttentionTask({ card, environmentId });
-  if (card.item.kind === "proposal") {
-    return <ProposalCard card={card} environmentId={environmentId} />;
-  }
   if (card.item.kind === "approval") {
     return <PlanApprovalCard card={card} environmentId={environmentId} />;
   }

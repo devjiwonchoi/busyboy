@@ -32,9 +32,9 @@ export function useAttentionTask({
   const isDirector = managers.some(
     (entry) => entry.summary.projectId === card.item.projectId && entry.summary.kind === "director",
   );
-  const projectId = related?.projectId ?? card.proposal?.projectId ?? card.item.projectId;
+  const projectId = related?.projectId ?? card.item.projectId;
   const projectTitle =
-    isDirector && related === null && card.proposal === null
+    isDirector && related === null
       ? "프로젝트 확인 필요"
       : (projects.find(
           (project) => project.environmentId === environmentId && project.id === projectId,

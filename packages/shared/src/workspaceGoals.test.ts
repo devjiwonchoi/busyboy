@@ -63,7 +63,6 @@ const seed = (epicChildStage: ProjectTaskStage) => ({
     task("B2", B, epicChildStage, { parentTaskId: id("E") }),
     // Open top-level work with no goal.
     task("B3", B, "inbox"),
-    task("B4", B, "proposed"),
     task("B5", B, "cancelled"),
   ],
   goals: [

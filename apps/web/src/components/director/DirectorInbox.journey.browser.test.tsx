@@ -91,7 +91,6 @@ function card(
   return {
     taskNumber: hour,
     taskTitle: `${id} 작업`,
-    proposal: kind === "proposal" ? { projectId: projectId as never } : null,
     plan: null,
     item: {
       id: id as never,
@@ -220,7 +219,7 @@ beforeEach(() => {
         pmThreadId: "pm-director" as never,
         kind: "director",
         persona: { name: "총괄", avatar: { kind: "emoji", emoji: "🧭" }, voice: "chill" },
-        decisionCards: [card("director", "제안", "proposal", 3)],
+        decisionCards: [card("director", "총괄", "decision", 3)],
         waitingThreads: [
           { threadId: "waiting-director" as never, title: "총괄 허용", kind: "approval" },
         ],
@@ -345,7 +344,7 @@ for (const width of [1280, 390]) {
 
       // Everything else gets handled: the dialog closes and the button goes away.
       await act(() => {
-        for (const id of ["실패", "제안", "계획"]) publishAnswered(id);
+        for (const id of ["실패", "총괄", "계획"]) publishAnswered(id);
         state.managers = state.managers.map((entry) => ({
           ...entry,
           summary: { ...entry.summary, waitingThreads: [] },
@@ -384,7 +383,7 @@ for (const width of [1280, 390]) {
       );
       expect(reveal).toHaveLength(1);
       await userEvent.click(reveal[0]!);
-      expect(state.revealed).toEqual(["제안"]);
+      expect(state.revealed).toEqual(["총괄"]);
       await vi.waitFor(() => expect(pendingDialog()).toBeNull());
     });
 

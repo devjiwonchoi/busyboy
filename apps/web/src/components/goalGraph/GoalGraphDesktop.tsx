@@ -265,17 +265,7 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
                 ) : null}
                 {goal !== undefined ? (
                   <span className="pointer-events-auto relative">
-                    <GoalChips
-                      goal={goal}
-                      onProposals={() => {
-                        if (graph.director !== null) {
-                          openChat({
-                            environmentId: graph.director.environmentId,
-                            pmThreadId: graph.director.summary.pmThreadId,
-                          });
-                        }
-                      }}
-                    />
+                    <GoalChips goal={goal} />
                   </span>
                 ) : null}
               </div>

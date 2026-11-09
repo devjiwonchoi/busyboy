@@ -314,7 +314,7 @@ it("reuses structured approval impacts and named task links from the inbox", asy
   await userEvent.click(row.querySelector<HTMLElement>("[data-director-inbox-task-link]")!);
   await vi.waitFor(() => expect(router.state.location.pathname).toBe("/tasks/env-1/a/a-1"));
 });
-/** A new task, a plan update and a new proposal card arrive through the subscription. */
+/** A new task, a plan update and a new decision card arrive through the subscription. */
 function arriveNewWork() {
   state.managers = state.managers.map((entry) =>
     entry.summary.projectId === "a"
@@ -328,7 +328,7 @@ function arriveNewWork() {
               ),
               graphTask("a-new", 9, { stage: "planning" }),
             ],
-            decisionCards: [...entry.summary.decisionCards, graphCard("a-new", true)],
+            decisionCards: [...entry.summary.decisionCards, graphCard("a-new")],
           },
         }
       : entry,

@@ -15,8 +15,6 @@ import { userLanguageRule } from "./userLanguage.ts";
 
 export function nextStepHint(stage: ProjectTaskStage): string {
   switch (stage) {
-    // A lead never runs on a proposal; this reads as the start of planning.
-    case "proposed":
     case "inbox":
     case "planning":
       return "Write the plan into the spec with task_spec_write, then ask for approval with ask_user(kind: approval). A subtask the user approved with its parent's breakdown skips the approval and goes to running.";

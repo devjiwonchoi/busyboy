@@ -12,7 +12,6 @@ import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ProjectTeamService from "../../../projectTeam/ProjectTeamService.ts";
 import {
   attentionContext,
-  PROJECT_ID,
   setUpManager,
   userSays,
   withTeam,
@@ -101,18 +100,7 @@ describe("projectTeam MCP toolkit", () => {
             request: "Do A.",
           });
           assert.isFalse(created.isError);
-          const team = yield* ProjectTeamService.ProjectTeamService;
-          const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
-            (entry) => entry.item.taskId === content(created).task.id,
-          )!;
-          yield* team.answerDecision({
-            projectId: PROJECT_ID,
-            attentionItemId: card.item.id,
-            answer: "태스크로 추가",
-          });
-          const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
-          assert.isFalse(started.isError);
-          const lead = content(started).leadThreadId as ThreadId;
+          const lead = content(created).task.leadThreadId as ThreadId;
 
           const leadStart = yield* call(lead, "task_start", { taskId: content(created).task.id });
           assert.isTrue(leadStart.isError);
@@ -165,21 +153,12 @@ describe("projectTeam MCP toolkit", () => {
             title: "Add hello.sh",
             request: "Add hello.sh with a test.",
           });
-          assert.strictEqual(content(created).task.stage, "proposed");
-
+          // task_create starts the lead at once: no proposal card, no separate task_start.
+          assert.isFalse(created.isError);
+          assert.strictEqual(content(created).task.stage, "planning");
           const team = yield* ProjectTeamService.ProjectTeamService;
-          const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
-            (entry) => entry.item.taskId === content(created).task.id,
-          )!;
-          yield* team.answerDecision({
-            projectId: PROJECT_ID,
-            attentionItemId: card.item.id,
-            answer: "태스크로 추가",
-          });
-          const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
-          assert.isFalse(started.isError);
-          assert.strictEqual(content(started).task.stage, "planning");
-          const lead = content(started).leadThreadId as ThreadId;
+          assert.deepStrictEqual((yield* team.attentionSnapshot).projects[0]!.decisionCards, []);
+          const lead = content(created).task.leadThreadId as ThreadId;
           // The task lead is delegated from the PM's own MCP scope, its end does
           // not wake the PM (the outcome reactor decides that), and its worktree
           // starts from origin's default branch rather than the PM's local HEAD.
@@ -244,19 +223,9 @@ describe("projectTeam MCP toolkit", () => {
               title,
               request: `${title}.`,
             });
-            const team = yield* ProjectTeamService.ProjectTeamService;
-            const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
-              (entry) => entry.item.taskId === content(created).task.id,
-            )!;
-            yield* team.answerDecision({
-              projectId: PROJECT_ID,
-              attentionItemId: card.item.id,
-              answer: "태스크로 추가",
-            });
-            const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
             return {
               taskId: content(created).task.id as string,
-              lead: content(started).leadThreadId as ThreadId,
+              lead: content(created).task.leadThreadId as ThreadId,
             };
           });
         const first = yield* startTask("First");

@@ -199,7 +199,6 @@ function makeCard(kind: "approval" | "decision"): ProjectDecisionCard {
   return {
     taskNumber: 32,
     taskTitle: "Plan approval modal",
-    proposal: null,
     plan: null,
     item: {
       id: ProjectAttentionItemId.make(`attention-${kind}`),

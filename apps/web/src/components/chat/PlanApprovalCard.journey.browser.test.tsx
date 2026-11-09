@@ -169,7 +169,6 @@ function planCard(
   return {
     taskNumber,
     taskTitle: title,
-    proposal: null,
     plan: null,
     item: {
       id: ProjectAttentionItemId.make(id),
@@ -349,6 +348,30 @@ for (const viewport of [
   { name: "desktop", width: 1100, height: 800 },
   { name: "phone", width: 390, height: 844 },
 ]) {
+  it(`shows a new task straight in planning, with only plan cards to answer (${viewport.name})`, async () => {
+    await page.viewport(viewport.width, viewport.height);
+    // The PM's task_create started this task at once: no card asks to add it.
+    server.summary = {
+      ...server.summary!,
+      tasks: [...TASKS, taskRef(10, "Dark mode toggle", { stage: "planning" })],
+    };
+    await act(async () => root.render(<PmChat />));
+    // Only the two plan approvals wait on the user.
+    await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 2개"));
+    const login = await jumpTo("attention-login");
+    expect(login.dataset.decisionCardState).toBe("open");
+    expect(buttonIn(login, "Approve")).toBeTruthy();
+    const cards = [...container.querySelectorAll<HTMLElement>("[data-decision-card]")];
+    expect(cards.every((card) => !card.textContent?.includes("Dark mode toggle"))).toBe(true);
+    const labels = [...container.querySelectorAll("button")].map((button) =>
+      button.textContent?.trim(),
+    );
+    expect(labels).not.toContain("태스크로 추가");
+    expect(labels).not.toContain("빼기");
+    expect(container.textContent).not.toContain("태스크 제안");
+    await page.screenshot({ path: `__screenshots__/no-proposal-card-${viewport.name}.png` });
+  });
+
   it(`approves a plan from its card without opening the review (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
     await act(async () => root.render(<PmChat />));

@@ -7,7 +7,6 @@ function card(id: string, createdAt: string, answeredAt: string | null): Project
   return {
     taskNumber: 1,
     taskTitle: "결정",
-    proposal: null,
     plan: null,
     item: {
       id: id as never,

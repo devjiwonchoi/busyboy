@@ -32,17 +32,17 @@ export function graphTask(
     ...overrides,
   };
 }
-export function graphCard(taskId: string, proposal: boolean): ProjectDecisionCard {
+/** A decision card; the Director's own cards live in its project but may be about any task. */
+export function graphCard(taskId: string, projectId = "a"): ProjectDecisionCard {
   return {
     taskNumber: 1,
     taskTitle: "제안",
     plan: null,
-    proposal: proposal ? { projectId: "a" as never } : null,
     item: {
       id: `card-${taskId}` as never,
-      projectId: (proposal ? "director" : "a") as never,
+      projectId: projectId as never,
       taskId: taskId as never,
-      kind: proposal ? "proposal" : "decision",
+      kind: "decision",
       question: "확인해 주세요",
       options: [],
       answer: null,
@@ -99,7 +99,7 @@ export function goalGraphFixture() {
     graphTask("b-2", 2, { stage: "planning" }),
     graphTask("b-3", 3, { parentTaskId: "b-2" as never, stage: "planning" }),
   ]);
-  const director = entry("director", [graphTask("proposal", 1, { stage: "proposed" })]);
+  const director = entry("director", []);
   return [
     a,
     b,
@@ -113,12 +113,12 @@ export function goalGraphFixture() {
           goal("goal-2", 1, "b", "b-1"),
           goal("goal-3", 2, "b", "missing"),
         ],
-        decisionCards: [graphCard("proposal", true)],
+        decisionCards: [graphCard("a-2", "director")],
       },
     },
   ].map((item) =>
     item.summary.projectId === "a"
-      ? { ...item, summary: { ...item.summary, decisionCards: [graphCard("a-1", false)] } }
+      ? { ...item, summary: { ...item.summary, decisionCards: [graphCard("a-1")] } }
       : item,
   );
 }
@@ -143,8 +143,8 @@ export function goalGraphSignalsFixture() {
     ...b.summary,
     decisionCards: [
       {
-        ...graphCard("b-1", false),
-        item: { ...graphCard("b-1", false).item, projectId: "b" as never },
+        ...graphCard("b-1"),
+        item: { ...graphCard("b-1").item, projectId: "b" as never },
       },
     ],
   };
