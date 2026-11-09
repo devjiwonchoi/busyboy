@@ -15,6 +15,7 @@ import { encodeHelperFrame, HelperFrameDecoder } from "./HelperFraming.ts";
 import {
   HelperSupervisor,
   helperSpawnEnv,
+  helperRootDir,
   resolveHelperSocketPath,
   SOCKET_POLL_MS,
   type HelperChild,
@@ -522,6 +523,17 @@ describe("helperSpawnEnv", () => {
         { BUSYBOY_CU_SOCKET_DIR: "/test" },
       ),
     ).toEqual({ PATH: "/bin", BUSYBOY_CU_SOCKET_DIR: "/test" });
+  });
+});
+
+describe("helperRootDir", () => {
+  it("keeps development builds out of the installed app's helper folder", () => {
+    expect(helperRootDir("/Users/a", false)).toBe(
+      "/Users/a/Library/Application Support/BusyBoy/ComputerUse",
+    );
+    expect(helperRootDir("/Users/a", true)).toBe(
+      "/Users/a/Library/Application Support/BusyBoy/ComputerUse-dev",
+    );
   });
 });
 

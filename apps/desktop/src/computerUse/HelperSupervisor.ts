@@ -123,6 +123,19 @@ export const spawnHelperProcess =
     };
   };
 
+/**
+ * Where the helper copy and its socket live. Development builds use their own
+ * folder, so a dev run never replaces the installed app's helper or takes its
+ * socket. The copy keeps its TCC grants there because macOS matches them by
+ * the helper's signature, not its path.
+ */
+export function helperRootDir(homeDirectory: string, development: boolean): string {
+  return NodePath.join(
+    homeDirectory,
+    `Library/Application Support/BusyBoy/${development ? "ComputerUse-dev" : "ComputerUse"}`,
+  );
+}
+
 /** Mirrors `socket::resolve_path` in the helper. */
 export function resolveHelperSocketPath(input: {
   readonly homeDirectory: string;
