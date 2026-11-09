@@ -184,10 +184,6 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 async function open(initial: string) {
-  const redirect = AllProjectsRoute.options.component;
-  if (redirect === undefined) {
-    throw new Error("Missing all-projects redirect");
-  }
   const base = createRootRoute({ component: Outlet });
   const router = createRouter({
     history: createMemoryHistory({ initialEntries: [initial] }),
@@ -200,7 +196,7 @@ async function open(initial: string) {
       createRoute({
         getParentRoute: () => base,
         path: "/all-projects",
-        component: redirect,
+        component: AllProjectsRoute.options.component!,
       }),
       createRoute({
         getParentRoute: () => base,
@@ -213,28 +209,13 @@ async function open(initial: string) {
   return router;
 }
 
-it("shows a way home until a Director exists, then redirects to it", async () => {
-  const managers = state.managers;
-  state.managers = managers.filter((entry) => entry.summary.kind !== "director");
+it("waits for the Director before drawing the map", async () => {
+  state.managers = state.managers.filter((entry) => entry.summary.kind !== "director");
   const router = await open("/all-projects");
-  expect(router.state.location.pathname).toBe("/all-projects");
   await vi.waitFor(() => expect(container.textContent).toContain("디렉터를 찾는 중이에요"));
-  await act(() => {
-    state.managers = managers;
-    for (const listener of state.listeners) {
-      listener();
-    }
-  });
-  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/director-thread"));
-  expect(router.history.length).toBe(1);
-});
-
-it("leaves /all-projects for home from the notice when there is no Director", async () => {
-  state.managers = [];
-  const router = await open("/all-projects");
-  await userEvent.click(page.getByRole("link", { name: "홈으로", exact: true }));
-  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/"));
-  expect(container.textContent).toContain("홈");
+  // All projects is a page now: it stays put instead of redirecting.
+  expect(router.state.location.pathname).toBe("/all-projects");
+  expect(container.querySelector("[data-goal-map]")).toBeNull();
 });
 
 it("opens the desktop workspace only from the header as one goal view, and stays closed on re-entry", async () => {
@@ -277,10 +258,10 @@ it("opens the desktop workspace only from the header as one goal view, and stays
   await page.screenshot({ path: "__screenshots__/director-reentry-stays-closed.png" });
 });
 
-it("redirects the old URL on mobile and opens the workspace sheet only from the header", async () => {
+it("opens the workspace sheet on mobile only from the header", async () => {
   await page.viewport(390, 844);
-  const router = await open("/all-projects");
-  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/director-thread"));
+  await open("/env-1/director-thread");
+  await vi.waitFor(() => expect(container.textContent).toContain("대화 director-thread"));
   expect(document.querySelector('[data-testid="director-workspace-surface"]')).toBeNull();
   await userEvent.click(page.getByRole("button", { name: "전체 프로젝트", exact: true }));
   await vi.waitFor(() =>
