@@ -60,7 +60,7 @@ import {
   isDesktopUpdatePreparing,
   resolveDesktopUpdateButtonAction,
 } from "../../components/desktopUpdate.logic";
-import { showDesktopUpdateReadyPrompt } from "../../components/desktopUpdate.toast";
+import { installDesktopUpdate } from "../../components/desktopUpdate.toast";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import {
@@ -332,8 +332,10 @@ function AboutVersionSection() {
       return;
     }
 
-    if (action === "install" && updateState) {
-      showDesktopUpdateReadyPrompt(bridge, updateState);
+    if (action === "install") {
+      if (isUpdateActionPending) return;
+      setIsUpdateActionPending(true);
+      void installDesktopUpdate(bridge).finally(() => setIsUpdateActionPending(false));
       return;
     }
 

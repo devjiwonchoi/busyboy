@@ -6,7 +6,6 @@ import {
   getArm64IntelBuildWarningDescription,
   getDesktopUpdateActionError,
   getDesktopUpdateButtonTooltip,
-  getDesktopUpdateReadyDescription,
   getDesktopUpdateReleaseHistoryUrl,
   getDesktopUpdateReleaseUrl,
   isDesktopUpdateButtonDisabled,
@@ -282,15 +281,6 @@ describe("desktop update UI helpers", () => {
     };
 
     expect(getArm64IntelBuildWarningDescription(state)).toContain("downloading now");
-  });
-
-  it("says when a ready update installs", () => {
-    expect(getDesktopUpdateReadyDescription({})).toBe(
-      "Restart to install it now. Otherwise it installs when you quit BusyBoy.",
-    );
-    expect(getDesktopUpdateReadyDescription({ localApp: true })).toBe(
-      "Restart to install it now. Otherwise it installs the next time BusyBoy restarts.",
-    );
   });
 });
 
