@@ -1,9 +1,9 @@
 import { useImperativeHandle, useRef, useState } from "react";
 import type { GraphViewProps } from "./GoalGraph";
-import { GoalChips, PulseDot, toneClasses, waitingClass } from "./GoalGraphNodes";
+import { GoalChips, PulseDot, toneClasses } from "./GoalGraphNodes";
 import { treeOrder } from "./goalGraph.logic";
 
-export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }: GraphViewProps) {
+export function GoalGraphMobile({ graph, ref, openChat, openTask }: GraphViewProps) {
   const container = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(
     () =>
@@ -77,17 +77,6 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
                 {goal.done}/{goal.total}
               </span>
             </button>
-            {goal.needsYou > 0 && goal.waitingTarget !== null ? (
-              <button
-                type="button"
-                className={waitingClass}
-                data-waiting-count={goal.needsYou}
-                aria-label={`나를 기다림 ${goal.needsYou}`}
-                onClick={() => openWaiting(goal.waitingTarget!)}
-              >
-                나를 기다림 {goal.needsYou}
-              </button>
-            ) : null}
             <GoalChips goal={goal} />
           </div>
           {expanded.has(goal.id)
@@ -116,20 +105,6 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
                           </span>
                         ) : null}
                       </button>
-                      {project.needsYou > 0 ? (
-                        <button
-                          type="button"
-                          className={waitingClass}
-                          data-waiting-count={project.needsYou}
-                          aria-label={`나를 기다림 ${project.needsYou}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openWaiting(project.waitingTarget ?? project);
-                          }}
-                        >
-                          나를 기다림 {project.needsYou}
-                        </button>
-                      ) : null}
                     </div>
                     {treeOrder(
                       graph.tasks.filter(
@@ -159,20 +134,6 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
                             </span>
                           ) : null}
                         </button>
-                        {task.needsYou ? (
-                          <button
-                            type="button"
-                            className={waitingClass}
-                            data-waiting-count={task.waitingCount}
-                            aria-label={`나를 기다림 ${task.waitingCount}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openWaiting(task);
-                            }}
-                          >
-                            나를 기다림 {task.waitingCount}
-                          </button>
-                        ) : null}
                         {task.waitsOnKeys.map((key) => (
                           <span
                             key={key}

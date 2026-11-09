@@ -8,8 +8,6 @@ export const toneClasses: Record<TaskTone, string> = {
   blocked: "border-l-red-500",
   planning: "border-l-muted-foreground",
 };
-export const waitingClass =
-  "shrink-0 rounded-full bg-warning/16 px-1.5 py-0.5 text-warning text-[10px] hover:bg-warning/24";
 
 export function ProgressRing({ done, total }: { done: number; total: number }) {
   return (

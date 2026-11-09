@@ -6,7 +6,6 @@ import {
   type WorkspaceBlockReason,
 } from "@t3tools/contracts";
 import { alignWorkspaceGoals } from "@t3tools/shared/workspaceGoals";
-import { directorInbox } from "../director/directorInbox.logic";
 import { buildTaskRelationsIndex, taskRelations } from "../task/taskRelations.logic";
 import { splitDirectorEntry } from "~/state/projectTeam.logic";
 import { type MapEntry, projectKey } from "../allProjects/allProjects.logic";
@@ -163,7 +162,6 @@ export function buildGoalGraph(input: {
         key: formatTaskKey(task.entry.summary.taskKeyPrefix, task.number),
         title: task.title,
         stage: task.stage,
-        stalled: task.lastOutcome === "stalled",
         tone,
         live:
           task.stage === "running" &&
@@ -174,7 +172,6 @@ export function buildGoalGraph(input: {
         recent: recent(task.updatedAt),
         updatedAt: task.updatedAt,
         changedLabel: changedLabel(task.updatedAt, input.nowMs),
-        waitingCount: Math.max(cards.length, task.openQuestion || task.openBlocker ? 1 : 0),
         blockReasons,
         waitsOnKeys: dependencies.map((dependency) =>
           formatTaskKey(dependency.entry.summary.taskKeyPrefix, dependency.number),
@@ -182,9 +179,6 @@ export function buildGoalGraph(input: {
         dependencyIds: dependencies.map(
           (dependency) => `task:${recordKey(task.entry.environmentId, dependency.id)}`,
         ),
-        needsYou: task.openQuestion || task.openBlocker || cards.length > 0,
-        /** The open card "나를 기다림" opens; null sends the user to the PM chat. */
-        cardId: cards[0]?.item.id ?? null,
         parentId:
           task.parentTaskId === null
             ? null
@@ -225,8 +219,6 @@ export function buildGoalGraph(input: {
       live: shown.some((task) => task.live),
       recent: shown.some((task) => task.recent),
       changedLabel: newest?.changedLabel ?? null,
-      needsYou: shown.reduce((sum, task) => sum + task.waitingCount, 0),
-      waitingTarget: shown.find((task) => task.needsYou) ?? null,
     };
   };
   const goals = active
@@ -285,8 +277,6 @@ export function buildGoalGraph(input: {
         pmThreadId: entry.summary.pmThreadId,
         progress: progress(shown),
         ...signals(shown),
-        // A badge with no waiting task on the board opens the PM chat.
-        cardId: null,
         // Unfiltered projects also show manager activity; filtered pulses belong to visible work.
         live:
           (!input.recentOnly && entry.summary.presence.running > 0) ||
@@ -347,13 +337,6 @@ export function buildGoalGraph(input: {
         edges.some((item) => item.from === goal.id && item.to === b.nodeId),
       ),
   );
-  const inbox = directorInbox(input.entries);
-  const cards = inbox.groups
-    .flatMap((group) => group.cards.map((card) => ({ group, card })))
-    .toSorted((a, b) => Date.parse(a.card.item.createdAt) - Date.parse(b.card.item.createdAt));
-  const waiting = inbox.groups.flatMap((group) =>
-    group.waitingThreads.map((thread) => ({ group, thread })),
-  );
   const index = buildTaskRelationsIndex(
     input.entries,
     input.entries.map((entry) => ({
@@ -364,27 +347,6 @@ export function buildGoalGraph(input: {
         "프로젝트",
     })),
   );
-  const runningProjects = input.entries.flatMap((entry) => {
-    const tasks = allTasks.filter(
-      (task) =>
-        task.environmentId === entry.environmentId &&
-        task.projectId === entry.summary.projectId &&
-        (task.stage === "running" ||
-          task.stage === "in_review" ||
-          (task.stalled && !finished(task.stage))),
-    );
-    return tasks.length === 0
-      ? []
-      : [
-          {
-            ...entry,
-            tasks,
-            title:
-              input.projectTitles?.get(projectKey(entry.environmentId, entry.summary.projectId)) ??
-              "프로젝트",
-          },
-        ];
-  });
   const epics = input.entries
     .filter((entry) => entry.summary.kind === "director")
     .flatMap((entry) =>
@@ -419,8 +381,6 @@ export function buildGoalGraph(input: {
         }),
     );
   return {
-    attention: { cards, waiting, total: inbox.total },
-    runningProjects,
     epics,
     goals,
     projects,
@@ -433,9 +393,7 @@ export function buildGoalGraph(input: {
         .filter((goal) => goal.id !== "goal:none")
         .map(({ id, title, done, total }) => ({ id, title, done, total })),
       blockedCount: tasks.filter((task) => task.tone === "blocked").length,
-      needsYouCount: tasks.filter((task) => task.needsYou).length,
       firstBlockedNodeId: tasks.find((task) => task.tone === "blocked")?.nodeId ?? null,
-      firstNeedsYouNodeId: tasks.find((task) => task.needsYou)?.nodeId ?? null,
     },
   };
 }

@@ -9,13 +9,13 @@ import {
   useState,
 } from "react";
 import type { GraphViewProps } from "./GoalGraph";
-import { GoalChips, ProgressRing, PulseDot, toneClasses, waitingClass } from "./GoalGraphNodes";
+import { GoalChips, ProgressRing, PulseDot, toneClasses } from "./GoalGraphNodes";
 import { layoutGoalGraph, relatedNodeIds } from "./goalGraph.logic";
 
 /** Below this zoom only goals and projects show, as progress rings. */
 const NEAR_SCALE = 0.7;
 
-export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }: GraphViewProps) {
+export function GoalGraphDesktop({ graph, ref, openChat, openTask }: GraphViewProps) {
   const viewport = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
   const marker = useId();
@@ -195,8 +195,6 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
             return null;
           }
           const node = goal ?? project ?? task!;
-          const waitingCount = task?.waitingCount ?? project?.needsYou ?? goal?.needsYou ?? 0;
-          const waitingTarget = task ?? project?.waitingTarget ?? project ?? goal?.waitingTarget;
           const blocked = goal?.blocked ?? project?.blocked ?? task?.tone === "blocked";
           return (
             <div
@@ -269,20 +267,6 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
                   </span>
                 ) : null}
               </div>
-              {waitingCount > 0 && waitingTarget !== null && waitingTarget !== undefined ? (
-                <button
-                  type="button"
-                  className={`relative ${waitingClass}`}
-                  data-waiting-count={waitingCount}
-                  aria-label={`나를 기다림 ${waitingCount}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openWaiting(waitingTarget);
-                  }}
-                >
-                  나를 기다림 {waitingCount}
-                </button>
-              ) : null}
             </div>
           );
         })}

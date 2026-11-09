@@ -192,7 +192,7 @@ describe("goal graph journey", () => {
     expect(container.querySelector('[data-zoom="near"]') === null).toBe(false);
     expect(taskNode("a-extra-0") === null).toBe(false);
   });
-  it("opens the mobile tree, shows blocked dependencies and opens the waiting card", async () => {
+  it("opens the mobile tree, shows blocked dependencies and opens a task", async () => {
     await page.viewport(390, 844);
     const router = await openGraph();
     expect(container.querySelector("[data-goal-tree]") === null).toBe(false);
@@ -211,20 +211,15 @@ describe("goal graph journey", () => {
     expect(container.textContent).toContain("목표 없음");
     expect(container.textContent).toContain("빠진 일 있음");
     await page.screenshot({ path: "__screenshots__/goal-graph-mobile.png" });
-    const badge = taskNode("a-1").parentElement!.querySelectorAll("button")[1]!;
-    await userEvent.click(badge);
-    // "나를 기다림" opens the waiting card itself, right here.
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector('[role="dialog"] [data-decision-card="card-a-1"]') === null,
-      ).toBe(false),
-    );
-    expect(router.state.location.pathname).toBe("/all-projects");
+    // No waiting badges: what waits on the user lives in the Director chat.
+    expect(container.querySelector("[data-waiting-count]")).toBeNull();
+    await userEvent.click(taskNode("a-1"));
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe("/tasks/env-1/a/a-1"));
   });
 });
 
 for (const width of [1280, 390]) {
-  it(`shows live signals, waiting cards and recent filtering at ${width}px`, async () => {
+  it(`shows live signals and recent filtering at ${width}px`, async () => {
     await page.viewport(width, 844);
     state.managers = goalGraphSignalsFixture();
     await openGraph();
@@ -240,11 +235,8 @@ for (const width of [1280, 390]) {
     expect(container.querySelector("[data-director-briefing]")?.textContent).toContain(
       "목표 2는 결정 1건에 막혀 있어요",
     );
-    const waiting = (node: HTMLElement) =>
-      node.parentElement!.querySelector<HTMLElement>("[data-waiting-count]")!;
-    expect(waiting(taskNode("a-1")).dataset.waitingCount).toBe("1");
-    expect(waiting(project()).dataset.waitingCount).toBe("1");
-    expect(waiting(goalNode("goal-1")).dataset.waitingCount).toBe("2");
+    expect(container.querySelector("[data-waiting-count]")).toBeNull();
+    expect(container.textContent).not.toContain("나를 기다림");
     container.querySelector("[data-director-briefing]")!.scrollIntoView({ block: "start" });
     await page.screenshot({
       path: `__screenshots__/goal-graph-signals-${width === 1280 ? "desktop" : "mobile"}.png`,
@@ -256,25 +248,7 @@ for (const width of [1280, 390]) {
       expect(container.querySelectorAll("[data-task-node]")).toHaveLength(0);
       expect(row(project()).querySelector("[data-pulse]") === null).toBe(false);
       expect(row(goalNode("goal-1")).querySelector("[data-pulse]") === null).toBe(false);
-      expect(waiting(project()).dataset.waitingCount).toBe("1");
-      expect(waiting(goalNode("goal-1")).dataset.waitingCount).toBe("2");
     }
-    await userEvent.click(waiting(goalNode("goal-1")));
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector('[role="dialog"] [data-decision-card="card-a-1"]') === null,
-      ).toBe(false),
-    );
-    await userEvent.keyboard("{Escape}");
-    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]') === null).toBe(true));
-    await userEvent.click(waiting(goalNode("goal-2")));
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector('[role="dialog"] [data-decision-card="card-b-1"]') === null,
-      ).toBe(false),
-    );
-    await userEvent.keyboard("{Escape}");
-    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]') === null).toBe(true));
     if (width === 1280) {
       await userEvent.click(page.getByRole("button", { name: "맞춤", exact: true }));
     }
@@ -292,17 +266,5 @@ for (const width of [1280, 390]) {
     ).toEqual(["a-1"]);
     expect(container.querySelectorAll("[data-project-node]")).toHaveLength(1);
     expect(container.querySelectorAll("[data-goal-node]")).toHaveLength(1);
-    expect(container.querySelector('[aria-label="목표 브리핑"]')?.textContent).toContain(
-      "나를 기다림 1",
-    );
-    expect(waiting(project()).dataset.waitingCount).toBe("1");
-    expect(waiting(goalNode("goal-1")).dataset.waitingCount).toBe("1");
-    expect(waiting(taskNode("a-1")).dataset.waitingCount).toBe("1");
-    await userEvent.click(waiting(taskNode("a-1")));
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector('[role="dialog"] [data-decision-card="card-a-1"]') === null,
-      ).toBe(false),
-    );
   });
 }

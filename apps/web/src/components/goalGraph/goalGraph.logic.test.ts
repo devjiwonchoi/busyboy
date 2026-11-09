@@ -40,7 +40,6 @@ describe("goal graph", () => {
     expect(graph.tasks.find((task) => task.id === "a-4")?.tone).toBe("done");
     expect(graph.tasks.find((task) => task.id === "a-1")).toMatchObject({
       tone: "blocked",
-      needsYou: true,
       blockReasons: ["waiting_on_user"],
     });
     expect(graph.tasks.find((task) => task.id === "b-1")).toMatchObject({
@@ -50,9 +49,7 @@ describe("goal graph", () => {
     });
     expect(graph.briefing).toMatchObject({
       blockedCount: 2,
-      needsYouCount: 1,
       firstBlockedNodeId: "task:env-1/a-1",
-      firstNeedsYouNodeId: "task:env-1/a-1",
     });
   });
   it("connects goals, projects, parents and cross-project waits with blocked edges", () => {
@@ -133,7 +130,7 @@ describe("goal graph", () => {
 });
 
 describe("live graph signals", () => {
-  it("rolls up pulse, card counts and newest changes across projects", () => {
+  it("rolls up pulse and newest changes across projects", () => {
     const entries = goalGraphSignalsFixture();
     entries[0]!.summary = {
       ...entries[0]!.summary,
@@ -148,28 +145,17 @@ describe("live graph signals", () => {
     const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW });
     expect(graph.tasks.find((task) => task.id === "a-1")).toMatchObject({
       live: true,
-      waitingCount: 2,
       changedLabel: "3시간 전",
     });
-    for (const project of graph.projects) {
-      expect(project.needsYou).toBe(
-        graph.tasks
-          .filter((task) => task.projectKey === project.key)
-          .reduce((sum, task) => sum + task.waitingCount, 0),
-      );
-    }
     expect(graph.projects[0]).toMatchObject({
       live: true,
-      needsYou: 2,
       recent: true,
       changedLabel: "3시간 전",
     });
     expect(graph.goals[0]).toMatchObject({
       live: true,
-      needsYou: 3,
       recent: true,
       changedLabel: "3시간 전",
-      waitingTarget: { cardId: "card-a-1" },
     });
     expect(graph.directorBriefing).toBe("목표 2는 결정 1건에 막혀 있어요");
     entries[1]!.summary = {
@@ -183,7 +169,7 @@ describe("live graph signals", () => {
       decisionCards: [],
     };
     const fallback = buildGoalGraph({ entries, nowMs: GRAPH_NOW });
-    expect(fallback.tasks.find((task) => task.id === "b-1")?.waitingCount).toBe(1);
+    expect(fallback.tasks.find((task) => task.id === "b-1")?.tone).toBe("blocked");
     expect(fallback.projects[1]?.live).toBe(true);
     expect(fallback.goals.find((goal) => goal.id === "goal-2")?.live).toBe(false);
   });
@@ -214,14 +200,8 @@ describe("live graph signals", () => {
       presence: { ...entries[0]!.summary.presence, running: 1 },
     };
     const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW, recentOnly: true });
-    expect(graph.goals[0]).toMatchObject({
-      needsYou: 0,
-      live: false,
-      changedLabel: "3시간 전",
-      waitingTarget: null,
-    });
-    expect(graph.projects[0]).toMatchObject({ needsYou: 0, live: false, waitingTarget: null });
-    expect(graph.briefing).toMatchObject({ needsYouCount: 0, firstNeedsYouNodeId: null });
+    expect(graph.goals[0]).toMatchObject({ live: false, changedLabel: "3시간 전" });
+    expect(graph.projects[0]).toMatchObject({ live: false });
     expect(graph.goals.map((goal) => goal.id)).toEqual(["goal-1"]);
   });
   it("labels the five-minute, hour and day boundaries", () => {
@@ -247,9 +227,7 @@ describe("live graph signals", () => {
     expect(filtered.projects.map((project) => project.projectId)).toEqual(["a"]);
     expect(filtered.goals.map((goal) => goal.id)).toEqual(["goal-1"]);
     expect(layoutGoalGraph(filtered).paths).toHaveLength(2);
-    expect(filtered.briefing).toMatchObject({ needsYouCount: 1, blockedCount: 1 });
-    expect(filtered.goals[0]).toMatchObject({ needsYou: 1, waitingTarget: { id: "a-1" } });
-    expect(filtered.projects[0]).toMatchObject({ needsYou: 1, waitingTarget: { id: "a-1" } });
+    expect(filtered.briefing).toMatchObject({ blockedCount: 1 });
     const empty = buildGoalGraph({
       entries: goalGraphSignalsFixture(),
       nowMs: GRAPH_NOW + 86400000,
@@ -262,45 +240,7 @@ describe("live graph signals", () => {
 });
 
 describe("goal graph panel summaries", () => {
-  it("keeps global attention chronological and independent of goals and recent filtering", () => {
-    const entries = goalGraphFixture();
-    const firstBase = graphCard("old");
-    const first = {
-      ...firstBase,
-      item: { ...firstBase.item, createdAt: "2026-11-01T00:00:00.000Z" },
-    };
-    const lastBase = graphCard("new");
-    const last = { ...lastBase, item: { ...lastBase.item, createdAt: "2026-11-03T00:00:00.000Z" } };
-    const middleBase = graphCard("middle");
-    const middle = {
-      ...middleBase,
-      item: { ...middleBase.item, createdAt: "2026-11-02T00:00:00.000Z" },
-    };
-    const answeredBase = graphCard("answered");
-    const answered = {
-      ...answeredBase,
-      item: { ...answeredBase.item, answeredAt: "2026-11-04T00:00:00.000Z" },
-    };
-    const withdrawnBase = graphCard("withdrawn");
-    const withdrawn = {
-      ...withdrawnBase,
-      item: { ...withdrawnBase.item, supersededAt: "2026-11-04T00:00:00.000Z" },
-    };
-    entries[0]!.summary = {
-      ...entries[0]!.summary,
-      decisionCards: [last, withdrawn, first, answered],
-    };
-    entries[1]!.summary = { ...entries[1]!.summary, decisionCards: [middle] };
-    entries[2]!.summary = { ...entries[2]!.summary, goals: [], decisionCards: [] };
-    const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW, recentOnly: true });
-    expect(graph.attention.cards.map(({ card }) => card.item.taskId)).toEqual([
-      "old",
-      "middle",
-      "new",
-    ]);
-    expect(graph.attention.total).toBe(3);
-  });
-  it("summarizes stalled and review work and excludes finished waits and cancelled children", () => {
+  it("summarizes epic progress and excludes finished waits and cancelled children", () => {
     const entries = goalGraphFixture();
     entries[2]!.summary = {
       ...entries[2]!.summary,
@@ -324,13 +264,6 @@ describe("goal graph panel summaries", () => {
     expect(epic.progress).toEqual({ done: 2, total: 5 });
     expect(epic.cancelled).toBe(1);
     expect(epic.blockedBy.map((task) => task.key)).toEqual(["A-2"]);
-    expect(
-      graph.runningProjects[0]!.tasks.map((task) => [task.id, task.stalled, task.live]),
-    ).toEqual([
-      ["a-1", false, true],
-      ["a-2", true, false],
-      ["a-3", false, false],
-    ]);
     expect(epic.counts.reduce((sum, [, count]) => sum + count, 0)).toBe(5);
   });
 });
