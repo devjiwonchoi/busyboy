@@ -418,6 +418,10 @@ export interface ClaudeAgentSdkQuerySession {
     mode: PermissionMode,
   ) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
   readonly stopTask: (taskId: string) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
+  /** Reconnects one MCP server, which also lists its tools again. */
+  readonly reconnectMcpServer: (
+    serverName: string,
+  ) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
   readonly backgroundTasks: (
     toolUseId: string,
   ) => Effect.Effect<boolean, ClaudeAgentSdkQueryRunnerError>;
@@ -579,6 +583,14 @@ export type ClaudeAgentSdkProtocolLogEvent =
       readonly payload: {
         readonly type: "query.stop_task";
         readonly taskId: string;
+      };
+    }
+  | {
+      readonly direction: "outgoing";
+      readonly stage: "decoded";
+      readonly payload: {
+        readonly type: "query.reconnect_mcp_server";
+        readonly serverName: string;
       };
     }
   | {
@@ -917,6 +929,19 @@ export const layerQueryRunner: Layer.Layer<
                 }),
               ),
             ),
+          reconnectMcpServer: (serverName) =>
+            Effect.tryPromise({
+              try: () => queryRuntime.reconnectMcpServer(serverName),
+              catch: (cause) => queryRunnerError(cause, "reconnectMcpServer"),
+            }).pipe(
+              Effect.tap(() =>
+                logProtocolEvent({
+                  direction: "outgoing",
+                  stage: "decoded",
+                  payload: { type: "query.reconnect_mcp_server", serverName },
+                }),
+              ),
+            ),
           backgroundTasks: (toolUseId) =>
             Effect.tryPromise({
               try: () => queryRuntime.backgroundTasks(toolUseId),
@@ -1226,6 +1251,15 @@ export const CLAUDE_T3_MCP_TOOL_TIMEOUT_MS = 65 * 60 * 1_000;
 // pre-approve only the annotated read-only orchestrator tools so a read-only session cannot
 // silently spawn threads or scheduled tasks.
 
+const CLAUDE_T3_MCP_SERVER_NAME = "t3-code";
+
+/** Changes when the thread's t3-code credential gains or loses a capability. */
+export function claudeMcpCapabilitiesKey(
+  session: McpProviderSession.McpProviderSessionConfig | undefined,
+): string {
+  return session?.capabilities === undefined ? "" : [...session.capabilities].toSorted().join(",");
+}
+
 export function claudeMcpQueryOverrides(input: {
   readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
   readonly readOnlySandbox: boolean;
@@ -1245,7 +1279,7 @@ export function claudeMcpQueryOverrides(input: {
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
     mcpServers: {
-      "t3-code": {
+      [CLAUDE_T3_MCP_SERVER_NAME]: {
         type: "http",
         url: session.endpoint,
         headers: {
@@ -3068,6 +3102,8 @@ interface ClaudeLiveQueryContext {
   readonly nativeThreadId: string;
   readonly query: ClaudeAgentSdkQuerySession;
   readonly queryPolicyKey: string;
+  /** The t3-code capabilities this process last listed tools for. */
+  mcpCapabilitiesKey: string;
   selection: CompiledClaudeModelSelection;
   readonly closed: Deferred.Deferred<void, never>;
   lastTurn: ActiveClaudeTurnContext | null;
@@ -8189,8 +8225,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           nativeThreadId: string,
         ) {
           const queryPolicy = claudeRuntimeQueryPolicyForRuntimePolicy(turnInput.runtimePolicy);
+          const mcpSession = yield* mcpSessions.read(turnInput.threadId);
+          const mcpCapabilitiesKey = claudeMcpCapabilitiesKey(mcpSession);
           const mcpOverrides = claudeMcpQueryOverrides({
-            mcpSession: yield* mcpSessions.read(turnInput.threadId),
+            mcpSession,
             readOnlySandbox:
               sandboxPolicyKindForClaudeRuntimePolicy(turnInput.runtimePolicy) === "readOnly",
             ...(queryPolicy.allowedTools === undefined
@@ -8243,6 +8281,24 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             if (existing.permissionMode !== existing.openedPermissionMode) {
               yield* existing.query.setPermissionMode(existing.openedPermissionMode);
               existing.permissionMode = existing.openedPermissionMode;
+            }
+            // The credential keeps its token when its capabilities change
+            // (computer use turned on), so the process lists its tools again.
+            if (existing.mcpCapabilitiesKey !== mcpCapabilitiesKey) {
+              const live = existing;
+              yield* live.query.reconnectMcpServer(CLAUDE_T3_MCP_SERVER_NAME).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    live.mcpCapabilitiesKey = mcpCapabilitiesKey;
+                  }),
+                ),
+                Effect.catch((cause) =>
+                  Effect.logWarning("orchestration-v2.claude-mcp-reconnect-failed", {
+                    threadId: turnInput.threadId,
+                    cause,
+                  }),
+                ),
+              );
             }
             return existing;
           }
@@ -8344,6 +8400,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             nativeThreadId,
             query: querySession,
             queryPolicyKey,
+            mcpCapabilitiesKey,
             selection: compiledSelection,
             closed,
             lastTurn: null,

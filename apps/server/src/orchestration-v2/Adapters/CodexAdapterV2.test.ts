@@ -1784,6 +1784,40 @@ function withReplayRequestId(
     : entry;
 }
 
+describe("CodexAdapterV2 MCP reload", () => {
+  const credential = (capabilities: ReadonlyArray<string>) => ({
+    environmentId: EnvironmentId.make("environment-codex-mcp-reload"),
+    threadId: ThreadId.make("thread-codex-mcp-reload"),
+    providerSessionId: "mcp-codex-reload",
+    providerInstanceId: CodexAdapterV2.CODEX_DEFAULT_INSTANCE_ID,
+    endpoint: "http://127.0.0.1:43123/mcp",
+    authorizationHeader: "Bearer same-token",
+    browserToolsAvailable: false,
+    capabilities: new Set(capabilities),
+  });
+
+  it("reloads once the thread's credential gains or loses computer use", () => {
+    const before = CodexAdapterV2.codexMcpCapabilitiesKey(credential(["orchestration"]));
+    assert.isTrue(
+      CodexAdapterV2.codexNeedsMcpReload(before, credential(["orchestration", "computer-use"])),
+    );
+    const after = CodexAdapterV2.codexMcpCapabilitiesKey(
+      credential(["computer-use", "orchestration"]),
+    );
+    assert.isTrue(CodexAdapterV2.codexNeedsMcpReload(after, credential(["orchestration"])));
+  });
+
+  it("does not reload for the same capabilities, or a thread without a t3-code server", () => {
+    const key = CodexAdapterV2.codexMcpCapabilitiesKey(credential(["orchestration", "preview"]));
+    assert.isFalse(
+      CodexAdapterV2.codexNeedsMcpReload(key, credential(["preview", "orchestration"])),
+    );
+    // Not seen yet, or started without a credential: a reload cannot add the server.
+    assert.isFalse(CodexAdapterV2.codexNeedsMcpReload(undefined, credential(["computer-use"])));
+    assert.isFalse(CodexAdapterV2.codexNeedsMcpReload(key, undefined));
+  });
+});
+
 describe("CodexAdapterV2 session initialize", () => {
   const openReplaySession = (
     transcript: CodexReplay.CodexAppServerReplayTranscript,
@@ -3273,6 +3307,126 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         );
         yield* harness.firstTerminal;
         assert.equal(harness.terminalEvents()[0]?.status, "completed");
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("reloads MCP servers before the turn after the credential's capabilities change", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const nativeThreadId = "mcp-reload-thread";
+        const turnIds = ["mcp-reload-turn-1", "mcp-reload-turn-2", "mcp-reload-turn-3"];
+        const turnParams = (text: string) =>
+          CodexAdapterV2.buildCodexTurnStartParams({
+            nativeThreadId,
+            codexInput: [{ type: "text", text }],
+            runtimePolicy: CODEX_TEST_RUNTIME_POLICY,
+            modelSelection: CODEX_TEST_MODEL_SELECTION,
+            hasT3Mcp: true,
+            browserToolsAvailable: false,
+          });
+        const turnEvent = (
+          method: "turn/started" | "turn/completed",
+          turnId: string,
+        ): CodexReplay.CodexAppServerReplayEntry => ({
+          type: "emit_inbound",
+          label: `${turnId} ${method}`,
+          frame: {
+            method,
+            params: {
+              threadId: nativeThreadId,
+              turn: makeCodexReplayTurn({
+                id: turnId,
+                status: method === "turn/started" ? "inProgress" : "completed",
+              }),
+            },
+          },
+        });
+        const turn = (id: number, index: number) =>
+          Effect.gen(function* () {
+            const params = yield* turnParams(`Turn ${index + 1}`);
+            return [
+              {
+                type: "expect_outbound",
+                label: `turn ${index + 1} turn/start`,
+                frame: { id, method: "turn/start", params },
+              },
+              {
+                type: "emit_inbound",
+                label: `turn ${index + 1} turn/start`,
+                frame: {
+                  id,
+                  result: {
+                    turn: makeCodexReplayTurn({ id: turnIds[index]!, status: "inProgress" }),
+                  },
+                },
+              },
+              turnEvent("turn/started", turnIds[index]!),
+              turnEvent("turn/completed", turnIds[index]!),
+            ] satisfies ReadonlyArray<CodexReplay.CodexAppServerReplayEntry>;
+          });
+        const transcript = makeCodexReplayTranscript({
+          scenario: "mcp-capabilities-reload",
+          entries: [
+            ...codexReplayPreamble({
+              nativeThreadId,
+              nativeTurnId: turnIds[0]!,
+              prompt: "unused",
+            }).slice(0, 5),
+            ...(yield* turn(3, 0)),
+            ...(yield* turn(4, 1)),
+            {
+              type: "expect_outbound",
+              label: "reload MCP servers",
+              frame: { id: 5, method: "config/mcpServer/reload" },
+            },
+            { type: "emit_inbound", label: "reloaded", frame: { id: 5, result: {} } },
+            ...(yield* turn(6, 2)),
+          ],
+        });
+        const harness = yield* makeCodexReplayHarness(transcript);
+        const credential = (capabilities: ReadonlyArray<string>) =>
+          McpProviderSessions.McpProviderSessions.pipe(
+            Effect.flatMap((sessions) =>
+              sessions.set({
+                environmentId: EnvironmentId.make("test"),
+                threadId: harness.threadId,
+                providerSessionId: "mcp-reload-session",
+                providerInstanceId: ProviderInstanceId.make("codex"),
+                endpoint: "http://127.0.0.1:43123/mcp",
+                authorizationHeader: "Bearer same-token",
+                browserToolsAvailable: false,
+                capabilities: new Set(capabilities),
+              }),
+            ),
+          );
+        const startTurn = (index: number) =>
+          Effect.gen(function* () {
+            yield* harness.runtime.startTurn(
+              makeCodexTestTurnInput({
+                threadId: harness.threadId,
+                providerThread: harness.providerThread,
+                now: yield* DateTime.now,
+                attemptId: RunAttemptId.make(`mcp-reload-attempt-${index}`),
+                text: `Turn ${index + 1}`,
+              }),
+            );
+            yield* awaitUntil(
+              () => harness.terminalEvents().length === index + 1,
+              `turn ${index + 1}`,
+            );
+          });
+
+        yield* credential(["orchestration"]);
+        yield* startTurn(0);
+        yield* startTurn(1);
+        // Computer use turned on: same token, one more capability.
+        yield* credential(["orchestration", "computer-use"]);
+        yield* startTurn(2);
       }).pipe(
         Effect.provide(
           Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),

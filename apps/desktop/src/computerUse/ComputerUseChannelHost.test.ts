@@ -27,7 +27,9 @@ afterEach(async () => {
 });
 
 /** A router over a real supervisor running FakeHelper.ts. */
-const withHelperProcess = (options: { readonly accessibilityFile?: boolean } = {}) => {
+const withHelperProcess = (
+  options: { readonly accessibilityFile?: boolean; readonly idleStopMs?: number } = {},
+) => {
   const socketDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "cu-host-"));
   const accessibilityFile = NodePath.join(socketDir, "accessibility");
   const children: Array<NodeChildProcess.ChildProcess> = [];
@@ -65,7 +67,11 @@ const withHelperProcess = (options: { readonly accessibilityFile?: boolean } = {
     spawn,
     onStatus: (status) => events.push(router!.helperStatusChanged(status)),
   });
-  router = new ComputerUseRouter(supervisor, (event) => events.push(event));
+  router = new ComputerUseRouter(
+    supervisor,
+    (event) => events.push(event),
+    options.idleStopMs === undefined ? {} : { idleStopMs: options.idleStopMs },
+  );
   cleanups.push(async () => {
     await router!.shutdown();
     NodeFS.rmSync(socketDir, { recursive: true, force: true });
@@ -146,6 +152,32 @@ describe("ComputerUseRouter with a helper process", () => {
     expect(isAlive(children[0]!.pid)).toBe(false);
     expect(router.activeSessions).toEqual([]);
     expect(events.at(-1)).toEqual({ type: "status", state: "stopped" });
+  });
+
+  it("answers the first call after an idle stop without a launch once a run prewarms it", async () => {
+    const { router, supervisor, events, children } = withHelperProcess();
+    await router.handle({ type: "configure", enabled: true });
+    const request = async (id: number, method: string) => {
+      const started = performance.now();
+      await router.handle({ type: "request", id, method, params: {} });
+      expect(events.filter((event) => event.type === "response" && event.id === id)).toEqual([
+        expect.objectContaining({ result: expect.anything() }),
+      ]);
+      return performance.now() - started;
+    };
+
+    await request(1, "apps.list");
+    // What the ten-minute idle timer does.
+    await supervisor.stop();
+    expect(supervisor.status.state).toBe("stopped");
+
+    // A run starting prewarms the helper: the server sends permissions.status.
+    await request(2, "permissions.status");
+    expect(children).toHaveLength(2);
+    // The agent's first call then finds it running.
+    const firstCallMs = await request(3, "apps.list");
+    expect(children).toHaveLength(2);
+    expect(firstCallMs).toBeLessThan(50);
   });
 
   it("restarts the helper on request", async () => {

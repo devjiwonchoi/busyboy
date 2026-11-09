@@ -589,6 +589,42 @@ export const layerWithOptions = (
                 return { mcpCredentialId: credential.config.providerSessionId, issued: true };
               }),
             );
+      /**
+       * Before each turn: brings the thread's live credential in line with the
+       * current settings, keeping its token. A provider process already holds
+       * that token, so turning computer use on reaches an open thread on its
+       * next turn without a new session.
+       */
+      const refreshMcpCapabilities = (threadId: ThreadId): Effect.Effect<void> =>
+        options.configureMcp === false
+          ? Effect.void
+          : mcpPrepareLock.withLock(
+              threadId,
+              Effect.gen(function* () {
+                const existing = yield* mcpSessions.read(threadId);
+                if (existing === undefined) return;
+                const resolved = yield* mcpSessionRegistry.resolve(
+                  existing.authorizationHeader.replace(/^Bearer\s+/, ""),
+                );
+                if (resolved === undefined || resolved.thread.threadId !== threadId) return;
+                const browserToolsAvailable = yield* agentAccessSettings(threadId);
+                const computerUseGranted = yield* computerUseAvailable();
+                if (
+                  resolved.capabilities.has("preview") === browserToolsAvailable &&
+                  resolved.capabilities.has("computer-use") === computerUseGranted
+                ) {
+                  return;
+                }
+                const capabilities = new Set(resolved.capabilities);
+                if (browserToolsAvailable) capabilities.add("preview");
+                else capabilities.delete("preview");
+                if (computerUseGranted) capabilities.add("computer-use");
+                else capabilities.delete("computer-use");
+                yield* mcpSessionRegistry.setCapabilities(existing.providerSessionId, capabilities);
+                yield* mcpSessions.set({ ...existing, browserToolsAvailable, capabilities });
+              }),
+            );
+
       const clearMcpSession = (threadId: ThreadId, mcpCredentialId?: string) =>
         mcpCredentialId === undefined
           ? mcpSessionRegistry
@@ -1924,6 +1960,7 @@ export const layerWithOptions = (
                 providerInstanceId: runtime.instanceId,
               }),
             ).pipe(
+              Effect.andThen(refreshMcpCapabilities(input.threadId)),
               // A start that fails or is stopped may never emit turn.terminal,
               // so it clears its own turn or the session never goes idle.
               Effect.andThen(

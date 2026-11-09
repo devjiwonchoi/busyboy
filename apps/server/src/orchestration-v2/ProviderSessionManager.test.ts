@@ -56,6 +56,7 @@ import {
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ServerConfig from "../config.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as EventSink from "./EventSink.ts";
 import * as EventStore from "./EventStore.ts";
@@ -500,6 +501,7 @@ function layerTest(input: {
   readonly spawnBeforeOpen?: boolean;
   readonly scopeCloseReached?: Deferred.Deferred<void>;
   readonly serverSettingsLayer?: ReturnType<typeof ServerSettings.layerTest>;
+  readonly serverConfigLayer?: Layer.Layer<ServerConfig.ServerConfig>;
   readonly projectServiceLayer?: Layer.Layer<ProjectService.ProjectService>;
   readonly projectTeamRepositoryLayer?: Layer.Layer<ProjectTeamRepository.ProjectTeamRepository>;
 }) {
@@ -578,6 +580,7 @@ function layerTest(input: {
           layerConfiguredMcpRegistry,
           layerTestStores,
           ...(input.serverSettingsLayer === undefined ? [] : [input.serverSettingsLayer]),
+          ...(input.serverConfigLayer === undefined ? [] : [input.serverConfigLayer]),
           ...(input.projectServiceLayer === undefined ? [] : [input.projectServiceLayer]),
           ...(input.projectTeamRepositoryLayer === undefined
             ? []
@@ -2119,6 +2122,143 @@ it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fai
       );
     }
   }),
+);
+
+/** A desktop that passed the computer-use channel fds. */
+const layerComputerUseServerConfig = Layer.effect(
+  ServerConfig.ServerConfig,
+  ServerConfig.ServerConfig.pipe(
+    Effect.map((base) => ({ ...base, desktopComputerUseFd: 3, desktopComputerUseControlFd: 4 })),
+    Effect.provide(
+      ServerConfig.layerTest(process.cwd(), { prefix: "t3-provider-session-manager-cu-" }),
+    ),
+  ),
+).pipe(Layer.provide(NodeServices.layer), Layer.orDie);
+
+it.effect(
+  "ProviderSessionManagerV2 gives an open thread computer use on its next turn, keeping its token",
+  () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(emptyState);
+      const computerUseOn = yield* Ref.make(false);
+      const settingsLayer = Layer.effect(
+        ServerSettings.ServerSettingsService,
+        Effect.gen(function* () {
+          const base = yield* ServerSettings.ServerSettingsService;
+          return {
+            ...base,
+            getSettings: Effect.all([base.getSettings, Ref.get(computerUseOn)]).pipe(
+              Effect.map(([settings, enableAgentComputerUse]) => ({
+                ...settings,
+                enableAgentComputerUse,
+              })),
+            ),
+          };
+        }),
+      ).pipe(Layer.provide(ServerSettings.layerTest()));
+
+      yield* Effect.gen(function* () {
+        const eventSink = yield* EventSink.EventSinkV2;
+        const idAllocator = yield* IdAllocator.IdAllocatorV2;
+        const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+        const registry = yield* McpSessionRegistry.McpSessionRegistry;
+        const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+        const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+        const now = yield* DateTime.now;
+        const threadId = ThreadId.make("thread-provider-session-manager-cu-next-turn");
+        const providerSessionId = yield* idAllocator.allocate.providerSession({
+          providerInstanceId: modelSelection.instanceId,
+          threadId,
+        });
+        const providerThread = makeProviderThread({
+          idAllocator,
+          threadId,
+          providerSessionId,
+          now,
+        });
+        yield* eventSink.write({
+          events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+        });
+        const runtime = yield* manager.open({
+          threadId,
+          providerSessionId,
+          modelSelection,
+          runtimePolicy,
+        });
+        const startTurn = (ordinal: number) =>
+          Effect.gen(function* () {
+            const runId = idAllocator.derive.run({ threadId, ordinal });
+            yield* runtime.startTurn({
+              appThread: (yield* projectionStore.getThreadProjection(threadId)).thread,
+              threadId,
+              runId,
+              runOrdinal: ordinal,
+              providerTurnOrdinal: ordinal,
+              attemptId: idAllocator.derive.runAttempt({ runId, attemptOrdinal: 1 }),
+              rootNodeId: idAllocator.derive.rootNode({ runId }),
+              providerThread,
+              message: {
+                createdBy: "user",
+                creationSource: "web",
+                messageId: yield* idAllocator.allocate.message({ threadId, ordinal }),
+                text: "hello",
+                attachments: [],
+              },
+              modelSelection,
+              runtimePolicy,
+            });
+          });
+        const token = (yield* mcpSessions.read(threadId))?.authorizationHeader.replace(
+          /^Bearer\s+/,
+          "",
+        );
+        assert.isDefined(token);
+        const capabilities = Effect.gen(function* () {
+          const scope = yield* registry.resolve(token!);
+          const config = yield* mcpSessions.read(threadId);
+          return {
+            credential: scope?.capabilities.has("computer-use"),
+            session: config?.capabilities?.has("computer-use"),
+            token: config?.authorizationHeader,
+          };
+        });
+
+        yield* startTurn(1);
+        assert.deepEqual(yield* capabilities, {
+          credential: false,
+          session: false,
+          token: `Bearer ${token}`,
+        });
+
+        // The user turns computer use on; the thread's next turn has it.
+        yield* Ref.set(computerUseOn, true);
+        yield* startTurn(2);
+        assert.deepEqual(yield* capabilities, {
+          credential: true,
+          session: true,
+          token: `Bearer ${token}`,
+        });
+
+        // And loses it on the turn after it is turned off.
+        yield* Ref.set(computerUseOn, false);
+        yield* startTurn(3);
+        assert.deepEqual(yield* capabilities, {
+          credential: false,
+          session: false,
+          token: `Bearer ${token}`,
+        });
+        yield* manager.close(providerSessionId);
+      }).pipe(
+        Effect.provide(
+          layerTest({
+            state,
+            idleTimeoutMs: 60_000,
+            serverConfigLayer: layerComputerUseServerConfig,
+            serverSettingsLayer: settingsLayer,
+          }),
+        ),
+      );
+    }),
 );
 
 it.effect("ProviderSessionManagerV2 honors a project browser-access opt-out", () =>

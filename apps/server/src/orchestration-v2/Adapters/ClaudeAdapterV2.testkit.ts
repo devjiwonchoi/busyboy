@@ -242,6 +242,7 @@ interface ClaudeSubagentFoundFrame {
 
 type ClaudeOutboundFrame =
   | { readonly type: "query.stop_task"; readonly taskId: string }
+  | { readonly type: "query.reconnect_mcp_server"; readonly serverName: string }
   | { readonly type: "query.background_tasks"; readonly toolUseId: string }
   | ClaudeQueryOpenFrame
   | ClaudePromptOfferFrame
@@ -840,6 +841,10 @@ function makeReplayQueryRunner(
         stopTask: (taskId) =>
           replayEffect(() => {
             assertNextOutboundFrame({ type: "query.stop_task", taskId });
+          }),
+        reconnectMcpServer: (serverName) =>
+          replayEffect(() => {
+            assertNextOutboundFrame({ type: "query.reconnect_mcp_server", serverName });
           }),
         backgroundTasks: (toolUseId) =>
           replayEffect(() => {
