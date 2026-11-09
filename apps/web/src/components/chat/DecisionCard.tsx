@@ -24,6 +24,7 @@ import { AFK_ANSWERED_LABEL } from "./Afk";
 import { ProposalCard } from "./ProposalCard";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 import { AttentionContext, AttentionTaskLink, useAttentionTask } from "./AttentionContext";
+import { CardDetailWithSideChat, type CardDetailTab, CardSideChat } from "./CardSideChat";
 
 const QUESTION_ID = "answer";
 
@@ -159,6 +160,7 @@ export function OpenDecisionCard({
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
+  const [tab, setTab] = useState<CardDetailTab>("card");
   const { headline, context } = decisionQuestionPresentation({
     question: card.item.question,
     action: card.item.context?.action,
@@ -369,12 +371,17 @@ export function OpenDecisionCard({
         <DialogPopup
           showCloseButton={false}
           bottomStickOnMobile={false}
-          className={`max-h-[90dvh] w-[min(92vw,64rem)] max-w-none ${turnFailed ? "border-destructive/40" : ""}`}
+          className={`h-[85dvh] max-h-[90dvh] w-[min(96vw,80rem)] max-w-none overflow-hidden ${turnFailed ? "border-destructive/40" : ""}`}
           data-decision-card-expanded={card.item.id}
           data-decision-card-variant={turnFailed ? "turn-failed" : undefined}
         >
           <DialogTitle className="sr-only">{headline}</DialogTitle>
-          <div className="max-h-[90dvh] overflow-y-auto">{panel(true)}</div>
+          <CardDetailWithSideChat
+            tab={tab}
+            onTabChange={setTab}
+            detail={<div className="min-h-0 flex-1 overflow-y-auto p-4">{panel(true)}</div>}
+            sideChat={<CardSideChat card={card} environmentId={environmentId} />}
+          />
         </DialogPopup>
       </Dialog>
     </div>
