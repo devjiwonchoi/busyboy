@@ -1110,7 +1110,10 @@ it.effect("a helper stop while a card is open cancels the card and returns stopp
 it.effect("each tool maps its arguments to the helper's action", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const t = yield* setup({ computerUseAlwaysAllowedApps: ["com.apple.TextEdit"] });
+      const t = yield* setup({
+        computerUseAlwaysAllowedApps: ["com.apple.TextEdit"],
+        computerUseScreenshots: true,
+      });
       yield* t.run(
         ComputerUseTools.click({
           app: "TextEdit",
@@ -1145,6 +1148,15 @@ it.effect("each tool maps its arguments to the helper's action", () =>
         [{ kind: "select", ref: "e2", range: { start: 1, length: 2 } }, true],
         [{ kind: "menu", path: ["Format", "Font", "Bold"] }, true],
       ]);
+      expect(acts.map((request) => request.params.includeScreenshot)).toEqual([
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+      ]);
       for (const act of acts) {
         expect(act.params).toMatchObject({
           app: "com.apple.TextEdit",
@@ -1152,6 +1164,42 @@ it.effect("each tool maps its arguments to the helper's action", () =>
           turnId: RUN_1,
           deadlineMs: 10_000,
         });
+      }
+    }),
+  ),
+);
+
+it.effect("actions honor screenshot settings and only capture when returning state", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      for (const allowed of [true, false]) {
+        const t = yield* setup({
+          computerUseAlwaysAllowedApps: ["com.apple.TextEdit"],
+          computerUseScreenshots: allowed,
+        });
+        const result = yield* t.run(ComputerUseTools.click({ app: "TextEdit", ref: "e1" }));
+        expect(
+          t.harness.requests.find((request) => request.method === "app.act")?.params,
+        ).toMatchObject({ returnState: true, includeScreenshot: allowed });
+        if (allowed) {
+          expect(result.state?.screenshot).toMatchObject({
+            mimeType: "image/png",
+            width: 10,
+            height: 10,
+          });
+        } else {
+          expect(result.state?.screenshot).toBeNull();
+          expect(result.state?.screenshotOmitted).toBe("disabled_in_settings");
+        }
+
+        const noState = yield* t.run(
+          ComputerUseTools.press({ app: "TextEdit", keys: "cmd+a", return_state: false }),
+        );
+        expect(t.harness.requests.at(-1)?.params).toMatchObject({
+          returnState: false,
+          includeScreenshot: false,
+        });
+        expect(noState.state).toBeUndefined();
       }
     }),
   ),

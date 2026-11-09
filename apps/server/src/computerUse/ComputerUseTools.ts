@@ -476,6 +476,16 @@ export const apps = Effect.fn("computerUse.tools.apps")(function* (input: Comput
   } satisfies ComputerAppsResult;
 });
 
+// Apply the user setting to both snapshot and post-action states, even if a helper sends an image.
+const applyScreenshotSetting = ({
+  state,
+  allowed,
+}: {
+  state: ComputerSnapshotResult;
+  allowed: boolean;
+}): ComputerSnapshotResult =>
+  allowed ? state : { ...state, screenshot: null, screenshotOmitted: "disabled_in_settings" };
+
 export const snapshot = Effect.fn("computerUse.tools.snapshot")(function* (
   input: ComputerSnapshotInput,
 ) {
@@ -496,9 +506,7 @@ export const snapshot = Effect.fn("computerUse.tools.snapshot")(function* (
     ),
   );
   const framed = frameAppContent(result, yield* newFrameId);
-  return wanted && !allowed
-    ? { ...framed, screenshot: null, screenshotOmitted: "disabled_in_settings" as const }
-    : framed;
+  return wanted ? applyScreenshotSetting({ state: framed, allowed }) : framed;
 });
 
 type Action = { readonly kind: string } & Record<string, unknown>;
@@ -510,6 +518,7 @@ const act = (app: string, action: Action, returnState: boolean | undefined) =>
       app: authorized.app.bundleId,
       action,
       returnState: returnState ?? true,
+      includeScreenshot: (returnState ?? true) && authorized.caller.settings.computerUseScreenshots,
     }).pipe(
       Effect.flatMap((value) =>
         decodeAction(value).pipe(
@@ -522,7 +531,10 @@ const act = (app: string, action: Action, returnState: boolean | undefined) =>
           : newFrameId.pipe(
               Effect.map((frameId) => ({
                 ...result,
-                state: frameAppContent(result.state!, frameId),
+                state: applyScreenshotSetting({
+                  state: frameAppContent(result.state!, frameId),
+                  allowed: authorized.caller.settings.computerUseScreenshots,
+                }),
               })),
             ),
       ),

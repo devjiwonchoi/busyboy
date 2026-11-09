@@ -448,6 +448,8 @@ pub struct AppActParams {
     pub action: Action,
     #[serde(default = "yes")]
     pub return_state: bool,
+    #[serde(default)]
+    pub include_screenshot: bool,
 }
 
 /// What changed after an action. Absent fields mean "not observed".
@@ -512,6 +514,10 @@ mod tests {
         assert_eq!(params.context.turn_id, "u");
         assert!(!params.context.experimental_pointer, "old clients leave the pointer off");
         assert!(params.return_state);
+        assert!(!params.include_screenshot, "old clients leave screenshots off");
+        let mut with_screenshot = serde_json::to_value(&params).unwrap();
+        with_screenshot["includeScreenshot"] = json!(true);
+        assert!(serde_json::from_value::<AppActParams>(with_screenshot).unwrap().include_screenshot);
         assert_eq!(
             params.action,
             Action::Click { element: Some("e4".into()), x: None, y: None, window: None, button: MouseButton::Left, count: 1 }

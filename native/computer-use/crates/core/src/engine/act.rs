@@ -213,7 +213,7 @@ impl<P: Platform> Engine<P> {
                 .clone();
             let options = CaptureOptions {
                 budget: TreeBudget::default(),
-                include_screenshot: false,
+                include_screenshot: params.include_screenshot,
                 turn_id: &params.context.turn_id,
                 pointer,
             };
