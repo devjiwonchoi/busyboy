@@ -16,6 +16,7 @@ import {
   HelperSupervisor,
   helperSpawnEnv,
   resolveHelperSocketPath,
+  SOCKET_POLL_MS,
   type HelperChild,
   type HelperExit,
   type HelperSupervisorOptions,
@@ -412,8 +413,8 @@ describe("HelperSupervisor restart policy", () => {
       error: { details: { reason: "helper_start_failed" } },
     });
 
-    // Each attempt fails at its first 50 ms socket poll, then waits out the backoff.
-    const gaps = spawnedAt.slice(1).map((at, index) => at - spawnedAt[index]! - 50);
+    // Each attempt fails at its first socket poll, then waits out the backoff.
+    const gaps = spawnedAt.slice(1).map((at, index) => at - spawnedAt[index]! - SOCKET_POLL_MS);
     expect(gaps).toEqual([1_000, 2_000, 4_000, 8_000]);
     expect(supervisor.status).toMatchObject({ state: "error", reason: "helper_crashed" });
     await expect(supervisor.client()).rejects.toMatchObject({

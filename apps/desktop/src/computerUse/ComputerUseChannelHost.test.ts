@@ -148,6 +148,33 @@ describe("ComputerUseRouter with a helper process", () => {
     expect(events.at(-1)).toEqual({ type: "status", state: "stopped" });
   });
 
+  it("answers the first call after an idle stop without a launch once a run prewarms it", async () => {
+    const { router, supervisor, events, children } = withHelperProcess();
+    await router.handle({ type: "configure", enabled: true });
+    const request = async (id: number, method: string) => {
+      const started = performance.now();
+      await router.handle({ type: "request", id, method, params: {} });
+      expect(events.filter((event) => event.type === "response" && event.id === id)).toEqual([
+        expect.objectContaining({ result: expect.anything() }),
+      ]);
+      return performance.now() - started;
+    };
+
+    await request(1, "apps.list");
+    // What the ten-minute idle timer does.
+    await supervisor.stop();
+    expect(supervisor.status.state).toBe("stopped");
+
+    // A run starting prewarms the helper: the server sends permissions.status.
+    await request(2, "permissions.status");
+    expect(children).toHaveLength(2);
+    // The agent's first call then finds it running.
+    const firstCallMs = await request(3, "apps.list");
+    expect(children).toHaveLength(2);
+    // A launch of this fake helper takes hundreds of ms; a running one answers in a few.
+    expect(firstCallMs).toBeLessThan(200);
+  });
+
   it("restarts the helper on request", async () => {
     const { router, events, children } = withHelperProcess();
     await router.handle({ type: "configure", enabled: true });
