@@ -2205,6 +2205,136 @@ for (const enableAgentComputerUse of [true, false]) {
   );
 }
 
+it.effect(
+  "ProviderSessionManagerV2 gives an open thread computer use on its next turn, keeping its token",
+  () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(emptyState);
+      const computerUseOn = yield* Ref.make(false);
+      const settingsLayer = Layer.effect(
+        ServerSettings.ServerSettingsService,
+        Effect.gen(function* () {
+          const base = yield* ServerSettings.ServerSettingsService;
+          return {
+            ...base,
+            getSettings: Effect.all([base.getSettings, Ref.get(computerUseOn)]).pipe(
+              Effect.map(([settings, enableAgentComputerUse]) => ({
+                ...settings,
+                enableAgentComputerUse,
+              })),
+            ),
+          };
+        }),
+      ).pipe(Layer.provide(ServerSettings.layerTest()));
+
+      yield* Effect.gen(function* () {
+        const eventSink = yield* EventSink.EventSinkV2;
+        const idAllocator = yield* IdAllocator.IdAllocatorV2;
+        const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+        const registry = yield* McpSessionRegistry.McpSessionRegistry;
+        const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+        const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+        const now = yield* DateTime.now;
+        const threadId = ThreadId.make("thread-provider-session-manager-cu-next-turn");
+        const providerSessionId = yield* idAllocator.allocate.providerSession({
+          providerInstanceId: modelSelection.instanceId,
+          threadId,
+        });
+        const providerThread = makeProviderThread({
+          idAllocator,
+          threadId,
+          providerSessionId,
+          now,
+        });
+        yield* eventSink.write({
+          events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+        });
+        const runtime = yield* manager.open({
+          threadId,
+          providerSessionId,
+          modelSelection,
+          runtimePolicy,
+        });
+        const startTurn = (ordinal: number) =>
+          Effect.gen(function* () {
+            const runId = idAllocator.derive.run({ threadId, ordinal });
+            yield* runtime.startTurn({
+              appThread: (yield* projectionStore.getThreadProjection(threadId)).thread,
+              threadId,
+              runId,
+              runOrdinal: ordinal,
+              providerTurnOrdinal: ordinal,
+              attemptId: idAllocator.derive.runAttempt({ runId, attemptOrdinal: 1 }),
+              rootNodeId: idAllocator.derive.rootNode({ runId }),
+              providerThread,
+              message: {
+                createdBy: "user",
+                creationSource: "web",
+                messageId: yield* idAllocator.allocate.message({ threadId, ordinal }),
+                text: "hello",
+                attachments: [],
+              },
+              modelSelection,
+              runtimePolicy,
+            });
+          });
+        const token = (yield* mcpSessions.read(threadId))?.authorizationHeader.replace(
+          /^Bearer\s+/,
+          "",
+        );
+        assert.isDefined(token);
+        const capabilities = Effect.gen(function* () {
+          const scope = yield* registry.resolve(token!);
+          const config = yield* mcpSessions.read(threadId);
+          return {
+            credential: scope?.capabilities.has("computer-use"),
+            session: config?.capabilities?.has("computer-use"),
+            guide: config?.teamInstructions?.includes(COMPUTER_USE_INSTRUCTIONS) === true,
+            token: config?.authorizationHeader,
+          };
+        });
+
+        yield* startTurn(1);
+        assert.deepEqual(yield* capabilities, {
+          credential: false,
+          session: false,
+          guide: false,
+          token: `Bearer ${token}`,
+        });
+
+        // The user turns computer use on; the thread's next turn has it.
+        yield* Ref.set(computerUseOn, true);
+        yield* startTurn(2);
+        assert.deepEqual(yield* capabilities, {
+          credential: true,
+          session: true,
+          guide: true,
+          token: `Bearer ${token}`,
+        });
+
+        // And loses it on the turn after it is turned off.
+        yield* Ref.set(computerUseOn, false);
+        yield* startTurn(3);
+        assert.deepEqual(yield* capabilities, {
+          credential: false,
+          session: false,
+          guide: false,
+          token: `Bearer ${token}`,
+        });
+        yield* manager.close(providerSessionId);
+      }).pipe(
+        Effect.provide(
+          layerTest({
+            state,
+            idleTimeoutMs: 60_000,
+            serverConfigLayer: layerComputerUseServerConfig,
+            serverSettingsLayer: settingsLayer,
+          }),
+        ),
+      );
+    }),
+);
+
 it.effect("ProviderSessionManagerV2 honors a project browser-access opt-out", () =>
   Effect.gen(function* () {
     const captured = yield* runBrowserAccessScenario({
