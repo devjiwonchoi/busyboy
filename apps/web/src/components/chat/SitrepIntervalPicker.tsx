@@ -14,6 +14,7 @@ import { Input } from "../ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Separator } from "../ui/separator";
 import { Switch } from "../ui/switch";
+import { AfkSettings } from "./Afk";
 import {
   ComposerControl,
   ComposerControlChevron,
@@ -118,6 +119,8 @@ export function SitrepSettingsContent({ projectRef, summary }: SitrepControlProp
           }}
         />
       </label>
+      <Separator className="my-1" />
+      <AfkSettings projectRef={projectRef} summary={summary} />
     </div>
   );
 }

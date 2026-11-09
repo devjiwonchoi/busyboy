@@ -26,34 +26,34 @@ import "~/index.css";
 // The fake server: applies a settings patch the way ProjectTeamService.applySettings does.
 const server = vi.hoisted(() => ({
   patches: [] as Array<{ projectId: string; patch: unknown }>,
-  apply: (_projectId: string, _patch: { afk?: { hours: number | null } | null }) => {},
+  apply: (_projectId: string, _patch: { afk: { hours: number | null } | null | undefined }) => {},
   /** The server answering a lead's question for the user after the grace period. */
   answerWhileAfk: () => {},
-  /** Every project manager the app knows, read by useProjectManagerEntries. */
-  entries: [] as Array<{ environmentId: unknown; summary: unknown }>,
 }));
 
 vi.mock(import("../../state/projectTeam"), async (original) => ({
   ...(await original()),
-  useProjectManagerEntries: (() => server.entries) as never,
   useUpdateTeamSettings: (() => (ref: { projectId: string }, patch: never) => {
     server.patches.push({ projectId: ref.projectId, patch });
     server.apply(ref.projectId, patch);
     return Promise.resolve();
   }) as never,
 }));
-vi.mock(import("../../state/environments"), async (original) => ({
-  ...(await original()),
-  useEnvironmentIds: (() => ["env-1"]) as never,
-}));
 vi.mock(import("../../state/session"), async (original) => ({
   ...(await original()),
   useEnvironmentScope: () => true,
-  useEnvironmentsWithScope: (() => new Set(["env-1"])) as never,
 }));
 
+vi.mock(import("../../state/director"), async (original) => ({
+  ...(await original()),
+  useDirectorInbox: () => ({ groups: [], total: 0 }),
+}));
+vi.mock(import("../director/useDirectorChat"), () => ({ useDirectorChat: () => null }));
+
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
-import { AfkBanner, AfkToggle } from "./Afk";
+import { AfkBanner } from "./Afk";
+import { WorkspaceRail } from "../sidebar/WorkspaceRail";
+import { SidebarProvider } from "../ui/sidebar";
 import { DecisionCard } from "./DecisionCard";
 import { SitrepIntervalPicker, SitrepSettingsContent } from "./SitrepIntervalPicker";
 
@@ -121,10 +121,9 @@ function withAfk(
 }
 
 /**
- * The sidebar's AFK switch beside the PM chat: its decision cards, then the composer
- * area with the banner and settings. A second project shares the workspace.
+ * Two PM areas share the real workspace rail, but keep independent AFK settings.
  */
-function PmChat(props: { compact: boolean; initial?: ProjectTeamAttentionSummary }) {
+function PmChat(props: { compact: boolean; initial: ProjectTeamAttentionSummary | undefined }) {
   const [summary, setSummary] = useState(props.initial ?? makeProjectManagerSummaryFixture());
   const [other, setOther] = useState(() =>
     makeProjectManagerSummaryFixture({
@@ -132,7 +131,6 @@ function PmChat(props: { compact: boolean; initial?: ProjectTeamAttentionSummary
       pmThreadId: ThreadId.make("pm-thread-2"),
     }),
   );
-  server.entries = [summary, other].map((entry) => ({ environmentId: "env-1", summary: entry }));
   server.apply = (projectId, patch) => {
     if (patch.afk === undefined) return;
     const afk = patch.afk;
@@ -155,37 +153,48 @@ function PmChat(props: { compact: boolean; initial?: ProjectTeamAttentionSummary
     }));
   };
   return (
-    <div className={props.compact ? "flex flex-col" : "flex"}>
-      <nav aria-label="Views" className={props.compact ? "flex p-2" : "flex flex-col p-1"}>
-        <AfkToggle compact={props.compact} />
-      </nav>
-      <div className="mx-auto w-full max-w-2xl p-3">
-        {summary.decisionCards.map((card) => (
-          <DecisionCard
-            key={card.item.id}
-            card={card}
-            environmentId={projectRef.environmentId}
-            threadRef={scopeThreadRef(projectRef.environmentId, summary.pmThreadId)}
-            cwd={undefined}
-          />
-        ))}
-        <AfkBanner projectRef={projectRef} summary={summary} />
-        <div className="rounded-xl border p-2">
-          {props.compact ? (
-            // Phones show the sitrep settings inside the composer's overflow menu.
-            <SitrepSettingsContent projectRef={projectRef} summary={summary} />
-          ) : (
-            <SitrepIntervalPicker projectRef={projectRef} summary={summary} />
-          )}
-        </div>
+    <SidebarProvider style={{ minHeight: 0, display: "block" }}>
+      <WorkspaceRail />
+      <div
+        style={{ display: "flex", flexDirection: props.compact ? "column" : "row", width: "100%" }}
+      >
+        {[summary, other].map((entry, index) => {
+          const ref = scopeProjectRef(projectRef.environmentId, entry.projectId);
+          return (
+            <section
+              key={entry.projectId}
+              aria-label={index === 0 ? "project A" : "project B"}
+              style={{ minWidth: 0, flex: 1, padding: 12 }}
+            >
+              {entry.decisionCards.map((card) => (
+                <DecisionCard
+                  key={card.item.id}
+                  card={card}
+                  environmentId={ref.environmentId}
+                  threadRef={scopeThreadRef(ref.environmentId, entry.pmThreadId)}
+                  cwd={undefined}
+                />
+              ))}
+              <AfkBanner projectRef={ref} summary={entry} />
+              <div className="rounded-xl border p-2">
+                {props.compact ? (
+                  // Phones share this content with the composer's overflow menu.
+                  <SitrepSettingsContent projectRef={ref} summary={entry} />
+                ) : (
+                  <SitrepIntervalPicker projectRef={ref} summary={entry} />
+                )}
+              </div>
+            </section>
+          );
+        })}
       </div>
-    </div>
+    </SidebarProvider>
   );
 }
 
 async function renderPmChat(compact: boolean, initial?: ProjectTeamAttentionSummary) {
   const rootRoute = createRootRoute({
-    component: () => <PmChat compact={compact} {...(initial ? { initial } : {})} />,
+    component: () => <PmChat compact={compact} initial={initial} />,
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
@@ -201,70 +210,114 @@ async function renderPmChat(compact: boolean, initial?: ProjectTeamAttentionSumm
   return router;
 }
 
-const banner = () => page.getByRole("status", { name: "AFK" });
-const toggle = () => page.getByRole("switch", { name: "AFK" });
+const project = (name: "A" | "B") => page.getByRole("region", { name: `project ${name}` });
+const banner = () => project("A").getByRole("status", { name: "AFK" });
+// Desktop settings use a portal; only the currently open project's switch is mounted.
+const toggle = (compact: boolean, name: "A" | "B") =>
+  (compact ? project(name) : page).getByRole("switch", { name: "AFK", exact: true });
+
+async function openSettings(compact: boolean, name: "A" | "B") {
+  if (!compact) {
+    await act(async () => {
+      await userEvent.click(project(name).getByRole("button", { name: /Sitrep/ }));
+    });
+  }
+}
+
+async function closeSettings(compact: boolean) {
+  if (!compact) {
+    await act(async () => {
+      await userEvent.keyboard("{Escape}");
+    });
+    // Wait for the closing portal to unmount before opening another project's menu.
+    await expect
+      .element(page.getByRole("switch", { name: "AFK", exact: true }))
+      .not.toBeInTheDocument();
+  }
+}
 
 describe.each([
   { name: "desktop", width: 1280, height: 900, compact: false },
   { name: "phone", width: 390, height: 844, compact: true },
-])("AFK switch ($name)", ({ width, height, compact }) => {
-  it("turns AFK on for every project until turned off, shows it, and auto-answers", async () => {
+])("AFK switch ($name)", ({ name, width, height, compact }) => {
+  it("turns AFK on for one project only", async () => {
     await page.viewport(width, height);
     const router = await renderPmChat(compact);
-    await expect.element(banner()).not.toBeInTheDocument();
-    await expect.element(toggle()).toHaveAttribute("aria-checked", "false");
-
-    // The settings menu no longer offers AFK windows.
-    if (!compact) await userEvent.click(page.getByRole("button", { name: /Sitrep/ }));
-    await expect.element(page.getByText("Sitrep notifications")).toBeVisible();
-    await expect.element(page.getByRole("radio", { name: "8 hours" })).not.toBeInTheDocument();
-    if (!compact) await userEvent.keyboard("{Escape}");
-
-    await userEvent.click(toggle());
-    expect(server.patches).toEqual([
-      { projectId: "project-1", patch: { afk: { hours: null } } },
-      { projectId: OTHER_PROJECT, patch: { afk: { hours: null } } },
-    ]);
-    await expect.element(toggle()).toHaveAttribute("aria-checked", "true");
-    await expect.element(banner()).toBeVisible();
+    const views = page.getByRole("navigation", { name: "Views" }).element();
+    expect(views.querySelector('[role="switch"]')).toBeNull();
+    expect(document.querySelector("[data-afk-toggle]")).toBeNull();
+    expect(views.textContent).not.toContain("AFK");
+    await openSettings(compact, "A");
+    await expect.element(toggle(compact, "A")).toHaveAttribute("aria-checked", "false");
+    await act(async () => {
+      await userEvent.click(toggle(compact, "A"));
+    });
+    expect(server.patches).toEqual([{ projectId: "project-1", patch: { afk: { hours: null } } }]);
+    await expect.element(toggle(compact, "A")).toHaveAttribute("aria-checked", "true");
     await expect.element(banner().getByText("AFK 켜짐 · 끌 때까지")).toBeVisible();
-    const rect = banner().element().getBoundingClientRect();
-    expect(rect.right).toBeLessThanOrEqual(width);
+    expect(project("B").element().querySelector("[data-afk-banner]")).toBeNull();
+    expect(banner().element().getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    // Let the switch finish its color transition before the screenshot.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await page.screenshot({ path: `__screenshots__/afk-${name}.png` });
 
-    // A lead asks; nobody answers within the grace period, so the server takes the
-    // recommended option.
+    await closeSettings(compact);
+    await openSettings(compact, "B");
+    await expect.element(toggle(compact, "B")).toHaveAttribute("aria-checked", "false");
+    await closeSettings(compact);
+
+    // A lead asks; after the grace period the server chooses the recommended option.
     await act(async () => server.answerWhileAfk());
-    await expect.element(page.getByText(/자동 응답됨\(AFK\)/)).toBeVisible();
-
+    await expect.element(project("A").getByText(/자동 응답됨\(AFK\)/)).toBeVisible();
     const answered = banner().getByRole("button", { name: "1개 자동 응답" });
     await expect.element(answered).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(answered);
+    await act(async () => {
+      await userEvent.click(answered);
+    });
     const row = banner().getByRole("link", { name: `${QUESTION} → ${ANSWER}`, exact: false });
     await expect.element(row).toBeVisible();
-    await userEvent.click(row);
+    await act(async () => {
+      await userEvent.click(row);
+    });
     await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/lead-thread"));
 
-    // The switch turns it off everywhere.
     server.patches = [];
-    await userEvent.click(toggle());
-    expect(server.patches).toEqual([
-      { projectId: "project-1", patch: { afk: null } },
-      { projectId: OTHER_PROJECT, patch: { afk: null } },
-    ]);
-    await expect.element(toggle()).toHaveAttribute("aria-checked", "false");
+    await openSettings(compact, "A");
+    await act(async () => {
+      await userEvent.click(toggle(compact, "A"));
+    });
+    expect(server.patches).toEqual([{ projectId: "project-1", patch: { afk: null } }]);
+    await expect.element(toggle(compact, "A")).toHaveAttribute("aria-checked", "false");
     await expect.element(banner()).not.toBeInTheDocument();
   });
 
-  it("turns off from the banner too", async () => {
+  it("turns off from the banner", async () => {
     await page.viewport(width, height);
     await renderPmChat(compact);
-    await userEvent.click(toggle());
+    await openSettings(compact, "A");
+    await act(async () => {
+      await userEvent.click(toggle(compact, "A"));
+    });
+    await closeSettings(compact);
     await expect.element(banner()).toBeVisible();
+    await openSettings(compact, "B");
+    await act(async () => {
+      await userEvent.click(toggle(compact, "B"));
+    });
+    await closeSettings(compact);
+    await expect.element(project("B").getByRole("status", { name: "AFK" })).toBeVisible();
     server.patches = [];
-    await userEvent.click(banner().getByRole("button", { name: "끄기" }));
-    expect(server.patches.map(({ patch }) => patch)).toEqual([{ afk: null }, { afk: null }]);
+    await act(async () => {
+      await userEvent.click(banner().getByRole("button", { name: "끄기" }));
+    });
+    expect(server.patches).toEqual([{ projectId: "project-1", patch: { afk: null } }]);
     await expect.element(banner()).not.toBeInTheDocument();
-    await expect.element(toggle()).toHaveAttribute("aria-checked", "false");
+    await openSettings(compact, "A");
+    await expect.element(toggle(compact, "A")).toHaveAttribute("aria-checked", "false");
+    await closeSettings(compact);
+    await expect.element(project("B").getByRole("status", { name: "AFK" })).toBeVisible();
+    await openSettings(compact, "B");
+    await expect.element(toggle(compact, "B")).toHaveAttribute("aria-checked", "true");
   });
 });
 
