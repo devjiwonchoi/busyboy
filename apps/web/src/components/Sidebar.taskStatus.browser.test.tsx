@@ -302,7 +302,7 @@ function renderSidebarApp() {
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([indexRoute, threadRoute]),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    history: createMemoryHistory({ initialEntries: ["/env-1/pm-thread"] }),
   });
   return { router, render: () => act(async () => root.render(<RouterProvider router={router} />)) };
 }

@@ -262,7 +262,7 @@ function renderSidebarApp() {
   );
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    history: createMemoryHistory({ initialEntries: ["/env-1/pm-thread"] }),
   });
   return { router, render: () => act(async () => root.render(<RouterProvider router={router} />)) };
 }
@@ -303,7 +303,7 @@ describe("sidebar task tree", () => {
     }
     expect(
       container.querySelector('[data-task-item="waiting"] [data-waiting-marker]')?.textContent,
-    ).toContain("BB-4");
+    ).toContain("Prerequisite sibling");
     expect(group().getAttribute("aria-label")).toBe("스레드 3개");
     expect(group().getAttribute("aria-expanded")).toBe("false");
     expect(threadItem("launch-1")).toBeNull();
@@ -327,7 +327,7 @@ describe("sidebar task tree", () => {
       expect(threadItem("launch-1")).toBeNull();
     });
     expect(parent().querySelector('[data-subtask-progress="0/3"]')).toBeTruthy();
-    expect(app.router.state.location.pathname).toBe("/");
+    expect(app.router.state.location.pathname).toBe("/env-1/pm-thread");
     // Hidden task leads and launched threads no longer consume keyboard jump slots.
     await userEvent.keyboard("{Meta>}4{/Meta}");
     await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/user-thread"));
