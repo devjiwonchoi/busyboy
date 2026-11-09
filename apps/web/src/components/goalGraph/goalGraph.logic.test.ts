@@ -261,3 +261,77 @@ describe("live graph signals", () => {
     expect(layoutGoalGraph(empty).paths).toHaveLength(0);
   });
 });
+
+describe("goal graph panel summaries", () => {
+  it("keeps global attention chronological and independent of goals and recent filtering", () => {
+    const entries = goalGraphFixture();
+    const firstBase = graphCard("old", false);
+    const first = {
+      ...firstBase,
+      item: { ...firstBase.item, createdAt: "2026-11-01T00:00:00.000Z" },
+    };
+    const lastBase = graphCard("new", false);
+    const last = { ...lastBase, item: { ...lastBase.item, createdAt: "2026-11-03T00:00:00.000Z" } };
+    const middleBase = graphCard("middle", false);
+    const middle = {
+      ...middleBase,
+      item: { ...middleBase.item, createdAt: "2026-11-02T00:00:00.000Z" },
+    };
+    const answeredBase = graphCard("answered", false);
+    const answered = {
+      ...answeredBase,
+      item: { ...answeredBase.item, answeredAt: "2026-11-04T00:00:00.000Z" },
+    };
+    const withdrawnBase = graphCard("withdrawn", false);
+    const withdrawn = {
+      ...withdrawnBase,
+      item: { ...withdrawnBase.item, supersededAt: "2026-11-04T00:00:00.000Z" },
+    };
+    entries[0]!.summary = {
+      ...entries[0]!.summary,
+      decisionCards: [last, withdrawn, first, answered],
+    };
+    entries[1]!.summary = { ...entries[1]!.summary, decisionCards: [middle] };
+    entries[2]!.summary = { ...entries[2]!.summary, goals: [], decisionCards: [] };
+    const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW, recentOnly: true });
+    expect(graph.attention.cards.map(({ card }) => card.item.taskId)).toEqual([
+      "old",
+      "middle",
+      "new",
+    ]);
+    expect(graph.attention.total).toBe(3);
+  });
+  it("summarizes stalled and review work and excludes finished waits and cancelled children", () => {
+    const entries = goalGraphFixture();
+    entries[2]!.summary = {
+      ...entries[2]!.summary,
+      tasks: [
+        graphTask("epic", 10, {
+          stage: "running",
+          waitsOn: ["a-4" as never, "a-cancelled" as never, "a-2" as never],
+        }),
+      ],
+    };
+    entries[0]!.summary = {
+      ...entries[0]!.summary,
+      tasks: entries[0]!.summary.tasks.map((task) => ({
+        ...task,
+        parentTaskId: "epic" as never,
+        lastOutcome: task.id === "a-2" || task.stage === "done" ? "stalled" : null,
+      })),
+    };
+    const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW });
+    const epic = graph.epics[0]!;
+    expect(epic.progress).toEqual({ done: 2, total: 5 });
+    expect(epic.cancelled).toBe(1);
+    expect(epic.blockedBy.map((task) => task.key)).toEqual(["A-2"]);
+    expect(
+      graph.runningProjects[0]!.tasks.map((task) => [task.id, task.stalled, task.live]),
+    ).toEqual([
+      ["a-1", false, true],
+      ["a-2", true, false],
+      ["a-3", false, false],
+    ]);
+    expect(epic.counts.reduce((sum, [, count]) => sum + count, 0)).toBe(5);
+  });
+});

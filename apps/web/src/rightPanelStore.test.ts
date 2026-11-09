@@ -1224,3 +1224,25 @@ describe("rightPanelStore", () => {
     expect(store.getUserActionRevision(refA)).toBe(revision);
   });
 });
+
+it("preserves and restores the Director goal graph tab using the existing panel lifecycle", () => {
+  const store = useRightPanelStore.getState();
+  store.open(refA, "director-workspace");
+  store.openProactive(refA, { id: "diff", kind: "diff" }, store.getUserActionRevision(refA));
+  expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe(
+    "director-workspace",
+  );
+  store.close(refA);
+  expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe(null);
+  store.open(refA, "director-workspace");
+  store.closeSurface(refA, "director-workspace");
+  expect(useClosedViewStore.getState().entries).toMatchObject([
+    { kind: "panel-tab", surface: { id: "director-workspace", kind: "director-workspace" } },
+  ]);
+  store.open(refA, "director-workspace");
+  expect(
+    selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces.map(
+      (surface) => surface.id,
+    ),
+  ).toEqual(["director-workspace"]);
+});

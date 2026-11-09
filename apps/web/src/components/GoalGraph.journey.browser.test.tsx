@@ -59,7 +59,8 @@ vi.mock(import("../state/director"), async (original) => ({
   useDirectorThreadRef: () => null,
 }));
 
-import { DirectorWorkspaceSurface } from "./director/DirectorWorkspaceSurface";
+import { GoalGraph } from "./goalGraph/GoalGraph";
+import { WorkspacePageContainer } from "./WorkspacePageContainer";
 import { SidebarProvider } from "./ui/sidebar";
 
 let root: Root;
@@ -96,7 +97,11 @@ async function openAllProjects() {
       createRoute({
         getParentRoute: () => rootRoute,
         path: "/all-projects",
-        component: DirectorWorkspaceSurface,
+        component: () => (
+          <WorkspacePageContainer width="wide" className="gap-4 px-3 sm:px-6">
+            <GoalGraph entries={state.managers as never} />
+          </WorkspacePageContainer>
+        ),
       }),
       createRoute({
         getParentRoute: () => rootRoute,
@@ -120,7 +125,6 @@ const taskNode = (id: string) => container.querySelector<HTMLElement>(`[data-tas
 const goalNode = (id: string) => container.querySelector<HTMLElement>(`[data-goal-node="${id}"]`)!;
 async function openGraph() {
   const router = await openAllProjects();
-  await userEvent.click(page.getByRole("button", { name: "목표 그래프", exact: true }));
   await vi.waitFor(() => expect(goalNode("goal-1") === null).toBe(false));
   return router;
 }

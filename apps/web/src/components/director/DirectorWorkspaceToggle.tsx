@@ -2,15 +2,13 @@ import type { ScopedThreadRef } from "@t3tools/contracts";
 import { LayoutGridIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 
-import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { selectActiveRightPanel, useRightPanelStore } from "~/rightPanelStore";
 
-/** Open once per entry; phones keep the conversation visible until requested. */
+/** Open once per entry, then respect panel and tab choices until the user returns. */
 export function useOpenDirectorWorkspaceOnEntry(
   threadRef: ScopedThreadRef | null,
   isDirector: boolean,
 ) {
-  const mobile = useMediaQuery("max-sm");
   const enteredFor = useRef<string | null>(null);
   const key =
     threadRef === null || !isDirector ? null : `${threadRef.environmentId}:${threadRef.threadId}`;
@@ -19,10 +17,10 @@ export function useOpenDirectorWorkspaceOnEntry(
       return;
     }
     enteredFor.current = key;
-    if (threadRef !== null && key !== null && !mobile) {
+    if (threadRef !== null && key !== null) {
       useRightPanelStore.getState().open(threadRef, "director-workspace");
     }
-  }, [key, mobile, threadRef]);
+  }, [key, threadRef]);
 }
 
 export function DirectorWorkspaceToggle(props: { threadRef: ScopedThreadRef }) {
