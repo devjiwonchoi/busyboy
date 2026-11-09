@@ -34,6 +34,8 @@ import { HelperRequestError, type HelperClient } from "./HelperClient.ts";
 import { HELPER_BUNDLE_NAME, HelperInstaller } from "./HelperInstall.ts";
 import {
   HelperSupervisor,
+  SOCKET_DIR_ENV,
+  helperRootDir,
   isComputerUseSupported,
   resolveHelperSocketPath,
   systemTimers,
@@ -521,20 +523,25 @@ export const make = Effect.gen(function* () {
   const log = (message: string) => runFork(logInfo(message));
 
   const supported = isComputerUseSupported(environment.platform, NodeOS.release());
+  const helperRoot = helperRootDir(environment.homeDirectory, environment.isDevelopment);
+  const socketPath = resolveHelperSocketPath({
+    homeDirectory: environment.homeDirectory,
+    ...(environment.isDevelopment ? { socketDir: environment.path.join(helperRoot, "run") } : {}),
+    tmpDir: process.env.TMPDIR,
+    euid: supported ? NodeOS.userInfo().uid : 0,
+    development: environment.isDevelopment,
+  });
   const installer = new HelperInstaller({
     bundledPath: Option.getOrNull(bundledPath),
-    installRoot: environment.path.join(
-      environment.homeDirectory,
-      "Library/Application Support/BusyBoy/ComputerUse",
-    ),
+    installRoot: helperRoot,
   });
   const supervisor = new HelperSupervisor({
     installer,
-    socketPath: resolveHelperSocketPath({
-      homeDirectory: environment.homeDirectory,
-      tmpDir: process.env.TMPDIR,
-      euid: supported ? NodeOS.userInfo().uid : 0,
-    }),
+    socketPath,
+    // The helper's default socket dir is the installed app's; hand dev builds the final one.
+    ...(environment.isDevelopment
+      ? { env: { [SOCKET_DIR_ENV]: environment.path.dirname(socketPath) } }
+      : {}),
     clientVersion: environment.appVersion,
     supported,
     log,
