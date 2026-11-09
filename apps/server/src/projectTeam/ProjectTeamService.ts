@@ -1619,14 +1619,16 @@ const make = Effect.gen(function* () {
           outcome === "dismiss"
             ? `[제안 빠짐] ${proposal.title}\nThe user removed this proposal. Don't propose it again unless they ask.`
             : `[제안 피드백] ${proposal.title}\n${answer}\nThe proposal is closed. Post a new task_create proposal if it still makes sense.`;
-        yield* unlinkFromGoals(proposal.id);
-        return yield* router.answer({
+        const closed = yield* router.answer({
           item,
           answer,
           senderThreadId,
           answeredBy: "user",
           relayText,
         });
+        // After the answer lands: a failed relay keeps the card open with its goal link.
+        yield* unlinkFromGoals(proposal.id);
+        return closed;
       }
       const key = yield* keyOf(proposal);
       const routed = proposal.projectId !== item.projectId;
