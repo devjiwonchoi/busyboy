@@ -1,4 +1,4 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   afkActive,
   afkSetting,
@@ -13,10 +13,12 @@ import { ChevronDownIcon, CoffeeIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { useUpdateTeamSettings } from "../../state/projectTeam";
-import { useEnvironmentScope } from "../../state/session";
+import { useEnvironmentIds } from "../../state/environments";
+import { useProjectManagerEntries, useUpdateTeamSettings } from "../../state/projectTeam";
+import { useEnvironmentsWithScope } from "../../state/session";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { Button } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 interface AfkProps {
   projectRef: ScopedProjectRef;
@@ -24,16 +26,7 @@ interface AfkProps {
 }
 
 /** Shown on a card the server answered while AFK was on. */
-export const AFK_ANSWERED_LABEL = "Auto-answered (AFK)";
-
-/** The choices the app offers; `hours: null` stays on until the user turns it off. */
-export const AFK_CHOICES = [
-  { id: "off", label: "Off", hours: undefined },
-  { id: "1h", label: "1 hour", hours: 1 },
-  { id: "8h", label: "8 hours", hours: 8 },
-  { id: "24h", label: "24 hours", hours: 24 },
-  { id: "until_off", label: "Until I turn it off", hours: null },
-] as const;
+export const AFK_ANSWERED_LABEL = "자동 응답됨(AFK)";
 
 function timeLabel(date: Date): string {
   return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -45,17 +38,10 @@ function dateTimeLabel(date: Date, now: Date): string {
   return `${date.toLocaleDateString(undefined, { weekday: "short" })} ${timeLabel(date)}`;
 }
 
-/** "until 6:30 PM", "until Sat 6:30 PM" past today, or "until you turn it off". */
+/** "끌 때까지", or "6:30 PM까지" for a timed window turned on before the toggle. */
 export function afkUntilLabel(setting: ProjectTeamAfk, now: Date = new Date()): string {
-  if (setting.until === null) return "until you turn it off";
-  return `until ${dateTimeLabel(new Date(setting.until), now)}`;
-}
-
-/** The menu choice that started this window; picking it again restarts the window. */
-function selectedChoice(setting: ProjectTeamAfk): string | null {
-  if (setting.until === null) return "until_off";
-  const hours = Math.round((Date.parse(setting.until) - Date.parse(setting.since)) / 3_600_000);
-  return AFK_CHOICES.find((choice) => choice.hours === hours)?.id ?? null;
+  if (setting.until === null) return "끌 때까지";
+  return `${dateTimeLabel(new Date(setting.until), now)}까지`;
 }
 
 /** Whether AFK is on now; re-renders when a timed window ends. */
@@ -66,61 +52,85 @@ export function useAfkActive(setting: ProjectTeamAfk | undefined) {
   useEffect(() => {
     if (!active || until === null) return;
     const remaining = Date.parse(until) - Date.now();
-    // setTimeout overflows past ~24.8 days; the app offers at most a week.
+    // setTimeout overflows past ~24.8 days; timed windows lasted at most a week.
     const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, remaining) + 50);
     return () => window.clearTimeout(timer);
   }, [active, until]);
   return active;
 }
 
-/** The "AFK" section of the PM's composer settings menu. */
-export function AfkSettings({ projectRef, summary }: AfkProps) {
-  const canOperate = useEnvironmentScope(projectRef.environmentId, AuthOrchestrationOperateScope);
+/**
+ * AFK for the whole workspace. The server keeps it per project, so turning it on or
+ * off writes every project the user can operate, the Director included. It reads as
+ * on while any project is AFK.
+ */
+export function useWorkspaceAfk() {
+  const entries = useProjectManagerEntries(useEnvironmentIds());
+  const operable = useEnvironmentsWithScope(entries, AuthOrchestrationOperateScope);
   const updateSettings = useUpdateTeamSettings();
-  const setting = afkSetting(summary.settings);
-  const active = useAfkActive(setting);
-  const selected = !active || setting === undefined ? "off" : selectedChoice(setting);
+  const now = Date.now();
+  const targets = entries
+    .filter((entry) => operable.has(entry.environmentId))
+    .map((entry) => ({
+      ref: scopeProjectRef(entry.environmentId, entry.summary.projectId),
+      setting: afkSetting(entry.summary.settings),
+    }));
+  const on = entries.some((entry) => afkActive(afkSetting(entry.summary.settings), now));
+  const setOn = (next: boolean) =>
+    Promise.all(
+      targets.flatMap(({ ref, setting }) => {
+        if (next) {
+          // Already on until turned off: nothing to write.
+          if (setting?.until === null) return [];
+          return [updateSettings(ref, { afk: { hours: null } })];
+        }
+        return setting === undefined ? [] : [updateSettings(ref, { afk: null })];
+      }),
+    );
+  return { on, canToggle: targets.length > 0, setOn };
+}
 
+const AFK_HINT =
+  "켜면 에이전트가 기다리지 않고 추천안으로 대신 답해요. 블로커·머지·시크릿은 기다려요.";
+
+/**
+ * The workspace AFK switch: an icon button at the bottom of the rail on desktop,
+ * a chip in the sidebar's tab row on phones. Amber while on.
+ */
+export function AfkToggle({ compact }: { compact: boolean }) {
+  const { on, canToggle, setOn } = useWorkspaceAfk();
+  const button = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label="AFK"
+      data-afk-toggle
+      disabled={!canToggle}
+      onClick={() => {
+        void setOn(!on);
+      }}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-md font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+        compact ? "h-9 gap-1.5 px-3 text-sm" : "size-9 flex-col gap-0.5 text-[9px] leading-none",
+        on
+          ? "bg-warning-surface text-warning-foreground ring-1 ring-warning/32"
+          : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+      )}
+    >
+      <CoffeeIcon aria-hidden className="size-4" />
+      AFK
+    </button>
+  );
+  if (compact) return button;
   return (
-    <div className="flex flex-col" data-afk-settings>
-      <div className="px-2 pt-1.5 font-medium text-muted-foreground text-xs">AFK</div>
-      <p className="px-2 pb-1.5 text-2xs text-muted-foreground">
-        Agents take the recommended option instead of waiting for you. Blockers, merges and secrets
-        still wait.
-      </p>
-      {active && setting !== undefined && setting.until !== null ? (
-        <p className="px-2 pb-1 text-xs">On {afkUntilLabel(setting)}</p>
-      ) : null}
-      <div role="radiogroup" aria-label="AFK" className="flex flex-col">
-        {AFK_CHOICES.map((choice) => (
-          <button
-            key={choice.id}
-            type="button"
-            role="radio"
-            aria-checked={selected === choice.id}
-            disabled={!canOperate}
-            onClick={() => {
-              void updateSettings(projectRef, {
-                afk: choice.hours === undefined ? null : { hours: choice.hours },
-              });
-            }}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50",
-              selected === choice.id && "font-medium",
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                "size-2 shrink-0 rounded-full border border-muted-foreground/60",
-                selected === choice.id && "border-primary bg-primary",
-              )}
-            />
-            {choice.label}
-          </button>
-        ))}
-      </div>
-    </div>
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipPopup side="right" className="max-w-56">
+        <div className="font-medium">{on ? "AFK 켜짐" : "AFK 꺼짐"}</div>
+        <div className="text-muted-foreground">{AFK_HINT}</div>
+      </TooltipPopup>
+    </Tooltip>
   );
 }
 
@@ -156,12 +166,11 @@ function AfkAnswerRow({
 }
 
 /**
- * A strip above the PM composer while AFK is on: when it ends, a Turn off button, and
- * the questions answered for the user since it was turned on.
+ * A strip above the PM composer while AFK is on: when it ends, a button that turns it
+ * off everywhere, and the questions answered for the user since it was turned on.
  */
 export function AfkBanner({ projectRef, summary }: AfkProps) {
-  const canOperate = useEnvironmentScope(projectRef.environmentId, AuthOrchestrationOperateScope);
-  const updateSettings = useUpdateTeamSettings();
+  const workspaceAfk = useWorkspaceAfk();
   const setting = afkSetting(summary.settings);
   const active = useAfkActive(setting);
   const [expanded, setExpanded] = useState(false);
@@ -178,7 +187,7 @@ export function AfkBanner({ projectRef, summary }: AfkProps) {
       <div className="flex items-center gap-2">
         <CoffeeIcon aria-hidden className="size-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate font-medium">
-          AFK on · {afkUntilLabel(setting)}
+          AFK 켜짐 · {afkUntilLabel(setting)}
         </span>
         {answers.length > 0 ? (
           <Button
@@ -189,7 +198,7 @@ export function AfkBanner({ projectRef, summary }: AfkProps) {
             className="shrink-0"
             onClick={() => setExpanded((value) => !value)}
           >
-            {answers.length} auto-answered
+            {answers.length}개 자동 응답
             <ChevronDownIcon
               aria-hidden
               className={cn("size-3 transition-transform", expanded && "rotate-180")}
@@ -200,17 +209,17 @@ export function AfkBanner({ projectRef, summary }: AfkProps) {
           type="button"
           size="xs"
           variant="ghost"
-          disabled={!canOperate}
+          disabled={!workspaceAfk.canToggle}
           className="shrink-0"
           onClick={() => {
-            void updateSettings(projectRef, { afk: null });
+            void workspaceAfk.setOn(false);
           }}
         >
-          Turn off
+          끄기
         </Button>
       </div>
       {expanded && answers.length > 0 ? (
-        <ul aria-label="Auto-answered" className="mt-1 mb-0.5 max-h-48 overflow-y-auto">
+        <ul aria-label="자동 응답" className="mt-1 mb-0.5 max-h-48 overflow-y-auto">
           {answers.map((answer) => (
             <AfkAnswerRow key={answer.id} answer={answer} projectRef={projectRef} />
           ))}
