@@ -79,7 +79,11 @@ import {
 } from "./composerDraftStore";
 import { removeLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 import { insertInlineContextReference } from "./lib/composerContextReferences";
-import { terminalContextReference, threadContextRecord } from "./lib/composerContextRecords";
+import {
+  projectContextRecord,
+  terminalContextReference,
+  threadContextRecord,
+} from "./lib/composerContextRecords";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
   formatTerminalContextReference,
@@ -1224,6 +1228,46 @@ describe("composerDraftStore thread contexts", () => {
     store.addThreadContexts(threadRef, [attached]);
     store.setThreadContexts(threadRef, []);
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+  });
+});
+
+describe("composerDraftStore project references", () => {
+  const threadId = ThreadId.make("thread-with-project");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const project = projectContextRecord({
+    environmentId: TEST_ENVIRONMENT_ID,
+    projectId: ProjectId.make("next-bot-id"),
+    title: "next-bot",
+    workspaceRoot: "/code/next-bot",
+  });
+  const thread = threadContextRecord(
+    scopeThreadRef(TEST_ENVIRONMENT_ID, ThreadId.make("attached-thread")),
+    "Fix login",
+  );
+
+  beforeEach(resetComposerDraftStore);
+
+  it("keeps a project reference next to a thread reference across persistence", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPrompt(threadRef, "Check");
+    store.addThreadContexts(threadRef, [project, thread]);
+
+    const draft = draftFor(threadId, TEST_ENVIRONMENT_ID);
+    expect(draft?.threadContexts).toEqual([project, thread]);
+    expect(draft?.prompt).toContain(`[next-bot](t3-context://v1/project/${project.contextId})`);
+
+    const merge = useComposerDraftStore.persist.getOptions().merge!;
+    const hydrated = merge(
+      JSON.parse(
+        JSON.stringify(partializeComposerDraftStoreState(useComposerDraftStore.getState())),
+      ),
+      useComposerDraftStore.getInitialState(),
+    );
+    expect(hydrated.draftsByThreadKey[scopedThreadKey(threadRef)]?.threadContexts).toEqual([
+      project,
+      thread,
+    ]);
+    expect(hydrated.draftsByThreadKey[scopedThreadKey(threadRef)]?.prompt).toBe(draft?.prompt);
   });
 });
 

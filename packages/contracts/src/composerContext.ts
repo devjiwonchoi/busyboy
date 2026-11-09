@@ -5,6 +5,7 @@ import {
   ForwardCompatibleArray,
   NonNegativeInt,
   PositiveInt,
+  ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
@@ -23,6 +24,7 @@ export const COMPOSER_CONTEXT_KINDS = [
   "mention",
   "skill",
   "thread",
+  "project",
 ] as const;
 export type KnownComposerContextKind = (typeof COMPOSER_CONTEXT_KINDS)[number];
 
@@ -213,6 +215,20 @@ export const ThreadContextRecord = Schema.Struct({
 });
 export type ThreadContextRecord = typeof ThreadContextRecord.Type;
 
+export const ProjectContextRecord = Schema.Struct({
+  ...recordBase,
+  kind: Schema.Literal("project"),
+  environmentId: EnvironmentId,
+  projectId: ProjectId,
+  title: ContextLabel,
+  workspaceRoot: TrimmedNonEmptyString.check(Schema.isMaxLength(2_048)),
+});
+export type ProjectContextRecord = typeof ProjectContextRecord.Type;
+
+/** Records that point at another entity (a thread or a project) rather than carrying content. */
+export const LinkedContextRecord = Schema.Union([ThreadContextRecord, ProjectContextRecord]);
+export type LinkedContextRecord = typeof LinkedContextRecord.Type;
+
 const isJson = Schema.is(Schema.Json);
 
 /**
@@ -246,6 +262,7 @@ export const KnownComposerContextRecord = Schema.Union([
   MentionContextRecord,
   SkillContextRecord,
   ThreadContextRecord,
+  ProjectContextRecord,
 ]);
 export type KnownComposerContextRecord = typeof KnownComposerContextRecord.Type;
 
