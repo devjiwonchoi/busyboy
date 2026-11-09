@@ -1,3 +1,5 @@
+import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
+
 import type { MessagesTimelineRow } from "./MessagesTimeline.logic";
 
 export interface TimelineMinimapItem {
@@ -7,13 +9,24 @@ export interface TimelineMinimapItem {
   readonly assistantText: string | null;
 }
 
+/**
+ * One tick per prompt. PM and Director chats draw app-sent prompts (such as "[목표 점검]")
+ * as one-line events, so `skipAppEvents` leaves them out there.
+ */
 export function deriveTimelineMinimapItems(
   rows: ReadonlyArray<MessagesTimelineRow>,
+  options?: { readonly skipAppEvents?: boolean },
 ): TimelineMinimapItem[] {
   const items: TimelineMinimapItem[] = [];
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     if (row?.kind !== "message" || row.message.role !== "user") {
+      continue;
+    }
+    if (
+      options?.skipAppEvents &&
+      resolveUserMessagePresentation(row.message).attribution === "t3code"
+    ) {
       continue;
     }
 
