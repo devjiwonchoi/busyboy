@@ -1,5 +1,4 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { formatTaskKey } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
@@ -7,7 +6,7 @@ import { useDirectorInbox } from "~/state/director";
 import { pendingActionItems } from "~/state/projectTeam.logic";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { DecisionCard } from "../chat/DecisionCard";
-import { useDirectorInboxTitles } from "./DirectorInbox";
+import { InboxTaskLink, useDirectorInboxTitles } from "./DirectorInbox";
 
 /** One shared decision at a time, kept beside the Director's composer. */
 export function DirectorInboxDock() {
@@ -67,10 +66,7 @@ export function DirectorInboxDock() {
           data-director-inbox-project={group.projectId}
           className="min-w-0 truncate rounded-full bg-muted px-2 py-0.5"
         >
-          {titleOf(group)}
-          {card !== null && card.taskNumber > 0
-            ? ` · ${formatTaskKey(group.taskKeyPrefix, card.taskNumber)}`
-            : ""}
+          {card !== null ? <InboxTaskLink card={card} group={group} /> : titleOf(group)}
         </span>
         <div className="ml-auto flex gap-1">
           <button

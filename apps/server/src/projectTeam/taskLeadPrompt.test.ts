@@ -11,6 +11,7 @@ import {
   type ProjectTask,
   type ProjectTaskSpecVersion,
 } from "@t3tools/contracts";
+import { USER_FACING_TASK_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
 import { resolveRoleModels } from "./roleModels.ts";
@@ -183,6 +184,20 @@ describe("buildTaskLeadPrompt", () => {
 
   it("keeps the whole prompt stable", () => {
     expect(buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] })).toMatchSnapshot();
+  });
+
+  it("names linked tasks and requires visible decision context without broadening approval", () => {
+    const prompt = buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] });
+
+    expect(prompt).toContain(USER_FACING_TASK_INSTRUCTIONS);
+    expect(prompt).toContain("[로그인 리다이렉트 수정 · 웹 앱](t3-task:task%3Alogin)");
+    expect(prompt).toContain("supporting detail in parentheses");
+    expect(prompt).toContain(
+      "required context describing its action, reason, impacts, cost, reversibility, and recommendation",
+    );
+    expect(prompt).toContain("Supply the required context fields");
+    expect(prompt).toContain("A plan approval authorizes only the scope the plan states");
+    expect(prompt).toContain("Merging a pull request still needs the user's explicit OK.");
   });
 
   it("tells the lead which model runs each role and to hand them off with task_delegate", () => {

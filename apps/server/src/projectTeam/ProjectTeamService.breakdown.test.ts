@@ -6,6 +6,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
+  attentionContext,
   approvePlan,
   PROJECT_ID,
   readyPlan,
@@ -60,7 +61,11 @@ const draftBreakdown = (lead: ThreadId, titles: ReadonlyArray<string>) =>
 const approve = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* service;
-    const { item } = yield* team.askUser(lead, { kind: "approval", question: "Approve?" });
+    const { item } = yield* team.askUser(lead, {
+      context: attentionContext({ action: "Approve?" }),
+      kind: "approval",
+      question: "Approve?",
+    });
     yield* team.answerDecision({
       projectId: PROJECT_ID,
       attentionItemId: item.id,
@@ -145,7 +150,11 @@ describe("ProjectTeamService intake and breakdown", () => {
 
         const sub = started.leadThreadId;
         const refused = yield* team
-          .askUser(sub, { kind: "approval", question: "Approve my plan?" })
+          .askUser(sub, {
+            context: attentionContext({ action: "Approve my plan?" }),
+            kind: "approval",
+            question: "Approve my plan?",
+          })
           .pipe(Effect.flip);
         assert.include(refused.message, "#2 needs no approval card");
         assert.include(refused.message, "Breakdown change");
@@ -187,7 +196,11 @@ describe("ProjectTeamService intake and breakdown", () => {
         const pm = yield* setUpManager;
         const { leadThreadId: lead } = yield* startLead(pm, "Workflow", harness.delegate);
         const [draft] = yield* draftBreakdown(lead, ["Server gates"]);
-        const { item } = yield* team.askUser(lead, { kind: "approval", question: "Approve?" });
+        const { item } = yield* team.askUser(lead, {
+          context: attentionContext({ action: "Approve?" }),
+          kind: "approval",
+          question: "Approve?",
+        });
         const open = (yield* team.attentionSnapshot).projects[0]!.decisionCards;
         assert.strictEqual(open.length, 1);
         assert.deepStrictEqual(open[0]?.plan?.subtasks, [
@@ -258,7 +271,11 @@ describe("ProjectTeamService intake and breakdown", () => {
           spec: readyPlan((yield* team.readSpec(lead, {})).current.spec),
           note: "Plan",
         });
-        yield* team.askUser(lead, { kind: "approval", question: "Approve?" });
+        yield* team.askUser(lead, {
+          context: attentionContext({ action: "Approve?" }),
+          kind: "approval",
+          question: "Approve?",
+        });
 
         for (let n = 0; n < 3; n++) {
           const sent = yield* team.nudgeTask(pm, {

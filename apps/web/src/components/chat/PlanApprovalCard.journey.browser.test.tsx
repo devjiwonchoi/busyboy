@@ -109,6 +109,13 @@ vi.mock(import("../../state/environments"), async (original) => ({
   useEnvironmentIds: (() => [ENVIRONMENT_ID]) as never,
 }));
 
+vi.mock(import("../../state/entities"), async (original) => ({
+  ...(await original()),
+  useProjects: (() => [
+    { id: "project-1", environmentId: "environment-local", title: "BusyBoy" },
+  ]) as never,
+}));
+
 // The chat sits inside the app's router; a plain link stands in for it here.
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
@@ -354,7 +361,7 @@ for (const viewport of [
     const title = login.querySelector<HTMLElement>("[data-plan-title]")!;
     expect(title.textContent).toBe("Login redirect");
     expect(login.querySelector("[data-plan-meta]")?.textContent).toMatch(
-      /^BB-3 · Plan approval · v\d+$/,
+      /^Plan approval · BusyBoy · v\d+ · \(BB-3\)$/,
     );
     expect(parseFloat(getComputedStyle(title).fontSize)).toBeGreaterThanOrEqual(18);
     const sections = [...login.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
@@ -390,7 +397,7 @@ for (const viewport of [
     // Where the task sits, Linear-style, in one quiet line under the title.
     const structure = login.querySelector<HTMLElement>("[data-task-structure-line]")!;
     expect(structure.textContent!.replace(/\s*·\s*/g, " · ")).toBe(
-      "Part of BB-1 · Blocked by BB-2 · 1/2 subtasks",
+      "상위 태스크: Auth overhaul · BusyBoy · 시작 전 완료: Session store · BusyBoy · 하위 태스크 1/2",
     );
     expect(
       title.compareDocumentPosition(structure) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -452,6 +459,42 @@ for (const viewport of [
     });
   });
 }
+
+it("makes the exact plan approval scope and recommendation visible at 360px", async () => {
+  await page.viewport(360, 1000);
+  const card: ProjectDecisionCard = {
+    ...loginPlan,
+    item: {
+      ...loginPlan.item,
+      context: {
+        action: "로그인 리다이렉트 수정안을 로컬에서 구현합니다.",
+        reason: "로그인 후 원래 요청한 페이지로 돌아가게 합니다.",
+        impacts: [],
+        cost: null,
+        reversibility: "reversible",
+        recommendation: "로컬 구현과 검증을 먼저 진행합니다.",
+      },
+    },
+  };
+  await act(async () =>
+    root.render(<PlanApprovalCard card={card} environmentId={ENVIRONMENT_ID} />),
+  );
+  const explanation = container.querySelector<HTMLElement>('[data-attention-context="known"]')!;
+  expect(explanation.querySelector("details")).toBeNull();
+  expect(explanation.querySelector("[data-attention-action]")?.textContent).toBe(
+    "로그인 리다이렉트 수정안을 로컬에서 구현합니다.",
+  );
+  expect(explanation.textContent).toContain("머지 없음");
+  expect(explanation.textContent).toContain("배포 없음");
+  expect(explanation.textContent).toContain("추가 비용 없음");
+  expect(explanation.textContent).toContain("외부 게시 없음");
+  expect(explanation.textContent).toContain("되돌리기 가능");
+  expect(explanation.querySelector("[data-attention-approval-scope]")?.textContent).toContain(
+    "머지·배포·비용·외부 게시 실행은 해당 작업의 승인을 따로 확인해야 합니다",
+  );
+  expect(explanation.scrollWidth).toBeLessThanOrEqual(explanation.clientWidth);
+  await page.screenshot({ path: "__screenshots__/readable-plan-360.png" });
+});
 
 it("still shows an older card answered with Approve only as Approved", async () => {
   const legacy = planCard(

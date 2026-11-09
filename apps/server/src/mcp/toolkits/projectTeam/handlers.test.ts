@@ -11,6 +11,7 @@ import { liveThreadsLayer } from "../../McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ProjectTeamService from "../../../projectTeam/ProjectTeamService.ts";
 import {
+  attentionContext,
   PROJECT_ID,
   setUpManager,
   userSays,
@@ -122,7 +123,11 @@ describe("projectTeam MCP toolkit", () => {
           assert.isFalse(leadCreate.isError);
           assert.strictEqual(content(leadCreate).task.parentTaskId, content(created).task.id);
 
-          const pmAsk = yield* call(pm, "ask_user", { kind: "decision", question: "Which?" });
+          const pmAsk = yield* call(pm, "ask_user", {
+            context: attentionContext({ action: "Which?" }),
+            kind: "decision",
+            question: "Which?",
+          });
           assert.isTrue(pmAsk.isError);
           assert.include(JSON.stringify(pmAsk.content), "not available to a PM");
         }).pipe(
@@ -182,13 +187,25 @@ describe("projectTeam MCP toolkit", () => {
             { scope: pm, completionWake: "never", worktreeBase: "origin-default" },
           ]);
 
+          const missingContext = yield* call(lead, "ask_user", {
+            kind: "decision",
+            question: "Add hello.sh in bash or sh?",
+          }).pipe(Effect.flip);
+          assert.strictEqual(missingContext._tag, "InvalidParams");
+          assert.include(missingContext.message, 'at ["context"]');
+
           const asked = yield* call(lead, "ask_user", {
+            context: attentionContext({ action: "Add hello.sh in bash or sh?" }),
             kind: "decision",
             question: "Add hello.sh in bash or sh?",
           });
           assert.isFalse(asked.isError);
           const item = content(asked).item;
           assert.strictEqual(item.askerThreadId, lead);
+          assert.deepStrictEqual(
+            item.context,
+            attentionContext({ action: "Add hello.sh in bash or sh?" }),
+          );
 
           const status = yield* call(pm, "team_status", {});
           assert.isFalse(status.isError);
@@ -246,6 +263,7 @@ describe("projectTeam MCP toolkit", () => {
         const second = yield* startTask("Second");
 
         const asked = yield* call(first.lead, "ask_user", {
+          context: attentionContext({ action: "Bash or sh?" }),
           kind: "decision",
           question: "Bash or sh?",
         });

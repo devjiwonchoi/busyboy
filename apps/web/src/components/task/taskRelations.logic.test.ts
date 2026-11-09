@@ -2,7 +2,7 @@ import type { EnvironmentId, ProjectTaskReference } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  blockedByKeys,
+  blockedByNames,
   blockedByLabel,
   blockedByShortLabel,
   buildTaskRelationsIndex,
@@ -36,34 +36,41 @@ function task(
   };
 }
 
-const index = buildTaskRelationsIndex([
-  {
-    environmentId: ENV,
-    summary: {
-      projectId: "busyboy" as never,
-      taskKeyPrefix: "BU",
-      tasks: [
-        task("epic", 53, { title: "Director" }),
-        task("model", 55, { parentTaskId: "epic" as never, stage: "done", title: "Model" }),
-        task("intake", 56, { parentTaskId: "epic" as never, waitsOn: ["model" as never] }),
-        task("ui", 57, {
-          parentTaskId: "epic" as never,
-          waitsOn: ["model" as never, "server" as never],
-          stage: "running",
-        }),
-        task("dropped", 60, { parentTaskId: "epic" as never, stage: "cancelled" }),
-      ],
+const index = buildTaskRelationsIndex(
+  [
+    {
+      environmentId: ENV,
+      summary: {
+        projectId: "busyboy" as never,
+        taskKeyPrefix: "BU",
+        tasks: [
+          task("epic", 53, { title: "Director" }),
+          task("model", 55, { parentTaskId: "epic" as never, stage: "done", title: "Model" }),
+          task("intake", 56, { parentTaskId: "epic" as never, waitsOn: ["model" as never] }),
+          task("ui", 57, {
+            parentTaskId: "epic" as never,
+            waitsOn: ["model" as never, "server" as never],
+            stage: "running",
+          }),
+          task("dropped", 60, { parentTaskId: "epic" as never, stage: "cancelled" }),
+        ],
+      },
     },
-  },
-  {
-    environmentId: ENV,
-    summary: {
-      projectId: "site" as never,
-      taskKeyPrefix: "SI",
-      tasks: [task("server", 4, { title: "Server" })],
+    {
+      environmentId: ENV,
+      summary: {
+        projectId: "site" as never,
+        taskKeyPrefix: "SI",
+        tasks: [task("server", 4, { title: "Server" })],
+      },
     },
-  },
-]);
+  ],
+  [
+    { environmentId: ENV, id: "busyboy" as never, title: "BusyBoy" },
+    { environmentId: ENV, id: "site" as never, title: "Site" },
+    { environmentId: "other" as EnvironmentId, id: "site" as never, title: "다른 서버" },
+  ],
+);
 
 describe("taskRelations", () => {
   it("counts finished subtasks and leaves cancelled ones out", () => {
@@ -77,13 +84,13 @@ describe("taskRelations", () => {
     expect(ui.parent?.key).toBe("BU-53");
     expect(ui.blockedBy.map((related) => related.key)).toEqual(["SI-4"]);
     expect(ui.related.map((related) => related.key)).toEqual(["BU-55"]);
-    expect(blockedByLabel(ui.blockedBy)).toBe("SI-4 끝나야 시작 · Server");
-    expect(blockedByShortLabel(ui.blockedBy)).toBe("SI-4 끝나야 시작");
-    expect(blockedByKeys(ui.blockedBy)).toBe("SI-4");
+    expect(blockedByLabel(ui.blockedBy)).toBe("Server · Site 끝나야 시작");
+    expect(blockedByShortLabel(ui.blockedBy)).toBe("Server · Site 끝나야 시작");
+    expect(blockedByNames(ui.blockedBy)).toBe("Server · Site");
     const two = [...ui.blockedBy, ...ui.related];
-    expect(blockedByLabel(two)).toBe("SI-4, BU-55 끝나야 시작");
+    expect(blockedByLabel(two)).toBe("Server · Site, Model · BusyBoy 끝나야 시작");
     expect(blockedByShortLabel(two)).toBe("2개 끝나야 시작");
-    expect(blockedByKeys(two)).toBe("SI-4 +1");
+    expect(blockedByNames(two)).toBe("Server · Site 외 1개");
   });
 
   it("lists the tasks a task blocks, and none once it is done", () => {

@@ -16,14 +16,37 @@ export function splitDecisionQuestion(text: string) {
   return { headline, context: lines.join("\n").trim() };
 }
 
+/** Long legacy paragraphs stay intact in the body rather than becoming a bold title. */
+export function decisionQuestionPresentation({
+  question,
+  action,
+  taskTitle,
+}: {
+  question: string;
+  action: string | null | undefined;
+  taskTitle: string;
+}) {
+  if (action) {
+    return { headline: action, context: question };
+  }
+
+  const presentation = splitDecisionQuestion(question);
+  if (presentation.headline.length > 120) {
+    return { headline: `${taskTitle}에 대한 결정`, context: question };
+  }
+
+  return presentation;
+}
+
 /** The display may be cleaned up, but answers retain the lead's exact option text. */
 export function parseDecisionOption(raw: string) {
-  const clean = raw.replace(/\(recommended\)/gi, "").trim();
-  const separator = / [—–] /.exec(clean);
+  const clean = raw.replace(/\((?:recommended|추천)\)/gi, "").trim();
+  const separator = / [\u2014\u2013] |:\s+/.exec(clean);
+  const hasShortLabel = separator !== null && separator.index <= 80;
   return {
     value: raw,
-    label: separator ? clean.slice(0, separator.index).trim() : clean,
-    tradeoff: separator ? clean.slice(separator.index + separator[0].length).trim() : null,
-    recommended: /\(recommended\)/i.test(raw),
+    label: hasShortLabel ? clean.slice(0, separator.index).trim() : clean,
+    tradeoff: hasShortLabel ? clean.slice(separator.index + separator[0].length).trim() : null,
+    recommended: /\((?:recommended|추천)\)/i.test(raw),
   };
 }

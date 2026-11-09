@@ -647,6 +647,26 @@ export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm", "afk"]);
 export type ProjectAttentionAnsweredBy = typeof ProjectAttentionAnsweredBy.Type;
 
+/** Explicit decision scope supplied by the requester, never inferred from prose. */
+export const ProjectAttentionContext = Schema.Struct({
+  action: TrimmedNonEmptyString.check(
+    Schema.isMaxLength(240),
+    Schema.makeFilter((action) => !/[\r\n]/u.test(action) || "Action must fit on one line."),
+  ),
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)),
+  impacts: Schema.Array(Schema.Literals(["merge", "deploy", "cost", "publish"])),
+  cost: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(1_000))),
+  reversibility: Schema.Literals(["reversible", "requires_work", "irreversible", "unknown"]),
+  recommendation: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+}).check(
+  Schema.makeFilter((context) =>
+    context.impacts.includes("cost") === (context.cost !== null)
+      ? true
+      : "A cost impact requires an amount or uncertainty explanation; otherwise cost must be null.",
+  ),
+);
+export type ProjectAttentionContext = typeof ProjectAttentionContext.Type;
+
 export const ProjectAttentionItem = Schema.Struct({
   id: ProjectAttentionItemId,
   projectId: ProjectId,
@@ -681,6 +701,7 @@ export const ProjectAttentionItem = Schema.Struct({
   summary: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** For a plan approval: the card's Verification section (markdown). Null for other kinds and older cards. */
   verification: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  context: Schema.optionalKey(Schema.NullOr(ProjectAttentionContext)),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
@@ -913,7 +934,7 @@ export const ProjectTeamSettings = Schema.Struct({
   /** Absent until the user or PM picks one; the server resolves a per-project default. */
   persona: Schema.optionalKey(ProjectManagerPersona),
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  /** Absent until the user picks one; the server derives it from the project's name. */
+  /** Assigned once from the project name; unique within this server. */
   taskKeyPrefix: Schema.optionalKey(ProjectTaskKeyPrefix),
   /** Absent when off. Only the user can set it, through the app. */
   afk: Schema.optionalKey(ProjectTeamAfk),
@@ -923,6 +944,8 @@ export const ProjectTeamSettings = Schema.Struct({
   roleModels: Schema.optionalKey(ProjectTaskRoleModels),
   /** Who merges Ready pull requests. Absent means the PM. */
   mergeOwner: Schema.optionalKey(ProjectMergeOwner),
+  /** Previous prefixes, only for resolving historical references in their project. */
+  taskKeyAliases: Schema.optionalKey(Schema.Array(ProjectTaskKeyPrefix)),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -1432,7 +1455,7 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description:
-      "Self-contained question. For approval, one line saying what the task is. For a decision or blocker, the first line is the question itself, naming the task; the card shows it as the title. Context goes below it and starts folded.",
+      "Self-contained question. For approval, one line saying what the task is. For a decision or blocker, the first line is the question itself, naming the task; the card shows it as the title. Additional evidence goes below it. Essential reasons and risks belong in context.",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -1440,7 +1463,11 @@ export const ProjectTeamAskUserInput = Schema.Struct({
     ),
   ).annotate({
     description:
-      'Suggested answers, if any, shown as choices. Write each as "Label — one-line tradeoff" and mark the one you recommend with "(Recommended)".',
+      'Suggested answers, if any, shown as choices. Write each as "Label: one-line tradeoff" and mark the one you recommend with "(Recommended)".',
+  }),
+  context: ProjectAttentionContext.annotate({
+    description:
+      "Required action, reason, explicit impacts (use [] for none), cost (null when absent), reversibility and recommendation. Essential risks stay visible on the card. This describes scope and does not grant additional authority.",
   }),
   taskId: Schema.optional(ProjectTaskId).annotate({
     description:
@@ -1865,6 +1892,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   tasks: Schema.Array(ProjectTaskReference),
   /** Resolved task ID prefix, such as BB for BB-7. */
   taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
+  /** Previous keys may be ambiguous across projects; never pick a global alias at random. */
+  taskKeyAliases: Schema.optionalKey(Schema.Array(Schema.String)),
   /** The PM chat's latest message the user would see, or null before the first one. */
   lastMessage: Schema.NullOr(ProjectManagerLastMessage).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),

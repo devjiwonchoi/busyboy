@@ -7,6 +7,7 @@ import { useProjects } from "~/state/entities";
 import { taskRouteParams } from "~/taskRoutes";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { type MapEntry, projectKey } from "../allProjects/allProjects.logic";
+import ChatMarkdown from "../ChatMarkdown";
 import { DirectorInbox } from "../director/DirectorInbox";
 import { Dialog, DialogClose, DialogPopup, DialogTitle } from "../ui/dialog";
 import { GoalGraphDesktop } from "./GoalGraphDesktop";
@@ -64,13 +65,23 @@ export function GoalGraph({ entries }: { entries: ReadonlyArray<MapEntry> }) {
     );
   }
   const View = wide ? GoalGraphDesktop : GoalGraphMobile;
+  const director = entries.find((entry) => entry.summary.kind === "director");
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {graph.directorBriefing !== null ? (
-        <p data-director-briefing className="text-sm">
+        <div data-director-briefing className="text-sm">
           <span className="mr-2 text-xs text-muted-foreground">디렉터</span>
-          {graph.directorBriefing}
-        </p>
+          <ChatMarkdown
+            cwd={undefined}
+            text={graph.directorBriefing}
+            environmentId={director?.environmentId}
+            threadRef={
+              director
+                ? scopeThreadRef(director.environmentId, director.summary.pmThreadId)
+                : undefined
+            }
+          />
+        </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 text-xs" aria-label="목표 브리핑">
         <button

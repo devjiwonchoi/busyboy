@@ -16,6 +16,7 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   PLAN_APPROVAL_START,
   ProjectId,
+  type ProjectAttentionContext,
   type ProjectTaskSpec,
   type ProjectTeamTaskCreateInput,
   ProviderInstanceId,
@@ -65,6 +66,20 @@ export const SCRATCH_ROOT = "/data/scratch";
 /** The model a delegated child runs on when the call names no target. */
 export const DEFAULT_PROVIDER_INSTANCE_ID = ProviderInstanceId.make("claude");
 export const DEFAULT_MODEL = "claude-opus-5-5";
+
+/** Explicit context for test questions; unknown reversibility avoids inventing safety. */
+export const attentionContext = ({
+  action,
+}: {
+  readonly action: string;
+}): ProjectAttentionContext => ({
+  action,
+  reason: "요청한 작업을 이어 가려면 사용자의 답변이 필요합니다.",
+  impacts: [],
+  cost: null,
+  reversibility: "unknown",
+  recommendation: "설명한 범위를 확인한 뒤 답변하는 안을 추천합니다.",
+});
 
 export interface FakeThread {
   readonly id: ThreadId;
@@ -637,6 +652,7 @@ export const approvePlan = (lead: ThreadId) =>
     const team = yield* ProjectTeamService.ProjectTeamService;
     yield* writeReadyPlan(lead);
     const { item } = yield* team.askUser(lead, {
+      context: attentionContext({ action: "Approve the plan?" }),
       kind: "approval",
       question: "Approve the plan?",
     });

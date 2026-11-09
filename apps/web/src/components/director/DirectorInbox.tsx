@@ -1,6 +1,6 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { formatTaskKey } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import type { ProjectDecisionCard } from "@t3tools/contracts";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 
 import { useNowMinute } from "~/hooks/useNowMinute";
@@ -8,6 +8,8 @@ import { useDirectorInbox } from "~/state/director";
 import { useProjects } from "~/state/entities";
 import { pendingActionItems } from "~/state/projectTeam.logic";
 import { buildThreadRouteParams } from "~/threadRoutes";
+import { taskRouteParams } from "~/taskRoutes";
+import { useAttentionTask } from "../chat/AttentionContext";
 import { DecisionCard } from "../chat/DecisionCard";
 import type { DirectorInboxGroup } from "./directorInbox.logic";
 
@@ -21,6 +23,33 @@ export function useDirectorInboxTitles() {
           (project) =>
             project.environmentId === group.environmentId && project.id === group.projectId,
         )?.title ?? "프로젝트");
+}
+
+export function InboxTaskLink({
+  card,
+  group,
+}: {
+  card: ProjectDecisionCard;
+  group: DirectorInboxGroup;
+}) {
+  const { related, projectId, projectTitle } = useAttentionTask({
+    card,
+    environmentId: group.environmentId,
+  });
+  const label = `${card.taskTitle} · ${projectTitle}`;
+  if (card.item.kind === "proposal" || (group.isDirector && related === null)) {
+    return <span>{label}</span>;
+  }
+
+  return (
+    <Link
+      {...taskRouteParams(group.environmentId, projectId, card.item.taskId)}
+      data-director-inbox-task-link
+      className="text-foreground underline decoration-border underline-offset-2 hover:decoration-current"
+    >
+      {label}
+    </Link>
+  );
 }
 
 export function DirectorInbox(props: { highlightCardId: string | null; showEmpty: boolean }) {
@@ -91,8 +120,7 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
             {group.cards.map((card) => (
               <div key={card.item.id} className="min-w-0">
                 <p className="mb-1 break-words text-muted-foreground text-xs">
-                  {card.taskNumber > 0 ? formatTaskKey(group.taskKeyPrefix, card.taskNumber) : ""}{" "}
-                  {card.taskTitle}
+                  <InboxTaskLink card={card} group={group} />
                 </p>
                 <DecisionCard
                   card={card}

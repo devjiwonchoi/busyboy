@@ -13,7 +13,7 @@ import * as ServerConfig from "../config.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import { directorWorkspaceRoot } from "./director.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
+import { attentionContext, PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
 const proposal = {
@@ -132,6 +132,7 @@ describe("ProjectTeamService task proposals", () => {
           const lead = yield* startLead(pm, "Ordinary task", harness.delegate);
           yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
           const decision = yield* team.askUser(lead.leadThreadId, {
+            context: attentionContext({ action: "Which list?" }),
             kind: "decision",
             question: "Which list?",
             options: ["Grouped (Recommended)", "Flat"],

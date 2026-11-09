@@ -12,6 +12,7 @@ import {
   afkPickOption,
   afkSetting,
   DEFAULT_PROJECT_TEAM_SETTINGS,
+  ProjectAttentionContext,
   ProjectAttentionItem,
   ProjectManagerPresence,
   ProjectTask,
@@ -384,18 +385,45 @@ describe("MCP inputs", () => {
     expect(decode({ reason: "user_asked" })).toEqual({});
   });
 
-  it("validates ask_user kinds", () => {
+  it("requires explicit decision scope for every ask_user kind", () => {
     const decode = Schema.decodeUnknownSync(ProjectTeamAskUserInput);
-    expect(decode({ kind: "blocker", question: "  Which account?  " })).toEqual({
-      kind: "blocker",
-      question: "Which account?",
-    });
-    expect(decode({ kind: "approval", question: "Approve the plan?" })).toEqual({
-      kind: "approval",
-      question: "Approve the plan?",
-    });
-    expect(() => decode({ kind: "fyi", question: "Hi" })).toThrow();
-    expect(() => decode({ kind: "decision", question: "   " })).toThrow();
+    const context = {
+      action: "Use the current results",
+      reason: "Two completed runs provide a baseline; three runs failed.",
+      impacts: [],
+      cost: null,
+      reversibility: "reversible",
+      recommendation: "Use these results and investigate the failed runs separately.",
+    };
+    for (const kind of ["decision", "approval", "blocker"]) {
+      expect(decode({ kind, question: "  Use the results?  ", context })).toEqual({
+        kind,
+        question: "Use the results?",
+        context,
+      });
+      expect(() => decode({ kind, question: "Use the results?" })).toThrow();
+    }
+    expect(() => decode({ kind: "fyi", question: "Hi", context })).toThrow();
+    expect(() => decode({ kind: "decision", question: "   ", context })).toThrow();
+  });
+
+  it("requires a cost amount or explicit uncertainty and nonempty scope fields", () => {
+    const decode = Schema.decodeUnknownSync(ProjectAttentionContext);
+    const context = {
+      action: "Rerun calibration",
+      reason: "Retry after the timeout fix",
+      impacts: ["cost"],
+      cost: "Unknown until execution; estimated $6-10",
+      reversibility: "irreversible",
+      recommendation: "Keep current results to avoid additional spending",
+    };
+    expect(decode(context)).toEqual(context);
+    expect(() => decode({ ...context, cost: null })).toThrow();
+    expect(() => decode({ ...context, impacts: [] })).toThrow();
+    expect(() => decode({ ...context, action: "Rerun\ncalibration" })).toThrow();
+    expect(() => decode({ ...context, reason: " " })).toThrow();
+    expect(() => decode({ ...context, recommendation: "" })).toThrow();
+    expect(() => decode({ ...context, reversibility: "safe" })).toThrow();
   });
 });
 

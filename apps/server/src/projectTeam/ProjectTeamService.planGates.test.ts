@@ -5,6 +5,7 @@ import * as Ref from "effect/Ref";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
+  attentionContext,
   PROJECT_ID,
   approvePlan,
   readyPlan,
@@ -21,6 +22,7 @@ const service = ProjectTeamService.ProjectTeamService;
 const askApproval = (lead: ThreadId) =>
   Effect.flatMap(service, (team) =>
     team.askUser(lead, {
+      context: attentionContext({ action: "Approve the plan?" }),
       kind: "approval",
       question: "Approve the plan?",
     }),
@@ -93,6 +95,13 @@ describe("ProjectTeamService plan gates", () => {
         yield* writeReadyPlan(lead);
         const { item } = yield* askApproval(lead);
         assert.strictEqual(item.specVersion, 2);
+        assert.deepStrictEqual(item.context, attentionContext({ action: "Approve the plan?" }));
+        const awaiting = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.deepStrictEqual(awaiting.openAttention[0]?.context, item.context);
+        const card = (yield* team.attentionSnapshot).projects
+          .flatMap((project) => project.decisionCards)
+          .find((entry) => entry.item.id === item.id);
+        assert.deepStrictEqual(card?.item.context, item.context);
       }),
     ),
   );

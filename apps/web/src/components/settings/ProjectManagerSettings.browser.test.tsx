@@ -1,4 +1,5 @@
 import type { ProjectTeamAttentionSummary } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -57,6 +58,24 @@ afterEach(async () => {
 });
 
 describe("project manager settings", () => {
+  it("shows the project using a duplicate prefix and restores the saved value", async () => {
+    current = makeProjectManagerSummaryFixture({ taskKeyPrefix: "BU" });
+    await renderSection();
+    state.updateSettings.mockResolvedValueOnce({
+      _tag: "Failure",
+      cause: Cause.fail(
+        new Error("태스크 접두어 NB는 ‘next-benchmarks’ 프로젝트에서 사용 중입니다."),
+      ),
+    });
+    const prefix = byLabel<HTMLInputElement>("Task key prefix")!;
+    await userEvent.clear(prefix);
+    await userEvent.type(prefix, "NB{Enter}");
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain("next-benchmarks"),
+    );
+    expect(prefix.value).toBe("BU");
+  });
+
   it("renames the PM on Enter and leaves an unchanged name alone", async () => {
     await renderSection();
     expect(container.textContent).toContain("You can also just tell Remy in chat.");
@@ -117,7 +136,7 @@ describe("project manager settings", () => {
   it("changes the task key prefix, uppercasing it and refusing an invalid one", async () => {
     current = makeProjectManagerSummaryFixture({ taskKeyPrefix: "BU" });
     await renderSection();
-    expect(container.textContent).toContain("Tasks are named like BU-7.");
+    expect(container.textContent).toContain("보조 키는 BU-7처럼 표시됩니다.");
     const prefix = byLabel<HTMLInputElement>("Task key prefix")!;
 
     await userEvent.clear(prefix);
@@ -130,6 +149,6 @@ describe("project manager settings", () => {
     expect(state.updateSettings).toHaveBeenCalledExactlyOnceWith(projectRef, {
       taskKeyPrefix: "BB",
     });
-    expect(container.textContent).toContain("Tasks are named like BB-7.");
+    expect(container.textContent).toContain("보조 키는 BB-7처럼 표시됩니다.");
   });
 });

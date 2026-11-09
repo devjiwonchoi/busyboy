@@ -17,11 +17,12 @@ import { PlanTodoList } from "../plan/PlanTodoList";
 import { planProgressLabel, type PlanTodoLike } from "../plan/planView.logic";
 import { TaskModelSteps } from "../task/TaskModelSteps";
 import { LiveTaskPhaseBadge } from "../task/TaskPhaseBadge";
-import { TaskStructureLine, useRelatedTask, useTaskRelations } from "../task/TaskRelations";
+import { TaskStructureLine, useTaskRelations } from "../task/TaskRelations";
 import { Button } from "../ui/button";
 import { AFK_ANSWERED_LABEL } from "./Afk";
 import { PlanApprovalModal } from "./PlanApprovalModal";
 import { PlanApprovalSections, PlanSummary, PlanTitle } from "./PlanMarkdown";
+import { AttentionContext, AttentionTaskLink, useAttentionTask } from "./AttentionContext";
 
 const OUTCOME_LABEL: Record<PlanApprovalOutcome, string> = {
   start: "Approved and started",
@@ -45,7 +46,7 @@ function structuredPlan(card: ProjectDecisionCard): ProjectApprovalPlan | null {
 
 /** "BU-62 · Plan approval · v3". */
 function metaLine(key: string | null, label: string, specVersion: number | null): string {
-  return [key, label, specVersion === null ? null : `v${specVersion}`]
+  return [label, specVersion === null ? null : `v${specVersion}`, key === null ? null : `(${key})`]
     .filter((part) => part !== null)
     .join(" · ");
 }
@@ -68,9 +69,9 @@ export function PlanApprovalCard({
   const [sending, setSending] = useState(false);
   const answerDecision = useAnswerDecision();
   const relations = useTaskRelations(environmentId, card.item.taskId);
-  const related = useRelatedTask(environmentId, card.item.taskId);
+  const { related, projectTitle } = useAttentionTask({ card, environmentId });
   const key = related?.key ?? null;
-  const header = planApprovalHeader(card);
+  const header = `${planApprovalHeader(card)} · ${projectTitle}`;
   const answer = card.item.answer;
   const plan = structuredPlan(card);
   const state =
@@ -112,11 +113,18 @@ export function PlanApprovalCard({
         data-plan-board
         className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5"
       >
-        <PlanTitle
-          as="div"
-          meta={metaLine(key, OUTCOME_LABEL[outcome], card.item.specVersion)}
-          title={card.taskTitle}
-        />
+        <AttentionTaskLink card={card} environmentId={environmentId}>
+          <PlanTitle
+            as="div"
+            meta={metaLine(
+              key,
+              `${OUTCOME_LABEL[outcome]} · ${projectTitle}`,
+              card.item.specVersion,
+            )}
+            title={card.taskTitle}
+          />
+        </AttentionTaskLink>
+        <AttentionContext context={card.item.context} planApproval />
         <PlanSummary text={plan.summary} />
         <LivePlanBoard
           card={card}
@@ -158,6 +166,7 @@ export function PlanApprovalCard({
             View plan
           </Button>
         </div>
+        <AttentionContext context={card.item.context} planApproval />
         {feedback.length > 0 ? (
           <details className="mt-1 text-muted-foreground text-xs">
             <summary className="cursor-pointer select-none">
@@ -191,11 +200,14 @@ export function PlanApprovalCard({
       data-decision-card-state="open"
       className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5"
     >
-      <PlanTitle
-        as="div"
-        meta={metaLine(key, "Plan approval", card.item.specVersion)}
-        title={card.taskTitle}
-      />
+      <AttentionTaskLink card={card} environmentId={environmentId}>
+        <PlanTitle
+          as="div"
+          meta={metaLine(key, `Plan approval · ${projectTitle}`, card.item.specVersion)}
+          title={card.taskTitle}
+        />
+      </AttentionTaskLink>
+      <AttentionContext context={card.item.context} planApproval />
       <TaskStructureLine relations={relations} />
       {plan === null ? (
         <PlanApprovalSections item={card.item} />

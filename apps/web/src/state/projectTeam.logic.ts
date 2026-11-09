@@ -1,5 +1,7 @@
 import {
   formatTaskKey,
+  type EnvironmentId,
+  type ProjectId,
   type ProjectAttentionKind,
   type ProjectDecisionCard,
   type ProjectTaskReference,
@@ -87,6 +89,74 @@ const taskMapBySummary = new WeakMap<
   ProjectTeamAttentionSummary["tasks"],
   ReadonlyMap<number, ProjectTaskReference>
 >();
+
+/** A task name and route from the same server as the message that mentions it. */
+export type NamedTaskReference = {
+  readonly task: ProjectTaskReference;
+  readonly projectId: ProjectId;
+  readonly projectTitle: string;
+  readonly key: string;
+};
+
+export type TaskReferenceCatalog = {
+  readonly byId: ReadonlyMap<string, NamedTaskReference>;
+  readonly byKey: ReadonlyMap<string, ReadonlyArray<NamedTaskReference>>;
+  readonly contextualProjectId: ProjectId | null;
+};
+
+/** Keep server boundaries and historical aliases when resolving a written task key. */
+export function buildTaskReferenceCatalog(input: {
+  readonly environmentId: EnvironmentId | null;
+  readonly contextualProjectId: ProjectId | null;
+  readonly entries: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly summary: Pick<ProjectTeamAttentionSummary, "projectId" | "tasks" | "taskKeyPrefix"> & {
+      readonly taskKeyAliases?: ReadonlyArray<string>;
+    };
+  }>;
+  readonly projects: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly id: ProjectId;
+    readonly title: string;
+  }>;
+}): TaskReferenceCatalog {
+  const byId = new Map<string, NamedTaskReference>();
+  const byKey = new Map<string, NamedTaskReference[]>();
+  for (const { environmentId, summary } of input.entries) {
+    if (environmentId !== input.environmentId) {
+      continue;
+    }
+    const projectTitle =
+      input.projects.find(
+        (project) => project.environmentId === environmentId && project.id === summary.projectId,
+      )?.title ?? "프로젝트";
+    for (const task of summary.tasks) {
+      const reference = {
+        task,
+        projectId: summary.projectId,
+        projectTitle,
+        key: formatTaskKey(summary.taskKeyPrefix, task.number),
+      };
+      byId.set(task.id, reference);
+      for (const prefix of new Set([summary.taskKeyPrefix, ...(summary.taskKeyAliases ?? [])])) {
+        const key = formatTaskKey(prefix, task.number);
+        const candidates = byKey.get(key) ?? [];
+        candidates.push(reference);
+        byKey.set(key, candidates);
+      }
+    }
+  }
+  return { byId, byKey, contextualProjectId: input.contextualProjectId };
+}
+
+/** A project-local historical key can be unambiguous even after its prefix changed. */
+export function taskReferenceCandidates(catalog: TaskReferenceCatalog, key: string) {
+  const candidates = catalog.byKey.get(key) ?? [];
+  const contextual = candidates.filter(
+    (candidate) => candidate.projectId === catalog.contextualProjectId,
+  );
+  return contextual.length === 1 ? contextual : candidates;
+}
 
 export interface LeadThreadTask {
   readonly task: ProjectTaskReference;

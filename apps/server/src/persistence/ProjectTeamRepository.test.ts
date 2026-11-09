@@ -316,18 +316,32 @@ describe("ProjectTeamRepository", () => {
         now: t0,
       });
       const batchId = ProjectAttentionBatchId.make("batch-1");
+      const context = {
+        action: "Choose the database",
+        reason: "The migration needs a storage target",
+        impacts: ["cost" as const],
+        cost: "Unknown until a database is selected",
+        reversibility: "requires_work" as const,
+        recommendation: "Use the existing database to avoid a second service",
+      };
       const approval = yield* team.createAttentionItem({
         id: ProjectAttentionItemId.make("item-1"),
         projectId,
         taskId: task.id,
         kind: "decision",
         question: "Which database?",
+        context,
         options: ["yes", "no"],
         askerThreadId: leadThreadId,
         batchId,
         createdAt: t0,
       });
       assert.deepStrictEqual(approval.options, ["yes", "no"]);
+      assert.deepStrictEqual(approval.context, context);
+      assert.deepStrictEqual(
+        Option.getOrThrow(yield* team.getAttentionItem(approval.id)).context,
+        context,
+      );
       yield* team.createAttentionItem({
         id: ProjectAttentionItemId.make("item-2"),
         projectId,
@@ -341,6 +355,7 @@ describe("ProjectTeamRepository", () => {
       });
 
       const latest = Option.getOrThrow(yield* team.getLatestAttentionItem(projectId));
+      assert.strictEqual(latest.context, null);
       assert.strictEqual(latest.id, "item-2");
       assert.strictEqual(latest.batchId, batchId);
 

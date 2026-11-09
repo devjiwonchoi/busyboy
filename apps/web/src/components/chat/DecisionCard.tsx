@@ -18,12 +18,12 @@ import { useAnswerDecision } from "../../state/projectTeam";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
 import ChatMarkdown from "../ChatMarkdown";
-import { useRelatedTask } from "../task/TaskRelations";
 import { Button } from "../ui/button";
-import { parseDecisionOption, splitDecisionQuestion } from "./DecisionCard.logic";
+import { decisionQuestionPresentation, parseDecisionOption } from "./DecisionCard.logic";
 import { AFK_ANSWERED_LABEL } from "./Afk";
 import { ProposalCard } from "./ProposalCard";
 import { PlanApprovalCard } from "./PlanApprovalCard";
+import { AttentionContext, AttentionTaskLink, useAttentionTask } from "./AttentionContext";
 
 const QUESTION_ID = "answer";
 
@@ -41,19 +41,25 @@ function cardOptions(card: ProjectDecisionCard): ReadonlyArray<string> {
 }
 
 /** "Decision · Fix login", or "Decision · BB-7 Fix login" where the task isn't obvious. */
-export function decisionCardHeader(card: ProjectDecisionCard, taskKey?: string): string {
-  const task = taskKey === undefined ? card.taskTitle : `${taskKey} ${card.taskTitle}`;
-  return `${KIND_LABEL[card.item.kind]} · ${task}`;
+export function decisionCardHeader(
+  card: ProjectDecisionCard,
+  taskKey?: string,
+  projectTitle?: string,
+): string {
+  const task = [card.taskTitle, projectTitle].filter((part) => part !== undefined).join(" · ");
+  const key = taskKey === undefined ? "" : ` (${taskKey})`;
+  return `${KIND_LABEL[card.item.kind]} · ${task}${key}`;
 }
 
 /** The card's question in the shape the shared question card renders. */
 export function decisionCardQuestion(
   card: ProjectDecisionCard,
   taskKey?: string,
+  projectTitle?: string,
 ): OrchestrationV2UserInputQuestion {
   return {
     id: QUESTION_ID,
-    header: decisionCardHeader(card, taskKey),
+    header: decisionCardHeader(card, taskKey, projectTitle),
     question: card.item.question,
     options: cardOptions(card).map((label) => ({ label, description: label })),
     multiSelect: false,
@@ -87,14 +93,14 @@ export function DecisionCard({
   threadRef: ScopedThreadRef;
   cwd: string | undefined;
 }) {
-  const related = useRelatedTask(environmentId, card.item.taskId);
+  const { related, projectTitle } = useAttentionTask({ card, environmentId });
   if (card.item.kind === "proposal") {
     return <ProposalCard card={card} environmentId={environmentId} />;
   }
   if (card.item.kind === "approval") {
     return <PlanApprovalCard card={card} environmentId={environmentId} />;
   }
-  const question = decisionCardQuestion(card, related?.key);
+  const question = decisionCardQuestion(card, related?.key, projectTitle);
   if (card.item.answeredAt !== null) {
     return (
       <div data-decision-card={card.item.id} data-decision-card-state="answered">
@@ -103,6 +109,7 @@ export function DecisionCard({
           answer={answeredPayload(card)}
           answeredLabel={card.item.answeredBy === "afk" ? AFK_ANSWERED_LABEL : "Answered"}
         />
+        <AttentionContext context={card.item.context} planApproval={false} />
       </div>
     );
   }
@@ -152,7 +159,11 @@ export function OpenDecisionCard({
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
-  const { headline, context } = splitDecisionQuestion(card.item.question);
+  const { headline, context } = decisionQuestionPresentation({
+    question: card.item.question,
+    action: card.item.context?.action,
+    taskTitle: card.taskTitle,
+  });
   const options = card.item.options.map(parseDecisionOption);
   const turnFailed = isTurnFailedBlocker(card.item);
   // A typed answer stands on its own, so a pick is optional whenever the note has text.
@@ -189,7 +200,8 @@ export function OpenDecisionCard({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p data-decision-card-meta className="truncate text-xs text-muted-foreground">
-            {question.header}
+            {KIND_LABEL[card.item.kind]} ·{" "}
+            <AttentionTaskLink card={card} environmentId={environmentId} children={undefined} />
           </p>
           <h3 data-decision-card-headline className="wrap-break-word text-base font-semibold">
             {headline}
@@ -205,6 +217,7 @@ export function OpenDecisionCard({
           {expanded ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
         </Button>
       </div>
+      <AttentionContext context={card.item.context} planApproval={false} />
       {context ? (
         <DecisionContext context={context} expanded={expanded} cwd={cwd} threadRef={threadRef} />
       ) : null}
@@ -259,7 +272,12 @@ export function OpenDecisionCard({
                 ) : null}
               </span>
               <span className="min-w-0 flex-1 wrap-break-word">
-                <span className="text-sm font-medium">{option.label}</span>
+                <span
+                  data-decision-option-label
+                  className={`text-sm ${option.label.length > 120 ? "font-normal" : "font-medium"}`}
+                >
+                  {option.label}
+                </span>
                 {option.recommended ? (
                   <span
                     data-decision-option-recommended
@@ -422,7 +440,7 @@ function DecisionContext({
           aria-expanded={unfolded}
           onClick={() => setUnfolded(!unfolded)}
         >
-          {unfolded ? "Show less" : "Show more"}
+          {unfolded ? "접기" : "전체 보기"}
         </Button>
       ) : null}
     </div>
