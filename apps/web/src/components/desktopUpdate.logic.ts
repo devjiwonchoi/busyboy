@@ -125,15 +125,6 @@ export function getDesktopUpdateButtonTooltip(state: DesktopUpdateState): string
   return "Up to date";
 }
 
-/** Body of the "update is ready" prompt. */
-export function getDesktopUpdateReadyDescription(
-  state: Pick<DesktopUpdateState, "localApp">,
-): string {
-  return state.localApp
-    ? "Restart to install it now. Otherwise it installs the next time BusyBoy restarts."
-    : "Restart to install it now. Otherwise it installs when you quit BusyBoy.";
-}
-
 export function getDesktopUpdateActionError(result: DesktopUpdateActionResult): string | null {
   if (!result.accepted || result.completed) return null;
   if (typeof result.state.message !== "string") return null;

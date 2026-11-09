@@ -263,7 +263,7 @@ function renderSidebarApp() {
   );
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    history: createMemoryHistory({ initialEntries: ["/env-1/pm-thread"] }),
   });
   return { router, render: () => act(async () => root.render(<RouterProvider router={router} />)) };
 }
@@ -328,6 +328,6 @@ describe("phone: sidebar task tree", () => {
     );
     expect(threadItem("launch-3")?.getAttribute("data-tree-depth")).toBe("3");
     expect(threadItem("user-thread")?.getAttribute("data-tree-depth")).toBe("0");
-    expect(app.router.state.location.pathname).toBe("/");
+    expect(app.router.state.location.pathname).toBe("/env-1/pm-thread");
   });
 });

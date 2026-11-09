@@ -32,14 +32,15 @@ export function graphTask(
     ...overrides,
   };
 }
-export function graphCard(taskId: string): ProjectDecisionCard {
+/** A decision card; the Director's own cards live in its project but may be about any task. */
+export function graphCard(taskId: string, projectId = "a"): ProjectDecisionCard {
   return {
     taskNumber: 1,
     taskTitle: "제안",
     plan: null,
     item: {
       id: `card-${taskId}` as never,
-      projectId: "a" as never,
+      projectId: projectId as never,
       taskId: taskId as never,
       kind: "decision",
       question: "확인해 주세요",
@@ -112,7 +113,7 @@ export function goalGraphFixture() {
           goal("goal-2", 1, "b", "b-1"),
           goal("goal-3", 2, "b", "missing"),
         ],
-        decisionCards: [],
+        decisionCards: [graphCard("a-2", "director")],
       },
     },
   ].map((item) =>

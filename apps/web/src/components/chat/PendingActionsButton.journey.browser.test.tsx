@@ -23,14 +23,13 @@ import "~/index.css";
 import { decisionCardsForThread } from "../../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { MessagesTimeline } from "./MessagesTimeline";
-import { Button } from "../ui/button";
-import type { ComposerBannerStackItem } from "./ComposerBannerStack";
 import {
-  PendingBar,
-  followPendingAction,
-  pendingBar,
-  pendingBarIcon,
-} from "./PendingActionsBar.testing";
+  PendingActions,
+  openPendingActions,
+  pendingButton,
+  pendingDialog,
+  revealPendingCard,
+} from "./PendingActionsButton.testing";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
@@ -43,7 +42,6 @@ const server = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   answers: [] as ProjectTeamAnswerDecisionInput[],
   opened: [] as ThreadId[],
-  subagentRunning: true,
 }));
 
 function publish(summary: ProjectTeamAttentionSummary) {
@@ -176,20 +174,6 @@ const cuThread: ProjectWaitingThread = {
   kind: "approval",
 };
 
-/** What the composer showed in the screenshot: a subagent the PM is waiting on. */
-const SUBAGENT_BANNER: ComposerBannerStackItem = {
-  id: "background-work",
-  variant: "default",
-  priority: "activity",
-  icon: <span data-subagent-banner style={{ width: 6, height: 6, borderRadius: 9 }} />,
-  title: "Waiting on subagent BU-79 project map review",
-  actions: (
-    <Button size="xs" variant="ghost">
-      Stop
-    </Button>
-  ),
-};
-
 const listRef = createRef<LegendListRef | null>();
 
 const timelineProps: Omit<TimelineProps, "timelineEntries"> = {
@@ -222,8 +206,8 @@ const timelineProps: Omit<TimelineProps, "timelineEntries"> = {
   onManualNavigation: () => {},
 };
 
-/** The PM chat: the real timeline, the composer's banner stack and a stand-in composer. */
-function PmChat({ subagentRunning }: { subagentRunning: boolean }) {
+/** The PM chat: the real timeline, the floating pill and a stand-in composer. */
+function PmChat() {
   const summary = useServerSummary();
   const cards = summary === null ? [] : decisionCardsForThread([summary], PM_THREAD_ID);
   return (
@@ -232,12 +216,12 @@ function PmChat({ subagentRunning }: { subagentRunning: boolean }) {
         <MessagesTimeline {...timelineProps} timelineEntries={ENTRIES} decisionCards={cards} />
       </div>
       <div style={{ padding: "0 12px 12px" }}>
-        <PendingBar
+        <PendingActions
           cards={cards}
           waitingThreads={summary?.waitingThreads ?? []}
           listRef={listRef}
+          threadId={PM_THREAD_ID}
           onOpenThread={(threadId) => server.opened.push(threadId)}
-          otherItems={subagentRunning ? [SUBAGENT_BANNER] : []}
         />
         <form
           data-testid="composer"
@@ -260,7 +244,6 @@ beforeEach(() => {
   });
   server.answers = [];
   server.opened = [];
-  server.subagentRunning = true;
   container = document.body.appendChild(document.createElement("div"));
   container.style.cssText = "height: 100dvh; width: 100%; display: flex; flex-direction: column;";
   root = createRoot(container);
@@ -271,14 +254,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const render = () =>
-  act(async () => root.render(<PmChat subagentRunning={server.subagentRunning} />));
+const render = () => act(async () => root.render(<PmChat />));
 const timeline = () => container.querySelector<HTMLElement>('[data-testid="timeline"]')!;
 const cardIn = (id: string) =>
   timeline().querySelector<HTMLElement>(`[data-decision-card="${id}"]`);
-/** The banner attached to the composer: the one the user sees first. */
-const frontBanner = () =>
-  container.querySelector<HTMLElement>("[data-composer-banner-drawer] [role=alert]");
+const dialogCards = () =>
+  [...(pendingDialog()?.querySelectorAll<HTMLElement>("[data-pending-actions-card]") ?? [])].map(
+    (row) => row.dataset.pendingActionsCard,
+  );
 
 function buttonIn(element: HTMLElement, text: string) {
   const button = [...element.querySelectorAll<HTMLElement>("button, [role=button]")].find(
@@ -294,7 +277,7 @@ function inViewport(element: HTMLElement) {
   return rect.top >= viewport.top - 1 && rect.top < viewport.bottom;
 }
 
-/** Waits until the card the bar jumped to is on screen and flashing. */
+/** Waits until the card the dialog jumped to is on screen and flashing. */
 function expectRevealed(id: string) {
   return vi.waitFor(
     () => {
@@ -320,124 +303,120 @@ function expectInsideViewport(element: HTMLElement, width: number) {
   expect(rect.right).toBeLessThanOrEqual(width + 0.5);
 }
 
+const ALL_WAITING = {
+  openCount: 4,
+  decisionCards: [loginBlocker, dragPlan, cachePlan],
+  waitingThreads: [cuThread],
+} satisfies Partial<ProjectTeamAttentionSummary>;
+
 for (const viewport of [
   { name: "desktop", width: 1100, height: 800 },
   { name: "phone", width: 390, height: 844 },
 ]) {
-  it(`shows an out-of-view blocker in front of the subagent status and jumps to it (${viewport.name})`, async () => {
+  it(`shows a small waiting button that opens every waiting item (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
-    await openPmChat({ openCount: 1, decisionCards: [loginBlocker] });
+    await openPmChat(ALL_WAITING);
 
-    // The chat sits at its end, so the blocker is far out of view; the bar still names it,
-    // in front of the subagent status.
-    const front = await vi.waitFor(() => {
-      expect(frontBanner()?.textContent).toContain("블로커: Fix the login redirect");
-      return frontBanner()!;
+    // No inbox or stepping banner, just a small pill with the count.
+    const pill = await vi.waitFor(() => {
+      const button = pendingButton();
+      if (!button) throw new Error("no pending button yet");
+      return button;
     });
-    expect(pendingBarIcon()?.dataset.pendingActionsBar).toBe("1");
+    expect(pill.textContent).toBe("기다리는 일 4개");
+    expect(pill.dataset.pendingActionsButton).toBe("4");
+    expect(pill.getBoundingClientRect().height).toBeLessThanOrEqual(32);
+    expectInsideViewport(pill, viewport.width);
+    expect(container.querySelector("[role=alert]")).toBeNull();
+    expect(document.body.textContent).not.toContain("받은편지함");
+    expect(document.body.textContent).not.toContain("기다리는 일 1/");
+    await page.screenshot({ path: `__screenshots__/pending-actions-button-${viewport.name}.png` });
+
+    // The dialog lists every open card and the waiting thread.
+    const dialog = await openPendingActions();
+    expect(dialog.textContent).toContain("나를 기다리는 일 4");
+    expect(dialogCards()).toEqual(["attention-login", "attention-drag", "attention-cache"]);
+    expect(dialog.textContent).toContain("블로커: Fix the login redirect");
+    expect(dialog.textContent).toContain("Plan: throttle the scroll handler.");
+    expect(dialog.textContent).toContain("CU eval chrome-form #1 · 허용 요청");
+    expectInsideViewport(dialog, viewport.width);
+    await page.screenshot({ path: `__screenshots__/pending-actions-${viewport.name}.png` });
+  });
+
+  it(`answers a card inside the dialog and the count drops (${viewport.name})`, async () => {
+    await page.viewport(viewport.width, viewport.height);
+    await openPmChat(ALL_WAITING);
+    await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
+    const dialog = await openPendingActions();
+    const drag = dialog.querySelector<HTMLElement>('[data-pending-actions-card="attention-drag"]')!;
+    await act(async () => buttonIn(drag, "Approve").click());
+    await act(async () => buttonIn(drag, "Submit").click());
+    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
+    expect(server.answers[0]?.attentionItemId).toBe("attention-drag");
+
+    await vi.waitFor(() => {
+      expect(pendingButton()?.textContent).toBe("기다리는 일 3개");
+      expect(dialogCards()).toEqual(["attention-login", "attention-cache"]);
+      expect(pendingDialog()?.textContent).toContain("나를 기다리는 일 3");
+    });
+  });
+
+  it(`jumps from the dialog to a card in the chat (${viewport.name})`, async () => {
+    await page.viewport(viewport.width, viewport.height);
+    await openPmChat(ALL_WAITING);
+    await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
+    // The chat sits at its end, so the oldest blocker is far out of view.
     expect(cardIn("attention-login") === null || !inViewport(cardIn("attention-login")!)).toBe(
       true,
     );
-    expectInsideViewport(front, viewport.width);
-    expect(container.textContent).not.toContain("action waiting");
 
-    // Tapping 보기 scrolls to the card where it was asked and flashes it.
-    await followPendingAction("attention-login");
+    await revealPendingCard("attention-login");
+    await vi.waitFor(() => expect(pendingDialog()).toBeNull());
     const login = await expectRevealed("attention-login");
     expect(login.dataset.decisionCardState).toBe("open");
-
-    // On screen or not, the bar stays while the blocker is open.
-    expect(pendingBar()?.textContent).toContain("블로커: Fix the login redirect");
-
-    // The blocker resolves: the bar goes away and the subagent status is in front again.
-    await act(async () =>
-      publish({
-        ...server.summary!,
-        openCount: 0,
-        decisionCards: [
-          { ...loginBlocker, item: { ...loginBlocker.item, supersededAt: minute(59) } },
-        ],
-      }),
-    );
-    await vi.waitFor(() => {
-      expect(pendingBarIcon()).toBeNull();
-      expect(frontBanner()?.textContent).toContain("Waiting on subagent");
-    });
   });
 
-  it(`shows another thread waiting on the user and opens it (${viewport.name})`, async () => {
+  it(`opens a waiting thread from the dialog (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
-    await openPmChat({ openCount: 1, waitingThreads: [cuThread] });
-
-    await vi.waitFor(() =>
-      expect(frontBanner()?.textContent).toContain("CU eval chrome-form #1 · 허용 요청"),
-    );
-    expectInsideViewport(frontBanner()!, viewport.width);
-    await followPendingAction(CU_THREAD_ID);
+    await openPmChat(ALL_WAITING);
+    await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
+    const dialog = await openPendingActions();
+    const row = dialog.querySelector<HTMLElement>(
+      `[data-pending-actions-thread="${CU_THREAD_ID}"]`,
+    )!;
+    await act(async () => buttonIn(row, "열기").click());
     expect(server.opened).toEqual([CU_THREAD_ID]);
-  });
-
-  it(`steps through waiting items in order and wraps (${viewport.name})`, async () => {
-    await page.viewport(viewport.width, viewport.height);
-    await openPmChat({
-      openCount: 3,
-      decisionCards: [cachePlan, loginBlocker],
-      waitingThreads: [cuThread],
-    });
-
-    await vi.waitFor(() => expect(frontBanner()?.textContent).toContain("기다리는 일 1/3"));
-    expect(pendingBarIcon()?.dataset.pendingActionsBar).toBe("3");
-    expectInsideViewport(frontBanner()!, viewport.width);
-
-    // The first click reveals the oldest card; subsequent clicks advance and wrap.
-    expect(
-      page.getByRole("button", { name: "기다리는 일 보기", exact: true }).element().textContent,
-    ).toBe("보기");
-    await followPendingAction("attention-login");
-    await expectRevealed("attention-login");
-    expect(
-      page.getByRole("button", { name: "다음 기다리는 일", exact: true }).element().textContent,
-    ).toBe("다음");
-    expect(frontBanner()?.textContent).toContain("기다리는 일 1/3 · 블로커:");
-    await followPendingAction("attention-cache");
-    await expectRevealed("attention-cache");
-    expect(frontBanner()?.textContent).toContain("기다리는 일 2/3");
-    await followPendingAction(CU_THREAD_ID);
-    expect(server.opened).toEqual([CU_THREAD_ID]);
-    expect(frontBanner()?.textContent).toContain("기다리는 일 3/3");
-    await followPendingAction("attention-login");
-    await expectRevealed("attention-login");
-    expect(frontBanner()?.textContent).toContain("기다리는 일 1/3");
+    await vi.waitFor(() => expect(pendingDialog()).toBeNull());
   });
 }
 
-it("hides the bar when nothing waits, leaving the subagent status", async () => {
+it("hides the button when nothing waits", async () => {
   await page.viewport(1100, 800);
   await openPmChat({
     openCount: 0,
     decisionCards: [{ ...dragPlan, item: { ...dragPlan.item, answeredAt: minute(30) } }],
   });
-  await vi.waitFor(() => expect(frontBanner()?.textContent).toContain("Waiting on subagent"));
-  expect(pendingBarIcon()).toBeNull();
-
-  // The subagent finishes too: nothing is left above the composer.
-  server.subagentRunning = false;
-  await render();
-  await vi.waitFor(() => expect(frontBanner()).toBeNull());
-  expect(pendingBarIcon()).toBeNull();
+  expect(pendingButton()).toBeNull();
 });
 
-it("answering the last card from the timeline clears the bar", async () => {
+it("answering the last card closes the dialog and hides the button", async () => {
   await page.viewport(1100, 800);
-  server.subagentRunning = false;
   await openPmChat({ openCount: 1, decisionCards: [dragPlan] });
-  await vi.waitFor(() => expect(pendingBar()?.textContent).toContain("결정 필요: Fix drag scroll"));
-  await followPendingAction("attention-drag");
-  const drag = await expectRevealed("attention-drag");
+  await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 1개"));
+  const dialog = await openPendingActions();
+  const drag = dialog.querySelector<HTMLElement>('[data-pending-actions-card="attention-drag"]')!;
   await act(async () => buttonIn(drag, "Approve").click());
   await act(async () => buttonIn(drag, "Submit").click());
   await vi.waitFor(() => expect(server.answers).toHaveLength(1));
-  await vi.waitFor(() => expect(pendingBarIcon()).toBeNull());
+  await vi.waitFor(() => {
+    expect(pendingButton()).toBeNull();
+    expect(pendingDialog()).toBeNull();
+  });
+
+  // A new card later shows the button again without reopening the dialog.
+  await act(async () => publish({ ...server.summary!, openCount: 1, decisionCards: [cachePlan] }));
+  await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 1개"));
+  expect(pendingDialog()).toBeNull();
 });
 
 it("shows a task lead's own questions in its thread, and every question in the PM thread", () => {

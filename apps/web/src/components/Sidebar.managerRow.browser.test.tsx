@@ -234,7 +234,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function renderSidebarApp() {
+function renderSidebarApp(initialPath = "/") {
   const rootRoute = createRootRoute({
     component: () => (
       <SidebarProvider>
@@ -257,7 +257,7 @@ function renderSidebarApp() {
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([indexRoute, threadRoute]),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
   return { router, render: () => act(async () => root.render(<RouterProvider router={router} />)) };
 }
@@ -321,6 +321,11 @@ describe("sidebar manager row", () => {
   it("shows the manager like a chat list row", async () => {
     await renderSidebarApp().render();
     await expectChatListRow();
+    // Its sessions show once its chat is open.
+    expect(rowTitles()).not.toContain("Task 1");
+    await act(() => root.unmount());
+    root = createRoot(container);
+    await renderSidebarApp("/env-1/pm-thread").render();
     await vi.waitFor(() =>
       expect(rowTitles()).toEqual(expect.arrayContaining(["Task 1", "Task 2", "My own thread"])),
     );

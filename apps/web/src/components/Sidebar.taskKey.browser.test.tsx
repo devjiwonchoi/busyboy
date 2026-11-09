@@ -244,9 +244,15 @@ async function renderSidebar() {
     path: "$",
     component: () => null,
   });
+  // Task rows show under their PM while its chat is open.
+  const threadRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/$environmentId/$threadId",
+    component: () => null,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([anyRoute]),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    routeTree: rootRoute.addChildren([threadRoute, anyRoute]),
+    history: createMemoryHistory({ initialEntries: ["/env-1/pm-thread"] }),
   });
   await act(async () => root.render(<RouterProvider router={router} />));
 }

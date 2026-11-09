@@ -95,9 +95,30 @@ beforeEach(async () => {
     root.render(
       <RegistryContext.Provider value={appAtomRegistry}>
         <ToastProvider>
-          <ul>
-            <SidebarUpdatePill />
-          </ul>
+          <div
+            data-testid="sidebar-footer"
+            style={{ width: 260, padding: 8, background: "var(--sidebar, #fafafa)" }}
+          >
+            <ul
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                margin: 0,
+                padding: 0,
+                listStyle: "none",
+              }}
+            >
+              {["Settings", "Pull Requests", "Usage"].map((label) => (
+                <li
+                  key={label}
+                  aria-hidden
+                  style={{ width: 32, height: 32, borderRadius: 8, background: "#e4e4e7" }}
+                />
+              ))}
+              <SidebarUpdatePill />
+            </ul>
+          </div>
           <DesktopUpdateLaunchNotice />
         </ToastProvider>
       </RegistryContext.Provider>,
@@ -112,50 +133,68 @@ afterEach(async () => {
 });
 
 describe("desktop app update", () => {
-  it("downloads on its own, then prompts to restart", async () => {
+  it("downloads on its own, then offers restart in the same bottom-left spot", async () => {
     bridge.installUpdate.mockResolvedValue(
       actionResult(updateState({ status: "downloaded", downloadedVersion: "0.0.30" })),
     );
+    const footer = page.getByTestId("sidebar-footer");
 
     await emit(updateState({ status: "available", availableVersion: "0.0.30" }));
-    await expect.element(updateButton("Downloading update…")).toBeInTheDocument();
+    await expect.element(footer.getByRole("button", { name: "Downloading update…" })).toBeVisible();
 
     await emit(
       updateState({ status: "downloading", availableVersion: "0.0.30", downloadPercent: 42 }),
     );
-    await expect.element(updateButton("Downloading update (42%)…")).toBeInTheDocument();
+    await expect
+      .element(footer.getByRole("button", { name: "Downloading update (42%)…" }))
+      .toBeVisible();
     expect(bridge.downloadUpdate).not.toHaveBeenCalled();
 
-    const ready = updateState({
-      status: "downloaded",
-      availableVersion: "0.0.30",
-      downloadedVersion: "0.0.30",
-      downloadPercent: 100,
-    });
-    await emit(ready);
-    await expect.element(page.getByText("Update 0.0.30 is ready")).toBeVisible();
-    await expect
-      .element(page.getByText(/Otherwise it installs when you quit BusyBoy/))
-      .toBeVisible();
-
-    // Dismissing keeps the update button in its ready state.
-    await userEvent.click(page.getByRole("button", { name: "Dismiss notification" }));
-    await expect.element(page.getByText("Update 0.0.30 is ready")).not.toBeInTheDocument();
-    const readyButton = updateButton(
-      "Update 0.0.30 ready — restart to update, or it installs when you quit",
+    await emit(
+      updateState({
+        status: "downloaded",
+        availableVersion: "0.0.30",
+        downloadedVersion: "0.0.30",
+        downloadPercent: 100,
+      }),
     );
-    await expect.element(readyButton).toBeInTheDocument();
+    const ready = footer.getByTestId("desktop-update-ready");
+    await expect.element(ready.getByText("v0.0.30")).toBeVisible();
+    const restart = ready.getByRole("button", {
+      name: "Update 0.0.30 ready — restart to update, or it installs when you quit",
+    });
+    await expect.element(restart).toHaveTextContent("Restart");
 
-    // The same state again does not re-prompt.
-    await emit({ ...ready });
-    expect(page.getByText("Update 0.0.30 is ready").query()).toBeNull();
+    // The version opens its release notes.
+    await userEvent.click(ready.getByRole("button", { name: "v0.0.30 release notes" }));
+    await vi.waitFor(() =>
+      expect(bridge.openExternal).toHaveBeenCalledWith(
+        "https://github.com/devjiwonchoi/busyboy/releases/tag/v0.0.30",
+      ),
+    );
+    await expect.element(restart).toBeVisible();
 
-    // The update button reopens the prompt.
-    await userEvent.click(readyButton);
-    await expect.element(page.getByText("Update 0.0.30 is ready")).toBeVisible();
+    // The restart lives only in the sidebar: no top-right toast.
+    expect(page.getByText(/is ready/).query()).toBeNull();
+    expect(page.getByRole("button", { name: "Dismiss notification" }).query()).toBeNull();
 
-    await userEvent.click(page.getByRole("button", { name: "Restart" }));
+    await userEvent.click(restart);
     await vi.waitFor(() => expect(bridge.installUpdate).toHaveBeenCalledTimes(1));
+    expect(page.getByText(/is ready/).query()).toBeNull();
+  });
+
+  it("shows nightly release notes from the ready pill", async () => {
+    await emit(
+      updateState({
+        status: "downloaded",
+        channel: "nightly",
+        availableVersion: "0.0.36-nightly.3",
+        downloadedVersion: "0.0.36-nightly.3",
+        releaseNotes: [{ version: "0.0.36-nightly.3", items: ["Change 3"], totalItems: 1 }],
+      }),
+    );
+    await userEvent.hover(page.getByRole("button", { name: "v0.0.36-nightly.3 release notes" }));
+    await expect.element(page.getByText("Change 3")).toBeVisible();
   });
 
   it("offers a retry when the download fails", async () => {

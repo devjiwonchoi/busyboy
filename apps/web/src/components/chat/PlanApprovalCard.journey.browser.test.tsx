@@ -30,11 +30,11 @@ import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { MessagesTimeline } from "./MessagesTimeline";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 import {
-  PendingBar,
-  followPendingAction,
-  pendingBar,
-  pendingBarIcon,
-} from "./PendingActionsBar.testing";
+  PendingActions,
+  pendingButton,
+  pendingDialog,
+  revealPendingCard,
+} from "./PendingActionsButton.testing";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
@@ -273,7 +273,7 @@ const timelineProps: Omit<TimelineProps, "timelineEntries"> = {
   onManualNavigation: () => {},
 };
 
-/** The PM chat: the real timeline and the pending bar above the composer. */
+/** The PM chat: the real timeline and the waiting button above the composer. */
 function PmChat() {
   const summary = useServerSummary();
   const cards = summary === null ? [] : decisionCardsForThread([summary], PM_THREAD_ID);
@@ -282,7 +282,7 @@ function PmChat() {
       <div data-testid="timeline" className="flex min-h-0 flex-1 flex-col">
         <MessagesTimeline {...timelineProps} timelineEntries={ENTRIES} decisionCards={cards} />
       </div>
-      <PendingBar cards={cards} listRef={listRef} />
+      <PendingActions cards={cards} listRef={listRef} threadId={PM_THREAD_ID} />
     </>
   );
 }
@@ -330,9 +330,10 @@ function buttonIn(element: HTMLElement, name: string): HTMLButtonElement {
   return match!;
 }
 
-/** Jumps to the card from the pending bar, as the user does from the end of the chat. */
+/** Jumps to the card from the waiting dialog, as the user does from the end of the chat. */
 async function jumpTo(id: string) {
-  await followPendingAction(id);
+  await revealPendingCard(id);
+  await vi.waitFor(() => expect(pendingDialog()).toBeNull());
   return vi.waitFor(
     () => {
       const element = cardIn(id);
@@ -356,7 +357,7 @@ for (const viewport of [
     };
     await act(async () => root.render(<PmChat />));
     // Only the two plan approvals wait on the user.
-    await vi.waitFor(() => expect(pendingBar()?.textContent).toContain("기다리는 일 1/2"));
+    await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 2개"));
     const login = await jumpTo("attention-login");
     expect(login.dataset.decisionCardState).toBe("open");
     expect(buttonIn(login, "Approve")).toBeTruthy();
@@ -374,7 +375,7 @@ for (const viewport of [
   it(`approves a plan from its card without opening the review (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
     await act(async () => root.render(<PmChat />));
-    await vi.waitFor(() => expect(pendingBar()?.textContent).toContain("기다리는 일 2개"));
+    await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 2개"));
     expect(taskStatus("task-3")).toBe("Waiting for approval");
 
     const login = await jumpTo("attention-login");
@@ -457,12 +458,12 @@ for (const viewport of [
     expect(document.querySelector("[data-plan-review]")).toBeNull();
     expect(taskStatus("task-3")).toBe("In Progress");
 
-    // The card records the outcome and drops off the pending bar.
+    // The card records the outcome and drops off the waiting count.
     await vi.waitFor(() => {
       const answered = cardIn("attention-login")!;
       expect(answered.dataset.decisionCardState).toBe("answered");
       expect(answered.textContent).toContain("Approved and started");
-      expect(pendingBar()?.textContent).toContain("승인 대기: Task page cache");
+      expect(pendingButton()?.textContent).toBe("기다리는 일 1개");
     });
 
     // An older card's single summary shows as Goal only, and approving it starts too.
@@ -478,7 +479,7 @@ for (const viewport of [
     expect(taskStatus("task-9")).toBe("In Progress");
     await vi.waitFor(() => {
       expect(cardIn("attention-cache")?.textContent).toContain("Approved and started");
-      expect(pendingBarIcon()).toBeNull();
+      expect(pendingButton()).toBeNull();
     });
   });
 }
