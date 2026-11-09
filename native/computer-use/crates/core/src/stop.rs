@@ -24,12 +24,19 @@ pub struct PhysicalInput {
     pub key_target: Option<i32>,
     /// Screen points with a top-left origin, the same space as the target frames.
     pub location: (f64, f64),
+    /// For a mouse-down, the process that owns the window taking the click, when known.
+    pub click_owner: Option<i32>,
+    /// That window belongs to BusyBoy itself (its chat, an approval card).
+    pub click_on_busyboy: bool,
     /// The event's user-data field; [`EVENT_TAG`] marks our own events.
     pub user_data: i64,
 }
 
 /// Esc stops every live turn, wherever it is pressed. A key into an operated app,
-/// or a click inside one of its operated windows, stops the turns that use it.
+/// or a click on one of its windows, stops the turns that use it. A click on a
+/// BusyBoy window (such as an approval card over the operated app) stops nothing.
+/// Any other click counts when it lands inside an operated window's frame, which
+/// keeps out-of-process panels like a sandboxed app's save dialog covered.
 /// Our own events never stop anything.
 pub fn classify_input(input: &PhysicalInput, targets: &[MonitorTarget]) -> Option<PlatformEvent> {
     if input.user_data == EVENT_TAG {
@@ -41,10 +48,18 @@ pub fn classify_input(input: &PhysicalInput, targets: &[MonitorTarget]) -> Optio
             let pid = input.key_target?;
             targets.iter().any(|target| target.pid == pid).then_some(PlatformEvent::UserInput { pid })
         }
-        InputKind::MouseDown => targets
-            .iter()
-            .find(|target| target.frames.iter().any(|frame| frame.contains(input.location.0, input.location.1)))
-            .map(|target| PlatformEvent::UserInput { pid: target.pid }),
+        InputKind::MouseDown => {
+            if let Some(pid) = input.click_owner.filter(|pid| targets.iter().any(|target| target.pid == *pid)) {
+                return Some(PlatformEvent::UserInput { pid });
+            }
+            if input.click_on_busyboy {
+                return None;
+            }
+            targets
+                .iter()
+                .find(|target| target.frames.iter().any(|frame| frame.contains(input.location.0, input.location.1)))
+                .map(|target| PlatformEvent::UserInput { pid: target.pid })
+        }
     }
 }
 
@@ -58,11 +73,19 @@ mod tests {
     }
 
     fn key(escape: bool, key_target: Option<i32>, user_data: i64) -> PhysicalInput {
-        PhysicalInput { kind: InputKind::KeyDown, escape, key_target, location: (0.0, 0.0), user_data }
+        PhysicalInput { kind: InputKind::KeyDown, escape, key_target, location: (0.0, 0.0), click_owner: None, click_on_busyboy: false, user_data }
     }
 
     fn click(x: f64, y: f64, user_data: i64) -> PhysicalInput {
-        PhysicalInput { kind: InputKind::MouseDown, escape: false, key_target: None, location: (x, y), user_data }
+        PhysicalInput { kind: InputKind::MouseDown, escape: false, key_target: None, location: (x, y), click_owner: None, click_on_busyboy: false, user_data }
+    }
+
+    fn click_on(x: f64, y: f64, owner: i32) -> PhysicalInput {
+        PhysicalInput { click_owner: Some(owner), ..click(x, y, 0) }
+    }
+
+    fn click_on_busyboy(x: f64, y: f64) -> PhysicalInput {
+        PhysicalInput { click_owner: Some(7), click_on_busyboy: true, ..click(x, y, 0) }
     }
 
     #[test]
@@ -92,5 +115,31 @@ mod tests {
         assert_eq!(classify_input(&click(150.0, 120.0, 0), &targets()), Some(PlatformEvent::UserInput { pid: 42 }));
         assert_eq!(classify_input(&click(50.0, 50.0, 0), &targets()), None);
         assert_eq!(classify_input(&click(500.0, 400.0, 0), &targets()), None);
+    }
+
+    #[test]
+    fn a_click_on_a_busyboy_window_over_a_target_does_not_stop() {
+        // BusyBoy's approval card sits on top of the operated window at this point.
+        assert_eq!(classify_input(&click_on_busyboy(150.0, 120.0), &targets()), None);
+    }
+
+    #[test]
+    fn a_click_on_another_process_inside_a_target_frame_still_stops() {
+        // A sandboxed app's save panel is drawn by a separate process over the app.
+        assert_eq!(classify_input(&click_on(150.0, 120.0, 99), &targets()), Some(PlatformEvent::UserInput { pid: 42 }));
+        assert_eq!(classify_input(&click_on(50.0, 50.0, 99), &targets()), None);
+    }
+
+    #[test]
+    fn a_click_on_a_target_window_stops_even_outside_the_known_frames() {
+        assert_eq!(classify_input(&click_on(150.0, 120.0, 42), &targets()), Some(PlatformEvent::UserInput { pid: 42 }));
+        // A window the frames list missed, such as a sheet or a popover.
+        assert_eq!(classify_input(&click_on(600.0, 500.0, 42), &targets()), Some(PlatformEvent::UserInput { pid: 42 }));
+    }
+
+    #[test]
+    fn our_own_clicks_are_ignored_even_on_a_target_window() {
+        let ours = PhysicalInput { user_data: EVENT_TAG, ..click_on(150.0, 120.0, 42) };
+        assert_eq!(classify_input(&ours, &targets()), None);
     }
 }
