@@ -67,7 +67,7 @@ import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "~/rightPanelLayout";
 import { selectThreadRightPanelState, useRightPanelStore } from "~/rightPanelStore";
-import { RightPanelSheet } from "../RightPanelSheet";
+import { HIDDEN_UNDER_PHONE_RIGHT_PANEL, RightPanelSheet } from "../RightPanelSheet";
 import { RightPanelTabs } from "../RightPanelTabs";
 import { DirectorWorkspaceToggle } from "./DirectorWorkspaceToggle";
 import { Route as AllProjectsRoute } from "../../routes/_chat.all-projects";
@@ -133,6 +133,14 @@ function ThreadView(props: { threadRef: ScopedThreadRef }) {
     <div style={{ display: "flex", height: "100vh", width: "100%" }}>
       <div data-testid="chat" style={{ flex: 1, minWidth: 0 }}>
         <header>
+          {/* Stands in for the app's fixed main sidebar toggle. */}
+          <button
+            type="button"
+            data-testid="sidebar-control"
+            className={HIDDEN_UNDER_PHONE_RIGHT_PANEL}
+          >
+            사이드바
+          </button>
           {ref.threadId === "director-thread" ? <DirectorWorkspaceToggle threadRef={ref} /> : null}
         </header>
         대화 {ref.threadId}
@@ -280,9 +288,26 @@ it("redirects the old URL on mobile and opens the workspace sheet only from the 
       document.querySelector('[role="dialog"] [data-testid="director-workspace-surface"]'),
     ).toBeTruthy(),
   );
+  // The sheet covers the whole phone screen: no chat shows beside it.
+  const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  const sheetBox = sheet.getBoundingClientRect();
+  expect(sheetBox.left).toBe(0);
+  expect(Math.round(sheetBox.width)).toBe(window.innerWidth);
+  // Fixed chrome that would sit on top of the full-screen panel steps aside while it is open.
+  const sidebarControl = () =>
+    document.querySelector<HTMLElement>('[data-testid="sidebar-control"]')!;
+  expect(getComputedStyle(sidebarControl()).display).toBe("none");
   await page.screenshot({ path: "../../../.screenshots/bu99-director-mobile-sheet.png" });
-  await userEvent.keyboard("{Escape}");
+  // The panel closes from its own controls.
+  await userEvent.click(page.getByRole("button", { name: "Close 전체 프로젝트" }));
   await vi.waitFor(() =>
-    expect(page.getByRole("button", { name: "전체 프로젝트", exact: true }).element()).toBeTruthy(),
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, {
+        environmentId: "env-1",
+        threadId: "director-thread",
+      } as ScopedThreadRef).isOpen,
+    ).toBe(false),
   );
+  await vi.waitFor(() => expect(getComputedStyle(sidebarControl()).display).not.toBe("none"));
+  expect(page.getByRole("button", { name: "전체 프로젝트", exact: true }).element()).toBeTruthy();
 });

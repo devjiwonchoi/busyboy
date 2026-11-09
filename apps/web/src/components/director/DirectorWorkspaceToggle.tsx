@@ -18,7 +18,7 @@ export function DirectorWorkspaceToggle(props: { threadRef: ScopedThreadRef }) {
       className="inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-muted-foreground text-xs hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       <LayoutGridIcon aria-hidden className="size-3.5" />
-      전체 프로젝트
+      <span className="max-sm:sr-only">전체 프로젝트</span>
     </button>
   );
 }

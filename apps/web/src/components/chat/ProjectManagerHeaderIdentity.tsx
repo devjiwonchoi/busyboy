@@ -22,7 +22,7 @@ export function ProjectManagerHeaderIdentity(props: {
   const identity = (
     <>
       <PmAvatar persona={summary.persona} status={status} size="md" />
-      <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
+      <h2 className="min-w-0 truncate text-sm font-medium text-foreground max-sm:max-w-36">
         {summary.persona.name}
       </h2>
     </>
@@ -37,7 +37,7 @@ export function ProjectManagerHeaderIdentity(props: {
                 type="button"
                 aria-label={`${summary.persona.name} settings`}
                 onClick={props.onOpenSettings}
-                className="inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-sm text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                className="inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-sm text-left max-sm:shrink-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               />
             }
           >
@@ -46,9 +46,10 @@ export function ProjectManagerHeaderIdentity(props: {
           <TooltipPopup side="bottom">Project manager settings</TooltipPopup>
         </Tooltip>
       ) : (
-        <span className="inline-flex min-w-0 items-center gap-2">{identity}</span>
+        <span className="inline-flex min-w-0 items-center gap-2 max-sm:shrink-0">{identity}</span>
       )}
-      <span className="shrink-0 rounded-sm border border-border px-1 text-2xs leading-4 font-medium text-muted-foreground">
+      {/* On a phone the name keeps its room; the presence line truncates instead. */}
+      <span className="shrink-0 rounded-sm border border-border px-1 text-2xs leading-4 font-medium text-muted-foreground max-sm:hidden">
         {props.projectName ? `PM · ${props.projectName}` : "PM"}
       </span>
       <span
