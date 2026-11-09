@@ -3602,7 +3602,6 @@ export default function ChatView(props: ChatViewProps) {
     if (isLocalDraftThread) {
       setDraftThreadContext(composerDraftTarget, { runtimeMode: mode });
     }
-    saveGlobalDefaults({ environmentId, patch: { defaultRuntimeMode: mode } });
     scheduleComposerFocus();
   };
   const handleRuntimeModeChangeStable = useStableCallback(handleRuntimeModeChange);
