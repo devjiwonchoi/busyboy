@@ -29,10 +29,13 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as DesktopComputerUseChannel from "./DesktopComputerUseChannel.ts";
 
 const SESSION_TIMEOUT_MS = 10_000;
+/** How long a prewarm waits for the helper to start before giving up. */
+const PREWARM_TIMEOUT_MS = 10_000;
 /** How long the end of a turn waits for its in-flight requests to cancel. */
 const DRAIN_TIMEOUT_MS = 1_000;
 
@@ -198,6 +201,7 @@ const keyOf = (threadId: string, turnId: string) => `${threadId}\u0000${turnId}`
 export const make = Effect.gen(function* () {
   const channel = yield* DesktopComputerUseChannel.DesktopComputerUseChannel;
   const threads = yield* ThreadManagementService.ThreadManagementService;
+  const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
   /** Background run interrupts live here, so they end with the service. */
   const scope = yield* Effect.scope;
   const turns = new Map<string, TurnState>();
@@ -446,9 +450,27 @@ export const make = Effect.gen(function* () {
       }
     });
 
+  /**
+   * The helper stops after ten idle minutes. A run that starts while it is
+   * stopped starts it in the background, so the agent's first computer_* call
+   * does not wait for the launch.
+   */
+  const prewarm = Effect.gen(function* () {
+    if (!channel.available || Option.isNone(serverSettings)) return;
+    const enabled = yield* serverSettings.value.getSettings.pipe(
+      Effect.map((settings) => settings.enableAgentComputerUse),
+      Effect.orElseSucceed(() => false),
+    );
+    if (!enabled || (yield* channel.status).state !== "stopped") return;
+    yield* channel
+      .request("permissions.status", {}, { timeoutMs: PREWARM_TIMEOUT_MS })
+      .pipe(Effect.ignore, Effect.forkIn(scope));
+  });
+
   const handleDomainEvent: ComputerUseTurns["Service"]["handleDomainEvent"] = (event) => {
     if (event.type !== "run.updated") return Effect.void;
     const run = event.payload;
+    if (run.status === "starting" || run.status === "running") return prewarm;
     if (!ThreadManagementService.isTerminalRunStatus(run.status)) return Effect.void;
     return endTurn(
       event.threadId,
