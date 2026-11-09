@@ -133,6 +133,42 @@ describe("ProjectTeamService workspace goals", () => {
     ),
   );
 
+  it.effect("keeps the Director's briefing to one line and shows it in its summary", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const { firstPm, director } = yield* setUpWorkspace(harness);
+        assert.strictEqual((yield* directorSummary).briefing, null);
+
+        const twoLines = yield* Effect.flip(
+          team.writeMemory(director.threadId, {
+            topic: "briefing",
+            content: "폰 목표는 결정 1건에 막혀 있어요\n결제는 순항 중",
+          }),
+        );
+        assert.include(twoLines.message, "holds one line");
+
+        yield* team.writeMemory(director.threadId, {
+          topic: "briefing",
+          content: "폰 목표는 푸시 알림 결정 1건에 막혀 있어요\n",
+        });
+        assert.strictEqual(
+          (yield* directorSummary).briefing,
+          "폰 목표는 푸시 알림 결정 1건에 막혀 있어요",
+        );
+        // A PM's own "briefing" topic is just memory: no limit and no field.
+        yield* team.writeMemory(firstPm, { topic: "briefing", content: "a\nb" });
+        const pmSummary = (yield* team.attentionSnapshot).projects.find(
+          (entry) => entry.projectId === PROJECT_ID,
+        )!;
+        assert.isUndefined(pmSummary.briefing);
+
+        yield* team.deleteMemory(director.threadId, { topic: "briefing" });
+        assert.strictEqual((yield* directorSummary).briefing, null);
+      }),
+    ),
+  );
+
   it.effect("keeps goals to the Director and checks what they link", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

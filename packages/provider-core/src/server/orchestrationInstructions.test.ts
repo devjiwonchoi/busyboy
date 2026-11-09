@@ -174,6 +174,17 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "You never approve plans, add tasks or start leads");
   });
 
+  it("has the Director keep its one-line briefing current on goal checks and digests", () => {
+    const text = directorInstructions({ name: "Nova", voice: "Calm." });
+    assert.include(text, "### Briefing");
+    assert.include(text, 'Your "briefing" memory topic is one line at the top of All projects');
+    assert.include(
+      text,
+      'After each "[목표 점검]" and each digest, rewrite it with `memory_write`',
+    );
+    assert.include(text, "The server refuses more than one line");
+  });
+
   it("quotes a custom voice as the user's words", () => {
     const text = projectManagerInstructions({
       name: "Remy",

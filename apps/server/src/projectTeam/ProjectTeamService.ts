@@ -31,6 +31,7 @@ import {
   type ProjectManagerKind,
   PROJECT_SUMMARY_MAX_LINES,
   PROJECT_SUMMARY_TOPIC,
+  DIRECTOR_BRIEFING_TOPIC,
   type ProjectManagerLastAction,
   type ProjectManagerPersona,
   type ProjectManagerPresence,
@@ -4047,6 +4048,16 @@ const make = Effect.gen(function* () {
           );
         }
       }
+      const briefing = role.type === "director" && input.topic === DIRECTOR_BRIEFING_TOPIC;
+      if (briefing) {
+        const lines = input.content.split("\n").filter((line) => line.trim() !== "").length;
+        if (lines > 1) {
+          return yield* teamError(
+            `The "${DIRECTOR_BRIEFING_TOPIC}" topic holds one line; it has ${lines}. Say the one thing about the goals the user should know now.`,
+            role.projectId,
+          );
+        }
+      }
       const entry = yield* repository.upsertMemory({
         id: ProjectMemoryEntryId.make(yield* newId("memory")),
         projectId: role.projectId,
@@ -4054,8 +4065,10 @@ const make = Effect.gen(function* () {
         content: input.content,
         updatedAt: yield* nowIso,
       });
-      // All projects shows the direction, so its change goes out with a new snapshot.
-      if (input.topic === PROJECT_DIRECTION_TOPIC) yield* router.publish(role.projectId);
+      // All projects shows the direction and briefing, so their change goes out with a new snapshot.
+      if (input.topic === PROJECT_DIRECTION_TOPIC || briefing) {
+        yield* router.publish(role.projectId);
+      }
       return { entry };
     }).pipe(orTeamError("Could not write the project memory."));
 
@@ -4066,7 +4079,13 @@ const make = Effect.gen(function* () {
         projectId: role.projectId,
         topic: input.topic,
       });
-      if (deleted && input.topic === PROJECT_DIRECTION_TOPIC) yield* router.publish(role.projectId);
+      if (
+        deleted &&
+        (input.topic === PROJECT_DIRECTION_TOPIC ||
+          (role.type === "director" && input.topic === DIRECTOR_BRIEFING_TOPIC))
+      ) {
+        yield* router.publish(role.projectId);
+      }
       return { topic: input.topic, deleted };
     }).pipe(orTeamError("Could not delete the project memory."));
 
@@ -4533,9 +4552,14 @@ const make = Effect.gen(function* () {
                 ),
             ),
           );
-          const directionEntry = (yield* repository.listMemory(projectId)).find(
-            (entry) => entry.topic === PROJECT_DIRECTION_TOPIC,
-          );
+          const memory = yield* repository.listMemory(projectId);
+          const directionEntry = memory.find((entry) => entry.topic === PROJECT_DIRECTION_TOPIC);
+          const briefingLine =
+            memory
+              .find((entry) => entry.topic === DIRECTOR_BRIEFING_TOPIC)
+              ?.content.split("\n")
+              .map((line) => line.trim())
+              .find((line) => line !== "") ?? null;
           const afk = yield* activeAfk(manager.settings);
           const afkAnswers =
             afk === null
@@ -4553,7 +4577,9 @@ const make = Effect.gen(function* () {
           return {
             projectId,
             pmThreadId: manager.threadId,
-            ...(manager.kind === "director" ? { kind: "director" as const } : {}),
+            ...(manager.kind === "director"
+              ? { kind: "director" as const, briefing: briefingLine }
+              : {}),
             openCount: open.length + otherThreadsWaiting,
             latestBatchId: Option.isSome(latestItem) ? latestItem.value.batchId : null,
             latestSitrepId: Option.isSome(latestPosted) ? latestPosted.value.id : null,
