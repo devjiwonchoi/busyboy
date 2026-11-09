@@ -155,19 +155,21 @@ export function OpenDecisionCard({
   const { headline, context } = splitDecisionQuestion(card.item.question);
   const options = card.item.options.map(parseDecisionOption);
   const turnFailed = isTurnFailedBlocker(card.item);
-  const canSubmit =
-    !sending && (turnFailed || (options.length > 0 ? picked !== null : note.trim().length > 0));
+  // A typed answer stands on its own, so a pick is optional whenever the note has text.
+  const canSubmit = !sending && (turnFailed || picked !== null || note.trim().length > 0);
 
   const submit = (choice: string | undefined) => {
     if (!canSubmit) {
       return;
     }
-    const answer = resolvePendingUserInputAnswer(question, {
-      selectedOptionValues: [
-        choice ?? (turnFailed ? TURN_FAILED_RETRY : (picked ?? "Give feedback")),
-      ],
-      note: choice === TURN_FAILED_CANCEL ? "" : note,
-    });
+    const selected = choice ?? (turnFailed ? TURN_FAILED_RETRY : picked);
+    const answer =
+      selected === null && options.length > 0
+        ? note.trim()
+        : resolvePendingUserInputAnswer(question, {
+            selectedOptionValues: [selected ?? "Give feedback"],
+            note: choice === TURN_FAILED_CANCEL ? "" : note,
+          });
     setSending(true);
     void answerDecision(environmentId, {
       projectId: card.item.projectId,
@@ -285,7 +287,7 @@ export function OpenDecisionCard({
           turnFailed
             ? "리드에게 전할 말 (선택)"
             : options.length > 0
-              ? "Add a note (optional)"
+              ? "Write your own answer, or add a note to your pick"
               : "Write your answer"
         }
         data-decision-card-note

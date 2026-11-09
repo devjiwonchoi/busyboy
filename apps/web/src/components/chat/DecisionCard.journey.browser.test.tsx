@@ -381,6 +381,37 @@ describe.each([
     expect(cardElement("resolved")?.querySelector("button")).toBeNull();
   });
 
+  it("relays a typed answer without a pick to the lead as written", async () => {
+    const open = await openCard(undefined);
+    expect(noteIn(open).placeholder).toBe("Write your own answer, or add a note to your pick");
+    await userEvent.type(noteIn(open), "   ");
+    expect((buttonIn(open, "Submit") as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.clear(noteIn(open));
+    await userEvent.type(noteIn(open), "우선 원인부터 찾아보자");
+    expect(radiosIn(open).some((radio) => radio.getAttribute("aria-checked") === "true")).toBe(
+      false,
+    );
+    await userEvent.click(buttonIn(open, "Submit"));
+    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
+    expect(server.answers[0]?.answer).toBe("우선 원인부터 찾아보자");
+    expect(server.leadMessages).toEqual([
+      `[User answer via BusyBoy] ${QUESTION} → 우선 원인부터 찾아보자`,
+    ]);
+    const answered = cardElement("answered")!;
+    expect(answered.querySelector("[data-selected=true]")).toBeNull();
+    expect(answered.querySelector("[data-answered-question-text]")?.textContent).toBe(
+      "Answer: 우선 원인부터 찾아보자",
+    );
+  });
+
+  it("sends a typed answer without a pick with Enter", async () => {
+    const open = await openCard(undefined);
+    await userEvent.type(noteIn(open), "둘 다 아니고 먼저 로그를 봐 주세요{Enter}");
+    await vi.waitFor(() =>
+      expect(server.answers[0]?.answer).toBe("둘 다 아니고 먼저 로그를 봐 주세요"),
+    );
+  });
+
   it("uses the implicit feedback answer for a blocker without options", async () => {
     const open = await openCard({ kind: "blocker", options: [] });
     expect(open.querySelector("[data-decision-card-meta]")?.textContent).toBe(
