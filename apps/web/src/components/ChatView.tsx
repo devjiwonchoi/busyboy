@@ -237,6 +237,7 @@ import {
 import { pendingActionItems } from "../state/projectTeam.logic";
 import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
 import { pendingActionsBannerItem, revealDecisionCard } from "./chat/PendingActionsBar";
+import { useDirectorPendingActions } from "./director/useDirectorPendingActions";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
 import {
@@ -5237,14 +5238,20 @@ export default function ChatView(props: ChatViewProps) {
     cancelTimelineLiveFollowForUserNavigationStable();
     revealDecisionCard(legendListRef.current, cardId);
   };
+  const directorPendingActions = useDirectorPendingActions({
+    threadRef: sideChat ? null : routeThreadRef,
+    cards: decisionCards,
+    onRevealCard: revealDecisionCardInTimeline,
+  });
   const pendingActionsBanner = paintOnlyDisplayedTimeline
     ? null
-    : pendingActionsBannerItem({
+    : (directorPendingActions?.banner ??
+      pendingActionsBannerItem({
         id: `pending-actions:${routeThreadKey}`,
         items: pendingActionItems({ cards: decisionCards, waitingThreads }),
         onRevealCard: revealDecisionCardInTimeline,
         onOpenThread: onOpenRelatedThreadStable,
-      });
+      }));
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [
@@ -8642,6 +8649,7 @@ export default function ChatView(props: ChatViewProps) {
 
       <RevertConfirmHost threadKey={routeThreadKey} onConfirm={onConfirmRevertStable} />
       {sideChat ? null : <LinkPullRequestDialogHost />}
+      {directorPendingActions?.dialog}
       <ThreadVisitWatermark threadRef={routeThreadRef} />
       <ExpandedImageDialogHost threadKey={routeThreadKey} />
     </div>
