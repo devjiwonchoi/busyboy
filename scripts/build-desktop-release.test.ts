@@ -108,6 +108,16 @@ describe("release hardening", () => {
     expect(config.files).toContain("!server-runtime/**/*");
   });
 
+  it("lets agents' scripts ask for Automation access to other apps", () => {
+    const config = createBuilderConfig("1.2.3");
+    // Without both, macOS refuses Apple Events from BusyBoy without ever asking.
+    expect(config.mac.extendInfo.NSAppleEventsUsageDescription).toMatch(/Calendar/);
+    for (const file of [config.mac.entitlements, "apps/server/resources/cli-entitlements.plist"]) {
+      const plist = NodeFS.readFileSync(NodePath.join(import.meta.dirname, "..", file), "utf8");
+      expect(plist).toContain("com.apple.security.automation.apple-events");
+    }
+  });
+
   it("reads the fuse wire the way Electron lays it out", () => {
     const wire = Buffer.concat([
       Buffer.from("padding"),
