@@ -29,21 +29,34 @@ const withTeam = <A>(
     return yield* use(team, thread.thread.threadId, scope).pipe(Effect.mapError(toMcpFailure));
   });
 
+/** Starts a task lead as the PM's async child. */
+const delegateTaskLead =
+  (
+    orchestrator: OrchestratorMcpService.OrchestratorMcpService["Service"],
+    scope: McpInvocationContext.McpInvocationScope,
+  ): ProjectTeamService.DelegateTaskLead =>
+  (delegateInput) =>
+    orchestrator.delegateTask(scope, delegateInput, {
+      completionWake: "never",
+      // A lead starts from the latest upstream, not the PM checkout's local HEAD.
+      worktreeBase: "origin-default",
+    });
+
 const handlers = {
+  // A PM's new task starts its lead right away, the same way task_start does.
   task_create: McpToolAccess.actsAsCaller((input) =>
-    withTeam((team, caller) => team.createTask(caller, input)),
+    Effect.gen(function* () {
+      const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
+      return yield* withTeam((team, caller, scope) =>
+        team.createTask(caller, input, delegateTaskLead(orchestrator, scope)),
+      );
+    }),
   ),
   task_start: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* withTeam((team, caller, scope) =>
-        team.startTask(caller, input, (delegateInput) =>
-          orchestrator.delegateTask(scope, delegateInput, {
-            completionWake: "never",
-            // A lead starts from the latest upstream, not the PM checkout's local HEAD.
-            worktreeBase: "origin-default",
-          }),
-        ),
+        team.startTask(caller, input, delegateTaskLead(orchestrator, scope)),
       );
     }),
   ),

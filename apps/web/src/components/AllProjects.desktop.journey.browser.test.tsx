@@ -97,7 +97,6 @@ function manager(projectId: string, tasks: ProjectTaskReference[]) {
                 taskNumber: 1,
                 taskTitle: "Map",
                 plan: null,
-                proposal: null,
                 item: {
                   id: "card-1" as never,
                   projectId: "busyboy" as never,

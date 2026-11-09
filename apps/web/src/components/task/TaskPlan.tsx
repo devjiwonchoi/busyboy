@@ -336,7 +336,6 @@ function TaskPlanBody(props: {
                 taskNumber: task.number,
                 taskTitle: task.title,
                 plan: planFor(item),
-                proposal: null,
               }}
               environmentId={environmentId}
               threadRef={scopeThreadRef(environmentId, props.pmThreadId!)}

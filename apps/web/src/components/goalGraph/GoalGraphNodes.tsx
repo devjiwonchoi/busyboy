@@ -44,29 +44,11 @@ export function ProgressRing({ done, total }: { done: number; total: number }) {
     </svg>
   );
 }
-export function GoalChips({
-  goal,
-  onProposals,
-}: {
-  goal: GoalGraphData["goals"][number];
-  onProposals: () => void;
-}) {
+export function GoalChips({ goal }: { goal: GoalGraphData["goals"][number] }) {
   return (
     <span className="flex flex-wrap gap-1 text-[10px]">
       {goal.missingWork ? (
         <span className="rounded bg-amber-500/15 px-1 text-amber-600">빠진 일 있음</span>
-      ) : null}
-      {goal.proposals.length > 0 ? (
-        <button
-          type="button"
-          className={waitingClass}
-          onClick={(event) => {
-            event.stopPropagation();
-            onProposals();
-          }}
-        >
-          디렉터 제안 {goal.proposals.length}
-        </button>
       ) : null}
     </span>
   );

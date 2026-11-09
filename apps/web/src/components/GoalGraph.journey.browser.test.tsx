@@ -143,7 +143,7 @@ describe("goal graph journey", () => {
     ).toBe(false);
     expect(container.textContent).toContain("목표 없음");
     expect(container.textContent).toContain("빠진 일 있음");
-    expect(container.textContent).toContain("디렉터 제안 1");
+    expect(container.textContent).not.toContain("디렉터 제안");
     await userEvent.hover(taskNode("b-1"));
     await vi.waitFor(() => expect(goalNode("goal-3").parentElement!.style.opacity).toBe("0.25"));
     for (let count = 0; count < 3; count++) {

@@ -37,7 +37,7 @@ export function InboxTaskLink({
     environmentId: group.environmentId,
   });
   const label = `${card.taskTitle} · ${projectTitle}`;
-  if (card.item.kind === "proposal" || (group.isDirector && related === null)) {
+  if (group.isDirector && related === null) {
     return <span>{label}</span>;
   }
 

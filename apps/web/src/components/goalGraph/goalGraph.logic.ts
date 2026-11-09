@@ -122,7 +122,6 @@ export function buildGoalGraph(input: {
       (task) =>
         task.entry.summary.kind !== "director" &&
         task.stage !== "cancelled" &&
-        task.stage !== "proposed" &&
         (task.stage !== "done" ||
           (recent(task.updatedAt) && !goalIdsOf(task).includes("goal:none"))),
     )
@@ -237,18 +236,6 @@ export function buildGoalGraph(input: {
         (task) => task.entry.summary.kind !== "director" && goalIdsOf(task).includes(goal.id),
       );
       const shown = tasks.filter((task) => task.goalIds.includes(goal.id));
-      const proposals = (director?.summary.decisionCards ?? []).filter((card) => {
-        if (!openCard(card) || card.item.kind !== "proposal") {
-          return false;
-        }
-        const proposed = byId.get(recordKey(director!.environmentId, card.item.taskId));
-        return goal.links.some((link) =>
-          link.taskId === null
-            ? link.projectId === (card.proposal?.projectId ?? proposed?.projectId)
-            : proposed !== undefined &&
-              lineage(proposed).some((ancestor) => ancestor.id === link.taskId),
-        );
-      });
       return {
         id: String(goal.id),
         title: goal.title,
@@ -257,7 +244,6 @@ export function buildGoalGraph(input: {
           alignment.goalsWithoutOpenWork.includes(goal.id),
         ),
         blocked: shown.some((task) => task.tone === "blocked"),
-        proposals,
         ...signals(shown),
       };
     });
@@ -269,7 +255,6 @@ export function buildGoalGraph(input: {
       ...progress(shown),
       missingWork: false,
       blocked: shown.some((task) => task.tone === "blocked"),
-      proposals: [],
       ...signals(shown),
     });
   }
@@ -404,10 +389,7 @@ export function buildGoalGraph(input: {
     .filter((entry) => entry.summary.kind === "director")
     .flatMap((entry) =>
       entry.summary.tasks
-        .filter(
-          (task) =>
-            task.stage !== "done" && task.stage !== "cancelled" && task.stage !== "proposed",
-        )
+        .filter((task) => task.stage !== "done" && task.stage !== "cancelled")
         .map((task) => {
           const relations = taskRelations(index, entry.environmentId, task.id);
           const children = relations.subtasks.map((child) => ({

@@ -69,7 +69,6 @@ export function GoalGraphSections({
               approval: "승인",
               decision: "질문·결정",
               blocker: "막힘",
-              proposal: "제안",
             }[card.item.kind];
             return (
               <li

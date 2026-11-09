@@ -60,13 +60,15 @@ const shared = {
 
 const TaskCreateTool = Tool.make("task_create", {
   ...shared,
+  dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "PM/Director: post a task proposal card (title, goal, verification, and which project) in your chat. Include intake explaining why this is new work; goal and verification are required. Write title, goal and verification in the user's language, and the request so a task lead can act on it alone. Nothing is created until the user presses 태스크로 추가. Wait for [제안 승인됨], then start it with task_start when a slot is free (Director: the target project's PM is woken on acceptance). [제안 빠짐] means the user dropped it; [제안 피드백] carries their feedback — post a new proposal if still useful. Set waitsOn and parentTaskId only to tasks already added by the user; they may be in other projects. Director: pass goalId when the work serves a workspace goal; the task is linked to it once added. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
+    "PM/Director: create a task (title, goal, verification, and which project). Include intake explaining why this is new work; goal and verification are required. Write title, goal and verification in the user's language, and the request so a task lead can act on it alone. There is no approval step for the task itself: the user shapes its scope at the lead's plan approval. PM: the task lands in Todo and its lead starts right away; if every slot is busy or a waitsOn task is unfinished, it waits in Todo (the result's `waiting` says why) and you start it with task_start once it can run. Director: with projectId the task goes to that project's Todo and its PM is woken to start it; without projectId it is an epic in your own project, then create one task per project with parentTaskId. waitsOn and parentTaskId may name tasks in other projects. Director: pass goalId when the work serves a workspace goal; the task is linked to it right away. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
   parameters: ProjectTeamTaskCreateInput,
   success: ProjectTeamTaskResult,
 })
   .annotate(Tool.Title, "Create a team task")
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.OpenWorld, true);
 
 const TaskStartTool = Tool.make("task_start", {
   ...shared,

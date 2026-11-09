@@ -97,6 +97,15 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"Delegated task … reached a terminal state"');
   });
 
+  it("has the PM's task_create start the task, with scope shaped at plan approval", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "its lead starts right away");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "shapes its scope at the lead's plan approval");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "the result's `waiting` says why");
+    for (const text of ["태스크로 추가", "[제안 승인됨]", "[제안 빠짐]", "[제안 피드백]"]) {
+      assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, text);
+    }
+  });
+
   it("tells the PM to report only on a due sitrep", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "call `team_status` first");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "[Sitrep due] since <time>");
@@ -188,7 +197,7 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "`workspace.alignment`");
   });
 
-  it("has the Director act on goal checks without approving, adding or starting work", () => {
+  it("has the Director act on goal checks without approving plans or starting work", () => {
     const text = directorInstructions({ name: "Nova", voice: "Calm." });
     assert.include(text, "### Working from goals");
     assert.include(text, 'When you receive "[목표 점검]"');
@@ -196,7 +205,8 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "`pm_nudge` with `projectId`, `taskId` and the reason");
     assert.include(text, "어느 목표인가요?");
     assert.include(text, "gather everything the user must decide into one `ask_user`");
-    assert.include(text, "You never approve plans, add tasks or start leads");
+    assert.include(text, "You never approve plans or start leads");
+    assert.notInclude(text, "태스크로 추가");
   });
 
   it("has the Director keep its one-line briefing current on goal checks and digests", () => {

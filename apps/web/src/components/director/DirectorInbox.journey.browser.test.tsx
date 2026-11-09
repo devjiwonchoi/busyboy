@@ -89,7 +89,6 @@ function card(
   return {
     taskNumber: hour,
     taskTitle: `${id} 작업`,
-    proposal: kind === "proposal" ? { projectId: projectId as never } : null,
     plan: null,
     item: {
       id: id as never,
@@ -211,7 +210,7 @@ beforeEach(() => {
         pmThreadId: "pm-director" as never,
         kind: "director",
         persona: { name: "총괄", avatar: { kind: "emoji", emoji: "🧭" }, voice: "chill" },
-        decisionCards: [card("director", "제안", "proposal", 3)],
+        decisionCards: [card("director", "총괄", "decision", 3)],
         waitingThreads: [
           { threadId: "waiting-director" as never, title: "총괄 허용", kind: "approval" },
         ],
@@ -266,7 +265,7 @@ for (const width of [1280, 390]) {
       });
       await act(async () => root.render(<RouterProvider router={router} />));
       await userEvent.click(page.getByRole("button", { name: "기다리는 일 보기", exact: true }));
-      expect(state.revealed).toEqual(["제안"]);
+      expect(state.revealed).toEqual(["총괄"]);
       await userEvent.click(page.getByRole("button", { name: "다음 기다리는 일", exact: true }));
       await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/waiting-director"));
     });
@@ -313,8 +312,8 @@ for (const width of [1280, 390]) {
       const inbox = () => container.querySelector<HTMLElement>("[data-director-inbox]")!;
       await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/4"));
       expect(page.getByRole("region", { name: "받은편지함", exact: true }).element()).toBe(inbox());
-      expect(container.querySelectorAll('[data-decision-card="제안"]')).toHaveLength(1);
-      expect(inbox().querySelector('[data-decision-card="제안"]')).toBeNull();
+      expect(container.querySelectorAll('[data-decision-card="총괄"]')).toHaveLength(1);
+      expect(inbox().querySelector('[data-decision-card="총괄"]')).toBeNull();
       expect(inbox().querySelectorAll("[data-decision-card]")).toHaveLength(1);
       expect(inbox().textContent).toContain("결정 작업 · 프로젝트 A");
       expect(

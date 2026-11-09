@@ -785,7 +785,7 @@ describe("ProjectTeamService", () => {
     ),
   );
 
-  it.effect("streams a fresh snapshot when the PM proposes a task", () =>
+  it.effect("streams a fresh snapshot when the PM creates a task", () =>
     withTeam(() =>
       Effect.gen(function* () {
         const team = yield* service;
@@ -805,9 +805,8 @@ describe("ProjectTeamService", () => {
         });
         const snapshots = Array.from(yield* Fiber.join(fiber));
         assert.strictEqual(snapshots[0]?.projects[0]?.presence.inbox, 0);
-        assert.strictEqual(snapshots[1]?.projects[0]?.presence.inbox, 0);
-        assert.strictEqual(snapshots[1]?.projects[0]?.decisionCards[0]?.item.kind, "proposal");
-        assert.strictEqual(snapshots[1]?.projects[0]?.decisionCards[0]?.taskTitle, "Later");
+        assert.strictEqual(snapshots[1]?.projects[0]?.presence.inbox, 1);
+        assert.deepStrictEqual(snapshots[1]?.projects[0]?.decisionCards, []);
         assert.strictEqual(
           snapshots[1]?.projects[0]?.presence.lastAction?.text,
           "noted on #1 Later",

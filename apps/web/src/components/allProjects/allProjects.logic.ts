@@ -85,7 +85,6 @@ const NEEDS_YOU_LABELS: Partial<Record<ProjectAttentionKind, string>> = {
   approval: "플랜 승인",
   decision: "질문",
   blocker: "막힘",
-  proposal: "제안",
 };
 /** Card kinds this app version doesn't know yet still count. */
 const OTHER_CARD_LABEL = "카드";
@@ -108,7 +107,7 @@ function goalPhase(task: ProjectTaskReference, checks: ReadonlyArray<ProjectTask
 }
 
 /**
- * A project's goals: its top-level tasks, without proposals, cancelled ones and ones that
+ * A project's goals: its top-level tasks, without cancelled ones and ones that
  * finished more than a week ago. In progress first, then waiting, planning and done.
  */
 export function selectGoals(
@@ -119,8 +118,7 @@ export function selectGoals(
   return tasks
     .filter((task) => isTopLevelTask(task, ids))
     .filter((task) => {
-      // A proposal is not a goal until the user adds it.
-      if (task.stage === "cancelled" || task.stage === "proposed") return false;
+      if (task.stage === "cancelled") return false;
       if (task.stage !== "done") return true;
       if (task.updatedAt === null) return false;
       return nowMs - Date.parse(task.updatedAt) <= DONE_GOAL_VISIBLE_MS;
@@ -269,11 +267,9 @@ export function buildMapArrows(
     const fromKey = projectKey(environmentId, project.summary.projectId);
     const fromTasks = tasksByProject.get(fromKey)!;
     for (const task of project.summary.tasks) {
-      // A proposal the user hasn't added is no dependency yet, on either end.
-      if (isFinishedTask(task) || task.stage === "proposed") continue;
+      if (isFinishedTask(task)) continue;
       for (const blocker of taskRelations(relations, environmentId, task.id).blockedBy) {
         if (blocker.projectId === project.summary.projectId) continue;
-        if (blocker.task.stage === "proposed") continue;
         const toKey = projectKey(blocker.environmentId, blocker.projectId);
         const toTasks = tasksByProject.get(toKey);
         if (toTasks === undefined) continue;

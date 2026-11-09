@@ -187,7 +187,6 @@ const CARD_LABEL: Record<ProjectAttentionKind, string> = {
   approval: "승인 대기",
   decision: "결정 필요",
   blocker: "블로커",
-  proposal: "태스크 제안",
 };
 
 const THREAD_LABEL: Record<ProjectWaitingThread["kind"], string> = {
