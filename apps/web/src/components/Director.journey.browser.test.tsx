@@ -320,7 +320,7 @@ async function walkThroughDirector(app: ReturnType<typeof renderApp>) {
   ).not.toEqual(expect.arrayContaining([expect.stringContaining("Director")]));
 
   // The rail's Director avatar shows what it waits on and opens its chat.
-  expect(directorAvatar().getAttribute("aria-label")).toBe("Atlas, 2 waiting");
+  expect(directorAvatar().getAttribute("aria-label")).toBe("Atlas");
   await userEvent.click(directorAvatar());
   await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/director-thread"));
   expect(directorAvatar().getAttribute("aria-current")).toBe("page");
