@@ -25,11 +25,13 @@ import { page, userEvent } from "vite-plus/test/browser";
 import type { ProjectManagerEntry } from "~/state/projectTeam";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { makeProjectManagerSummaryFixture } from "~/test-fixtures";
-import { pendingActionItems } from "~/state/projectTeam.logic";
 import { DecisionCard } from "../chat/DecisionCard";
-import { ComposerBannerStack } from "../chat/ComposerBannerStack";
-import { pendingActionsBannerItem } from "../chat/PendingActionsBar";
-import { DirectorInboxDock } from "./DirectorInboxDock";
+import { DirectorPendingActions, ThreadPendingActions } from "../chat/PendingActionsButton";
+import {
+  openPendingActions,
+  pendingButton,
+  pendingDialog,
+} from "../chat/PendingActionsButton.testing";
 import { DirectorInbox } from "./DirectorInbox";
 
 const AT = "2026-11-09T01:00:00.000Z";
@@ -159,21 +161,8 @@ function Chat() {
   const entry = entries.find((entry) => entry.summary.pmThreadId === threadId);
   const cards = entry?.summary.decisionCards ?? [];
   const ref = scopeThreadRef("env" as never, threadId as never);
-  const banner = pendingActionsBannerItem({
-    id: `pending-actions:${threadId}`,
-    items: pendingActionItems({ cards, waitingThreads: entry?.summary.waitingThreads ?? [] }),
-    onRevealCard: (id) => state.revealed.push(id),
-    onOpenThread: (threadId) => {
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: { environmentId: ref.environmentId, threadId },
-      });
-    },
-  });
   return (
     <div className="min-w-0 flex-1 p-3">
-      {threadId === "pm-director" ? <DirectorInboxDock /> : null}
-      <ComposerBannerStack items={banner === null ? [] : [banner]} />
       {cards.map((card) => (
         <DecisionCard
           key={card.item.id}
@@ -183,6 +172,26 @@ function Chat() {
           cwd={undefined}
         />
       ))}
+      <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
+        {threadId === "pm-director" ? (
+          <DirectorPendingActions onRevealCard={(id) => state.revealed.push(id)} />
+        ) : (
+          <ThreadPendingActions
+            cards={cards}
+            waitingThreads={entry?.summary.waitingThreads ?? []}
+            environmentId={ref.environmentId}
+            threadRef={ref}
+            cwd={undefined}
+            onRevealCard={(id) => state.revealed.push(id)}
+            onOpenThread={(threadId) => {
+              void navigate({
+                to: "/$environmentId/$threadId",
+                params: { environmentId: ref.environmentId, threadId },
+              });
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -249,86 +258,74 @@ function buttonIn(element: Element, label: string) {
 const cardIn = (element: Element, id: string) =>
   element.querySelector<HTMLElement>(`[data-decision-card="${id}"]`)!;
 
+async function renderChat(threadId: string) {
+  const base = createRootRoute({ component: Outlet });
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: [`/env/${threadId}`] }),
+    routeTree: base.addChildren([
+      createRoute({
+        getParentRoute: () => base,
+        path: "/$environmentId/$threadId",
+        component: Chat,
+      }),
+    ]),
+  });
+  await act(async () => root.render(<RouterProvider router={router} />));
+  return router;
+}
+
+/** The project groups in the dialog. */
+const dialogProjects = () =>
+  [...(pendingDialog()?.querySelectorAll<HTMLElement>("[data-director-inbox-project]") ?? [])].map(
+    (group) => group.dataset.directorInboxProject,
+  );
+
+function expectInsideViewport(element: HTMLElement, width: number) {
+  const rect = element.getBoundingClientRect();
+  expect(rect.left).toBeGreaterThanOrEqual(0);
+  expect(rect.right).toBeLessThanOrEqual(width + 0.5);
+}
+
 for (const width of [1280, 390]) {
-  describe(`director inbox at ${width}px`, () => {
-    it("reaches the Director's own waiting thread through its chat banner", async () => {
+  describe(`director waiting button at ${width}px`, () => {
+    it("shows a small button instead of the inbox and lists every project", async () => {
       await page.viewport(width, 844);
-      const base = createRootRoute({ component: Outlet });
-      const router = createRouter({
-        history: createMemoryHistory({ initialEntries: ["/env/pm-director"] }),
-        routeTree: base.addChildren([
-          createRoute({
-            getParentRoute: () => base,
-            path: "/$environmentId/$threadId",
-            component: Chat,
-          }),
-        ]),
-      });
-      await act(async () => root.render(<RouterProvider router={router} />));
-      await userEvent.click(page.getByRole("button", { name: "기다리는 일 보기", exact: true }));
-      expect(state.revealed).toEqual(["제안"]);
-      await userEvent.click(page.getByRole("button", { name: "다음 기다리는 일", exact: true }));
-      await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/waiting-director"));
-    });
+      await renderChat("pm-director");
 
-    it("keeps the shown card when an earlier card is answered elsewhere", async () => {
-      await page.viewport(width, 844);
-      const base = createRootRoute({ component: Outlet });
-      const router = createRouter({
-        history: createMemoryHistory({ initialEntries: ["/env/pm-director"] }),
-        routeTree: base.addChildren([
-          createRoute({
-            getParentRoute: () => base,
-            path: "/$environmentId/$threadId",
-            component: Chat,
-          }),
-        ]),
+      // No inbox dock: just the pill with every project's waiting items.
+      const pill = await vi.waitFor(() => {
+        const button = pendingButton();
+        if (!button) throw new Error("no pending button yet");
+        return button;
       });
-      await act(async () => root.render(<RouterProvider router={router} />));
-      const inbox = () => container.querySelector<HTMLElement>("[data-director-inbox]")!;
-      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
-      expect(cardIn(inbox(), "실패")).toBeTruthy();
-      await act(() => publishAnswered("결정"));
-      expect(inbox().textContent).toContain("받은편지함 1/3");
-      expect(cardIn(inbox(), "실패")).toBeTruthy();
-      await act(() => publishAnswered("실패"));
-      expect(inbox().textContent).toContain("받은편지함 1/2");
-      expect(cardIn(inbox(), "계획")).toBeTruthy();
-    });
+      expect(pill.textContent).toBe("기다리는 일 6개");
+      expect(pill.getBoundingClientRect().height).toBeLessThanOrEqual(32);
+      expect(container.querySelector("[data-director-inbox]")).toBeNull();
+      expect(document.body.textContent).not.toContain("받은편지함");
 
-    it("steps oldest first, answers in place, and shares answers with the PM", async () => {
-      await page.viewport(width, 844);
-      const base = createRootRoute({ component: Outlet });
-      const router = createRouter({
-        history: createMemoryHistory({ initialEntries: ["/env/pm-director"] }),
-        routeTree: base.addChildren([
-          createRoute({
-            getParentRoute: () => base,
-            path: "/$environmentId/$threadId",
-            component: Chat,
-          }),
-        ]),
-      });
-      await act(async () => root.render(<RouterProvider router={router} />));
-      const inbox = () => container.querySelector<HTMLElement>("[data-director-inbox]")!;
-      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/4"));
-      expect(page.getByRole("region", { name: "받은편지함", exact: true }).element()).toBe(inbox());
-      expect(container.querySelectorAll('[data-decision-card="제안"]')).toHaveLength(1);
-      expect(inbox().querySelector('[data-decision-card="제안"]')).toBeNull();
-      expect(inbox().querySelectorAll("[data-decision-card]")).toHaveLength(1);
-      expect(inbox().textContent).toContain("결정 작업 · 프로젝트 A");
+      const dialog = await openPendingActions();
+      expect(dialog.textContent).toContain("나를 기다리는 일 6");
+      // One title with the count; the list doesn't repeat it.
+      expect(dialog.textContent!.split("나를 기다리는 일")).toHaveLength(2);
+      expect(dialogProjects()).toEqual(expect.arrayContaining(["a", "b", "director"]));
+      expect(dialog.querySelectorAll("[data-decision-card]")).toHaveLength(4);
+      expect(dialog.textContent).toContain("결정 작업 · 프로젝트 A");
+      expect(dialog.textContent).toContain("접근 허용");
       expect(
-        inbox()
+        dialog
           .querySelector<HTMLAnchorElement>("[data-director-inbox-task-link]")
           ?.getAttribute("href"),
-      ).toContain("/tasks/env/a/task-");
-      expect(inbox().querySelector("[data-attention-action]")?.textContent).toBe(
-        "결정 변경을 로컬에서 구현합니다.",
-      );
-      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
-      expect(inbox().textContent).toContain("실패 작업 · 프로젝트 B");
-      await userEvent.click(page.getByRole("button", { name: "이전 카드", exact: true }));
-      const decision = cardIn(inbox(), "결정");
+      ).toContain("/tasks/env/");
+      expectInsideViewport(dialog, width);
+      await page.screenshot({ path: `__screenshots__/director-pending-actions-${width}.png` });
+    });
+
+    it("answers in the dialog, the count drops, and the button hides at zero", async () => {
+      await page.viewport(width, 844);
+      await renderChat("pm-director");
+      await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
+      const dialog = await openPendingActions();
+      const decision = cardIn(dialog, "결정");
       await userEvent.click(decision.querySelector<HTMLButtonElement>('[role="radio"]')!);
       await userEvent.click(
         decision.querySelector<HTMLButtonElement>("[data-decision-card-submit]")!,
@@ -340,36 +337,74 @@ for (const width of [1280, 390]) {
         answer: "첫 번째",
       });
       await act(() => publishAnswered("결정"));
-      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/3"));
-      expect(cardIn(inbox(), "실패")).toBeTruthy();
-      // Answer the next card from its project's chat, then return to the same shared summary.
-      await act(async () => {
-        await router.navigate({
-          to: "/$environmentId/$threadId",
-          params: { environmentId: "env", threadId: "pm-b" },
-        });
+      await vi.waitFor(() => {
+        expect(pendingButton()?.textContent).toBe("기다리는 일 5개");
+        expect(pendingDialog()?.textContent).toContain("나를 기다리는 일 5");
+        expect(pendingDialog()?.querySelector('[data-decision-card="결정"]')).toBeNull();
       });
-      await userEvent.click(buttonIn(cardIn(container, "실패"), "다시 시도"));
-      await vi.waitFor(() => expect(state.answers).toHaveLength(2));
-      await act(() => publishAnswered("실패"));
-      await act(async () => {
-        await router.navigate({
-          to: "/$environmentId/$threadId",
-          params: { environmentId: "env", threadId: "pm-director" },
-        });
-      });
-      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/2"));
-      expect(cardIn(inbox(), "실패")).toBeNull();
-      expect(inbox().textContent).not.toContain("총괄");
-      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
-      expect(inbox().textContent).toContain("받은편지함 2/2");
-      // Closing cards while positioned at the end clamps the position to the remaining item.
+
+      // Everything else gets handled: the dialog closes and the button goes away.
       await act(() => {
-        publishAnswered("계획");
+        for (const id of ["실패", "제안", "계획"]) publishAnswered(id);
+        state.managers = state.managers.map((entry) => ({
+          ...entry,
+          summary: { ...entry.summary, waitingThreads: [] },
+        }));
+        for (const listener of state.listeners) listener();
       });
-      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/1"));
-      await userEvent.click(buttonIn(inbox(), "열기"));
-      await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/waiting-b"));
+      await vi.waitFor(() => {
+        expect(pendingButton()).toBeNull();
+        expect(pendingDialog()).toBeNull();
+      });
+    });
+
+    it("opens a waiting thread from the dialog and closes it", async () => {
+      await page.viewport(width, 844);
+      const router = await renderChat("pm-director");
+      await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
+      const dialog = await openPendingActions();
+      const row = [...dialog.querySelectorAll<HTMLElement>("div.border-dashed")].find((candidate) =>
+        candidate.textContent?.includes("접근 허용"),
+      )!;
+      await userEvent.click(buttonIn(row, "열기"));
+      await vi.waitFor(() => {
+        expect(router.state.location.pathname).toBe("/env/waiting-b");
+        expect(pendingDialog()).toBeNull();
+      });
+    });
+
+    it("jumps from the dialog to one of the Director's own cards", async () => {
+      await page.viewport(width, 844);
+      await renderChat("pm-director");
+      await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
+      const dialog = await openPendingActions();
+      // Only the Director's own cards live in this chat's timeline.
+      const reveal = [...dialog.querySelectorAll("button")].filter(
+        (button) => button.textContent === "채팅에서 보기",
+      );
+      expect(reveal).toHaveLength(1);
+      await userEvent.click(reveal[0]!);
+      expect(state.revealed).toEqual(["제안"]);
+      await vi.waitFor(() => expect(pendingDialog()).toBeNull());
+    });
+
+    it("shows the same small button in a PM chat", async () => {
+      await page.viewport(width, 844);
+      await renderChat("pm-a");
+      const pill = await vi.waitFor(() => {
+        const button = pendingButton();
+        if (!button) throw new Error("no pending button yet");
+        return button;
+      });
+      expect(pill.textContent).toBe("기다리는 일 2개");
+      expect(container.querySelector("[data-director-inbox]")).toBeNull();
+      const dialog = await openPendingActions();
+      expect(
+        [...dialog.querySelectorAll<HTMLElement>("[data-pending-actions-card]")].map(
+          (row) => row.dataset.pendingActionsCard,
+        ),
+      ).toEqual(["결정", "계획"]);
+      await page.screenshot({ path: `__screenshots__/pm-pending-actions-${width}.png` });
     });
   });
 }

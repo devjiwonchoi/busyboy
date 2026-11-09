@@ -234,11 +234,13 @@ import {
   useThreadDecisionCards,
   useThreadWaitingThreads,
 } from "../state/projectTeam";
-import { pendingActionItems } from "../state/projectTeam.logic";
 import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
-import { pendingActionsBannerItem, revealDecisionCard } from "./chat/PendingActionsBar";
+import {
+  DirectorPendingActions,
+  ThreadPendingActions,
+  revealDecisionCard,
+} from "./chat/PendingActionsButton";
 import { useDirectorThreadRef } from "~/state/director";
-import { DirectorInboxDock } from "./director/DirectorInboxDock";
 import { useOpenDirectorWorkspaceOnEntry } from "./director/DirectorWorkspaceToggle";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
@@ -5248,18 +5250,9 @@ export default function ChatView(props: ChatViewProps) {
     cancelTimelineLiveFollowForUserNavigationStable();
     revealDecisionCard(legendListRef.current, cardId);
   });
-  const pendingActionsBanner = paintOnlyDisplayedTimeline
-    ? null
-    : pendingActionsBannerItem({
-        id: `pending-actions:${routeThreadKey}`,
-        items: pendingActionItems({ cards: decisionCards, waitingThreads }),
-        onRevealCard: revealDecisionCardInTimeline,
-        onOpenThread: onOpenRelatedThreadStable,
-      });
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [
-      pendingActionsBanner,
       childInputBannerItem,
       goalBannerItem,
       backgroundWorkBannerItem,
@@ -8096,29 +8089,41 @@ export default function ChatView(props: ChatViewProps) {
                   : { historyControls: threadHistoryControls })}
               />
 
-              {!isThreadFindActive && (
-                <div
-                  className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex flex-wrap justify-center gap-2 py-1.5"
-                  style={{ bottom: scrollToEndClearance + 4 }}
-                >
-                  {showScrollToBottom && (
-                    <Button
-                      aria-label="Scroll to end"
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => {
-                        composerRef.current?.restoreAfterTimelineReachedEnd();
-                        scrollToEnd(true);
-                      }}
-                      className="pointer-events-auto"
-                      size="xs"
-                      variant="glass"
-                    >
-                      <ChevronDownIcon className="size-3.5" />
-                      Scroll to end
-                    </Button>
-                  )}
-                </div>
-              )}
+              {/* The waiting count stays during find; only "Scroll to end" steps aside. */}
+              <div
+                className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex flex-wrap justify-center gap-2 py-1.5"
+                style={{ bottom: scrollToEndClearance + 4 }}
+              >
+                {isDirectorThread ? (
+                  <DirectorPendingActions onRevealCard={revealDecisionCardInTimeline} />
+                ) : paintOnlyDisplayedTimeline ? null : (
+                  <ThreadPendingActions
+                    cards={decisionCards}
+                    waitingThreads={waitingThreads}
+                    environmentId={routeThreadRef.environmentId}
+                    threadRef={routeThreadRef}
+                    cwd={gitCwd ?? undefined}
+                    onRevealCard={revealDecisionCardInTimeline}
+                    onOpenThread={onOpenRelatedThreadStable}
+                  />
+                )}
+                {showScrollToBottom && !isThreadFindActive && (
+                  <Button
+                    aria-label="Scroll to end"
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      composerRef.current?.restoreAfterTimelineReachedEnd();
+                      scrollToEnd(true);
+                    }}
+                    className="pointer-events-auto"
+                    size="xs"
+                    variant="glass"
+                  >
+                    <ChevronDownIcon className="size-3.5" />
+                    Scroll to end
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div
@@ -8163,7 +8168,6 @@ export default function ChatView(props: ChatViewProps) {
                         : undefined
                     }
                   >
-                    {isDirectorThread ? <DirectorInboxDock /> : null}
                     <ComposerSurface.Shell
                       contextStrip={showComposerContextStrip || showComposerModelStrip}
                     >

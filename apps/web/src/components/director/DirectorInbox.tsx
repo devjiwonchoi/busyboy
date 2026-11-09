@@ -28,9 +28,12 @@ export function useDirectorInboxTitles() {
 export function InboxTaskLink({
   card,
   group,
+  onNavigate,
 }: {
   card: ProjectDecisionCard;
   group: DirectorInboxGroup;
+  /** Called when the link is followed, e.g. to close the dialog it sits in. */
+  onNavigate?: (() => void) | undefined;
 }) {
   const { related, projectId, projectTitle } = useAttentionTask({
     card,
@@ -45,6 +48,7 @@ export function InboxTaskLink({
     <Link
       {...taskRouteParams(group.environmentId, projectId, card.item.taskId)}
       data-director-inbox-task-link
+      onClick={onNavigate}
       className="text-foreground underline decoration-border underline-offset-2 hover:decoration-current"
     >
       {label}
@@ -52,7 +56,16 @@ export function InboxTaskLink({
   );
 }
 
-export function DirectorInbox(props: { highlightCardId: string | null; showEmpty: boolean }) {
+export function DirectorInbox(props: {
+  highlightCardId: string | null;
+  showEmpty: boolean;
+  /** Called before leaving for a task or thread, e.g. to close the dialog. */
+  onNavigate?: () => void;
+  /** False when the surrounding dialog already titles the list with its count. */
+  showHeading?: boolean;
+  /** In the Director's chat: jump to one of the Director's own cards in its timeline. */
+  onRevealDirectorCard?: (cardId: string) => void;
+}) {
   const { groups, total } = useDirectorInbox();
   const titleOf = useDirectorInboxTitles();
   const navigate = useNavigate();
@@ -90,7 +103,9 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
 
   return (
     <section ref={section} data-director-inbox className="flex min-w-0 flex-col gap-4">
-      <h2 className="font-semibold text-base">나를 기다리는 일 {total}</h2>
+      {props.showHeading === false ? null : (
+        <h2 className="font-semibold text-base">나를 기다리는 일 {total}</h2>
+      )}
       {groups.map((group) => {
         // Korean elapsed labels avoid the shared formatter's English suffixes.
         const minutes =
@@ -119,9 +134,20 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
             </h3>
             {group.cards.map((card) => (
               <div key={card.item.id} className="min-w-0">
-                <p className="mb-1 break-words text-muted-foreground text-xs">
-                  <InboxTaskLink card={card} group={group} />
-                </p>
+                <div className="mb-1 flex items-center gap-2 text-muted-foreground text-xs">
+                  <p className="min-w-0 flex-1 break-words">
+                    <InboxTaskLink card={card} group={group} onNavigate={props.onNavigate} />
+                  </p>
+                  {group.isDirector && props.onRevealDirectorCard ? (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-md px-2 py-1 text-foreground hover:bg-muted"
+                      onClick={() => props.onRevealDirectorCard?.(card.item.id)}
+                    >
+                      채팅에서 보기
+                    </button>
+                  ) : null}
+                </div>
                 <DecisionCard
                   card={card}
                   environmentId={group.environmentId}
@@ -141,14 +167,15 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
                 <button
                   type="button"
                   className="shrink-0 rounded-md px-3 py-2 hover:bg-muted"
-                  onClick={() =>
+                  onClick={() => {
+                    props.onNavigate?.();
                     void navigate({
                       to: "/$environmentId/$threadId",
                       params: buildThreadRouteParams(
                         scopeThreadRef(group.environmentId, thread.threadId),
                       ),
-                    })
-                  }
+                    });
+                  }}
                 >
                   열기
                 </button>
