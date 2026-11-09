@@ -352,16 +352,18 @@ function seedStructure() {
 function expectStructure() {
   const plan = planBody()!;
   const parent = plan.querySelector<HTMLElement>("[data-task-parent]")!;
-  expect(parent.textContent).toBe("BU-53Director");
+  expect(parent.textContent).toBe("Director · 프로젝트");
   expect(parent.getAttribute("href")).toBe("#task-53");
   expect(plan.querySelector("[data-subtask-progress]")?.getAttribute("data-subtask-progress")).toBe(
     "1/2",
   );
   const waiting = plan.querySelector<HTMLElement>("[data-waiting-marker]")!;
   expect(waiting.querySelector(".sr-only")?.textContent).toBe(
-    "BU-55 끝나야 시작 · Dependency model",
+    "Dependency model · 프로젝트 끝나야 시작",
   );
-  expect(waiting.querySelector("[aria-hidden]")?.textContent).toBe("BU-55");
+  expect(waiting.querySelector("[data-waiting-keys]")?.textContent).toBe(
+    "Dependency model · 프로젝트",
+  );
   expect(plan.querySelector(".lucide-flag")).toBeNull();
   expect(
     plan.querySelector("[data-relation-group='blocked-by'] h3 .lucide-hourglass"),

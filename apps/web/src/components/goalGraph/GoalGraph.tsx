@@ -10,6 +10,7 @@ import { type MapEntry, projectKey } from "../allProjects/allProjects.logic";
 import ChatMarkdown from "../ChatMarkdown";
 import { DirectorInbox } from "../director/DirectorInbox";
 import { Dialog, DialogClose, DialogPopup, DialogTitle } from "../ui/dialog";
+import { GoalGraphSections } from "./GoalGraphSections";
 import { GoalGraphDesktop } from "./GoalGraphDesktop";
 import { GoalGraphMobile } from "./GoalGraphMobile";
 import { buildGoalGraph, type GoalGraphData } from "./goalGraph.logic";
@@ -28,7 +29,13 @@ export type GraphViewProps = {
   ) => void;
 };
 
-export function GoalGraph({ entries }: { entries: ReadonlyArray<MapEntry> }) {
+export function GoalGraph({
+  entries,
+  panel,
+}: {
+  entries: ReadonlyArray<MapEntry>;
+  panel?: boolean;
+}) {
   const projects = useProjects();
   const now = useNowMinute();
   const wide = useMediaQuery("sm");
@@ -57,14 +64,14 @@ export function GoalGraph({ entries }: { entries: ReadonlyArray<MapEntry> }) {
     node.cardId === null ? openChat(node) : setCardId(node.cardId);
   const openTask: GraphViewProps["openTask"] = (task) =>
     void navigate(taskRouteParams(task.environmentId, task.projectId, task.id));
-  if (!recentOnly && graph.goals.length === 0) {
+  if (!panel && !recentOnly && graph.goals.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
         아직 목표가 없어요. 디렉터에게 목표를 말해 보세요.
       </p>
     );
   }
-  const View = wide ? GoalGraphDesktop : GoalGraphMobile;
+  const View = wide && !panel ? GoalGraphDesktop : GoalGraphMobile;
   const director = entries.find((entry) => entry.summary.kind === "director");
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -83,6 +90,7 @@ export function GoalGraph({ entries }: { entries: ReadonlyArray<MapEntry> }) {
           />
         </div>
       ) : null}
+      {panel ? <GoalGraphSections graph={graph} openCard={setCardId} /> : null}
       <div className="flex flex-wrap items-center gap-2 text-xs" aria-label="목표 브리핑">
         <button
           type="button"
@@ -129,7 +137,11 @@ export function GoalGraph({ entries }: { entries: ReadonlyArray<MapEntry> }) {
           나를 기다림 {graph.briefing.needsYouCount}
         </button>
       </div>
-      {recentOnly && graph.tasks.length === 0 ? (
+      {graph.goals.length === 0 && !recentOnly ? (
+        <p className="text-sm text-muted-foreground">
+          아직 목표가 없어요. 디렉터에게 목표를 말해 보세요.
+        </p>
+      ) : recentOnly && graph.tasks.length === 0 ? (
         <p className="text-sm text-muted-foreground">최근 24시간 안에 바뀐 일이 없어요</p>
       ) : (
         <View

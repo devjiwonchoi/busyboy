@@ -112,7 +112,7 @@ export function DirectorWorkspaceSurface() {
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="wide" className="gap-4 px-3 sm:px-6">
             {view === "graph" ? (
-              <GoalGraph entries={entries} />
+              <GoalGraph entries={entries} panel />
             ) : map.length === 0 ? (
               <p className="text-muted-foreground text-sm">아직 PM이 있는 프로젝트가 없어요.</p>
             ) : (

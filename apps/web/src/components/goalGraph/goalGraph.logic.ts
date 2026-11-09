@@ -1,11 +1,27 @@
 import {
   formatTaskKey,
+  resolveProjectTaskStatus,
   type ProjectDecisionCard,
+  type ProjectTaskStatus,
   type WorkspaceBlockReason,
 } from "@t3tools/contracts";
 import { alignWorkspaceGoals } from "@t3tools/shared/workspaceGoals";
+import { directorInbox } from "../director/directorInbox.logic";
+import { buildTaskRelationsIndex, taskRelations } from "../task/taskRelations.logic";
 import { splitDirectorEntry } from "~/state/projectTeam.logic";
 import { type MapEntry, projectKey } from "../allProjects/allProjects.logic";
+
+export const GOAL_GRAPH_STATUS_LABELS: Record<ProjectTaskStatus, string> = {
+  todo: "대기",
+  planning: "계획 중",
+  waiting_for_approval: "승인 대기",
+  ask_question: "답변 대기",
+  in_progress: "진행 중",
+  in_review: "검토 중",
+  ready: "검토 준비됨",
+  fatal: "막힘",
+  done: "완료",
+};
 
 const DAY = 24 * 60 * 60 * 1000;
 const openCard = (card: ProjectDecisionCard) =>
@@ -101,13 +117,12 @@ export function buildGoalGraph(input: {
     return ids;
   };
   const recent = (at: string | null) => changedLabel(at, input.nowMs) !== null;
-  const tasks = records
+  const allTasks = records
     .filter(
       (task) =>
         task.entry.summary.kind !== "director" &&
         task.stage !== "cancelled" &&
         task.stage !== "proposed" &&
-        goalIdsOf(task).length > 0 &&
         (task.stage !== "done" ||
           (recent(task.updatedAt) && !goalIdsOf(task).includes("goal:none"))),
     )
@@ -149,6 +164,7 @@ export function buildGoalGraph(input: {
         key: formatTaskKey(task.entry.summary.taskKeyPrefix, task.number),
         title: task.title,
         stage: task.stage,
+        stalled: task.lastOutcome === "stalled",
         tone,
         live:
           task.stage === "running" &&
@@ -181,8 +197,10 @@ export function buildGoalGraph(input: {
         projectId: task.projectId,
         pmThreadId: task.entry.summary.pmThreadId,
       };
-    })
-    .filter((task) => !input.recentOnly || task.recent);
+    });
+  const tasks = allTasks.filter(
+    (task) => task.goalIds.length > 0 && (!input.recentOnly || task.recent),
+  );
   const taskById = new Map(tasks.map((task) => [task.nodeId, task]));
   for (const task of tasks) {
     const seen = new Set([task.nodeId]);
@@ -344,7 +362,84 @@ export function buildGoalGraph(input: {
         edges.some((item) => item.from === goal.id && item.to === b.nodeId),
       ),
   );
+  const inbox = directorInbox(input.entries);
+  const cards = inbox.groups
+    .flatMap((group) => group.cards.map((card) => ({ group, card })))
+    .toSorted((a, b) => Date.parse(a.card.item.createdAt) - Date.parse(b.card.item.createdAt));
+  const waiting = inbox.groups.flatMap((group) =>
+    group.waitingThreads.map((thread) => ({ group, thread })),
+  );
+  const index = buildTaskRelationsIndex(
+    input.entries,
+    input.entries.map((entry) => ({
+      environmentId: entry.environmentId,
+      id: entry.summary.projectId,
+      title:
+        input.projectTitles?.get(projectKey(entry.environmentId, entry.summary.projectId)) ??
+        "프로젝트",
+    })),
+  );
+  const runningProjects = input.entries.flatMap((entry) => {
+    const tasks = allTasks.filter(
+      (task) =>
+        task.environmentId === entry.environmentId &&
+        task.projectId === entry.summary.projectId &&
+        (task.stage === "running" ||
+          task.stage === "in_review" ||
+          (task.stalled && !finished(task.stage))),
+    );
+    return tasks.length === 0
+      ? []
+      : [
+          {
+            ...entry,
+            tasks,
+            title:
+              input.projectTitles?.get(projectKey(entry.environmentId, entry.summary.projectId)) ??
+              "프로젝트",
+          },
+        ];
+  });
+  const epics = input.entries
+    .filter((entry) => entry.summary.kind === "director")
+    .flatMap((entry) =>
+      entry.summary.tasks
+        .filter(
+          (task) =>
+            task.stage !== "done" && task.stage !== "cancelled" && task.stage !== "proposed",
+        )
+        .map((task) => {
+          const relations = taskRelations(index, entry.environmentId, task.id);
+          const children = relations.subtasks.map((child) => ({
+            ...child,
+            status: resolveProjectTaskStatus(child.task, {
+              openQuestion: child.task.openQuestion,
+              openBlocker: child.task.openBlocker,
+              leadRunning: false,
+              leadFailed: false,
+            }),
+            blockedBy: taskRelations(index, child.environmentId, child.task.id).blockedBy,
+          }));
+          const counts = new Map<ProjectTaskStatus, number>();
+          for (const child of children) {
+            counts.set(child.status, (counts.get(child.status) ?? 0) + 1);
+          }
+          const allChildren = index.childrenOf.get(`${entry.environmentId}\u0000${task.id}`) ?? [];
+          return {
+            ...entry,
+            task,
+            children,
+            counts: [...counts],
+            progress: relations.progress,
+            blockedBy: relations.blockedBy,
+            cancelled: allChildren.filter((child) => child.task.stage === "cancelled").length,
+          };
+        }),
+    );
   return {
+    attention: { cards, waiting, total: inbox.total },
+    runningProjects,
+    epics,
     goals,
     projects,
     tasks,

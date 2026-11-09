@@ -300,14 +300,10 @@ it("opens the desktop workspace on entry, switches graph and map, and respects c
   );
 });
 
-it("redirects the old URL and keeps mobile chat first until the header opens the sheet", async () => {
+it("redirects the old URL and opens the workspace sheet on mobile entry", async () => {
   await page.viewport(390, 844);
   const router = await open("/all-projects");
   await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/director-thread"));
-  expect(document.querySelector('[role="dialog"][data-open]')).toBeNull();
-  expect(page.getByRole("button", { name: "전체 프로젝트", exact: true }).element()).toBeTruthy();
-  await page.screenshot({ path: "../../../.screenshots/bu99-director-mobile-chat.png" });
-  await userEvent.click(page.getByRole("button", { name: "전체 프로젝트", exact: true }));
   await vi.waitFor(() =>
     expect(
       document.querySelector('[role="dialog"] [data-testid="director-workspace-surface"]'),
