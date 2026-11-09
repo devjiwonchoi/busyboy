@@ -124,6 +124,9 @@ const handlers = {
   goal_link: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.goalLink(caller, input)),
   ),
+  pm_nudge: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.pmNudge(caller, input)),
+  ),
 } satisfies McpToolAccess.Handlers<typeof ProjectTeamToolkit.tools>;
 
 export const layer = McpToolAccess.toLayer(ProjectTeamToolkit, handlers);
