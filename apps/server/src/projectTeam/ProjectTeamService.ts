@@ -3151,71 +3151,80 @@ const make = Effect.gen(function* () {
       ) {
         return yield* teamError("The settings update has no fields.", projectId);
       }
-      const { manager, settings, now, previousPersona, persona } = yield* sitreps.withSettingsLock(
-        projectId,
-        Effect.gen(function* () {
-          const manager = yield* requireManager(projectId);
-          const now = yield* nowIso;
-          const previousPersona = resolvePersona(projectId, manager.settings);
-          const persona = hasPersonaChange(personaPatch)
-            ? mergePersona(previousPersona, personaPatch)
-            : previousPersona;
-          // The legacy "Auto-approve plans" key is read as AFK and never written back.
-          const {
-            quietHours: _previousQuietHours,
-            afk: _previousAfk,
-            autoApprovePlans: _legacyAutoApprove,
-            ...current
-          } = manager.settings;
-          const afk =
-            patch.afk === undefined
-              ? afkSetting(manager.settings)
-              : patch.afk === null
-                ? undefined
-                : {
-                    since: now,
-                    until:
-                      patch.afk.hours === null
-                        ? null
-                        : DateTime.formatIso(
-                            DateTime.add(DateTime.makeUnsafe(now), { hours: patch.afk.hours }),
-                          ),
-                  };
-          const quietHours =
-            patch.quietHours === undefined
-              ? manager.settings.quietHours
-              : (patch.quietHours ?? undefined);
-          const { roleModels: previousRoleModels, ...currentRest } = current;
-          const roleModels =
-            patch.roleModels === undefined
-              ? previousRoleModels
-              : applyRoleModelsPatch(previousRoleModels ?? {}, patch.roleModels);
-          const settings: ProjectTeamSettings = {
-            ...currentRest,
-            ...(roleModels === undefined || Object.keys(roleModels).length === 0
-              ? {}
-              : { roleModels }),
-            ...(patch.maxConcurrentTasks === undefined
-              ? {}
-              : { maxConcurrentTasks: patch.maxConcurrentTasks }),
-            ...(patch.sitrepIntervalMinutes === undefined
-              ? {}
-              : { sitrepIntervalMinutes: patch.sitrepIntervalMinutes }),
-            ...(patch.sitrepNotify === undefined ? {} : { sitrepNotify: patch.sitrepNotify }),
-            ...(quietHours === undefined ? {} : { quietHours }),
-            persona,
-            ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
-            ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
-            ...(patch.mergeOwner === undefined ? {} : { mergeOwner: patch.mergeOwner }),
-            ...(afk === undefined ? {} : { afk }),
-            // Only setting the interval by hand stops it adapting, for good; other fields
-            // keep the pin as is.
-            ...(patch.sitrepIntervalMinutes === undefined ? {} : { intervalPinnedAt: now }),
-          };
-          yield* repository.updateManagerSettings({ projectId, settings, now });
-          return { manager, settings, now, previousPersona, persona };
-        }),
-      );
+      const { manager, settings, now, previousPersona, persona, afkFlipped } =
+        yield* sitreps.withSettingsLock(
+          projectId,
+          Effect.gen(function* () {
+            const manager = yield* requireManager(projectId);
+            const now = yield* nowIso;
+            const previousPersona = resolvePersona(projectId, manager.settings);
+            const persona = hasPersonaChange(personaPatch)
+              ? mergePersona(previousPersona, personaPatch)
+              : previousPersona;
+            // The legacy "Auto-approve plans" key is read as AFK and never written back.
+            const {
+              quietHours: _previousQuietHours,
+              afk: _previousAfk,
+              autoApprovePlans: _legacyAutoApprove,
+              ...current
+            } = manager.settings;
+            // Repeated writes preserve the AFK window and only real transitions wake the team.
+            const previous = afkSetting(manager.settings);
+            const wasActive = afkActive(previous, Date.parse(now));
+            let afk = previous;
+            if (patch.afk === null) {
+              afk = undefined;
+            } else if (patch.afk !== undefined) {
+              const until =
+                patch.afk.hours === null
+                  ? null
+                  : DateTime.formatIso(
+                      DateTime.add(DateTime.makeUnsafe(now), { hours: patch.afk.hours }),
+                    );
+              afk =
+                wasActive && previous !== undefined
+                  ? previous.until === until
+                    ? previous
+                    : { since: previous.since, until }
+                  : { since: now, until };
+            }
+            const isActive = afkActive(afk, Date.parse(now));
+            const afkFlipped = patch.afk !== undefined && wasActive !== isActive;
+            const quietHours =
+              patch.quietHours === undefined
+                ? manager.settings.quietHours
+                : (patch.quietHours ?? undefined);
+            const { roleModels: previousRoleModels, ...currentRest } = current;
+            const roleModels =
+              patch.roleModels === undefined
+                ? previousRoleModels
+                : applyRoleModelsPatch(previousRoleModels ?? {}, patch.roleModels);
+            const settings: ProjectTeamSettings = {
+              ...currentRest,
+              ...(roleModels === undefined || Object.keys(roleModels).length === 0
+                ? {}
+                : { roleModels }),
+              ...(patch.maxConcurrentTasks === undefined
+                ? {}
+                : { maxConcurrentTasks: patch.maxConcurrentTasks }),
+              ...(patch.sitrepIntervalMinutes === undefined
+                ? {}
+                : { sitrepIntervalMinutes: patch.sitrepIntervalMinutes }),
+              ...(patch.sitrepNotify === undefined ? {} : { sitrepNotify: patch.sitrepNotify }),
+              ...(quietHours === undefined ? {} : { quietHours }),
+              persona,
+              ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
+              ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
+              ...(patch.mergeOwner === undefined ? {} : { mergeOwner: patch.mergeOwner }),
+              ...(afk === undefined ? {} : { afk }),
+              // Only setting the interval by hand stops it adapting, for good; other fields
+              // keep the pin as is.
+              ...(patch.sitrepIntervalMinutes === undefined ? {} : { intervalPinnedAt: now }),
+            };
+            yield* repository.updateManagerSettings({ projectId, settings, now });
+            return { manager, settings, now, previousPersona, persona, afkFlipped };
+          }),
+        );
       if (persona.name !== previousPersona.name) {
         yield* renameManagerThread(manager.threadId, persona.name);
       }
@@ -3256,7 +3265,7 @@ const make = Effect.gen(function* () {
           createdAt: now,
         });
       }
-      if (patch.afk !== undefined) {
+      if (afkFlipped) {
         yield* repository.appendTaskEvent({
           id: ProjectTaskEventId.make(yield* newId("project-event")),
           projectId,

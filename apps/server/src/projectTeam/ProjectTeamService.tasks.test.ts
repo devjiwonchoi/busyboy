@@ -430,17 +430,15 @@ describe("ProjectTeamService tasks as specs", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const first = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
-          startPlanning: false,
+        const first = yield* createAcceptedTask(pm, {
+          intake: "New work.",
           title: "Fix drag",
-          context: "Fix drag.",
+          request: "Fix drag.",
         });
-        const second = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
-          startPlanning: false,
+        const second = yield* createAcceptedTask(pm, {
+          intake: "New work.",
           title: "Fix drop",
-          context: "Fix drop.",
+          request: "Fix drop.",
         });
         const { leadThreadId: leadA } = yield* team.startTask(
           pm,
@@ -545,16 +543,69 @@ describe("AFK", () => {
     return events.map((event) => event.body);
   });
 
+  it.effect("wakes the PM once per real change and ignores repeats", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+
+        // Turning off an already inactive project never wakes the PM.
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: null });
+        assert.lengthOf(
+          (yield* harness.messagesTo(pm)).filter((text) => text.startsWith("[AFK]")),
+          0,
+        );
+
+        const first = yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
+        yield* TestClock.adjust("1 second");
+        const repeated = yield* team.updateSettings({
+          projectId: PROJECT_ID,
+          afk: { hours: null },
+        });
+        assert.strictEqual(repeated.settings.afk?.since, first.settings.afk?.since);
+        assert.lengthOf(
+          (yield* harness.messagesTo(pm)).filter((text) => text.startsWith("[AFK]")),
+          1,
+        );
+        assert.lengthOf(
+          (yield* journal).filter((body) => body.startsWith("AFK turned on")),
+          1,
+        );
+
+        // Changing the window while already on adds neither a wake nor a journal event.
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 8 } });
+        assert.lengthOf(
+          (yield* harness.messagesTo(pm)).filter((text) => text.startsWith("[AFK]")),
+          1,
+        );
+        assert.lengthOf(
+          (yield* journal).filter((body) => body.startsWith("AFK turned on")),
+          1,
+        );
+
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: null });
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: null });
+        assert.lengthOf(
+          (yield* harness.messagesTo(pm)).filter((text) => text.startsWith("[AFK]")),
+          2,
+        );
+        assert.lengthOf(
+          (yield* journal).filter((body) => body === "AFK turned off by you"),
+          1,
+        );
+      }),
+    ),
+  );
+
   it.effect("answers a decision card with the recommended option after the grace period", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
-          startPlanning: false,
+        const { task } = yield* createAcceptedTask(pm, {
+          intake: "New work.",
           title: "Fix drag",
-          context: "Fix drag.",
+          request: "Fix drag.",
         });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
 
@@ -627,11 +678,10 @@ describe("AFK", () => {
       Effect.gen(function* () {
         const team = yield* service;
         const pm = yield* setUpManager;
-        const { task } = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
-          startPlanning: false,
+        const { task } = yield* createAcceptedTask(pm, {
+          intake: "New work.",
           title: "Fix drag",
-          context: "Fix drag.",
+          request: "Fix drag.",
         });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
@@ -664,11 +714,10 @@ describe("AFK", () => {
         const team = yield* service;
         const pm = yield* setUpManager;
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: 1 } });
-        const { task } = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
-          startPlanning: false,
+        const { task } = yield* createAcceptedTask(pm, {
+          intake: "New work.",
           title: "Fix drag",
-          context: "Fix drag.",
+          request: "Fix drag.",
         });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* TestClock.adjust("2 hours");
@@ -714,11 +763,10 @@ describe("AFK", () => {
           },
           now: "2026-11-04T00:00:00.000Z",
         });
-        const { task } = yield* team.createTaskForUser({
-          projectId: PROJECT_ID,
-          startPlanning: false,
+        const { task } = yield* createAcceptedTask(pm, {
+          intake: "New work.",
           title: "Fix drag",
-          context: "Fix drag.",
+          request: "Fix drag.",
         });
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* team.updateTask(leadThreadId, { stage: "awaiting_approval" });
