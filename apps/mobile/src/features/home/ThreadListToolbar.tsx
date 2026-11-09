@@ -31,6 +31,7 @@ export function ThreadListToolbar(props: {
   readonly filterCustomized: boolean;
   readonly onFilterAction: NonNullable<ComponentProps<typeof Menu>["onPressAction"]>;
   readonly onOpenSettings: () => void;
+  readonly onOpenGoalMap?: () => void;
   readonly onOpenEnvironments: () => void;
   readonly sidebar?: boolean;
   readonly onLayout?: (event: LayoutChangeEvent) => void;
@@ -129,6 +130,13 @@ export function ThreadListToolbar(props: {
                 icon="magnifyingglass"
                 onPress={openSearch}
               />
+              {props.onOpenGoalMap ? (
+                <AndroidHeaderIconButton
+                  accessibilityLabel="전체 프로젝트"
+                  icon="point.3.connected.trianglepath.dotted"
+                  onPress={props.onOpenGoalMap}
+                />
+              ) : null}
               <AndroidHeaderIconButton
                 accessibilityLabel="Open settings"
                 icon="gearshape"
