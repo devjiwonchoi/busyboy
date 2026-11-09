@@ -5234,10 +5234,12 @@ export default function ChatView(props: ChatViewProps) {
   const waitingThreads = useThreadWaitingThreads(
     isServerThread && !sideChat ? routeThreadRef : null,
   );
-  const revealDecisionCardInTimeline = (cardId: string) => {
+  // Stable, so passing it during render doesn't count as reading the ref there
+  // (the React Compiler would otherwise skip all of ChatView).
+  const revealDecisionCardInTimeline = useStableCallback((cardId: string) => {
     cancelTimelineLiveFollowForUserNavigationStable();
     revealDecisionCard(legendListRef.current, cardId);
-  };
+  });
   const directorPendingActions = useDirectorPendingActions({
     threadRef: sideChat ? null : routeThreadRef,
     cards: decisionCards,
