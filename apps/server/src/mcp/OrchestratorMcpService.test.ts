@@ -25,6 +25,7 @@ import * as Result from "effect/Result";
 
 import {
   DispatchModeLimit,
+  type DispatchModeLimitValue,
   type DispatchModeRefusal,
 } from "../orchestration-v2/DispatchModeLimit.ts";
 import {
@@ -2481,6 +2482,124 @@ describe("originDefaultWorktreeStrategy", () => {
           "/repo",
         ),
       );
+    }),
+  );
+});
+
+describe("approved cross-mode messages", () => {
+  it.effect.each([
+    "missing",
+    "exact",
+    "other-target",
+    "changed-mode",
+    "runtime-downgrade",
+    "interaction-downgrade",
+  ] as const)("%s grant only sends to the exact approved target modes", (grant) =>
+    Effect.gen(function* () {
+      const parentId = ThreadId.make("thread:auto-message-parent");
+      const targetId = ThreadId.make("thread:full-access-message-target");
+      const parent = liveThreadShell(parentId, { runtimeMode: "auto" });
+      const target = liveThreadShell(targetId, {
+        ...(grant === "runtime-downgrade" || grant === "interaction-downgrade"
+          ? { runtimeMode: "auto" }
+          : {}),
+        ...(grant === "interaction-downgrade" ? { interactionMode: "plan" } : {}),
+      });
+      const sent: Array<{ readonly text: string; readonly threadId: ThreadId }> = [];
+      const interrupted: ThreadId[] = [];
+      const scope: McpInvocationScope = {
+        environmentId: EnvironmentId.make("environment:approved-send"),
+        requestNamespace: "approved-send",
+        thread: {
+          threadId: parentId,
+          providerInstanceId: parent.providerInstanceId,
+          providerSessionId: "session:approved-send",
+        },
+        client: undefined,
+        capabilities: new Set(["orchestration"]),
+        issuedAt: 1,
+      };
+      const dependencies = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: (id) => Effect.succeed(id === parentId ? parent : target),
+          getThreadRecords: () => Effect.succeed(idleThreadProjection(parent)),
+          getProjectThreadRecords: () => Effect.succeed(idleThreadProjection(target)),
+          sendToThread: (input) =>
+            Effect.sync(() => {
+              sent.push({ text: input.text, threadId: input.threadId });
+              return {
+                run: { id: RunId.make("run:approved-send"), status: "running" },
+                delivery: "started",
+              } as never;
+            }),
+          interruptThread: (input) =>
+            Effect.sync(() => {
+              interrupted.push(input.threadId);
+              return { type: "no_active_run" } as const;
+            }),
+        }),
+        ServerSettings.layerTest(),
+        Layer.mock(ProviderRegistry.ProviderRegistry)({ getProviders: Effect.succeed([]) }),
+        Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({
+          list: () => Effect.succeed([]),
+        }),
+        Layer.mock(ProjectService.ProjectService)({}),
+        Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+      );
+      const service = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+        Effect.provide(layerOrchestratorService.pipe(Layer.provide(dependencies))),
+      );
+      const dispatchLimit = {
+        runtimeMode: "auto",
+        interactionMode: "default",
+        approvedTargets:
+          grant === "missing"
+            ? []
+            : [
+                {
+                  threadId: grant === "other-target" ? parentId : targetId,
+                  runtimeMode:
+                    grant === "changed-mode" || grant === "interaction-downgrade"
+                      ? "auto"
+                      : "full-access",
+                  interactionMode: "default",
+                },
+              ],
+      } satisfies DispatchModeLimitValue;
+      const send = service
+        .sendToThread(scope, {
+          threadId: targetId,
+          message: "Summarize the project status.",
+          clientRequestId: `approved-send:${grant}`,
+        })
+        .pipe(Effect.provideService(DispatchModeLimit, dispatchLimit));
+      const interrupt = service
+        .interruptThread(scope, {
+          threadId: targetId,
+          clientRequestId: `approved-interrupt:${grant}`,
+        })
+        .pipe(Effect.provideService(DispatchModeLimit, dispatchLimit));
+      if (grant === "exact") {
+        const result = yield* send;
+        assert.equal(result.threadId, targetId);
+        assert.deepEqual(sent, [{ text: "Summarize the project status.", threadId: targetId }]);
+        yield* interrupt;
+        assert.deepEqual(interrupted, [targetId]);
+      } else {
+        const error = yield* send.pipe(Effect.flip);
+        const expectedCode =
+          grant === "interaction-downgrade"
+            ? "interaction_mode_escalation_denied"
+            : "runtime_mode_escalation_denied";
+        assert.equal(error.code, expectedCode);
+        const interruptError = yield* interrupt.pipe(Effect.flip);
+        assert.equal(interruptError.code, expectedCode);
+        assert.deepEqual(sent, []);
+        assert.deepEqual(interrupted, []);
+      }
+      assert.equal(parent.runtimeMode, "auto");
     }),
   );
 });

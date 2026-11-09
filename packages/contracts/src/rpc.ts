@@ -357,6 +357,7 @@ import {
 } from "./projectTeam.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import { BrowserRequestAnswerInput, BrowserRequestError } from "./browserRequest.ts";
+import { OperationPermissionAnswerInput, OperationPermissionError } from "./operationPermission.ts";
 import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
@@ -514,6 +515,7 @@ export const WS_METHODS = {
   scheduledTasksRotateWebhookToken: "scheduledTasks.rotateWebhookToken",
   secretsAnswerRequest: "secrets.answerRequest",
   browserRequestsAnswer: "browserRequests.answer",
+  operationPermissionsAnswer: "operationPermissions.answer",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
 
@@ -1793,6 +1795,11 @@ const WsBrowserRequestsAnswerRpc = Rpc.make(WS_METHODS.browserRequestsAnswer, {
   error: Schema.Union([BrowserRequestError, EnvironmentAuthorizationError]),
 });
 
+const WsOperationPermissionsAnswerRpc = Rpc.make(WS_METHODS.operationPermissionsAnswer, {
+  payload: OperationPermissionAnswerInput,
+  error: Schema.Union([OperationPermissionError, EnvironmentAuthorizationError]),
+});
+
 const WsScheduledTasksListWebhookDeliveriesRpc = Rpc.make(
   WS_METHODS.scheduledTasksListWebhookDeliveries,
   {
@@ -1957,6 +1964,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsScheduledTasksRotateWebhookTokenRpc,
   WsSecretsAnswerRequestRpc,
   WsBrowserRequestsAnswerRpc,
+  WsOperationPermissionsAnswerRpc,
   WsScheduledTasksListWebhookDeliveriesRpc,
   WsScheduledTasksGetWebhookDeliveryRpc,
   WsProjectTeamSubscribeAttentionRpc,

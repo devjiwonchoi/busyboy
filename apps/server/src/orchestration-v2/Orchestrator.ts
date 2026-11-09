@@ -107,7 +107,12 @@ import * as EffectOutbox from "./EffectOutbox.ts";
 import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
-import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
+import {
+  DispatchModeLimit,
+  approvedDispatchTargetModeMismatch,
+  exceededDispatchModeLimit,
+  isApprovedDispatchTarget,
+} from "./DispatchModeLimit.ts";
 import {
   applyToProjection,
   emptyProjection,
@@ -477,6 +482,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "secret_request.record":
     case "computer_use_app_request.record":
     case "browser_request.record":
+    case "operation_permission.record":
       return command.threadId;
     case "thread.fork":
     case "thread.merge_back":
@@ -607,7 +613,7 @@ function latestStableRun(
   );
 }
 
-function runForSourcePoint(
+export function runForSourcePoint(
   projection: Pick<OrchestrationV2ThreadProjection, "runs" | "checkpoints">,
   sourcePoint: Extract<
     OrchestrationV2Command,
@@ -3302,7 +3308,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       },
     ) {
       const limit = yield* DispatchModeLimit;
-      const exceeded = limit === undefined ? undefined : exceededDispatchModeLimit(limit, modes);
+      if (limit !== undefined && isApprovedDispatchTarget(limit, threadId, modes)) {
+        return;
+      }
+      const exceeded =
+        limit === undefined
+          ? undefined
+          : (approvedDispatchTargetModeMismatch(limit, threadId, modes) ??
+            exceededDispatchModeLimit(limit, modes));
       if (limit === undefined || exceeded === undefined) return;
       const refusal = {
         threadId,
@@ -7205,6 +7218,138 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchOperationPermissionRecord = Effect.fn(
+    "orchestrationV2.dispatch.operationPermissionRecord",
+  )(function* (
+    command: Extract<
+      OrchestrationV2InternalCommand,
+      { readonly type: "operation_permission.record" }
+    >,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(command.threadId, ["runs", "turnItems", "attempts", "providerTurns"], {
+        messageRoles: [],
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    const run = projection.runs.find((candidate) => candidate.id === command.runId);
+    const reject = (cause: string) =>
+      new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause,
+      });
+    if (run === undefined || run.rootNodeId !== command.nodeId) {
+      return yield* reject("The permission request does not belong to this run's root node.");
+    }
+    const existing = projection.turnItems.find((item) => item.id === command.turnItemId);
+    if (existing !== undefined && existing.type !== "operation_permission") {
+      return yield* reject("The turn item is not an operation permission request.");
+    }
+    const now = yield* DateTime.now;
+    const expiresAt = Date.parse(command.expiresAt);
+    if (!Number.isFinite(expiresAt)) {
+      return yield* reject("The permission request has an invalid expiration time.");
+    }
+    const status = command.permissionStatus;
+    if (existing === undefined) {
+      if (
+        status !== "pending" ||
+        !isBlockingRun(run) ||
+        projection.thread.archivedAt !== null ||
+        projection.thread.deletedAt !== null
+      ) {
+        return yield* reject("Only an active run can open a pending permission request.");
+      }
+      if (expiresAt <= DateTime.toEpochMillis(now)) {
+        return yield* reject("The permission request has expired.");
+      }
+    } else {
+      if (
+        existing.runId !== command.runId ||
+        existing.nodeId !== command.nodeId ||
+        existing.operation !== command.operation ||
+        existing.summary !== command.summary ||
+        existing.reason !== command.reason ||
+        existing.targetDescription !== command.targetDescription ||
+        existing.fingerprint !== command.fingerprint ||
+        existing.expiresAt !== command.expiresAt
+      ) {
+        return yield* reject("The permission request's approved operation cannot change.");
+      }
+      const allowed =
+        existing.permissionStatus === "pending"
+          ? ["approved", "declined", "cancelled", "expired"]
+          : existing.permissionStatus === "approved"
+            ? ["consumed", "cancelled", "expired"]
+            : existing.permissionStatus === "consumed"
+              ? ["succeeded", "failed"]
+              : [];
+      if (!allowed.includes(status)) {
+        return yield* reject("The permission request cannot make this state transition.");
+      }
+      if (
+        (status === "approved" || status === "consumed") &&
+        (!isBlockingRun(run) ||
+          projection.thread.archivedAt !== null ||
+          projection.thread.deletedAt !== null ||
+          expiresAt <= DateTime.toEpochMillis(now))
+      ) {
+        return yield* reject("The permission request's run stopped or its approval expired.");
+      }
+    }
+    const pending = status === "pending" || status === "approved";
+    const turnItem: OrchestrationV2TurnItem = {
+      id: command.turnItemId,
+      threadId: command.threadId,
+      runId: command.runId,
+      nodeId: command.nodeId,
+      providerThreadId: run.providerThreadId,
+      providerTurnId: providerTurnForRun(projection, run)?.id ?? null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: existing?.ordinal ?? (yield* nextTurnItemOrdinal(projection)),
+      status:
+        status === "consumed"
+          ? "running"
+          : pending
+            ? "waiting"
+            : status === "succeeded"
+              ? "completed"
+              : status === "failed"
+                ? "failed"
+                : "cancelled",
+      title: "실행 승인",
+      startedAt: existing?.startedAt ?? now,
+      completedAt: pending || status === "consumed" ? null : now,
+      updatedAt: now,
+      type: "operation_permission",
+      operation: command.operation,
+      summary: command.summary,
+      reason: command.reason,
+      targetDescription: command.targetDescription,
+      fingerprint: command.fingerprint,
+      expiresAt: command.expiresAt,
+      permissionStatus: status,
+    };
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      runId: command.runId,
+      nodeId: command.nodeId,
+      providerInstanceId: run.providerInstanceId,
+      occurredAt: now,
+      payload: turnItem,
+    });
+  });
+
   const dispatchRuntimeRequestRespond = (
     command: Extract<OrchestrationV2Command, { readonly type: "runtime-request.respond" }>,
     events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
@@ -10830,6 +10975,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "browser_request.record":
         yield* dispatchBrowserRequestRecord(command, events);
+        break;
+      case "operation_permission.record":
+        yield* dispatchOperationPermissionRecord(command, events);
         break;
       default:
         return yield* dispatchUnsupported(command);

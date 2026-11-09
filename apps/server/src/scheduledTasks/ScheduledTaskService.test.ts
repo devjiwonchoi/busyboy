@@ -3,7 +3,7 @@ import * as NodeUtil from "node:util";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { ScheduledTaskError } from "@t3tools/contracts";
+import { ScheduledTaskError, ScheduledTaskId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -57,6 +57,67 @@ const insertRow = (
     last_run_error: null,
     run_count: 0,
   })}`;
+
+it.effect("manual execution rejects changed approval snapshots without starting a run", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const now = "2026-09-09T12:00:00.000Z";
+    const id = ScheduledTaskId.make("approved-manual");
+    yield* insertRow(sql, { id, next: null, enabled: 0, status: "never" }, now);
+    const launched: Array<ThreadLaunchService.ThreadLaunchInput> = [];
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const dependencies = Layer.mergeAll(
+          Layer.mock(ThreadLaunchService.ThreadLaunchService)({
+            launch: (input) =>
+              Effect.sync(() => {
+                launched.push(input);
+                return {} as never;
+              }),
+          }),
+          Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          NodeCrypto.layer,
+          Scheduler.layer,
+        );
+        const service = yield* ScheduledTaskService.ScheduledTaskService.pipe(
+          Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(dependencies))),
+        );
+        const expectedTask = (yield* service.list()).tasks[0]!;
+        for (const column of ["prompt", "runtime_mode", "thread_id"] as const) {
+          const changed =
+            column === "prompt"
+              ? "Changed prompt"
+              : column === "runtime_mode"
+                ? "auto"
+                : "another-thread";
+          yield* sql`UPDATE scheduled_tasks SET ${sql(column)} = ${changed} WHERE task_id = ${id}`;
+          const exit = yield* service.runNow({ id, expectedTask }).pipe(Effect.exit);
+          assert.equal(exit._tag, "Failure");
+          assert.equal(launched.length, 0);
+          const rows = yield* sql<{
+            last_run_status: string;
+            run_count: number;
+          }>`SELECT last_run_status, run_count FROM scheduled_tasks WHERE task_id = ${id}`;
+          assert.equal(rows[0]?.last_run_status, "never");
+          assert.equal(rows[0]?.run_count, 0);
+          const original =
+            column === "prompt"
+              ? expectedTask.prompt
+              : column === "runtime_mode"
+                ? expectedTask.runtimeMode
+                : expectedTask.threadId;
+          yield* sql`UPDATE scheduled_tasks SET ${sql(column)} = ${original} WHERE task_id = ${id}`;
+        }
+        const result = yield* service.runNow({ id, expectedTask });
+        assert.equal(launched.length, 1);
+        assert.equal(launched[0]?.runtimeMode, "full-access");
+        assert.equal(launched[0]?.initialMessage?.text, expectedTask.prompt);
+        assert.equal(result.task.lastRunStatus, "succeeded");
+      }),
+    );
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
 
 it.effect("loads only due tasks and skips corrupt due rows without decoding settled tasks", () =>
   Effect.gen(function* () {

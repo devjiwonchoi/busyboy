@@ -124,6 +124,7 @@ import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as ProjectTeam from "./projectTeam/ProjectTeamService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as BrowserRequests from "./browserRequests/BrowserRequests.ts";
+import * as OperationPermissions from "./permissions/OperationPermissions.ts";
 import {
   archivedShellStreamItemFromThreadShell,
   buildActiveShellSnapshot,
@@ -1196,6 +1197,7 @@ const layerWsRpc = (
       const projectTeam = yield* ProjectTeam.ProjectTeamService;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const browserRequests = yield* BrowserRequests.BrowserRequests;
+      const operationPermissions = yield* OperationPermissions.OperationPermissions;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
@@ -2109,6 +2111,10 @@ const layerWsRpc = (
         [WS_METHODS.browserRequestsAnswer]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(browserRequests.answer(input)),
+          ),
+        [WS_METHODS.operationPermissionsAnswer]: (input) =>
+          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
+            Effect.andThen(operationPermissions.answer(input)),
           ),
         [WS_METHODS.scheduledTasksListWebhookDeliveries]: (input) =>
           Effect.annotateCurrentSpan({ "scheduled_task.id": input.id }).pipe(

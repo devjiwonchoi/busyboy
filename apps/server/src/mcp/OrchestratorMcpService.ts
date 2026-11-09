@@ -80,6 +80,8 @@ import {
 } from "@t3tools/provider-core/server/subagentProjection";
 import {
   DispatchModeLimit,
+  approvedDispatchTargetModeMismatch,
+  isApprovedDispatchTarget,
   type DispatchModeRefusal,
 } from "../orchestration-v2/DispatchModeLimit.ts";
 import { runOutcome } from "../orchestration-v2/RestartBackgroundNote.ts";
@@ -656,6 +658,22 @@ export function resolveInteractionMode(
     : Effect.succeed(resolved);
 }
 
+const hasCurrentApprovedDispatchTarget = Effect.fn("mcp.hasCurrentApprovedDispatchTarget")(
+  function* (thread: Pick<OrchestrationV2ThreadShell, "id" | "runtimeMode" | "interactionMode">) {
+    const limit = yield* DispatchModeLimit;
+    const mismatch = approvedDispatchTargetModeMismatch(limit, thread.id, thread);
+    if (mismatch !== undefined) {
+      return yield* failure(
+        mismatch === "runtime"
+          ? "runtime_mode_escalation_denied"
+          : "interaction_mode_escalation_denied",
+        `The approved target's ${mismatch} mode changed. Request approval again.`,
+      );
+    }
+    return isApprovedDispatchTarget(limit, thread.id, thread);
+  },
+);
+
 function stablePart(value: string): string {
   return encodeURIComponent(value);
 }
@@ -888,6 +906,8 @@ function turnItemText(item: OrchestrationV2TurnItem): string | null {
       return item.requestKind === "sign_in"
         ? `Asked the user to sign in to ${item.origin ?? "a site"}: ${item.browserStatus}.`
         : `Asked to read browsing history: ${item.browserStatus}.`;
+    case "operation_permission":
+      return `${item.operation}: ${item.summary}\n${item.targetDescription}\n${item.permissionStatus}`;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":
@@ -2627,7 +2647,9 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const { parent, limits, target } = yield* loadScopedThread(scope, input.threadId);
         yield* assertLiveCallerForOtherThread(scope, parent, target);
-        yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        if (!(yield* hasCurrentApprovedDispatchTarget(target.thread))) {
+          yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        }
         yield* resolveInteractionMode(limits.interactionMode, target.thread.interactionMode);
 
         const mode = input.mode ?? "auto";
@@ -2700,7 +2722,9 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const { parent, limits, target } = yield* loadScopedThread(scope, input.threadId);
         yield* assertLiveCallerForOtherThread(scope, parent, target);
-        yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        if (!(yield* hasCurrentApprovedDispatchTarget(target.thread))) {
+          yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        }
         yield* resolveInteractionMode(limits.interactionMode, target.thread.interactionMode);
         const key = yield* requestKey(input.clientRequestId);
         const result = yield* threadManagement

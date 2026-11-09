@@ -54,6 +54,7 @@ import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as BrowserRequests from "../browserRequests/BrowserRequests.ts";
+import * as OperationPermissions from "../permissions/OperationPermissions.ts";
 
 export const layerEventInfrastructure = Layer.mergeAll(
   OrchestrationEventStore.layer,
@@ -286,6 +287,9 @@ const layerSecretRequestsProvided = SecretRequests.layer.pipe(
 const layerBrowserRequestsProvided = BrowserRequests.layer.pipe(
   Layer.provide(layerThreadManagementProvided),
 );
+const layerOperationPermissionsProvided = OperationPermissions.layer.pipe(
+  Layer.provide(layerThreadManagementProvided),
+);
 const layerScheduledTaskProvided = ScheduledTaskService.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
@@ -370,6 +374,7 @@ export const layerProduction = Layer.mergeAll(
   layerScheduledTaskProvided,
   layerSecretRequestsProvided,
   layerBrowserRequestsProvided,
+  layerOperationPermissionsProvided,
   UsageLimitRecoveryWorker.layer.pipe(
     Layer.provide(Layer.mergeAll(ProjectionStore.layer, layerThreadManagementProvided)),
   ),

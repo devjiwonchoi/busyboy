@@ -110,6 +110,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.projectTeamSetTaskRoleModels]: "projectTeam",
   [WS_METHODS.secretsAnswerRequest]: "secrets",
   [WS_METHODS.browserRequestsAnswer]: "browser",
+  [WS_METHODS.operationPermissionsAnswer]: "orchestrationV2",
 
   [WS_METHODS.pullRequestsList]: "pull-requests",
   [WS_METHODS.pullRequestsListStats]: "pull-requests",

@@ -17,6 +17,7 @@ import {
   TurnItemId,
   type OrchestrationV2ProjectedTurnItem,
   type OrchestrationV2ThreadShell,
+  type OrchestrationV2Command,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
@@ -34,10 +35,16 @@ import {
 
 import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../../config.ts";
+import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as ProviderAdapterRegistry from "../../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ThreadLaunchService from "../../orchestration-v2/ThreadLaunchService.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
+import {
+  OperationPermissions,
+  type OperationPermissionRequest,
+} from "../../permissions/OperationPermissions.ts";
+import * as ThreadCommandExecutor from "../../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadSearch from "../../orchestration-v2/ThreadSearch.ts";
 import * as PreviewBrowser from "../../preview/PreviewBrowser.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
@@ -378,6 +385,50 @@ it("keeps MCP preference output allowlisted and Unicode-bounded", () => {
   });
 });
 
+it.effect("an auto caller cannot change environment preferences without user approval", () => {
+  const writes: Array<unknown> = [];
+  return Effect.gen(function* () {
+    const server = yield* McpServer.McpServer;
+    const result = yield* server
+      .callTool({
+        name: "t3_environment_preferences_update",
+        arguments: { newWorktreesStartFromOrigin: true },
+      })
+      .pipe(
+        Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
+        Effect.provideService(McpSchema.McpServerClient, client),
+      );
+    // This narrow host has no approval service, so the write must remain blocked.
+    expect(declaredFailure(result)).toMatchObject({ code: "capability_denied" });
+    expect(writes).toEqual([]);
+  }).pipe(
+    Effect.provide(
+      McpHttpServer.layerEnvironmentToolkit.pipe(
+        Layer.provideMerge(McpServer.McpServer.layer),
+        Layer.provide(
+          Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadShell: () =>
+              Effect.succeed(
+                McpToolAccessTestkit.liveThreadShell(threadId, { runtimeMode: "auto" }),
+              ),
+          }),
+        ),
+        Layer.provide(Layer.mock(ServerEnvironment.ServerEnvironment)({})),
+        Layer.provide(Layer.mock(ThreadCommandExecutor.ThreadCommandExecutor)({})),
+        Layer.provide(
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            updateSettings: (patch) =>
+              Effect.sync(() => {
+                writes.push(patch);
+                return DEFAULT_SERVER_SETTINGS;
+              }),
+          }),
+        ),
+      ),
+    ),
+  );
+});
+
 it.effect("resolves reused attachment references from stored metadata", () =>
   Effect.gen(function* () {
     const stored = ChatImageAttachment.make({
@@ -403,6 +454,15 @@ it.effect("resolves reused attachment references from stored metadata", () =>
     });
     const result = yield* AttachmentHandlers.resolveAttachmentReferences([forged], [stored]);
     expect(result).toEqual([stored]);
+    const changed = yield* AttachmentHandlers.resolveAttachmentReferences(
+      result,
+      [{ ...stored, name: "changed-after-approval.png" }],
+      true,
+    ).pipe(Effect.flip);
+    expect(changed.code).toBe("invalid_request");
+    expect(yield* AttachmentHandlers.resolveAttachmentReferences(result, [stored], true)).toEqual(
+      result,
+    );
     const failure = yield* AttachmentHandlers.resolveAttachmentReferences(
       [{ ...forged, id: "other-image" }],
       [stored],
@@ -884,3 +944,88 @@ it.effect("only the caller that prepared a pending upload can discard it", () =>
     ),
   ),
 );
+
+for (const operation of ["t3_thread_fork", "t3_thread_merge_back"] as const) {
+  it.effect(`${operation} pins the latest stable run before requesting approval`, () => {
+    const callerId = ThreadId.make("thread:context-caller");
+    const sourceId = ThreadId.make("thread:context-source");
+    const targetId = ThreadId.make("thread:context-target");
+    const approvedRunId = RunId.make("run:approved-context");
+    const laterRunId = RunId.make("run:later-context");
+    const caller = McpToolAccessTestkit.liveThreadShell(callerId, { runtimeMode: "auto" });
+    const source = McpToolAccessTestkit.liveThreadShell(sourceId);
+    const target = McpToolAccessTestkit.liveThreadShell(targetId, { runtimeMode: "auto" });
+    const shells = new Map([
+      [callerId, caller],
+      [sourceId, source],
+      [targetId, target],
+    ]);
+    const commands: OrchestrationV2Command[] = [];
+    const approvals: OperationPermissionRequest[] = [];
+    let latestRunId = approvedRunId;
+    const management = Layer.mock(ThreadManagement.ThreadManagementService)({
+      getThreadShell: (id) => Effect.succeed(shells.get(id) ?? null),
+      getProjectThreadRecords: ({ threadId }) =>
+        Effect.sync(() => ({
+          ...McpToolAccessTestkit.idleThreadProjection(shells.get(threadId)!),
+          runs: [
+            { id: latestRunId, ordinal: 1, status: "completed", checkpointId: "checkpoint:stable" },
+          ] as never,
+        })),
+      dispatch: (command) =>
+        Effect.sync(() => {
+          commands.push(command as OrchestrationV2Command);
+          return { sequence: 7, storedEvents: [] };
+        }),
+    });
+    const permissions = Layer.mock(OperationPermissions)({
+      withPermission: (_scope, request, effect) =>
+        Effect.sync(() => {
+          approvals.push(request);
+          // The source finishes another run while the user reviews the original context.
+          latestRunId = laterRunId;
+        }).pipe(Effect.andThen(effect)),
+    });
+    return Effect.gen(function* () {
+      const server = yield* McpServer.McpServer;
+      const result = yield* server
+        .callTool({
+          name: operation,
+          arguments: {
+            ...(operation === "t3_thread_fork"
+              ? { threadId: sourceId }
+              : { sourceThreadId: sourceId, targetThreadId: targetId }),
+            sourcePoint: { type: "latest_stable" },
+          },
+        })
+        .pipe(
+          Effect.provideService(McpInvocationContext.McpInvocationContext, {
+            ...clientScope("auto"),
+            client: undefined,
+            thread: {
+              threadId: callerId,
+              providerInstanceId: caller.providerInstanceId,
+              providerSessionId: "session:context",
+            },
+          }),
+          Effect.provideService(McpSchema.McpServerClient, client),
+        );
+      expect(result.isError).toBe(false);
+      expect(approvals).toHaveLength(1);
+      expect(approvals[0]?.summary.includes(approvedRunId)).toBe(true);
+      expect(approvals[0]?.summary.includes("latest_stable")).toBe(false);
+      expect(commands).toHaveLength(1);
+      expect(commands[0]).toMatchObject({ sourcePoint: { type: "run", runId: approvedRunId } });
+      expect(latestRunId).toBe(laterRunId);
+    }).pipe(
+      Effect.provide(
+        layerThreadToolkit.pipe(
+          Layer.provideMerge(McpServer.McpServer.layer),
+          Layer.provide(management),
+          Layer.provide(permissions),
+          Layer.provide(NodeCrypto.layer),
+        ),
+      ),
+    );
+  });
+}
