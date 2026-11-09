@@ -40,6 +40,7 @@ export interface ComputerUseSettingValues {
 export interface ComputerUseSettingsViewProps {
   /** Null until the first status arrives and says whether this Mac can run it. */
   readonly supported: boolean | null;
+  readonly canGrantOnThisDevice: boolean;
   readonly settings: ComputerUseSettingValues;
   readonly status: ComputerUseSettingsStatus | null;
   readonly onUpdate: (patch: ServerSettingsPatch) => void;
@@ -52,16 +53,20 @@ export interface ComputerUseSettingsViewProps {
 }
 
 /**
- * Desktop app on a Mac, with a desktop backend that is not on an older macOS.
- * Null while a Mac desktop app still waits for its first status.
+ * Desktop clients require a Mac; browsers use the connected server’s report.
+ * Null until the first server status arrives.
  */
 export function isComputerUseSupported(input: {
   readonly isElectron: boolean;
   readonly platform: string;
   readonly status: ComputerUseSettingsStatus | null;
 }): boolean | null {
-  if (!input.isElectron || !isMacPlatform(input.platform)) return false;
-  if (input.status === null) return null;
+  if (input.isElectron && !isMacPlatform(input.platform)) {
+    return false;
+  }
+  if (input.status === null) {
+    return null;
+  }
   return input.status.available && input.status.helper.reason !== "unsupported_platform";
 }
 
@@ -125,6 +130,7 @@ function PermissionRow({
 
 export function ComputerUseSettingsView({
   supported,
+  canGrantOnThisDevice,
   settings,
   status,
   onUpdate,
@@ -135,7 +141,7 @@ export function ComputerUseSettingsView({
   now: nowProp,
 }: ComputerUseSettingsViewProps) {
   if (supported === null) {
-    // Neutral until we know, so older macOS never flashes the full section.
+    // Neutral until we know, so an unsupported server never flashes the full section.
     return (
       <SettingsSection id="computer-use" title="Computer Use">
         <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">Checking…</p>
@@ -156,6 +162,24 @@ export function ComputerUseSettingsView({
   const permissions = status?.permissions ?? null;
   const screenRecording = permissions === null ? null : permissions.screenRecording === "granted";
   const urls = status?.settingsUrls;
+  // The first missing grant is actionable; subsequent grants wait their turn.
+  const steps = [
+    {
+      kind: "accessibility",
+      title: "손쉬운 사용(Accessibility)",
+      hint: "앱 창을 읽고 조작하려면 필요해요",
+      granted: permissions?.accessibility === "granted",
+      urlKey: "accessibility",
+    },
+    {
+      kind: "screen_recording",
+      title: "화면 기록(Screen Recording)",
+      hint: "창 스크린샷에 필요해요",
+      granted: screenRecording === true,
+      urlKey: "screenRecording",
+    },
+  ] as const;
+  const currentStep = steps.findIndex((step) => !step.granted);
   const helper = status?.helper ?? null;
   const now = nowProp ?? Date.now();
   // Expired grants no longer count, so they are not listed.
@@ -177,36 +201,72 @@ export function ComputerUseSettingsView({
       />
       {enabled ? (
         <>
-          <p className="px-3 py-2 text-xs text-muted-foreground sm:px-4">
-            These grants appear in System Settings as “BusyBoy Computer Use”, not BusyBoy.
-          </p>
-          <PermissionRow
-            title="Accessibility"
-            description="Required. Lets BusyBoy read and operate app windows."
-            ok={permissions === null ? null : permissions.accessibility === "granted"}
-            okLabel="Granted"
-            missingLabel="Not granted"
-            showActions={urls !== undefined}
-            onRequest={() => onRequestPermission("accessibility")}
-            onOpen={() => urls && onOpenSystemSettings(urls.accessibility)}
-          />
-          <PermissionRow
-            title="Screen Recording"
-            description="Optional. Only needed for window screenshots."
-            ok={screenRecording}
-            okLabel="Granted"
-            missingLabel="Not granted"
-            showActions={urls !== undefined}
-            onRequest={() => onRequestPermission("screen_recording")}
-            onOpen={() => urls && onOpenSystemSettings(urls.screenRecording)}
-          />
+          <div className="space-y-3 px-3 py-3 sm:px-4">
+            <h3 className="text-sm font-medium">처음 설정</h3>
+            <p className="text-xs text-muted-foreground">
+              시스템 설정에서 “BusyBoy Computer Use”에 아래 권한을 차례로 허용해 주세요.
+            </p>
+            <ol aria-label="처음 설정" className="space-y-3">
+              {steps.map((step, index) => {
+                const current = permissions !== null && index === currentStep;
+                return (
+                  <li
+                    key={step.kind}
+                    aria-current={current ? "step" : undefined}
+                    className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-medium">
+                        <span aria-hidden="true">{step.granted ? "✓" : `${index + 1}.`}</span>{" "}
+                        {step.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{step.hint}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {permissions === null
+                          ? "확인 중…"
+                          : step.granted
+                            ? "허용됨"
+                            : current
+                              ? "현재 단계"
+                              : "대기 중"}
+                      </p>
+                    </div>
+                    {permissions !== null && !step.granted ? (
+                      canGrantOnThisDevice ? (
+                        current && urls !== undefined ? (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            className="self-start sm:self-auto"
+                            onClick={() => {
+                              onRequestPermission(step.kind);
+                              onOpenSystemSettings(urls[step.urlKey]);
+                            }}
+                          >
+                            열기
+                          </Button>
+                        ) : null
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Mac에서 허용 필요</span>
+                      )
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+            {permissions !== null && currentStep === -1 ? (
+              <p role="status" className="text-xs text-success-foreground">
+                설정 완료 — 에이전트가 Mac 앱을 쓸 수 있어요
+              </p>
+            ) : null}
+          </div>
           <PermissionRow
             title="Stop with Esc"
             description="Press Esc, or use the app yourself, to stop the agent. Needs Input Monitoring."
             ok={permissions === null ? null : permissions.stopMonitor === "available"}
             okLabel="Available"
             missingLabel="Unavailable"
-            showActions={urls !== undefined}
+            showActions={canGrantOnThisDevice && urls !== undefined}
             onRequest={() => onRequestPermission("input_monitoring")}
             onOpen={() => urls && onOpenSystemSettings(urls.inputMonitoring)}
           />
@@ -321,19 +381,18 @@ export function ComputerUseSettings() {
   const readStatusRef = useRef(readStatus);
   readStatusRef.current = readStatus;
   const enabled = settings.enableAgentComputerUse;
-  const platformOk = isElectron && isMacPlatform(navigator.platform);
+  const canGrantOnThisDevice = isElectron && isMacPlatform(navigator.platform);
+  const canReadStatus = !isElectron || canGrantOnThisDevice;
 
   useEffect(() => {
-    if (environmentId === null || !platformOk) return;
+    if (environmentId === null || !canReadStatus) return;
     let cancelled = false;
     // Opening or focusing settings starts the helper so its grants show; the
     // poll only reads, so an open settings page never keeps the helper awake.
     const refresh = (start: boolean) => {
-      void readStatusRef
-        .current({ environmentId, input: start ? { start } : {} })
-        .then((result) => {
-          if (!cancelled && result._tag === "Success") setStatus(result.value);
-        });
+      void readStatusRef.current({ environmentId, input: { start } }).then((result) => {
+        if (!cancelled && result._tag === "Success") setStatus(result.value);
+      });
     };
     const refreshAndStart = () => refresh(true);
     refreshAndStart();
@@ -344,11 +403,12 @@ export function ComputerUseSettings() {
       window.clearInterval(interval);
       window.removeEventListener("focus", refreshAndStart);
     };
-  }, [environmentId, platformOk, enabled]);
+  }, [environmentId, canReadStatus, enabled]);
 
   return (
     <ComputerUseSettingsView
       supported={isComputerUseSupported({ isElectron, platform: navigator.platform, status })}
+      canGrantOnThisDevice={canGrantOnThisDevice}
       settings={settings}
       status={status}
       restarting={restarting}
