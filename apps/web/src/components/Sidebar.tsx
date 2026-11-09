@@ -264,7 +264,12 @@ import {
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarRowSwipe, type SidebarRowSwipeAction } from "./sidebar/SidebarRowSwipe";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
-import { selectSidebarTasksWithoutSession, SidebarTaskRow } from "./sidebar/SidebarTaskRows";
+import {
+  SidebarTaskRow,
+  SidebarTreeToggle,
+  SidebarThreadGroupRow,
+} from "./sidebar/SidebarTaskRows";
+import { sidebarTaskTree } from "./sidebar/sidebarTaskTree.logic";
 import { taskRouteParams } from "../taskRoutes";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
@@ -467,6 +472,16 @@ function useSidebarThreads(input: {
     NO_COLLAPSED_PROJECTS,
     Schema.Array(Schema.String),
   );
+  const [collapsedTaskKeyList, setCollapsedTaskKeyList] = useLocalStorage(
+    "busyboy:sidebar:collapsed-tasks",
+    NO_COLLAPSED_PROJECTS,
+    Schema.Array(Schema.String),
+  );
+  const [expandedThreadGroupKeyList, setExpandedThreadGroupKeyList] = useLocalStorage(
+    "busyboy:sidebar:expanded-thread-groups",
+    NO_COLLAPSED_PROJECTS,
+    Schema.Array(Schema.String),
+  );
   const projectManagerEntries = useProjectOnlyManagerEntries(useEnvironmentIds());
   const projectKeyByProject = new Map<string, string>(
     projectGroups.flatMap((group) =>
@@ -543,9 +558,35 @@ function useSidebarThreads(input: {
       .map((group) => group.projectKey),
     new Set(projectGroups.filter((group) => group.isScratch).map((group) => group.projectKey)),
   );
-  const activeThreads = projectSectionKeys.flatMap((projectKey) =>
-    collapsedProjectKeys.has(projectKey) ? [] : (activeThreadsByProject.get(projectKey) ?? []),
-  );
+  // Build the visible tree before navigation and sorting so collapsed descendants disappear there too.
+  const projectTaskTrees = new Map<string, ReturnType<typeof sidebarTaskTree>>();
+  const treeDepthByThreadKey = new Map<string, number>();
+  for (const [projectKey, manager] of projectManagerByProjectKey) {
+    const tree = sidebarTaskTree({
+      threads: activeThreadsByProject.get(projectKey) ?? [],
+      tasks: manager.entry.summary.tasks,
+      taskByLeadKey,
+      threadByKey: shellByKey,
+      collapsedTaskKeys: new Set(collapsedTaskKeyList),
+      expandedThreadGroupKeys: new Set(expandedThreadGroupKeyList),
+      environmentId: manager.entry.environmentId,
+    });
+    projectTaskTrees.set(projectKey, tree);
+    for (const row of tree.rows) {
+      if (row.kind === "thread") {
+        treeDepthByThreadKey.set(row.key, row.depth);
+      }
+    }
+  }
+  const activeThreads = projectSectionKeys.flatMap((projectKey) => {
+    if (collapsedProjectKeys.has(projectKey)) {
+      return [];
+    }
+    const tree = projectTaskTrees.get(projectKey);
+    return tree
+      ? tree.rows.flatMap((row) => (row.kind === "thread" ? [shellByKey.get(row.key)!] : []))
+      : (activeThreadsByProject.get(projectKey) ?? []);
+  });
 
   const visibleWorkingThreads = workingShelfExpanded
     ? workingThreads
@@ -576,6 +617,16 @@ function useSidebarThreads(input: {
     projectManagerByProjectKey,
     taskByLeadKey,
     collapsedProjectKeys,
+    projectTaskTrees,
+    treeDepthByThreadKey,
+    toggleTaskCollapsed: (key: string) =>
+      setCollapsedTaskKeyList((keys) =>
+        keys.includes(key) ? keys.filter((candidate) => candidate !== key) : [...keys, key],
+      ),
+    toggleThreadGroupExpanded: (key: string) =>
+      setExpandedThreadGroupKeyList((keys) =>
+        keys.includes(key) ? keys.filter((candidate) => candidate !== key) : [...keys, key],
+      ),
     toggleProjectCollapsed: (projectKey: string) =>
       setCollapsedProjectKeyList((keys) =>
         keys.includes(projectKey)
@@ -1434,6 +1485,8 @@ type SidebarThreadRowProps = {
   isActive: boolean;
   /** Indents the row under its project manager heading. */
   nested?: boolean | undefined;
+  depth?: number | undefined;
+  taskToggle?: { expanded: boolean; onToggle: () => void } | undefined;
   jumpLabel: string | null;
   project: EnvironmentProject | null;
   projectDisplayName: string | null;
@@ -1623,21 +1676,20 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       "bg-sidebar bg-linear-to-b from-sidebar-row-active to-sidebar-row-active text-sidebar-foreground opacity-100 shadow-lg",
   );
   const sortable = props.sortable;
-  const sortableRootProps = sortable
+  const sortableStyle = sortable
     ? {
-        ref: sortable.setNodeRef,
-        style: {
-          transform: CSS.Translate.toString(sortable.transform),
-          transition: sortable.transition,
-          // A zero-height boundary also makes dnd-kit scale the source to
-          // zero. Only projected peers use scaleY as a visibility sentinel.
-          visibility:
-            !sortable.isDragging && sortable.transform?.scaleY === 0
-              ? ("hidden" as const)
-              : undefined,
-        },
-        ...sortable.listeners,
+        transform: CSS.Translate.toString(sortable.transform),
+        transition: sortable.transition,
+        // A zero-height boundary also makes dnd-kit scale the source to
+        // zero. Only projected peers use scaleY as a visibility sentinel.
+        visibility:
+          !sortable.isDragging && sortable.transform?.scaleY === 0
+            ? ("hidden" as const)
+            : undefined,
       }
+    : undefined;
+  const sortableRootProps = sortable
+    ? { ref: sortable.setNodeRef, style: sortableStyle, ...sortable.listeners }
     : {};
   const dragDestination =
     props.dropVerb !== null ? (
@@ -1781,15 +1833,20 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   return (
     <li
       data-thread-item={threadKey}
+      data-tree-depth={props.depth ?? 0}
       {...sortableRootProps}
       {...(fileDropHandlers ?? {})}
+      style={{
+        ...sortableStyle,
+        // Lines the row's text up with the heading's project name, past the avatar, then one step per tree level.
+        ...(props.nested ? { paddingLeft: 26 + (props.depth ?? 0) * 14 } : {}),
+      }}
       className={cn(
-        "list-none py-px [content-visibility:auto] [contain-intrinsic-size:auto_34px]",
-        // Lines the row's text up with the heading's project name, past the avatar.
-        props.nested && "pl-6.5",
+        "relative list-none py-px [content-visibility:auto] [contain-intrinsic-size:auto_34px]",
         sortable?.isDragging && "relative z-20",
       )}
     >
+      {props.taskToggle ? <SidebarTreeToggle {...props.taskToggle} /> : null}
       <SidebarRowSwipe
         enabled={isMobile}
         paused={isRenaming || sortable?.isDragging}
@@ -2295,6 +2352,10 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     taskByLeadKey,
     collapsedProjectKeys,
     toggleProjectCollapsed,
+    projectTaskTrees,
+    treeDepthByThreadKey,
+    toggleTaskCollapsed,
+    toggleThreadGroupExpanded,
   } = useSidebarThreads({
     scopedProjectKeys,
     serverConfigs,
@@ -3827,12 +3888,20 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                         const threadKey = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
                         );
+                        const depth =
+                          section === "active" ? (treeDepthByThreadKey.get(threadKey) ?? 0) : 0;
+                        const task =
+                          section === "active" ? taskByLeadKey.get(threadKey) : undefined;
+                        const toggle = task
+                          ? projectTaskTrees.get(projectKeyOf(thread))?.toggles.get(task.taskId)
+                          : undefined;
                         return (
                           <SortableThreadRow
                             key={threadKey}
                             sortableId={threadKey}
                             contextDrag={isContextDrag}
                             sortableDisabled={
+                              depth > 0 ||
                               renamingThreadKey === threadKey ||
                               section === "working" ||
                               !draggableThreadKeys.has(threadKey) ||
@@ -3860,6 +3929,16 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                             nested={
                               section === "active" &&
                               projectManagerByProjectKey.has(projectKeyOf(thread))
+                            }
+                            depth={depth}
+                            taskToggle={
+                              task && toggle?.hasChildren
+                                ? {
+                                    expanded: toggle.expanded,
+                                    onToggle: () =>
+                                      toggleTaskCollapsed(`${thread.environmentId}:${task.taskId}`),
+                                  }
+                                : undefined
                             }
                             jumpLabel={
                               showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null
@@ -3904,6 +3983,12 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                       ];
                       for (const item of sidebarListItems) {
                         if (item.kind === "thread") {
+                          if (
+                            item.section === "active" &&
+                            projectTaskTrees.has(projectKeyOf(threadByKey.get(item.key)!))
+                          ) {
+                            continue;
+                          }
                           items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
                           continue;
                         }
@@ -4013,22 +4098,50 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                             );
                             if (manager && !collapsedProjectKeys.has(projectKey)) {
                               const { environmentId, summary } = manager.entry;
-                              for (const { task, depth } of selectSidebarTasksWithoutSession(
-                                summary,
-                              )) {
-                                items.push(
-                                  <SidebarTaskRow
-                                    key={`task:${environmentId}:${task.id}`}
-                                    task={task}
-                                    taskKeyPrefix={summary.taskKeyPrefix}
-                                    environmentId={environmentId}
-                                    depth={depth}
-                                    isActive={routeTaskId === task.id}
-                                    onOpen={() =>
-                                      void navigateToTask(environmentId, summary.projectId, task.id)
-                                    }
-                                  />,
-                                );
+                              const tree = projectTaskTrees.get(projectKey);
+                              for (const row of tree?.rows ?? []) {
+                                if (row.kind === "thread") {
+                                  items.push(renderThreadRow(threadByKey.get(row.key)!, "active"));
+                                } else if (row.kind === "thread-group") {
+                                  items.push(
+                                    <SidebarThreadGroupRow
+                                      key={`group:${environmentId}:${row.taskId}`}
+                                      {...row}
+                                      onToggle={() =>
+                                        toggleThreadGroupExpanded(`${environmentId}:${row.taskId}`)
+                                      }
+                                    />,
+                                  );
+                                } else {
+                                  const { task, depth } = row;
+                                  const toggle = tree?.toggles.get(task.id);
+                                  items.push(
+                                    <SidebarTaskRow
+                                      key={`task:${environmentId}:${task.id}`}
+                                      task={task}
+                                      taskKeyPrefix={summary.taskKeyPrefix}
+                                      environmentId={environmentId}
+                                      depth={depth}
+                                      toggle={
+                                        toggle?.hasChildren
+                                          ? {
+                                              expanded: toggle.expanded,
+                                              onToggle: () =>
+                                                toggleTaskCollapsed(`${environmentId}:${task.id}`),
+                                            }
+                                          : undefined
+                                      }
+                                      isActive={routeTaskId === task.id}
+                                      onOpen={() =>
+                                        void navigateToTask(
+                                          environmentId,
+                                          summary.projectId,
+                                          task.id,
+                                        )
+                                      }
+                                    />,
+                                  );
+                                }
                               }
                             }
                           }

@@ -109,6 +109,7 @@ export function makeThreadFixture(overrides: ThreadFixtureOverrides = {}): Threa
       relationshipToParent: null,
     },
     forkedFrom: overrides.forkedFrom ?? null,
+    launchedByThreadId: overrides.launchedByThreadId ?? null,
     createdBy: "user",
     creationSource: "web",
     latestRunId: overrides.latestRun?.runId ?? null,

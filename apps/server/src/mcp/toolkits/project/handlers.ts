@@ -150,6 +150,7 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
               "Pass modelSelection: the project has no default model. orchestrator_capabilities lists providers and models.",
           });
         const result = yield* ThreadMessageIntake.launchThread({
+          ...(caller === undefined ? {} : { launchedByThreadId: caller.id }),
           commandId,
           threadId,
           projectId,

@@ -83,6 +83,8 @@ export const layer: Layer.Layer<ThreadForkServiceV2> = Layer.succeed(
         }
         const targetThread: OrchestrationV2AppThread = {
           ...input.sourceProjection.thread,
+          // A fork has lineage of its own; it was not launched by the source launcher.
+          launchedByThreadId: null,
           createdBy: input.createdBy,
           creationSource: input.creationSource,
           id: input.targetThreadId,
