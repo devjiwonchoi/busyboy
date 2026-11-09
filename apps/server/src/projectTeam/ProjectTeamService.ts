@@ -4481,7 +4481,17 @@ const make = Effect.gen(function* () {
             plan: yield* approvalPlanFor(item),
           };
           return [card];
-        }),
+        }).pipe(
+          // One unreadable row (say, a spec that no longer decodes) drops only its card,
+          // not every project's summary and waiting items.
+          Effect.catch((error) =>
+            Effect.logWarning("could not read a decision card", {
+              attentionId: item.id,
+              taskId: item.taskId,
+              error,
+            }).pipe(Effect.as<ReadonlyArray<ProjectDecisionCard>>([])),
+          ),
+        ),
       ).pipe(Effect.map((cards) => cards.flat()));
     });
 

@@ -1,7 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { PLAN_APPROVAL_START, type ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Logger from "effect/Logger";
 import * as Ref from "effect/Ref";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
@@ -276,6 +278,38 @@ describe("ProjectTeamService plan gates", () => {
         const brief = yield* team.listTasks(pm, {});
         const row = brief.tasks.find((candidate) => candidate.id === task.id);
         assert.deepStrictEqual([row?.phase, row?.iterateRound, row?.shipRound], ["ship", 3, 1]);
+      }),
+    ),
+  );
+
+  it.effect("skips only the card whose spec no longer decodes, keeping the summary", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const sql = yield* SqlClient.SqlClient;
+        const pm = yield* setUpManager;
+        const healthy = yield* startLead(pm, "Healthy", harness.delegate);
+        const broken = yield* startLead(pm, "Broken", harness.delegate);
+        yield* writeReadyPlan(healthy.leadThreadId);
+        yield* writeReadyPlan(broken.leadThreadId);
+        const healthyCard = yield* askApproval(healthy.leadThreadId);
+        const brokenCard = yield* askApproval(broken.leadThreadId);
+
+        yield* sql`
+          UPDATE project_task_spec_versions SET spec_json = '{not json'
+          WHERE task_id = ${broken.task.id}
+        `;
+        const warnings: Array<unknown> = [];
+        const snapshot = yield* team.attentionSnapshot.pipe(
+          Effect.provide(Logger.layer([Logger.make(({ message }) => void warnings.push(message))])),
+        );
+
+        const cards = snapshot.projects[0]?.decisionCards.map((card) => card.item.id) ?? [];
+        assert.include(cards, healthyCard.item.id);
+        assert.notInclude(cards, brokenCard.item.id);
+        assert.isTrue(
+          warnings.some((message) => JSON.stringify(message).includes("decision card")),
+        );
       }),
     ),
   );

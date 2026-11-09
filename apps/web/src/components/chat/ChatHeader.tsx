@@ -296,7 +296,8 @@ export const ChatHeader = memo(function ChatHeader({
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"
       >
-        {activeProject ? (
+        {/* The Director's project is its own hidden folder, so its crumb would only repeat the name. */}
+        {activeProject && projectManager?.kind !== "director" ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>

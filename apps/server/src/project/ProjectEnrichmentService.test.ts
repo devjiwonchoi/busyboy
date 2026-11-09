@@ -6,7 +6,12 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
+import * as Path from "effect/Path";
 import { TestClock } from "effect/testing";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+
+import * as ServerConfig from "../config.ts";
+import { directorWorkspaceRoot } from "../projectTeam/director.ts";
 
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 
@@ -478,4 +483,75 @@ it.effect(
         assert.equal(yield* Ref.get(faviconScans), 1);
       }).pipe(Effect.provide(layer(layerMetadata)));
     }),
+);
+
+it.effect("gives system folders such as the Director's no repository identity", () =>
+  Effect.gen(function* () {
+    const layerMetadata = Layer.merge(
+      Layer.succeed(RepositoryIdentityResolver.RepositoryIdentityResolver, {
+        resolve: (workspaceRoot) => Effect.succeed(identity("/repo", workspaceRoot.length)),
+      }),
+      Layer.succeed(ProjectFaviconResolver.ProjectFaviconResolver, {
+        resolvePath: () => Effect.succeed(null),
+      }),
+    );
+
+    yield* Effect.gen(function* () {
+      const service = yield* ProjectEnrichment.ProjectEnrichmentService;
+      yield* service.request("/repo/.busyboy/director");
+      yield* service.request("/repo");
+
+      const repo = yield* waitForAvailable(
+        service,
+        "/repo",
+        (value) => value.repositoryIdentityResolved,
+      );
+      assert.isNotNull(repo.repositoryIdentity);
+
+      const director = yield* waitForAvailable(
+        service,
+        "/repo/.busyboy/director",
+        (value) => value.repositoryIdentityResolved,
+      );
+      assert.isNull(director.repositoryIdentity);
+    }).pipe(
+      Effect.provide(layer(layerMetadata, { systemWorkspaceRoots: ["/repo/.busyboy/director"] })),
+    );
+  }),
+);
+
+it.effect("wires the server's Director folder into the live layer", () =>
+  Effect.gen(function* () {
+    const metadataLayer = Layer.merge(
+      Layer.succeed(RepositoryIdentityResolver.RepositoryIdentityResolver, {
+        resolve: (workspaceRoot) => Effect.succeed(identity(workspaceRoot)),
+      }),
+      Layer.succeed(ProjectFaviconResolver.ProjectFaviconResolver, {
+        resolvePath: () => Effect.succeed(null),
+      }),
+    );
+
+    yield* Effect.gen(function* () {
+      const service = yield* ProjectEnrichment.ProjectEnrichmentService;
+      const config = yield* ServerConfig.ServerConfig;
+      const directorRoot = directorWorkspaceRoot(yield* Path.Path, config.baseDir);
+      yield* service.request(directorRoot);
+      const director = yield* waitForAvailable(
+        service,
+        directorRoot,
+        (value) => value.repositoryIdentityResolved,
+      );
+      assert.isNull(director.repositoryIdentity);
+    }).pipe(
+      Effect.provide(
+        ProjectEnrichment.layer.pipe(
+          Layer.provideMerge(metadataLayer),
+          Layer.provideMerge(
+            ServerConfig.layerTest(process.cwd(), { prefix: "enrichment-director-test-" }),
+          ),
+          Layer.provideMerge(NodeServices.layer),
+        ),
+      ),
+    );
+  }),
 );
