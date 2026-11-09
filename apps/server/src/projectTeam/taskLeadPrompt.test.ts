@@ -182,6 +182,17 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).not.toMatch(/jwn|\/[a-z-]+:[a-z-]+|plugin/i);
   });
 
+  it("tells the lead to answer side chat questions without changing the plan", () => {
+    const prompt = buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] });
+    const rule = prompt.split("\n").find((line) => line.includes('"[사용자 질문]"')) ?? "";
+    expect(rule).toContain('reply in one message per question: "[답변]" on the first line');
+    expect(rule).toContain('the question\'s "<!-- card:… -->" line copied as is');
+    expect(rule).toContain("Answer briefly");
+    expect(rule).toContain("Do not change the plan, spec, todos or code because of it.");
+    expect(rule).toContain('"변경 요청으로 보낼까요?"');
+    expect(rule).toContain("change the plan only when the user requests changes through the card");
+  });
+
   it("keeps the whole prompt stable", () => {
     expect(buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] })).toMatchSnapshot();
   });

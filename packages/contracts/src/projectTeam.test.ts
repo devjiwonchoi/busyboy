@@ -2,6 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  formatLeadQuestion,
+  parseLeadQuestion,
+  parseLeadAnswer,
   isTurnFailedBlocker,
   turnFailedReason,
   TURN_FAILED_OPTIONS,
@@ -494,6 +497,7 @@ describe("project team RPCs", () => {
       WS_METHODS.projectTeamSubscribeAttention,
       WS_METHODS.projectTeamRequestSitrep,
       WS_METHODS.projectTeamAnswerDecision,
+      WS_METHODS.projectTeamAskLead,
       WS_METHODS.projectTeamUpdateSettings,
     ]) {
       expect(WsRpcGroup.requests.has(method)).toBe(true);
@@ -681,5 +685,53 @@ describe("failed-turn blockers", () => {
       expect(isTurnFailedBlocker({ kind: "blocker", options })).toBe(false);
     }
     expect(isTurnFailedBlocker({ kind: "decision", options: TURN_FAILED_OPTIONS })).toBe(false);
+  });
+});
+
+describe("lead questions", () => {
+  it("formats a side chat question with its card and quotes and reads it back", () => {
+    const text = formatLeadQuestion({
+      cardId: "attention:1",
+      cardLabel: "플랜 승인 · BU-7 Fix login",
+      question: "왜 이렇게 해요?",
+      quotes: [
+        { section: "Summary", quote: "first line\nsecond line" },
+        { section: "", quote: "plain" },
+      ],
+    });
+    expect(text).toBe(
+      [
+        "[사용자 질문] 플랜 승인 · BU-7 Fix login",
+        "<!-- card:attention:1 -->",
+        "> [Summary] first line",
+        "> second line",
+        ">",
+        "> plain",
+        "",
+        "왜 이렇게 해요?",
+      ].join("\n"),
+    );
+    expect(parseLeadQuestion(text)).toEqual({
+      cardId: "attention:1",
+      quotes: ["[Summary] first line\nsecond line", "plain"],
+      question: "왜 이렇게 해요?",
+    });
+  });
+
+  it("ignores other messages", () => {
+    expect(parseLeadQuestion("[User answer via BusyBoy] yes")).toBeNull();
+    expect(parseLeadAnswer("Working on the tests now.")).toBeNull();
+  });
+
+  it("reads the lead's reply, including one still streaming its prefix", () => {
+    expect(parseLeadAnswer("[답변] 오늘 고쳐야 해서요.")).toEqual({
+      cardId: null,
+      text: "오늘 고쳐야 해서요.",
+    });
+    expect(parseLeadAnswer("[답변]\n<!-- card:attention:1 -->\n오늘이요.")).toEqual({
+      cardId: "attention:1",
+      text: "오늘이요.",
+    });
+    expect(parseLeadAnswer("[답")).toEqual({ cardId: null, text: "" });
   });
 });

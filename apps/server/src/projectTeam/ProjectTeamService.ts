@@ -67,6 +67,8 @@ import {
   type ProjectTeamMemoryWriteInput,
   type ProjectTeamMemoryWriteResult,
   type ProjectTeamAnswerDecisionInput,
+  type ProjectTeamAskLeadInput,
+  type ProjectTeamAskLeadResult,
   type ProjectTeamRequestSitrepInput,
   type ProjectTeamRequestSitrepResult,
   type ProjectTeamSettings,
@@ -115,6 +117,7 @@ import {
   type ProjectTeamTaskReadyInput,
   type ProjectTaskSpecVersion,
   defaultTaskKeyPrefix,
+  formatLeadQuestion,
   formatTaskKey,
   ProviderInstanceId,
   ThreadId,
@@ -231,6 +234,13 @@ const DEFAULT_TASK_SEARCH_LIMIT = 20;
 const LEAD_MESSAGE_SUMMARY_MAX_CHARS = 300;
 export const PM_RELAY_NOT_USER_WORDS =
   "Decision cards need the user's own words. Quote exactly what the user wrote in this chat after the card appeared, or let them click the card.";
+/** How a side chat question names the card it was asked from. */
+const LEAD_QUESTION_CARD_LABEL = {
+  approval: "플랜 승인",
+  decision: "결정",
+  blocker: "블로커",
+} as const;
+
 /** Where a person types: messages the user wrote in the app, not ones an agent or the server sent. */
 const USER_TYPED_SOURCES: ReadonlySet<OrchestrationV2ConversationMessage["creationSource"]> =
   new Set(["web", "mobile"]);
@@ -787,6 +797,14 @@ export class ProjectTeamService extends Context.Service<
     readonly answerDecision: (
       input: ProjectTeamAnswerDecisionInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+
+    /**
+     * projectTeam.askLead RPC: the user's question from a card's side chat, sent to the lead
+     * that raised the card. Leaves the card, the task and its plan as they are.
+     */
+    readonly askLead: (
+      input: ProjectTeamAskLeadInput,
+    ) => Effect.Effect<ProjectTeamAskLeadResult, ProjectTeamError>;
 
     readonly listMemory: (
       callerThreadId: ThreadId,
@@ -3980,6 +3998,50 @@ const make = Effect.gen(function* () {
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
 
+  const askLead: ProjectTeamService["Service"]["askLead"] = (input) =>
+    Effect.gen(function* () {
+      const manager = yield* requireManager(input.projectId);
+      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      if (Option.isNone(item) || item.value.projectId !== input.projectId) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} was not found in this project.`,
+          input.projectId,
+        );
+      }
+      if (item.value.kind === "proposal") {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is a task proposal; it has no task lead to ask.`,
+          input.projectId,
+        );
+      }
+      // The task's own lead: on a Director card the asker is the Director, not the lead.
+      const task = yield* requireAnyTask(item.value.taskId, item.value.projectId);
+      const leadThreadId = task.leadThreadId;
+      if (leadThreadId === null) {
+        return yield* teamError(`Task ${task.id} has no task lead to ask yet.`, input.projectId);
+      }
+      const key = `project-team:ask-lead:${yield* newId(item.value.id)}`;
+      yield* threads.sendToThread({
+        projectId: task.projectId,
+        commandId: CommandId.make(key),
+        threadId: leadThreadId,
+        messageId: MessageId.make(key),
+        senderThreadId: manager.threadId,
+        text: formatLeadQuestion({
+          cardId: item.value.id,
+          cardLabel: `${LEAD_QUESTION_CARD_LABEL[item.value.kind]} · ${yield* keyOf(task)} ${task.title}`,
+          question: input.question,
+          quotes: input.quotes,
+        }),
+        attachments: [],
+        mode: "auto",
+        createdBy: "user",
+        creationSource: "server",
+      });
+      yield* appendEvent(task, "note", "사용자가 카드에서 리드에게 질문했어요.", null);
+      return { messageId: key };
+    }).pipe(orTeamError("Could not send the question to the lead.", input.projectId));
+
   /**
    * Wakes the PM of every other project with an inbox task that this task just cleared:
    * all of that task's waitsOn are now in review or done. Its own PM hears it from the
@@ -4891,6 +4953,7 @@ const make = Effect.gen(function* () {
     setTaskRoleModels,
     delegateStep,
     answerDecision,
+    askLead,
     answerAttention,
     dismissAttention,
     listMemory,

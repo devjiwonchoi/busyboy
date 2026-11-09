@@ -1940,6 +1940,113 @@ export const ProjectTeamAnswerDecisionInput = Schema.Struct({
 });
 export type ProjectTeamAnswerDecisionInput = typeof ProjectTeamAnswerDecisionInput.Type;
 
+/** A plan passage the user quoted in a card's side chat. */
+export const ProjectLeadQuestionQuote = Schema.Struct({
+  section: Schema.String.check(Schema.isMaxLength(200)),
+  quote: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)),
+});
+export type ProjectLeadQuestionQuote = typeof ProjectLeadQuestionQuote.Type;
+
+/** The user's question from a card's side chat, for the lead that raised the card. */
+export const ProjectTeamAskLeadInput = Schema.Struct({
+  projectId: ProjectId,
+  attentionItemId: ProjectAttentionItemId,
+  question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
+  quotes: Schema.Array(ProjectLeadQuestionQuote)
+    .check(Schema.isMaxLength(20))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+});
+export type ProjectTeamAskLeadInput = typeof ProjectTeamAskLeadInput.Type;
+
+export const ProjectTeamAskLeadResult = Schema.Struct({
+  messageId: Schema.String,
+});
+export type ProjectTeamAskLeadResult = typeof ProjectTeamAskLeadResult.Type;
+
+/** Starts a question the user asked a lead from a card's side chat. */
+export const LEAD_QUESTION_PREFIX = "[사용자 질문]";
+
+/** Starts the lead's reply to a side chat question; the side chat shows only these. */
+export const LEAD_ANSWER_PREFIX = "[답변]";
+
+const LEAD_QUESTION_CARD = /^<!-- card:(\S+) -->$/;
+
+/**
+ * The lead-thread message for a side chat question: the prefix and card on the first line,
+ * a hidden card id, the quotes as "> " blocks split by a bare ">" line, then the question.
+ */
+export function formatLeadQuestion(input: {
+  readonly cardId: string;
+  readonly cardLabel: string;
+  readonly question: string;
+  readonly quotes: ReadonlyArray<ProjectLeadQuestionQuote>;
+}): string {
+  const quotes = input.quotes.map((entry) => {
+    const section = entry.section.trim();
+    const text = section.length > 0 ? `[${section}] ${entry.quote.trim()}` : entry.quote.trim();
+    return text
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+  });
+  return [
+    `${LEAD_QUESTION_PREFIX} ${input.cardLabel}`.trimEnd(),
+    `<!-- card:${input.cardId} -->`,
+    ...(quotes.length > 0 ? [quotes.join("\n>\n")] : []),
+    "",
+    input.question.trim(),
+  ].join("\n");
+}
+
+/** Reads a message written by formatLeadQuestion back; null for any other message. */
+export function parseLeadQuestion(text: string): {
+  readonly cardId: string | null;
+  readonly quotes: ReadonlyArray<string>;
+  readonly question: string;
+} | null {
+  if (!text.startsWith(LEAD_QUESTION_PREFIX)) return null;
+  const lines = text.split("\n").slice(1);
+  const card = LEAD_QUESTION_CARD.exec(lines[0] ?? "");
+  const quotes: string[] = [];
+  let current: string[] = [];
+  let index = card === null ? 0 : 1;
+  for (; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    if (line === ">") {
+      if (current.length > 0) quotes.push(current.join("\n"));
+      current = [];
+    } else if (line.startsWith("> ")) {
+      current.push(line.slice(2));
+    } else {
+      break;
+    }
+  }
+  if (current.length > 0) quotes.push(current.join("\n"));
+  return { cardId: card?.[1] ?? null, quotes, question: lines.slice(index).join("\n").trim() };
+}
+
+/**
+ * The lead's side chat reply: the card it answers (from the question's card line, which the
+ * reply repeats) and its text without the prefix. Null for any other message.
+ */
+export function parseLeadAnswer(
+  text: string,
+): { readonly cardId: string | null; readonly text: string } | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith(LEAD_ANSWER_PREFIX)) {
+    // A streamed reply can show only part of the prefix yet.
+    return trimmed.length > 0 && LEAD_ANSWER_PREFIX.startsWith(trimmed)
+      ? { cardId: null, text: "" }
+      : null;
+  }
+  const lines = trimmed.slice(LEAD_ANSWER_PREFIX.length).trim().split("\n");
+  const card = LEAD_QUESTION_CARD.exec(lines[0]?.trim() ?? "");
+  return {
+    cardId: card?.[1] ?? null,
+    text: (card === null ? lines : lines.slice(1)).join("\n").trim(),
+  };
+}
+
 export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   projectId: ProjectId,
   sitrepIntervalMinutes: Schema.optional(ProjectTeamSitrepIntervalMinutes),

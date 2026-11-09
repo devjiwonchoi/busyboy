@@ -17,6 +17,7 @@ import type {
   ProjectDecisionCard,
   ProjectId,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamAskLeadInput,
   ProjectTeamRestoreTaskSpecInput,
   ProjectTeamSetTaskRoleModelsInput,
   ProjectTeamSplitTaskTodoInput,
@@ -205,6 +206,13 @@ export function useAnswerDecision() {
   const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
   return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision({ environmentId, input });
+}
+
+/** Asks the lead that raised a card a question from the card's side chat. */
+export function useAskLead() {
+  const askLead = useAtomCommand(projectTeamEnvironment.askLead);
+  return (environmentId: EnvironmentId, input: ProjectTeamAskLeadInput) =>
+    askLead({ environmentId, input });
 }
 
 export type ProjectTeamSettingsPatch = Omit<ProjectTeamUpdateSettingsInput, "projectId">;
