@@ -1,53 +1,20 @@
-// @effect-diagnostics nodeBuiltinImport:off
-import * as NodePath from "node:path";
-
 import { assert, describe, it } from "@effect/vitest";
 import { ProjectId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import type * as Path from "effect/Path";
 
-import * as ServerConfig from "../config.ts";
-import { directorWorkspaceRoot, epicStage } from "./director.ts";
+import { epicStage } from "./director.ts";
 import { personaInstructions } from "./persona.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
   createAcceptedTask,
+  DIRECTOR_PROJECT_ID as DIRECTOR,
   PROJECT_ID,
-  START,
-  setUpManager,
+  SECOND_PROJECT_ID as SECOND,
+  setUpWorkspace,
   withTeam,
-  type TeamHarness,
 } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
-const SECOND = ProjectId.make("project-2");
-const DIRECTOR = ProjectId.make("project-director");
-
-/** Two projects with PMs, plus the Director's system project and its Director. */
-const setUpWorkspace = (harness: TeamHarness) =>
-  Effect.gen(function* () {
-    const team = yield* service;
-    const config = yield* ServerConfig.ServerConfig;
-    const firstPm = yield* setUpManager;
-    harness.addProject(SECOND, "Second");
-    const secondPm = (yield* team.ensureManager(SECOND)).threadId;
-    harness.projects.set(DIRECTOR, {
-      projectId: DIRECTOR,
-      title: "Director",
-      workspaceRoot: directorWorkspaceRoot(NodePath as unknown as Path.Path, config.baseDir),
-      defaultModelSelection: null,
-      defaultThreadEnvMode: null,
-      autoPull: false,
-      faviconPath: null,
-      projectIcon: null,
-      scripts: [],
-      createdAt: START,
-      updatedAt: START,
-      deletedAt: null,
-    });
-    const director = yield* team.ensureManager(DIRECTOR);
-    return { firstPm, secondPm, director };
-  });
 
 describe("ProjectTeamService Director", () => {
   it.effect("routes tasks to projects, wakes their PMs, and keeps the epic in step", () =>

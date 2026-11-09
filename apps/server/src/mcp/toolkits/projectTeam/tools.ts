@@ -35,6 +35,9 @@ import {
   ProjectTeamTaskReviewSetInput,
   ProjectTeamTaskReadyInput,
   ProjectTeamTaskDelegateInput,
+  ProjectTeamGoalWriteInput,
+  ProjectTeamGoalLinkInput,
+  ProjectTeamGoalResult,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -288,6 +291,27 @@ const MemoryDeleteTool = Tool.make("memory_delete", {
   .annotate(Tool.Destructive, true)
   .annotate(Tool.Idempotent, true);
 
+const GoalWriteTool = Tool.make("goal_write", {
+  ...shared,
+  description:
+    "Director only. Add a workspace goal (omit goalId) or change one: title, detail, status, position. Write title and detail in the user's language, in their own words. status done marks a goal reached; archived drops it. Goals and how work lines up with them show in team_status workspace.goals and workspace.alignment.",
+  parameters: ProjectTeamGoalWriteInput,
+  success: ProjectTeamGoalResult,
+})
+  .annotate(Tool.Title, "Write a workspace goal")
+  .annotate(Tool.Destructive, false);
+
+const GoalLinkTool = Tool.make("goal_link", {
+  ...shared,
+  description:
+    "Director only. Link projects and tasks (from any project, epics included) to a goal, or unlink them. A linked project or task serves the goal with all of its subtasks.",
+  parameters: ProjectTeamGoalLinkInput,
+  success: ProjectTeamGoalResult,
+})
+  .annotate(Tool.Title, "Link work to a workspace goal")
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
 export const ProjectTeamToolkit = Toolkit.make(
   TaskCreateTool,
   TaskStartTool,
@@ -311,4 +335,6 @@ export const ProjectTeamToolkit = Toolkit.make(
   MemoryListTool,
   MemoryWriteTool,
   MemoryDeleteTool,
+  GoalWriteTool,
+  GoalLinkTool,
 );

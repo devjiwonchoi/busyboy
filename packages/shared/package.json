@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./workspaceGoals": {
+      "types": "./src/workspaceGoals.ts",
+      "import": "./src/workspaceGoals.ts"
+    },
     "./githubMarkdownLinks": {
       "types": "./src/githubMarkdownLinks.ts",
       "import": "./src/githubMarkdownLinks.ts"
