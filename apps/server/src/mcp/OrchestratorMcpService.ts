@@ -2391,6 +2391,7 @@ const make = Effect.gen(function* () {
               yield* threadManagement
                 .dispatch({
                   type: "thread.create",
+                  launchedByThreadId: scope.thread.threadId,
                   createdBy: "agent",
                   creationSource: "mcp",
                   commandId: stableCommandId({

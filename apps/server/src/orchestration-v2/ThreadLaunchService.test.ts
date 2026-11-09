@@ -65,6 +65,11 @@ import * as ThreadTitleRegeneration from "./ThreadTitleRegenerationService.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
+import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
+import * as McpToolAccess from "../mcp/McpToolAccess.ts";
+import * as ProjectHandlers from "../mcp/toolkits/project/handlers.ts";
+import { ProjectToolkit } from "../mcp/toolkits/project/tools.ts";
+
 const projectId = ProjectId.make("project:launch-test");
 const otherProjectId = ProjectId.make("project:launch-other");
 const encodeThreadProjection = Schema.encodeEffect(OrchestrationV2ThreadProjectionJson);
@@ -304,6 +309,52 @@ function waitUntil<E, R>(predicate: () => Effect.Effect<boolean, E, R>): Effect.
     assert.fail("Condition was not reached before timeout.");
   });
 }
+
+it.effect("records the t3_thread_launch caller in the launched thread shell", () => {
+  const harness = makeHarness({});
+  return Effect.gen(function* () {
+    const launches = yield* ThreadLaunch.ThreadLaunchService;
+    const threads = yield* ThreadManagement.ThreadManagementService;
+    const caller = yield* launches.launch(
+      launchInput({
+        command: "command:caller",
+        thread: "thread:caller",
+        message: "Launch a thread",
+      }),
+    );
+    const invocation = Layer.mergeAll(
+      NodeCrypto.layer,
+      Layer.mock(GitVcsDriver.GitVcsDriver)({}),
+      ServerConfig.layerTest(process.cwd(), { prefix: "launch-caller-" }).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+      Layer.succeed(McpInvocationContext.McpInvocationContext, {
+        environmentId: EnvironmentId.make("environment"),
+        requestNamespace: "launcher-test",
+        thread: {
+          threadId: caller.threadId,
+          providerSessionId: "session",
+          providerInstanceId: modelSelection.instanceId,
+        },
+        client: undefined,
+        issuedAt: 0,
+        capabilities: new Set(["orchestration" as const]),
+      }),
+    );
+    const toolkit = yield* ProjectToolkit.pipe(
+      Effect.provide(
+        McpToolAccess.HandlersLayer.layer(ProjectHandlers.layer).pipe(Layer.provide(invocation)),
+      ),
+    );
+    const result = yield* toolkit
+      .handle("t3_thread_launch", { title: "Launched by caller" })
+      .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(invocation));
+    const launched = result.at(-1)?.result as { threadId: ThreadId };
+    assert.isString(launched.threadId);
+    const shell = yield* threads.getThreadShell(launched.threadId);
+    assert.equal(shell?.launchedByThreadId, caller.threadId);
+  }).pipe(Effect.provide(harness.layer));
+});
 
 it.effect.each(
   (["new", "existing"] as const).flatMap((target) =>
