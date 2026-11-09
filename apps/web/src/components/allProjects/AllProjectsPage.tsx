@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { isElectron } from "~/env";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useNowMinute } from "~/hooks/useNowMinute";
+import { useDirectorInbox } from "~/state/director";
 import { useProjects } from "~/state/entities";
 import { useEnvironmentIds } from "~/state/environments";
 import { useProjectManagerEntries } from "~/state/projectTeam";
@@ -17,14 +18,13 @@ import { SidebarInset } from "../ui/sidebar";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { DirectorCard } from "../director/DirectorCard";
+import { DirectorInbox } from "../director/DirectorInbox";
 import { useDirectorChat } from "../director/useDirectorChat";
 import {
   buildMapArrows,
   buildProjectMap,
-  longestWaiting,
   type MapArrow,
   type MapProject,
-  needsYouOf,
   projectKey,
 } from "./allProjects.logic";
 import { ProjectMapArrows } from "./ProjectMapArrows";
@@ -37,7 +37,7 @@ import { type MapWaitingLine, ProjectMapCard } from "./ProjectMapCard";
  */
 export function AllProjectsPage() {
   const entries = useProjectManagerEntries(useEnvironmentIds());
-  const { director: directorEntry, projects: projectEntries } = splitDirectorEntry(entries);
+  const { projects: projectEntries } = splitDirectorEntry(entries);
   const director = useDirectorChat();
   const projectInfos = useProjects();
   const navigate = useNavigate();
@@ -49,25 +49,7 @@ export function AllProjectsPage() {
   const map = buildProjectMap(projectEntries, Date.parse(`${nowMinute}:00.000Z`));
   // The Director's epics are parents of project tasks, so relations span both.
   const arrows = buildMapArrows(map, buildTaskRelationsIndex(entries));
-  // The Director's open cards (its task proposals) wait on the user too.
-  const waitingChats = [
-    ...map.map((project) => ({
-      environmentId: project.environmentId,
-      threadId: project.summary.pmThreadId,
-      needsYou: project.needsYou,
-    })),
-    ...(directorEntry === null
-      ? []
-      : [
-          {
-            environmentId: directorEntry.environmentId,
-            threadId: directorEntry.summary.pmThreadId,
-            needsYou: needsYouOf(directorEntry.summary),
-          },
-        ]),
-  ];
-  const needsYouTotal = waitingChats.reduce((total, chat) => total + chat.needsYou.total, 0);
-  const longestWaitingChat = longestWaiting(waitingChats);
+  const { total: needsYouTotal } = useDirectorInbox();
   const keyOf = (project: MapProject) =>
     projectKey(project.environmentId, project.summary.projectId);
   // Hover only matters while arrows show, and only for a card still on the map.
@@ -113,12 +95,14 @@ export function AllProjectsPage() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <h1 className="min-w-0 flex-1 truncate font-medium text-sm">All projects</h1>
-          {needsYouTotal > 0 && longestWaitingChat !== null ? (
+          {needsYouTotal > 0 ? (
             <button
               type="button"
               data-needs-you-total={needsYouTotal}
               onClick={() =>
-                openChat(longestWaitingChat.environmentId, longestWaitingChat.threadId)
+                document
+                  .querySelector("[data-director-inbox]")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
               }
               className="shrink-0 rounded-full bg-warning/16 px-2.5 py-1 font-medium text-warning text-xs outline-none hover:bg-warning/24 focus-visible:ring-2 focus-visible:ring-ring"
             >
@@ -129,6 +113,7 @@ export function AllProjectsPage() {
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="wide" className="gap-4 px-3 sm:px-6">
             {director !== null ? <DirectorCard director={director} /> : null}
+            <DirectorInbox highlightCardId={null} showEmpty={false} />
             {map.length === 0 ? (
               <p className="text-muted-foreground text-sm">아직 PM이 있는 프로젝트가 없어요.</p>
             ) : (

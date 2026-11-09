@@ -458,7 +458,7 @@ async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
   );
   expect(railEntry("Chat").getAttribute("aria-current")).toBe("page");
 
-  // "나를 기다림" adds up every open card and opens the chat whose card waited longest.
+  // "나를 기다림" adds up every open card and scrolls to the inbox.
   await userEvent.click(railEntry("All projects"));
   await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/all-projects"));
   const pill = await vi.waitFor(() => {
@@ -467,8 +467,13 @@ async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
     return element!;
   });
   expect(pill.textContent).toBe("나를 기다림 2");
+  const scroll = vi.spyOn(
+    container.querySelector<HTMLElement>("[data-director-inbox]")!,
+    "scrollIntoView",
+  );
   await userEvent.click(pill);
-  await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
+  expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+  expect(app.router.state.location.pathname).toBe("/all-projects");
 
   // A project's name opens its PM chat.
   await userEvent.click(railEntry("All projects"));

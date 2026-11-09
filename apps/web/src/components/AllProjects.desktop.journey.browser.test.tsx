@@ -220,7 +220,12 @@ describe("All projects in the desktop app", () => {
     expect(card("docs").className).toContain("opacity-60");
     expect(card("busyboy").className).not.toContain("opacity-60");
 
+    const scroll = vi.spyOn(
+      container.querySelector<HTMLElement>("[data-director-inbox]")!,
+      "scrollIntoView",
+    );
     await userEvent.click(pill);
-    await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/pm-busyboy"));
+    expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(router.state.location.pathname).toBe("/all-projects");
   });
 });

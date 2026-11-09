@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import { LayoutListIcon, MessageSquareIcon, type LucideIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
+import { useDirectorInbox } from "~/state/director";
 import { type DirectorChat, useDirectorChat } from "../director/useDirectorChat";
 import { PmAvatar } from "../PmAvatar";
 import { useSidebar } from "../ui/sidebar";
@@ -15,11 +16,6 @@ const ENTRIES: ReadonlyArray<{ view: RailView; label: string; icon: LucideIcon }
   { view: "chat", label: "Chat", icon: MessageSquareIcon },
   { view: "all-projects", label: "All projects", icon: LayoutListIcon },
 ];
-
-/** Questions the Director is waiting on, shown on its avatar. */
-function directorNeedsYou(director: DirectorChat): number {
-  return director.entry.summary.openCount;
-}
 
 /**
  * The workspace Director at the top of the rail: its avatar with a live status
@@ -37,8 +33,8 @@ function DirectorRailButton({
   onOpen: () => void;
 }) {
   const { persona } = director.entry.summary;
-  const waiting = directorNeedsYou(director);
-  const label = waiting > 0 ? `${persona.name}, ${waiting} waiting` : persona.name;
+  const { total: waiting } = useDirectorInbox();
+  const label = waiting > 0 ? `${persona.name}, 기다리는 일 ${waiting}개` : persona.name;
   return (
     <button
       {...rest}
