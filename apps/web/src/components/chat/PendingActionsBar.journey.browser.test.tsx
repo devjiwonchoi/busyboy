@@ -16,7 +16,7 @@ import { AsyncResult } from "effect/reactivity";
 import { act, createRef, type ComponentProps, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
+import { page } from "vite-plus/test/browser";
 
 import "~/index.css";
 
@@ -378,7 +378,7 @@ for (const viewport of [
     expect(server.opened).toEqual([CU_THREAD_ID]);
   });
 
-  it(`counts several waiting items and lists them (${viewport.name})`, async () => {
+  it(`steps through waiting items in order and wraps (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
     await openPmChat({
       openCount: 3,
@@ -386,34 +386,22 @@ for (const viewport of [
       waitingThreads: [cuThread],
     });
 
-    await vi.waitFor(() => expect(frontBanner()?.textContent).toContain("기다리는 일 3개"));
+    await vi.waitFor(() => expect(frontBanner()?.textContent).toContain("기다리는 일 1/3"));
     expect(pendingBarIcon()?.dataset.pendingActionsBar).toBe("3");
     expectInsideViewport(frontBanner()!, viewport.width);
 
-    // The list: cards oldest first, then the waiting thread.
-    await act(async () =>
-      userEvent.click(document.querySelector<HTMLElement>('[aria-label="기다리는 일 목록"]')!),
-    );
-    const labels = await vi.waitFor(() => {
-      const items = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")];
-      expect(items).toHaveLength(3);
-      return items.map((item) => item.textContent);
-    });
-    expect(labels).toEqual([
-      "블로커: Fix the login redirect",
-      "결정 필요: Cache task pages",
-      "CU eval chrome-form #1 · 허용 요청",
-    ]);
-    for (const item of document.querySelectorAll<HTMLElement>("[role=menuitem]")) {
-      expectInsideViewport(item, viewport.width);
-    }
-    await act(async () => userEvent.keyboard("{Escape}"));
-
-    // Picking a card from the list jumps to it; picking the thread opens it.
+    // The first click reveals the oldest card; subsequent clicks advance and wrap.
+    await followPendingAction("attention-login");
+    await expectRevealed("attention-login");
+    expect(frontBanner()?.textContent).toContain("기다리는 일 1/3 · 블로커:");
     await followPendingAction("attention-cache");
     await expectRevealed("attention-cache");
     await followPendingAction(CU_THREAD_ID);
     expect(server.opened).toEqual([CU_THREAD_ID]);
+    expect(frontBanner()?.textContent).toContain("기다리는 일 3/3");
+    await followPendingAction("attention-login");
+    await expectRevealed("attention-login");
+    expect(frontBanner()?.textContent).toContain("기다리는 일 1/3");
   });
 }
 

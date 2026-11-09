@@ -73,9 +73,7 @@ import {
 
 import { taskForLeadThread } from "../state/projectTeam.logic";
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
-import { AllProjectsPage } from "./allProjects/AllProjectsPage";
-import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
-import { ThreadSidebarWithRail } from "./sidebar/ThreadSidebarWithRail";
+import { DirectorWorkspaceSurface } from "./director/DirectorWorkspaceSurface";
 import { SidebarProvider } from "./ui/sidebar";
 
 function threadShell(id: string, projectId: string, updatedAt: string): EnvironmentThreadShell {
@@ -302,30 +300,9 @@ function renderApp() {
   const rootRoute = createRootRoute({
     component: () => (
       <SidebarProvider>
-        {/* Phones stack the (normally slide-in) sidebar above the page. */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: window.innerWidth < 768 ? "column" : "row",
-            width: "100%",
-          }}
-        >
-          <div
-            style={{
-              width: window.innerWidth < 768 ? "100%" : 320,
-              height: window.innerWidth < 768 ? 300 : "100vh",
-              flexShrink: 0,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <ThreadSidebarWithRail />
-          </div>
-          <div style={{ display: "flex", minWidth: 0, flex: 1 }}>
-            <Outlet />
-          </div>
+        <div style={{ display: "flex", width: "100%" }}>
+          <Outlet />
         </div>
-        <MainAppLocationTracker />
       </SidebarProvider>
     ),
   });
@@ -333,7 +310,7 @@ function renderApp() {
     createRoute({
       getParentRoute: () => rootRoute,
       path: "/all-projects",
-      component: AllProjectsPage,
+      component: DirectorWorkspaceSurface,
     }),
     ...["/", "/$environmentId/$threadId", "/tasks/$environmentId/$projectId/$taskId"].map((path) =>
       createRoute({ getParentRoute: () => rootRoute, path, component: () => null }),
@@ -341,16 +318,11 @@ function renderApp() {
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
-    history: createMemoryHistory({ initialEntries: ["/env-1/pm-thread"] }),
+    history: createMemoryHistory({ initialEntries: ["/all-projects"] }),
   });
   return { router, render: () => act(async () => root.render(<RouterProvider router={router} />)) };
 }
 
-const rail = () => container.querySelector<HTMLElement>("[data-workspace-rail]")!;
-const railEntry = (label: string) =>
-  [...rail().querySelectorAll<HTMLElement>("button")].find(
-    (button) => (button.getAttribute("aria-label") ?? button.textContent) === label,
-  )!;
 const card = (projectId: string) =>
   container.querySelector<HTMLElement>(`[data-project-card="${projectId}"]`)!;
 const goal = (projectId: string, taskId: string) =>
@@ -365,14 +337,8 @@ const isShown = (element: Element) => getComputedStyle(element).display !== "non
 async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
   const phone = window.innerWidth < 640;
   await app.render();
-  await vi.waitFor(() => expect(rail()).not.toBeNull());
-  expect(railEntry("Chat").getAttribute("aria-current")).toBe("page");
-
-  // The rail opens All projects.
-  await userEvent.click(railEntry("All projects"));
-  await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/all-projects"));
+  await userEvent.click(page.getByRole("button", { name: "지도", exact: true }));
   await vi.waitFor(() => expect(container.querySelector("[data-project-card]")).not.toBeNull());
-  expect(railEntry("All projects").getAttribute("aria-current")).toBe("page");
 
   // One card per project; the one waiting on the user first.
   const cards = [...container.querySelectorAll<HTMLElement>("[data-project-card]")];
@@ -456,27 +422,12 @@ async function walkThroughAllProjects(app: ReturnType<typeof renderApp>) {
   await vi.waitFor(() =>
     expect(app.router.state.location.pathname).toBe("/tasks/env-1/busyboy/task-3"),
   );
-  expect(railEntry("Chat").getAttribute("aria-current")).toBe("page");
-
-  // "나를 기다림" adds up every open card and scrolls to the inbox.
-  await userEvent.click(railEntry("All projects"));
-  await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/all-projects"));
-  const pill = await vi.waitFor(() => {
-    const element = container.querySelector<HTMLElement>("[data-needs-you-total]");
-    expect(element).not.toBeNull();
-    return element!;
+  await act(async () => {
+    await app.router.navigate({ to: "/all-projects" });
   });
-  expect(pill.textContent).toBe("나를 기다림 2");
-  const scroll = vi.spyOn(
-    container.querySelector<HTMLElement>("[data-director-inbox]")!,
-    "scrollIntoView",
-  );
-  await userEvent.click(pill);
-  expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
-  expect(app.router.state.location.pathname).toBe("/all-projects");
+  await userEvent.click(page.getByRole("button", { name: "지도", exact: true }));
 
   // A project's name opens its PM chat.
-  await userEvent.click(railEntry("All projects"));
   await vi.waitFor(() => expect(container.querySelector("[data-project-card]")).not.toBeNull());
   await userEvent.click(
     card("site").querySelector<HTMLElement>("[data-project-card-head] button")!,
@@ -489,14 +440,11 @@ describe("All projects", () => {
     await page.viewport(1280, 800);
     const app = renderApp();
     await walkThroughAllProjects(app);
-    expect(rail().getAttribute("data-workspace-rail")).toBe("column");
   });
 
   it("stacks the same cards on a phone, with waiting lines instead of arrows", async () => {
     await page.viewport(390, 844);
     const app = renderApp();
     await walkThroughAllProjects(app);
-    expect(rail().getAttribute("data-workspace-rail")).toBe("tabs");
-    expect(railEntry("All projects").textContent).toBe("All projects");
   });
 });

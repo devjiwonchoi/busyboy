@@ -21,6 +21,7 @@ import {
 import { isTrailingDoubleClick, resolveSidebarThreadStatus } from "../Sidebar.logic";
 import { useThreadShell } from "../../state/entities";
 import { useLeadThreadTask, useProjectManagerForThread } from "../../state/projectTeam";
+import { DirectorWorkspaceToggle } from "../director/DirectorWorkspaceToggle";
 import { TaskPlanToggle } from "../task/TaskPlanSurface";
 import { ProjectManagerHeaderIdentity } from "./ProjectManagerHeaderIdentity";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -288,6 +289,9 @@ export const ChatHeader = memo(function ChatHeader({
       onContextMenu={handleHeaderContextMenu}
     >
       {leadTask === null ? null : <TaskPlanToggle threadRef={activeThreadRef} />}
+      {projectManager?.kind === "director" ? (
+        <DirectorWorkspaceToggle threadRef={activeThreadRef} />
+      ) : null}
       <WorkspaceBreadcrumb
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"

@@ -24,13 +24,8 @@ import { page, userEvent } from "vite-plus/test/browser";
 import type { ProjectManagerEntry } from "~/state/projectTeam";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { makeProjectManagerSummaryFixture } from "~/test-fixtures";
-import { AllProjectsPage } from "../allProjects/AllProjectsPage";
 import { DecisionCard } from "../chat/DecisionCard";
-import { ComposerBannerStack } from "../chat/ComposerBannerStack";
-import { followPendingAction } from "../chat/PendingActionsBar.testing";
-import { WorkspaceRail } from "../sidebar/WorkspaceRail";
-import { SidebarProvider } from "../ui/sidebar";
-import { useDirectorPendingActions } from "./useDirectorPendingActions";
+import { DirectorInboxDock } from "./DirectorInboxDock";
 
 const AT = "2026-11-09T01:00:00.000Z";
 const state = vi.hoisted(() => ({
@@ -150,24 +145,20 @@ function Chat() {
   const entry = entries.find((entry) => entry.summary.pmThreadId === threadId);
   const cards = entry?.summary.decisionCards ?? [];
   const ref = scopeThreadRef("env" as never, threadId as never);
-  const actions = useDirectorPendingActions({
-    threadRef: ref,
-    cards,
-    onRevealCard: (id) => state.revealed.push(id),
-  });
   return (
     <div className="min-w-0 flex-1 p-3">
-      <ComposerBannerStack items={actions?.banner ? [actions.banner] : []} />
-      {cards.map((card) => (
-        <DecisionCard
-          key={card.item.id}
-          card={card}
-          environmentId={ref.environmentId}
-          threadRef={ref}
-          cwd={undefined}
-        />
-      ))}
-      {actions?.dialog}
+      {threadId === "pm-director" ? <DirectorInboxDock /> : null}
+      {threadId === "pm-director"
+        ? null
+        : cards.map((card) => (
+            <DecisionCard
+              key={card.item.id}
+              card={card}
+              environmentId={ref.environmentId}
+              threadRef={ref}
+              cwd={undefined}
+            />
+          ))}
     </div>
   );
 }
@@ -233,24 +224,12 @@ const cardIn = (element: Element, id: string) =>
 
 for (const width of [1280, 390]) {
   describe(`director inbox at ${width}px`, () => {
-    it("answers in place, shares the PM timeline, and retries through the Director dialog", async () => {
+    it("steps oldest first, answers in place, and shares answers with the PM", async () => {
       await page.viewport(width, 844);
-      const base = createRootRoute({
-        component: () => (
-          <SidebarProvider>
-            <WorkspaceRail />
-            <Outlet />
-          </SidebarProvider>
-        ),
-      });
+      const base = createRootRoute({ component: Outlet });
       const router = createRouter({
-        history: createMemoryHistory({ initialEntries: ["/all-projects"] }),
+        history: createMemoryHistory({ initialEntries: ["/env/pm-director"] }),
         routeTree: base.addChildren([
-          createRoute({
-            getParentRoute: () => base,
-            path: "/all-projects",
-            component: AllProjectsPage,
-          }),
           createRoute({
             getParentRoute: () => base,
             path: "/$environmentId/$threadId",
@@ -259,33 +238,15 @@ for (const width of [1280, 390]) {
         ]),
       });
       await act(async () => root.render(<RouterProvider router={router} />));
-      await vi.waitFor(() => expect(container.querySelector("[data-director-inbox]")).toBeTruthy());
-      const inbox = container.querySelector<HTMLElement>("[data-director-inbox]")!;
-      expect(
-        [...inbox.querySelectorAll("[data-director-inbox-project]")].map((group) =>
-          group.getAttribute("data-director-inbox-project"),
-        ),
-      ).toEqual(["a", "b", "director"]);
-      expect(inbox.textContent).toContain("프로젝트 A");
-      expect(inbox.textContent).toContain("프로젝트 B");
-      expect(inbox.textContent).toContain("A-1 결정 작업");
-      expect(inbox.textContent).toContain("B-2 실패 작업");
-      expect(inbox.scrollWidth).toBeLessThanOrEqual(inbox.clientWidth);
-      expect(container.querySelector("[data-needs-you-total]")?.textContent).toBe("나를 기다림 5");
-      expect(container.querySelector("[data-director-rail]")?.getAttribute("aria-label")).toBe(
-        "총괄, 기다리는 일 5개",
-      );
-      expect(container.querySelector("[data-director-card] [data-proposal-card]")).toBeNull();
-      const scroll = vi.spyOn(inbox, "scrollIntoView");
-      await userEvent.click(container.querySelector<HTMLButtonElement>("[data-needs-you-total]")!);
-      expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
-
-      const decision = cardIn(inbox, "결정");
+      const inbox = () => container.querySelector<HTMLElement>("[data-director-inbox]")!;
+      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/5"));
+      expect(inbox().querySelectorAll("[data-decision-card]")).toHaveLength(1);
+      expect(inbox().textContent).toContain("프로젝트 A · A-1");
+      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
+      expect(inbox().textContent).toContain("프로젝트 B · B-2");
+      await userEvent.click(page.getByRole("button", { name: "이전 카드", exact: true }));
+      const decision = cardIn(inbox(), "결정");
       await userEvent.click(decision.querySelector<HTMLButtonElement>('[role="radio"]')!);
-      await userEvent.type(
-        decision.querySelector<HTMLTextAreaElement>("[data-decision-card-note]")!,
-        "단계별로 해 주세요",
-      );
       await userEvent.click(
         decision.querySelector<HTMLButtonElement>("[data-decision-card-submit]")!,
       );
@@ -293,74 +254,40 @@ for (const width of [1280, 390]) {
       expect(state.answers[0]).toMatchObject({
         projectId: "a",
         attentionItemId: "결정",
-        answer: "첫 번째\nNote: 단계별로 해 주세요",
+        answer: "첫 번째",
       });
       await act(() => publishAnswered("결정"));
-      expect(cardIn(inbox, "결정")).toBeNull();
-      expect(container.querySelector("[data-needs-you-total]")?.textContent).toBe("나를 기다림 4");
-      await userEvent.click(buttonIn(cardIn(inbox, "계획"), "Approve"));
-      await vi.waitFor(() =>
-        expect(state.answers[1]).toMatchObject({
-          projectId: "a",
-          attentionItemId: "계획",
-          answer: PLAN_APPROVAL_START,
-        }),
-      );
-      await act(() => publishAnswered("계획"));
+      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/4"));
+      expect(cardIn(inbox(), "실패")).toBeTruthy();
+      // Answer the next card from its project's chat, then return to the same shared summary.
       await act(async () => {
         await router.navigate({
           to: "/$environmentId/$threadId",
-          params: { environmentId: "env", threadId: "pm-a" },
+          params: { environmentId: "env", threadId: "pm-b" },
         });
       });
-      expect(cardIn(container, "결정").dataset.decisionCardState).toBe("answered");
-      await act(async () => {
-        await router.navigate({
-          to: "/$environmentId/$threadId",
-          params: { environmentId: "env", threadId: "pm-director" },
-        });
-      });
-      expect(container.textContent).toContain("기다리는 일 3개");
-      await followPendingAction("제안");
-      expect(state.revealed).toEqual(["제안"]);
-      await act(async () =>
-        userEvent.click(page.getByRole("button", { name: "기다리는 일 목록" })),
-      );
-      const failureItem = document.querySelector<HTMLElement>(
-        '[role="menuitem"][data-pending-action-id="실패"]',
-      )!;
-      expect(failureItem.textContent).toBe("프로젝트 B · 블로커: 실패 작업");
-      await act(async () => userEvent.click(failureItem));
-      const dialog = await vi.waitFor(() => {
-        const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-        expect(dialog).toBeTruthy();
-        return dialog!;
-      });
-      expect(dialog.textContent).toContain("나를 기다리는 일");
-      expect(cardIn(dialog, "실패").dataset.decisionCardHighlighted).toBe("true");
-      expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(width);
-      expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
-      expect(getComputedStyle(dialog).overflowY).toBe("auto");
-      await userEvent.click(buttonIn(cardIn(dialog, "실패"), "다시 시도"));
-      await vi.waitFor(() =>
-        expect(state.answers[2]).toMatchObject({
-          projectId: "b",
-          attentionItemId: "실패",
-          answer: "다시 시도",
-        }),
-      );
+      await userEvent.click(buttonIn(cardIn(container, "실패"), "다시 시도"));
+      await vi.waitFor(() => expect(state.answers).toHaveLength(2));
       await act(() => publishAnswered("실패"));
-      expect(cardIn(dialog, "실패")).toBeNull();
-      await userEvent.click(buttonIn(dialog, "열기"));
-      await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/waiting-b"));
       await act(async () => {
         await router.navigate({
           to: "/$environmentId/$threadId",
           params: { environmentId: "env", threadId: "pm-director" },
         });
       });
-      expect(document.querySelector('[role="dialog"]')).toBeNull();
-      await followPendingAction("waiting-b");
+      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/3"));
+      expect(cardIn(inbox(), "실패")).toBeNull();
+      expect(inbox().textContent).toContain("총괄");
+      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
+      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
+      expect(inbox().textContent).toContain("받은편지함 3/3");
+      // Closing cards while positioned at the end clamps the position to the remaining item.
+      await act(() => {
+        publishAnswered("계획");
+        publishAnswered("제안");
+      });
+      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/1"));
+      await userEvent.click(buttonIn(inbox(), "열기"));
       await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/waiting-b"));
     });
   });

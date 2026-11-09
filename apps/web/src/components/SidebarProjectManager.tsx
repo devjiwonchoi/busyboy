@@ -155,7 +155,7 @@ export function SidebarProjectManagerHeading(props: {
                 {summary.persona.name}
               </span>
               <span className="min-w-0 truncate text-2xs text-sidebar-muted-foreground">
-                {projectName}
+                {summary.kind === "director" ? null : projectName}
               </span>
             </span>
             <SidebarProjectManagerBadges summary={summary} />

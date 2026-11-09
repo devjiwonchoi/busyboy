@@ -32,11 +32,11 @@ import { restrictToFirstScrollableAncestor, restrictToHorizontalAxis } from "@dn
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  Smartphone,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  LayoutGrid,
   FileDiff,
   Files,
   Globe2,
@@ -65,7 +65,6 @@ import { readLocalApi } from "~/localApi";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { Button } from "~/components/ui/button";
 import { MorphIcon } from "~/components/MorphIcon";
-import { AndroidIcon, AppleIcon } from "~/components/Icons";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Kbd } from "~/components/ui/kbd";
 import {
@@ -591,6 +590,8 @@ function surfaceTitle(
       return "Pull requests";
     case "side-chat":
       return "Side chat";
+    case "director-workspace":
+      return "전체 프로젝트";
     case "task-plan":
       return "Plan";
     case "preview": {
@@ -683,6 +684,8 @@ function SurfaceIcon({
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "side-chat":
       return <MessagesSquare className="size-3 shrink-0" />;
+    case "director-workspace":
+      return <LayoutGrid className="size-3 shrink-0" />;
     case "task-plan":
       return <ClipboardList className="size-3 shrink-0" />;
   }
