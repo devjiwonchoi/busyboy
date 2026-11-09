@@ -14,6 +14,7 @@ import {
   Outlet,
   RouterProvider,
   useParams,
+  useNavigate,
 } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
 import { act, useSyncExternalStore } from "react";
@@ -24,7 +25,10 @@ import { page, userEvent } from "vite-plus/test/browser";
 import type { ProjectManagerEntry } from "~/state/projectTeam";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { makeProjectManagerSummaryFixture } from "~/test-fixtures";
+import { pendingActionItems } from "~/state/projectTeam.logic";
 import { DecisionCard } from "../chat/DecisionCard";
+import { ComposerBannerStack } from "../chat/ComposerBannerStack";
+import { pendingActionsBannerItem } from "../chat/PendingActionsBar";
 import { DirectorInboxDock } from "./DirectorInboxDock";
 
 const AT = "2026-11-09T01:00:00.000Z";
@@ -141,24 +145,35 @@ function publishAnswered(id: string) {
 /** Render the same pending-actions integration ChatView uses, alongside its PM cards. */
 function Chat() {
   const { threadId } = useParams({ strict: false });
+  const navigate = useNavigate();
   const entries = useProjectManagerEntries([]);
   const entry = entries.find((entry) => entry.summary.pmThreadId === threadId);
   const cards = entry?.summary.decisionCards ?? [];
   const ref = scopeThreadRef("env" as never, threadId as never);
+  const banner = pendingActionsBannerItem({
+    id: `pending-actions:${threadId}`,
+    items: pendingActionItems({ cards, waitingThreads: entry?.summary.waitingThreads ?? [] }),
+    onRevealCard: (id) => state.revealed.push(id),
+    onOpenThread: (threadId) => {
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId: ref.environmentId, threadId },
+      });
+    },
+  });
   return (
     <div className="min-w-0 flex-1 p-3">
       {threadId === "pm-director" ? <DirectorInboxDock /> : null}
-      {threadId === "pm-director"
-        ? null
-        : cards.map((card) => (
-            <DecisionCard
-              key={card.item.id}
-              card={card}
-              environmentId={ref.environmentId}
-              threadRef={ref}
-              cwd={undefined}
-            />
-          ))}
+      <ComposerBannerStack items={banner === null ? [] : [banner]} />
+      {cards.map((card) => (
+        <DecisionCard
+          key={card.item.id}
+          card={card}
+          environmentId={ref.environmentId}
+          threadRef={ref}
+          cwd={undefined}
+        />
+      ))}
     </div>
   );
 }
@@ -188,6 +203,9 @@ beforeEach(() => {
         kind: "director",
         persona: { name: "총괄", avatar: { kind: "emoji", emoji: "🧭" }, voice: "chill" },
         decisionCards: [card("director", "제안", "proposal", 3)],
+        waitingThreads: [
+          { threadId: "waiting-director" as never, title: "총괄 허용", kind: "approval" },
+        ],
       }),
     },
     {
@@ -224,6 +242,51 @@ const cardIn = (element: Element, id: string) =>
 
 for (const width of [1280, 390]) {
   describe(`director inbox at ${width}px`, () => {
+    it("reaches the Director's own waiting thread through its chat banner", async () => {
+      await page.viewport(width, 844);
+      const base = createRootRoute({ component: Outlet });
+      const router = createRouter({
+        history: createMemoryHistory({ initialEntries: ["/env/pm-director"] }),
+        routeTree: base.addChildren([
+          createRoute({
+            getParentRoute: () => base,
+            path: "/$environmentId/$threadId",
+            component: Chat,
+          }),
+        ]),
+      });
+      await act(async () => root.render(<RouterProvider router={router} />));
+      await userEvent.click(page.getByRole("button", { name: "기다리는 일 보기", exact: true }));
+      expect(state.revealed).toEqual(["제안"]);
+      await userEvent.click(page.getByRole("button", { name: "다음 기다리는 일", exact: true }));
+      await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/waiting-director"));
+    });
+
+    it("keeps the shown card when an earlier card is answered elsewhere", async () => {
+      await page.viewport(width, 844);
+      const base = createRootRoute({ component: Outlet });
+      const router = createRouter({
+        history: createMemoryHistory({ initialEntries: ["/env/pm-director"] }),
+        routeTree: base.addChildren([
+          createRoute({
+            getParentRoute: () => base,
+            path: "/$environmentId/$threadId",
+            component: Chat,
+          }),
+        ]),
+      });
+      await act(async () => root.render(<RouterProvider router={router} />));
+      const inbox = () => container.querySelector<HTMLElement>("[data-director-inbox]")!;
+      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
+      expect(cardIn(inbox(), "실패")).toBeTruthy();
+      await act(() => publishAnswered("결정"));
+      expect(inbox().textContent).toContain("받은편지함 1/3");
+      expect(cardIn(inbox(), "실패")).toBeTruthy();
+      await act(() => publishAnswered("실패"));
+      expect(inbox().textContent).toContain("받은편지함 1/2");
+      expect(cardIn(inbox(), "계획")).toBeTruthy();
+    });
+
     it("steps oldest first, answers in place, and shares answers with the PM", async () => {
       await page.viewport(width, 844);
       const base = createRootRoute({ component: Outlet });
@@ -239,7 +302,10 @@ for (const width of [1280, 390]) {
       });
       await act(async () => root.render(<RouterProvider router={router} />));
       const inbox = () => container.querySelector<HTMLElement>("[data-director-inbox]")!;
-      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/5"));
+      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/4"));
+      expect(page.getByRole("region", { name: "받은편지함", exact: true }).element()).toBe(inbox());
+      expect(container.querySelectorAll('[data-decision-card="제안"]')).toHaveLength(1);
+      expect(inbox().querySelector('[data-decision-card="제안"]')).toBeNull();
       expect(inbox().querySelectorAll("[data-decision-card]")).toHaveLength(1);
       expect(inbox().textContent).toContain("프로젝트 A · A-1");
       await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
@@ -257,7 +323,7 @@ for (const width of [1280, 390]) {
         answer: "첫 번째",
       });
       await act(() => publishAnswered("결정"));
-      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/4"));
+      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/3"));
       expect(cardIn(inbox(), "실패")).toBeTruthy();
       // Answer the next card from its project's chat, then return to the same shared summary.
       await act(async () => {
@@ -275,16 +341,14 @@ for (const width of [1280, 390]) {
           params: { environmentId: "env", threadId: "pm-director" },
         });
       });
-      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/3"));
+      await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/2"));
       expect(cardIn(inbox(), "실패")).toBeNull();
-      expect(inbox().textContent).toContain("총괄");
+      expect(inbox().textContent).not.toContain("총괄");
       await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
-      await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
-      expect(inbox().textContent).toContain("받은편지함 3/3");
+      expect(inbox().textContent).toContain("받은편지함 2/2");
       // Closing cards while positioned at the end clamps the position to the remaining item.
       await act(() => {
         publishAnswered("계획");
-        publishAnswered("제안");
       });
       await vi.waitFor(() => expect(inbox().textContent).toContain("받은편지함 1/1"));
       await userEvent.click(buttonIn(inbox(), "열기"));

@@ -54,7 +54,10 @@ import {
   goalGraphSignalsFixture,
   graphTask,
 } from "./goalGraph/goalGraph.test-fixtures";
-vi.mock(import("./director/useDirectorChat"), () => ({ useDirectorChat: () => null }));
+vi.mock(import("../state/director"), async (original) => ({
+  ...(await original()),
+  useDirectorThreadRef: () => null,
+}));
 
 import { DirectorWorkspaceSurface } from "./director/DirectorWorkspaceSurface";
 import { SidebarProvider } from "./ui/sidebar";

@@ -237,7 +237,7 @@ import {
 import { pendingActionItems } from "../state/projectTeam.logic";
 import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
 import { pendingActionsBannerItem, revealDecisionCard } from "./chat/PendingActionsBar";
-import { useDirectorChat } from "./director/useDirectorChat";
+import { useDirectorThreadRef } from "~/state/director";
 import { DirectorInboxDock } from "./director/DirectorInboxDock";
 import { useOpenDirectorWorkspaceOnEntry } from "./director/DirectorWorkspaceToggle";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
@@ -1616,12 +1616,12 @@ export default function ChatView(props: ChatViewProps) {
   );
   const isTaskLeadThread = leadTask !== null;
   useOpenTaskPlanOnEntry(isServerThread ? activeThreadRef : null, isTaskLeadThread);
-  const director = useDirectorChat();
+  const director = useDirectorThreadRef();
   const isDirectorThread =
     !sideChat &&
     director !== null &&
-    routeThreadRef.environmentId === director.threadRef.environmentId &&
-    routeThreadRef.threadId === director.threadRef.threadId;
+    routeThreadRef.environmentId === director.environmentId &&
+    routeThreadRef.threadId === director.threadId;
   useOpenDirectorWorkspaceOnEntry(isServerThread ? activeThreadRef : null, isDirectorThread);
   const timelineThreadError =
     serverRuntime?.status === "failed" &&
@@ -5248,15 +5248,14 @@ export default function ChatView(props: ChatViewProps) {
     cancelTimelineLiveFollowForUserNavigationStable();
     revealDecisionCard(legendListRef.current, cardId);
   });
-  const pendingActionsBanner =
-    paintOnlyDisplayedTimeline || isDirectorThread
-      ? null
-      : pendingActionsBannerItem({
-          id: `pending-actions:${routeThreadKey}`,
-          items: pendingActionItems({ cards: decisionCards, waitingThreads }),
-          onRevealCard: revealDecisionCardInTimeline,
-          onOpenThread: onOpenRelatedThreadStable,
-        });
+  const pendingActionsBanner = paintOnlyDisplayedTimeline
+    ? null
+    : pendingActionsBannerItem({
+        id: `pending-actions:${routeThreadKey}`,
+        items: pendingActionItems({ cards: decisionCards, waitingThreads }),
+        onRevealCard: revealDecisionCardInTimeline,
+        onOpenThread: onOpenRelatedThreadStable,
+      });
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [

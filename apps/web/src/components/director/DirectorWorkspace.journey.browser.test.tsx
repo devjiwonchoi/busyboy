@@ -1,11 +1,12 @@
 import "~/index.css";
 import type { ProjectTeamAttentionSummary, ScopedThreadRef } from "@t3tools/contracts";
-import { act } from "react";
+import { act, useSyncExternalStore } from "react";
 import { page, userEvent } from "vite-plus/test/browser";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 const state = vi.hoisted(() => ({
   managers: [] as { environmentId: string; summary: ProjectTeamAttentionSummary }[],
+  listeners: new Set<() => void>(),
 }));
 
 // The desktop app: page headers are the window's drag area.
@@ -27,7 +28,16 @@ vi.mock(import("../../state/entities"), async (original) => ({
 }));
 vi.mock(import("../../state/projectTeam"), async (original) => ({
   ...(await original()),
-  useProjectManagerEntries: (() => state.managers) as never,
+  useProjectManagerEntries: (() =>
+    useSyncExternalStore(
+      (listener) => {
+        state.listeners.add(listener);
+        return () => {
+          state.listeners.delete(listener);
+        };
+      },
+      () => state.managers,
+    )) as never,
 }));
 vi.mock(import("../../state/environments"), async (original) => ({
   ...(await original()),
@@ -176,6 +186,11 @@ async function open(initial: string) {
     routeTree: base.addChildren([
       createRoute({
         getParentRoute: () => base,
+        path: "/",
+        component: () => <div>홈</div>,
+      }),
+      createRoute({
+        getParentRoute: () => base,
         path: "/all-projects",
         component: redirect,
       }),
@@ -189,6 +204,30 @@ async function open(initial: string) {
   await act(async () => root.render(<RouterProvider router={router} />));
   return router;
 }
+
+it("shows a way home until a Director exists, then redirects to it", async () => {
+  const managers = state.managers;
+  state.managers = managers.filter((entry) => entry.summary.kind !== "director");
+  const router = await open("/all-projects");
+  expect(router.state.location.pathname).toBe("/all-projects");
+  await vi.waitFor(() => expect(container.textContent).toContain("디렉터를 찾는 중이에요"));
+  await act(() => {
+    state.managers = managers;
+    for (const listener of state.listeners) {
+      listener();
+    }
+  });
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/director-thread"));
+  expect(router.history.length).toBe(1);
+});
+
+it("leaves /all-projects for home from the notice when there is no Director", async () => {
+  state.managers = [];
+  const router = await open("/all-projects");
+  await userEvent.click(page.getByRole("link", { name: "홈으로", exact: true }));
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  expect(container.textContent).toContain("홈");
+});
 
 it("opens the desktop workspace on entry, switches graph and map, and respects closing until re-entry", async () => {
   await page.viewport(1440, 900);

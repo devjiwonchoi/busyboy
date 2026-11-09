@@ -47,8 +47,8 @@ vi.mock(import("../../state/session"), async (original) => ({
 vi.mock(import("../../state/director"), async (original) => ({
   ...(await original()),
   useDirectorInbox: () => ({ groups: [], total: 0 }),
+  useDirectorThreadRef: () => null,
 }));
-vi.mock(import("../director/useDirectorChat"), () => ({ useDirectorChat: () => null }));
 
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { AfkBanner } from "./Afk";

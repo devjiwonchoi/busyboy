@@ -75,7 +75,7 @@ function PendingActionsStepper(props: PendingActionsInput) {
       <Button
         size="xs"
         variant="ghost"
-        aria-label="다음 기다리는 일"
+        aria-label={followedIndex < 0 ? "기다리는 일 보기" : "다음 기다리는 일"}
         data-pending-action-id={idOf(next)}
         onPointerDown={(event) => event.preventDefault()}
         onClick={() => {
@@ -87,7 +87,7 @@ function PendingActionsStepper(props: PendingActionsInput) {
           }
         }}
       >
-        다음
+        {followedIndex < 0 ? "보기" : "다음"}
       </Button>
     </span>
   );

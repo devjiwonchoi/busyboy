@@ -14,29 +14,48 @@ export function DirectorInboxDock() {
   const { groups } = useDirectorInbox();
   const titleOf = useDirectorInboxTitles();
   const navigate = useNavigate();
-  const [requestedIndex, setIndex] = useState(0);
+  // The shown item and its sort time; when it closes, the next item in time takes its place.
+  const [selection, setSelection] = useState({ id: null as string | null, at: -Infinity });
   // Flatten before sorting: cards from different projects can interleave in time.
   const items = groups
+    .filter((group) => !group.isDirector)
     .flatMap((group) => [
-      ...group.cards.map((card) => ({ group, card, thread: null })),
-      ...group.waitingThreads.map((thread) => ({ group, card: null, thread })),
+      ...group.cards.map((card) => ({
+        id: `${group.environmentId}:card:${card.item.id}`,
+        at: Date.parse(card.item.createdAt),
+        group,
+        card,
+        thread: null,
+      })),
+      ...group.waitingThreads.map((thread) => ({
+        id: `${group.environmentId}:thread:${thread.threadId}`,
+        at: Infinity,
+        group,
+        card: null,
+        thread,
+      })),
     ])
-    .toSorted(
-      (a, b) =>
-        (a.card === null ? Infinity : Date.parse(a.card.item.createdAt)) -
-        (b.card === null ? Infinity : Date.parse(b.card.item.createdAt)),
-    );
-  const index = Math.min(requestedIndex, Math.max(0, items.length - 1));
-  if (index !== requestedIndex) {
-    setIndex(index);
-  }
+    .toSorted((a, b) => (a.at === b.at ? 0 : a.at < b.at ? -1 : 1));
+  const followedIndex = items.findIndex((item) => item.id === selection.id);
+  const nextInTime = items.findIndex((item) => item.at >= selection.at);
+  const index =
+    followedIndex >= 0
+      ? followedIndex
+      : nextInTime >= 0
+        ? nextInTime
+        : Math.max(0, items.length - 1);
   const current = items[index];
+  const select = (target: number) => {
+    const item = items[target];
+    if (item) setSelection({ id: item.id, at: item.at });
+  };
   if (!current) {
     return null;
   }
   const { group, card, thread } = current;
   return (
     <section
+      aria-label="받은편지함"
       data-director-inbox
       className="mb-2 max-h-[40dvh] min-w-0 overflow-y-auto rounded-lg border bg-background p-2"
     >
@@ -58,7 +77,7 @@ export function DirectorInboxDock() {
             type="button"
             aria-label="이전 카드"
             disabled={index === 0}
-            onClick={() => setIndex(index - 1)}
+            onClick={() => select(index - 1)}
             className="rounded px-2 py-1 hover:bg-muted disabled:opacity-40"
           >
             ‹
@@ -67,7 +86,7 @@ export function DirectorInboxDock() {
             type="button"
             aria-label="다음 카드"
             disabled={index === items.length - 1}
-            onClick={() => setIndex(index + 1)}
+            onClick={() => select(index + 1)}
             className="rounded px-2 py-1 hover:bg-muted disabled:opacity-40"
           >
             ›

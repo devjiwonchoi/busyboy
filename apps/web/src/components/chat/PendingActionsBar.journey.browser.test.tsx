@@ -391,11 +391,18 @@ for (const viewport of [
     expectInsideViewport(frontBanner()!, viewport.width);
 
     // The first click reveals the oldest card; subsequent clicks advance and wrap.
+    expect(
+      page.getByRole("button", { name: "기다리는 일 보기", exact: true }).element().textContent,
+    ).toBe("보기");
     await followPendingAction("attention-login");
     await expectRevealed("attention-login");
+    expect(
+      page.getByRole("button", { name: "다음 기다리는 일", exact: true }).element().textContent,
+    ).toBe("다음");
     expect(frontBanner()?.textContent).toContain("기다리는 일 1/3 · 블로커:");
     await followPendingAction("attention-cache");
     await expectRevealed("attention-cache");
+    expect(frontBanner()?.textContent).toContain("기다리는 일 2/3");
     await followPendingAction(CU_THREAD_ID);
     expect(server.opened).toEqual([CU_THREAD_ID]);
     expect(frontBanner()?.textContent).toContain("기다리는 일 3/3");
