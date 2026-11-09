@@ -64,6 +64,7 @@ import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
+import { withComputerUseInstructions } from "../mcp/toolkits/computerUse/instructions.ts";
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_MAX_IDLE_PIN_MS = 4 * 60 * 60 * 1000;
@@ -536,9 +537,12 @@ export const layerWithOptions = (
                 if (computerUseGranted) capabilities.add("computer-use");
                 const existing = yield* mcpSessions.read(threadId);
                 // A failed role read keeps the live session's instructions rather than stripping them.
-                const teamInstructions = Option.getOrElse(
-                  yield* teamInstructionsFor(threadId),
-                  () => existing?.teamInstructions,
+                const teamInstructions = withComputerUseInstructions(
+                  Option.getOrElse(
+                    yield* teamInstructionsFor(threadId),
+                    () => existing?.teamInstructions,
+                  ),
+                  computerUseGranted,
                 );
                 const withTeamInstructions = (
                   config: McpProviderSession.McpProviderSessionConfig,

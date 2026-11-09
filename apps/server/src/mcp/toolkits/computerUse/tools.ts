@@ -36,7 +36,7 @@ const dependencies = [
 
 /** Shared by every action tool description. */
 const ACTION_RULES =
-  "Works in the background: the app is not brought forward and the pointer does not move. Call computer_snapshot first and target elements by ref (eN) from it rather than coordinates.";
+  "Works in the background: the app is not brought forward and the pointer does not move. Call computer_snapshot first and target elements by ref (eN) from it rather than coordinates, then snapshot again to check the result. Ask the user before deleting, paying, sending, entering credentials, or changing account or security settings.";
 
 const actionTool = <const Name extends string, P extends Schema.Constraint>(
   name: Name,

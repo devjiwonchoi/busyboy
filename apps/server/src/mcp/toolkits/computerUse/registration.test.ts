@@ -208,6 +208,13 @@ it.effect("computer_* tools are listed with the computer-use capability", () =>
         expect(tool.description, tool.name).toMatch(/computer_snapshot|Call this first/);
         expect(tool.description, tool.name).toMatch(/ref/);
       }
+      for (const tool of tools.filter(
+        (tool) => tool.name !== "computer_apps" && tool.name !== "computer_snapshot",
+      )) {
+        expect(tool.description, tool.name).toMatch(
+          /Ask the user before deleting, paying, sending, entering credentials, or changing account or security settings\./,
+        );
+      }
       expect(tools.find((tool) => tool.name === "computer_snapshot")!.description).toMatch(
         /in-app browser/,
       );

@@ -16,7 +16,8 @@ export interface McpProviderSessionConfig {
   readonly capabilities?: ReadonlySet<string>;
   /**
    * Role instructions the adapter adds after the orchestration instructions,
-   * such as PROJECT_MANAGER_INSTRUCTIONS when this thread is a project's PM.
+   * such as PROJECT_MANAGER_INSTRUCTIONS when this thread is a project's PM,
+   * plus the computer-use guide when the session holds that capability.
    */
   readonly teamInstructions?: string;
   readonly agentDeviceEnvironment?: Readonly<Record<string, string>>;
