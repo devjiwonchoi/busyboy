@@ -17,6 +17,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { GoalGraph } from "../goalGraph/GoalGraph";
 import { DirectorCard } from "../director/DirectorCard";
 import { DirectorInbox } from "../director/DirectorInbox";
 import { useDirectorChat } from "../director/useDirectorChat";
@@ -44,6 +45,7 @@ export function AllProjectsPage() {
   const nowMinute = useNowMinute();
   const mapRef = useRef<HTMLDivElement>(null);
   const wide = useMediaQuery("sm");
+  const [view, setView] = useState<"map" | "graph">("map");
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
   const map = buildProjectMap(projectEntries, Date.parse(`${nowMinute}:00.000Z`));
@@ -95,6 +97,24 @@ export function AllProjectsPage() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <h1 className="min-w-0 flex-1 truncate font-medium text-sm">All projects</h1>
+          <div className="flex shrink-0 rounded-lg border p-0.5" aria-label="프로젝트 보기">
+            {(
+              [
+                ["map", "지도"],
+                ["graph", "목표 그래프"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                aria-pressed={view === value}
+                onClick={() => setView(value)}
+                className={`rounded-md px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring ${view === value ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {needsYouTotal > 0 ? (
             <button
               type="button"
@@ -114,7 +134,9 @@ export function AllProjectsPage() {
           <WorkspacePageContainer width="wide" className="gap-4 px-3 sm:px-6">
             {director !== null ? <DirectorCard director={director} /> : null}
             <DirectorInbox highlightCardId={null} showEmpty={false} />
-            {map.length === 0 ? (
+            {view === "graph" ? (
+              <GoalGraph entries={entries} />
+            ) : map.length === 0 ? (
               <p className="text-muted-foreground text-sm">아직 PM이 있는 프로젝트가 없어요.</p>
             ) : (
               <div
