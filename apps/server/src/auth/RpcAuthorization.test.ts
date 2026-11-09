@@ -79,6 +79,12 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("requires operate access for the user's execution approval", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.operationPermissionsAnswer)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+
   it("requires write access to import agent session history", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.agentSessionsScan)).toBe(
       AuthOrchestrationReadScope,

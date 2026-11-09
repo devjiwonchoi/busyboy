@@ -206,4 +206,91 @@ it.layer(layerOrchestrator)("writesThreads against a mode raise", (it) => {
       ),
     ),
   );
+
+  it.effect("checks an approved target's exact modes again under its command lock", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const threadId = ThreadId.make("thread:approved-race");
+      yield* createSupervisedThread(threadId);
+      yield* orchestrator.dispatch({
+        type: "thread.runtime-mode.set",
+        commandId: CommandId.make("approved-race:runtime"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const limit = {
+        runtimeMode: "auto",
+        interactionMode: "default",
+        approvedTargets: [{ threadId, runtimeMode: "full-access", interactionMode: "default" }],
+      } as const;
+      yield* orchestrator
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("approved-race:first-write"),
+          threadId,
+          title: "Approved operation",
+        })
+        .pipe(Effect.provideService(DispatchModeLimit, limit));
+      assert.equal((yield* projections.getThreadShell(threadId))?.title, "Approved operation");
+
+      yield* orchestrator.dispatch({
+        type: "thread.interaction-mode.set",
+        commandId: CommandId.make("approved-race:user-changes-mode"),
+        threadId,
+        interactionMode: "plan",
+      });
+      const refused = yield* orchestrator
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("approved-race:stale-write"),
+          threadId,
+          title: "Must not be applied",
+        })
+        .pipe(Effect.provideService(DispatchModeLimit, limit), Effect.flip);
+      assert.equal(refused._tag, "OrchestratorThreadAboveModeLimitError");
+      assert.equal((yield* projections.getThreadShell(threadId))?.title, "Approved operation");
+
+      // A stale grant cannot fall back to the caller's ordinary permissions after a downgrade.
+      for (const runtimeMode of ["auto", "approval-required"] as const) {
+        yield* orchestrator.dispatch({
+          type: "thread.runtime-mode.set",
+          commandId: CommandId.make(`approved-race:downgrade:${runtimeMode}`),
+          threadId,
+          runtimeMode,
+        });
+        const downgraded = yield* orchestrator
+          .dispatch({
+            type: "thread.metadata.update",
+            commandId: CommandId.make(`approved-race:stale-downgraded:${runtimeMode}`),
+            threadId,
+            title: "Must not be applied after downgrade",
+          })
+          .pipe(Effect.provideService(DispatchModeLimit, limit), Effect.flip);
+        assert.ok(downgraded._tag === "OrchestratorThreadAboveModeLimitError");
+        assert.equal(downgraded.mode, "runtime");
+        assert.equal((yield* projections.getThreadShell(threadId))?.title, "Approved operation");
+      }
+
+      const interactionOnly = yield* orchestrator
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("approved-race:stale-interaction-only"),
+          threadId,
+          title: "Must not be applied after interaction downgrade",
+        })
+        .pipe(
+          Effect.provideService(DispatchModeLimit, {
+            ...limit,
+            approvedTargets: [
+              { threadId, runtimeMode: "approval-required", interactionMode: "default" },
+            ],
+          }),
+          Effect.flip,
+        );
+      assert.ok(interactionOnly._tag === "OrchestratorThreadAboveModeLimitError");
+      assert.equal(interactionOnly.mode, "interaction");
+      assert.equal((yield* projections.getThreadShell(threadId))?.title, "Approved operation");
+    }),
+  );
 });

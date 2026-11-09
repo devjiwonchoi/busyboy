@@ -38,6 +38,7 @@ import {
 } from "./baseSchemas.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
 import { ComputerUseAppRequestStatus } from "./desktopComputerUse.ts";
+import { OperationPermissionStatus } from "./operationPermission.ts";
 import {
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
@@ -1379,6 +1380,18 @@ const OrchestrationV2BrowserRequestFields = {
   browserStatus: OrchestrationV2BrowserRequestStatus,
 } as const;
 
+/** A bounded execution approval. Raw arguments and credentials are never recorded here. */
+const OrchestrationV2OperationPermissionFields = {
+  type: Schema.Literal("operation_permission"),
+  operation: Schema.String,
+  summary: Schema.String,
+  reason: Schema.String,
+  targetDescription: Schema.String,
+  fingerprint: Schema.String,
+  expiresAt: IsoDateTime,
+  permissionStatus: OperationPermissionStatus,
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1564,6 +1577,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2BrowserRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2OperationPermissionFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2309,6 +2326,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
     ...OrchestrationV2BrowserRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2OperationPermissionFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
@@ -3079,6 +3100,16 @@ const OrchestrationV2InternalCommand = Schema.Union([
     historyLimit: Schema.optional(Schema.Int),
     autoApprove: Schema.optional(Schema.Boolean),
     browserStatus: OrchestrationV2BrowserRequestStatus,
+  }),
+  /** Internal: the waiting call and authenticated app answer path own this request. */
+  Schema.Struct({
+    ...OrchestrationV2OperationPermissionFields,
+    type: Schema.Literal("operation_permission.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    nodeId: NodeId,
+    turnItemId: TurnItemId,
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

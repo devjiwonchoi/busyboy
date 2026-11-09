@@ -317,6 +317,7 @@ import {
 import { SecretRequestCard } from "./SecretRequestCard";
 import { ComputerUseAppRequestCard } from "./ComputerUseAppRequestCard";
 import { BrowserRequestCard } from "./BrowserRequestCard";
+import { OperationPermissionCard } from "./OperationPermissionCard";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 
 import { SkillChipIcon, SkillInlineText } from "./SkillInlineText";
@@ -3042,6 +3043,15 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
   if (item.type === "browser_request") {
     return (
       <BrowserRequestCard
+        environmentId={ctx.activeThreadEnvironmentId}
+        item={item}
+        visibility={visibility}
+      />
+    );
+  }
+  if (item.type === "operation_permission") {
+    return (
+      <OperationPermissionCard
         environmentId={ctx.activeThreadEnvironmentId}
         item={item}
         visibility={visibility}

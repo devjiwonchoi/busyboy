@@ -1,11 +1,14 @@
 import {
   ATTACHMENT_UPLOAD_URL_TTL_MS,
-  type ChatAttachment,
+  ChatAttachment,
+  ChatImageAttachment,
+  ChatFileAttachment,
   MessageId,
   OrchestratorMcpFailure,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as Upload from "../../../assets/AttachmentUpload.ts";
 import * as Claims from "../../../orchestration-v2/AttachmentClaims.ts";
@@ -14,15 +17,32 @@ import * as McpToolAccess from "../../McpToolAccess.ts";
 import { newCommandId, readThread, unavailable } from "../../threadAccess.ts";
 import { AttachmentToolkit } from "./tools.ts";
 
+const supportedAttachments = Schema.Array(Schema.Union([ChatImageAttachment, ChatFileAttachment]));
+const decodeSupportedAttachments = Schema.decodeUnknownEffect(supportedAttachments);
+const encodeAttachments = Schema.encodeSync(Schema.fromJsonString(Schema.Array(ChatAttachment)));
+
 export function resolveAttachmentReferences(
   requested: ReadonlyArray<ChatAttachment>,
   stored: ReadonlyArray<ChatAttachment>,
-) {
+  requireUnchanged?: boolean,
+): Effect.Effect<ReadonlyArray<ChatAttachment>, OrchestratorMcpFailure> {
   const owned = new Map(stored.map((attachment) => [attachment.id, attachment]));
   return Effect.forEach(requested, (attachment) => {
     const canonical = Claims.attachmentIsPendingUpload(attachment)
       ? attachment
       : owned.get(attachment.id);
+    if (
+      requireUnchanged === true &&
+      canonical !== undefined &&
+      encodeAttachments([canonical]) !== encodeAttachments([attachment])
+    ) {
+      return Effect.fail(
+        new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: "The attachment changed after approval. Request approval again.",
+        }),
+      );
+    }
     return canonical === undefined
       ? Effect.fail(
           new OrchestratorMcpFailure({
@@ -88,6 +108,7 @@ export const layer = McpToolAccess.toLayer(
             const attachments = yield* resolveAttachmentReferences(
               input.attachments,
               projection.messages.flatMap((message) => message.attachments),
+              true,
             );
             const commandId = yield* newCommandId();
             const messageId = MessageId.make(commandId);
@@ -119,6 +140,28 @@ export const layer = McpToolAccess.toLayer(
               status: result.run.status,
             };
           }),
+        "t3_thread_send_attachments",
+        {
+          prepare: (input) =>
+            Effect.gen(function* () {
+              const { projection } = yield* readThread(input.threadId, ["messages"]);
+              const attachments = yield* resolveAttachmentReferences(
+                input.attachments,
+                projection.messages.flatMap((message) => message.attachments),
+              );
+              // The card and execution use the stored attachment identity, not caller-supplied labels.
+              const supported = yield* decodeSupportedAttachments(attachments).pipe(
+                Effect.mapError(
+                  () =>
+                    new OrchestratorMcpFailure({
+                      code: "invalid_request",
+                      message: "Unsupported attachment type.",
+                    }),
+                ),
+              );
+              return { ...input, attachments: supported };
+            }),
+        },
       ),
     };
   }),

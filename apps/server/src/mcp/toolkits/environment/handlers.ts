@@ -54,21 +54,23 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
       };
     }),
   ),
-  t3_environment_preferences_update: McpToolAccess.writesEnvironment((patch, check) =>
-    Effect.gen(function* () {
-      const scope = yield* McpInvocationContext.McpInvocationContext;
-      const executor = yield* ThreadCommandExecutor.ThreadCommandExecutor;
-      const update = Effect.gen(function* () {
-        // The turn may have ended, or the thread's modes changed, while this waited for the lock.
-        yield* check;
-        const { settings } = yield* access;
-        return preferences(
-          yield* settings.updateSettings(patch).pipe(Effect.mapError(unavailable)),
-        );
-      });
-      return yield* scope.thread === undefined
-        ? update
-        : executor.withLock(scope.thread.threadId, update);
-    }),
+  t3_environment_preferences_update: McpToolAccess.writesEnvironment(
+    (patch, check) =>
+      Effect.gen(function* () {
+        const scope = yield* McpInvocationContext.McpInvocationContext;
+        const executor = yield* ThreadCommandExecutor.ThreadCommandExecutor;
+        const update = Effect.gen(function* () {
+          // The turn may have ended, or the thread's modes changed, while this waited for the lock.
+          yield* check;
+          const { settings } = yield* access;
+          return preferences(
+            yield* settings.updateSettings(patch).pipe(Effect.mapError(unavailable)),
+          );
+        });
+        return yield* scope.thread === undefined
+          ? update
+          : executor.withLock(scope.thread.threadId, update);
+      }),
+    { operation: "t3_environment_preferences_update" },
   ),
 });

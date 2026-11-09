@@ -45,9 +45,9 @@ export function eventPathContainsSelector(event: Event, selector: string): boole
   return path.some((target) => target instanceof Element && target.closest(selector));
 }
 
-// Secret requests and browser sign-in cards both take private input.
+// Private inputs and permission cards own their keyboard interactions.
 const SECRET_REQUEST_SELECTOR =
-  '[data-v2-item-type="secret_request"], [data-v2-item-type="browser_request"]';
+  '[data-v2-item-type="secret_request"], [data-v2-item-type="browser_request"], [data-v2-item-type="operation_permission"]';
 
 export function shouldRedirectInputToComposer(event: Event): boolean {
   if (event.defaultPrevented) return false;
