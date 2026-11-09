@@ -1314,6 +1314,35 @@ export const CODEX_THREAD_CONFIG = {
 // that limit so the server's own wait timeout ends a long call.
 const CODEX_T3_MCP_TOOL_TIMEOUT_SEC = 65 * 60;
 
+/**
+ * Changes when the thread's t3-code credential gains or loses a capability;
+ * undefined without a credential.
+ */
+function codexMcpCapabilitiesKey(
+  mcpSession: McpProviderSession.McpProviderSessionConfig | undefined,
+): string | undefined {
+  if (mcpSession === undefined) return undefined;
+  return [...(mcpSession.capabilities ?? [])].toSorted().join(",");
+}
+
+/**
+ * Whether a thread's MCP client must list its tools again before the next
+ * turn: its credential kept its token but gained or lost a capability. Only a
+ * thread that connected with a credential: the reload keeps the thread's MCP
+ * config, it cannot add one.
+ */
+function codexNeedsMcpReload(
+  connectedCapabilities: string | undefined,
+  mcpSession: McpProviderSession.McpProviderSessionConfig | undefined,
+): boolean {
+  const capabilities = codexMcpCapabilitiesKey(mcpSession);
+  return (
+    connectedCapabilities !== undefined &&
+    capabilities !== undefined &&
+    connectedCapabilities !== capabilities
+  );
+}
+
 export function codexThreadRuntimeParams(input: {
   readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
   readonly modelSelection?: { readonly model: string };
@@ -1849,6 +1878,17 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             context.nativeTurnId,
           ).hasSubagents = true;
         };
+        /**
+         * The t3-code capabilities each app thread's MCP client last connected
+         * with. The credential keeps its token when they change (computer use
+         * turned on), so the next turn reloads the MCP servers to list the new
+         * tools.
+         */
+        const mcpCapabilitiesByThread = new Map<ThreadId, string | undefined>();
+        const rememberMcpCapabilities = (
+          threadId: ThreadId,
+          mcpSession: McpProviderSession.McpProviderSessionConfig | undefined,
+        ) => mcpCapabilitiesByThread.set(threadId, codexMcpCapabilitiesKey(mcpSession));
         const pendingRootTurns = yield* Ref.make(
           new Map<string, ProviderAdapter.ProviderAdapterV2TurnInput>(),
         );
@@ -6303,6 +6343,24 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           Effect.gen(function* () {
             const threadId = yield* getNativeThreadId(turnInput.providerThread);
             const mcpSession = yield* mcpSessions.read(turnInput.threadId);
+            const connectedCapabilities = mcpCapabilitiesByThread.get(turnInput.threadId);
+            if (!codexNeedsMcpReload(connectedCapabilities, mcpSession)) {
+              rememberMcpCapabilities(turnInput.threadId, mcpSession);
+            } else {
+              // Applied on the next turn. A failure keeps the old tool list and
+              // tries again on the turn after.
+              yield* client.request("config/mcpServer/reload", undefined).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => rememberMcpCapabilities(turnInput.threadId, mcpSession)),
+                ),
+                Effect.catch((cause) =>
+                  Effect.logWarning("orchestration-v2.codex-mcp-reload-failed", {
+                    threadId: turnInput.threadId,
+                    cause,
+                  }),
+                ),
+              );
+            }
             const turnStartParams = yield* buildCodexTurnStartParams({
               nativeThreadId: threadId,
               codexInput,
@@ -6576,6 +6634,9 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           ensureThread: (threadInput) =>
             ensureInitialized.pipe(
               Effect.andThen(mcpSessions.read(threadInput.threadId)),
+              Effect.tap((mcpSession) =>
+                Effect.sync(() => rememberMcpCapabilities(threadInput.threadId, mcpSession)),
+              ),
               Effect.flatMap((mcpSession) =>
                 client.request(
                   "thread/start",
@@ -6608,14 +6669,15 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           resumeThread: (threadInput) =>
             Effect.gen(function* () {
               const nativeThreadId = yield* getNativeThreadId(threadInput.providerThread);
+              const appThreadId = threadInput.threadId ?? threadInput.providerThread.appThreadId;
+              const mcpSession = yield* readMcpSession(appThreadId);
+              if (appThreadId !== null) rememberMcpCapabilities(appThreadId, mcpSession);
               // excludeTurns is not in the generated request schema yet.
               const resume = client.raw.request("thread/resume", {
                 threadId: nativeThreadId,
                 excludeTurns: true,
                 ...codexThreadRuntimeParams({
-                  mcpSession: yield* readMcpSession(
-                    threadInput.threadId ?? threadInput.providerThread.appThreadId,
-                  ),
+                  mcpSession,
                   ...(threadInput.modelSelection === undefined
                     ? {}
                     : { modelSelection: threadInput.modelSelection }),
