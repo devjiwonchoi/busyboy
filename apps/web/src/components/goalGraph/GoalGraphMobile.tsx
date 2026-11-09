@@ -1,7 +1,7 @@
 import { useImperativeHandle, useRef, useState } from "react";
 import type { GraphViewProps } from "./GoalGraph";
 import { GoalChips, PulseDot, toneClasses } from "./GoalGraphNodes";
-import { treeOrder } from "./goalGraph.logic";
+import { GOAL_GRAPH_STATUS_LABELS, treeOrder } from "./goalGraph.logic";
 
 export function GoalGraphMobile({ graph, ref, openChat, openTask }: GraphViewProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -42,8 +42,7 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask }: GraphViewPro
           className={`overflow-hidden rounded-lg border bg-card ${goal.id === "goal:none" ? "border-dashed" : ""}`}
         >
           <div
-            data-recent={goal.recent}
-            className={`flex items-center gap-2 border-l-[3px] p-3 ${goal.recent ? "ring-2 ring-inset ring-primary/60" : ""} ${goal.blocked ? "border-l-red-500" : "border-l-transparent"}`}
+            className={`flex items-center gap-2 border-l-[3px] p-3 ${goal.blocked ? "border-l-red-500" : "border-l-transparent"}`}
           >
             <button
               type="button"
@@ -86,10 +85,7 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask }: GraphViewPro
                 )
                 .map((project) => (
                   <div key={project.key} className="ml-4 border-t py-2 pr-2">
-                    <div
-                      data-recent={project.recent}
-                      className={`flex items-center gap-2 px-2 py-1 ${project.recent ? "ring-2 ring-primary/60" : ""}`}
-                    >
+                    <div className="flex items-center gap-2 px-2 py-1">
                       <button
                         type="button"
                         data-node-id={project.nodeId}
@@ -113,8 +109,7 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask }: GraphViewPro
                     ).map((task) => (
                       <div
                         key={task.nodeId}
-                        data-recent={task.recent}
-                        className={`my-1 flex flex-wrap items-center gap-1 border-l-[3px] px-2 py-1.5 ${toneClasses[task.tone]} ${task.recent ? "ring-2 ring-primary/60" : ""}`}
+                        className={`my-1 flex flex-wrap items-center gap-1 border-l-[3px] px-2 py-1.5 ${toneClasses[task.tone]}`}
                         style={{ marginLeft: 12 + task.depth * 16 }}
                       >
                         <button
@@ -134,6 +129,12 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask }: GraphViewPro
                             </span>
                           ) : null}
                         </button>
+                        <span
+                          data-task-status
+                          className="shrink-0 text-[10px] text-muted-foreground"
+                        >
+                          {GOAL_GRAPH_STATUS_LABELS[task.status]}
+                        </span>
                         {task.waitsOnKeys.map((key) => (
                           <span
                             key={key}

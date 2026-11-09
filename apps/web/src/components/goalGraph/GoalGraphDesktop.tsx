@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { GraphViewProps } from "./GoalGraph";
 import { GoalChips, ProgressRing, PulseDot, toneClasses } from "./GoalGraphNodes";
-import { layoutGoalGraph, relatedNodeIds } from "./goalGraph.logic";
+import { GOAL_GRAPH_STATUS_LABELS, layoutGoalGraph, relatedNodeIds } from "./goalGraph.logic";
 
 /** Below this zoom only goals and projects show, as progress rings. */
 const NEAR_SCALE = 0.7;
@@ -209,8 +209,7 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask }: GraphViewPr
                 height: box.height,
                 opacity: dim(box.id),
               }}
-              data-recent={node.recent}
-              className={`flex items-center gap-2 rounded-lg border border-l-[3px] bg-card px-3 shadow-sm ${task !== undefined ? toneClasses[task.tone] : blocked ? "border-l-red-500" : "border-l-border"} ${goal?.id === "goal:none" ? "border-dashed text-muted-foreground" : ""} ${node.recent ? "ring-2 ring-primary/60" : ""}`}
+              className={`flex items-center gap-2 rounded-lg border border-l-[3px] bg-card px-3 shadow-sm ${task !== undefined ? toneClasses[task.tone] : blocked ? "border-l-red-500" : "border-l-border"} ${goal?.id === "goal:none" ? "border-dashed text-muted-foreground" : ""}`}
             >
               <button
                 type="button"
@@ -245,6 +244,11 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask }: GraphViewPr
                     <span className="text-muted-foreground">{task.key}</span>
                   ) : null}
                   <span className="truncate">{goal?.title ?? project?.title ?? task?.title}</span>
+                  {task !== undefined ? (
+                    <span data-task-status className="shrink-0 text-[10px] text-muted-foreground">
+                      {GOAL_GRAPH_STATUS_LABELS[task.status]}
+                    </span>
+                  ) : null}
                 </div>
                 {node.changedLabel !== null ? (
                   <span className="block text-[10px] text-primary">{node.changedLabel}</span>

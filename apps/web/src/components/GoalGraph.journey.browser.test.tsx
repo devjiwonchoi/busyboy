@@ -230,7 +230,8 @@ for (const width of [1280, 390]) {
     expect(row(goalNode("goal-1")).querySelector("[data-pulse]") === null).toBe(false);
     expect(taskNode("a-1").dataset.recent).toBe("true");
     expect(taskNode("b-1").dataset.recent).toBe("false");
-    expect(taskNode("a-1").parentElement!.className).toContain("ring-2");
+    // Recent rows say when they changed; no ring around every row.
+    expect(taskNode("a-1").parentElement!.className).not.toContain("ring-2");
     expect(taskNode("a-1").parentElement!.textContent).toContain("3시간 전");
     expect(container.querySelector("[data-director-briefing]")?.textContent).toContain(
       "목표 2는 결정 1건에 막혀 있어요",

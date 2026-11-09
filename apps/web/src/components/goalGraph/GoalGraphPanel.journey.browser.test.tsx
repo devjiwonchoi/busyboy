@@ -216,8 +216,19 @@ function withEpic() {
   const a = state.managers[0]!;
   a.summary = {
     ...a.summary,
-    tasks: a.summary.tasks.map((task) => ({ ...task, parentTaskId: "epic" as never })),
+    tasks: [
+      ...a.summary.tasks,
+      graphTask("a-run", 7, undefined),
+      graphTask("a-failed", 8, { lastOutcome: "failed" }),
+    ].map((task) => ({
+      ...task,
+      parentTaskId: "epic" as never,
+      openBlocker: task.id === "a-2",
+    })),
   };
+  // b-1 waits only on unfinished work, with no card for the user.
+  const b = state.managers[1]!;
+  b.summary = { ...b.summary, decisionCards: [] };
   const director = state.managers[2]!;
   director.summary = {
     ...director.summary,
@@ -252,8 +263,25 @@ for (const width of [1280, 390]) {
     const waiting = surface().querySelector<HTMLElement>('[data-task-node="b-1"]')!.parentElement!;
     expect(waiting.textContent).toContain("⏳ A-2 막힘");
     expect(text).toContain("에픽 진행도");
-    expect(text).toContain("완료 2 / 5");
+    expect(text).toContain("완료 2 / 7");
     expect(text).toContain("작업 a-2 · a 끝나야 시작");
+    // Each task row says its status in words, and a red-edged row never reads as progress.
+    const status = (id: string) =>
+      surface()
+        .querySelector<HTMLElement>(`[data-task-node="${id}"]`)!
+        .parentElement!.querySelector("[data-task-status]")!.textContent;
+    expect(status("a-1")).toBe("답변 대기"); // running, but an open decision card waits on the user
+    expect(status("a-2")).toBe("막힘");
+    expect(status("a-3")).toBe("검토 중");
+    expect(status("a-run")).toBe("진행 중");
+    // A failed run reads "막힘" and gets the red edge with it.
+    expect(status("a-failed")).toBe("막힘");
+    expect(surface().querySelector('[data-task-node="a-failed"]')!.getAttribute("data-tone")).toBe(
+      "blocked",
+    );
+    expect(status("b-1")).toBe("막힘"); // running, but waits on unfinished A-2
+    // Only blocked rows stand out (red edge); recently changed rows get no blue ring.
+    expect(surface().querySelector('[class*="ring-primary"]')).toBe(null);
     await page.screenshot({ path: `__screenshots__/all-projects-${width}.png` });
     // Reopening keeps the same single view.
     await act(() => useRightPanelStore.getState().close(DIRECTOR));

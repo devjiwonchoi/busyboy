@@ -144,6 +144,25 @@ export function buildGoalGraph(input: {
       if (dependencies.length > 0) {
         blockReasons.push("waits_on");
       }
+      // The app's shared status words; an open card counts as a question.
+      const baseStatus = resolveProjectTaskStatus(task, {
+        openQuestion: task.openQuestion || cards.length > 0,
+        openBlocker: task.openBlocker,
+        leadRunning: false,
+        leadFailed: false,
+      });
+      // A failed run reads "막힘", so it gets the red edge too.
+      if (baseStatus === "fatal" && blockReasons.length === 0) {
+        blockReasons.push("fatal");
+      }
+      // A red-edged row never reads as plain progress: waiting on unfinished work is "막힘".
+      const status: ProjectTaskStatus =
+        blockReasons.length > 0 &&
+        baseStatus !== "ask_question" &&
+        baseStatus !== "waiting_for_approval" &&
+        baseStatus !== "fatal"
+          ? "fatal"
+          : baseStatus;
       const tone: TaskTone =
         blockReasons.length > 0
           ? "blocked"
@@ -163,6 +182,7 @@ export function buildGoalGraph(input: {
         title: task.title,
         stage: task.stage,
         tone,
+        status,
         live:
           task.stage === "running" &&
           !task.openQuestion &&
