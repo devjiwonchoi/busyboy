@@ -1,4 +1,4 @@
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   afkActive,
   afkSetting,
@@ -13,12 +13,11 @@ import { ChevronDownIcon, CoffeeIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { useEnvironmentIds } from "../../state/environments";
-import { useProjectManagerEntries, useUpdateTeamSettings } from "../../state/projectTeam";
-import { useEnvironmentsWithScope } from "../../state/session";
+import { useUpdateTeamSettings } from "../../state/projectTeam";
+import { useEnvironmentScope } from "../../state/session";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { Switch } from "../ui/switch";
 
 interface AfkProps {
   projectRef: ScopedProjectRef;
@@ -59,78 +58,34 @@ export function useAfkActive(setting: ProjectTeamAfk | undefined) {
   return active;
 }
 
-/**
- * AFK for the whole workspace. The server keeps it per project, so turning it on or
- * off writes every project the user can operate, the Director included. It reads as
- * on while any project is AFK.
- */
-export function useWorkspaceAfk() {
-  const entries = useProjectManagerEntries(useEnvironmentIds());
-  const operable = useEnvironmentsWithScope(entries, AuthOrchestrationOperateScope);
-  const updateSettings = useUpdateTeamSettings();
-  const now = Date.now();
-  const targets = entries
-    .filter((entry) => operable.has(entry.environmentId))
-    .map((entry) => ({
-      ref: scopeProjectRef(entry.environmentId, entry.summary.projectId),
-      setting: afkSetting(entry.summary.settings),
-    }));
-  const on = entries.some((entry) => afkActive(afkSetting(entry.summary.settings), now));
-  const setOn = (next: boolean) =>
-    Promise.all(
-      targets.flatMap(({ ref, setting }) => {
-        if (next) {
-          // Already on until turned off: nothing to write.
-          if (setting?.until === null) return [];
-          return [updateSettings(ref, { afk: { hours: null } })];
-        }
-        return setting === undefined ? [] : [updateSettings(ref, { afk: null })];
-      }),
-    );
-  return { on, canToggle: targets.length > 0, setOn };
-}
-
 const AFK_HINT =
   "켜면 에이전트가 기다리지 않고 추천안으로 대신 답해요. 블로커·머지·시크릿은 기다려요.";
 
-/**
- * The workspace AFK switch: an icon button at the bottom of the rail on desktop,
- * a chip in the sidebar's tab row on phones. Amber while on.
- */
-export function AfkToggle({ compact }: { compact: boolean }) {
-  const { on, canToggle, setOn } = useWorkspaceAfk();
-  const button = (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label="AFK"
-      data-afk-toggle
-      disabled={!canToggle}
-      onClick={() => {
-        void setOn(!on);
-      }}
-      className={cn(
-        "flex shrink-0 items-center justify-center rounded-md font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-        compact ? "h-9 gap-1.5 px-3 text-sm" : "size-9 flex-col gap-0.5 text-[9px] leading-none",
-        on
-          ? "bg-warning-surface text-warning-foreground ring-1 ring-warning/32"
-          : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-      )}
-    >
-      <CoffeeIcon aria-hidden className="size-4" />
-      AFK
-    </button>
-  );
-  if (compact) return button;
+/** Per-project AFK control shared by desktop and phone PM settings. */
+export function AfkSettings({ projectRef, summary }: AfkProps) {
+  const setting = afkSetting(summary.settings);
+  const active = useAfkActive(setting);
+  const canOperate = useEnvironmentScope(projectRef.environmentId, AuthOrchestrationOperateScope);
+  const updateSettings = useUpdateTeamSettings();
+
   return (
-    <Tooltip>
-      <TooltipTrigger render={button} />
-      <TooltipPopup side="right" className="max-w-56">
-        <div className="font-medium">{on ? "AFK 켜짐" : "AFK 꺼짐"}</div>
-        <div className="text-muted-foreground">{AFK_HINT}</div>
-      </TooltipPopup>
-    </Tooltip>
+    <div data-afk-settings>
+      <label className="flex cursor-pointer items-center justify-between gap-4 px-2 py-1.5 text-sm">
+        AFK
+        <Switch
+          size="sm"
+          checked={active}
+          disabled={!canOperate}
+          onCheckedChange={(checked) => {
+            void updateSettings(projectRef, { afk: checked ? { hours: null } : null });
+          }}
+        />
+      </label>
+      <p className="px-2 pb-1.5 text-xs text-muted-foreground">{AFK_HINT}</p>
+      {active && setting !== undefined && setting.until !== null ? (
+        <p className="px-2 pb-1.5 text-xs text-muted-foreground">{afkUntilLabel(setting)}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -167,10 +122,11 @@ function AfkAnswerRow({
 
 /**
  * A strip above the PM composer while AFK is on: when it ends, a button that turns it
- * off everywhere, and the questions answered for the user since it was turned on.
+ * off for this project, and the questions answered for the user since it was turned on.
  */
 export function AfkBanner({ projectRef, summary }: AfkProps) {
-  const workspaceAfk = useWorkspaceAfk();
+  const canOperate = useEnvironmentScope(projectRef.environmentId, AuthOrchestrationOperateScope);
+  const updateSettings = useUpdateTeamSettings();
   const setting = afkSetting(summary.settings);
   const active = useAfkActive(setting);
   const [expanded, setExpanded] = useState(false);
@@ -209,10 +165,10 @@ export function AfkBanner({ projectRef, summary }: AfkProps) {
           type="button"
           size="xs"
           variant="ghost"
-          disabled={!workspaceAfk.canToggle}
+          disabled={!canOperate}
           className="shrink-0"
           onClick={() => {
-            void workspaceAfk.setOn(false);
+            void updateSettings(projectRef, { afk: null });
           }}
         >
           끄기
