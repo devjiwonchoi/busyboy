@@ -121,6 +121,7 @@ it.effect("imports messages once and preserves the provider native resume bindin
       id: threadId,
       activeProviderThreadId: providerThread?.payload.id,
       historyOrigin: "imported",
+      runtimeMode: "auto",
     });
     expect(providerThread?.payload).toMatchObject({
       appThreadId: threadId,
@@ -139,6 +140,7 @@ it.effect("imports messages once and preserves the provider native resume bindin
       expect.objectContaining({
         threadId,
         providerInstanceId,
+        runtimeMode: "auto",
         resumeCursor: { threadId: providerSessionId },
       }),
     ]);
