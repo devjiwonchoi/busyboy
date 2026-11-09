@@ -14,7 +14,7 @@ import { DecisionCard } from "../chat/DecisionCard";
 import type { DirectorInboxGroup } from "./directorInbox.logic";
 
 /** Resolve names by both environment and project: IDs can repeat across servers. */
-export function useDirectorInboxTitles() {
+function useDirectorInboxTitles() {
   const projects = useProjects();
   return (group: DirectorInboxGroup) =>
     group.isDirector
@@ -25,7 +25,7 @@ export function useDirectorInboxTitles() {
         )?.title ?? "프로젝트");
 }
 
-export function InboxTaskLink({
+function InboxTaskLink({
   card,
   group,
   onNavigate,

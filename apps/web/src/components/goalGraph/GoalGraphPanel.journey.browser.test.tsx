@@ -1,7 +1,6 @@
 import "~/index.css";
 
 import type { ProjectTeamAttentionSummary } from "@t3tools/contracts";
-import { AsyncResult } from "effect/reactivity";
 import { act, useSyncExternalStore } from "react";
 import { page, userEvent } from "vite-plus/test/browser";
 import { createRoot, type Root } from "react-dom/client";
@@ -10,7 +9,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 const state = vi.hoisted(() => ({
   managers: [] as { environmentId: string; summary: ProjectTeamAttentionSummary }[],
   listeners: new Set<() => void>(),
-  answers: [] as unknown[],
 }));
 
 // The desktop app: page headers are the window's drag area.
@@ -41,10 +39,6 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
       },
       () => state.managers,
     )) as never,
-  useAnswerDecision: (() => async (_env: unknown, input: unknown) => {
-    state.answers.push(input);
-    return AsyncResult.success({});
-  }) as never,
 }));
 vi.mock(import("../../state/environments"), async (original) => ({
   ...(await original()),
@@ -92,7 +86,6 @@ const noop = () => undefined;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.managers = goalGraphSignalsFixture();
-  state.answers = [];
   useRightPanelStore.setState({ byThreadKey: {}, userActionRevisionByThreadKey: {} });
   container = document.createElement("div");
   document.body.append(container);
@@ -218,65 +211,102 @@ async function mount() {
   );
   return router;
 }
+/** Puts project a's tasks under a Director epic, so the epic progress section has rows. */
+function withEpic() {
+  const a = state.managers[0]!;
+  a.summary = {
+    ...a.summary,
+    tasks: [
+      ...a.summary.tasks,
+      graphTask("a-run", 7, undefined),
+      graphTask("a-failed", 8, { lastOutcome: "failed" }),
+    ].map((task) => ({
+      ...task,
+      parentTaskId: "epic" as never,
+      openBlocker: task.id === "a-2",
+    })),
+  };
+  // b-1 waits only on unfinished work, with no card for the user.
+  const b = state.managers[1]!;
+  b.summary = { ...b.summary, decisionCards: [] };
+  const director = state.managers[2]!;
+  director.summary = {
+    ...director.summary,
+    tasks: [graphTask("epic", 10, { stage: "running", waitsOn: ["a-2" as never] })],
+  };
+}
+const surface = () =>
+  document.querySelector<HTMLElement>('[data-testid="director-workspace-surface"]')!;
 for (const width of [1280, 390]) {
-  it(`reuses the panel shell and goal tree at ${width}px`, async () => {
+  it(`shows only goals, progress and relations at ${width}px`, async () => {
     await page.viewport(width, 844);
+    withEpic();
     await mount();
-    expect(document.querySelector("[data-goal-tree]") === null).toBe(false);
-    expect(document.body.textContent).toContain("목표 2는 결정 1건에 막혀 있어요");
-    expect(document.body.textContent).toContain("위험 정보 미제공");
-    await page.screenshot({ path: `__screenshots__/director-goal-panel-${width}.png` });
-    await act(() => useRightPanelStore.getState().close(DIRECTOR));
-    expect(
-      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, DIRECTOR).isOpen,
-    ).toBe(false);
-    await userEvent.click(headerToggle());
-    await vi.waitFor(() =>
-      expect(document.querySelector('[data-testid="director-workspace-surface"]') === null).toBe(
-        false,
-      ),
+    const text = surface().textContent ?? "";
+    // No to-do handling: that lives in the Director chat.
+    for (const gone of ["내 할 일", "나를 기다림", "마감", "카드 열기", "위험 정보 미제공"]) {
+      expect(text.includes(gone), gone).toBe(false);
+    }
+    expect(surface().querySelector("[data-workspace-attention]")).toBe(null);
+    expect(surface().querySelector("[data-waiting-count]")).toBe(null);
+    // One view, no tabs.
+    expect(page.getByRole("button", { name: "지도", exact: true }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "목표 그래프", exact: true }).elements()).toHaveLength(
+      0,
     );
-    await act(() => useRightPanelStore.getState().openBrowser(DIRECTOR, null));
-    expect(document.querySelector('[data-testid="browser-body"]') === null).toBe(false);
-    await act(() => useRightPanelStore.getState().open(DIRECTOR, "director-workspace"));
-    await userEvent.click(page.getByRole("button", { name: "최근 24시간", exact: true }));
-    expect(document.querySelectorAll("[data-workspace-attention]").length).toBe(3);
+    // Goals with progress, the goal → project → task tree with waits, and epic progress.
+    expect(text).toContain("목표 2는 결정 1건에 막혀 있어요");
+    const goal = surface().querySelector<HTMLElement>('[data-goal-node="goal-1"]')!;
+    expect(goal.textContent).toMatch(/^▾목표 1.*\d+\/\d+$/);
+    expect(surface().querySelector('[data-project-node="env-1/a"]') === null).toBe(false);
+    expect(surface().querySelector('[data-task-node="a-1"]') === null).toBe(false);
+    const waiting = surface().querySelector<HTMLElement>('[data-task-node="b-1"]')!.parentElement!;
+    expect(waiting.textContent).toContain("⏳ A-2 막힘");
+    expect(text).toContain("에픽 진행도");
+    expect(text).toContain("완료 2 / 7");
+    expect(text).toContain("작업 a-2 · a 끝나야 시작");
+    // Each task row says its status in words, and a red-edged row never reads as progress.
+    const status = (id: string) =>
+      surface()
+        .querySelector<HTMLElement>(`[data-task-node="${id}"]`)!
+        .parentElement!.querySelector("[data-task-status]")!.textContent;
+    expect(status("a-1")).toBe("답변 대기"); // running, but an open decision card waits on the user
+    expect(status("a-2")).toBe("막힘");
+    expect(status("a-3")).toBe("검토 중");
+    expect(status("a-run")).toBe("진행 중");
+    // A failed run reads "막힘" and gets the red edge with it.
+    expect(status("a-failed")).toBe("막힘");
+    expect(surface().querySelector('[data-task-node="a-failed"]')!.getAttribute("data-tone")).toBe(
+      "blocked",
+    );
+    expect(status("b-1")).toBe("막힘"); // running, but waits on unfinished A-2
+    // Only blocked rows stand out (red edge); recently changed rows get no blue ring.
+    expect(surface().querySelector('[class*="ring-primary"]')).toBe(null);
+    await page.screenshot({ path: `__screenshots__/all-projects-${width}.png` });
+    // Reopening keeps the same single view.
+    await act(() => useRightPanelStore.getState().close(DIRECTOR));
+    await userEvent.click(headerToggle());
+    await vi.waitFor(() => expect(document.querySelector("[data-goal-tree]") === null).toBe(false));
+  });
+  it(`opens a task from its node at ${width}px`, async () => {
+    await page.viewport(width, 844);
+    const router = await mount();
+    await userEvent.click(surface().querySelector<HTMLElement>('[data-task-node="a-1"]')!);
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe("/tasks/env-1/a/a-1"));
+  });
+  it(`opens the PM chat from a project node at ${width}px`, async () => {
+    await page.viewport(width, 844);
+    const router = await mount();
+    await userEvent.click(surface().querySelector<HTMLElement>('[data-project-node="env-1/a"]')!);
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/pm-a"));
   });
 }
-it("answers through the existing card and updates the panel from the subscription", async () => {
-  await mount();
-  await userEvent.click(page.getByRole("button", { name: "a 제안 카드 열기", exact: true }));
-  await vi.waitFor(() =>
-    expect(document.querySelector('[role="dialog"] [data-decision-card="card-a-1"]') === null).toBe(
-      false,
-    ),
-  );
-  const card = document.querySelector<HTMLElement>(
-    '[role="dialog"] [data-decision-card="card-a-1"]',
-  )!;
-  const textarea = card.querySelector<HTMLTextAreaElement>("textarea")!;
-  await userEvent.fill(textarea, "이 방향으로 진행해 주세요");
-  await userEvent.click(card.querySelector<HTMLElement>("[data-decision-card-submit]")!);
-  await vi.waitFor(() => expect(state.answers.length).toBe(1));
-  await act(() => {
-    state.managers = state.managers.map((entry) => ({
-      ...entry,
-      summary: {
-        ...entry.summary,
-        decisionCards: entry.summary.decisionCards.filter((card) => card.item.id !== "card-a-1"),
-      },
-    }));
-    for (const listener of state.listeners) listener();
-  });
-  expect(document.querySelector('[data-workspace-attention="card-a-1"]')).toBe(null);
-});
-it("keeps attention without goals and refreshes briefing", async () => {
+it("refreshes the briefing without goals", async () => {
   state.managers = state.managers.map((entry) => ({
     ...entry,
     summary: { ...entry.summary, goals: [] },
   }));
   await mount();
-  expect(document.querySelectorAll("[data-workspace-attention]").length).toBe(3);
   await act(() => {
     state.managers = state.managers.map((entry) => ({
       ...entry,
@@ -285,34 +315,6 @@ it("keeps attention without goals and refreshes briefing", async () => {
     for (const listener of state.listeners) listener();
   });
   expect(document.querySelector("[data-director-briefing]")?.textContent).toContain("새 브리핑");
-});
-it("reuses structured approval impacts and named task links from the inbox", async () => {
-  const entry = state.managers[0]!;
-  entry.summary = {
-    ...entry.summary,
-    decisionCards: entry.summary.decisionCards.map((card) => ({
-      ...card,
-      item: {
-        ...card.item,
-        context: {
-          action: "비용이 드는 작업을 시작합니다",
-          reason: "실행 환경이 필요합니다",
-          impacts: ["cost", "merge"],
-          cost: "$5",
-          reversibility: "irreversible",
-          recommendation: "영향을 확인하고 진행합니다",
-        },
-      },
-    })),
-  };
-  const router = await mount();
-  const row = document.querySelector<HTMLElement>('[data-workspace-attention="card-a-1"]')!;
-  expect(row.textContent).toContain("비용: $5");
-  expect(row.textContent).toContain("되돌릴 수 없음");
-  expect(row.querySelector('[data-attention-context="known"]')).toBeTruthy();
-  expect(row.textContent?.includes("위험 정보 미제공")).toBe(false);
-  await userEvent.click(row.querySelector<HTMLElement>("[data-director-inbox-task-link]")!);
-  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/tasks/env-1/a/a-1"));
 });
 /** A new task, a plan update and a new decision card arrive through the subscription. */
 function arriveNewWork() {
@@ -382,44 +384,12 @@ for (const width of [1280, 390]) {
   });
 }
 
-it("shows stalled work, epic status counts and deadlines, then opens a waiting thread", async () => {
-  const a = state.managers[0]!;
-  a.summary = {
-    ...a.summary,
-    tasks: a.summary.tasks.map((task) => ({
-      ...task,
-      parentTaskId: "epic" as never,
-      lastOutcome: task.id === "a-2" ? "stalled" : null,
-    })),
-    waitingThreads: [{ threadId: "question" as never, title: "권한 확인", kind: "question" }],
-  };
-  const director = state.managers[2]!;
-  director.summary = {
-    ...director.summary,
-    tasks: [graphTask("epic", 10, { stage: "running", waitsOn: ["a-2" as never] })],
-  };
-  const router = await mount();
-  expect(document.body.textContent).toContain("멈춤");
-  expect(document.body.textContent).toContain("완료 2 / 5");
-  expect(document.body.textContent).toContain("취소 1개 (완료율 제외)");
-  expect(document.body.textContent).toContain("작업 a-2 · a 끝나야 시작");
-  await userEvent.click(page.getByText("마감", { exact: true }));
-  expect(document.body.textContent).toContain("현재 태스크에 마감 필드가 없어요");
-  page.getByText("에픽 진행률", { exact: true }).element().scrollIntoView();
-  await page.screenshot({ path: "__screenshots__/director-goal-panel-epic.png" });
-  document.querySelector('[aria-label="목표 브리핑"]')?.scrollIntoView();
-  await page.screenshot({ path: "__screenshots__/director-goal-panel-progress.png" });
-  await userEvent.click(page.getByRole("button", { name: "권한 확인 · 채팅 열기", exact: true }));
-  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/question"));
-});
-it("shows empty attention, running and epic states", async () => {
+it("shows empty goal and epic states", async () => {
   state.managers = state.managers.map((entry) => ({
     ...entry,
     summary: { ...entry.summary, tasks: [], decisionCards: [], waitingThreads: [], goals: [] },
   }));
   await mount();
-  expect(document.body.textContent).toContain("기다리는 일이 없어요");
-  expect(document.body.textContent).toContain("진행 중인 태스크가 없어요");
   expect(document.body.textContent).toContain("진행 중인 에픽이 없어요");
   expect(document.body.textContent).toContain("아직 목표가 없어요");
 });

@@ -8,8 +8,6 @@ import { taskRouteParams } from "~/taskRoutes";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { type MapEntry, projectKey } from "../allProjects/allProjects.logic";
 import ChatMarkdown from "../ChatMarkdown";
-import { DirectorInbox } from "../director/DirectorInbox";
-import { Dialog, DialogClose, DialogPopup, DialogTitle } from "../ui/dialog";
 import { GoalGraphSections } from "./GoalGraphSections";
 import { GoalGraphDesktop } from "./GoalGraphDesktop";
 import { GoalGraphMobile } from "./GoalGraphMobile";
@@ -23,10 +21,6 @@ export type GraphViewProps = {
     project: Pick<GoalGraphData["projects"][number], "environmentId" | "pmThreadId">,
   ) => void;
   openTask: (task: GoalGraphData["tasks"][number]) => void;
-  /** "나를 기다림": the waiting card itself, or the PM chat when there is none. */
-  openWaiting: (
-    node: Pick<GoalGraphData["tasks"][number], "environmentId" | "pmThreadId" | "cardId">,
-  ) => void;
 };
 
 export function GoalGraph({
@@ -59,9 +53,6 @@ export function GoalGraph({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(scopeThreadRef(project.environmentId, project.pmThreadId)),
     });
-  const [cardId, setCardId] = useState<string | null>(null);
-  const openWaiting: GraphViewProps["openWaiting"] = (node) =>
-    node.cardId === null ? openChat(node) : setCardId(node.cardId);
   const openTask: GraphViewProps["openTask"] = (task) =>
     void navigate(taskRouteParams(task.environmentId, task.projectId, task.id));
   if (!panel && !recentOnly && graph.goals.length === 0) {
@@ -90,7 +81,6 @@ export function GoalGraph({
           />
         </div>
       ) : null}
-      {panel ? <GoalGraphSections graph={graph} openCard={setCardId} /> : null}
       <div className="flex flex-wrap items-center gap-2 text-xs" aria-label="목표 브리핑">
         <button
           type="button"
@@ -123,19 +113,6 @@ export function GoalGraph({
         >
           막힌 곳 {graph.briefing.blockedCount}
         </button>
-        <span aria-hidden="true">·</span>
-        <button
-          type="button"
-          className="text-warning disabled:text-muted-foreground"
-          disabled={graph.briefing.firstNeedsYouNodeId === null}
-          onClick={() => {
-            if (graph.briefing.firstNeedsYouNodeId !== null) {
-              view.current?.focusNode(graph.briefing.firstNeedsYouNodeId);
-            }
-          }}
-        >
-          나를 기다림 {graph.briefing.needsYouCount}
-        </button>
       </div>
       {graph.goals.length === 0 && !recentOnly ? (
         <p className="text-sm text-muted-foreground">
@@ -144,33 +121,9 @@ export function GoalGraph({
       ) : recentOnly && graph.tasks.length === 0 ? (
         <p className="text-sm text-muted-foreground">최근 24시간 안에 바뀐 일이 없어요</p>
       ) : (
-        <View
-          ref={view}
-          graph={graph}
-          openChat={openChat}
-          openTask={openTask}
-          openWaiting={openWaiting}
-        />
+        <View ref={view} graph={graph} openChat={openChat} openTask={openTask} />
       )}
-      <Dialog
-        open={cardId !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCardId(null);
-          }
-        }}
-      >
-        <DialogPopup
-          showCloseButton={false}
-          className="flex max-h-[85dvh] w-full min-w-0 flex-col overflow-y-auto p-4 sm:max-w-3xl"
-        >
-          <div className="mb-4 flex items-center gap-2">
-            <DialogTitle className="flex-1">나를 기다리는 일</DialogTitle>
-            <DialogClose className="rounded-md px-3 py-2 text-sm hover:bg-muted">닫기</DialogClose>
-          </div>
-          <DirectorInbox highlightCardId={cardId} showEmpty />
-        </DialogPopup>
-      </Dialog>
+      {panel ? <GoalGraphSections graph={graph} /> : null}
     </div>
   );
 }

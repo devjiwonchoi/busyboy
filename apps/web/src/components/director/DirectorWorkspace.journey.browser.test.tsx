@@ -229,7 +229,7 @@ it("leaves /all-projects for home from the notice when there is no Director", as
   expect(container.textContent).toContain("홈");
 });
 
-it("opens the desktop workspace only from the header, switches graph and map, and stays closed on re-entry", async () => {
+it("opens the desktop workspace only from the header as one goal view, and stays closed on re-entry", async () => {
   await page.viewport(1440, 900);
   const router = await open("/env-1/director-thread");
   await vi.waitFor(() => expect(container.querySelector('[data-testid="chat"]')).toBeTruthy());
@@ -239,46 +239,11 @@ it("opens the desktop workspace only from the header, switches graph and map, an
     expect(container.querySelector('[data-testid="director-workspace-surface"]')).toBeTruthy(),
   );
   expect(container.querySelector('[data-testid="chat"]')?.textContent).toContain("대화");
-  expect(
-    page
-      .getByRole("button", { name: "목표 그래프", exact: true })
-      .element()
-      .getAttribute("aria-pressed"),
-  ).toBe("true");
+  // One view: no graph / map tabs.
+  expect(page.getByRole("button", { name: "목표 그래프", exact: true }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: "지도", exact: true }).elements()).toHaveLength(0);
+  expect(container.querySelector("[data-project-map]")).toBeNull();
   await page.screenshot({ path: "../../../.screenshots/bu99-director-desktop.png" });
-  await userEvent.click(page.getByRole("button", { name: "지도", exact: true }));
-  await vi.waitFor(() =>
-    expect(container.querySelectorAll("[data-project-card]").length).toBeGreaterThan(0),
-  );
-  // Panel width, rather than the desktop viewport, controls the map columns.
-  const surface = container.querySelector<HTMLElement>(
-    '[data-testid="director-workspace-surface"]',
-  )!;
-  surface.style.width = "300px";
-  surface.style.flex = "none";
-  await vi.waitFor(() =>
-    expect(
-      getComputedStyle(container.querySelector("[data-project-map]")!).gridTemplateColumns.split(
-        " ",
-      ),
-    ).toHaveLength(1),
-  );
-  surface.style.width = "600px";
-  await vi.waitFor(() =>
-    expect(
-      getComputedStyle(container.querySelector("[data-project-map]")!).gridTemplateColumns.split(
-        " ",
-      ),
-    ).toHaveLength(2),
-  );
-  surface.style.width = "800px";
-  await vi.waitFor(() =>
-    expect(
-      getComputedStyle(container.querySelector("[data-project-map]")!).gridTemplateColumns.split(
-        " ",
-      ),
-    ).toHaveLength(3),
-  );
   const ref = { environmentId: "env-1", threadId: "director-thread" } as ScopedThreadRef;
   await act(() => useRightPanelStore.getState().close(ref));
   expect(container.querySelector('[data-testid="director-workspace-surface"]')).toBeNull();
