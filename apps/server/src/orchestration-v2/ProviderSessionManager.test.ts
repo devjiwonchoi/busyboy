@@ -56,6 +56,8 @@ import {
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ServerConfig from "../config.ts";
+import { COMPUTER_USE_INSTRUCTIONS } from "../mcp/toolkits/computerUse/instructions.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as EventSink from "./EventSink.ts";
 import * as EventStore from "./EventStore.ts";
@@ -500,6 +502,7 @@ function layerTest(input: {
   readonly spawnBeforeOpen?: boolean;
   readonly scopeCloseReached?: Deferred.Deferred<void>;
   readonly serverSettingsLayer?: ReturnType<typeof ServerSettings.layerTest>;
+  readonly serverConfigLayer?: Layer.Layer<ServerConfig.ServerConfig>;
   readonly projectServiceLayer?: Layer.Layer<ProjectService.ProjectService>;
   readonly projectTeamRepositoryLayer?: Layer.Layer<ProjectTeamRepository.ProjectTeamRepository>;
 }) {
@@ -578,6 +581,7 @@ function layerTest(input: {
           layerConfiguredMcpRegistry,
           layerTestStores,
           ...(input.serverSettingsLayer === undefined ? [] : [input.serverSettingsLayer]),
+          ...(input.serverConfigLayer === undefined ? [] : [input.serverConfigLayer]),
           ...(input.projectServiceLayer === undefined ? [] : [input.projectServiceLayer]),
           ...(input.projectTeamRepositoryLayer === undefined
             ? []
@@ -2120,6 +2124,86 @@ it.effect("ProviderSessionManagerV2 keeps PM instructions when the role read fai
     }
   }),
 );
+
+/** A desktop that passed the computer-use channel fds. */
+const layerComputerUseServerConfig = Layer.effect(
+  ServerConfig.ServerConfig,
+  ServerConfig.ServerConfig.pipe(
+    Effect.map((base) => ({ ...base, desktopComputerUseFd: 3, desktopComputerUseControlFd: 4 })),
+    Effect.provide(
+      ServerConfig.layerTest(process.cwd(), { prefix: "t3-provider-session-manager-cu-" }),
+    ),
+  ),
+).pipe(Layer.provide(NodeServices.layer), Layer.orDie);
+
+for (const enableAgentComputerUse of [true, false]) {
+  it.effect(
+    `ProviderSessionManagerV2 ${enableAgentComputerUse ? "gives" : "withholds"} the computer-use guide ${enableAgentComputerUse ? "with" : "without"} the capability`,
+    () =>
+      Effect.gen(function* () {
+        const threadId = ThreadId.make(
+          `thread-provider-session-manager-cu-${enableAgentComputerUse}`,
+        );
+        const state = yield* Ref.make(emptyState);
+        const mcpConfigs = yield* Ref.make<
+          ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
+        >([]);
+
+        yield* Effect.gen(function* () {
+          const eventSink = yield* EventSink.EventSinkV2;
+          const idAllocator = yield* IdAllocator.IdAllocatorV2;
+          const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+          const now = yield* DateTime.now;
+          const providerSessionId = yield* idAllocator.allocate.providerSession({
+            providerInstanceId: modelSelection.instanceId,
+            threadId,
+          });
+          yield* eventSink.write({
+            events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+          });
+          yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+          yield* manager.close(providerSessionId);
+        }).pipe(
+          Effect.provide(
+            layerTest({
+              state,
+              idleTimeoutMs: 1_000,
+              mcpConfigs,
+              serverConfigLayer: layerComputerUseServerConfig,
+              serverSettingsLayer: ServerSettings.layerTest({ enableAgentComputerUse }).pipe(
+                Layer.orDie,
+              ),
+            }),
+          ),
+        );
+
+        const [config] = yield* Ref.get(mcpConfigs);
+        assert.equal(config?.capabilities?.has("computer-use"), enableAgentComputerUse);
+        if (!enableAgentComputerUse) {
+          assert.isUndefined(config?.teamInstructions);
+          return;
+        }
+        const instructions = config?.teamInstructions ?? "";
+        assert.equal(instructions, COMPUTER_USE_INSTRUCTIONS);
+        for (const phrase of [
+          "`computer_apps`",
+          "`computer_snapshot` again to check the result",
+          "keyboard shortcuts",
+          "`computer_invoke_menu`",
+          "coordinates you read from the screenshot",
+          "Ask the user first",
+          "delete anything",
+          "pay, buy, subscribe",
+          "send a message, email",
+          "password, passcode, or other credentials",
+          "account, privacy, or security settings",
+          "If an `ask_user` tool is available, ask with it",
+        ]) {
+          assert.include(instructions, phrase);
+        }
+      }),
+  );
+}
 
 it.effect("ProviderSessionManagerV2 honors a project browser-access opt-out", () =>
   Effect.gen(function* () {
