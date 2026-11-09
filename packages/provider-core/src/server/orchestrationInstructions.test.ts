@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 
 import {
+  directorInstructions,
   PROJECT_MANAGER_INSTRUCTIONS,
   projectManagerInstructions,
   T3_CODE_ORCHESTRATION_INSTRUCTIONS,
@@ -152,6 +153,14 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "Your name is Remy.");
     assert.include(text, "Your voice: Terse and dry.");
     assert.include(text, "`team_settings_update`");
+  });
+
+  it("has the Director record goals and link the work that serves them", () => {
+    const text = directorInstructions({ name: "Nova", voice: "Calm." });
+    assert.include(text, "### Goals");
+    assert.include(text, "record it with `goal_write`");
+    assert.include(text, "Link the work that serves a goal with `goal_link`");
+    assert.include(text, "`workspace.alignment`");
   });
 
   it("quotes a custom voice as the user's words", () => {

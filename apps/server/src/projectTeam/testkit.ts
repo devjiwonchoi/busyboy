@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodePath from "node:path";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
@@ -43,6 +46,7 @@ import * as AttentionRouter from "./AttentionRouter.ts";
 import * as ContextCare from "./ContextCare.ts";
 import * as RoleStepReactor from "./RoleStepReactor.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
+import { directorWorkspaceRoot } from "./director.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import type { PullRequestText } from "./pullRequestFormat.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
@@ -514,6 +518,35 @@ export const setUpManager = Effect.gen(function* () {
   const manager = yield* team.ensureManager(PROJECT_ID);
   return manager.threadId;
 });
+
+export const SECOND_PROJECT_ID = ProjectId.make("project-2");
+export const DIRECTOR_PROJECT_ID = ProjectId.make("project-director");
+
+/** Two projects with PMs, plus the Director's system project and its Director. */
+export const setUpWorkspace = (harness: TeamHarness) =>
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService.ProjectTeamService;
+    const config = yield* ServerConfig.ServerConfig;
+    const firstPm = yield* setUpManager;
+    harness.addProject(SECOND_PROJECT_ID, "Second");
+    const secondPm = (yield* team.ensureManager(SECOND_PROJECT_ID)).threadId;
+    harness.projects.set(DIRECTOR_PROJECT_ID, {
+      projectId: DIRECTOR_PROJECT_ID,
+      title: "Director",
+      workspaceRoot: directorWorkspaceRoot(NodePath as unknown as Path.Path, config.baseDir),
+      defaultModelSelection: null,
+      defaultThreadEnvMode: null,
+      autoPull: false,
+      faviconPath: null,
+      projectIcon: null,
+      scripts: [],
+      createdAt: START,
+      updatedAt: START,
+      deletedAt: null,
+    });
+    const director = yield* team.ensureManager(DIRECTOR_PROJECT_ID);
+    return { firstPm, secondPm, director };
+  });
 
 export const startLead = (
   pm: ThreadId,

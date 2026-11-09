@@ -635,7 +635,12 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
 }
 
 /** "proposal": a PM's or the Director's task proposal; only the user's click adds it. */
-export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker", "proposal"]);
+export const ProjectAttentionKind = Schema.Literals([
+  "decision",
+  "approval",
+  "blocker",
+  "proposal",
+]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
 /** "afk": the server answered for the user while AFK was on. */
@@ -1047,10 +1052,97 @@ export const ProjectTeamEpic = Schema.Struct({
 });
 export type ProjectTeamEpic = typeof ProjectTeamEpic.Type;
 
+/** A user goal kept by the Director at workspace level. */
+export const WorkspaceGoalId = TrimmedNonEmptyString.pipe(Schema.brand("WorkspaceGoalId"));
+export type WorkspaceGoalId = typeof WorkspaceGoalId.Type;
+
+export const WorkspaceGoalStatus = Schema.Literals(["active", "done", "archived"]);
+export type WorkspaceGoalStatus = typeof WorkspaceGoalStatus.Type;
+
+/** A project (taskId null) or one task that serves a goal. */
+export const WorkspaceGoalLink = Schema.Struct({
+  projectId: ProjectId,
+  taskId: Schema.NullOr(ProjectTaskId),
+});
+export type WorkspaceGoalLink = typeof WorkspaceGoalLink.Type;
+
+export const WorkspaceGoal = Schema.Struct({
+  id: WorkspaceGoalId,
+  /** In the user's own words. */
+  title: Schema.String,
+  detail: Schema.NullOr(Schema.String),
+  status: WorkspaceGoalStatus,
+  /** Order the user sees goals in, lowest first. */
+  position: Schema.Int,
+  links: Schema.Array(WorkspaceGoalLink),
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type WorkspaceGoal = typeof WorkspaceGoal.Type;
+
+/** The projects and tasks that serve one active goal. */
+export const WorkspaceGoalContribution = Schema.Struct({
+  goalId: WorkspaceGoalId,
+  projectIds: Schema.Array(ProjectId),
+  taskIds: Schema.Array(ProjectTaskId),
+});
+export type WorkspaceGoalContribution = typeof WorkspaceGoalContribution.Type;
+
+export const WorkspaceTaskRef = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+});
+export type WorkspaceTaskRef = typeof WorkspaceTaskRef.Type;
+
+/**
+ * Why an open task on a goal's path is stuck: a question card waits on the user, a
+ * blocker card (fatal), the task is blocked, or it waits on an unfinished task.
+ */
+export const WorkspaceBlockReason = Schema.Literals([
+  "waiting_on_user",
+  "fatal",
+  "blocked",
+  "waits_on",
+]);
+export type WorkspaceBlockReason = typeof WorkspaceBlockReason.Type;
+
+export const WorkspaceBlockedPath = Schema.Struct({
+  goalId: WorkspaceGoalId,
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  reasons: Schema.Array(WorkspaceBlockReason),
+  /** The unfinished tasks it waits on, for "waits_on". */
+  waitsOnTaskIds: Schema.Array(ProjectTaskId),
+});
+export type WorkspaceBlockedPath = typeof WorkspaceBlockedPath.Type;
+
+/** How the workspace's work lines up with the active goals. */
+export const WorkspaceGoalAlignment = Schema.Struct({
+  goals: Schema.Array(WorkspaceGoalContribution),
+  /** Open top-level tasks that serve no active goal. */
+  unalignedTasks: Schema.Array(WorkspaceTaskRef),
+  /** Active goals with no open work: likely missing work. */
+  goalsWithoutOpenWork: Schema.Array(WorkspaceGoalId),
+  blockedPaths: Schema.Array(WorkspaceBlockedPath),
+});
+export type WorkspaceGoalAlignment = typeof WorkspaceGoalAlignment.Type;
+
+export const EMPTY_WORKSPACE_GOAL_ALIGNMENT: WorkspaceGoalAlignment = {
+  goals: [],
+  unalignedTasks: [],
+  goalsWithoutOpenWork: [],
+  blockedPaths: [],
+};
+
 /** What team_status adds for the Director: every project and every epic. */
 export const ProjectTeamWorkspace = Schema.Struct({
   projects: Schema.Array(ProjectTeamWorkspaceProject),
   epics: Schema.Array(ProjectTeamEpic),
+  /** Every workspace goal, done and archived ones included. */
+  goals: Schema.Array(WorkspaceGoal).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  alignment: WorkspaceGoalAlignment.pipe(
+    Schema.withDecodingDefault(Effect.succeed(EMPTY_WORKSPACE_GOAL_ALIGNMENT)),
+  ),
 });
 export type ProjectTeamWorkspace = typeof ProjectTeamWorkspace.Type;
 
@@ -1577,6 +1669,49 @@ export const ProjectTeamMemoryDeleteResult = Schema.Struct({
 });
 export type ProjectTeamMemoryDeleteResult = typeof ProjectTeamMemoryDeleteResult.Type;
 
+const WorkspaceGoalTitle = TrimmedNonEmptyString.check(Schema.isMaxLength(512)).annotate({
+  description: "The goal in the user's own words and language.",
+});
+const WorkspaceGoalDetail = TrimmedString.check(Schema.isMaxLength(8_000)).annotate({
+  description: "More about the goal, in the user's words. Empty or null clears it.",
+});
+
+export const ProjectTeamGoalWriteInput = Schema.Struct({
+  goalId: Schema.optional(Schema.NullOr(WorkspaceGoalId)).annotate({
+    description: "The goal to change. Omit or null to add a new goal.",
+  }),
+  title: Schema.optional(WorkspaceGoalTitle),
+  detail: Schema.optional(Schema.NullOr(WorkspaceGoalDetail)),
+  status: Schema.optional(WorkspaceGoalStatus).annotate({
+    description: "active (default), done when it is reached, archived when the user drops it.",
+  }),
+  position: Schema.optional(Schema.Int).annotate({
+    description: "Order among goals, lowest first. New goals go last.",
+  }),
+});
+export type ProjectTeamGoalWriteInput = typeof ProjectTeamGoalWriteInput.Type;
+
+const WorkspaceGoalLinkTargets = Schema.Struct({
+  projectIds: Schema.optional(Schema.Array(ProjectId)),
+  taskIds: Schema.optional(Schema.Array(ProjectTaskId)),
+});
+
+export const ProjectTeamGoalLinkInput = Schema.Struct({
+  goalId: WorkspaceGoalId,
+  link: Schema.optional(WorkspaceGoalLinkTargets).annotate({
+    description: "Projects and tasks (from any project) that serve the goal.",
+  }),
+  unlink: Schema.optional(WorkspaceGoalLinkTargets).annotate({
+    description: "Projects and tasks to remove from the goal.",
+  }),
+});
+export type ProjectTeamGoalLinkInput = typeof ProjectTeamGoalLinkInput.Type;
+
+export const ProjectTeamGoalResult = Schema.Struct({
+  goal: WorkspaceGoal,
+});
+export type ProjectTeamGoalResult = typeof ProjectTeamGoalResult.Type;
+
 // Client RPCs.
 
 export const ProjectManagerLastAction = Schema.Struct({
@@ -1708,6 +1843,10 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   waitingThreads: Schema.Array(ProjectWaitingThread).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
+  /** Director only: every workspace goal, done and archived ones included. */
+  goals: Schema.optional(Schema.Array(WorkspaceGoal)),
+  /** Director only: how the workspace's work lines up with the active goals. */
+  goalAlignment: Schema.optional(WorkspaceGoalAlignment),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 

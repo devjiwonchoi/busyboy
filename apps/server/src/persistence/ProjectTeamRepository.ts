@@ -46,6 +46,10 @@ import {
   ProjectTeamSettings,
   ProjectManagerKind,
   ThreadId,
+  WorkspaceGoal,
+  WorkspaceGoalId,
+  WorkspaceGoalLink,
+  WorkspaceGoalStatus,
 } from "@t3tools/contracts";
 
 import {
@@ -398,6 +402,11 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly topic: string;
     }) => Result<boolean>;
+
+    /** Every workspace goal with its links, in position order. */
+    readonly listWorkspaceGoals: () => Result<ReadonlyArray<WorkspaceGoal>>;
+    /** Writes the goal and replaces its links with the given ones. */
+    readonly saveWorkspaceGoal: (goal: WorkspaceGoal) => Result<void>;
 
     readonly createSitrep: (input: CreateProjectSitrepInput) => Result<ProjectSitrep>;
     readonly setSitrepBody: (input: {
@@ -1406,6 +1415,63 @@ export const make = Effect.gen(function* () {
     `,
   });
 
+  // Workspace goals
+
+  const GoalRow = Schema.Struct({
+    id: WorkspaceGoalId,
+    title: Schema.String,
+    detail: Schema.NullOr(Schema.String),
+    status: WorkspaceGoalStatus,
+    position: Schema.Int,
+    createdAt: IsoDateTime,
+    updatedAt: IsoDateTime,
+  });
+  const GoalLinkRow = Schema.Struct({ goalId: WorkspaceGoalId, ...WorkspaceGoalLink.fields });
+  const findGoals = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: GoalRow,
+    execute: () => sql`
+      SELECT goal_id AS "id", title, detail, status, position,
+        created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM workspace_goals
+      ORDER BY position ASC, created_at ASC
+    `,
+  });
+  const findGoalLinks = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: GoalLinkRow,
+    execute: () => sql`
+      SELECT goal_id AS "goalId", project_id AS "projectId", task_id AS "taskId"
+      FROM workspace_goal_links
+      ORDER BY created_at ASC, rowid ASC
+    `,
+  });
+  const upsertGoalRow = SqlSchema.void({
+    Request: GoalRow,
+    execute: (goal) => sql`
+      INSERT INTO workspace_goals (goal_id, title, detail, status, position, created_at, updated_at)
+      VALUES (${goal.id}, ${goal.title}, ${goal.detail}, ${goal.status}, ${goal.position},
+        ${goal.createdAt}, ${goal.updatedAt})
+      ON CONFLICT (goal_id) DO UPDATE SET
+        title = excluded.title,
+        detail = excluded.detail,
+        status = excluded.status,
+        position = excluded.position,
+        updated_at = excluded.updated_at
+    `,
+  });
+  const deleteGoalLinks = SqlSchema.void({
+    Request: Schema.Struct({ goalId: WorkspaceGoalId }),
+    execute: ({ goalId }) => sql`DELETE FROM workspace_goal_links WHERE goal_id = ${goalId}`,
+  });
+  const insertGoalLink = SqlSchema.void({
+    Request: Schema.Struct({ ...GoalLinkRow.fields, createdAt: IsoDateTime }),
+    execute: (link) => sql`
+      INSERT OR IGNORE INTO workspace_goal_links (goal_id, project_id, task_id, created_at)
+      VALUES (${link.goalId}, ${link.projectId}, ${link.taskId}, ${link.createdAt})
+    `,
+  });
+
   // Sitreps
 
   const insertSitrep = SqlSchema.findOne({
@@ -1684,6 +1750,27 @@ export const make = Effect.gen(function* () {
         Effect.map((rows) => rows.length > 0),
         Effect.mapError(toRepositoryError("deleteMemory")),
       ),
+
+    listWorkspaceGoals: () =>
+      Effect.gen(function* () {
+        const goals = yield* findGoals(undefined);
+        const links = yield* findGoalLinks(undefined);
+        return goals.map((goal): WorkspaceGoal => ({
+          ...goal,
+          links: links
+            .filter((link) => link.goalId === goal.id)
+            .map((link) => ({ projectId: link.projectId, taskId: link.taskId })),
+        }));
+      }).pipe(Effect.mapError(toRepositoryError("listWorkspaceGoals"))),
+    saveWorkspaceGoal: ({ links, ...goal }) =>
+      Effect.gen(function* () {
+        yield* upsertGoalRow(goal);
+        yield* deleteGoalLinks({ goalId: goal.id });
+        // Links keep their order; the timestamp only breaks ties within one save.
+        for (const link of links) {
+          yield* insertGoalLink({ goalId: goal.id, ...link, createdAt: goal.updatedAt });
+        }
+      }).pipe(sql.withTransaction, Effect.mapError(toRepositoryError("saveWorkspaceGoal"))),
 
     createSitrep: (input) =>
       insertSitrep(input).pipe(Effect.mapError(toRepositoryError("createSitrep"))),

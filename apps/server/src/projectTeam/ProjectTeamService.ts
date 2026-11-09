@@ -124,11 +124,18 @@ import {
   afkAnswerEventBody,
   afkPickOption,
   afkSetting,
+  type ProjectTeamGoalLinkInput,
+  type ProjectTeamGoalResult,
+  type ProjectTeamGoalWriteInput,
+  type WorkspaceGoal,
+  type WorkspaceGoalLink,
+  WorkspaceGoalId,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { normalizeThreadPullRequestKey } from "@t3tools/shared/threadPullRequests";
+import { type AlignableTask, alignWorkspaceGoals } from "@t3tools/shared/workspaceGoals";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -439,6 +446,23 @@ export type DelegateStep = (
   input: OrchestratorMcpDelegateTaskInput,
   onChildCreated?: (child: DelegatedChild) => Effect.Effect<void>,
 ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
+
+/** A task as goal alignment reads it, with its project's open cards. */
+function toAlignableTask(
+  task: ProjectTask,
+  openAttention: ReadonlyArray<ProjectAttentionItem>,
+): AlignableTask {
+  const cards = openAttention.filter((item) => item.taskId === task.id);
+  return {
+    id: task.id,
+    projectId: task.projectId,
+    parentTaskId: task.parentTaskId,
+    waitsOn: task.waitsOn,
+    stage: task.stage,
+    openQuestion: cards.length > 0,
+    openBlocker: cards.some((item) => item.kind === "blocker"),
+  };
+}
 
 export function toTaskBrief(
   task: ProjectTask,
@@ -752,6 +776,17 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamMemoryDeleteInput,
     ) => Effect.Effect<ProjectTeamMemoryDeleteResult, ProjectTeamError>;
 
+    /** Director only: add or change a workspace goal. */
+    readonly goalWrite: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamGoalWriteInput,
+    ) => Effect.Effect<ProjectTeamGoalResult, ProjectTeamError>;
+    /** Director only: link projects and tasks to a goal, or unlink them. */
+    readonly goalLink: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamGoalLinkInput,
+    ) => Effect.Effect<ProjectTeamGoalResult, ProjectTeamError>;
+
     /** projectTeam.requestSitrep RPC. */
     readonly requestSitrep: (
       input: ProjectTeamRequestSitrepInput,
@@ -860,6 +895,8 @@ const make = Effect.gen(function* () {
   const managerLocks = yield* KeyedLock.make<ProjectId>();
   const taskStartLocks = yield* KeyedLock.make<ProjectId>();
   const specLocks = yield* KeyedLock.make<ProjectTaskId>();
+  // Goal writes read, change and save the whole goal; parallel calls must not drop each other's changes.
+  const goalLocks = yield* KeyedLock.make<"goals">();
 
   const roleOf: ProjectTeamService["Service"]["roleOf"] = (threadId) =>
     roleOfThread(threadId).pipe(
@@ -2945,21 +2982,29 @@ const make = Effect.gen(function* () {
         otherThreads,
         journal,
         memoryTopics,
-        ...(role.type === "director" ? { workspace: yield* workspaceView(tasks) } : {}),
+        ...(role.type === "director"
+          ? { workspace: yield* workspaceView(projectId, tasks, openAttention) }
+          : {}),
       } satisfies ProjectTeamStatus;
     }).pipe(orTeamError("Could not read the team status."));
 
   /**
    * The Director's view of the workspace: each project's counts, open tasks and
-   * questions, and its PM's summary; then each open epic with its subtasks.
+   * questions, and its PM's summary; then each open epic with its subtasks; then the
+   * goals and how every task lines up with them.
    */
-  const workspaceView = (epics: ReadonlyArray<ProjectTask>) =>
+  const workspaceView = (
+    directorProjectId: ProjectId,
+    epics: ReadonlyArray<ProjectTask>,
+    epicAttention: ReadonlyArray<ProjectAttentionItem>,
+  ) =>
     Effect.gen(function* () {
       const managers = (yield* repository.listManagers()).filter(
         (manager) => manager.kind === "pm",
       );
       const briefById = new Map<string, ProjectTaskBrief>();
       const prefixByProject = new Map<string, string>();
+      const alignable: Array<AlignableTask> = [];
       const projectsView: Array<ProjectTeamWorkspaceProject> = [];
       for (const manager of managers) {
         const project = yield* projects.get(manager.projectId);
@@ -2971,6 +3016,7 @@ const make = Effect.gen(function* () {
         const brief = yield* liveTaskSignals(tasks, openAttention);
         const briefs = tasks.map(brief);
         for (const item of briefs) briefById.set(item.id, item);
+        alignable.push(...tasks.map((task) => toAlignableTask(task, openAttention)));
         const prefix = yield* taskKeyPrefixFor(manager.projectId, manager.settings);
         prefixByProject.set(manager.projectId, prefix);
         const summary = (yield* repository.listMemory(manager.projectId)).find(
@@ -3002,7 +3048,18 @@ const make = Effect.gen(function* () {
           })),
         });
       }
-      return { projects: projectsView, epics: epicsView } satisfies ProjectTeamWorkspace;
+      alignable.push(...epics.map((epic) => toAlignableTask(epic, epicAttention)));
+      const goals = yield* repository.listWorkspaceGoals();
+      return {
+        projects: projectsView,
+        epics: epicsView,
+        goals,
+        alignment: alignWorkspaceGoals({
+          goals,
+          tasks: alignable,
+          projectIds: [directorProjectId, ...projectsView.map((project) => project.projectId)],
+        }),
+      } satisfies ProjectTeamWorkspace;
     });
 
   const applySettings = (
@@ -3897,6 +3954,107 @@ const make = Effect.gen(function* () {
       return { topic: input.topic, deleted };
     }).pipe(orTeamError("Could not delete the project memory."));
 
+  const requireGoal = (goalId: WorkspaceGoalId, projectId: ProjectId) =>
+    Effect.gen(function* () {
+      const goals = yield* repository.listWorkspaceGoals();
+      const goal = goals.find((candidate) => candidate.id === goalId);
+      if (goal === undefined) {
+        return yield* teamError(`Goal ${goalId} was not found.`, projectId);
+      }
+      return goal;
+    });
+
+  const saveGoal = (goal: WorkspaceGoal, projectId: ProjectId) =>
+    Effect.gen(function* () {
+      yield* repository.saveWorkspaceGoal(goal);
+      // The Director's summary carries the goals, so a change goes out with a new snapshot.
+      yield* router.publish(projectId);
+      return { goal };
+    });
+
+  const goalWrite: ProjectTeamService["Service"]["goalWrite"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["director"], "goal_write");
+      return yield* goalLocks.withLock("goals", writeGoal(role.projectId, input));
+    }).pipe(orTeamError("Could not write the goal."));
+
+  const writeGoal = (projectId: ProjectId, input: ProjectTeamGoalWriteInput) =>
+    Effect.gen(function* () {
+      const now = yield* nowIso;
+      const detail =
+        input.detail === undefined ? undefined : input.detail === "" ? null : input.detail;
+      if (input.goalId === undefined || input.goalId === null) {
+        if (input.title === undefined) {
+          return yield* teamError("A new goal needs a title.", projectId);
+        }
+        const goals = yield* repository.listWorkspaceGoals();
+        return yield* saveGoal(
+          {
+            id: WorkspaceGoalId.make(yield* newId("goal")),
+            title: input.title,
+            detail: detail ?? null,
+            status: input.status ?? "active",
+            position: input.position ?? Math.max(-1, ...goals.map((goal) => goal.position)) + 1,
+            links: [],
+            createdAt: now,
+            updatedAt: now,
+          },
+          projectId,
+        );
+      }
+      const goal = yield* requireGoal(input.goalId, projectId);
+      return yield* saveGoal(
+        {
+          ...goal,
+          title: input.title ?? goal.title,
+          detail: detail === undefined ? goal.detail : detail,
+          status: input.status ?? goal.status,
+          position: input.position ?? goal.position,
+          updatedAt: now,
+        },
+        projectId,
+      );
+    });
+
+  const goalLink: ProjectTeamService["Service"]["goalLink"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["director"], "goal_link");
+      return yield* goalLocks.withLock("goals", linkGoal(role.projectId, input));
+    }).pipe(orTeamError("Could not link the goal."));
+
+  const linkGoal = (projectId: ProjectId, input: ProjectTeamGoalLinkInput) =>
+    Effect.gen(function* () {
+      const linkProjects = input.link?.projectIds ?? [];
+      const linkTasks = input.link?.taskIds ?? [];
+      const unlinkProjects = new Set<string>(input.unlink?.projectIds ?? []);
+      const unlinkTasks = new Set<string>(input.unlink?.taskIds ?? []);
+      if (linkProjects.length + linkTasks.length + unlinkProjects.size + unlinkTasks.size === 0) {
+        return yield* teamError("goal_link needs projects or tasks to link or unlink.", projectId);
+      }
+      const goal = yield* requireGoal(input.goalId, projectId);
+      const added: Array<WorkspaceGoalLink> = [];
+      for (const linkedProjectId of linkProjects) {
+        const project = yield* projects.get(linkedProjectId);
+        if (Option.isNone(project) || project.value.deletedAt !== null) {
+          return yield* teamError(`Project ${linkedProjectId} was not found.`, projectId);
+        }
+        added.push({ projectId: linkedProjectId, taskId: null });
+      }
+      for (const taskId of linkTasks) {
+        const task = yield* requireAnyTask(taskId, projectId);
+        added.push({ projectId: task.projectId, taskId: task.id });
+      }
+      const sameLink = (a: WorkspaceGoalLink, b: WorkspaceGoalLink) =>
+        a.projectId === b.projectId && a.taskId === b.taskId;
+      const links: Array<WorkspaceGoalLink> = goal.links.filter((link) =>
+        link.taskId === null ? !unlinkProjects.has(link.projectId) : !unlinkTasks.has(link.taskId),
+      );
+      for (const link of added) {
+        if (!links.some((existing) => sameLink(existing, link))) links.push(link);
+      }
+      return yield* saveGoal({ ...goal, links, updatedAt: yield* nowIso }, projectId);
+    });
+
   const requestSitrep: ProjectTeamService["Service"]["requestSitrep"] = ({ projectId }) =>
     sitreps.request(projectId).pipe(Effect.map((sitrepId) => ({ sitrepId })));
 
@@ -4195,7 +4353,32 @@ const make = Effect.gen(function* () {
           } satisfies ProjectTeamAttentionSummary;
         }),
       );
-      return { projects: summaries };
+      if (!summaries.some((summary) => summary.kind === "director")) return { projects: summaries };
+      // The Director's summary carries the goals, aligned with every project's tasks.
+      const goals = yield* repository.listWorkspaceGoals();
+      // Same projects as team_status: the Director's own and every project not deleted.
+      const projectIds: Array<ProjectId> = [];
+      for (const summary of summaries) {
+        const project = yield* projects.get(summary.projectId);
+        if (
+          summary.kind === "director" ||
+          (Option.isSome(project) && project.value.deletedAt === null)
+        ) {
+          projectIds.push(summary.projectId);
+        }
+      }
+      const goalAlignment = alignWorkspaceGoals({
+        goals,
+        projectIds,
+        tasks: summaries.flatMap((summary) =>
+          summary.tasks.map((task) => ({ ...task, projectId: summary.projectId })),
+        ),
+      });
+      return {
+        projects: summaries.map((summary) =>
+          summary.kind === "director" ? { ...summary, goals, goalAlignment } : summary,
+        ),
+      };
     },
   ).pipe(orTeamError("Could not read the team attention summary."));
 
@@ -4345,6 +4528,8 @@ const make = Effect.gen(function* () {
     listMemory,
     writeMemory,
     deleteMemory,
+    goalWrite,
+    goalLink,
     requestSitrep,
     attentionSnapshot,
     afkSweep,

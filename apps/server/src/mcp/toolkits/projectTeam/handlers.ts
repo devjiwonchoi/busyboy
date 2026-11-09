@@ -118,6 +118,12 @@ const handlers = {
   memory_delete: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.deleteMemory(caller, input)),
   ),
+  goal_write: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.goalWrite(caller, input)),
+  ),
+  goal_link: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.goalLink(caller, input)),
+  ),
 } satisfies McpToolAccess.Handlers<typeof ProjectTeamToolkit.tools>;
 
 export const layer = McpToolAccess.toLayer(ProjectTeamToolkit, handlers);
