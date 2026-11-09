@@ -69,16 +69,12 @@ import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "~/rightPanelLayout";
 import { selectThreadRightPanelState, useRightPanelStore } from "~/rightPanelStore";
 import { RightPanelSheet } from "../RightPanelSheet";
 import { RightPanelTabs } from "../RightPanelTabs";
-import {
-  DirectorWorkspaceToggle,
-  useOpenDirectorWorkspaceOnEntry,
-} from "./DirectorWorkspaceToggle";
+import { DirectorWorkspaceToggle } from "./DirectorWorkspaceToggle";
 import { Route as AllProjectsRoute } from "../../routes/_chat.all-projects";
 
 const noop = () => {};
 function ThreadView(props: { threadRef: ScopedThreadRef }) {
   const ref = props.threadRef;
-  useOpenDirectorWorkspaceOnEntry(ref, ref.threadId === "director-thread");
   const panel = useRightPanelStore((store) => selectThreadRightPanelState(store.byThreadKey, ref));
   const sheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const active = panel.surfaces.find((surface) => surface.id === panel.activeSurfaceId) ?? null;
@@ -117,6 +113,10 @@ function ThreadView(props: { threadRef: ScopedThreadRef }) {
       onAddPullRequest={noop}
       onAddPullRequests={noop}
       onAddSideChat={noop}
+      onAddProject={() => store().open(ref, "director-workspace")}
+      onAddTaskPlan={noop}
+      projectAvailable
+      taskPlanAvailable={false}
       browserAvailable
       terminalAvailable={false}
       diffAvailable={false}
@@ -229,9 +229,12 @@ it("leaves /all-projects for home from the notice when there is no Director", as
   expect(container.textContent).toContain("홈");
 });
 
-it("opens the desktop workspace on entry, switches graph and map, and respects closing until re-entry", async () => {
+it("opens the desktop workspace only from the header, switches graph and map, and stays closed on re-entry", async () => {
   await page.viewport(1440, 900);
   const router = await open("/env-1/director-thread");
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="chat"]')).toBeTruthy());
+  expect(container.querySelector('[data-testid="director-workspace-surface"]')).toBeNull();
+  await userEvent.click(page.getByRole("button", { name: "전체 프로젝트", exact: true }));
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="director-workspace-surface"]')).toBeTruthy(),
   );
@@ -283,6 +286,7 @@ it("opens the desktop workspace on entry, switches graph and map, and respects c
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="director-workspace-surface"]')).toBeTruthy(),
   );
+  await act(() => useRightPanelStore.getState().close(ref));
   await act(async () => {
     await router.navigate({
       to: "/$environmentId/$threadId",
@@ -295,15 +299,17 @@ it("opens the desktop workspace on entry, switches graph and map, and respects c
       params: { environmentId: "env-1", threadId: "director-thread" },
     });
   });
-  await vi.waitFor(() =>
-    expect(container.querySelector('[data-testid="director-workspace-surface"]')).toBeTruthy(),
-  );
+  await vi.waitFor(() => expect(container.textContent).toContain("대화 director-thread"));
+  expect(container.querySelector('[data-testid="director-workspace-surface"]')).toBeNull();
+  await page.screenshot({ path: "__screenshots__/director-reentry-stays-closed.png" });
 });
 
-it("redirects the old URL and opens the workspace sheet on mobile entry", async () => {
+it("redirects the old URL on mobile and opens the workspace sheet only from the header", async () => {
   await page.viewport(390, 844);
   const router = await open("/all-projects");
   await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env-1/director-thread"));
+  expect(document.querySelector('[data-testid="director-workspace-surface"]')).toBeNull();
+  await userEvent.click(page.getByRole("button", { name: "전체 프로젝트", exact: true }));
   await vi.waitFor(() =>
     expect(
       document.querySelector('[role="dialog"] [data-testid="director-workspace-surface"]'),

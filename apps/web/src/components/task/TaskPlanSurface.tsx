@@ -1,6 +1,5 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { ClipboardListIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
 
 import { useThreadShell } from "~/state/entities";
 import { useLeadThreadTask } from "~/state/projectTeam";
@@ -25,31 +24,7 @@ export function TaskPlanSurface(props: { readonly threadRef: ScopedThreadRef }) 
   );
 }
 
-/**
- * Opens the right panel on the Plan tab each time a task lead thread is entered, so every way
- * into a task (sidebar, All projects, #N chips, the approval modal) lands on its plan. Fires
- * once per entry: switching tabs or closing the panel afterwards sticks until the user leaves.
- */
-export function useOpenTaskPlanOnEntry(threadRef: ScopedThreadRef | null, isLeadThread: boolean) {
-  const openedFor = useRef<ScopedThreadRef | null>(null);
-  useEffect(() => {
-    if (threadRef === null) {
-      openedFor.current = null;
-      return;
-    }
-    const entered =
-      openedFor.current?.environmentId === threadRef.environmentId &&
-      openedFor.current.threadId === threadRef.threadId;
-    if (entered || !isLeadThread) {
-      if (!entered) openedFor.current = null;
-      return;
-    }
-    openedFor.current = threadRef;
-    useRightPanelStore.getState().open(threadRef, "task-plan");
-  }, [threadRef, isLeadThread]);
-}
-
-/** The chat header's way back to a task's plan: opens the right panel on the Plan tab. */
+/** The chat header's way to a task's plan: opens the right panel on the Plan tab. */
 export function TaskPlanToggle(props: { readonly threadRef: ScopedThreadRef }) {
   const showing = useRightPanelStore(
     (state) => selectActiveRightPanel(state.byThreadKey, props.threadRef) === "task-plan",

@@ -48,6 +48,7 @@ import { Volume2, VolumeOff } from "lucide";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ComponentType,
   type ReactElement,
   type ReactNode,
   useEffect,
@@ -142,8 +143,12 @@ interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddSideChat: () => void;
-  /** Present only on task lead threads, which get a Plan tab. */
-  onAddTaskPlan?: (() => void) | undefined;
+  /** Opens every project's board (goal graph, map, waiting cards). */
+  onAddProject: () => void;
+  projectAvailable: boolean;
+  onAddTaskPlan: () => void;
+  /** Only task lead threads have a plan to show. */
+  taskPlanAvailable: boolean;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -179,6 +184,8 @@ const SURFACE_DISABLED_REASONS = {
   pullRequest: "This thread's branch has no pull request yet.",
   pullRequests: "No linked pull requests are available for this thread.",
   sideChat: "Side chats open from project threads that have started.",
+  taskPlan: "No plan to show in this thread.",
+  project: "The project board opens from a chat thread.",
 } as const;
 
 const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
@@ -200,6 +207,8 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
   sideChat: "Available in project threads after the first message.",
+  taskPlan: "Available in task lead threads.",
+  project: "Available in chat threads.",
 } as const;
 
 type TabContextMenuAction =
@@ -310,52 +319,70 @@ function SurfaceMenuItem(props: {
   return <DisabledReasonTooltip reason={props.disabledReason} trigger={item} />;
 }
 
-/** The Plan entry is listed only where it applies, so other threads see no disabled item. */
-function taskPlanActions(onAddTaskPlan: (() => void) | undefined) {
-  return onAddTaskPlan === undefined
-    ? []
-    : [
-        {
-          label: "Plan",
-          icon: ClipboardList,
-          shortcut: "N",
-          available: true,
-          disabledReason: "",
-          onClick: onAddTaskPlan,
-        },
-      ];
+type SurfaceLauncherProps = Pick<
+  RightPanelTabsProps,
+  | "onAddProject"
+  | "onAddTaskPlan"
+  | "onAddBrowser"
+  | "onAddTerminal"
+  | "onAddFiles"
+  | "onAddDiff"
+  | "onAddPullRequest"
+  | "onAddPullRequests"
+  | "onAddSideChat"
+  | "projectAvailable"
+  | "taskPlanAvailable"
+  | "browserAvailable"
+  | "terminalAvailable"
+  | "filesAvailable"
+  | "diffAvailable"
+  | "pullRequestAvailable"
+  | "pullRequestsAvailable"
+  | "sideChatAvailable"
+>;
+
+type SurfaceUnavailableReasons = Record<
+  keyof typeof SURFACE_DISABLED_REASONS & keyof typeof SURFACE_UNAVAILABLE_HINTS,
+  string
+>;
+
+interface SurfaceLauncherAction {
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  shortcut: string;
+  available: boolean;
+  disabledReason: string;
+  onClick: () => void;
 }
 
-function RightPanelEmptyState(props: {
-  onAddBrowser: () => void;
-  onAddBrowserInProfile: (profileId: string) => void;
-  browserProfiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
-  onAddTerminal: () => void;
-  onAddDiff: () => void;
-  onAddFiles: () => void;
-  onAddPullRequest: () => void;
-  onAddPullRequests: () => void;
-  onAddSideChat: () => void;
-  /** Present only on task lead threads, which get a Plan tab. */
-  onAddTaskPlan?: (() => void) | undefined;
-  browserAvailable: boolean;
-  terminalAvailable: boolean;
-  diffAvailable: boolean;
-  filesAvailable: boolean;
-  pullRequestAvailable: boolean;
-  pullRequestsAvailable: boolean;
-  sideChatAvailable: boolean;
-}) {
-  const [highlight, setHighlight] = useState(-1);
-
-  const actions = [
-    ...taskPlanActions(props.onAddTaskPlan),
+/** The one list behind both the "+" menu and the empty panel's "Open a surface". */
+function surfaceLauncherActions(
+  props: SurfaceLauncherProps,
+  reasons: SurfaceUnavailableReasons,
+): readonly SurfaceLauncherAction[] {
+  return [
+    {
+      label: "Project",
+      icon: LayoutGrid,
+      shortcut: "J",
+      available: props.projectAvailable,
+      disabledReason: reasons.project,
+      onClick: props.onAddProject,
+    },
+    {
+      label: "Plan",
+      icon: ClipboardList,
+      shortcut: "N",
+      available: props.taskPlanAvailable,
+      disabledReason: reasons.taskPlan,
+      onClick: props.onAddTaskPlan,
+    },
     {
       label: "Browser",
       icon: Globe2,
       shortcut: "B",
       available: props.browserAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.browser,
+      disabledReason: reasons.browser,
       onClick: props.onAddBrowser,
     },
     {
@@ -363,7 +390,7 @@ function RightPanelEmptyState(props: {
       icon: TerminalSquare,
       shortcut: "T",
       available: props.terminalAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.terminal,
+      disabledReason: reasons.terminal,
       onClick: props.onAddTerminal,
     },
     {
@@ -371,7 +398,7 @@ function RightPanelEmptyState(props: {
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.files,
+      disabledReason: reasons.files,
       onClick: props.onAddFiles,
     },
     {
@@ -379,7 +406,7 @@ function RightPanelEmptyState(props: {
       icon: FileDiff,
       shortcut: "D",
       available: props.diffAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.diff,
+      disabledReason: reasons.diff,
       onClick: props.onAddDiff,
     },
     {
@@ -387,7 +414,7 @@ function RightPanelEmptyState(props: {
       icon: PullRequestGlyph.pullRequest,
       shortcut: "P",
       available: props.pullRequestAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequest,
+      disabledReason: reasons.pullRequest,
       onClick: props.onAddPullRequest,
     },
     {
@@ -395,7 +422,7 @@ function RightPanelEmptyState(props: {
       icon: PullRequestGlyph.link,
       shortcut: "L",
       available: props.pullRequestsAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequests,
+      disabledReason: reasons.pullRequests,
       onClick: props.onAddPullRequests,
     },
     {
@@ -403,12 +430,23 @@ function RightPanelEmptyState(props: {
       icon: MessagesSquare,
       shortcut: "S",
       available: props.sideChatAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.sideChat,
+      disabledReason: reasons.sideChat,
       onClick: props.onAddSideChat,
     },
-  ] as const;
+  ];
+}
 
-  type SurfaceAction = (typeof actions)[number];
+function RightPanelEmptyState(
+  props: SurfaceLauncherProps & {
+    onAddBrowserInProfile: (profileId: string) => void;
+    browserProfiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  },
+) {
+  const [highlight, setHighlight] = useState(-1);
+
+  const actions = surfaceLauncherActions(props, SURFACE_UNAVAILABLE_HINTS);
+
+  type SurfaceAction = SurfaceLauncherAction;
 
   const availableActions = actions.filter((action) => action.available);
   const highlightIndex =
@@ -1016,65 +1054,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     });
   };
 
-  const addSurfaceActions = [
-    ...taskPlanActions(props.onAddTaskPlan),
-    {
-      label: "Browser",
-      icon: Globe2,
-      shortcut: "B",
-      available: props.browserAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.browser,
-      onClick: props.onAddBrowser,
-    },
-    {
-      label: "Terminal",
-      icon: TerminalSquare,
-      shortcut: "T",
-      available: props.terminalAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.terminal,
-      onClick: props.onAddTerminal,
-    },
-    {
-      label: "Files",
-      icon: Files,
-      shortcut: "F",
-      available: props.filesAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.files,
-      onClick: props.onAddFiles,
-    },
-    {
-      label: "Diff",
-      icon: FileDiff,
-      shortcut: "D",
-      available: props.diffAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.diff,
-      onClick: props.onAddDiff,
-    },
-    {
-      label: "Pull request",
-      icon: PullRequestGlyph.pullRequest,
-      shortcut: "P",
-      available: props.pullRequestAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.pullRequest,
-      onClick: props.onAddPullRequest,
-    },
-    {
-      label: "Linked pull requests",
-      icon: PullRequestGlyph.link,
-      shortcut: "L",
-      available: props.pullRequestsAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.pullRequests,
-      onClick: props.onAddPullRequests,
-    },
-    {
-      label: "Side chat",
-      icon: MessagesSquare,
-      shortcut: "S",
-      available: props.sideChatAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.sideChat,
-      onClick: props.onAddSideChat,
-    },
-  ] as const;
+  const addSurfaceActions = surfaceLauncherActions(props, SURFACE_DISABLED_REASONS);
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const action = surfaceShortcutActionForKey(addSurfaceActions, event.nativeEvent);
@@ -1423,25 +1403,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       </div>
       <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>
         {props.activeSurfaceId === null ? (
-          <RightPanelEmptyState
-            onAddBrowser={props.onAddBrowser}
-            onAddBrowserInProfile={props.onAddBrowserInProfile}
-            browserProfiles={browserProfiles}
-            onAddTerminal={props.onAddTerminal}
-            onAddDiff={props.onAddDiff}
-            onAddFiles={props.onAddFiles}
-            onAddPullRequest={props.onAddPullRequest}
-            onAddPullRequests={props.onAddPullRequests}
-            onAddSideChat={props.onAddSideChat}
-            onAddTaskPlan={props.onAddTaskPlan}
-            browserAvailable={props.browserAvailable}
-            terminalAvailable={props.terminalAvailable}
-            diffAvailable={props.diffAvailable}
-            filesAvailable={props.filesAvailable}
-            pullRequestAvailable={props.pullRequestAvailable}
-            pullRequestsAvailable={props.pullRequestsAvailable}
-            sideChatAvailable={props.sideChatAvailable}
-          />
+          <RightPanelEmptyState {...props} browserProfiles={browserProfiles} />
         ) : (
           props.children
         )}

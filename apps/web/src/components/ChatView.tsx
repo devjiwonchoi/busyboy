@@ -234,14 +234,12 @@ import {
   useThreadDecisionCards,
   useThreadWaitingThreads,
 } from "../state/projectTeam";
-import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
 import {
   DirectorPendingActions,
   ThreadPendingActions,
   revealDecisionCard,
 } from "./chat/PendingActionsButton";
 import { useDirectorThreadRef } from "~/state/director";
-import { useOpenDirectorWorkspaceOnEntry } from "./director/DirectorWorkspaceToggle";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
 import {
@@ -1617,14 +1615,12 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadShell?.projectId ?? null,
   );
   const isTaskLeadThread = leadTask !== null;
-  useOpenTaskPlanOnEntry(isServerThread ? activeThreadRef : null, isTaskLeadThread);
   const director = useDirectorThreadRef();
   const isDirectorThread =
     !sideChat &&
     director !== null &&
     routeThreadRef.environmentId === director.environmentId &&
     routeThreadRef.threadId === director.threadId;
-  useOpenDirectorWorkspaceOnEntry(isServerThread ? activeThreadRef : null, isDirectorThread);
   const timelineThreadError =
     serverRuntime?.status === "failed" &&
     serverRuntime.lastErrorClass === "usage_limit" &&
@@ -3698,6 +3694,11 @@ export default function ChatView(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "task-plan");
   };
   const addTaskPlanSurfaceStable = useStableCallback(addTaskPlanSurface);
+  const addProjectSurface = () => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "director-workspace");
+  };
+  const addProjectSurfaceStable = useStableCallback(addProjectSurface);
   useAgentOpenedPreviews({
     threadRef: activeThreadRef,
     previewState: activePreviewState,
@@ -8590,7 +8591,10 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddSideChat={startSideChatStable}
-          onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
+          onAddProject={addProjectSurfaceStable}
+          projectAvailable={activeThreadRef !== null}
+          onAddTaskPlan={addTaskPlanSurfaceStable}
+          taskPlanAvailable={isTaskLeadThread}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
@@ -8642,7 +8646,10 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
             onAddSideChat={startSideChatStable}
-            onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
+            onAddProject={addProjectSurfaceStable}
+            projectAvailable={activeThreadRef !== null}
+            onAddTaskPlan={addTaskPlanSurfaceStable}
+            taskPlanAvailable={isTaskLeadThread}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}

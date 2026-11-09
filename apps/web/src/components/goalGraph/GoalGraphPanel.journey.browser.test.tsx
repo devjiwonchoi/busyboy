@@ -65,7 +65,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { graphTask, goalGraphSignalsFixture } from "./goalGraph.test-fixtures";
+import { graphCard, graphTask, goalGraphSignalsFixture } from "./goalGraph.test-fixtures";
 
 vi.mock(import("~/hooks/useTheme"), async (original) => ({
   ...(await original()),
@@ -83,10 +83,7 @@ import { selectThreadRightPanelState, useRightPanelStore } from "~/rightPanelSto
 import { RightPanelSheet } from "../RightPanelSheet";
 import { RightPanelTabs } from "../RightPanelTabs";
 import { DirectorWorkspaceSurface } from "../director/DirectorWorkspaceSurface";
-import {
-  DirectorWorkspaceToggle,
-  useOpenDirectorWorkspaceOnEntry,
-} from "../director/DirectorWorkspaceToggle";
+import { DirectorWorkspaceToggle } from "../director/DirectorWorkspaceToggle";
 let root: Root;
 let container: HTMLDivElement;
 const DIRECTOR = { environmentId: "env-1", threadId: "pm-director" } as ScopedThreadRef;
@@ -110,7 +107,6 @@ afterEach(async () => {
 function ThreadView(props: { threadRef: ScopedThreadRef }) {
   const ref = props.threadRef;
   const isDirector = ref.threadId === DIRECTOR.threadId;
-  useOpenDirectorWorkspaceOnEntry(ref, isDirector);
   const panel = useRightPanelStore((store) => selectThreadRightPanelState(store.byThreadKey, ref));
   const sheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const active = panel.surfaces.find((surface) => surface.id === panel.activeSurfaceId) ?? null;
@@ -149,6 +145,10 @@ function ThreadView(props: { threadRef: ScopedThreadRef }) {
       onAddPullRequest={noop}
       onAddPullRequests={noop}
       onAddSideChat={noop}
+      onAddProject={() => store().open(ref, "director-workspace")}
+      onAddTaskPlan={noop}
+      projectAvailable
+      taskPlanAvailable={false}
       browserAvailable
       terminalAvailable={false}
       diffAvailable={false}
@@ -182,6 +182,9 @@ function ThreadView(props: { threadRef: ScopedThreadRef }) {
   );
 }
 
+// The sheet's own "전체 프로젝트" tab can linger while it closes, so target the chat header.
+const headerToggle = () =>
+  document.querySelector<HTMLElement>('[data-testid="chat"] header [aria-label="전체 프로젝트"]')!;
 async function mount() {
   const rootRoute = createRootRoute({ component: Outlet });
   const router = createRouter({
@@ -205,6 +208,9 @@ async function mount() {
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
   await act(async () => root.render(<RouterProvider router={router} />));
+  // Entering the Director leaves the panel closed; the user opens the board.
+  expect(document.querySelector('[data-testid="director-workspace-surface"]')).toBe(null);
+  await userEvent.click(headerToggle());
   await vi.waitFor(() =>
     expect(document.querySelector('[data-testid="director-workspace-surface"]') === null).toBe(
       false,
@@ -224,7 +230,7 @@ for (const width of [1280, 390]) {
     expect(
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, DIRECTOR).isOpen,
     ).toBe(false);
-    await userEvent.click(page.getByRole("button", { name: "전체 프로젝트", exact: true }));
+    await userEvent.click(headerToggle());
     await vi.waitFor(() =>
       expect(document.querySelector('[data-testid="director-workspace-surface"]') === null).toBe(
         false,
@@ -308,20 +314,73 @@ it("reuses structured approval impacts and named task links from the inbox", asy
   await userEvent.click(row.querySelector<HTMLElement>("[data-director-inbox-task-link]")!);
   await vi.waitFor(() => expect(router.state.location.pathname).toBe("/tasks/env-1/a/a-1"));
 });
-function EntryProbe({ threadRef }: { threadRef: ScopedThreadRef }) {
-  useOpenDirectorWorkspaceOnEntry(threadRef, threadRef.threadId === DIRECTOR.threadId);
-  return null;
+/** A new task, a plan update and a new proposal card arrive through the subscription. */
+function arriveNewWork() {
+  state.managers = state.managers.map((entry) =>
+    entry.summary.projectId === "a"
+      ? {
+          ...entry,
+          summary: {
+            ...entry.summary,
+            tasks: [
+              ...entry.summary.tasks.map((task) =>
+                task.id === "a-2" ? { ...task, stage: "awaiting_approval" as const } : task,
+              ),
+              graphTask("a-new", 9, { stage: "planning" }),
+            ],
+            decisionCards: [...entry.summary.decisionCards, graphCard("a-new", true)],
+          },
+        }
+      : entry,
+  );
+  for (const listener of state.listeners) listener();
 }
-it("respects closing until reentry and leaves ordinary PM threads alone", async () => {
-  await act(async () => root.render(<EntryProbe threadRef={DIRECTOR} />));
-  await act(() => useRightPanelStore.getState().close(DIRECTOR));
-  await act(async () => root.render(<EntryProbe threadRef={OTHER} />));
-  expect(document.querySelector('[data-testid="director-workspace-surface"]')).toBe(null);
-  await act(async () => root.render(<EntryProbe threadRef={DIRECTOR} />));
-  expect(
-    selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, DIRECTOR).isOpen,
-  ).toBe(true);
-});
+for (const width of [1280, 390]) {
+  it(`stays closed at ${width}px while new work arrives and on re-entry`, async () => {
+    await page.viewport(width, 844);
+    const rootRoute = createRootRoute({ component: Outlet });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([
+        createRoute({
+          getParentRoute: () => rootRoute,
+          path: "/",
+          component: () => <ThreadView threadRef={DIRECTOR} />,
+        }),
+        createRoute({
+          getParentRoute: () => rootRoute,
+          path: "/$environmentId/$threadId",
+          component: () => <ThreadView threadRef={OTHER} />,
+        }),
+      ]),
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+    });
+    await act(async () => root.render(<RouterProvider router={router} />));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("chat pm-director"));
+    expect(document.querySelector('[data-testid="director-workspace-surface"]')).toBe(null);
+    await userEvent.click(headerToggle());
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-testid="director-workspace-surface"]') === null).toBe(
+        false,
+      ),
+    );
+    await act(() => useRightPanelStore.getState().close(DIRECTOR));
+    await act(() => arriveNewWork());
+    await act(() =>
+      router.navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId: "env-1", threadId: "pm-a" },
+      }),
+    );
+    await act(() => router.navigate({ to: "/" }));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("chat pm-director"));
+    await act(() => arriveNewWork());
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, DIRECTOR).isOpen,
+    ).toBe(false);
+    expect(headerToggle()).toBeTruthy();
+    await page.screenshot({ path: `__screenshots__/director-stays-closed-${width}.png` });
+  });
+}
 
 it("shows stalled work, epic status counts and deadlines, then opens a waiting thread", async () => {
   const a = state.managers[0]!;
