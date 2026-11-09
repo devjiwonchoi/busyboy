@@ -81,6 +81,7 @@ import {
 import { getDesktopSnapShotBridge } from "../lib/desktopSnapShot";
 import { installDesktopPasteAsText } from "../lib/desktopPasteAsText";
 import { shouldResumeSnapShotSetupOnStartup } from "../lib/snapShotSetupResume";
+import { reloadOnceForNewerServer } from "../lib/staleBundleReload";
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
@@ -509,6 +510,14 @@ function EventRouter({
   const [keybindingsToastController] = useState<KeybindingsUpdateToastController>(() =>
     createKeybindingsUpdateToastController({}),
   );
+
+  useEffect(() => {
+    reloadOnceForNewerServer({
+      serverVersion: serverConfig?.environment.serverVersion,
+      isElectron,
+      isHostedStatic: isHostedStaticApp(),
+    });
+  }, [serverConfig?.environment.serverVersion]);
 
   const handleWelcome = useEffectEvent((payload: ServerLifecycleWelcomePayload | null) => {
     if (!payload) return;
