@@ -500,6 +500,7 @@ fn escape_key(user_data: i64) -> crate::stop::PhysicalInput {
         escape: true,
         key_target: None,
         location: (0.0, 0.0),
+        click_owner: None,
         user_data,
     }
 }

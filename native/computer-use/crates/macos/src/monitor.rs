@@ -21,13 +21,15 @@ use cu_core::platform::{MonitorTarget, PlatformEvent};
 use cu_core::stop::{InputKind, PhysicalInput, classify_input};
 use objc2::rc::autoreleasepool;
 use objc2_app_kit::NSWorkspace;
-use objc2_core_foundation::{CFMachPort, CFRetained, CFRunLoop, kCFRunLoopCommonModes};
+use objc2_core_foundation::{
+    CFArray, CFDictionary, CFMachPort, CFRetained, CFRunLoop, CFString, CFType, kCFRunLoopCommonModes,
+};
 use objc2_core_graphics::{
     CGEvent, CGEventField, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventTapProxy, CGEventType,
-    CGPreflightListenEventAccess,
+    CGPreflightListenEventAccess, CGWindowListCopyWindowInfo, CGWindowListOption, kCGWindowOwnerPID,
 };
 
-use crate::ax::AxElement;
+use crate::ax::{self, AxElement};
 use crate::{EVENT_TAG, SharedSink, emit};
 
 /// Virtual key code of Esc.
@@ -68,6 +70,8 @@ struct RawInput {
     target_pid: i32,
     x: f64,
     y: f64,
+    /// For a mouse-down, the window number under the pointer that takes the click; 0 when unknown.
+    window: i64,
     user_data: i64,
 }
 
@@ -200,6 +204,7 @@ fn dispatch(shared: &Shared, input: RawInput) {
         escape,
         key_target,
         location: (input.x, input.y),
+        click_owner: if input.kind == InputKind::MouseDown { window_owner_pid(input.window) } else { None },
         user_data: input.user_data,
     };
     if escape {
@@ -248,6 +253,21 @@ fn key_focused_pid() -> Option<i32> {
         return Some(pid);
     }
     autoreleasepool(|_| NSWorkspace::sharedWorkspace().frontmostApplication().map(|app| app.processIdentifier()))
+}
+
+/// The process that owns window `number`, from the window server.
+fn window_owner_pid(number: i64) -> Option<i32> {
+    let id = u32::try_from(number).ok().filter(|id| *id != 0)?;
+    let list = CGWindowListCopyWindowInfo(CGWindowListOption::OptionIncludingWindow, id)?;
+    // SAFETY: the window list is an array of dictionaries; each entry is type-checked below.
+    let list: &CFArray<CFType> = unsafe { list.cast_unchecked() };
+    let entry = list.iter().next()?;
+    let dictionary = entry.downcast_ref::<CFDictionary>()?;
+    // SAFETY: window-info dictionaries are keyed by CFString.
+    let dictionary: &CFDictionary<CFString, CFType> = unsafe { dictionary.cast_unchecked() };
+    // SAFETY: the key constant is a valid static CFString.
+    let owner = dictionary.get(unsafe { kCGWindowOwnerPID })?;
+    ax::as_f64(&owner).map(|pid| pid as i32).filter(|pid| *pid > 0)
 }
 
 /// Starts the tap thread and waits briefly for it to report whether the tap exists.
@@ -384,12 +404,22 @@ unsafe extern "C-unwind" fn on_event(
         return passthrough;
     }
     let location = CGEvent::location(event);
+    // The window that takes the click, so a click-through overlay is skipped; else the one under the pointer.
+    let window = if input_kind == InputKind::MouseDown {
+        match CGEvent::integer_value_field(event, CGEventField::MouseEventWindowUnderMousePointerThatCanHandleThisEvent) {
+            0 => CGEvent::integer_value_field(event, CGEventField::MouseEventWindowUnderMousePointer),
+            window => window,
+        }
+    } else {
+        0
+    };
     let input = RawInput {
         kind: input_kind,
         keycode,
         target_pid: CGEvent::integer_value_field(event, CGEventField::EventTargetUnixProcessID) as i32,
         x: location.x,
         y: location.y,
+        window,
         user_data,
     };
     let _ = context.events.send(input);
