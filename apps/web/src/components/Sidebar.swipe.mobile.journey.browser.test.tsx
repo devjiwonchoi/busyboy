@@ -197,7 +197,7 @@ async function renderSidebar() {
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([indexRoute, threadRoute]),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    history: createMemoryHistory({ initialEntries: ["/env-1/pm-thread"] }),
   });
   await act(async () => root.render(<RouterProvider router={router} />));
   return router;
@@ -259,7 +259,7 @@ describe("phone: swipe a sidebar row", () => {
     const labels = [...tray!.querySelectorAll("button")].map((b) => b.textContent);
     expect(labels).toEqual(["Pin", "Archive"]);
     // The swipe itself does not open the thread.
-    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.pathname).toBe("/env-1/pm-thread");
 
     await act(async () =>
       tray!.querySelector<HTMLButtonElement>('button[aria-label="Archive thread"]')!.click(),
@@ -294,7 +294,7 @@ describe("phone: swipe a sidebar row", () => {
     expect(trayOf("idle")).not.toBeNull();
     await swipe(row("idle"), 0);
     expect(trayOf("idle")).toBeNull();
-    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.pathname).toBe("/env-1/pm-thread");
     expect(state.archiveThread).not.toHaveBeenCalled();
   });
 

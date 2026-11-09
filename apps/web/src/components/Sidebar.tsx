@@ -448,9 +448,17 @@ function useSidebarThreads(input: {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly routeThreadKey: string | null;
+  readonly routeTaskId: string | null;
   readonly projectGroups: readonly SidebarProjectSnapshot[];
 }) {
-  const { scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey, projectGroups } = input;
+  const {
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    routeThreadKey,
+    routeTaskId,
+    projectGroups,
+  } = input;
   const allThreads = useThreadShells();
   const sideChatParents = useSideChatStore((state) => state.parentByThreadKey);
   // Side chats live in their thread's right panel, not in the list.
@@ -554,10 +562,21 @@ function useSidebarThreads(input: {
       .map((group) => group.projectKey),
     new Set(projectGroups.filter((group) => group.isScratch).map((group) => group.projectKey)),
   );
+  // Only the manager whose project holds the open thread or task shows its sessions.
+  const routeShell = routeThreadKey === null ? undefined : shellByKey.get(routeThreadKey);
+  const expandedProjectKey = routeShell
+    ? projectKeyOf(routeShell)
+    : ([...projectManagerByProjectKey].find(([, manager]) =>
+        manager.entry.summary.tasks.some((task) => task.id === routeTaskId),
+      )?.[0] ?? null);
   // Build the visible tree before navigation and sorting so collapsed descendants disappear there too.
   const projectTaskTrees = new Map<string, ReturnType<typeof sidebarTaskTree>>();
   const treeDepthByThreadKey = new Map<string, number>();
   for (const [projectKey, manager] of projectManagerByProjectKey) {
+    if (projectKey !== expandedProjectKey) {
+      projectTaskTrees.set(projectKey, { rows: [], toggles: new Map() });
+      continue;
+    }
     const tree = sidebarTaskTree({
       threads: activeThreadsByProject.get(projectKey) ?? [],
       tasks: manager.entry.summary.tasks,
@@ -614,6 +633,7 @@ function useSidebarThreads(input: {
     taskByLeadKey,
     collapsedProjectKeys,
     projectTaskTrees,
+    expandedProjectKey,
     treeDepthByThreadKey,
     toggleTaskCollapsed: (key: string) =>
       setCollapsedTaskKeyList((keys) =>
@@ -2349,6 +2369,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     collapsedProjectKeys,
     toggleProjectCollapsed,
     projectTaskTrees,
+    expandedProjectKey,
     treeDepthByThreadKey,
     toggleTaskCollapsed,
     toggleThreadGroupExpanded,
@@ -2357,6 +2378,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     serverConfigs,
     optimisticDrop,
     routeThreadKey,
+    routeTaskId,
     projectGroups,
   });
 
@@ -4051,6 +4073,9 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                             const projectKey = item.marker.slice("project:".length);
                             const projectGroup = projectGroupByScopeKey.get(projectKey);
                             const manager = projectManagerByProjectKey.get(projectKey);
+                            // A manager's rows show only while its project is open.
+                            const hiddenByRoute =
+                              manager !== undefined && projectKey !== expandedProjectKey;
                             items.push(
                               <SidebarProjectHeader
                                 key={item.marker}
@@ -4063,8 +4088,13 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                                   optimisticDrop === null &&
                                   renamingThreadKey === null
                                 }
-                                expanded={!collapsedProjectKeys.has(projectKey)}
-                                onToggle={() => toggleProjectCollapsed(projectKey)}
+                                expanded={!collapsedProjectKeys.has(projectKey) && !hiddenByRoute}
+                                onToggle={() => {
+                                  // Opening a closed manager only clears a saved fold.
+                                  if (hiddenByRoute && !collapsedProjectKeys.has(projectKey))
+                                    return;
+                                  toggleProjectCollapsed(projectKey);
+                                }}
                                 onNewThread={
                                   projectGroup ? () => handleProjectNewThread(projectGroup) : null
                                 }
