@@ -64,7 +64,6 @@ const isClosedViewEntry = (entry: unknown): entry is ClosedViewEntry => {
     case "files":
     case "pull-requests":
     case "task-plan":
-    case "director-workspace":
       return surface.id === surface.kind;
     case "preview":
       return surface.resourceId === null || typeof surface.resourceId === "string";

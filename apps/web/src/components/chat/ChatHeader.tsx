@@ -289,9 +289,7 @@ export const ChatHeader = memo(function ChatHeader({
       onContextMenu={handleHeaderContextMenu}
     >
       {leadTask === null ? null : <TaskPlanToggle threadRef={activeThreadRef} />}
-      {projectManager?.kind === "director" ? (
-        <DirectorWorkspaceToggle threadRef={activeThreadRef} />
-      ) : null}
+      {projectManager?.kind === "director" ? <DirectorWorkspaceToggle /> : null}
       <WorkspaceBreadcrumb
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"

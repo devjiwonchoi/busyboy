@@ -85,9 +85,7 @@ function ThreadView(props: { threadRef: ScopedThreadRef; hasPlan: boolean }) {
       onAddPullRequest={noop}
       onAddPullRequests={noop}
       onAddSideChat={noop}
-      onAddProject={() => store().open(ref, "director-workspace")}
       onAddTaskPlan={() => store().open(ref, "task-plan")}
-      projectAvailable
       taskPlanAvailable={props.hasPlan}
       browserAvailable={false}
       terminalAvailable={false}
@@ -97,9 +95,6 @@ function ThreadView(props: { threadRef: ScopedThreadRef; hasPlan: boolean }) {
       pullRequestsAvailable={false}
       sideChatAvailable={false}
     >
-      {active?.kind === "director-workspace" ? (
-        <div data-testid="project-body">전체 프로젝트 보드</div>
-      ) : null}
       {active?.kind === "task-plan" ? <div data-testid="plan-body">플랜</div> : null}
     </RightPanelTabs>
   );
@@ -132,7 +127,6 @@ async function renderEmptyPanel(threadRef: ScopedThreadRef, hasPlan: boolean) {
   });
 }
 
-const projectBody = () => document.querySelector('[data-testid="project-body"]');
 const planBody = () => document.querySelector('[data-testid="plan-body"]');
 const launcherRows = (launcher: HTMLElement) =>
   [...launcher.querySelectorAll<HTMLElement>("button, [aria-disabled]")].filter(
@@ -157,28 +151,28 @@ for (const [device, width, height] of [
   ["phone", 390, 844],
 ] as const) {
   describe(`right panel launchers on ${device}`, () => {
-    it("lists Project and Plan first in both lists and opens each in the panel", async () => {
+    it("lists Plan first in both lists, with no Project entry, and opens it in the panel", async () => {
       await page.viewport(width, height);
       const launcher = await renderEmptyPanel(LEAD, true);
-      expect(
-        launcherRows(launcher)
-          .slice(0, 2)
-          .map((row) => row.textContent),
-      ).toEqual(["ProjectJ", "PlanN"]);
+      expect(launcherRows(launcher)[0]!.textContent).toBe("PlanN");
+      // All projects is its own page now, not a panel surface.
+      expect(launcherRow(launcher, "Project")).toBeUndefined();
       await page.screenshot({ path: `__screenshots__/launcher-open-a-surface-${device}.png` });
+      await userEvent.keyboard("j");
+      expect(
+        selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, LEAD).surfaces,
+      ).toEqual([]);
 
-      // "Open a surface": Project opens the project board.
-      await userEvent.click(launcherRow(launcher, "Project"));
-      await vi.waitFor(() => expect(projectBody()).not.toBeNull());
-
-      // "+" menu: Project and Plan come first, and Plan opens the plan.
-      const items = await openMenu();
-      expect(items.slice(0, 2).map((item) => item.textContent)).toEqual(["ProjectJ", "PlanN"]);
-      await page.screenshot({ path: `__screenshots__/launcher-plus-menu-${device}.png` });
-      await userEvent.click(menuItem(items, "Plan"));
+      // "+" menu: Plan comes first and opens the plan.
+      await userEvent.click(launcherRow(launcher, "Plan"));
       await vi.waitFor(() => expect(planBody()).not.toBeNull());
+      const items = await openMenu();
+      expect(items[0]!.textContent).toBe("PlanN");
+      expect(menuItem(items, "Project")).toBeUndefined();
+      await page.screenshot({ path: `__screenshots__/launcher-plus-menu-${device}.png` });
+      await userEvent.keyboard("{Escape}");
 
-      // Back on an empty panel, the shortcuts open them too.
+      // Back on an empty panel, the shortcut opens it too.
       await act(() => useRightPanelStore.getState().closeAllSurfaces(LEAD));
       await act(() => useRightPanelStore.getState().show(LEAD));
       await vi.waitFor(() =>
@@ -186,9 +180,6 @@ for (const [device, width, height] of [
       );
       await userEvent.keyboard("n");
       await vi.waitFor(() => expect(planBody()).not.toBeNull());
-      await openMenu();
-      await userEvent.keyboard("j");
-      await vi.waitFor(() => expect(projectBody()).not.toBeNull());
     });
 
     it("shows Plan disabled in both lists on a thread without a plan", async () => {
@@ -196,7 +187,6 @@ for (const [device, width, height] of [
       const launcher = await renderEmptyPanel(PM, false);
       const row = launcherRow(launcher, "Plan");
       expect(row.getAttribute("aria-disabled")).toBe("true");
-      expect(launcherRow(launcher, "Project").getAttribute("aria-disabled")).toBeNull();
       await userEvent.keyboard("n");
       await userEvent.click(row);
       expect(planBody()).toBeNull();
@@ -208,7 +198,6 @@ for (const [device, width, height] of [
       await page.screenshot({ path: `__screenshots__/launcher-plus-plan-disabled-${device}.png` });
       await userEvent.keyboard("n");
       expect(planBody()).toBeNull();
-      expect(menuItem(items, "Project").getAttribute("aria-disabled")).toBeNull();
     });
   });
 }

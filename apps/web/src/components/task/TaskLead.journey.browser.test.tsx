@@ -235,9 +235,7 @@ function ThreadView(props: { threadRef: ScopedThreadRef }) {
       onAddPullRequest={noop}
       onAddPullRequests={noop}
       onAddSideChat={noop}
-      onAddProject={() => store().open(ref, "director-workspace")}
       onAddTaskPlan={() => store().open(ref, "task-plan")}
-      projectAvailable
       taskPlanAvailable={leadTask !== null}
       browserAvailable
       terminalAvailable={false}
