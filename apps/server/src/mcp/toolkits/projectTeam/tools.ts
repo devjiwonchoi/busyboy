@@ -38,6 +38,8 @@ import {
   ProjectTeamGoalWriteInput,
   ProjectTeamGoalLinkInput,
   ProjectTeamGoalResult,
+  ProjectTeamPmNudgeInput,
+  ProjectTeamPmNudgeResult,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -59,7 +61,7 @@ const shared = {
 const TaskCreateTool = Tool.make("task_create", {
   ...shared,
   description:
-    "PM/Director: post a task proposal card (title, goal, verification, and which project) in your chat. Include intake explaining why this is new work; goal and verification are required. Write title, goal and verification in the user's language, and the request so a task lead can act on it alone. Nothing is created until the user presses 태스크로 추가. Wait for [제안 승인됨], then start it with task_start when a slot is free (Director: the target project's PM is woken on acceptance). [제안 빠짐] means the user dropped it; [제안 피드백] carries their feedback — post a new proposal if still useful. Set waitsOn and parentTaskId only to tasks already added by the user; they may be in other projects. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
+    "PM/Director: post a task proposal card (title, goal, verification, and which project) in your chat. Include intake explaining why this is new work; goal and verification are required. Write title, goal and verification in the user's language, and the request so a task lead can act on it alone. Nothing is created until the user presses 태스크로 추가. Wait for [제안 승인됨], then start it with task_start when a slot is free (Director: the target project's PM is woken on acceptance). [제안 빠짐] means the user dropped it; [제안 피드백] carries their feedback — post a new proposal if still useful. Set waitsOn and parentTaskId only to tasks already added by the user; they may be in other projects. Director: pass goalId when the work serves a workspace goal; the task is linked to it once added. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
   parameters: ProjectTeamTaskCreateInput,
   success: ProjectTeamTaskResult,
 })
@@ -233,7 +235,7 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
   description:
-    'Task lead only. The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. A subtask covered by its parent\'s approved breakdown never asks for approval. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers "Approve and start" or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.',
+    "Task lead, and Director for decisions. Director: kind decision only, with taskId set to the task it is mainly about; bundle everything the user must decide into one card in your chat, and relay the answer to that project's PM yourself. Task lead: the only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. A subtask covered by its parent's approved breakdown never asks for approval. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers \"Approve and start\" or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.",
   parameters: ProjectTeamAskUserInput,
   success: ProjectTeamAttentionItemResult,
 })
@@ -253,7 +255,7 @@ const AttentionAnswerTool = Tool.make("attention_answer", {
 const AttentionDismissTool = Tool.make("attention_dismiss", {
   ...shared,
   description:
-    "Close an open question that no longer needs an answer, with a short reason: the user decided it another way, or it no longer applies. It stops counting as waiting. The PM can close any question in its project, and the task lead that asked is told why. A task lead can close only its own questions.",
+    "Close an open question that no longer needs an answer, with a short reason: the user decided it another way, or it no longer applies. It stops counting as waiting. The PM can close any question in its project, and the task lead that asked is told why. A task lead, or the Director, can close only its own questions.",
   parameters: ProjectTeamAttentionDismissInput,
   success: ProjectTeamAttentionItemResult,
 })
@@ -312,6 +314,16 @@ const GoalLinkTool = Tool.make("goal_link", {
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true);
 
+const PmNudgeTool = Tool.make("pm_nudge", {
+  ...shared,
+  description:
+    "Director only. Send a project's PM a message about one stuck task: why it is stuck and what to do. The server adds the task's key and title. Each task is nudged at most once a day, unless the user answered one of your decision cards since; a repeat returns skipped. You cannot approve, add or start tasks; this only tells the PM.",
+  parameters: ProjectTeamPmNudgeInput,
+  success: ProjectTeamPmNudgeResult,
+})
+  .annotate(Tool.Title, "Nudge a project PM")
+  .annotate(Tool.Destructive, false);
+
 export const ProjectTeamToolkit = Toolkit.make(
   TaskCreateTool,
   TaskStartTool,
@@ -337,4 +349,5 @@ export const ProjectTeamToolkit = Toolkit.make(
   MemoryDeleteTool,
   GoalWriteTool,
   GoalLinkTool,
+  PmNudgeTool,
 );
