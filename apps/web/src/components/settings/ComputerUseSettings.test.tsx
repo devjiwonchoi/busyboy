@@ -16,8 +16,8 @@ import {
   type ComputerUseSettingValues,
 } from "./ComputerUseSettings";
 
-// The browser runner could not start Chromium in this sandbox, so this walks the
-// rendered element tree instead. Hook-free local parts are expanded in place;
+// These unit tests walk the rendered element tree.
+// Hook-free local parts are expanded in place;
 // SettingsRow is kept and its title, description, status, control, and
 // children are walked.
 const EXPANDED = new Set(["PermissionRow", "GrantStatus"]);
@@ -86,6 +86,7 @@ const NOT_GRANTED = status(
 );
 
 function render(input: {
+  canGrantOnThisDevice?: boolean;
   supported?: boolean | null;
   settings?: Partial<ComputerUseSettingValues>;
   now?: number;
@@ -98,6 +99,7 @@ function render(input: {
     restart: 0,
   };
   const tree = ComputerUseSettingsView({
+    canGrantOnThisDevice: input.canGrantOnThisDevice ?? true,
     supported: input.supported === undefined ? true : input.supported,
     settings: { ...SETTINGS, ...input.settings },
     status: input.status ?? null,
@@ -146,7 +148,9 @@ describe("Computer Use settings section", () => {
     const view = render({ settings: { enableAgentComputerUse: true }, status: GRANTED });
     expect(view.text).toContain("BusyBoy Computer Use");
     expect(view.text).toContain("Accessibility");
-    expect(view.text).toContain("Granted");
+    expect(view.text).toContain("허용됨");
+    expect(view.text).toContain("설정 완료 — 에이전트가 Mac 앱을 쓸 수 있어요");
+    expect(view.buttons("열기")).toHaveLength(0);
     expect(view.text).toContain("Available");
     expect(view.text).toContain("Running");
     expect(view.buttons("Request access")).toHaveLength(0);
@@ -158,19 +162,22 @@ describe("Computer Use settings section", () => {
 
   it("offers access requests and System Settings links when not granted", () => {
     const view = render({ settings: { enableAgentComputerUse: true }, status: NOT_GRANTED });
-    expect(view.text).toContain("Not granted");
+    expect(view.text).toContain("현재 단계");
+    expect(view.text).toContain("대기 중");
     expect(view.text).toContain("Unavailable");
     expect(view.text).toContain("Error · the helper keeps crashing");
 
     const requests = view.buttons("Request access");
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(1);
+    const open = view.buttons("열기");
+    expect(open).toHaveLength(1);
+    open[0]!.props.onClick();
     for (const button of requests) button.props.onClick();
-    expect(view.calls.request).toEqual(["accessibility", "screen_recording", "input_monitoring"]);
+    expect(view.calls.request).toEqual(["accessibility", "input_monitoring"]);
 
     for (const button of view.buttons("Open System Settings")) button.props.onClick();
     expect(view.calls.open).toEqual([
       COMPUTER_USE_SETTINGS_URLS.accessibility,
-      COMPUTER_USE_SETTINGS_URLS.screenRecording,
       COMPUTER_USE_SETTINGS_URLS.inputMonitoring,
     ]);
 
@@ -234,14 +241,52 @@ describe("ComputerUseSettingsView before the first status", () => {
     const view = render({ supported: null, settings: { enableAgentComputerUse: true } });
     expect(view.text).toContain("Checking…");
     expect(view.text).not.toContain(COMPUTER_USE_UNSUPPORTED_MESSAGE);
-    expect(
-      view.elements.filter((element) => element.type === Button || element.type === Switch),
-    ).toEqual([]);
+    expect(view.text).not.toContain("손쉬운 사용(Accessibility)");
+  });
+
+  it("shows neutral steps without permission actions until permissions arrive", () => {
+    for (const pending of [status(undefined, { state: "starting" })]) {
+      const view = render({
+        settings: { enableAgentComputerUse: true },
+        status: pending,
+      });
+      expect(view.text).toContain("확인 중…");
+      expect(view.text).toContain("손쉬운 사용(Accessibility)");
+      expect(view.text).toContain("화면 기록(Screen Recording)");
+      expect(view.buttons("열기")).toHaveLength(0);
+    }
+  });
+
+  it("advances to Screen Recording after Accessibility is granted", () => {
+    const view = render({
+      settings: { enableAgentComputerUse: true },
+      status: status({
+        accessibility: "granted",
+        screenRecording: "not_granted",
+        stopMonitor: "available",
+      }),
+    });
+    expect(view.text).toContain("허용됨");
+    view.buttons("열기")[0]!.props.onClick();
+    expect(view.calls.request).toEqual(["screen_recording"]);
+    expect(view.calls.open).toEqual([COMPUTER_USE_SETTINGS_URLS.screenRecording]);
+  });
+
+  it("shows remote grant instructions and hides system permission actions on phones", () => {
+    const view = render({
+      settings: { enableAgentComputerUse: true },
+      status: NOT_GRANTED,
+      canGrantOnThisDevice: false,
+    });
+    expect(view.text.match(/Mac에서 허용 필요/g)).toHaveLength(2);
+    expect(view.buttons("열기")).toHaveLength(0);
+    expect(view.buttons("Request access")).toHaveLength(0);
+    expect(view.buttons("Open System Settings")).toHaveLength(0);
   });
 });
 
 describe("isComputerUseSupported", () => {
-  it("needs the Mac desktop app and a backend on macOS 14 or later", () => {
+  it("uses the backend report for browsers and requires a Mac for Electron", () => {
     // Unknown until the first status arrives.
     expect(isComputerUseSupported({ isElectron: true, platform: "MacIntel", status: null })).toBe(
       null,
@@ -249,12 +294,29 @@ describe("isComputerUseSupported", () => {
     expect(
       isComputerUseSupported({ isElectron: true, platform: "MacIntel", status: GRANTED }),
     ).toBe(true);
-    expect(isComputerUseSupported({ isElectron: false, platform: "MacIntel", status: null })).toBe(
-      false,
+    expect(isComputerUseSupported({ isElectron: false, platform: "iPhone", status: null })).toBe(
+      null,
     );
     expect(isComputerUseSupported({ isElectron: true, platform: "Win32", status: null })).toBe(
       false,
     );
+    expect(isComputerUseSupported({ isElectron: false, platform: "iPhone", status: GRANTED })).toBe(
+      true,
+    );
+    expect(
+      isComputerUseSupported({
+        isElectron: false,
+        platform: "Linux",
+        status: { ...GRANTED, available: false },
+      }),
+    ).toBe(false);
+    expect(
+      isComputerUseSupported({
+        isElectron: false,
+        platform: "iPhone",
+        status: status(undefined, { state: "stopped", reason: "unsupported_platform" }),
+      }),
+    ).toBe(false);
     expect(
       isComputerUseSupported({
         isElectron: true,

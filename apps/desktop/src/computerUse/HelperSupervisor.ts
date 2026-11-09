@@ -45,7 +45,13 @@ export const STOP_GRACE_MS = 1_500;
 export const SOCKET_GONE_TIMEOUT_MS = 2_000;
 /** Connections closed without a `hello` reply, after exit 66, that mean a foreign helper. */
 const FOREIGN_CLOSE_LIMIT = 2;
-const SOCKET_POLL_MS = 50;
+/**
+ * The helper binds its socket within tens of ms, so the first half second
+ * polls finely; a coarse poll would dominate the launch.
+ */
+export const SOCKET_POLL_MS = 5;
+const SOCKET_POLL_FINE_FOR_MS = 500;
+const SOCKET_POLL_SLOW_MS = 50;
 const DEFAULT_SOCKET_TIMEOUT_MS = 5_000;
 /** `sun_path` minus the terminator, as in the helper. */
 const MAX_SOCKET_PATH_BYTES = 103;
@@ -431,6 +437,7 @@ export class HelperSupervisor {
     const deadline =
       this.timers.now() + (this.options.socketTimeoutMs ?? DEFAULT_SOCKET_TIMEOUT_MS);
     const checkSocket = this.options.checkSocket ?? defaultSocketOwnerCheck;
+    const polledSince = this.timers.now();
     let alreadyRunning = false;
     let closedWithoutReply = 0;
     for (;;) {
@@ -497,7 +504,11 @@ export class HelperSupervisor {
           false,
         );
       }
-      await new Promise<void>((resolve) => this.timers.setTimeout(resolve, SOCKET_POLL_MS));
+      const poll =
+        this.timers.now() - polledSince < SOCKET_POLL_FINE_FOR_MS
+          ? SOCKET_POLL_MS
+          : SOCKET_POLL_SLOW_MS;
+      await new Promise<void>((resolve) => this.timers.setTimeout(resolve, poll));
     }
   }
 
