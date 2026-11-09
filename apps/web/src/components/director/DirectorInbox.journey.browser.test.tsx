@@ -30,6 +30,7 @@ import { DecisionCard } from "../chat/DecisionCard";
 import { ComposerBannerStack } from "../chat/ComposerBannerStack";
 import { pendingActionsBannerItem } from "../chat/PendingActionsBar";
 import { DirectorInboxDock } from "./DirectorInboxDock";
+import { DirectorInbox } from "./DirectorInbox";
 
 const AT = "2026-11-09T01:00:00.000Z";
 const state = vi.hoisted(() => ({
@@ -112,6 +113,14 @@ function card(
       specVersion: null,
       summary: "진행할 계획",
       verification: "화면 확인",
+      context: {
+        action: `${id} 변경을 로컬에서 구현합니다.`,
+        reason: "사용자가 겪는 오류를 고칩니다.",
+        impacts: [],
+        cost: null,
+        reversibility: "reversible",
+        recommendation: "로컬 검증 후 결과를 확인합니다.",
+      },
     },
   };
 }
@@ -307,9 +316,17 @@ for (const width of [1280, 390]) {
       expect(container.querySelectorAll('[data-decision-card="제안"]')).toHaveLength(1);
       expect(inbox().querySelector('[data-decision-card="제안"]')).toBeNull();
       expect(inbox().querySelectorAll("[data-decision-card]")).toHaveLength(1);
-      expect(inbox().textContent).toContain("프로젝트 A · A-1");
+      expect(inbox().textContent).toContain("결정 작업 · 프로젝트 A");
+      expect(
+        inbox()
+          .querySelector<HTMLAnchorElement>("[data-director-inbox-task-link]")
+          ?.getAttribute("href"),
+      ).toContain("/tasks/env/a/task-");
+      expect(inbox().querySelector("[data-attention-action]")?.textContent).toBe(
+        "결정 변경을 로컬에서 구현합니다.",
+      );
       await userEvent.click(page.getByRole("button", { name: "다음 카드", exact: true }));
-      expect(inbox().textContent).toContain("프로젝트 B · B-2");
+      expect(inbox().textContent).toContain("실패 작업 · 프로젝트 B");
       await userEvent.click(page.getByRole("button", { name: "이전 카드", exact: true }));
       const decision = cardIn(inbox(), "결정");
       await userEvent.click(decision.querySelector<HTMLButtonElement>('[role="radio"]')!);
@@ -356,3 +373,103 @@ for (const width of [1280, 390]) {
     });
   });
 }
+
+it("opens a Director card's task in its actual project without a lead thread", async () => {
+  const decision = card("director", "프로젝트간결정", "decision", 1);
+  state.managers = [
+    {
+      environmentId: "env" as never,
+      summary: makeProjectManagerSummaryFixture({
+        projectId: "director" as never,
+        pmThreadId: "pm-director" as never,
+        kind: "director",
+        decisionCards: [decision],
+      }),
+    },
+    {
+      environmentId: "env" as never,
+      summary: makeProjectManagerSummaryFixture({
+        projectId: "a" as never,
+        pmThreadId: "pm-a" as never,
+        tasks: [
+          {
+            id: decision.item.taskId,
+            number: 1,
+            title: decision.taskTitle,
+            stage: "running",
+            parentTaskId: null,
+            waitsOn: [],
+            leadThreadId: null,
+            prUrl: null,
+            lastOutcome: null,
+            openQuestion: true,
+            openBlocker: false,
+            iterateRound: 0,
+            shipRound: 0,
+            modelSteps: {},
+            updatedAt: AT,
+          },
+        ],
+      }),
+    },
+  ];
+  const base = createRootRoute({ component: Outlet });
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: ["/inbox"] }),
+    routeTree: base.addChildren([
+      createRoute({
+        getParentRoute: () => base,
+        path: "/inbox",
+        component: () => <DirectorInbox highlightCardId={null} showEmpty />,
+      }),
+      createRoute({
+        getParentRoute: () => base,
+        path: "/tasks/$environmentId/$projectId/$taskId",
+        component: () => <p>태스크 화면</p>,
+      }),
+    ]),
+  });
+  await act(async () => root.render(<RouterProvider router={router} />));
+  const link = await vi.waitFor(() => {
+    const element = container.querySelector<HTMLAnchorElement>("[data-director-inbox-task-link]");
+    expect(element).toBeTruthy();
+    return element!;
+  });
+  expect(link.textContent).toBe("프로젝트간결정 작업 · 프로젝트 A");
+  await userEvent.click(link);
+  await vi.waitFor(() => expect(router.state.location.pathname).toContain("/tasks/env/a/task-"));
+  expect(container.textContent).toContain("태스크 화면");
+});
+
+it("does not present the Director's chat project as an unresolved task's owner", async () => {
+  const decision = card("director", "소유확인", "decision", 1);
+  state.managers = [
+    {
+      environmentId: "env" as never,
+      summary: makeProjectManagerSummaryFixture({
+        projectId: "director" as never,
+        pmThreadId: "pm-director" as never,
+        kind: "director",
+        tasks: [],
+        decisionCards: [decision],
+      }),
+    },
+  ];
+  const base = createRootRoute({ component: Outlet });
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: ["/inbox"] }),
+    routeTree: base.addChildren([
+      createRoute({
+        getParentRoute: () => base,
+        path: "/inbox",
+        component: () => <DirectorInbox highlightCardId={null} showEmpty />,
+      }),
+    ]),
+  });
+  await act(async () => root.render(<RouterProvider router={router} />));
+  await vi.waitFor(() =>
+    expect(container.textContent).toContain("소유확인 작업 · 프로젝트 확인 필요"),
+  );
+  expect(container.querySelector("[data-director-inbox-task-link]")).toBeNull();
+  expect(container.querySelector("[data-attention-task-link]")).toBeNull();
+});

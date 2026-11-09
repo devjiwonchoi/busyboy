@@ -5,9 +5,49 @@ import * as TestClock from "effect/testing/TestClock";
 
 import { dismissedQuestionText, relayedAnswerText } from "./AttentionRouter.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
-import { PROJECT_ID, setUpManager, startLead, userSays, withTeam } from "./testkit.ts";
+import {
+  attentionContext,
+  PROJECT_ID,
+  setUpManager,
+  startLead,
+  userSays,
+  withTeam,
+} from "./testkit.ts";
 
 describe("AttentionRouter", () => {
+  it.effect("preserves approval context in task detail and the shared attention feed", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Hello", harness.delegate);
+        const context = {
+          action: "수정 사항을 병합하고 배포합니다",
+          reason: "로그인 오류를 사용자에게 전달하려면 배포가 필요합니다.",
+          impacts: ["merge", "deploy", "cost", "publish"] as const,
+          cost: "호스팅 요금은 사용량에 따라 달라 아직 확정할 수 없습니다.",
+          reversibility: "requires_work" as const,
+          recommendation: "검증한 수정 사항을 병합한 뒤 배포하는 안을 추천합니다.",
+        };
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "로그인 수정 사항을 병합하고 배포할까요?",
+          context,
+        });
+        assert.deepStrictEqual(item.context, context);
+        const card = (yield* team.attentionSnapshot).projects
+          .flatMap((project) => project.decisionCards)
+          .find((entry) => entry.item.id === item.id);
+        assert.deepStrictEqual(card?.item.context, context);
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: lead.task.id });
+        assert.deepStrictEqual(
+          detail.openAttention.find((entry) => entry.id === item.id)?.context,
+          context,
+        );
+      }),
+    ),
+  );
+
   it.effect("closes a task's open cards when it is cancelled or done", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -17,12 +57,25 @@ describe("AttentionRouter", () => {
         const finished = yield* startLead(pm, "Hello", harness.delegate);
         const kept = yield* startLead(pm, "Goodbye", harness.delegate);
         const first = yield* team.askUser(cancelled.leadThreadId, {
+          context: attentionContext({ action: "Which login provider?" }),
           kind: "decision",
           question: "Which login provider?",
         });
-        yield* team.askUser(cancelled.leadThreadId, { kind: "decision", question: "Which?" });
-        yield* team.askUser(finished.leadThreadId, { kind: "blocker", question: "Token?" });
-        const open = yield* team.askUser(kept.leadThreadId, { kind: "decision", question: "A?" });
+        yield* team.askUser(cancelled.leadThreadId, {
+          context: attentionContext({ action: "Which?" }),
+          kind: "decision",
+          question: "Which?",
+        });
+        yield* team.askUser(finished.leadThreadId, {
+          context: attentionContext({ action: "Token?" }),
+          kind: "blocker",
+          question: "Token?",
+        });
+        const open = yield* team.askUser(kept.leadThreadId, {
+          context: attentionContext({ action: "A?" }),
+          kind: "decision",
+          question: "A?",
+        });
         assert.strictEqual((yield* team.attentionSnapshot).projects[0]?.openCount, 4);
 
         yield* team.updateTask(pm, { taskId: cancelled.task.id, stage: "cancelled" });
@@ -54,16 +107,19 @@ describe("AttentionRouter", () => {
         const b = yield* startLead(pm, "Goodbye", harness.delegate);
 
         const first = yield* team.askUser(a.leadThreadId, {
+          context: attentionContext({ action: "Plan A?" }),
           kind: "decision",
           question: "Plan A?",
         });
         yield* TestClock.adjust("1 minute");
         const second = yield* team.askUser(b.leadThreadId, {
+          context: attentionContext({ action: "Plan B?" }),
           kind: "decision",
           question: "Plan B?",
         });
         yield* TestClock.adjust("90 seconds");
         const third = yield* team.askUser(a.leadThreadId, {
+          context: attentionContext({ action: "Tabs or spaces?" }),
           kind: "decision",
           question: "Tabs or spaces?",
           options: ["tabs", "spaces"],
@@ -79,6 +135,7 @@ describe("AttentionRouter", () => {
 
         yield* TestClock.adjust("3 minutes");
         const later = yield* team.askUser(b.leadThreadId, {
+          context: attentionContext({ action: "Need a token." }),
           kind: "blocker",
           question: "Need a token.",
         });
@@ -94,6 +151,7 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Ship the fix today?" }),
           kind: "decision",
           question: "Ship the fix today?",
         });
@@ -134,6 +192,7 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Ship the fix today?" }),
           kind: "decision",
           question: "Ship the fix today?",
         });
@@ -181,10 +240,12 @@ describe("AttentionRouter", () => {
         const asker = yield* startLead(pm, "Hello", harness.delegate);
         const other = yield* startLead(pm, "Goodbye", harness.delegate);
         const own = yield* team.askUser(asker.leadThreadId, {
+          context: attentionContext({ action: "Tabs or spaces?" }),
           kind: "decision",
           question: "Tabs or spaces?",
         });
         const answered = yield* team.askUser(asker.leadThreadId, {
+          context: attentionContext({ action: "Need a token." }),
           kind: "blocker",
           question: "Need a token.",
         });
@@ -226,6 +287,7 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Ship the fix today?" }),
           kind: "decision",
           question: "Ship the fix today?",
         });
@@ -259,6 +321,7 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Fix login", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Ship the fix today?" }),
           kind: "decision",
           question: "Ship the fix today?",
           options: ["Approve", "Request changes"],
@@ -293,6 +356,7 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Fix login", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Keep the remaining runs?" }),
           kind: "decision",
           question: "Keep the remaining runs?",
           options: ["A: keep them", "B: cancel them"],
@@ -325,11 +389,13 @@ describe("AttentionRouter", () => {
         userSays(harness, pm, "Use Postgres", { id: "early" });
         yield* TestClock.adjust("1 minute");
         const database = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Which database?" }),
           kind: "decision",
           question: "Which database?",
           options: ["Use Postgres", "Use SQLite"],
         });
         const decision = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Tabs or spaces?" }),
           kind: "decision",
           question: "Tabs or spaces?",
           options: ["tabs", "spaces"],
@@ -370,6 +436,7 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Ship the fix today?" }),
           kind: "decision",
           question: "Ship the fix today?",
         });
@@ -396,6 +463,7 @@ describe("AttentionRouter", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Hello", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Need a token." }),
           kind: "blocker",
           question: "Need a token.",
         });

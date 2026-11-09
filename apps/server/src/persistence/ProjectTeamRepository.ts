@@ -13,6 +13,7 @@ import {
   PositiveInt,
   ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
+  ProjectAttentionContext,
   ProjectAttentionItem,
   ProjectAttentionItemId,
   ProjectAttentionKind,
@@ -149,6 +150,7 @@ export interface CreateProjectAttentionItemInput {
   readonly summary?: string | null;
   /** For a plan approval: the card's Verification section. */
   readonly verification?: string | null;
+  readonly context?: ProjectAttentionContext | null;
 }
 
 export interface CreateProjectSitrepInput {
@@ -496,6 +498,7 @@ const AttentionRow = Schema.Struct({
   summary: Schema.NullOr(Schema.String),
   verification: Schema.NullOr(Schema.String),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
+  context: Schema.NullOr(Schema.fromJsonString(ProjectAttentionContext)),
 });
 const SpecVersionRow = Schema.Struct({
   ...ProjectTaskSpecVersion.fields,
@@ -590,7 +593,8 @@ export const make = Effect.gen(function* () {
     answered_by AS "answeredBy",
     spec_version AS "specVersion",
     summary AS "summary",
-    verification AS "verification"
+    verification AS "verification",
+    context_json AS "context"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -1249,17 +1253,18 @@ export const make = Effect.gen(function* () {
       specVersion: Schema.NullOr(PositiveInt),
       summary: Schema.NullOr(Schema.String),
       verification: Schema.NullOr(Schema.String),
+      context: Schema.NullOr(Schema.fromJsonString(ProjectAttentionContext)),
     }),
     Result: AttentionRow,
     execute: (item) => sql`
       INSERT INTO project_attention_items (
         item_id, project_id, task_id, kind, question, options_json,
-        asker_thread_id, batch_id, created_at, spec_version, summary, verification
+        asker_thread_id, batch_id, created_at, spec_version, summary, verification, context_json
       )
       VALUES (
         ${item.id}, ${item.projectId}, ${item.taskId}, ${item.kind}, ${item.question},
         ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt},
-        ${item.specVersion}, ${item.summary}, ${item.verification}
+        ${item.specVersion}, ${item.summary}, ${item.verification}, ${item.context}
       )
       RETURNING ${attentionColumns}
     `,
@@ -1707,6 +1712,7 @@ export const make = Effect.gen(function* () {
         specVersion: input.specVersion ?? null,
         summary: input.summary ?? null,
         verification: input.verification ?? null,
+        context: input.context ?? null,
       }).pipe(Effect.mapError(toRepositoryError("createAttentionItem"))),
     getAttentionItem: (id) =>
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),

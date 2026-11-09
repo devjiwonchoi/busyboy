@@ -23,6 +23,7 @@ import { defaultPersona, defaultPersonaName } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { nextStepHint } from "./taskLeadPrompt.ts";
 import {
+  attentionContext,
   createAcceptedTask,
   approvePlan,
   PROJECT_ID,
@@ -321,6 +322,7 @@ describe("ProjectTeamService", () => {
         });
         const askingLead = yield* team.startTask(pm, { taskId: asking.task.id }, harness.delegate);
         yield* team.askUser(askingLead.leadThreadId, {
+          context: attentionContext({ action: "Which login provider?" }),
           kind: "decision",
           question: "Which login provider?",
         });
@@ -394,7 +396,11 @@ describe("ProjectTeamService", () => {
           prUrl: "https://github.com/acme/app/pull/9",
         });
         const asking = yield* start("Asking");
-        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Which one?" });
+        yield* team.askUser(asking.leadThreadId, {
+          context: attentionContext({ action: "Which one?" }),
+          kind: "decision",
+          question: "Which one?",
+        });
         const stuck = yield* start("Stuck");
         yield* team.updateTask(stuck.leadThreadId, { stage: "blocked" });
         const finished = yield* start("Finished");
@@ -719,8 +725,16 @@ describe("ProjectTeamService", () => {
           context: "Later.",
         });
         yield* team.recordOutcome({ task: second.task, outcome: "stalled" });
-        yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which way?" });
-        yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which color?" });
+        yield* team.askUser(first.leadThreadId, {
+          context: attentionContext({ action: "Which way?" }),
+          kind: "decision",
+          question: "Which way?",
+        });
+        yield* team.askUser(first.leadThreadId, {
+          context: attentionContext({ action: "Which color?" }),
+          kind: "decision",
+          question: "Which color?",
+        });
         yield* TestClock.adjust("1 minute");
         yield* team.nudgeTask(pm, { taskId: second.task.id });
 
@@ -1166,6 +1180,7 @@ describe("ProjectTeamService", () => {
         const escalation = yield* team.nudgeTask(pm, { taskId: lead.task.id });
         assert.strictEqual(escalation.status, "escalated");
         const own = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Need credentials" }),
           kind: "blocker",
           question: "Need credentials",
         });

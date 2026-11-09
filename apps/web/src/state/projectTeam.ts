@@ -30,12 +30,15 @@ import type {
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { useMemo } from "react";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
-import { useThreadShell } from "./entities";
+import { useProjects, useThreadShell } from "./entities";
 import { environmentThreadShells } from "./threads";
 import {
+  buildTaskReferenceCatalog,
+  type TaskReferenceCatalog,
   decisionCardsForThread,
   type LeadThreadTask,
   taskForLeadThread,
@@ -286,9 +289,13 @@ const numberedThreadTitlesAtom = Atom.family((key: string) => {
 });
 
 /** What the task-reference linker needs besides the tasks: the key prefix and thread titles. */
-export function useTaskReferenceLinkContext(ref: ScopedThreadRef | null): {
+export function useTaskReferenceLinkContext(
+  ref: ScopedThreadRef | null,
+  explicitEnvironmentId?: EnvironmentId | null,
+): {
   readonly taskKeyPrefix: string | null;
   readonly threadTitles: ReadonlyArray<string>;
+  readonly catalog: TaskReferenceCatalog;
 } {
   const projectId = useThreadShell(ref)?.projectId ?? null;
   const projectRef =
@@ -299,7 +306,20 @@ export function useTaskReferenceLinkContext(ref: ScopedThreadRef | null): {
       ? EMPTY_THREAD_TITLES_ATOM
       : numberedThreadTitlesAtom(scopedProjectKey(projectRef)),
   );
-  return { taskKeyPrefix: summary?.taskKeyPrefix ?? null, threadTitles };
+  const environmentId = ref?.environmentId ?? explicitEnvironmentId ?? null;
+  const entries = useProjectManagerEntries(environmentId === null ? [] : [environmentId]);
+  const projects = useProjects();
+  const catalog = useMemo(
+    () =>
+      buildTaskReferenceCatalog({
+        environmentId,
+        contextualProjectId: summary?.kind === "director" ? null : projectId,
+        entries,
+        projects,
+      }),
+    [environmentId, summary?.kind, projectId, entries, projects],
+  );
+  return { taskKeyPrefix: summary?.taskKeyPrefix ?? null, threadTitles, catalog };
 }
 
 /** The task this thread leads, with whether it waits on the user; null for other threads. */

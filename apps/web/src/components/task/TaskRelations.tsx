@@ -4,12 +4,13 @@ import { ChevronRightIcon, HourglassIcon, Link2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
+import { useProjects } from "~/state/entities";
 import { useEnvironmentIds } from "~/state/environments";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
 import { GlyphWithLabel, StatusGlyphWithLabel } from "../sidebar/SidebarRowLine";
 import {
-  blockedByKeys,
+  blockedByNames,
   blockedByLabel,
   buildTaskRelationsIndex,
   type RelatedTask,
@@ -24,7 +25,7 @@ import { useLiveTaskStatus } from "./taskStatus";
 /** Every task the app knows, across projects, for relation lookups. */
 export function useTaskRelationsIndex(): TaskRelationsIndex {
   const entries = useProjectManagerEntries(useEnvironmentIds());
-  return buildTaskRelationsIndex(entries);
+  return buildTaskRelationsIndex(entries, useProjects());
 }
 
 export function useTaskRelations(
@@ -49,16 +50,19 @@ const BLOCKED_CLASS = "text-orange-500 dark:text-orange-400";
 const BLOCKING_CLASS = "text-red-500 dark:text-red-400";
 
 /**
- * "⏳ BU-66" on a task row: the task waits on an unfinished one. Names it in full on
+ * A named dependency on a task row: the task waits on an unfinished one. Names it in full on
  * hover or long-press.
  */
 export function WaitingMarker(props: {
   blockedBy: ReadonlyArray<RelatedTask>;
   className?: string;
-  /** Hides the keys where the row is too narrow; the label still names them. */
+  /** Hides the dependency name where the row is too narrow; the label still names it. */
   keysClassName?: string;
+  /** Enable navigation only outside an already interactive task row. */
+  linkToTask?: boolean;
 }) {
-  if (props.blockedBy.length === 0) return null;
+  const [first] = props.blockedBy;
+  if (first === undefined) return null;
   const label = blockedByLabel(props.blockedBy);
   return (
     <span
@@ -67,11 +71,22 @@ export function WaitingMarker(props: {
     >
       <span className="sr-only">{label}</span>
       <GlyphWithLabel label={label} testId="waiting-marker-trigger">
-        <span aria-hidden className="inline-flex items-center gap-0.5 font-mono text-2xs">
+        <span className="inline-flex min-w-0 items-center gap-0.5 text-2xs">
           <HourglassIcon data-waiting-icon className="size-3" />
-          <span data-waiting-keys className={props.keysClassName}>
-            {blockedByKeys(props.blockedBy)}
-          </span>
+          {props.linkToTask ? (
+            <Link
+              {...taskRouteParams(first.environmentId, first.projectId, first.task.id)}
+              data-waiting-keys
+              title={label}
+              className={cn("max-w-28 truncate hover:underline", props.keysClassName)}
+            >
+              {blockedByNames(props.blockedBy)}
+            </Link>
+          ) : (
+            <span data-waiting-keys className={cn("max-w-28 truncate", props.keysClassName)}>
+              {blockedByNames(props.blockedBy)}
+            </span>
+          )}
         </span>
       </GlyphWithLabel>
     </span>
@@ -111,7 +126,7 @@ export function SubtaskProgressBadge(props: { progress: SubtaskProgress; classNa
   return (
     <span
       data-subtask-progress={`${done}/${total}`}
-      title={`${done} of ${total} subtasks done`}
+      title={`하위 태스크 ${total}개 중 ${done}개 완료`}
       className={cn(
         "inline-flex shrink-0 items-center gap-1 text-muted-foreground text-xs tabular-nums",
         props.className,
@@ -119,12 +134,12 @@ export function SubtaskProgressBadge(props: { progress: SubtaskProgress; classNa
     >
       <ProgressRing progress={props.progress} />
       <span aria-hidden>{`${done}/${total}`}</span>
-      <span className="sr-only">{`${done} of ${total} subtasks done`}</span>
+      <span className="sr-only">{`하위 태스크 ${total}개 중 ${done}개 완료`}</span>
     </span>
   );
 }
 
-/** The plan card's one line: "Part of BU-53 · Blocked by BU-55 · 2/5 subtasks". */
+/** The plan card's one line: "상위 태스크: Director · BusyBoy · 시작 전 완료: Model · BusyBoy". */
 export function TaskStructureLine(props: { relations: TaskRelations | null }) {
   const { relations } = props;
   if (relations === null) return null;
@@ -132,7 +147,7 @@ export function TaskStructureLine(props: { relations: TaskRelations | null }) {
   if (relations.parent !== null) {
     parts.push(
       <span key="parent" className="min-w-0 truncate">
-        Part of <RelatedTaskKey related={relations.parent} />
+        상위 태스크: <RelatedTaskLink related={relations.parent} />
       </span>,
     );
   }
@@ -141,11 +156,11 @@ export function TaskStructureLine(props: { relations: TaskRelations | null }) {
       <span key="blocked" className="inline-flex min-w-0 items-center gap-1">
         <HourglassIcon aria-hidden className={cn("size-3 shrink-0", BLOCKED_CLASS)} />
         <span className="truncate">
-          Blocked by{" "}
+          시작 전 완료:{" "}
           {relations.blockedBy.map((related, position) => (
             <span key={related.task.id}>
               {position > 0 ? ", " : null}
-              <RelatedTaskKey related={related} />
+              <RelatedTaskLink related={related} />
             </span>
           ))}
         </span>
@@ -156,7 +171,7 @@ export function TaskStructureLine(props: { relations: TaskRelations | null }) {
     parts.push(
       <span key="subtasks" className="inline-flex items-center gap-1">
         <ProgressRing progress={relations.progress} />
-        {`${relations.progress.done}/${relations.progress.total} subtasks`}
+        {`하위 태스크 ${relations.progress.done}/${relations.progress.total}`}
       </span>,
     );
   }
@@ -180,15 +195,15 @@ export function TaskStructureLine(props: { relations: TaskRelations | null }) {
   );
 }
 
-function RelatedTaskKey(props: { related: RelatedTask }) {
+function RelatedTaskLink(props: { related: RelatedTask }) {
   const { related } = props;
   return (
     <Link
       {...taskRouteParams(related.environmentId, related.projectId, related.task.id)}
-      title={related.task.title}
-      className="font-mono text-foreground/80 hover:text-foreground hover:underline"
+      title={`${related.task.title} · ${related.projectTitle} (${related.key})`}
+      className="text-foreground/80 hover:text-foreground hover:underline"
     >
-      {related.key}
+      {related.task.title} · {related.projectTitle}
     </Link>
   );
 }
@@ -201,10 +216,12 @@ export function TaskParentBreadcrumb(props: { relations: TaskRelations | null })
     <Link
       {...taskRouteParams(parent.environmentId, parent.projectId, parent.task.id)}
       data-task-parent={parent.key}
+      title={`${parent.task.title} · ${parent.projectTitle} (${parent.key})`}
       className="inline-flex max-w-full items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
     >
-      <span className="font-mono">{parent.key}</span>
-      <span className="min-w-0 truncate">{parent.task.title}</span>
+      <span className="min-w-0 truncate">
+        {parent.task.title} · {parent.projectTitle}
+      </span>
       <ChevronRightIcon aria-hidden className="size-3 shrink-0" />
     </Link>
   );
@@ -225,31 +242,31 @@ export function TaskStructure(props: { relations: TaskRelations | null; classNam
   if (empty) return null;
   return (
     <section
-      aria-label="Structure"
+      aria-label="태스크 관계"
       data-task-structure
       className={cn("flex flex-col gap-3", props.className)}
     >
       {relations.progress !== null ? (
         <RelationGroup
-          label="Sub-tasks"
+          label="하위 태스크"
           name="subtasks"
           adornment={<SubtaskProgressBadge progress={relations.progress} />}
           tasks={relations.subtasks}
         />
       ) : null}
       <RelationGroup
-        label="Blocked by"
+        label="시작 전 완료"
         name="blocked-by"
         icon={<HourglassIcon aria-hidden className={cn("size-3", BLOCKED_CLASS)} />}
         tasks={relations.blockedBy}
       />
       <RelationGroup
-        label="Blocking"
+        label="완료를 기다리는 태스크"
         name="blocking"
         icon={<Link2Icon aria-hidden className={cn("size-3", BLOCKING_CLASS)} />}
         tasks={relations.blocking}
       />
-      <RelationGroup label="Related" name="related" tasks={relations.related} />
+      <RelationGroup label="관련 태스크" name="related" tasks={relations.related} />
     </section>
   );
 }
@@ -278,7 +295,7 @@ function RelationGroup(props: {
   );
 }
 
-/** One related task: status icon, key and title; the whole row opens it. */
+/** One related task: status icon, title and project; the whole row opens it. */
 export function RelatedTaskRow(props: { related: RelatedTask }) {
   const { related } = props;
   const status = useLiveTaskStatus(related.environmentId, related.task);
@@ -291,12 +308,12 @@ export function RelatedTaskRow(props: { related: RelatedTask }) {
       <span className={cn("relative z-10 inline-flex shrink-0", status.className)}>
         <StatusGlyphWithLabel status={status} />
       </span>
-      <span className="shrink-0 font-mono text-muted-foreground text-xs">{related.key}</span>
       <Link
         {...taskRouteParams(related.environmentId, related.projectId, related.task.id)}
+        title={`${related.task.title} · ${related.projectTitle} (${related.key})`}
         className="min-w-0 truncate outline-none after:absolute after:inset-0 focus-visible:underline"
       >
-        {related.task.title}
+        {related.task.title} · {related.projectTitle}
       </Link>
     </li>
   );
@@ -304,7 +321,7 @@ export function RelatedTaskRow(props: { related: RelatedTask }) {
 
 /**
  * A compact row's markers, after its title: subtask progress and the waiting marker.
- * The waiting keys show only when the row (an `@container/task-row`) leaves the title room.
+ * The dependency names show only when the row (an `@container/task-row`) leaves the title room.
  */
 export function TaskRowMarkers(props: { relations: TaskRelations | null }) {
   const { relations } = props;

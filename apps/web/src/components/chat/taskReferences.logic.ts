@@ -1,4 +1,5 @@
 import type { ProjectTaskReference } from "@t3tools/contracts";
+import { taskReferenceCandidates, type TaskReferenceCatalog } from "~/state/projectTeam.logic";
 
 import {
   findAndReplaceText,
@@ -13,10 +14,31 @@ const TASK_KEY_PREFIX_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
 
 const TASK_REFERENCE_HREF_PATTERN = /^t3-task:([1-9]\d*)$/u;
 
-/** The task number of a link made by remarkTaskReferences, or null for any other link. */
-export function parseTaskReferenceHref(href: string): number | null {
+/** Read a stable task ID or a legacy project-local number from an in-app link. */
+export function parseTaskReferenceHref(href: string): number | string | null {
   const match = TASK_REFERENCE_HREF_PATTERN.exec(href);
-  return match ? Number(match[1]) : null;
+  if (match) {
+    return Number(match[1]);
+  }
+  if (!href.startsWith("t3-task:")) {
+    return null;
+  }
+  try {
+    const id = decodeURIComponent(href.slice("t3-task:".length));
+    return /^task[:-][^\s/]+$/u.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+export function taskReferenceHref(taskId: string) {
+  return `t3-task:${encodeURIComponent(taskId)}`;
+}
+
+/** An unresolved historical key shows named choices, never an arbitrary project's task. */
+export function parseTaskReferenceChoiceHref(href: string): string | null {
+  const match = /^t3-task-key:([A-Z][A-Z0-9]{0,5}-[1-9]\d*)$/u.exec(href);
+  return match?.[1] ?? null;
 }
 
 const isWordCharacter = (character: string | undefined) =>
@@ -54,6 +76,7 @@ function insideThreadTitle(
  */
 export function remarkTaskReferences(options: {
   readonly tasks: ReadonlyMap<number, ProjectTaskReference>;
+  readonly catalog?: TaskReferenceCatalog;
   readonly taskKeyPrefix?: string | null;
   readonly threadTitles?: ReadonlyArray<string>;
 }) {
@@ -63,7 +86,11 @@ export function remarkTaskReferences(options: {
       ? options.taskKeyPrefix
       : null;
   const pattern =
-    prefix === null ? TASK_REFERENCE_PATTERN : new RegExp(`#[1-9]\\d*|${prefix}-[1-9]\\d*`, "gu");
+    options.catalog && options.catalog.byKey.size > 0
+      ? /#[1-9]\d*|[A-Z][A-Z0-9]{0,5}-[1-9]\d*/gu
+      : prefix === null
+        ? TASK_REFERENCE_PATTERN
+        : new RegExp(`#[1-9]\\d*|${prefix}-[1-9]\\d*`, "gu");
   return (tree: MarkdownNode) => {
     findAndReplaceText(
       tree,
@@ -71,21 +98,37 @@ export function remarkTaskReferences(options: {
       (matched: string, match: TextMatch) => {
         const before = match.input[match.index - 1];
         const after = match.input[match.index + matched.length];
-        if (isWordCharacter(before) || before === "&" || isWordCharacter(after)) return false;
+        if (isWordCharacter(before) || before === "&" || /[A-Za-z0-9_]/u.test(after ?? "")) {
+          return false;
+        }
         let number: number;
         if (matched.startsWith("#")) {
           if (insideThreadTitle(match, matched, threadTitles)) return false;
           number = Number(matched.slice(1));
         } else {
           // A key next to "-" is part of a longer name, such as "BU-7-draft".
-          if (prefix === null || before === "-" || after === "-") return false;
+          if (before === "-" || after === "-") return false;
+          const candidates = options.catalog
+            ? taskReferenceCandidates(options.catalog, matched)
+            : [];
+          if (candidates.length > 0) {
+            const only = candidates.length === 1 ? candidates[0] : undefined;
+            return {
+              type: "link",
+              url: only ? taskReferenceHref(only.task.id) : `t3-task-key:${matched}`,
+              children: [{ type: "text", value: matched }],
+            };
+          }
+          if (prefix === null || !matched.startsWith(`${prefix}-`)) return false;
           number = Number(matched.slice(prefix.length + 1));
         }
         const task = options.tasks.get(number);
         if (task === undefined) return false;
         return {
           type: "link",
-          url: `t3-task:${task.number}`,
+          url: options.catalog?.byId.has(task.id)
+            ? taskReferenceHref(task.id)
+            : `t3-task:${task.number}`,
           children: [{ type: "text", value: matched }],
         };
       },

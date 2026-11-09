@@ -236,7 +236,7 @@ function TaskPlanBody(props: {
         </span>
         <TaskPhaseBadge view={taskPhaseView({ ...task, status: status.status })} />
         {relations?.progress ? <SubtaskProgressBadge progress={relations.progress} /> : null}
-        <WaitingMarker blockedBy={relations?.blockedBy ?? []} />
+        <WaitingMarker blockedBy={relations?.blockedBy ?? []} linkToTask />
         <div className="ml-auto">
           <Select
             value={String(shown.version)}

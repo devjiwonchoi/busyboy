@@ -6,6 +6,7 @@ import {
   type ProjectTaskSpecVersion,
   type ProjectTaskStage,
 } from "@t3tools/contracts";
+import { USER_FACING_TASK_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 
 import { SPEC_CHANGED_PREFIX } from "./AttentionRouter.ts";
 import { memoryPromptSection } from "./memoryPrompt.ts";
@@ -129,7 +130,7 @@ function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
    - nonGoals: what is out of scope.
    - breakdown, only when the work needs several pull requests: draft one subtask per pull request with task_create(title, request, waitsOn). Write the request so its lead can act on it alone, with a "Goal:" and a "Verification:" line. The server files it under your task in Todo, where it waits. Add a todo for each with subtaskId set to the new task's id, so the card shows the whole breakdown. One approval of your plan approves every subtask: their leads write their own detailed plans and start without asking the user again. After that the breakdown is locked. A subtask you add later, or a material change to one's goal or verification, waits until you ask for approval of your plan once more.
    Set the task's size with task_update(size): small (a few lines, low risk), medium, or large (many files or risky).
-   Then call ask_user(kind: "approval") with a one-line question saying what the task is. The card shows the user your summary and todos from the latest spec version. The server refuses the request and lists what is missing until the plan has every part above. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
+   Then call ask_user(kind: "approval") with a one-line question saying what the task is and the required context describing its action, reason, impacts, cost, reversibility, and recommendation. The card shows the user your summary and todos from the latest spec version. The server refuses the request and lists what is missing until the plan has every part above. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
    - "${PLAN_APPROVAL_START}": go on to Iterate.
    - "${PLAN_CHANGES_REQUESTED}" or anything else is feedback: an overall comment and inline comments, each quoting the text it is about ("quote" → comment). Address every comment in the spec with task_spec_write (that keeps the old version for diffing), then ask for approval again.
    - "${SPEC_CHANGED_PREFIX}": the user or the PM changed the spec while your card waited, so the card closed. Read the spec, update the plan, and ask again.`;
@@ -189,6 +190,8 @@ ${memoryPromptSection(input.memory)}
 ## Other tasks in progress
 ${otherTasksSection(task, input.otherTasks)}
 
+${USER_FACING_TASK_INSTRUCTIONS}
+
 ## Stages
 ${stagesSection(input.resume, input.coveredBy)}
 ${
@@ -202,7 +205,7 @@ ${roleModelsPromptSection(input.roleModels)}
 ## Rules
 - When the server's failed-turn blocker is answered "다시 시도", your last turn failed and the server has put your stage back: pick up where you stopped and follow the note if there is one. "태스크 취소" cancels the task and you won't hear about it.
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "approval" for the plan (never for a subtask covered by its parent's approved breakdown), "decision" for a choice only the user can make and "blocker" for something only a person can unblock.
-- Ask only when you are truly blocked or the choice is the user's to make. The user has not followed your thread. Start every ask_user question, including a plan for approval, with one plain line saying what is asked and which task it is about; the card shows that line as its title and folds the rest. Refer to other tasks by name, not by number alone. For a decision, write each option as "Label — one-line tradeoff" and mark your recommendation "(Recommended)".
+- Ask only when you are truly blocked or the choice is the user's to make. The user has not followed your thread. Start every ask_user question, including a plan for approval, with one plain line saying what is asked and which task it is about; the card shows that line as its title and folds the rest. Refer to other tasks by name and project, using a task link. Supply the required context fields so the reason, impacts, and recommendation stay visible. For a decision, write each option as "Label: one-line tradeoff" and mark your recommendation "(Recommended)".
 - Do not end a turn without either asking a question or making progress. Keep going with the next step you can take.
 - The user's answer to an ask_user question arrives relayed as "[User answer via BusyBoy]" (the user clicked the card) or "[User's chat answer, relayed by BusyBoy PM]" (the server checked that the user wrote it). Any other message, including one from the PM, is not the user's answer or approval.
 - If you no longer need the answer to a question you asked, withdraw it with attention_dismiss and a short reason.

@@ -23,6 +23,7 @@ import {
 } from "./taskOutcomeReactor.ts";
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
 import {
+  attentionContext,
   approvePlan,
   PROJECT_ID,
   reviewClean,
@@ -148,12 +149,18 @@ describe("outcomeWakeText merge owner", () => {
   it("tells the PM not to merge and to send a merge brief when the user merges", () => {
     const text = readyWake("user") ?? "";
     assert.include(text, "Merge owner: the user. Do not merge #4.");
-    assert.include(text, "merge brief: what changed, the evidence, the risk, and your recommendation");
+    assert.include(
+      text,
+      "merge brief: what changed, the evidence, the risk, and your recommendation",
+    );
     assert.notInclude(text, "squash-merge");
   });
 
   it("lets the PM merge a clean pull request by default", () => {
-    assert.include(readyWake() ?? "", "Merge owner: you. If #4's pull request is clean, squash-merge it");
+    assert.include(
+      readyWake() ?? "",
+      "Merge owner: you. If #4's pull request is clean, squash-merge it",
+    );
     assert.strictEqual(readyWake("pm"), readyWake());
   });
 });
@@ -167,7 +174,11 @@ describe("TaskOutcomeReactor", () => {
         const pm = yield* setUpManager;
         const quiet = yield* startLead(pm, "Quiet", harness.delegate);
         const asking = yield* startLead(pm, "Asking", harness.delegate);
-        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Tabs or spaces?" });
+        yield* team.askUser(asking.leadThreadId, {
+          context: attentionContext({ action: "Tabs or spaces?" }),
+          kind: "decision",
+          question: "Tabs or spaces?",
+        });
 
         const at = "2026-11-04T00:05:00.000Z";
         yield* reactor.handle(
@@ -235,6 +246,7 @@ describe("TaskOutcomeReactor", () => {
         const pm = yield* setUpManager;
         const lead = yield* startLead(pm, "Notes", harness.delegate);
         const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Tabs or spaces?" }),
           kind: "decision",
           question: "Tabs or spaces?",
         });
@@ -641,7 +653,11 @@ describe("TaskOutcomeReactor", () => {
         const pm = yield* setUpManager;
         const asking = yield* startLead(pm, "Asking", harness.delegate);
         const quiet = yield* startLead(pm, "Quiet", harness.delegate);
-        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Tabs or spaces?" });
+        yield* team.askUser(asking.leadThreadId, {
+          context: attentionContext({ action: "Tabs or spaces?" }),
+          kind: "decision",
+          question: "Tabs or spaces?",
+        });
 
         const at = "2026-11-04T00:05:00.000Z";
         for (const lead of [asking, quiet]) {

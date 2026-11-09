@@ -202,6 +202,7 @@ import {
   toDelegateTarget,
 } from "./roleModels.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
+import { allocateTaskKeyPrefixes } from "./taskKeyPrefixes.ts";
 import { resolveUserLanguage } from "./userLanguage.ts";
 
 export const MAX_TASK_NUDGES = 2;
@@ -927,6 +928,8 @@ const make = Effect.gen(function* () {
   const directorRoot = directorWorkspaceRoot(path, serverConfig.baseDir);
   const isDirectorRoot = (workspaceRoot: string) => path.resolve(workspaceRoot) === directorRoot;
   const managerLocks = yield* KeyedLock.make<ProjectId>();
+  // Prefixes belong to the whole server, so different projects share this lock.
+  const taskKeyLocks = yield* KeyedLock.make<"prefixes">();
   const taskStartLocks = yield* KeyedLock.make<ProjectId>();
   const specLocks = yield* KeyedLock.make<ProjectTaskId>();
   // Goal writes read, change and save the whole goal; parallel calls must not drop each other's changes.
@@ -967,6 +970,48 @@ const make = Effect.gen(function* () {
         }),
       ),
     );
+
+  // Call with taskKeyLocks held, before taking any per-project settings lock.
+  const reconcileTaskKeyPrefixes = Effect.gen(function* () {
+    const managers = yield* repository.listManagers();
+    const named = yield* Effect.forEach(managers, (manager) =>
+      Effect.map(projects.get(manager.projectId), (project) => ({ manager, project })),
+    );
+    const assignments = allocateTaskKeyPrefixes({
+      projects: named.flatMap(({ manager, project }) =>
+        Option.isSome(project) && project.value.deletedAt === null
+          ? [
+              {
+                projectId: manager.projectId,
+                title: project.value.title,
+                prefix: manager.settings.taskKeyPrefix,
+                aliases: manager.settings.taskKeyAliases ?? [],
+              },
+            ]
+          : [],
+      ),
+    });
+    for (const assignment of assignments) {
+      const manager = managers.find((candidate) => candidate.projectId === assignment.projectId)!;
+      if (manager.settings.taskKeyPrefix === assignment.prefix) continue;
+      yield* sitreps.withSettingsLock(
+        manager.projectId,
+        Effect.gen(function* () {
+          const latest = yield* requireManager(manager.projectId);
+          yield* repository.updateManagerSettings({
+            projectId: manager.projectId,
+            settings: {
+              ...latest.settings,
+              taskKeyPrefix: assignment.prefix,
+              taskKeyAliases: assignment.aliases,
+            },
+            now: yield* nowIso,
+          });
+        }),
+      );
+      yield* router.publish(manager.projectId);
+    }
+  });
 
   const requireTask = (taskId: ProjectTaskId, projectId: ProjectId) =>
     repository.getTask(taskId).pipe(
@@ -1374,77 +1419,86 @@ const make = Effect.gen(function* () {
     });
 
   const ensureManager: ProjectTeamService["Service"]["ensureManager"] = (projectId) =>
-    managerLocks.withLock(
-      projectId,
-      Effect.gen(function* () {
-        const project = yield* projects.get(projectId);
-        if (Option.isNone(project)) {
-          return yield* teamError(`Project ${projectId} was not found.`, projectId);
-        }
-        const kind: ProjectManagerKind = isDirectorRoot(project.value.workspaceRoot)
-          ? "director"
-          : "pm";
-        const existing = yield* repository.getManager(projectId);
-        if (Option.isSome(existing)) {
-          const shell = yield* threads.getThreadShell(existing.value.threadId);
-          if (shell !== null && shell.deletedAt === null) {
-            return yield* reviveManager(existing.value, shell, project.value.title);
-          }
-        }
-        const defaults =
-          kind === "director"
-            ? { ...DEFAULT_PROJECT_TEAM_SETTINGS, persona: DIRECTOR_PERSONA }
-            : DEFAULT_PROJECT_TEAM_SETTINGS;
-        const persona = resolvePersona(
-          projectId,
-          Option.isSome(existing) ? existing.value.settings : defaults,
-        );
-        const settings = resolveProjectSettings(
-          yield* serverSettings.getSettings,
-          projectId,
-        ).settings;
-        const modelSelection: ModelSelection = project.value.defaultModelSelection ??
-          settings.defaultModelSelection ??
-          (yield* availableModelSelection) ?? {
-            instanceId: ProviderInstanceId.make("codex"),
-            model: DEFAULT_MODEL,
-          };
-        const threadId = ThreadId.make(yield* newId("project-pm"));
-        yield* threads.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make(`project-team:create-pm:${threadId}`),
-          threadId,
-          projectId,
-          title: persona.name,
-          modelSelection,
-          runtimeMode: settings.defaultRuntimeMode,
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-          branch: null,
-          worktreePath: null,
-          createdBy: "system",
-          creationSource: "server",
-        });
-        // A replaced PM keeps the stored settings: persona, on/off, interval and the rest.
-        const upserted = yield* sitreps.withSettingsLock(
+    taskKeyLocks.withLock(
+      "prefixes",
+      managerLocks
+        .withLock(
           projectId,
           Effect.gen(function* () {
-            const stored = yield* repository.getManager(projectId);
-            const kept = Option.isSome(stored) ? stored.value.settings : defaults;
-            return yield* repository.upsertManager({
+            const project = yield* projects.get(projectId);
+            if (Option.isNone(project)) {
+              return yield* teamError(`Project ${projectId} was not found.`, projectId);
+            }
+            const kind: ProjectManagerKind = isDirectorRoot(project.value.workspaceRoot)
+              ? "director"
+              : "pm";
+            const existing = yield* repository.getManager(projectId);
+            if (Option.isSome(existing)) {
+              const shell = yield* threads.getThreadShell(existing.value.threadId);
+              if (shell !== null && shell.deletedAt === null) {
+                return yield* reviveManager(existing.value, shell, project.value.title);
+              }
+            }
+            const defaults =
+              kind === "director"
+                ? { ...DEFAULT_PROJECT_TEAM_SETTINGS, persona: DIRECTOR_PERSONA }
+                : DEFAULT_PROJECT_TEAM_SETTINGS;
+            const persona = resolvePersona(
               projectId,
+              Option.isSome(existing) ? existing.value.settings : defaults,
+            );
+            const settings = resolveProjectSettings(
+              yield* serverSettings.getSettings,
+              projectId,
+            ).settings;
+            const modelSelection: ModelSelection = project.value.defaultModelSelection ??
+              settings.defaultModelSelection ??
+              (yield* availableModelSelection) ?? {
+                instanceId: ProviderInstanceId.make("codex"),
+                model: DEFAULT_MODEL,
+              };
+            const threadId = ThreadId.make(yield* newId("project-pm"));
+            yield* threads.dispatch({
+              type: "thread.create",
+              commandId: CommandId.make(`project-team:create-pm:${threadId}`),
               threadId,
-              kind,
-              settings: { ...kept, persona: resolvePersona(projectId, kept) },
-              now: yield* nowIso,
+              projectId,
+              title: persona.name,
+              modelSelection,
+              runtimeMode: settings.defaultRuntimeMode,
+              interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+              branch: null,
+              worktreePath: null,
+              createdBy: "system",
+              creationSource: "server",
             });
-          }),
-        );
-        const manager = yield* persistPersona(upserted);
-        // A sitrep the old PM thread was writing will never be posted.
-        if (Option.isSome(existing)) yield* sitreps.abandonPending(projectId);
-        yield* router.publish(projectId);
-        return manager;
-      }).pipe(orTeamError("Could not set up the project's PM.", projectId)),
+            // A replaced PM keeps the stored settings: persona, on/off, interval and the rest.
+            const upserted = yield* sitreps.withSettingsLock(
+              projectId,
+              Effect.gen(function* () {
+                const stored = yield* repository.getManager(projectId);
+                const kept = Option.isSome(stored) ? stored.value.settings : defaults;
+                return yield* repository.upsertManager({
+                  projectId,
+                  threadId,
+                  kind,
+                  settings: { ...kept, persona: resolvePersona(projectId, kept) },
+                  now: yield* nowIso,
+                });
+              }),
+            );
+            const manager = yield* persistPersona(upserted);
+            // A sitrep the old PM thread was writing will never be posted.
+            if (Option.isSome(existing)) yield* sitreps.abandonPending(projectId);
+            yield* router.publish(projectId);
+            return manager;
+          }).pipe(orTeamError("Could not set up the project's PM.", projectId)),
+        )
+        .pipe(
+          Effect.tap(() => reconcileTaskKeyPrefixes),
+          Effect.flatMap(() => requireManager(projectId)),
+          orTeamError("Could not set up the project's PM.", projectId),
+        ),
     );
 
   /** Refuses a new task whose title matches an open task's: that work belongs there. */
@@ -3144,6 +3198,23 @@ const make = Effect.gen(function* () {
     actorThreadId: ThreadId | null,
   ) =>
     Effect.gen(function* () {
+      yield* reconcileTaskKeyPrefixes;
+      if (patch.taskKeyPrefix !== undefined) {
+        const collisions = (yield* repository.listManagers()).filter(
+          (candidate) =>
+            candidate.projectId !== projectId &&
+            candidate.settings.taskKeyPrefix === patch.taskKeyPrefix,
+        );
+        for (const collision of collisions) {
+          const project = yield* projects.get(collision.projectId);
+          if (Option.isNone(project) || project.value.deletedAt !== null) continue;
+          const title = project.value.title;
+          return yield* teamError(
+            `태스크 접두어 ${patch.taskKeyPrefix}는 ‘${title}’ 프로젝트에서 사용 중입니다. 다른 접두어를 지정해 주세요.`,
+            projectId,
+          );
+        }
+      }
       const { persona: personaPatch, ...plain } = patch;
       if (
         Object.values(plain).every((value) => value === undefined) &&
@@ -3214,7 +3285,20 @@ const make = Effect.gen(function* () {
               ...(quietHours === undefined ? {} : { quietHours }),
               persona,
               ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
-              ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
+              ...(patch.taskKeyPrefix === undefined
+                ? {}
+                : {
+                    taskKeyPrefix: patch.taskKeyPrefix,
+                    taskKeyAliases: [
+                      ...new Set([
+                        ...(manager.settings.taskKeyAliases ?? []),
+                        ...(manager.settings.taskKeyPrefix === undefined ||
+                        manager.settings.taskKeyPrefix === patch.taskKeyPrefix
+                          ? []
+                          : [manager.settings.taskKeyPrefix]),
+                      ]),
+                    ],
+                  }),
               ...(patch.mergeOwner === undefined ? {} : { mergeOwner: patch.mergeOwner }),
               ...(afk === undefined ? {} : { afk }),
               // Only setting the interval by hand stops it adapting, for good; other fields
@@ -3281,7 +3365,10 @@ const make = Effect.gen(function* () {
       }
       yield* router.publish(projectId);
       return { projectId, settings };
-    }).pipe(orTeamError("Could not update the team settings.", projectId));
+    }).pipe(
+      (effect) => taskKeyLocks.withLock("prefixes", effect),
+      orTeamError("Could not update the team settings.", projectId),
+    );
 
   const updateSettingsAsManager: ProjectTeamService["Service"]["updateSettingsAsManager"] = (
     callerThreadId,
@@ -3376,6 +3463,7 @@ const make = Effect.gen(function* () {
         task,
         kind: "approval",
         question: input.question,
+        context: input.context,
         // One way to approve: approving always starts the work.
         options: [PLAN_APPROVAL_START],
         askerThreadId: callerThreadId,
@@ -3446,6 +3534,7 @@ const make = Effect.gen(function* () {
         task,
         kind: input.kind,
         question: input.question,
+        context: input.context,
         options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
@@ -3482,6 +3571,7 @@ const make = Effect.gen(function* () {
         projectId: role.projectId,
         kind: "decision",
         question: input.question,
+        context: input.context,
         options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
@@ -4505,6 +4595,7 @@ const make = Effect.gen(function* () {
 
   const attentionSnapshot: ProjectTeamService["Service"]["attentionSnapshot"] = Effect.gen(
     function* () {
+      yield* taskKeyLocks.withLock("prefixes", reconcileTaskKeyPrefixes);
       const managers = yield* repository.listManagers();
       const summaries = yield* Effect.forEach(managers, (manager) =>
         Effect.gen(function* () {
@@ -4600,6 +4691,7 @@ const make = Effect.gen(function* () {
             presence,
             decisionCards,
             taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
+            taskKeyAliases: manager.settings.taskKeyAliases ?? [],
             lastMessage: yield* readManagerLastMessage(manager.threadId),
             afkAnswers,
             direction:
@@ -4769,6 +4861,8 @@ const make = Effect.gen(function* () {
       yield* router.publish(reopened.value.projectId);
       return reopened;
     }).pipe(orTeamError("Could not record the pull request update."));
+
+  yield* taskKeyLocks.withLock("prefixes", reconcileTaskKeyPrefixes);
 
   return {
     ensureManager,

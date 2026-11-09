@@ -48,6 +48,44 @@ describe("runMigrations", () => {
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 
+  it.effect("preserves legacy attention text and leaves its decision scope unknown", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* Migrator.make({})({
+        loader: Migrator.fromRecord(
+          Object.fromEntries(
+            migrationEntries
+              .filter(([id]) => id < 18)
+              .map(([id, name, migration]) => [`${id}_${name}`, migration]),
+          ),
+        ),
+      });
+      const at = "2026-11-01T00:00:00.000Z";
+      const question =
+        "5 runs: 2 succeeded, 3 failed. Estimated $6, limit $15. Uncertainty remains.";
+      const options = JSON.stringify(["Use current results", "Rerun for $6-10"]);
+      yield* sql`
+        INSERT INTO project_tasks (
+          task_id, project_id, number, title, request, stage, waits_on_json,
+          stage_changed_at, created_at, updated_at
+        ) VALUES ('task:legacy', 'project-1', 1, 'Calibration', 'Request', 'running', '[]',
+          ${at}, ${at}, ${at})
+      `;
+      yield* sql`
+        INSERT INTO project_attention_items (
+          item_id, project_id, task_id, kind, question, options_json, batch_id, created_at
+        ) VALUES ('attention:legacy', 'project-1', 'task:legacy', 'decision',
+          ${question}, ${options}, 'batch:legacy', ${at})
+      `;
+      assert.deepStrictEqual(yield* runMigrations(), [[18, "ProjectAttentionContext"]]);
+      const rows = yield* sql`
+        SELECT question, options_json, context_json FROM project_attention_items
+        WHERE item_id = 'attention:legacy'
+      `;
+      assert.deepStrictEqual(rows, [{ question, options_json: options, context_json: null }]);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
   it.effect("rewrites stored thread settlement events as metadata updates", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

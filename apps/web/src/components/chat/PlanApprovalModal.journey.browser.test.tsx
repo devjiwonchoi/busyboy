@@ -77,6 +77,14 @@ vi.mock(import("../../state/environments"), async (original) => ({
   useEnvironmentIds: (() => [ENVIRONMENT_ID]) as never,
 }));
 
+vi.mock(import("../../state/entities"), async (original) => ({
+  ...(await original()),
+  useProjects: (() => [
+    { id: "project-1", environmentId: "environment-local", title: "BusyBoy" },
+    { id: "site", environmentId: "environment-local", title: "Website" },
+  ]) as never,
+}));
+
 // The chat sits inside the app's router; a plain link stands in for it here.
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
@@ -281,9 +289,9 @@ async function openReview() {
   await act(async () => root.render(<LiveCard />));
   const card = container.querySelector('[data-decision-card-state="open"]')!;
   // Reads like a doc: "# title", then Goal and Verification.
-  // The task key leads the meta line once the app knows the task.
+  // The task key remains secondary to the human-readable plan information.
   expect(card.querySelector("[data-plan-meta]")?.textContent).toMatch(
-    /^(BU-32 · )?Plan approval · v2$/,
+    /^Plan approval · .+ · v2( · \(BU-32\))?$/,
   );
   expect(card.querySelector("[data-plan-title]")?.textContent).toBe("Plan approval modal");
   expect(card.textContent).toContain("A card in the PM chat");
@@ -477,7 +485,7 @@ describe.each([
     const review = modal();
     // Linear's parent breadcrumb, above the title.
     const parent = review.querySelector<HTMLElement>("[data-task-parent]")!;
-    expect(parent.textContent).toBe("BU-30Plan approval rework");
+    expect(parent.textContent).toBe("Plan approval rework · BusyBoy");
     expect(parent.getAttribute("href")).toBe("#task-30");
     const title = review.querySelector<HTMLElement>("[data-plan-title]")!;
     expect(parent.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -495,7 +503,7 @@ describe.each([
       "blocking",
       "related",
     ]);
-    expect(groups[0]!.querySelector("h3")!.textContent).toContain("Sub-tasks");
+    expect(groups[0]!.querySelector("h3")!.textContent).toContain("하위 태스크");
     expect(
       groups[0]!.querySelector("[data-subtask-progress]")!.getAttribute("data-subtask-progress"),
     ).toBe("1/2");

@@ -8,6 +8,7 @@ import {
   t3AcpPromptWithInstructions,
   t3OrchestrationPromptForFirstRun,
   t3OrchestrationSystemPrompt,
+  USER_FACING_TASK_INSTRUCTIONS,
 } from "./orchestrationInstructions.ts";
 
 describe("T3 orchestration provider instructions", () => {
@@ -153,6 +154,30 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "Your name is Remy.");
     assert.include(text, "Your voice: Terse and dry.");
     assert.include(text, "`team_settings_update`");
+  });
+
+  it("gives both user-facing roles named task links and explicit decision context", () => {
+    const prompts = [
+      projectManagerInstructions({ name: "Remy", voice: "Terse." }),
+      directorInstructions({ name: "Nova", voice: "Calm." }),
+    ];
+
+    for (const text of prompts) {
+      assert.include(text, USER_FACING_TASK_INSTRUCTIONS);
+      assert.include(text, "name the work and its project first");
+      assert.include(text, "supporting detail in parentheses");
+      assert.include(text, "[로그인 리다이렉트 수정 · 웹 앱](t3-task:task%3Alogin)");
+      assert.include(text, "using `encodeURIComponent(task.id)`");
+      assert.include(text, "`action`");
+      assert.include(text, "`reason`");
+      assert.include(text, "`impacts`");
+      assert.include(text, "`cost`");
+      assert.include(text, "`reversibility`");
+      assert.include(text, "`recommendation`");
+      assert.include(text, "explicitly use [] for none");
+      assert.include(text, "Existing role, explicit-approval, and AFK restrictions still apply");
+      assert.include(text, "the card's impact labels do not grant permission");
+    }
   });
 
   it("has the Director record goals and link the work that serves them", () => {

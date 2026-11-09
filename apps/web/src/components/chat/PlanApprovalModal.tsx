@@ -26,12 +26,7 @@ import { DIALOG_POPUP_CLASS } from "../ui/dialog-styles";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { diffWords } from "./planDiff";
-import {
-  TaskParentBreadcrumb,
-  TaskStructure,
-  useRelatedTask,
-  useTaskRelations,
-} from "../task/TaskRelations";
+import { TaskParentBreadcrumb, TaskStructure, useTaskRelations } from "../task/TaskRelations";
 import {
   PlanBreakdown,
   PlanCriteria,
@@ -42,6 +37,7 @@ import {
 } from "../plan/PlanDocument";
 import { PlanTodoList } from "../plan/PlanTodoList";
 import { PlanApprovalSections, PlanMarkdown, PlanSummary } from "./PlanMarkdown";
+import { AttentionContext, useAttentionTask } from "./AttentionContext";
 
 /** A text selection in the plan, waiting for the Comment button. */
 interface PendingSelection {
@@ -233,9 +229,10 @@ function PlanReview({
   readOnly: boolean;
 }) {
   const relations = useTaskRelations(environmentId, card.item.taskId);
-  const running = useRelatedTask(environmentId, card.item.taskId)?.task.stage === "running";
+  const { related, projectId, projectTitle } = useAttentionTask({ card, environmentId });
+  const running = related?.task.stage === "running";
   const query = useTaskDetail(environmentId, {
-    projectId: card.item.projectId,
+    projectId,
     taskId: card.item.taskId,
   });
   const answerDecision = useAnswerDecision();
@@ -434,7 +431,7 @@ function PlanReview({
       <header className="flex shrink-0 flex-col gap-1.5 border-b px-5 pt-4 pb-3 md:px-7">
         <div className="flex flex-wrap items-center gap-2 pe-8">
           <span data-plan-meta className="font-mono text-muted-foreground text-xs">
-            {detail.key}
+            {projectTitle} ({detail.key})
           </span>
           <span
             data-plan-status
@@ -511,6 +508,7 @@ function PlanReview({
             onMouseUp={captureSelection}
             onTouchEnd={captureSelection}
           >
+            <AttentionContext context={card.item.context} planApproval />
             {structured ? (
               diffing ? (
                 textSection("Summary", "summary")

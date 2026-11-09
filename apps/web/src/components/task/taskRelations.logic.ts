@@ -14,6 +14,7 @@ export interface RelatedTask {
   /** Such as BU-55. */
   readonly key: string;
   readonly task: ProjectTaskReference;
+  readonly projectTitle: string;
 }
 
 export interface SubtaskProgress {
@@ -66,6 +67,11 @@ export function buildTaskRelationsIndex(
     readonly environmentId: EnvironmentId;
     readonly summary: Pick<ProjectTeamAttentionSummary, "projectId" | "taskKeyPrefix" | "tasks">;
   }>,
+  projects?: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly id: ProjectId;
+    readonly title: string;
+  }>,
 ): TaskRelationsIndex {
   const byId = new Map<string, RelatedTask>();
   for (const { environmentId, summary } of entries) {
@@ -75,6 +81,11 @@ export function buildTaskRelationsIndex(
         projectId: summary.projectId,
         key: formatTaskKey(summary.taskKeyPrefix, task.number),
         task,
+        projectTitle:
+          projects?.find(
+            (project) =>
+              project.environmentId === environmentId && project.id === summary.projectId,
+          )?.title ?? "프로젝트",
       });
     }
   }
@@ -158,24 +169,22 @@ export function taskRelations(
   };
 }
 
-/** "BU-55 끝나야 시작 · Dependency model" or "BU-55, BU-58 끝나야 시작". */
+/** Names the dependencies and their projects rather than exposing bare keys. */
 export function blockedByLabel(blockedBy: ReadonlyArray<RelatedTask>): string {
-  const [first] = blockedBy;
-  if (first === undefined) return "";
-  if (blockedBy.length === 1) return `${first.key} 끝나야 시작 · ${first.task.title}`;
-  return `${blockedBy.map((related) => related.key).join(", ")} 끝나야 시작`;
+  if (blockedBy.length === 0) return "";
+  return `${blockedBy.map((related) => `${related.task.title} · ${related.projectTitle}`).join(", ")} 끝나야 시작`;
 }
 
-/** "BU-55 끝나야 시작" or "2개 끝나야 시작", short enough for a phone row. */
+/** A compact dependency summary for phone rows. */
 export function blockedByShortLabel(blockedBy: ReadonlyArray<RelatedTask>): string {
-  const [first] = blockedBy;
-  if (first === undefined) return "";
-  return blockedBy.length === 1 ? `${first.key} 끝나야 시작` : `${blockedBy.length}개 끝나야 시작`;
+  if (blockedBy.length === 0) return "";
+  return blockedBy.length === 1 ? blockedByLabel(blockedBy) : `${blockedBy.length}개 끝나야 시작`;
 }
 
-/** The keys a row shows next to the hourglass: "BU-55" or "BU-55 +1". */
-export function blockedByKeys(blockedBy: ReadonlyArray<RelatedTask>): string {
+/** The named dependency beside the hourglass, plus the number of other dependencies. */
+export function blockedByNames(blockedBy: ReadonlyArray<RelatedTask>): string {
   const [first] = blockedBy;
   if (first === undefined) return "";
-  return blockedBy.length === 1 ? first.key : `${first.key} +${blockedBy.length - 1}`;
+  const name = `${first.task.title} · ${first.projectTitle}`;
+  return blockedBy.length === 1 ? name : `${name} 외 ${blockedBy.length - 1}개`;
 }

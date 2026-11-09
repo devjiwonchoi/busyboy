@@ -4,6 +4,7 @@ import {
   TURN_FAILED_RETRY,
   MessageId,
   type ProjectAttentionAnsweredBy,
+  type ProjectAttentionContext,
   ProjectAttentionBatchId,
   type ProjectAttentionItem,
   ProjectAttentionItemId,
@@ -90,6 +91,7 @@ export class AttentionRouter extends Context.Service<
       readonly summary?: string;
       /** For a plan approval: the card's Verification section. */
       readonly verification?: string;
+      readonly context?: ProjectAttentionContext;
     }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /** Saves the answer and relays it to the thread that asked. */
     readonly answer: (input: {
@@ -151,6 +153,7 @@ const make = Effect.gen(function* () {
         specVersion: input.specVersion ?? null,
         summary: input.summary ?? null,
         verification: input.verification ?? null,
+        context: input.context ?? null,
       });
       yield* publish(projectId);
       return item;
