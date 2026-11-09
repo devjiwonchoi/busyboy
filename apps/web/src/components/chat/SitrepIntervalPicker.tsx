@@ -20,7 +20,6 @@ import {
   ComposerControlIcon,
   type ComposerControlSize,
 } from "./ComposerControl";
-import { AfkSettings } from "./Afk";
 import { useComposerMenuProps } from "./composerEventScope";
 import { useComposerMenuState } from "./useComposerMenuState";
 
@@ -119,8 +118,6 @@ export function SitrepSettingsContent({ projectRef, summary }: SitrepControlProp
           }}
         />
       </label>
-      <Separator className="my-1" />
-      <AfkSettings projectRef={projectRef} summary={summary} />
     </div>
   );
 }

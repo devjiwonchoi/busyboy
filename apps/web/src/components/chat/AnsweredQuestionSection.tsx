@@ -22,7 +22,7 @@ export function AnsweredQuestionSection({
   questions: ReadonlyArray<OrchestrationV2UserInputQuestion>;
   answer: UserInputAttachmentAnswerPayload;
   renderAttachments?: (questionId: string) => ReactNode;
-  /** Who answered, e.g. "Auto-answered (AFK)". */
+  /** Who answered, e.g. "자동 응답됨(AFK)". */
   answeredLabel?: string;
 }) {
   const questionIds = [

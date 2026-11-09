@@ -4,6 +4,7 @@ import { LayoutListIcon, MessageSquareIcon, type LucideIcon } from "lucide-react
 
 import { cn } from "~/lib/utils";
 import { useDirectorInbox } from "~/state/director";
+import { AfkToggle } from "../chat/Afk";
 import { type DirectorChat, useDirectorChat } from "../director/useDirectorChat";
 import { PmAvatar } from "../PmAvatar";
 import { useSidebar } from "../ui/sidebar";
@@ -116,6 +117,7 @@ export function WorkspaceRail() {
             {entry.label}
           </button>
         ))}
+        <AfkToggle compact />
       </nav>
     );
   }
@@ -124,7 +126,7 @@ export function WorkspaceRail() {
     <nav
       aria-label="Views"
       data-workspace-rail="column"
-      className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border pt-1"
+      className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border pt-1 pb-2"
     >
       {director !== null ? (
         <>
@@ -162,6 +164,8 @@ export function WorkspaceRail() {
           <TooltipPopup side="right">{entry.label}</TooltipPopup>
         </Tooltip>
       ))}
+      <span aria-hidden className="flex-1" />
+      <AfkToggle compact={false} />
     </nav>
   );
 }
