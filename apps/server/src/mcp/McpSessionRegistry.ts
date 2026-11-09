@@ -34,6 +34,15 @@ export interface McpSessionRegistryShape {
     rawToken: string,
   ) => Effect.Effect<McpInvocationContext.McpThreadInvocationScope | undefined>;
   readonly touch: (threadId: ThreadId) => Effect.Effect<void>;
+  /**
+   * Replaces the capabilities of a live credential and keeps its token, so a
+   * provider process that already holds the token gets the new tools on its
+   * next tool listing instead of failing auth.
+   */
+  readonly setCapabilities: (
+    providerSessionId: string,
+    capabilities: ReadonlySet<McpInvocationContext.McpCapability>,
+  ) => Effect.Effect<void>;
   readonly revokeProviderSession: (providerSessionId: string) => Effect.Effect<void>;
   readonly revokeThread: (threadId: ThreadId) => Effect.Effect<void>;
   readonly revokeAll: Effect.Effect<void>;
@@ -180,6 +189,23 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
     },
   );
 
+  const setCapabilities: McpSessionRegistryShape["setCapabilities"] = Effect.fn(
+    "McpSessionRegistry.setCapabilities",
+  )(function* (providerSessionId, capabilities) {
+    yield* SynchronizedRef.update(state, ({ records }) => {
+      const next = new Map(records);
+      for (const [tokenHash, record] of records) {
+        if (record.scope.thread.providerSessionId === providerSessionId) {
+          next.set(tokenHash, {
+            ...record,
+            scope: { ...record.scope, capabilities: new Set(capabilities) },
+          });
+        }
+      }
+      return { records: next };
+    });
+  });
+
   const revokeWhere = (predicate: (record: CredentialRecord) => boolean) =>
     SynchronizedRef.update(state, ({ records }) => ({
       records: new Map(Array.from(records).filter(([, record]) => !predicate(record))),
@@ -189,6 +215,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
     issue,
     resolve,
     touch,
+    setCapabilities,
     revokeProviderSession: Effect.fn("McpSessionRegistry.revokeProviderSession")(
       function* (providerSessionId) {
         yield* revokeWhere((record) => record.scope.thread.providerSessionId === providerSessionId);
