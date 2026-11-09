@@ -71,3 +71,14 @@ export function GoalChips({
     </span>
   );
 }
+
+/** A still dot remains visible when the user prefers reduced motion. */
+export function PulseDot() {
+  return (
+    <span
+      data-pulse
+      aria-label="에이전트 작업 중"
+      className="inline-block size-1.5 shrink-0 rounded-full bg-blue-500 motion-safe:animate-pulse"
+    />
+  );
+}

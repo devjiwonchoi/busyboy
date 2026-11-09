@@ -1,6 +1,6 @@
 import { useImperativeHandle, useRef, useState } from "react";
 import type { GraphViewProps } from "./GoalGraph";
-import { GoalChips, toneClasses, waitingClass } from "./GoalGraphNodes";
+import { GoalChips, PulseDot, toneClasses, waitingClass } from "./GoalGraphNodes";
 import { treeOrder } from "./goalGraph.logic";
 
 export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }: GraphViewProps) {
@@ -42,12 +42,14 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
           className={`overflow-hidden rounded-lg border bg-card ${goal.id === "goal:none" ? "border-dashed" : ""}`}
         >
           <div
-            className={`flex items-center gap-2 border-l-[3px] p-3 ${goal.blocked ? "border-l-red-500" : "border-l-transparent"}`}
+            data-recent={goal.recent}
+            className={`flex items-center gap-2 border-l-[3px] p-3 ${goal.recent ? "ring-2 ring-inset ring-primary/60" : ""} ${goal.blocked ? "border-l-red-500" : "border-l-transparent"}`}
           >
             <button
               type="button"
               data-node-id={goal.id}
               data-goal-node={goal.id}
+              data-recent={goal.recent}
               data-blocked={goal.blocked}
               aria-expanded={expanded.has(goal.id)}
               className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
@@ -64,11 +66,28 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
               }
             >
               <span>{expanded.has(goal.id) ? "▾" : "▸"}</span>
-              <span className="truncate">{goal.title}</span>
+              {goal.live ? <PulseDot /> : null}
+              <span className="min-w-0">
+                <span className="block truncate">{goal.title}</span>
+                {goal.changedLabel !== null ? (
+                  <span className="block text-[10px] text-primary">{goal.changedLabel}</span>
+                ) : null}
+              </span>
               <span className="text-xs text-muted-foreground">
                 {goal.done}/{goal.total}
               </span>
             </button>
+            {goal.needsYou > 0 && goal.waitingTarget !== null ? (
+              <button
+                type="button"
+                className={waitingClass}
+                data-waiting-count={goal.needsYou}
+                aria-label={`나를 기다림 ${goal.needsYou}`}
+                onClick={() => openWaiting(goal.waitingTarget!)}
+              >
+                나를 기다림 {goal.needsYou}
+              </button>
+            ) : null}
             <GoalChips
               goal={goal}
               onProposals={() => {
@@ -88,26 +107,37 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
                 )
                 .map((project) => (
                   <div key={project.key} className="ml-4 border-t py-2 pr-2">
-                    <div className="flex items-center gap-2 px-2 py-1">
+                    <div
+                      data-recent={project.recent}
+                      className={`flex items-center gap-2 px-2 py-1 ${project.recent ? "ring-2 ring-primary/60" : ""}`}
+                    >
                       <button
                         type="button"
                         data-node-id={project.nodeId}
                         data-project-node={project.key}
+                        data-recent={project.recent}
                         className="flex-1 text-left text-xs font-medium"
                         onClick={() => openChat(project)}
                       >
-                        {project.title}
+                        {project.live ? <PulseDot /> : null} {project.title}
+                        {project.changedLabel !== null ? (
+                          <span className="block text-[10px] text-primary">
+                            {project.changedLabel}
+                          </span>
+                        ) : null}
                       </button>
                       {project.needsYou > 0 ? (
                         <button
                           type="button"
                           className={waitingClass}
+                          data-waiting-count={project.needsYou}
+                          aria-label={`나를 기다림 ${project.needsYou}`}
                           onClick={(event) => {
                             event.stopPropagation();
-                            openWaiting(project);
+                            openWaiting(project.waitingTarget ?? project);
                           }}
                         >
-                          나를 기다림
+                          나를 기다림 {project.needsYou}
                         </button>
                       ) : null}
                     </div>
@@ -118,39 +148,39 @@ export function GoalGraphMobile({ graph, ref, openChat, openTask, openWaiting }:
                     ).map((task) => (
                       <div
                         key={task.nodeId}
-                        className={`my-1 flex flex-wrap items-center gap-1 border-l-[3px] px-2 py-1.5 ${toneClasses[task.tone]}`}
+                        data-recent={task.recent}
+                        className={`my-1 flex flex-wrap items-center gap-1 border-l-[3px] px-2 py-1.5 ${toneClasses[task.tone]} ${task.recent ? "ring-2 ring-primary/60" : ""}`}
                         style={{ marginLeft: 12 + task.depth * 16 }}
                       >
                         <button
                           type="button"
                           data-node-id={task.nodeId}
                           data-task-node={task.id}
+                          data-recent={task.recent}
                           data-tone={task.tone}
                           data-blocked={task.tone === "blocked"}
                           className={`min-w-0 flex-1 text-left text-xs ${task.tone === "done" ? "line-through" : ""}`}
                           onClick={() => openTask(task)}
                         >
-                          {task.live ? (
-                            <span className="mr-1 inline-block size-1.5 animate-pulse rounded-full bg-blue-500" />
-                          ) : null}
-                          {task.key} {task.title}
-                          {task.recent ? (
-                            <span
-                              title="24시간 안에 바뀜"
-                              className="ml-1 inline-block size-1 rounded-full bg-primary align-middle"
-                            />
+                          {task.live ? <PulseDot /> : null} {task.key} {task.title}
+                          {task.changedLabel !== null ? (
+                            <span className="block text-[10px] text-primary">
+                              {task.changedLabel}
+                            </span>
                           ) : null}
                         </button>
                         {task.needsYou ? (
                           <button
                             type="button"
                             className={waitingClass}
+                            data-waiting-count={task.waitingCount}
+                            aria-label={`나를 기다림 ${task.waitingCount}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               openWaiting(task);
                             }}
                           >
-                            나를 기다림
+                            나를 기다림 {task.waitingCount}
                           </button>
                         ) : null}
                         {task.waitsOnKeys.map((key) => (

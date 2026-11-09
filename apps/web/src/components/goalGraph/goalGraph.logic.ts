@@ -5,7 +5,7 @@ import {
 } from "@t3tools/contracts";
 import { alignWorkspaceGoals } from "@t3tools/shared/workspaceGoals";
 import { splitDirectorEntry } from "~/state/projectTeam.logic";
-import { type MapEntry, needsYouOf, projectKey } from "../allProjects/allProjects.logic";
+import { type MapEntry, projectKey } from "../allProjects/allProjects.logic";
 
 const DAY = 24 * 60 * 60 * 1000;
 const openCard = (card: ProjectDecisionCard) =>
@@ -14,10 +14,32 @@ const finished = (stage: string) => stage === "done" || stage === "cancelled";
 export type TaskTone = "running" | "review" | "ready" | "done" | "blocked" | "planning";
 type Progress = { done: number; total: number };
 
+/**
+ * "방금 바뀜", "N분 전" or "N시간 전" within the last 24 hours, else null. Times slightly
+ * ahead of now count as now: "now" is rounded down to the minute.
+ */
+export function changedLabel(updatedAt: string | null, nowMs: number): string | null {
+  if (updatedAt === null) {
+    return null;
+  }
+  const elapsed = Math.max(0, nowMs - Date.parse(updatedAt));
+  if (!Number.isFinite(elapsed) || elapsed >= DAY) {
+    return null;
+  }
+  if (elapsed < 5 * 60 * 1000) {
+    return "방금 바뀜";
+  }
+  if (elapsed < 60 * 60 * 1000) {
+    return `${Math.floor(elapsed / 60000)}분 전`;
+  }
+  return `${Math.floor(elapsed / 3600000)}시간 전`;
+}
+
 export function buildGoalGraph(input: {
   entries: ReadonlyArray<MapEntry>;
   projectTitles?: ReadonlyMap<string, string>;
   nowMs: number;
+  recentOnly?: boolean | undefined;
 }) {
   const { director } = splitDirectorEntry(input.entries);
   const active = (director?.summary.goals ?? [])
@@ -78,9 +100,7 @@ export function buildGoalGraph(input: {
     }
     return ids;
   };
-  const recent = (at: string | null) =>
-    // No lower bound: "now" is rounded down to the minute, so this minute's changes look ahead.
-    at !== null && input.nowMs - Date.parse(at) <= DAY;
+  const recent = (at: string | null) => changedLabel(at, input.nowMs) !== null;
   const tasks = records
     .filter(
       (task) =>
@@ -130,8 +150,16 @@ export function buildGoalGraph(input: {
         title: task.title,
         stage: task.stage,
         tone,
-        live: task.stage === "running",
+        live:
+          task.stage === "running" &&
+          !task.openQuestion &&
+          !task.openBlocker &&
+          task.lastOutcome !== "stalled" &&
+          task.lastOutcome !== "failed",
         recent: recent(task.updatedAt),
+        updatedAt: task.updatedAt,
+        changedLabel: changedLabel(task.updatedAt, input.nowMs),
+        waitingCount: Math.max(cards.length, task.openQuestion || task.openBlocker ? 1 : 0),
         blockReasons,
         waitsOnKeys: dependencies.map((dependency) =>
           formatTaskKey(dependency.entry.summary.taskKeyPrefix, dependency.number),
@@ -153,7 +181,8 @@ export function buildGoalGraph(input: {
         projectId: task.projectId,
         pmThreadId: task.entry.summary.pmThreadId,
       };
-    });
+    })
+    .filter((task) => !input.recentOnly || task.recent);
   const taskById = new Map(tasks.map((task) => [task.nodeId, task]));
   for (const task of tasks) {
     const seen = new Set([task.nodeId]);
@@ -168,35 +197,52 @@ export function buildGoalGraph(input: {
     done: items.filter((task) => task.stage === "done").length,
     total: items.length,
   });
-  const goals = active.map((goal) => {
-    const contributing = records.filter(
-      (task) => task.entry.summary.kind !== "director" && goalIdsOf(task).includes(goal.id),
-    );
-    const shown = tasks.filter((task) => task.goalIds.includes(goal.id));
-    const proposals = (director?.summary.decisionCards ?? []).filter((card) => {
-      if (!openCard(card) || card.item.kind !== "proposal") {
-        return false;
-      }
-      const proposed = byId.get(recordKey(director!.environmentId, card.item.taskId));
-      return goal.links.some((link) =>
-        link.taskId === null
-          ? link.projectId === (card.proposal?.projectId ?? proposed?.projectId)
-          : proposed !== undefined &&
-            lineage(proposed).some((ancestor) => ancestor.id === link.taskId),
-      );
-    });
+  // Ancestors reflect only the tasks displayed on the board.
+  const signals = (shown: typeof tasks) => {
+    const newest = shown.toSorted(
+      (a, b) =>
+        (b.updatedAt === null ? 0 : Date.parse(b.updatedAt)) -
+        (a.updatedAt === null ? 0 : Date.parse(a.updatedAt)),
+    )[0];
     return {
-      id: String(goal.id),
-      title: goal.title,
-      ...progress(contributing),
-      missingWork: alignments.some(({ alignment }) =>
-        alignment.goalsWithoutOpenWork.includes(goal.id),
-      ),
-      blocked: shown.some((task) => task.tone === "blocked"),
-      proposals,
-      needsYou: shown.filter((task) => task.needsYou).length,
+      live: shown.some((task) => task.live),
+      recent: shown.some((task) => task.recent),
+      changedLabel: newest?.changedLabel ?? null,
+      needsYou: shown.reduce((sum, task) => sum + task.waitingCount, 0),
+      waitingTarget: shown.find((task) => task.needsYou) ?? null,
     };
-  });
+  };
+  const goals = active
+    .filter((goal) => !input.recentOnly || tasks.some((task) => task.goalIds.includes(goal.id)))
+    .map((goal) => {
+      const contributing = records.filter(
+        (task) => task.entry.summary.kind !== "director" && goalIdsOf(task).includes(goal.id),
+      );
+      const shown = tasks.filter((task) => task.goalIds.includes(goal.id));
+      const proposals = (director?.summary.decisionCards ?? []).filter((card) => {
+        if (!openCard(card) || card.item.kind !== "proposal") {
+          return false;
+        }
+        const proposed = byId.get(recordKey(director!.environmentId, card.item.taskId));
+        return goal.links.some((link) =>
+          link.taskId === null
+            ? link.projectId === (card.proposal?.projectId ?? proposed?.projectId)
+            : proposed !== undefined &&
+              lineage(proposed).some((ancestor) => ancestor.id === link.taskId),
+        );
+      });
+      return {
+        id: String(goal.id),
+        title: goal.title,
+        ...progress(contributing),
+        missingWork: alignments.some(({ alignment }) =>
+          alignment.goalsWithoutOpenWork.includes(goal.id),
+        ),
+        blocked: shown.some((task) => task.tone === "blocked"),
+        proposals,
+        ...signals(shown),
+      };
+    });
   if (tasks.some((task) => task.goalIds.includes("goal:none"))) {
     const shown = tasks.filter((task) => task.goalIds.includes("goal:none"));
     goals.push({
@@ -206,7 +252,7 @@ export function buildGoalGraph(input: {
       missingWork: false,
       blocked: shown.some((task) => task.tone === "blocked"),
       proposals: [],
-      needsYou: shown.filter((task) => task.needsYou).length,
+      ...signals(shown),
     });
   }
   const projects = input.entries
@@ -216,7 +262,8 @@ export function buildGoalGraph(input: {
         (tasks.some(
           (task) => task.projectKey === projectKey(entry.environmentId, entry.summary.projectId),
         ) ||
-          (entry.environmentId === director?.environmentId &&
+          (!input.recentOnly &&
+            entry.environmentId === director?.environmentId &&
             active.some((goal) =>
               goal.links.some(
                 (link) => link.projectId === entry.summary.projectId && link.taskId === null,
@@ -234,9 +281,13 @@ export function buildGoalGraph(input: {
         title: input.projectTitles?.get(key) ?? "프로젝트",
         pmThreadId: entry.summary.pmThreadId,
         progress: progress(shown),
-        needsYou: needsYouOf(entry.summary).total,
-        cardId: entry.summary.decisionCards.find(openCard)?.item.id ?? null,
-        working: entry.summary.presence.running > 0 || shown.some((task) => task.live),
+        ...signals(shown),
+        // A badge with no waiting task on the board opens the PM chat.
+        cardId: null,
+        // Unfiltered projects also show manager activity; filtered pulses belong to visible work.
+        live:
+          (!input.recentOnly && entry.summary.presence.running > 0) ||
+          shown.some((task) => task.live),
         blocked: shown.some((task) => task.tone === "blocked"),
       };
     });
@@ -263,7 +314,7 @@ export function buildGoalGraph(input: {
         .find((item) => item.environmentId === project.environmentId)
         ?.alignment.goals.find((item) => item.goalId === goal.id)
         ?.projectIds.includes(project.projectId);
-      if (contributing.length > 0 || linked || alignedProject) {
+      if (contributing.length > 0 || (!input.recentOnly && (linked || alignedProject))) {
         edge(
           goal.id,
           project.nodeId,
@@ -299,6 +350,7 @@ export function buildGoalGraph(input: {
     tasks,
     edges,
     director,
+    directorBriefing: director?.summary.briefing?.trim() || null,
     briefing: {
       goals: goals
         .filter((goal) => goal.id !== "goal:none")

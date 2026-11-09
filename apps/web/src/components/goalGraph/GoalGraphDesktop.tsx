@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { GraphViewProps } from "./GoalGraph";
-import { GoalChips, ProgressRing, toneClasses, waitingClass } from "./GoalGraphNodes";
+import { GoalChips, ProgressRing, PulseDot, toneClasses, waitingClass } from "./GoalGraphNodes";
 import { layoutGoalGraph, relatedNodeIds } from "./goalGraph.logic";
 
 /** Below this zoom only goals and projects show, as progress rings. */
@@ -194,6 +194,9 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
           if (far && task !== undefined) {
             return null;
           }
+          const node = goal ?? project ?? task!;
+          const waitingCount = task?.waitingCount ?? project?.needsYou ?? goal?.needsYou ?? 0;
+          const waitingTarget = task ?? project?.waitingTarget ?? project ?? goal?.waitingTarget;
           const blocked = goal?.blocked ?? project?.blocked ?? task?.tone === "blocked";
           return (
             <div
@@ -208,7 +211,8 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
                 height: box.height,
                 opacity: dim(box.id),
               }}
-              className={`flex items-center gap-2 rounded-lg border border-l-[3px] bg-card px-3 shadow-sm ${task !== undefined ? toneClasses[task.tone] : blocked ? "border-l-red-500" : "border-l-border"} ${goal?.id === "goal:none" ? "border-dashed text-muted-foreground" : ""} ${task?.recent ? "ring-1 ring-primary/15" : ""}`}
+              data-recent={node.recent}
+              className={`flex items-center gap-2 rounded-lg border border-l-[3px] bg-card px-3 shadow-sm ${task !== undefined ? toneClasses[task.tone] : blocked ? "border-l-red-500" : "border-l-border"} ${goal?.id === "goal:none" ? "border-dashed text-muted-foreground" : ""} ${node.recent ? "ring-2 ring-primary/60" : ""}`}
             >
               <button
                 type="button"
@@ -218,7 +222,7 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
                 data-tone={task?.tone}
                 data-blocked={blocked}
                 className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                title={task?.recent ? "24시간 안에 바뀜" : undefined}
+                data-recent={node.recent}
                 aria-label={goal?.title ?? project?.title ?? `${task?.key} ${task?.title}`}
                 onClick={() => {
                   if (task !== undefined) {
@@ -238,20 +242,15 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
                 <div
                   className={`flex items-center gap-1 truncate ${far ? "text-sm" : "text-xs"} ${task?.tone === "done" ? "line-through" : ""}`}
                 >
-                  {task?.live ? (
-                    <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-blue-500" />
-                  ) : null}
+                  {node.live ? <PulseDot /> : null}
                   {task !== undefined ? (
                     <span className="text-muted-foreground">{task.key}</span>
                   ) : null}
                   <span className="truncate">{goal?.title ?? project?.title ?? task?.title}</span>
-                  {task?.recent ? (
-                    <span
-                      title="24시간 안에 바뀜"
-                      className="size-1 shrink-0 rounded-full bg-primary"
-                    />
-                  ) : null}
                 </div>
+                {node.changedLabel !== null ? (
+                  <span className="block text-[10px] text-primary">{node.changedLabel}</span>
+                ) : null}
                 {task !== undefined && task.waitsOnKeys.length > 0 ? (
                   <span className="flex gap-1 text-[10px] text-red-500">
                     {task.waitsOnKeys.map((key) => (
@@ -280,16 +279,18 @@ export function GoalGraphDesktop({ graph, ref, openChat, openTask, openWaiting }
                   </span>
                 ) : null}
               </div>
-              {task?.needsYou || (project?.needsYou ?? 0) > 0 ? (
+              {waitingCount > 0 && waitingTarget !== null && waitingTarget !== undefined ? (
                 <button
                   type="button"
                   className={`relative ${waitingClass}`}
+                  data-waiting-count={waitingCount}
+                  aria-label={`나를 기다림 ${waitingCount}`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    openWaiting(task ?? project!);
+                    openWaiting(waitingTarget);
                   }}
                 >
-                  나를 기다림
+                  나를 기다림 {waitingCount}
                 </button>
               ) : null}
             </div>
