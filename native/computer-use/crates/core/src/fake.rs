@@ -664,8 +664,13 @@ impl Platform for FakePlatform {
         Ok(())
     }
 
-    fn capture_window(&self, _app: &RunningApp, _window: &WindowInfo, _deadline: Deadline) -> Result<Screenshot, ScreenshotOmitted> {
-        Ok(Screenshot { mime_type: "image/png".into(), data: String::new(), width: 1, height: 1 })
+    fn capture_window(&self, _app: &RunningApp, window: &WindowInfo, _deadline: Deadline) -> Result<Screenshot, ScreenshotOmitted> {
+        Ok(Screenshot {
+            mime_type: "image/png".into(),
+            data: String::new(),
+            width: window.bounds.width.round() as u32,
+            height: window.bounds.height.round() as u32,
+        })
     }
 
     fn is_locked(&self) -> bool {

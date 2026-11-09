@@ -166,6 +166,38 @@ fn clicks_a_ref_with_press_and_returns_verified_state() {
 }
 
 #[test]
+fn actions_attach_screenshots_when_granted_and_explain_when_not() {
+    let harness = Harness::new();
+    let (bold, _) = harness.platform.with_text_editor();
+    harness.begin("u1");
+    let tree = harness.state("u1", "TextEdit").unwrap()["tree"].as_str().unwrap().to_owned();
+    let bold_ref = Harness::find_ref(&tree, "Bold");
+
+    for granted in [true, false] {
+        harness.platform.with_world(|world| world.screen_recording = granted);
+        let result = harness.call(method::APP_ACT, json!({
+            "threadId": "t1", "turnId": "u1", "app": "TextEdit",
+            "includeScreenshot": true, "action": {"kind": "click", "ref": bold_ref}
+        })).unwrap();
+        assert_eq!(result["verified"], true);
+        let state = &result["state"];
+        if granted {
+            assert_eq!(state["screenshot"]["mimeType"], "image/png");
+            assert!(state.get("notes").is_none());
+        } else {
+            assert_eq!(state["screenshot"], Value::Null);
+            assert_eq!(state["screenshotOmitted"], "screen_recording_not_granted");
+            let notes = state["notes"].as_array().unwrap();
+            assert_eq!(notes.len(), 1);
+            assert!(notes[0].as_str().unwrap().contains("No screenshot: BusyBoy lacks Screen Recording permission"));
+        }
+    }
+    assert_eq!(harness.platform.with_world(|world| world.nodes[&bold].presses), 2);
+    let result = harness.act("u1", json!({"kind": "click", "ref": bold_ref})).unwrap();
+    assert_eq!(result["state"]["screenshotOmitted"], "not_requested");
+}
+
+#[test]
 fn clicks_window_points_through_hit_testing() {
     let harness = Harness::new();
     let (bold, _) = harness.platform.with_text_editor();

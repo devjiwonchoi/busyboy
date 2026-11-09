@@ -24,7 +24,7 @@ use objc2_screen_capture_kit::{
 };
 
 /// Longest image edge in pixels.
-pub const MAX_EDGE: f64 = 1_600.0;
+pub const MAX_EDGE: f64 = 1_280.0;
 
 /// Parses `w<cg_window_id>` window ids.
 pub(crate) fn parse_window_id(id: &str) -> Option<u32> {
@@ -159,10 +159,10 @@ mod tests {
     }
 
     #[test]
-    fn scales_the_long_edge_to_1600() {
-        assert_eq!(output_size(3200.0, 1600.0), (1600, 800));
+    fn scales_the_long_edge_to_1280() {
+        assert_eq!(output_size(3200.0, 1600.0), (1280, 640));
         assert_eq!(output_size(800.0, 600.0), (800, 600));
-        assert_eq!(output_size(1000.0, 4000.0), (400, 1600));
+        assert_eq!(output_size(1000.0, 4000.0), (320, 1280));
     }
 
     #[test]

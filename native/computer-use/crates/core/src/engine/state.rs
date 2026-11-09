@@ -4,7 +4,7 @@
 use std::time::{Duration, Instant};
 
 use cu_protocol::{
-    AppIdentity, AppState, AppStateParams, ErrorCode, ErrorObject, ForbiddenReason, ScreenshotOmitted, WindowSummary,
+    AppIdentity, AppState, AppStateParams, ErrorCode, ErrorObject, ForbiddenReason, Screenshot, ScreenshotOmitted, WindowSummary,
 };
 
 use super::{AppSlot, Engine, forbidden_error};
@@ -75,6 +75,22 @@ pub(crate) fn identity(app: &RunningApp) -> AppIdentity {
 
 fn quote_title(title: &str) -> String {
     format!("{title:?}")
+}
+
+// Explain missing images and the conversion from image pixels to window-local points.
+fn screenshot_note(screenshot: Option<&Screenshot>, omitted: Option<ScreenshotOmitted>, bounds: crate::tree::Rect) -> Option<String> {
+    if omitted == Some(ScreenshotOmitted::ScreenRecordingNotGranted) {
+        return Some("No screenshot: BusyBoy lacks Screen Recording permission (System Settings › Privacy & Security › Screen Recording). Work from the tree.".into());
+    }
+    let image = screenshot?;
+    if image.width > 0 && f64::from(image.width) + 0.5 < bounds.width {
+        let factor = bounds.width / f64::from(image.width);
+        return Some(format!(
+            "Screenshot is scaled to {}x{} from the window's {}x{} points; multiply image coordinates by {factor:.2} for click x/y.",
+            image.width, image.height, bounds.width, bounds.height
+        ));
+    }
+    None
 }
 
 impl<P: Platform> Engine<P> {
@@ -173,6 +189,10 @@ impl<P: Platform> Engine<P> {
             }
         };
 
+        if let Some(note) = screenshot_note(screenshot.as_ref(), screenshot_omitted, window.bounds) {
+            notes.push(note);
+        }
+
         Ok(AppState {
             app: identity(app),
             windows: window_summaries(windows),
@@ -242,6 +262,18 @@ mod tests {
 
     fn window(id: &str, focused: bool, main: bool, minimized: bool, private: bool) -> WindowInfo {
         WindowInfo { id: id.into(), title: id.into(), bounds: Rect::default(), minimized, main, focused, private }
+    }
+
+    #[test]
+    fn screenshot_notes_explain_permission_and_scaled_coordinates() {
+        let bounds = Rect { width: 3200.0, height: 1600.0, ..Rect::default() };
+        let image = Screenshot { mime_type: "image/png".into(), data: String::new(), width: 1280, height: 640 };
+        assert_eq!(screenshot_note(Some(&image), None, bounds).unwrap(),
+            "Screenshot is scaled to 1280x640 from the window's 3200x1600 points; multiply image coordinates by 2.50 for click x/y.");
+        assert!(screenshot_note(None, Some(ScreenshotOmitted::ScreenRecordingNotGranted), bounds).unwrap().contains("Work from the tree."));
+        assert_eq!(screenshot_note(None, Some(ScreenshotOmitted::NotRequested), bounds), None);
+        assert_eq!(screenshot_note(Some(&image), None, Rect { width: 1280.4, height: 640.2, ..bounds }), None);
+        assert_eq!(screenshot_note(Some(&image), None, Rect { width: 640.0, height: 320.0, ..bounds }), None);
     }
 
     #[test]
