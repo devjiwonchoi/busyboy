@@ -1,5 +1,7 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 
+import { directorInbox } from "~/components/director/directorInbox.logic";
+import { useEnvironmentIds } from "./environments";
 import { type ProjectManagerEntry, useProjectManagerEntries } from "./projectTeam";
 import { directorProjectKeys, splitDirectorEntry } from "./projectTeam.logic";
 
@@ -20,4 +22,9 @@ export function useDirectorProjectKeys(
   environmentIds: readonly EnvironmentId[],
 ): ReadonlySet<string> {
   return directorProjectKeys(useProjectManagerEntries(environmentIds));
+}
+
+/** Open attention across every project and the workspace Director. */
+export function useDirectorInbox() {
+  return directorInbox(useProjectManagerEntries(useEnvironmentIds()));
 }

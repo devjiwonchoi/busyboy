@@ -7,7 +7,6 @@ import { newMessageId } from "~/lib/utils";
 import { useEnvironmentScope } from "~/state/session";
 import { threadEnvironment } from "~/state/threads";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
-import { ProposalCard } from "../chat/ProposalCard";
 import { PmAvatar } from "../PmAvatar";
 import { toastManager } from "../ui/toast";
 import type { DirectorChat } from "./useDirectorChat";
@@ -67,14 +66,6 @@ export function DirectorCard(props: { director: DirectorChat }) {
     void send();
   };
 
-  // The Director's task proposals wait here too: they become tasks only when the user adds them.
-  const proposals = summary.decisionCards.filter(
-    (card) =>
-      card.item.kind === "proposal" &&
-      card.item.answeredAt === null &&
-      card.item.supersededAt === null,
-  );
-
   return (
     <section data-director-card className="flex flex-col gap-3">
       <form
@@ -112,13 +103,6 @@ export function DirectorCard(props: { director: DirectorChat }) {
           <ArrowUpIcon aria-hidden className="size-4" />
         </button>
       </form>
-      {proposals.map((card) => (
-        <ProposalCard
-          key={card.item.id}
-          card={card}
-          environmentId={director.threadRef.environmentId}
-        />
-      ))}
     </section>
   );
 }
