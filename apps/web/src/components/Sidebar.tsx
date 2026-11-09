@@ -156,6 +156,7 @@ import {
   readIsProjectManagerThread,
   useLeadThreadTask,
   useProjectManagerForThread,
+  useAnyProjectTeamAttentionPending,
   useProjectManagerEntries,
   type ProjectManagerEntry,
 } from "../state/projectTeam";
@@ -2342,6 +2343,9 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     },
   );
 
+  // Until the PM data arrives, PM chats and their task threads would list as ordinary
+  // rows and then regroup under the PM, so the list stays empty instead.
+  const projectTeamPending = useAnyProjectTeamAttentionPending();
   const {
     threads,
     workingShelfEnabled,
@@ -3868,7 +3872,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
               </p>
             )
           ) : null}
-          {!isSearchingThreads ? (
+          {!isSearchingThreads && !projectTeamPending ? (
             <TooltipProvider
               key="sidebar-thread-tooltips-150"
               delay={150}
@@ -4181,6 +4185,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
             </TooltipProvider>
           ) : null}
           {!isSearchingThreads &&
+          !projectTeamPending &&
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length + activeThreadCount + workingThreads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">

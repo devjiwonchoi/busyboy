@@ -67,6 +67,56 @@ export const environmentProjectTeamAttentionAtom = Atom.family((environmentId: E
   }).pipe(Atom.withLabel(`web-project-team:attention:${environmentId}`)),
 );
 
+/** How long a view waits for the PM data before it shows anyway. */
+export const PROJECT_TEAM_ATTENTION_GRACE_MS = 3000;
+
+// Turns true once, a fixed time after the first view asked, so a stream that never
+// answers (an unreachable environment) cannot keep views blank. It only covers startup:
+// an environment that connects later is not held back, so its PM chat may still flash.
+const attentionGraceExpiredAtom = Atom.make((get) => {
+  const timer = setTimeout(() => get.setSelf(true), PROJECT_TEAM_ATTENTION_GRACE_MS);
+  get.addFinalizer(() => clearTimeout(timer));
+  return false;
+}).pipe(Atom.keepAlive, Atom.withLabel("web-project-team:attention-grace-expired"));
+
+// Whether a thread is a PM chat is only known once the attention stream sends its first
+// value. Until then a PM chat and the sidebar would render as ordinary threads and then
+// switch to the PM layout, so views that depend on it wait. A failed stream is no longer
+// pending, since waiting on it would never end.
+const environmentAttentionPendingAtom = Atom.family((environmentId: EnvironmentId) =>
+  Atom.make(
+    (get): boolean =>
+      !get(attentionGraceExpiredAtom) &&
+      AsyncResult.isInitial(get(projectTeamEnvironment.attention({ environmentId, input: {} }))),
+  ).pipe(Atom.withLabel(`web-project-team:attention-pending:${environmentId}`)),
+);
+
+const NOT_PENDING_ATOM = Atom.make(false).pipe(
+  Atom.withLabel("web-project-team:attention-pending:none"),
+);
+
+// A PM always has its own thread, so only environments with threads can hold one.
+const anyAttentionPendingAtom = Atom.make((get): boolean => {
+  const environmentIds = new Set(
+    get(environmentThreadShells.threadShellsAtom).map((thread) => thread.environmentId),
+  );
+  return [...environmentIds].some((environmentId) =>
+    get(environmentAttentionPendingAtom(environmentId)),
+  );
+}).pipe(Atom.withLabel("web-project-team:attention-pending:any"));
+
+/** True while this environment has not yet said which of its threads are PM chats. */
+export function useProjectTeamAttentionPending(environmentId: EnvironmentId | null): boolean {
+  return useAtomValue(
+    environmentId === null ? NOT_PENDING_ATOM : environmentAttentionPendingAtom(environmentId),
+  );
+}
+
+/** True while any environment with threads has not yet said which threads are PM chats. */
+export function useAnyProjectTeamAttentionPending(): boolean {
+  return useAtomValue(anyAttentionPendingAtom);
+}
+
 const projectManagerAtom = Atom.family((key: string) => {
   const ref = parseScopedProjectKey(key);
   return Atom.make((get): ProjectTeamAttentionSummary | null => {
