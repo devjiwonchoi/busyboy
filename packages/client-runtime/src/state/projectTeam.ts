@@ -101,6 +101,12 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
       },
     }),
+    // A side chat question for the card's lead; the card itself stays as it is.
+    askLead: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:ask-lead",
+      tag: WS_METHODS.projectTeamAskLead,
+      scheduler: commandScheduler,
+    }),
     updateSettings: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:update-settings",
       tag: WS_METHODS.projectTeamUpdateSettings,
