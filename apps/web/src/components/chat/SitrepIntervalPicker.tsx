@@ -8,6 +8,7 @@ import {
 import { RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { useUpdateTeamSettings } from "../../state/projectTeam";
 import { useEnvironmentScope } from "../../state/session";
 import { Input } from "../ui/input";
@@ -67,9 +68,8 @@ export function SitrepSettingsContent({ projectRef, summary }: SitrepControlProp
   };
   // Phones have no Enter on the number pad, and a tap outside closes the popover
   // without blurring the input, so a typed value is also saved when the field unmounts.
-  const saveOnUnmount = useRef(save);
-  saveOnUnmount.current = save;
-  useEffect(() => () => saveOnUnmount.current(false), []);
+  const saveOnUnmount = useStableCallback(save);
+  useEffect(() => () => saveOnUnmount(false), [saveOnUnmount]);
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
       save(false);

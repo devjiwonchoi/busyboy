@@ -209,10 +209,9 @@ function PendingSignIn(props: {
       await finish(result.outcome, signedInAs);
     } catch {
       setError("Couldn't reach the browser tab. Try again, or decline.");
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
     }
+    inFlight.current = false;
+    setBusy(false);
   };
 
   const decline = async () => {
@@ -422,10 +421,9 @@ function PendingHistory(props: {
       if (failure !== null) setError(failure);
     } catch {
       setError("Couldn't read browsing history.");
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
     }
+    inFlight.current = false;
+    setBusy(false);
   };
 
   const deny = async () => {

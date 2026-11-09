@@ -107,8 +107,6 @@ function BrowserHistoryPane({ bridge }: { readonly bridge: DesktopBrowserHistory
   useBrowserHistoryChanged(profileId, () => setRevision((current) => current + 1));
 
   const filterKey = `${profileId}\0${source}\0${debouncedQuery}`;
-  const filterKeyRef = useRef(filterKey);
-  filterKeyRef.current = filterKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -156,7 +154,8 @@ function BrowserHistoryPane({ bridge }: { readonly bridge: DesktopBrowserHistory
         ...(debouncedQuery.length > 0 ? { query: debouncedQuery } : {}),
       })
       .then((result) => {
-        if (filterKeyRef.current !== requestedFor) return;
+        // The filter changed while this page loaded.
+        if (fetchedFilterKeyRef.current !== requestedFor) return;
         setVisits((current) => {
           const next = [...current, ...result.visits];
           loadedCountRef.current = next.length;
@@ -400,9 +399,8 @@ function ClearBrowsingDataDialog(props: {
       props.onOpenChange(false);
     } catch {
       toastManager.add({ type: "error", title: "Could not clear browsing data" });
-    } finally {
-      setClearing(false);
     }
+    setClearing(false);
   };
 
   return (

@@ -115,9 +115,8 @@ function BrowserPasswordsPane({ bridge }: { readonly bridge: DesktopBrowserPassw
       setDeleteAllOpen(false);
     } catch {
       toastManager.add({ type: "error", title: "Could not delete passwords" });
-    } finally {
-      setDeletingAll(false);
     }
+    setDeletingAll(false);
   };
 
   const hasNoLogins = logins !== null && logins.length === 0 && debouncedQuery.length === 0;
@@ -369,7 +368,9 @@ function LoginDetailDialog(props: {
   const site = loginSite(login.origin);
 
   const [username, setUsername] = useState(login.username);
+  // Queued saves compare against the refs; render compares against the state.
   const savedUsernameRef = useRef(login.username);
+  const [savedUsername, setSavedUsername] = useState(login.username);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   // `null` means untouched: the field shows the revealed password, or nothing.
   const [passwordDraft, setPasswordDraft] = useState<string | null>(null);
@@ -377,6 +378,7 @@ function LoginDetailDialog(props: {
   const [revealing, setRevealing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const savedNoteRef = useRef<string | null>(null);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copying" | "copied">("idle");
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -391,11 +393,13 @@ function LoginDetailDialog(props: {
       .then((result) => {
         if (cancelled) return;
         savedNoteRef.current = result.note;
+        setSavedNote(result.note);
         setNote(result.note);
       })
       .catch(() => {
         if (cancelled) return;
         savedNoteRef.current = "";
+        setSavedNote("");
         setNote("");
       });
     return () => {
@@ -432,6 +436,7 @@ function LoginDetailDialog(props: {
           return false;
         }
         savedUsernameRef.current = next;
+        setSavedUsername(next);
         setUsernameError(null);
         return true;
       } catch {
@@ -475,6 +480,7 @@ function LoginDetailDialog(props: {
           return false;
         }
         savedNoteRef.current = next;
+        setSavedNote(next);
         return true;
       } catch {
         toastManager.add({ type: "error", title: "Could not save note" });
@@ -501,9 +507,8 @@ function LoginDetailDialog(props: {
       // `cancelled`: the user declined the device check; stay masked.
     } catch {
       toastManager.add({ type: "error", title: "Could not show password" });
-    } finally {
-      setRevealing(false);
     }
+    setRevealing(false);
   };
 
   const copyPassword = async () => {
@@ -539,9 +544,9 @@ function LoginDetailDialog(props: {
   };
 
   const unsavedChanges =
-    username !== savedUsernameRef.current ||
+    username !== savedUsername ||
     (passwordDraft !== null && passwordDraft !== "" && passwordDraft !== revealed) ||
-    (note !== null && note !== savedNoteRef.current);
+    (note !== null && note !== savedNote);
 
   return (
     <Dialog
@@ -745,7 +750,7 @@ function AddPasswordDialog(props: {
         case "updated":
           toastManager.add({ type: "success", title: "Password saved" });
           onClose();
-          return;
+          break;
         case "insecure":
           setConfirm({ kind: "insecure", origin: result.origin });
           break;
@@ -759,9 +764,8 @@ function AddPasswordDialog(props: {
       }
     } catch {
       toastManager.add({ type: "error", title: "Could not save password" });
-    } finally {
-      setSubmitting(false);
     }
+    setSubmitting(false);
   };
 
   const canSubmit = url.trim() !== "" && password !== "" && !submitting;

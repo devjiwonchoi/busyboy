@@ -99,9 +99,8 @@ export function ChromePasswordImportDialog(props: {
       else setFailure(result.reason);
     } catch {
       setFailure("readFailed");
-    } finally {
-      setRunning(false);
     }
+    setRunning(false);
   };
 
   return (
