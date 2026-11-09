@@ -822,6 +822,8 @@ export type ProjectManagerKind = typeof ProjectManagerKind.Type;
 export const PROJECT_SUMMARY_MAX_LINES = 5;
 /** Memory topic each PM keeps current for the Director. */
 export const PROJECT_SUMMARY_TOPIC = "summary";
+/** The Director's one-line briefing memory topic, shown atop the goal graph. */
+export const DIRECTOR_BRIEFING_TOPIC = "briefing";
 
 /** Same shape as a project icon, so the icon picker and renderer can be reused. */
 export const ProjectManagerAvatar = ProjectIconOverride;
@@ -1879,6 +1881,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   goals: Schema.optional(Schema.Array(WorkspaceGoal)),
   /** Director only: how the workspace's work lines up with the active goals. */
   goalAlignment: Schema.optional(WorkspaceGoalAlignment),
+  /** Director only: its one-line "briefing" memory, shown atop the goal graph; null when empty. */
+  briefing: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type ProjectTeamAttentionSummary = typeof ProjectTeamAttentionSummary.Type;
 

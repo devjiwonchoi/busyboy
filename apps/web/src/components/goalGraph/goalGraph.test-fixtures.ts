@@ -122,3 +122,41 @@ export function goalGraphFixture() {
       : item,
   );
 }
+
+/** A recent running lead and waiting work across two projects exercise signal rollups. */
+export function goalGraphSignalsFixture() {
+  const entries = goalGraphFixture();
+  for (const entry of entries) {
+    entry.summary = {
+      ...entry.summary,
+      tasks: entry.summary.tasks.map((task) => ({
+        ...task,
+        updatedAt: new Date(
+          GRAPH_NOW - (task.id === "a-1" ? 3 * 3600000 : 2 * 86400000),
+        ).toISOString(),
+        leadThreadId: task.id === "a-1" ? ("lead-a-1" as never) : null,
+      })),
+    };
+  }
+  const b = entries[1]!;
+  b.summary = {
+    ...b.summary,
+    decisionCards: [
+      {
+        ...graphCard("b-1", false),
+        item: { ...graphCard("b-1", false).item, projectId: "b" as never },
+      },
+    ],
+  };
+  const director = entries[2]!;
+  director.summary = {
+    ...director.summary,
+    briefing: "목표 2는 결정 1건에 막혀 있어요",
+    goals: (director.summary.goals ?? []).map((goal, index) =>
+      index === 0
+        ? { ...goal, links: [...goal.links, { projectId: "b" as never, taskId: "b-1" as never }] }
+        : goal,
+    ),
+  };
+  return entries;
+}

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { buildGoalGraph, layoutGoalGraph, relatedNodeIds } from "./goalGraph.logic";
-import { GRAPH_NOW, goalGraphFixture, graphTask } from "./goalGraph.test-fixtures";
+import { buildGoalGraph, changedLabel, layoutGoalGraph, relatedNodeIds } from "./goalGraph.logic";
+import {
+  GRAPH_NOW,
+  goalGraphFixture,
+  goalGraphSignalsFixture,
+  graphCard,
+  graphTask,
+} from "./goalGraph.test-fixtures";
 
 const build = () => buildGoalGraph({ entries: goalGraphFixture(), nowMs: GRAPH_NOW });
 describe("goal graph", () => {
@@ -124,5 +130,134 @@ describe("goal graph", () => {
     expect(graph.tasks.find((task) => task.nodeId === "task:env-2/a-1")?.goalIds).toEqual([
       "goal:none",
     ]);
+  });
+});
+
+describe("live graph signals", () => {
+  it("rolls up pulse, card counts and newest changes across projects", () => {
+    const entries = goalGraphSignalsFixture();
+    entries[0]!.summary = {
+      ...entries[0]!.summary,
+      decisionCards: [
+        ...entries[0]!.summary.decisionCards,
+        {
+          ...graphCard("a-1", false),
+          item: { ...graphCard("a-1", false).item, id: "second-card" as never },
+        },
+      ],
+    };
+    const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW });
+    expect(graph.tasks.find((task) => task.id === "a-1")).toMatchObject({
+      live: true,
+      waitingCount: 2,
+      changedLabel: "3시간 전",
+    });
+    for (const project of graph.projects) {
+      expect(project.needsYou).toBe(
+        graph.tasks
+          .filter((task) => task.projectKey === project.key)
+          .reduce((sum, task) => sum + task.waitingCount, 0),
+      );
+    }
+    expect(graph.projects[0]).toMatchObject({
+      live: true,
+      needsYou: 2,
+      recent: true,
+      changedLabel: "3시간 전",
+    });
+    expect(graph.goals[0]).toMatchObject({
+      live: true,
+      needsYou: 3,
+      recent: true,
+      changedLabel: "3시간 전",
+      waitingTarget: { cardId: "card-a-1" },
+    });
+    expect(graph.directorBriefing).toBe("목표 2는 결정 1건에 막혀 있어요");
+    entries[1]!.summary = {
+      ...entries[1]!.summary,
+      presence: { ...entries[1]!.summary.presence, running: 1 },
+      tasks: entries[1]!.summary.tasks.map((task) => ({
+        ...task,
+        stage: "planning",
+        openQuestion: true,
+      })),
+      decisionCards: [],
+    };
+    const fallback = buildGoalGraph({ entries, nowMs: GRAPH_NOW });
+    expect(fallback.tasks.find((task) => task.id === "b-1")?.waitingCount).toBe(1);
+    expect(fallback.projects[1]?.live).toBe(true);
+    expect(fallback.goals.find((goal) => goal.id === "goal-2")?.live).toBe(false);
+  });
+  it("does not pulse running tasks that are waiting or stalled", () => {
+    const entries = goalGraphSignalsFixture();
+    entries[0]!.summary = {
+      ...entries[0]!.summary,
+      tasks: [
+        graphTask("question", 10, { openQuestion: true }),
+        graphTask("blocker", 11, { openBlocker: true }),
+        graphTask("stalled", 12, { lastOutcome: "stalled" }),
+      ],
+    };
+    const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW });
+    expect(graph.tasks.filter((task) => task.projectId === "a").map((task) => task.live)).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(graph.projects[0]?.live).toBe(false);
+  });
+  it("rolls up only visible work when an old waiting lead shares a goal", () => {
+    const entries = goalGraphSignalsFixture();
+    entries[0]!.summary = {
+      ...entries[0]!.summary,
+      tasks: entries[0]!.summary.tasks.map((task) => ({ ...task, stage: "planning" })),
+      decisionCards: [],
+      presence: { ...entries[0]!.summary.presence, running: 1 },
+    };
+    const graph = buildGoalGraph({ entries, nowMs: GRAPH_NOW, recentOnly: true });
+    expect(graph.goals[0]).toMatchObject({
+      needsYou: 0,
+      live: false,
+      changedLabel: "3시간 전",
+      waitingTarget: null,
+    });
+    expect(graph.projects[0]).toMatchObject({ needsYou: 0, live: false, waitingTarget: null });
+    expect(graph.briefing).toMatchObject({ needsYouCount: 0, firstNeedsYouNodeId: null });
+    expect(graph.goals.map((goal) => goal.id)).toEqual(["goal-1"]);
+  });
+  it("labels the five-minute, hour and day boundaries", () => {
+    const label = (minutes: number) =>
+      changedLabel(new Date(GRAPH_NOW - minutes * 60000).toISOString(), GRAPH_NOW);
+    expect(label(0)).toBe("방금 바뀜");
+    expect(label(4.99)).toBe("방금 바뀜");
+    expect(label(5)).toBe("5분 전");
+    expect(label(59)).toBe("59분 전");
+    expect(label(60)).toBe("1시간 전");
+    expect(label(1439)).toBe("23시간 전");
+    expect(label(1440)).toBeNull();
+    expect(label(2880)).toBeNull();
+    expect(changedLabel(null, GRAPH_NOW)).toBeNull();
+  });
+  it("keeps only recent tasks, their ancestors and valid edges", () => {
+    const filtered = buildGoalGraph({
+      entries: goalGraphSignalsFixture(),
+      nowMs: GRAPH_NOW,
+      recentOnly: true,
+    });
+    expect(filtered.tasks.map((task) => task.id)).toEqual(["a-1"]);
+    expect(filtered.projects.map((project) => project.projectId)).toEqual(["a"]);
+    expect(filtered.goals.map((goal) => goal.id)).toEqual(["goal-1"]);
+    expect(layoutGoalGraph(filtered).paths).toHaveLength(2);
+    expect(filtered.briefing).toMatchObject({ needsYouCount: 1, blockedCount: 1 });
+    expect(filtered.goals[0]).toMatchObject({ needsYou: 1, waitingTarget: { id: "a-1" } });
+    expect(filtered.projects[0]).toMatchObject({ needsYou: 1, waitingTarget: { id: "a-1" } });
+    const empty = buildGoalGraph({
+      entries: goalGraphSignalsFixture(),
+      nowMs: GRAPH_NOW + 86400000,
+      recentOnly: true,
+    });
+    expect(empty.tasks).toHaveLength(0);
+    expect(empty.goals).toHaveLength(0);
+    expect(layoutGoalGraph(empty).paths).toHaveLength(0);
   });
 });
