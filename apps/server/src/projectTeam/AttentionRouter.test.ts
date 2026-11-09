@@ -286,6 +286,35 @@ describe("AttentionRouter", () => {
     ),
   );
 
+  it.effect("relays a typed answer outside the options to the task lead as written", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Fix login", harness.delegate);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          kind: "decision",
+          question: "Keep the remaining runs?",
+          options: ["A: keep them", "B: cancel them"],
+        });
+
+        const answered = yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: item.id,
+          answer: "우선 원인부터 찾아보자",
+        });
+        assert.strictEqual(answered.item.answer, "우선 원인부터 찾아보자");
+        const toLead = (yield* Ref.get(harness.sent)).filter(
+          (relay) => relay.threadId === lead.leadThreadId,
+        );
+        assert.deepStrictEqual(
+          toLead.map((relay) => relay.text),
+          ["[User answer via BusyBoy] Keep the remaining runs? → 우선 원인부터 찾아보자"],
+        );
+      }),
+    ),
+  );
+
   it.effect("rejects a PM answer on a decision card the user did not write", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
