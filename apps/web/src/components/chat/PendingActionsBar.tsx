@@ -1,10 +1,10 @@
 import type { LegendListRef } from "@legendapp/list/react";
 import type { ThreadId } from "@t3tools/contracts";
-import { BellDotIcon, ChevronDownIcon } from "lucide-react";
+import { BellDotIcon } from "lucide-react";
 
 import type { PendingActionItem } from "../../state/projectTeam.logic";
 import { Button } from "../ui/button";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { useState } from "react";
 import type { ComposerBannerStackItem } from "./ComposerBannerStack";
 
 const HIGHLIGHT_MS = 1800;
@@ -50,59 +50,82 @@ export function revealDecisionCard(list: LegendListRef | null, cardId: string): 
   tryFlash();
 }
 
-/**
- * The banner above the composer for everything waiting on the user: open question cards
- * and other threads. It shows whether or not the card is on screen, in front of the
- * other banners. One item gets a "보기" button; several get a count and a list.
- */
-export function pendingActionsBannerItem(input: {
+type PendingActionsInput = {
   readonly id: string;
   readonly items: ReadonlyArray<PendingActionItem>;
   readonly onRevealCard: (cardId: string) => void;
   readonly onOpenThread: (threadId: ThreadId) => void;
-}): ComposerBannerStackItem | null {
+};
+
+/** Keep stepping local to the mounted banner, starting with the first item. */
+function PendingActionsStepper(props: PendingActionsInput) {
+  const [followedId, setFollowedId] = useState<string | null>(null);
+  const idOf = (item: PendingActionItem) => (item.kind === "card" ? item.id : item.threadId);
+  const followedIndex = props.items.findIndex((item) => idOf(item) === followedId);
+  const shown = props.items[Math.max(0, followedIndex)];
+  const next = props.items[(followedIndex + 1) % props.items.length];
+  if (!shown || !next) {
+    return null;
+  }
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="min-w-0 flex-1 truncate">
+        기다리는 일 {Math.max(0, followedIndex) + 1}/{props.items.length} · {shown.label}
+      </span>
+      <Button
+        size="xs"
+        variant="ghost"
+        aria-label={followedIndex < 0 ? "기다리는 일 보기" : "다음 기다리는 일"}
+        data-pending-action-id={idOf(next)}
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setFollowedId(idOf(next));
+          if (next.kind === "card") {
+            props.onRevealCard(next.id);
+          } else {
+            props.onOpenThread(next.threadId);
+          }
+        }}
+      >
+        {followedIndex < 0 ? "보기" : "다음"}
+      </Button>
+    </span>
+  );
+}
+
+/** Open cards and waiting threads share the composer's attention banner. */
+export function pendingActionsBannerItem(
+  input: PendingActionsInput,
+): ComposerBannerStackItem | null {
   const { items } = input;
   const [only] = items;
-  if (only === undefined) return null;
-  const itemId = (item: PendingActionItem) => (item.kind === "card" ? item.id : item.threadId);
-  const follow = (item: PendingActionItem) =>
-    item.kind === "card" ? input.onRevealCard(item.id) : input.onOpenThread(item.threadId);
+  if (only === undefined) {
+    return null;
+  }
   return {
     id: input.id,
     variant: "info",
     priority: "attention",
     icon: <BellDotIcon className="text-primary" data-pending-actions-bar={items.length} />,
-    title: items.length === 1 ? only.label : `기다리는 일 ${items.length}개`,
+    title: items.length === 1 ? only.label : <PendingActionsStepper {...input} />,
     actions:
       items.length === 1 ? (
         <Button
           size="xs"
           variant="ghost"
           aria-label={`${only.label} ${only.kind === "card" ? "보기" : "열기"}`}
-          data-pending-action-id={itemId(only)}
+          data-pending-action-id={only.kind === "card" ? only.id : only.threadId}
           onPointerDown={(event) => event.preventDefault()}
-          onClick={() => follow(only)}
+          onClick={() => {
+            if (only.kind === "card") {
+              input.onRevealCard(only.id);
+            } else {
+              input.onOpenThread(only.threadId);
+            }
+          }}
         >
           {only.kind === "card" ? "보기" : "열기"}
         </Button>
-      ) : (
-        <Menu>
-          <MenuTrigger render={<Button size="xs" variant="ghost" aria-label="기다리는 일 목록" />}>
-            목록
-            <ChevronDownIcon className="size-3.5" />
-          </MenuTrigger>
-          <MenuPopup align="end" side="top" sideOffset={6} className="max-w-[min(22rem,90vw)]">
-            {items.map((item) => (
-              <MenuItem
-                key={itemId(item)}
-                data-pending-action-id={itemId(item)}
-                onClick={() => follow(item)}
-              >
-                <span className="min-w-0 truncate">{item.label}</span>
-              </MenuItem>
-            ))}
-          </MenuPopup>
-        </Menu>
-      ),
+      ) : null,
   };
 }

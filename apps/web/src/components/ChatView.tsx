@@ -237,7 +237,9 @@ import {
 import { pendingActionItems } from "../state/projectTeam.logic";
 import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
 import { pendingActionsBannerItem, revealDecisionCard } from "./chat/PendingActionsBar";
-import { useDirectorPendingActions } from "./director/useDirectorPendingActions";
+import { useDirectorThreadRef } from "~/state/director";
+import { DirectorInboxDock } from "./director/DirectorInboxDock";
+import { useOpenDirectorWorkspaceOnEntry } from "./director/DirectorWorkspaceToggle";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
 import {
@@ -1614,6 +1616,13 @@ export default function ChatView(props: ChatViewProps) {
   );
   const isTaskLeadThread = leadTask !== null;
   useOpenTaskPlanOnEntry(isServerThread ? activeThreadRef : null, isTaskLeadThread);
+  const director = useDirectorThreadRef();
+  const isDirectorThread =
+    !sideChat &&
+    director !== null &&
+    routeThreadRef.environmentId === director.environmentId &&
+    routeThreadRef.threadId === director.threadId;
+  useOpenDirectorWorkspaceOnEntry(isServerThread ? activeThreadRef : null, isDirectorThread);
   const timelineThreadError =
     serverRuntime?.status === "failed" &&
     serverRuntime.lastErrorClass === "usage_limit" &&
@@ -5239,20 +5248,14 @@ export default function ChatView(props: ChatViewProps) {
     cancelTimelineLiveFollowForUserNavigationStable();
     revealDecisionCard(legendListRef.current, cardId);
   });
-  const directorPendingActions = useDirectorPendingActions({
-    threadRef: sideChat ? null : routeThreadRef,
-    cards: decisionCards,
-    onRevealCard: revealDecisionCardInTimeline,
-  });
   const pendingActionsBanner = paintOnlyDisplayedTimeline
     ? null
-    : (directorPendingActions?.banner ??
-      pendingActionsBannerItem({
+    : pendingActionsBannerItem({
         id: `pending-actions:${routeThreadKey}`,
         items: pendingActionItems({ cards: decisionCards, waitingThreads }),
         onRevealCard: revealDecisionCardInTimeline,
         onOpenThread: onOpenRelatedThreadStable,
-      }));
+      });
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [
@@ -8160,6 +8163,7 @@ export default function ChatView(props: ChatViewProps) {
                         : undefined
                     }
                   >
+                    {isDirectorThread ? <DirectorInboxDock /> : null}
                     <ComposerSurface.Shell
                       contextStrip={showComposerContextStrip || showComposerModelStrip}
                     >
@@ -8650,7 +8654,6 @@ export default function ChatView(props: ChatViewProps) {
 
       <RevertConfirmHost threadKey={routeThreadKey} onConfirm={onConfirmRevertStable} />
       {sideChat ? null : <LinkPullRequestDialogHost />}
-      {directorPendingActions?.dialog}
       <ThreadVisitWatermark threadRef={routeThreadRef} />
       <ExpandedImageDialogHost threadKey={routeThreadKey} />
     </div>

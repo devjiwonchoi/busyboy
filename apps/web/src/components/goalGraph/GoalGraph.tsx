@@ -7,7 +7,8 @@ import { useProjects } from "~/state/entities";
 import { taskRouteParams } from "~/taskRoutes";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { type MapEntry, projectKey } from "../allProjects/allProjects.logic";
-import { DirectorInboxDialog } from "../director/DirectorInbox";
+import { DirectorInbox } from "../director/DirectorInbox";
+import { Dialog, DialogClose, DialogPopup, DialogTitle } from "../ui/dialog";
 import { GoalGraphDesktop } from "./GoalGraphDesktop";
 import { GoalGraphMobile } from "./GoalGraphMobile";
 import { buildGoalGraph, type GoalGraphData } from "./goalGraph.logic";
@@ -128,7 +129,25 @@ export function GoalGraph({ entries }: { entries: ReadonlyArray<MapEntry> }) {
           openWaiting={openWaiting}
         />
       )}
-      <DirectorInboxDialog cardId={cardId} onClose={() => setCardId(null)} />
+      <Dialog
+        open={cardId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCardId(null);
+          }
+        }}
+      >
+        <DialogPopup
+          showCloseButton={false}
+          className="flex max-h-[85dvh] w-full min-w-0 flex-col overflow-y-auto p-4 sm:max-w-3xl"
+        >
+          <div className="mb-4 flex items-center gap-2">
+            <DialogTitle className="flex-1">나를 기다리는 일</DialogTitle>
+            <DialogClose className="rounded-md px-3 py-2 text-sm hover:bg-muted">닫기</DialogClose>
+          </div>
+          <DirectorInbox highlightCardId={cardId} showEmpty />
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 }

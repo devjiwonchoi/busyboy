@@ -1,7 +1,6 @@
 import type { ProjectDecisionCard, ProjectWaitingThread, ThreadId } from "@t3tools/contracts";
 import type { LegendListRef } from "@legendapp/list/react";
 import { act } from "react";
-import { expect, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { pendingActionItems } from "../../state/projectTeam.logic";
@@ -39,24 +38,19 @@ export function pendingBar(): HTMLElement | null {
   return icon?.closest<HTMLElement>("[role=alert]") ?? null;
 }
 
-/** Taps the bar's button for one item, or picks the item from its list. */
+/** Follow the visible stepping sequence until the requested item is reached. */
 export async function followPendingAction(id: string) {
-  const direct = document.querySelector<HTMLElement>(
-    `button[data-pending-action-id="${CSS.escape(id)}"]`,
-  );
-  if (direct) {
-    await act(async () => userEvent.click(direct));
-    return;
+  const count = Number(pendingBarIcon()?.dataset.pendingActionsBar ?? 0);
+  for (let step = 0; step < count; step += 1) {
+    const button = document.querySelector<HTMLElement>("button[data-pending-action-id]");
+    if (!button) {
+      throw new Error("Missing pending action button");
+    }
+    const matches = button.dataset.pendingActionId === id;
+    await act(async () => userEvent.click(button));
+    if (matches) {
+      return;
+    }
   }
-  const trigger = document.querySelector<HTMLElement>('[aria-label="기다리는 일 목록"]');
-  expect(trigger, "pending list button").not.toBeNull();
-  await act(async () => userEvent.click(trigger!));
-  const item = await vi.waitFor(() => {
-    const element = document.querySelector<HTMLElement>(
-      `[role=menuitem][data-pending-action-id="${CSS.escape(id)}"]`,
-    );
-    expect(element, `menu item ${id}`).not.toBeNull();
-    return element!;
-  });
-  await act(async () => userEvent.click(item));
+  throw new Error(`Missing pending action ${id}`);
 }

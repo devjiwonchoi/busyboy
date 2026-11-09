@@ -22,6 +22,7 @@ const RIGHT_PANEL_KINDS = [
   "pull-requests",
   "side-chat",
   "task-plan",
+  "director-workspace",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -73,6 +74,7 @@ export type RightPanelSurface =
   | { id: "pull-requests"; kind: "pull-requests" }
   /** The plan of the task this thread leads; only offered on task lead threads. */
   | { id: "task-plan"; kind: "task-plan" }
+  | { id: "director-workspace"; kind: "director-workspace" }
   /** A separate session chatted with beside the panel's thread. */
   | { id: `side-chat:${string}`; kind: "side-chat"; threadId: string };
 
@@ -210,6 +212,8 @@ const singletonSurface = (
       return { id: "pull-requests", kind };
     case "task-plan":
       return { id: "task-plan", kind };
+    case "director-workspace":
+      return { id: "director-workspace", kind };
   }
 };
 
@@ -569,8 +573,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           ) {
             return state;
           }
-          // A task's plan was put in front on purpose; nothing replaces it on its own.
-          if (selectActiveRightPanel(state.byThreadKey, ref) === "task-plan") return state;
+          // Keep the chosen plan or Director workspace in front of proactive updates.
+          if (
+            ["task-plan", "director-workspace"].includes(
+              selectActiveRightPanel(state.byThreadKey, ref) ?? "",
+            )
+          ) {
+            return state;
+          }
           if (
             surface.kind === "diff" &&
             (selectActiveRightPanel(state.byThreadKey, ref) === "pull-request" ||

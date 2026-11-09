@@ -180,17 +180,3 @@ export function splitDirectorEntry<
   }
   return { director, projects };
 }
-
-/** "environmentId:projectId" of every Director system project, to hide them from project lists. */
-export function directorProjectKeys(
-  entries: ReadonlyArray<{
-    readonly environmentId: string;
-    readonly summary: Pick<ProjectTeamAttentionSummary, "kind" | "projectId">;
-  }>,
-): ReadonlySet<string> {
-  return new Set(
-    entries
-      .filter((entry) => isDirectorSummary(entry.summary))
-      .map((entry) => `${entry.environmentId}:${entry.summary.projectId}`),
-  );
-}

@@ -9,7 +9,6 @@ import { useProjects } from "~/state/entities";
 import { pendingActionItems } from "~/state/projectTeam.logic";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { DecisionCard } from "../chat/DecisionCard";
-import { Dialog, DialogClose, DialogPopup, DialogTitle } from "../ui/dialog";
 import type { DirectorInboxGroup } from "./directorInbox.logic";
 
 /** Resolve names by both environment and project: IDs can repeat across servers. */
@@ -131,29 +130,5 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
         );
       })}
     </section>
-  );
-}
-
-export function DirectorInboxDialog(props: { cardId: string | null; onClose: () => void }) {
-  return (
-    <Dialog
-      open={props.cardId !== null}
-      onOpenChange={(open) => {
-        if (!open) {
-          props.onClose();
-        }
-      }}
-    >
-      <DialogPopup
-        showCloseButton={false}
-        className="flex max-h-[85dvh] w-full min-w-0 flex-col overflow-y-auto p-4 sm:max-w-3xl"
-      >
-        <div className="mb-4 flex items-center gap-2">
-          <DialogTitle className="flex-1">나를 기다리는 일</DialogTitle>
-          <DialogClose className="rounded-md px-3 py-2 text-sm hover:bg-muted">닫기</DialogClose>
-        </div>
-        <DirectorInbox highlightCardId={props.cardId} showEmpty />
-      </DialogPopup>
-    </Dialog>
   );
 }

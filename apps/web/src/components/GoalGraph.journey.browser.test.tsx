@@ -54,9 +54,12 @@ import {
   goalGraphSignalsFixture,
   graphTask,
 } from "./goalGraph/goalGraph.test-fixtures";
-vi.mock(import("./director/useDirectorChat"), () => ({ useDirectorChat: () => null }));
+vi.mock(import("../state/director"), async (original) => ({
+  ...(await original()),
+  useDirectorThreadRef: () => null,
+}));
 
-import { AllProjectsPage } from "./allProjects/AllProjectsPage";
+import { DirectorWorkspaceSurface } from "./director/DirectorWorkspaceSurface";
 import { SidebarProvider } from "./ui/sidebar";
 
 let root: Root;
@@ -93,7 +96,7 @@ async function openAllProjects() {
       createRoute({
         getParentRoute: () => rootRoute,
         path: "/all-projects",
-        component: AllProjectsPage,
+        component: DirectorWorkspaceSurface,
       }),
       createRoute({
         getParentRoute: () => rootRoute,
@@ -109,7 +112,7 @@ async function openAllProjects() {
     history: createMemoryHistory({ initialEntries: ["/all-projects"] }),
   });
   await act(async () => root.render(<RouterProvider router={router} />));
-  await vi.waitFor(() => expect(container.querySelector("[data-project-card]")).not.toBeNull());
+  await vi.waitFor(() => expect(container.querySelector("[data-goal-node]")).not.toBeNull());
   return router;
 }
 

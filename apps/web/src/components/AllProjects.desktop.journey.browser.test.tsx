@@ -49,7 +49,7 @@ import {
 } from "@tanstack/react-router";
 
 import { makeProjectManagerSummaryFixture } from "../test-fixtures";
-import { AllProjectsPage } from "./allProjects/AllProjectsPage";
+import { DirectorWorkspaceSurface } from "./director/DirectorWorkspaceSurface";
 import { SidebarProvider } from "./ui/sidebar";
 
 function task(
@@ -159,7 +159,7 @@ async function openAllProjects() {
       createRoute({
         getParentRoute: () => rootRoute,
         path: "/all-projects",
-        component: AllProjectsPage,
+        component: DirectorWorkspaceSurface,
       }),
       createRoute({
         getParentRoute: () => rootRoute,
@@ -175,6 +175,7 @@ async function openAllProjects() {
     history: createMemoryHistory({ initialEntries: ["/all-projects"] }),
   });
   await act(async () => root.render(<RouterProvider router={router} />));
+  await userEvent.click(page.getByRole("button", { name: "지도", exact: true }));
   await vi.waitFor(() => expect(container.querySelector("[data-project-card]")).not.toBeNull());
   return router;
 }
@@ -183,28 +184,10 @@ const card = (projectId: string) =>
   container.querySelector<HTMLElement>(`[data-project-card="${projectId}"]`)!;
 const arrow = () => container.querySelector<SVGPathElement>("[data-map-arrow]")!;
 
-/**
- * The desktop app drags the window from title bars. A click reaches the page
- * only when the element's nearest ancestor with an app region opts out.
- */
-function appRegionAt(element: HTMLElement): string {
-  for (let node: HTMLElement | null = element; node !== null; node = node.parentElement) {
-    const region = getComputedStyle(node).getPropertyValue("-webkit-app-region");
-    if (region !== "" && region !== "none") return region;
-  }
-  return "none";
-}
-
 describe("All projects in the desktop app", () => {
-  it("keeps the header's buttons clickable and highlights one card's arrows on hover", async () => {
+  it("highlights related project arrows on hover", async () => {
     await page.viewport(1280, 800);
     const router = await openAllProjects();
-
-    // The header drags the window; the "나를 기다림" pill opts out, so clicks land.
-    const pill = container.querySelector<HTMLElement>("[data-needs-you-total]")!;
-    expect(pill.textContent).toBe("나를 기다림 1");
-    expect(appRegionAt(pill.closest("header")!)).toBe("drag");
-    expect(appRegionAt(pill)).toBe("no-drag");
 
     // site waits on busyboy: one dashed arrow between their goals.
     await vi.waitFor(() => expect(arrow()).not.toBeNull());
@@ -220,12 +203,6 @@ describe("All projects in the desktop app", () => {
     expect(card("docs").className).toContain("opacity-60");
     expect(card("busyboy").className).not.toContain("opacity-60");
 
-    const scroll = vi.spyOn(
-      container.querySelector<HTMLElement>("[data-director-inbox]")!,
-      "scrollIntoView",
-    );
-    await userEvent.click(pill);
-    expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     expect(router.state.location.pathname).toBe("/all-projects");
   });
 });

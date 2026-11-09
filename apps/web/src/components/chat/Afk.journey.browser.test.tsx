@@ -47,12 +47,11 @@ vi.mock(import("../../state/session"), async (original) => ({
 vi.mock(import("../../state/director"), async (original) => ({
   ...(await original()),
   useDirectorInbox: () => ({ groups: [], total: 0 }),
+  useDirectorThreadRef: () => null,
 }));
-vi.mock(import("../director/useDirectorChat"), () => ({ useDirectorChat: () => null }));
 
 import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { AfkBanner } from "./Afk";
-import { WorkspaceRail } from "../sidebar/WorkspaceRail";
 import { SidebarProvider } from "../ui/sidebar";
 import { DecisionCard } from "./DecisionCard";
 import { SitrepIntervalPicker, SitrepSettingsContent } from "./SitrepIntervalPicker";
@@ -121,7 +120,7 @@ function withAfk(
 }
 
 /**
- * Two PM areas share the real workspace rail, but keep independent AFK settings.
+ * Two PM areas keep independent AFK settings.
  */
 function PmChat(props: { compact: boolean; initial: ProjectTeamAttentionSummary | undefined }) {
   const [summary, setSummary] = useState(props.initial ?? makeProjectManagerSummaryFixture());
@@ -154,7 +153,6 @@ function PmChat(props: { compact: boolean; initial: ProjectTeamAttentionSummary 
   };
   return (
     <SidebarProvider style={{ minHeight: 0, display: "block" }}>
-      <WorkspaceRail />
       <div
         style={{ display: "flex", flexDirection: props.compact ? "column" : "row", width: "100%" }}
       >
@@ -243,10 +241,8 @@ describe.each([
   it("turns AFK on for one project only", async () => {
     await page.viewport(width, height);
     const router = await renderPmChat(compact);
-    const views = page.getByRole("navigation", { name: "Views" }).element();
-    expect(views.querySelector('[role="switch"]')).toBeNull();
+    expect(document.querySelector('nav[aria-label="Views"]')).toBeNull();
     expect(document.querySelector("[data-afk-toggle]")).toBeNull();
-    expect(views.textContent).not.toContain("AFK");
     await openSettings(compact, "A");
     await expect.element(toggle(compact, "A")).toHaveAttribute("aria-checked", "false");
     await act(async () => {
