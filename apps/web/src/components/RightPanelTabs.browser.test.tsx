@@ -141,9 +141,7 @@ async function renderTabs(
         onAddPullRequest={noop}
         onAddPullRequests={noop}
         onAddSideChat={noop}
-        onAddProject={noop}
         onAddTaskPlan={noop}
-        projectAvailable={false}
         taskPlanAvailable={false}
         onAddDiff={noop}
         onAddFiles={noop}

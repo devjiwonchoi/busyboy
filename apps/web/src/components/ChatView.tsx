@@ -3694,11 +3694,6 @@ export default function ChatView(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "task-plan");
   };
   const addTaskPlanSurfaceStable = useStableCallback(addTaskPlanSurface);
-  const addProjectSurface = () => {
-    if (!activeThreadRef) return;
-    useRightPanelStore.getState().open(activeThreadRef, "director-workspace");
-  };
-  const addProjectSurfaceStable = useStableCallback(addProjectSurface);
   useAgentOpenedPreviews({
     threadRef: activeThreadRef,
     previewState: activePreviewState,
@@ -8591,8 +8586,6 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddSideChat={startSideChatStable}
-          onAddProject={addProjectSurfaceStable}
-          projectAvailable={activeThreadRef !== null}
           onAddTaskPlan={addTaskPlanSurfaceStable}
           taskPlanAvailable={isTaskLeadThread}
           browserAvailable={canOperatePreview && browserAvailable}
@@ -8646,8 +8639,6 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
             onAddSideChat={startSideChatStable}
-            onAddProject={addProjectSurfaceStable}
-            projectAvailable={activeThreadRef !== null}
             onAddTaskPlan={addTaskPlanSurfaceStable}
             taskPlanAvailable={isTaskLeadThread}
             browserAvailable={canOperatePreview && browserAvailable}

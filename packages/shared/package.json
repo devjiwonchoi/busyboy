@@ -7,6 +7,10 @@
       "types": "./src/workspaceGoals.ts",
       "import": "./src/workspaceGoals.ts"
     },
+    "./goalMap": {
+      "types": "./src/goalMap.ts",
+      "import": "./src/goalMap.ts"
+    },
     "./githubMarkdownLinks": {
       "types": "./src/githubMarkdownLinks.ts",
       "import": "./src/githubMarkdownLinks.ts"

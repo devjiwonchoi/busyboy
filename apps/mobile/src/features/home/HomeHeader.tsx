@@ -13,7 +13,7 @@ import { createNativeMailSearchToolbarItem } from "../layout/native-mail-search-
 import { useNativeMailSearchToolbar } from "../../native/use-native-mail-search-toolbar";
 import { useDeviceType } from "../../native/native-layout-metrics";
 import { buildHomeListFilterMenu } from "./home-list-filter-menu";
-import { createSidebarHeaderItems } from "../threads/sidebar-native-header-items";
+import { createSidebarHeaderItems, homeMenuItems } from "../threads/sidebar-native-header-items";
 import type { HomeHeaderProps } from "./HomeHeader.types";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 
@@ -76,6 +76,7 @@ export function HomeHeader(props: HomeHeaderProps) {
                       : "line.3.horizontal.decrease.circle",
                     filterMenu,
                     onOpenSettings: props.onOpenSettings,
+                    onOpenGoalMap: props.onOpenGoalMap,
                   }),
                   ...(showsCompactCompose
                     ? [
@@ -93,12 +94,12 @@ export function HomeHeader(props: HomeHeaderProps) {
                 ]
               : [
                   withNativeGlassHeaderItem({
-                    accessibilityLabel: "Open settings",
+                    accessibilityLabel: "메뉴",
                     icon: { name: "ellipsis", type: "sfSymbol" } as const,
                     identifier: "home-settings",
                     label: "",
-                    onPress: props.onOpenSettings,
-                    type: "button",
+                    type: "menu",
+                    menu: { items: homeMenuItems(props.onOpenGoalMap, props.onOpenSettings) },
                   }),
                 ],
           // The keys below are set per-branch (not `undefined`) so a later

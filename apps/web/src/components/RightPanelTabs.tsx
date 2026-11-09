@@ -36,7 +36,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  LayoutGrid,
   FileDiff,
   Files,
   Globe2,
@@ -143,9 +142,6 @@ interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddSideChat: () => void;
-  /** Opens every project's board (goal graph, map, waiting cards). */
-  onAddProject: () => void;
-  projectAvailable: boolean;
   onAddTaskPlan: () => void;
   /** Only task lead threads have a plan to show. */
   taskPlanAvailable: boolean;
@@ -185,7 +181,6 @@ const SURFACE_DISABLED_REASONS = {
   pullRequests: "No linked pull requests are available for this thread.",
   sideChat: "Side chats open from project threads that have started.",
   taskPlan: "No plan to show in this thread.",
-  project: "The project board opens from a chat thread.",
 } as const;
 
 const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
@@ -208,7 +203,6 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequests: "No linked pull requests available.",
   sideChat: "Available in project threads after the first message.",
   taskPlan: "Available in task lead threads.",
-  project: "Available in chat threads.",
 } as const;
 
 type TabContextMenuAction =
@@ -321,7 +315,6 @@ function SurfaceMenuItem(props: {
 
 type SurfaceLauncherProps = Pick<
   RightPanelTabsProps,
-  | "onAddProject"
   | "onAddTaskPlan"
   | "onAddBrowser"
   | "onAddTerminal"
@@ -330,7 +323,6 @@ type SurfaceLauncherProps = Pick<
   | "onAddPullRequest"
   | "onAddPullRequests"
   | "onAddSideChat"
-  | "projectAvailable"
   | "taskPlanAvailable"
   | "browserAvailable"
   | "terminalAvailable"
@@ -361,14 +353,6 @@ function surfaceLauncherActions(
   reasons: SurfaceUnavailableReasons,
 ): readonly SurfaceLauncherAction[] {
   return [
-    {
-      label: "Project",
-      icon: LayoutGrid,
-      shortcut: "J",
-      available: props.projectAvailable,
-      disabledReason: reasons.project,
-      onClick: props.onAddProject,
-    },
     {
       label: "Plan",
       icon: ClipboardList,
@@ -628,8 +612,6 @@ function surfaceTitle(
       return "Pull requests";
     case "side-chat":
       return "Side chat";
-    case "director-workspace":
-      return "전체 프로젝트";
     case "task-plan":
       return "Plan";
     case "preview": {
@@ -722,8 +704,6 @@ function SurfaceIcon({
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "side-chat":
       return <MessagesSquare className="size-3 shrink-0" />;
-    case "director-workspace":
-      return <LayoutGrid className="size-3 shrink-0" />;
     case "task-plan":
       return <ClipboardList className="size-3 shrink-0" />;
   }

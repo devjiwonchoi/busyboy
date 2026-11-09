@@ -14,6 +14,7 @@ import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 import { useSidebarWorkspaceTabs } from "./useSystemWorkspaceTabBar";
 import { useSelectWorkspaceTab } from "./useSelectWorkspaceTab";
 import { useMobileNavigationTheme } from "../../lib/useMobileNavigationTheme";
+import { GOAL_MAP_ROUTE } from "../goals/goal-map";
 
 // Tabler's git-pull-request geometry, shared with the UIKit tab bar.
 const PULL_REQUEST_ICON = require("../../../assets/icons/pull-request.png");
@@ -114,16 +115,21 @@ export function WorkspaceToolbar(props: {
       />
       {/* UIKit lays trailing items out from the edge inward. */}
       <Toolbar placement="right">
-        <Toolbar.Button
-          accessibilityLabel="Settings"
-          icon="gearshape"
-          onPress={() =>
-            navigation.navigate("SettingsSheet", {
-              screen: "SettingsContent",
-              params: { screen: "Settings" },
-            })
-          }
-        />
+        <Toolbar.Menu accessibilityLabel="메뉴" icon="ellipsis" title="메뉴">
+          <Toolbar.MenuAction onPress={() => navigation.navigate(GOAL_MAP_ROUTE)}>
+            <Toolbar.Label>전체 프로젝트</Toolbar.Label>
+          </Toolbar.MenuAction>
+          <Toolbar.MenuAction
+            onPress={() =>
+              navigation.navigate("SettingsSheet", {
+                screen: "SettingsContent",
+                params: { screen: "Settings" },
+              })
+            }
+          >
+            <Toolbar.Label>설정</Toolbar.Label>
+          </Toolbar.MenuAction>
+        </Toolbar.Menu>
         {NATIVE_LIQUID_GLASS_SUPPORTED ? null : (
           <Toolbar.Button
             accessibilityLabel={

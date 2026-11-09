@@ -81,6 +81,7 @@ import {
 import { useNativeLayoutMetrics } from "../../native/native-layout-metrics";
 import { AndroidHingeObserver } from "../../native/AndroidHingeObserver";
 import { WindowHingeContext } from "../../native/window-hinge-context";
+import { GOAL_MAP_ROUTE } from "../goals/goal-map";
 
 interface AdaptiveWorkspaceContextValue {
   readonly layout: Layout;
@@ -459,6 +460,10 @@ function AdaptiveWorkspaceLayoutContent(
     });
   }, [navigation]);
 
+  const handleOpenGoalMap = useCallback(() => {
+    navigation.navigate(GOAL_MAP_ROUTE);
+  }, [navigation]);
+
   const handleStartNewTask = useCallback(() => {
     navigation.navigate("NewTaskSheet", { screen: "NewTask" });
   }, [navigation]);
@@ -788,6 +793,7 @@ function AdaptiveWorkspaceLayoutContent(
                           onRequestVisibility={revealPrimarySidebar}
                           selectedThreadKey={selectedThreadKey}
                           onOpenSettings={handleOpenSettings}
+                          onOpenGoalMap={handleOpenGoalMap}
                           onOpenEnvironmentSettings={handleOpenEnvironmentSettings}
                           onNewThreadInProject={handleNewThreadInProject}
                           onNewThreadOnBranch={handleNewThreadOnBranch}
