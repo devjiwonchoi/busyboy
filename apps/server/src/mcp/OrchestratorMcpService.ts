@@ -998,7 +998,7 @@ const make = Effect.gen(function* () {
     if (yield* MemoryHeadroom.waitToStart(memoryHeadroom)) return;
     return yield* failure(
       "orchestration_error",
-      "Mac memory is short; this child waits. Try again later. (메모리 여유 부족)",
+      "Mac memory is short, so this child was not started. Delegate it again later. (메모리 여유 부족)",
     );
   });
 

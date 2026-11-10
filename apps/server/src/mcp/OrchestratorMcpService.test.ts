@@ -1546,6 +1546,23 @@ describe("OrchestratorMcpService provider resolution", () => {
     },
   );
 
+  it.effect("refuses a local child the Mac never has room for, saying it was not started", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, dispatched }) =>
+        Effect.gen(function* () {
+          const child = yield* service
+            .delegateTask(scope, localChild("never-room"))
+            .pipe(Effect.flip, Effect.forkChild);
+          yield* TestClock.adjust(MemoryHeadroom.HEADROOM_WAIT_MS);
+          const refused = yield* Fiber.join(child);
+          assert.include(refused.message, "this child was not started. Delegate it again later.");
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 0);
+        }),
+      () => TIGHT,
+    ),
+  );
+
   it.effect("keeps a local parent's cloud child on the Mac under local only", () =>
     withDelegations(
       { taskExecution: { location: "local_only" } },
