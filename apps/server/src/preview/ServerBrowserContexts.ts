@@ -162,13 +162,29 @@ export class ServerBrowserContexts {
 
   private async newSharedContext(options?: Parameters<Browser["newContext"]>[0]) {
     this.browserContextsOpening += 1;
+    let context: BrowserContext;
     try {
-      const context = await (await this.sharedBrowser()).newContext(options);
-      context.on("close", () => this.scheduleBrowserIdle());
-      return context;
-    } finally {
+      context = await (await this.sharedBrowser()).newContext(options);
+    } catch (cause) {
       this.browserContextsOpening -= 1;
+      // A browser launched for this context and left with none is closed now.
+      await this.closeBrowserIfUnused();
+      throw cause;
     }
+    this.browserContextsOpening -= 1;
+    context.on("close", () => this.scheduleBrowserIdle());
+    return context;
+  }
+
+  private async closeBrowserIfUnused() {
+    const launched = this.browser;
+    const browser = await launched?.catch(() => undefined);
+    if (!browser || this.browser !== launched) return;
+    if (this.browserContextsOpening > 0 || browser.contexts().length > 0) return;
+    this.browser = undefined;
+    clearTimeout(this.browserIdleTimer);
+    this.browserIdleTimer = undefined;
+    await browser.close().catch(constVoid);
   }
 
   private async launchOptions() {
@@ -230,26 +246,30 @@ export class ServerBrowserContexts {
     const pending: Promise<BrowserContext> = cleared
       .then(() => this.createContext(profileId, isolationKey))
       .then(async (context) => {
-        context.on("close", () => {
-          if (this.contexts.get(key) === pending) {
-            this.contexts.delete(key);
-            this.lastUse.delete(key);
-          }
-          this.options.onContextClose?.(context);
-        });
-        for (const page of context.pages()) await page.close().catch(constVoid);
-        if (this.closing) {
-          await context.close().catch(constVoid);
-          throw new Error("The preview browser is closed.");
-        }
-        // Tabs close their pages; the context closes once its last page is gone.
-        context.on("page", (page) => {
-          page.once("close", () => {
-            if (context.pages().length === 0) this.scheduleContextIdle(key, pending);
+        try {
+          context.on("close", () => {
+            if (this.contexts.get(key) === pending) {
+              this.contexts.delete(key);
+              this.lastUse.delete(key);
+            }
+            this.options.onContextClose?.(context);
           });
-        });
-        this.scheduleContextIdle(key, pending);
-        return context;
+          for (const page of context.pages()) await page.close().catch(constVoid);
+          if (this.closing) throw new Error("The preview browser is closed.");
+          // Tabs close their pages; the context closes once its last page is gone.
+          context.on("page", (page) => {
+            page.once("close", () => {
+              if (context.pages().length === 0) this.scheduleContextIdle(key, pending);
+            });
+          });
+          this.scheduleContextIdle(key, pending);
+          return context;
+        } catch (cause) {
+          // A context, or the persistent Chrome behind it, that its caller will
+          // never get is closed rather than left running.
+          await context.close().catch(constVoid);
+          throw cause;
+        }
       });
     this.contexts.set(key, pending);
     void pending.catch(() => {
@@ -283,7 +303,10 @@ export class ServerBrowserContexts {
   async scratchPage() {
     if (this.closing) throw new Error("The preview browser is closed.");
     const context = await this.newSharedContext();
-    const page = await context.newPage();
+    const page = await context.newPage().catch(async (cause: unknown) => {
+      await context.close().catch(constVoid);
+      throw cause;
+    });
     page.once("close", () => void context.close().catch(constVoid));
     return page;
   }

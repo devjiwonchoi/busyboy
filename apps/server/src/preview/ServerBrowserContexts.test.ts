@@ -337,4 +337,41 @@ describe("ServerBrowserContexts", () => {
       expect(next.close).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("closes what it launched when a context fails to open", async () => {
+    // The shared browser launched, but its context did not open.
+    const browser = makeBrowser();
+    browser.newContext.mockRejectedValueOnce(new Error("no context"));
+    launches.launch.mockResolvedValueOnce(browser as unknown as Browser);
+    const pool = new ServerBrowserContexts(options());
+    await expect(pool.contextFor("default", "agent-a")).rejects.toThrow("no context");
+    expect(browser.close).toHaveBeenCalledTimes(1);
+
+    // A scratch page that fails to open closes its context.
+    const next = makeBrowser();
+    launches.launch.mockResolvedValueOnce(next as unknown as Browser);
+    next.newContext.mockImplementationOnce(async () => {
+      const context = makeContext();
+      next.created.push(context);
+      return Object.assign(context, {
+        newPage: vi.fn(async () => {
+          throw new Error("no page");
+        }),
+      }) as unknown as BrowserContext;
+    });
+    await expect(pool.scratchPage()).rejects.toThrow("no page");
+    expect(next.created[0]?.close).toHaveBeenCalled();
+
+    // A persistent Chrome whose context the pool closed meanwhile is closed too.
+    const human = makeContext();
+    const launched = Promise.withResolvers<BrowserContext>();
+    launches.persistent.mockReturnValueOnce(launched.promise);
+    const opening = pool.contextFor("default");
+    await vi.waitFor(() => expect(launches.persistent).toHaveBeenCalled());
+    const closing = pool.close();
+    launched.resolve(human as unknown as BrowserContext);
+    await expect(opening).rejects.toThrow("closed");
+    await closing;
+    expect(human.close).toHaveBeenCalled();
+  });
 });
