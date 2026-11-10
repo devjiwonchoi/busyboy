@@ -6,6 +6,7 @@ import { useDeviceType } from "../../native/native-layout-metrics";
 import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
+import { CloudPill } from "./CloudPill";
 import {
   ThreadGitControls,
   useThreadGitCenterHeaderItems,
@@ -14,6 +15,13 @@ import {
 
 type NativeHeaderItems = ReadonlyArray<Record<string, unknown>>;
 
+const CLOUD_HEADER_ITEM = {
+  type: "custom" as const,
+  identifier: "thread-right-cloud",
+  element: <CloudPill />,
+  hidesSharedBackground: true,
+};
+
 export function useThreadHeaderOptions(props: {
   readonly title: string;
   readonly subtitle: string;
@@ -21,14 +29,25 @@ export function useThreadHeaderOptions(props: {
   readonly usesNativeHeaderGlass: boolean;
   readonly gitControls: Parameters<typeof ThreadGitControls>[0];
   readonly onReturnToThread?: () => void;
+  /** Set for a task lead that runs in a cloud sandbox; shows a small Cloud pill. */
+  readonly runsInCloud?: boolean;
 }) {
   const usesNativeWorkspaceColumns = useNativeWorkspaceColumnsSupported();
   const deviceType = useDeviceType();
   const usesDuoHeader = usesNativeWorkspaceColumns && isDuoDevice(deviceType);
   const navigation = useNavigation();
   const { layout, panes, togglePrimarySidebar } = useAdaptiveWorkspaceLayout();
-  const threadCenterHeaderItems = useThreadGitCenterHeaderItems(props.gitControls);
-  const compactRightHeaderItems = useThreadGitRightHeaderItems(props.gitControls);
+  const gitCenterHeaderItems = useThreadGitCenterHeaderItems(props.gitControls);
+  const gitRightHeaderItems = useThreadGitRightHeaderItems(props.gitControls);
+  // The Cloud pill leads the trailing items, so it sits nearest the title.
+  const threadCenterHeaderItems = useMemo<NativeHeaderItems>(
+    () => (props.runsInCloud ? [CLOUD_HEADER_ITEM, ...gitCenterHeaderItems] : gitCenterHeaderItems),
+    [props.runsInCloud, gitCenterHeaderItems],
+  );
+  const compactRightHeaderItems = useMemo<NativeHeaderItems>(
+    () => (props.runsInCloud ? [CLOUD_HEADER_ITEM, ...gitRightHeaderItems] : gitRightHeaderItems),
+    [props.runsInCloud, gitRightHeaderItems],
+  );
   const splitLeftHeaderItems = useMemo<NativeHeaderItems>(
     () => [
       ...(!usesDuoHeader

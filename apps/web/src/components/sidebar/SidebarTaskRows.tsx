@@ -8,6 +8,7 @@ import {
 import { ChevronRightIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
+import { CloudBadge } from "../CloudBadge";
 import { TaskRowMarkers, useTaskRelations } from "../task/TaskRelations";
 import { blockedByLabel } from "../task/taskRelations.logic";
 import { resolveLiveTaskStatus } from "../task/taskStatus";
@@ -61,6 +62,7 @@ export function SidebarTaskRow(props: {
             </span>
           }
           status={status}
+          indicators={task.location === "cloud" ? <CloudBadge variant="icon" /> : undefined}
         />
       </button>
     </li>

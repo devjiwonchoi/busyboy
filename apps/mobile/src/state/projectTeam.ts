@@ -4,7 +4,12 @@ import {
   EMPTY_PROJECT_TEAM_ATTENTION_INDEX,
   type ProjectTeamAttentionIndex,
 } from "@t3tools/client-runtime/state/project-team";
-import type { EnvironmentId, ProjectTeamAnswerDecisionInput } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProjectId,
+  ProjectTeamAnswerDecisionInput,
+  ThreadId,
+} from "@t3tools/contracts";
 import type { GoalMapEntry } from "@t3tools/shared/goalMap";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -63,4 +68,30 @@ export function useAnswerDecision() {
   const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
   return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision({ environmentId, input });
+}
+
+const EMPTY_ATTENTION_ATOM = Atom.make<ProjectTeamAttentionIndex>(
+  EMPTY_PROJECT_TEAM_ATTENTION_INDEX,
+).pipe(Atom.withLabel("mobile-project-team:attention:empty"));
+
+/** Whether this thread leads a task whose lead runs in a cloud sandbox. */
+export function useLeadThreadRunsInCloud(
+  thread: {
+    readonly environmentId: EnvironmentId;
+    readonly projectId: ProjectId;
+    readonly id: ThreadId;
+  } | null,
+): boolean {
+  const index = useAtomValue(
+    thread === null
+      ? EMPTY_ATTENTION_ATOM
+      : environmentProjectTeamAttentionAtom(thread.environmentId),
+  );
+  return (
+    thread !== null &&
+    (index.byProjectId
+      .get(thread.projectId)
+      ?.tasks.some((task) => task.leadThreadId === thread.id && task.location === "cloud") ??
+      false)
+  );
 }

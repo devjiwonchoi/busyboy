@@ -226,6 +226,8 @@ beforeEach(() => {
           title: `Task ${task.number}`,
           stage: task.stage,
           leadThreadId: `lead-${task.number}` as never,
+          // Task 4's lead runs in a cloud sandbox; the rest run locally.
+          location: task.number === 4 ? "cloud" : "local",
           prUrl: task.prUrl ?? null,
           lastOutcome: task.lastOutcome ?? null,
           openQuestion: task.openQuestion ?? false,
@@ -376,6 +378,17 @@ describe("sidebar task status", () => {
         document.querySelector('[data-testid="sidebar-task-status-tooltip"]')?.textContent,
       ).toBe("In Review · PR #81"),
     );
+  });
+
+  it("marks only a cloud lead's row with a quiet cloud icon", async () => {
+    await renderSidebarApp().render();
+    await vi.waitFor(() => expect(rowStatus(4).icon).toBe("task-in_progress"), { timeout: 3000 });
+    const cloud = taskRow(4).querySelector<SVGElement>('[data-cloud-badge="icon"]');
+    expect(cloud?.getAttribute("aria-label")).toBe("Runs in a cloud sandbox");
+    expect(cloud?.getBoundingClientRect().width).toBeGreaterThan(0);
+    for (const number of [1, 2, 5, 9]) {
+      expect(taskRow(number).querySelector("[data-cloud-badge]"), `task ${number}`).toBeNull();
+    }
   });
 
   it("leaves ordinary thread rows without a task status", async () => {
