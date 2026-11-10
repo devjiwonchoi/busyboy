@@ -5,6 +5,7 @@ import {
   type PlanApprovalOutcome,
   type ProjectApprovalPlan,
   type ProjectDecisionCard,
+  type ProjectTaskId,
   type ProjectTaskReference,
   type ProjectTaskStage,
 } from "@t3tools/contracts";
@@ -297,7 +298,8 @@ function LiveTodos(props: {
 }) {
   const query = useTaskDetail(props.environmentId, {
     projectId: props.card.item.projectId,
-    taskId: props.card.item.taskId,
+    // Plan approvals always belong to a task.
+    taskId: props.card.item.taskId as ProjectTaskId,
   });
   const todos: ReadonlyArray<PlanTodoLike> =
     query.data?.versions.at(-1)?.spec.todos ?? props.pinned.todos;

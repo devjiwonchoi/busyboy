@@ -40,13 +40,28 @@ function InboxTaskLink({
     environmentId: group.environmentId,
   });
   const label = `${card.taskTitle} · ${projectTitle}`;
+  const taskId = card.item.taskId;
+  // A card without a task is the PM's own: it leads to the PM chat.
+  if (taskId === null) {
+    return (
+      <Link
+        to="/$environmentId/$threadId"
+        params={buildThreadRouteParams(scopeThreadRef(group.environmentId, group.pmThreadId))}
+        data-director-inbox-task-link
+        onClick={onNavigate}
+        className="text-foreground underline decoration-border underline-offset-2 hover:decoration-current"
+      >
+        {label}
+      </Link>
+    );
+  }
   if (group.isDirector && related === null) {
     return <span>{label}</span>;
   }
 
   return (
     <Link
-      {...taskRouteParams(group.environmentId, projectId, card.item.taskId)}
+      {...taskRouteParams(group.environmentId, projectId, taskId)}
       data-director-inbox-task-link
       onClick={onNavigate}
       className="text-foreground underline decoration-border underline-offset-2 hover:decoration-current"

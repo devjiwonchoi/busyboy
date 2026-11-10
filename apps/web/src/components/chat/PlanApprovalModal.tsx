@@ -7,6 +7,7 @@ import {
   type PlanReviewComment,
   type ProjectDecisionCard,
   type ProjectLeadQuestionQuote,
+  type ProjectTaskId,
 } from "@t3tools/contracts";
 import { XIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
@@ -239,7 +240,8 @@ function PlanReview({
   const running = related?.task.stage === "running";
   const query = useTaskDetail(environmentId, {
     projectId,
-    taskId: card.item.taskId,
+    // Plan approvals always belong to a task.
+    taskId: card.item.taskId as ProjectTaskId,
   });
   const answerDecision = useAnswerDecision();
   const bodyRef = useRef<HTMLDivElement>(null);

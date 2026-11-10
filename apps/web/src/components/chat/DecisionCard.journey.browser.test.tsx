@@ -425,6 +425,51 @@ describe.each([
     );
   });
 
+  it("shows a PM's own blocker with the PM and project names and sends the pick back to the PM", async () => {
+    const question =
+      "Jota 막힘: 자동 권한 검사가 작업을 거부했어요\n\n거부된 작업: `gh workflow run release.yml --ref main`\n이유: Production Deploy";
+    const options = [
+      "진행해도 돼요: 내 지시로 다시 시도",
+      "내가 직접 실행할게요",
+      "이 단계는 빼고 계속",
+    ];
+    server.summary = {
+      ...server.summary!,
+      openCount: 1,
+      decisionCards: [
+        {
+          ...card({
+            id: ProjectAttentionItemId.make("attention-pm"),
+            taskId: null,
+            kind: "blocker",
+            askerThreadId: PM_THREAD_ID,
+            question,
+            options,
+          }),
+          taskNumber: null,
+          taskTitle: "Jota",
+        },
+      ],
+    };
+    await renderCards();
+    const open = cardElement("open")!;
+    expect(open.querySelector("[data-decision-card-meta]")?.textContent).toBe(
+      "Blocker · Jota · BusyBoy",
+    );
+    expect(open.querySelector("[data-decision-card-context]")?.textContent).toContain(
+      "gh workflow run release.yml --ref main",
+    );
+    await page.screenshot({ path: `__screenshots__/pm-blocker-card-${width}.png` });
+    await userEvent.click(radiosIn(open)[1]!);
+    await userEvent.click(buttonIn(open, "Submit"));
+    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
+    expect(server.answers[0]).toMatchObject({
+      attentionItemId: "attention-pm",
+      answer: "내가 직접 실행할게요",
+    });
+    expect(cardElement("answered")).not.toBeNull();
+  });
+
   it("uses a single tab stop and moves both selection and focus with radio keys", async () => {
     const open = await openCard(undefined);
     const radios = radiosIn(open);

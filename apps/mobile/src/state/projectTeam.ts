@@ -4,11 +4,12 @@ import {
   EMPTY_PROJECT_TEAM_ATTENTION_INDEX,
   type ProjectTeamAttentionIndex,
 } from "@t3tools/client-runtime/state/project-team";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectTeamAnswerDecisionInput } from "@t3tools/contracts";
 import type { GoalMapEntry } from "@t3tools/shared/goalMap";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { connectionAtomRuntime } from "../connection/runtime";
+import { useAtomCommand } from "./use-atom-command";
 
 export const projectTeamEnvironment = createProjectTeamEnvironmentAtoms(connectionAtomRuntime);
 
@@ -35,4 +36,16 @@ const projectManagerEntriesAtom = Atom.family((environmentIdsKey: string) =>
 /** Every project manager's attention snapshot across the given environments. */
 export function useProjectManagerEntries(environmentIds: ReadonlyArray<EnvironmentId>) {
   return useAtomValue(projectManagerEntriesAtom(environmentIds.join(",")));
+}
+
+/** One environment's project manager summaries, for the cards a thread shows. */
+export function useEnvironmentProjectTeamAttention(environmentId: EnvironmentId) {
+  return useAtomValue(environmentProjectTeamAttentionAtom(environmentId));
+}
+
+/** Answers a blocker or decision card; the server relays it to the thread that asked. */
+export function useAnswerDecision() {
+  const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
+    answerDecision({ environmentId, input });
 }

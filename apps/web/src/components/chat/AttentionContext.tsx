@@ -62,7 +62,7 @@ export function AttentionTaskLink({
 
   return (
     <Link
-      {...taskRouteParams(environmentId, related.projectId, card.item.taskId)}
+      {...taskRouteParams(environmentId, related.projectId, related.task.id)}
       data-attention-task-link
       className="min-w-0 text-foreground underline decoration-border underline-offset-2 hover:decoration-current"
     >

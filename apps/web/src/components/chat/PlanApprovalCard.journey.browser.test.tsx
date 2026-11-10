@@ -73,7 +73,7 @@ async function answerDecision(input: ProjectTeamAnswerDecisionInput) {
   const current = server.summary!;
   const card = current.decisionCards.find((entry) => entry.item.id === input.attentionItemId)!;
   const outcome = planApprovalOutcome(input.answer);
-  server.stages[card.item.taskId] =
+  server.stages[card.item.taskId as string] =
     outcome === "start" ? "running" : outcome === "approve_only" ? "inbox" : "planning";
   publish({
     ...current,
