@@ -83,6 +83,9 @@ function afkAnsweredCard(answeredAt: string): ProjectDecisionCard {
       specVersion: null,
       summary: null,
       verification: null,
+      details: null,
+      senderRole: null,
+      senderName: null,
     },
   };
 }

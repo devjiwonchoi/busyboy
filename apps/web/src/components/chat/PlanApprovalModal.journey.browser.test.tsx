@@ -240,6 +240,9 @@ function makeCard(): ProjectDecisionCard {
       specVersion: 2,
       summary: "- A card in the PM chat\n- It opens a review modal",
       verification: "- A journey test approves from the modal",
+      details: null,
+      senderRole: null,
+      senderName: null,
     },
   };
 }
@@ -286,15 +289,12 @@ function section(name: string): HTMLElement {
 
 async function openReview() {
   await act(async () => root.render(<LiveCard />));
-  const card = container.querySelector('[data-decision-card-state="open"]')!;
-  // Reads like a doc: "# title", then Goal and Verification.
-  // The task key remains secondary to the human-readable plan information.
-  expect(card.querySelector("[data-plan-meta]")?.textContent).toMatch(
-    /^Plan approval · .+ · v2( · \(BU-32\))?$/,
-  );
-  expect(card.querySelector("[data-plan-title]")?.textContent).toBe("Plan approval modal");
-  expect(card.textContent).toContain("A card in the PM chat");
-  await userEvent.click(button("Review plan"));
+  const card = container.querySelector<HTMLElement>('[data-decision-card-state="open"]')!;
+  // An open approval is one message; the full plan opens from its details.
+  expect(card.querySelector("[data-request-bubble]")).not.toBeNull();
+  expect(card.textContent).not.toContain("BU-32");
+  await userEvent.click(button("자세히 보기"));
+  await userEvent.click(button("전체 플랜"));
   await vi.waitFor(() => expect(section("End result")).toBeTruthy());
 }
 

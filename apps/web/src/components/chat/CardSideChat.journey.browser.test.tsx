@@ -220,6 +220,9 @@ function makeCard(kind: "approval" | "decision"): ProjectDecisionCard {
       specVersion: kind === "approval" ? 1 : null,
       summary: kind === "approval" ? "- A card that opens a review modal" : null,
       verification: null,
+      details: null,
+      senderRole: null,
+      senderName: null,
     },
   };
 }
@@ -295,7 +298,9 @@ describe.each([
   it("asks the lead about a quoted plan passage, then approves in the same view", async () => {
     server.card = makeCard("approval");
     await act(async () => root.render(<LiveCard />));
-    await userEvent.click(button("Review plan"));
+    // The full plan opens from inside the request's details.
+    await userEvent.click(button("자세히 보기"));
+    await userEvent.click(button("전체 플랜"));
     const endResult = await vi.waitFor(() => {
       const element = document.querySelector<HTMLElement>('[data-plan-section="End result"]');
       if (element === null) throw new Error("Plan not open");
@@ -391,17 +396,10 @@ describe.each([
   it("opens the side chat beside a full-screen decision card", async () => {
     server.card = makeCard("decision");
     await act(async () => root.render(<LiveCard />));
-    await userEvent.click(
-      document.querySelector<HTMLButtonElement>('[aria-label="Open full screen"]')!,
-    );
-    const expanded = await vi.waitFor(() => {
-      const element = document.querySelector<HTMLElement>("[data-decision-card-expanded]");
-      if (element === null) throw new Error("Not expanded");
-      return element;
-    });
-    if (mobile) await userEvent.click(button("리드에게 질문", expanded));
+    // Details open inside the bubble and lead straight to the lead chat.
+    await userEvent.click(button("자세히 보기"));
+    await userEvent.click(button("💬 리드와 대화"));
     const chat = await vi.waitFor(() => sideChat());
-    expect(expanded.contains(chat)).toBe(true);
     expect(chat.querySelector("[data-card-side-chat-context]")?.textContent).toBe(
       "BusyBoy · BU-32 Plan approval modal",
     );
@@ -412,13 +410,13 @@ describe.each([
     await vi.waitFor(() => expect(chat.textContent).toContain("2-3일이요."));
     await page.screenshot({ path: `__screenshots__/card-side-chat-decision-${name}.png` });
 
-    // Still open: pick and submit in the same view.
+    // Still open: close the chat, then answer from the same bubble.
     expect(server.answers).toEqual([]);
-    if (mobile) await userEvent.click(button("카드", expanded));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(document.querySelector("[data-card-side-chat]")).toBeNull());
     await userEvent.click(
-      [...expanded.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(visible)!,
+      button("보내기", document.querySelector<HTMLElement>("[data-request-bubble]")!),
     );
-    await userEvent.click(button("Submit", expanded));
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
   });
 });

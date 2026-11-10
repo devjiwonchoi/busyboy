@@ -3,6 +3,7 @@ import type {
   ProjectAttentionContext,
   ProjectDecisionCard,
 } from "@t3tools/contracts";
+import { requestSenderLabel, shortWorkName } from "@t3tools/shared/requestMessage";
 import { Link, useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -41,6 +42,16 @@ export function useAttentionTask({
         )?.title ?? "프로젝트 확인 필요");
 
   return { related, projectId, projectTitle };
+}
+
+/** Sender identity is shared by requests and waiting lists, including legacy cards. */
+export function useRequestSender(card: ProjectDecisionCard, environmentId: EnvironmentId) {
+  const { related, projectTitle } = useAttentionTask({ card, environmentId });
+  return requestSenderLabel({
+    role: card.item.senderRole ?? (related?.task.leadThreadId ? "lead" : "pm"),
+    name: card.item.senderName ?? shortWorkName(card.taskTitle),
+    projectTitle,
+  }) ?? projectTitle;
 }
 
 /** Task names in cards use the same stable task page even before a lead thread exists. */

@@ -250,6 +250,9 @@ function makeCard(spec: ProjectTaskSpec): ProjectDecisionCard {
       specVersion: 3,
       summary: null,
       verification: null,
+      details: null,
+      senderRole: null,
+      senderName: null,
     },
   };
 }
@@ -325,29 +328,24 @@ describe.each([
     await act(async () => root.render(<LiveCard />));
     const open = card();
     expect(open.dataset.decisionCardState).toBe("open");
-    expect(open.querySelector("[data-plan-meta]")?.textContent).toBe("BU-62 · Plan approval · v3");
-    expect(open.querySelector("[data-plan-title]")?.textContent).toBe("Plan view");
-    // The summary in the lead's words, bold phrases kept; no Goal/Verification sections.
-    const summary = open.querySelector<HTMLElement>("[data-plan-summary-text]")!;
-    expect([...summary.querySelectorAll("strong")].map((bold) => bold.textContent)).toEqual([
-      "글 덩어리",
-      "요약 + todo 목록",
-    ]);
-    expect(open.querySelector("[data-plan-summary-section]")).toBeNull();
-    // Todos: nothing spins before approval; each has its check line and dependency chip.
-    expect(statuses(open)).toEqual(["todo", "todo", "todo"]);
-    const [first, second, third] = rows(open);
-    expect(first!.querySelector("[data-plan-todo-done-when]")?.textContent).toBe(
-      "Done when: Unit tests pass",
+    // One bubble: question, todo titles only, and the two buttons under a divider.
+    const bubble = open.querySelector<HTMLElement>("[data-request-bubble]")!;
+    expect(bubble.querySelector("[data-decision-card-headline]")?.textContent).toBe(
+      "This task reshapes the plan card.",
     );
-    expect(first!.querySelector("[data-plan-todo-deps]")).toBeNull();
-    expect(second!.querySelector("[data-plan-todo-deps]")?.textContent).toBe("↳ after 1");
-    expect(third!.querySelector("[data-plan-todo-deps]")?.textContent).toBe("↳ after 1, 2");
-    expect(open.querySelector("[data-plan-progress]")?.textContent).toBe("3 steps · 0 done");
-    for (const name of ["Approve", "View details"]) expectInside(open, button(name, open));
-    for (const row of rows(open)) expectInside(open, row);
+    expect([...bubble.querySelectorAll("ol > li")].map((item) => item.textContent)).toEqual([
+      "Plan view logic",
+      "Approval card",
+      "Phone screenshots",
+    ]);
+    expect(bubble.textContent).not.toContain("Unit tests pass");
+    const actions = bubble.querySelector<HTMLElement>("[data-request-actions]")!;
+    expect([...actions.querySelectorAll("button")].map((item) => item.textContent)).toEqual([
+      "승인",
+      "자세히 보기",
+    ]);
 
-    await userEvent.click(button("Approve", open));
+    await userEvent.click(button("승인", open));
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
     expect(server.answers[0]!.answer).toBe(PLAN_APPROVAL_START);
 
@@ -355,9 +353,10 @@ describe.each([
     await vi.waitFor(() => expect(card().dataset.decisionCardState).toBe("answered"));
     const board = card();
     expect(board.hasAttribute("data-plan-board")).toBe(true);
-    expect(board.querySelector("[data-plan-meta]")?.textContent).toBe(
-      "BU-62 · Approved and started · v3",
-    );
+    // The answered board names the sender, not the task key.
+    const boardMeta = board.querySelector("[data-plan-meta]")?.textContent ?? "";
+    expect(boardMeta).toContain("Plan view 리드 · Approved and started");
+    expect(boardMeta).not.toContain("BU-62");
     expect(board.querySelector("[data-plan-summary-text]")).not.toBeNull();
     expect(statuses(board)).toEqual(["current", "todo", "todo"]);
     expect(board.querySelector('[data-plan-todo-icon="current"] svg')).not.toBeNull();
@@ -398,7 +397,8 @@ describe.each([
 
   it("opens the full plan from View details, with comments on the todos", async () => {
     await act(async () => root.render(<LiveCard />));
-    await userEvent.click(button("View details", card()));
+    await userEvent.click(button("자세히 보기", card()));
+    await userEvent.click(button("전체 플랜", card()));
     await vi.waitFor(() => expect(modal()?.querySelector("[data-plan-files]")).not.toBeNull());
     const review = modal();
 

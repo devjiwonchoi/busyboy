@@ -62,6 +62,9 @@ export function mapCard(
       specVersion: null,
       summary: null,
       verification: null,
+      details: null,
+      senderRole: null,
+      senderName: null,
     },
   };
 }
