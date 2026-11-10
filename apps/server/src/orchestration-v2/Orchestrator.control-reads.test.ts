@@ -712,7 +712,7 @@ it.effect("holds a moving lead's new turns until its queue resumes, and moves it
       payload: { ...first, status: "interrupted", completedAt: yield* DateTime.now },
     });
 
-    gate.hold(threadId);
+    gate.hold(threadId, "move");
     yield* send("sent-mid-move");
     yield* orchestrator.dispatch({
       type: "thread.metadata.update",
@@ -730,7 +730,7 @@ it.effect("holds a moving lead's new turns until its queue resumes, and moves it
       ],
     );
 
-    gate.release(threadId);
+    gate.release(threadId, "move");
     yield* orchestrator.dispatch({
       type: "queue.resume",
       commandId: CommandId.make("move-done"),

@@ -14,7 +14,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
-import type { ExecutionLocation } from "@t3tools/contracts";
+import { type ExecutionLocation, ThreadId } from "@t3tools/contracts";
 
 import * as ServerConfig from "../config.ts";
 import { ensureBaseSnapshot, fileBaseSnapshotStore, readLocalInputs } from "./BaseSnapshot.ts";
@@ -57,6 +57,19 @@ export interface CloudLeadHooksShape {
     readonly sessionId: string;
     readonly location: ExecutionLocation;
   }) => Effect.Effect<boolean, CloudLeadError>;
+  /** How a sandbox replaced near its lifetime limit stops and resumes the lead's turn. */
+  readonly setRotationHandler: (handler: RotationHandler) => Effect.Effect<void>;
+}
+
+export interface RotationHandler {
+  /** True while the lead is being moved; a rotation then waits. */
+  readonly busy: (threadId: ThreadId) => boolean;
+  /** Stops the lead's running turn with its queue held; succeeds once the turn ended. */
+  readonly interrupt: (threadId: ThreadId) => Effect.Effect<void>;
+  /** Lets the held queue run again on the new sandbox. */
+  readonly resume: (threadId: ThreadId) => Effect.Effect<void>;
+  /** The sandbox could not be replaced; the user decides what to do. */
+  readonly failed: (threadId: ThreadId, reason: string) => Effect.Effect<void>;
 }
 
 /** No cloud runtime: cloud work fails, local work does nothing. Tests spread it. */
@@ -73,6 +86,7 @@ export const unavailableHooks: CloudLeadHooksShape = {
     ),
   exportTranscripts: () => Effect.void,
   hasTranscript: () => Effect.succeed(false),
+  setRotationHandler: () => Effect.void,
 };
 
 export class CloudLeadHooks extends Context.Reference<CloudLeadHooksShape>(
@@ -126,6 +140,16 @@ export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape
             detail: `Could not look for the transcript: ${errorDetail(cause)}`,
           }),
       }),
+    setRotationHandler: (handler) =>
+      Effect.sync(() =>
+        runtime.setRotationHandler({
+          busy: (threadId) => handler.busy(ThreadId.make(threadId)),
+          interrupt: (threadId) => Effect.runPromise(handler.interrupt(ThreadId.make(threadId))),
+          resume: (threadId) => Effect.runPromise(handler.resume(ThreadId.make(threadId))),
+          failed: (threadId, reason) =>
+            Effect.runPromise(handler.failed(ThreadId.make(threadId), reason)),
+        }),
+      ),
   });
 
 /** The Vercel CLI keeps its login token here on macOS; used when none was saved. */

@@ -713,6 +713,24 @@ export function isTurnFailedBlocker(item: Pick<ProjectAttentionItem, "kind" | "o
   );
 }
 
+/** The decision raised when a cloud lead's sandbox could not be replaced before its limit. */
+export const SANDBOX_ROTATION_MOVE_LOCAL = "로컬로 가져오기";
+export const SANDBOX_ROTATION_KEEP = "클라우드에 두기";
+export const SANDBOX_ROTATION_OPTIONS = [
+  SANDBOX_ROTATION_MOVE_LOCAL,
+  SANDBOX_ROTATION_KEEP,
+] as const;
+
+export function isSandboxRotationDecision(
+  item: Pick<ProjectAttentionItem, "kind" | "options">,
+): boolean {
+  return (
+    item.kind === "decision" &&
+    item.options.length === SANDBOX_ROTATION_OPTIONS.length &&
+    item.options.every((option, index) => option === SANDBOX_ROTATION_OPTIONS[index])
+  );
+}
+
 export function turnFailedReason(detail: string | undefined): string | null {
   if (detail === undefined) {
     return null;

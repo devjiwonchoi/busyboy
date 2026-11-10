@@ -26,7 +26,7 @@ import * as Schema from "effect/Schema";
 
 import type { ThreadManagementServiceShape } from "../orchestration-v2/ThreadManagementService.ts";
 import type { CloudLeadHooksShape } from "./CloudLeadService.ts";
-import type { LeadMoveGateShape } from "./LeadMoveGate.ts";
+import type { LeadHoldReason, LeadMoveGateShape } from "./LeadMoveGate.ts";
 
 export class TaskMoveError extends Schema.TaggedError<TaskMoveError>()("TaskMoveError", {
   detail: Schema.String,
@@ -36,13 +36,22 @@ export class TaskMoveError extends Schema.TaggedError<TaskMoveError>()("TaskMove
   }
 }
 
-export interface TaskMoverDeps {
+/** What pausing and resuming a lead's turns needs. */
+export interface LeadControlDeps {
+  readonly threads: Pick<ThreadManagementServiceShape, "dispatch" | "getThreadShell">;
+  readonly gate: LeadMoveGateShape;
+  readonly newKey: (prefix: string) => Effect.Effect<string>;
+  /** How often to look whether the stopped turn has ended. */
+  readonly pollEvery?: number;
+  readonly stopTimeoutMs?: number;
+}
+
+export interface TaskMoverDeps extends LeadControlDeps {
   readonly threads: Pick<
     ThreadManagementServiceShape,
     "dispatch" | "getThreadShell" | "getThreadRecords"
   >;
   readonly cloudLead: CloudLeadHooksShape;
-  readonly gate: LeadMoveGateShape;
   readonly providers: Effect.Effect<ReadonlyArray<ServerProvider>>;
   /** Writes move_target (and location); none when expectedMoveTarget no longer matches. */
   readonly setMove: (input: {
@@ -53,11 +62,7 @@ export interface TaskMoverDeps {
   }) => Effect.Effect<Option.Option<ProjectTask>, ProjectTeamError>;
   readonly note: (task: ProjectTask, body: string) => Effect.Effect<unknown, ProjectTeamError>;
   readonly publish: (task: ProjectTask) => Effect.Effect<void>;
-  readonly newKey: (prefix: string) => Effect.Effect<string>;
   readonly isFinished: (task: ProjectTask) => boolean;
-  /** How often to look whether the stopped turn has ended. */
-  readonly pollEvery?: number;
-  readonly stopTimeoutMs?: number;
 }
 
 const PLACE: Record<ExecutionLocation, string> = { local: "로컬", cloud: "클라우드" };
@@ -106,13 +111,10 @@ export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: Executi
       .setMove({ task, moveTarget: to, expectedMoveTarget: null })
       .pipe(Effect.mapError((cause) => new TaskMoveError({ detail: detailOf(cause) })));
     if (Option.isNone(claimed)) return yield* fail("이미 옮기는 중이에요.");
-    deps.gate.hold(lead);
+    deps.gate.hold(lead, "move");
     yield* deps.publish(claimed.value);
 
-    const dispatch = (command: (key: string) => OrchestrationV2ServerCommand, prefix: string) =>
-      Effect.flatMap(deps.newKey(`task-move:${prefix}`), (key) =>
-        deps.threads.dispatch(command(key)),
-      ).pipe(Effect.mapError((cause) => new TaskMoveError({ detail: detailOf(cause) })));
+    const { dispatch, tellLead, resumeQueue, stopTurn } = leadControl(deps, lead, "move");
     const setThreadLocation = (location: ExecutionLocation) =>
       dispatch(
         (key) => ({
@@ -123,40 +125,11 @@ export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: Executi
         }),
         "location",
       );
-    const tellLead = (text: string) =>
-      dispatch(
-        (key) => ({
-          type: "message.dispatch",
-          commandId: CommandId.make(key),
-          threadId: lead,
-          messageId: MessageId.make(key),
-          text,
-          attachments: [],
-          dispatchMode: { type: "queue_after_active" },
-          createdBy: "system",
-          creationSource: "server",
-        }),
-        "notice",
-      );
-    const resumeQueue = Effect.gen(function* () {
-      deps.gate.release(lead);
-      yield* dispatch(
-        (key) => ({ type: "queue.resume", commandId: CommandId.make(key), threadId: lead }),
-        "resume",
-      ).pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("could not resume a moved lead's queue", {
-            lead,
-            detail: error.detail,
-          }),
-        ),
-      );
-    });
     const state = { interrupted: false, transcriptMissing: false };
 
     const steps = Effect.gen(function* () {
       // 1. Stop the lead's turn where it runs now; later messages wait.
-      state.interrupted = yield* stopTurn(deps, lead, dispatch);
+      state.interrupted = yield* stopTurn;
       // 2. Carry the transcripts and flip the place.
       if (to === "cloud") {
         yield* deps.cloudLead
@@ -233,16 +206,45 @@ export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: Executi
     return yield* fail(`리드를 ${PLACE[to]}로 옮기지 못했어요: ${detail}`);
   }).pipe(Effect.uninterruptible);
 
-/** Interrupts the lead's running turn, holding its queue, and waits for it to end. */
-const stopTurn = (
-  deps: TaskMoverDeps,
-  lead: ThreadId,
-  dispatch: (
-    command: (key: string) => OrchestrationV2ServerCommand,
-    prefix: string,
-  ) => Effect.Effect<unknown, TaskMoveError>,
-) =>
-  Effect.gen(function* () {
+/** Stopping, telling and resuming one lead; a move and a sandbox rotation share these. */
+export const leadControl = (deps: LeadControlDeps, lead: ThreadId, reason: LeadHoldReason) => {
+  const dispatch = (command: (key: string) => OrchestrationV2ServerCommand, prefix: string) =>
+    Effect.flatMap(deps.newKey(`task-move:${prefix}`), (key) =>
+      deps.threads.dispatch(command(key)),
+    ).pipe(Effect.mapError((cause) => new TaskMoveError({ detail: detailOf(cause) })));
+
+  const tellLead = (text: string) =>
+    dispatch(
+      (key) => ({
+        type: "message.dispatch",
+        commandId: CommandId.make(key),
+        threadId: lead,
+        messageId: MessageId.make(key),
+        text,
+        attachments: [],
+        dispatchMode: { type: "queue_after_active" },
+        createdBy: "system",
+        creationSource: "server",
+      }),
+      "notice",
+    );
+
+  /** Ends this hold; the waiting messages run once no other hold is left. */
+  const resumeQueue = Effect.gen(function* () {
+    deps.gate.release(lead, reason);
+    if (deps.gate.isHeld(lead)) return;
+    yield* dispatch(
+      (key) => ({ type: "queue.resume", commandId: CommandId.make(key), threadId: lead }),
+      "resume",
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("could not resume a lead's held queue", { lead, detail: error.detail }),
+      ),
+    );
+  });
+
+  /** Interrupts the running turn, holding the queue, and waits for it to end. True when one ran. */
+  const stopTurn = Effect.gen(function* () {
     const shell = yield* deps.threads.getThreadShell(lead).pipe(Effect.orElseSucceed(() => null));
     const runId = shell?.activeRunId ?? null;
     if (runId === null) return false;
@@ -268,3 +270,6 @@ const stopTurn = (
       yield* Effect.sleep(pollEvery);
     }
   });
+
+  return { dispatch, tellLead, resumeQueue, stopTurn };
+};

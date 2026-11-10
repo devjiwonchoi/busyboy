@@ -6,7 +6,11 @@ import * as NodeOs from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { CloudLeadRuntime } from "./CloudLeadRuntime.ts";
+import {
+  CloudLeadRuntime,
+  type CloudLeadRotationHandler,
+  type CloudLeadRuntimeDeps,
+} from "./CloudLeadRuntime.ts";
 import { encodeProjectDir } from "./pathRewrite.ts";
 import type { RemoteProcess } from "./RelayClient.ts";
 import { fakeLocalHost, localSandboxClient } from "./testkit.ts";
@@ -74,7 +78,11 @@ process.stdin.on("end", () => process.exit(0));
 `;
 
 const setup = async (
-  options: { readonly idleStopMs?: number; readonly macShell?: typeof shell } = {},
+  options: {
+    readonly idleStopMs?: number;
+    readonly macShell?: typeof shell;
+    readonly runtime?: Partial<CloudLeadRuntimeDeps>;
+  } = {},
 ) => {
   const root = await tempDir("cloud-runtime-");
   const macHome = `${root}/mac-home`;
@@ -114,6 +122,7 @@ const setup = async (
     ports,
     ...(options.idleStopMs === undefined ? {} : { idleStopMs: options.idleStopMs }),
     ...(options.macShell === undefined ? {} : { macShell: options.macShell }),
+    ...options.runtime,
   });
   cleanups.push(() => runtime.releaseAll());
   return { mac, macHome, client, runtime, mcpEndpoint, mcpCalls, ports };
@@ -396,5 +405,156 @@ describe("CloudLeadRuntime", () => {
         location: "cloud",
       }),
     ).toBe(false);
+  });
+
+  describe("near the sandbox's lifetime limit", () => {
+    const HOUR = 60 * 60 * 1000;
+    /** A fake clock the runtime reads sandbox ages from, checked every 20ms. */
+    const clocked = () => {
+      const clock = { now: 0 };
+      const calls: string[] = [];
+      const handler: CloudLeadRotationHandler = {
+        interrupt: async (threadId) => void calls.push(`interrupt ${threadId}`),
+        resume: async (threadId) => void calls.push(`resume ${threadId}`),
+        failed: async (threadId, reason) => void calls.push(`failed ${threadId}: ${reason}`),
+      };
+      return {
+        clock,
+        calls,
+        handler,
+        runtime: {
+          now: () => clock.now,
+          rotationCheckMs: 20,
+        } satisfies Partial<CloudLeadRuntimeDeps>,
+      };
+    };
+    const transcriptDir = (home: string) =>
+      `${home}/.claude/projects/${encodeProjectDir(`${home}/busyboy`)}`;
+
+    it("replaces an idle sandbox and the next turn resumes the same session", async () => {
+      const { clock, calls, handler, runtime: clockDeps } = clocked();
+      const { mac, client, runtime, mcpEndpoint } = await setup({ runtime: clockDeps });
+      runtime.setRotationHandler(handler);
+      const launch = await runtime.prepare({
+        threadId: "thread-r1",
+        worktreePath: mac,
+        mcpEndpoint,
+      });
+      const first = client.created[0]!;
+      const child = launch.spawn({ command: "claude", args: [], env: {} });
+      const output = lines(child);
+      child.stdin.write("edit wip.txt\n");
+      await waitFor(() => output.some((line) => line.file === "wip.txt"));
+      await NodeFs.mkdir(transcriptDir(first.home), { recursive: true });
+      await NodeFs.writeFile(`${transcriptDir(first.home)}/s1.jsonl`, "turn 1\n");
+      child.stdin.end();
+      await new Promise((resolve) => child.once("exit", resolve));
+
+      // 23 hours in: not yet.
+      clock.now = 23 * HOUR;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(first.deleted()).toBe(false);
+
+      // 30 minutes before 24 hours, between turns: replaced right away, no turn stopped.
+      clock.now = 23.5 * HOUR;
+      await waitFor(() => first.deleted());
+      expect(runtime.hasSession("thread-r1")).toBe(false);
+      expect(calls).toEqual([]);
+      expect(await NodeFs.readFile(`${mac}/wip.txt`, "utf8")).toBe("edit\n");
+
+      await runtime.prepare({ threadId: "thread-r1", worktreePath: mac, mcpEndpoint });
+      const second = client.created[1]!;
+      expect(await NodeFs.readFile(`${transcriptDir(second.home)}/s1.jsonl`, "utf8")).toBe(
+        "turn 1\n",
+      );
+      expect(await NodeFs.readFile(`${second.home}/busyboy/wip.txt`, "utf8")).toBe("edit\n");
+    });
+
+    it("stops a running turn, replaces the sandbox, then lets the queue run", async () => {
+      const { clock, calls, runtime: clockDeps } = clocked();
+      const { mac, client, runtime, mcpEndpoint } = await setup({ runtime: clockDeps });
+      const launch = await runtime.prepare({
+        threadId: "thread-r2",
+        worktreePath: mac,
+        mcpEndpoint,
+      });
+      const child = launch.spawn({ command: "claude", args: [], env: {} });
+      const output = lines(child);
+      child.stdin.write("edit midturn.txt\n");
+      await waitFor(() => output.some((line) => line.file === "midturn.txt"));
+      runtime.setRotationHandler({
+        // Like run.interrupt with holdQueue: the turn's claude stops.
+        interrupt: async (threadId) => {
+          calls.push(`interrupt ${threadId}`);
+          const exited = new Promise((resolve) => child.once("exit", resolve));
+          child.kill("SIGTERM");
+          await exited;
+        },
+        resume: async (threadId) => void calls.push(`resume ${threadId}`),
+        failed: async (threadId, reason) => void calls.push(`failed ${threadId}: ${reason}`),
+      });
+
+      clock.now = 23.6 * HOUR;
+      await waitFor(() => calls.includes("resume thread-r2"));
+      expect(calls).toEqual(["interrupt thread-r2", "resume thread-r2"]);
+      expect(client.created[0]!.deleted()).toBe(true);
+      expect(await NodeFs.readFile(`${mac}/midturn.txt`, "utf8")).toBe("edit\n");
+      await runtime.prepare({ threadId: "thread-r2", worktreePath: mac, mcpEndpoint });
+      expect(client.created).toHaveLength(2);
+    });
+
+    it("keeps the sandbox and reports once when it cannot be replaced", async () => {
+      const { clock, calls, handler, runtime: clockDeps } = clocked();
+      let broken = false;
+      const brokenMac = {
+        ...shell,
+        run: async (script: string) => {
+          if (broken && script.includes("git reset")) throw new Error("Mac disk is full");
+          return shell.run(script);
+        },
+      };
+      const { mac, client, runtime, mcpEndpoint } = await setup({
+        macShell: brokenMac,
+        runtime: clockDeps,
+      });
+      runtime.setRotationHandler(handler);
+      await runtime.prepare({ threadId: "thread-r3", worktreePath: mac, mcpEndpoint });
+      broken = true;
+      clock.now = 23.9 * HOUR;
+      await waitFor(() => calls.length > 0);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatch(/^failed thread-r3: .*Mac disk is full/s);
+      expect(client.created[0]!.deleted()).toBe(false);
+      expect(runtime.hasSession("thread-r3")).toBe(true);
+    });
+
+    it("waits while the lead is being moved, then replaces the sandbox", async () => {
+      const { clock, calls, handler, runtime: clockDeps } = clocked();
+      const { mac, client, runtime, mcpEndpoint } = await setup({ runtime: clockDeps });
+      let moving = true;
+      runtime.setRotationHandler({ ...handler, busy: () => moving });
+      await runtime.prepare({ threadId: "thread-r5", worktreePath: mac, mcpEndpoint });
+      clock.now = 23.9 * HOUR;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(client.created[0]!.deleted()).toBe(false);
+      expect(calls).toEqual([]);
+
+      moving = false;
+      await waitFor(() => client.created[0]!.deleted());
+      expect(calls).toEqual([]);
+    });
+
+    it("replaces a sandbox that is due when a turn starts", async () => {
+      const { clock } = clocked();
+      const { mac, client, runtime, mcpEndpoint } = await setup({
+        runtime: { now: () => clock.now, rotationCheckMs: HOUR },
+      });
+      await runtime.prepare({ threadId: "thread-r4", worktreePath: mac, mcpEndpoint });
+      clock.now = 24 * HOUR;
+      await runtime.prepare({ threadId: "thread-r4", worktreePath: mac, mcpEndpoint });
+      expect(client.created).toHaveLength(2);
+      expect(client.created[0]!.deleted()).toBe(true);
+    });
   });
 });

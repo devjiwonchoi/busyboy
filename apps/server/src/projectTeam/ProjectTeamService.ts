@@ -1,4 +1,7 @@
 import {
+  isSandboxRotationDecision,
+  SANDBOX_ROTATION_MOVE_LOCAL,
+  SANDBOX_ROTATION_OPTIONS,
   isTurnFailedBlocker,
   TURN_FAILED_CANCEL,
   TURN_FAILED_OPTIONS,
@@ -195,7 +198,7 @@ import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
-import { moveTaskLead } from "../cloudLead/TaskMover.ts";
+import { leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
@@ -3980,6 +3983,77 @@ const make = Effect.gen(function* () {
     ),
   );
 
+  /**
+   * A cloud lead's sandbox could not be replaced before its lifetime limit: ask the user
+   * whether to bring the lead to the Mac, once per open card.
+   */
+  const raiseSandboxRotationDecision = (leadThreadId: ThreadId, reason: string) =>
+    Effect.gen(function* () {
+      const found = yield* repository.findTaskByLeadThreadId(leadThreadId);
+      if (Option.isNone(found)) return;
+      const task = found.value;
+      if (!LIVE_TASK_STAGES.has(task.stage) || task.location !== "cloud") return;
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      if (open.some(isSandboxRotationDecision)) return;
+      const who = `${yield* keyOf(task)} ${task.title}`;
+      yield* router.ask({
+        task,
+        kind: "decision",
+        question: `${who}: 클라우드 샌드박스를 새로 바꾸지 못했어요\n\n이유: ${reason}\n\n지금 샌드박스는 사용 시간이 끝나면 멈춰요. 로컬로 가져오면 지금까지의 작업과 대화를 그대로 이어가요.`,
+        options: SANDBOX_ROTATION_OPTIONS,
+        askerThreadId: leadThreadId,
+        context: {
+          action: "클라우드 리드를 어디서 계속할지 정합니다",
+          reason: `${who}: 샌드박스 사용 시간이 곧 끝나는데 새 샌드박스로 옮기지 못했어요.`,
+          impacts: [],
+          cost: null,
+          reversibility: "reversible",
+          recommendation: "작업이 끊기지 않도록 '로컬로 가져오기'를 추천해요.",
+        },
+      });
+      yield* appendEvent(task, "note", "클라우드 샌드박스 교체에 실패해 결정을 요청했어요.", null);
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("could not raise the sandbox rotation decision", { leadThreadId, cause }),
+      ),
+    );
+
+  const leadControlDeps = {
+    threads,
+    gate: leadMoveGate,
+    newKey: (prefix: string) => newId(prefix).pipe(Effect.orDie),
+  };
+  yield* cloudLead.setRotationHandler({
+    // A move mirrors and releases the sandbox itself.
+    busy: (lead) => leadMoveGate.isHeldFor(lead, "move"),
+    interrupt: (lead) =>
+      Effect.gen(function* () {
+        leadMoveGate.hold(lead, "rotation");
+        yield* leadControl(leadControlDeps, lead, "rotation").stopTurn;
+      }).pipe(Effect.orDie),
+    resume: (lead) =>
+      Effect.gen(function* () {
+        const control = leadControl(leadControlDeps, lead, "rotation");
+        // A move that began meanwhile tells the lead where it continues.
+        const stillCloud =
+          !leadMoveGate.isHeldFor(lead, "move") &&
+          (yield* threads.getThreadShell(lead).pipe(
+            Effect.map((shell) => shell?.location === "cloud"),
+            Effect.orElseSucceed(() => false),
+          ));
+        if (stillCloud) {
+          yield* control
+            .tellLead("[교체] 새 클라우드 샌드박스에서 이어가요.")
+            .pipe(Effect.catch(() => Effect.void));
+        }
+        yield* control.resumeQueue;
+      }),
+    failed: raiseSandboxRotationDecision,
+  });
+
   const updateTaskSpec: ProjectTeamService["Service"]["updateTaskSpec"] = (input) =>
     Effect.gen(function* () {
       const task = yield* requireTask(input.taskId, input.projectId);
@@ -4089,13 +4163,27 @@ const make = Effect.gen(function* () {
           item.value,
         );
       }
+      // A sandbox that could not be replaced: the lead comes to the Mac before the card closes.
+      const rotation = isSandboxRotationDecision(item.value);
+      if (
+        rotation &&
+        item.value.answeredAt === null &&
+        item.value.supersededAt === null &&
+        item.value.taskId !== null &&
+        input.answer.split("\nNote:")[0]?.trim() === SANDBOX_ROTATION_MOVE_LOCAL
+      ) {
+        const task = yield* requireTask(item.value.taskId, item.value.projectId);
+        if (task.location === "cloud") {
+          yield* moveTask({ projectId: task.projectId, taskId: task.id, to: "local" });
+        }
+      }
       const restored = yield* restoreFailedTurnStage(item.value, input.answer);
       const answered = yield* router
         .answer({
           item: item.value,
           answer: input.answer,
           senderThreadId: manager.threadId,
-          relay: !cancel,
+          relay: !cancel && !rotation,
           answeredBy: "user",
         })
         .pipe(

@@ -7,7 +7,9 @@
  */
 import { assert, describe, it } from "@effect/vitest";
 import {
+  isSandboxRotationDecision,
   type OrchestrationV2ServerCommand,
+  SANDBOX_ROTATION_MOVE_LOCAL,
   ProviderDriverKind,
   ProviderThreadId,
   type ThreadId,
@@ -444,5 +446,64 @@ describe("moving a task lead", () => {
         }),
       { cloudLead: fakeHooks({}) },
     ),
+  );
+
+  it.effect(
+    "replaces a cloud lead's sandbox mid-turn, and offers to bring it home when that fails",
+    () => {
+      let rotation: CloudLeadService.RotationHandler | null = null;
+      const released: string[] = [];
+      return withTeam(
+        (harness) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            const gate = yield* LeadMoveGate.LeadMoveGate;
+            const { pm, task, lead, thread } = yield* startImplementingTask(harness, "/tmp/lead");
+            yield* team.moveTask({ projectId: PROJECT_ID, taskId: task.id, to: "cloud" });
+
+            // The sandbox nears its limit mid-turn: the turn stops with its queue held,
+            // and once the new sandbox is ready the lead goes on there.
+            thread.activeRunId = "run:cloud";
+            const mark = (yield* commandsTo(harness, lead)).length;
+            yield* rotation!.interrupt(lead);
+            assert.isTrue(gate.isHeld(lead));
+            yield* rotation!.resume(lead);
+            assert.isFalse(gate.isHeld(lead));
+            assert.deepEqual(moveSteps((yield* commandsTo(harness, lead)).slice(mark)), [
+              "interrupt holding the queue",
+              "message [교체] 새 클라우드 샌드박스에서 이어가요.",
+              "resume queue",
+            ]);
+
+            // A replacement that fails asks the user once.
+            yield* rotation!.failed(lead, "Vercel API가 응답하지 않아요");
+            yield* rotation!.failed(lead, "Vercel API가 응답하지 않아요");
+            const cards = (yield* team.readTask(pm, { taskId: task.id })).openAttention.filter(
+              isSandboxRotationDecision,
+            );
+            assert.strictEqual(cards.length, 1);
+            assert.include(cards[0]!.question, "Vercel API가 응답하지 않아요");
+
+            // "로컬로 가져오기" brings the lead to the Mac.
+            yield* team.answerDecision({
+              projectId: PROJECT_ID,
+              attentionItemId: cards[0]!.id,
+              answer: SANDBOX_ROTATION_MOVE_LOCAL,
+            });
+            const after = yield* team.readTask(pm, { taskId: task.id });
+            assert.strictEqual(after.task.location, "local");
+            assert.strictEqual(thread.shell?.location, "local");
+            assert.deepEqual(released, [lead]);
+            assert.isFalse(after.openAttention.some(isSandboxRotationDecision));
+            assert.include(yield* harness.messagesTo(lead), "[옮김] 클라우드→로컬");
+          }),
+        {
+          cloudLead: fakeHooks({
+            setRotationHandler: (handler) => Effect.sync(() => void (rotation = handler)),
+            release: (threadId) => Effect.sync(() => void released.push(threadId)),
+          }),
+        },
+      );
+    },
   );
 });
