@@ -82,6 +82,7 @@ describe("runMigrations", () => {
         [19, "RemoveTaskProposals"],
         [20, "ProjectAttentionOptionalTask"],
         [21, "ProjectTaskLocation"],
+        [22, "ProjectTaskMoveTarget"],
       ]);
       const rows = yield* sql`
         SELECT question, options_json, context_json FROM project_attention_items
@@ -131,6 +132,7 @@ describe("runMigrations", () => {
         [19, "RemoveTaskProposals"],
         [20, "ProjectAttentionOptionalTask"],
         [21, "ProjectTaskLocation"],
+        [22, "ProjectTaskMoveTarget"],
       ]);
       const tasks = yield* sql`SELECT task_id, stage FROM project_tasks ORDER BY number`;
       assert.deepStrictEqual(tasks, [
@@ -176,6 +178,7 @@ describe("runMigrations", () => {
       assert.deepStrictEqual(yield* runMigrations(), [
         [20, "ProjectAttentionOptionalTask"],
         [21, "ProjectTaskLocation"],
+        [22, "ProjectTaskMoveTarget"],
       ]);
       yield* sql`
         INSERT INTO project_attention_items (

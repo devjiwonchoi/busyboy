@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 
+import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { createAcceptedTask, PROJECT_ID, setUpManager, startLead, withTeam } from "./testkit.ts";
 
@@ -102,6 +103,7 @@ describe("ProjectTeamService location", () => {
         }),
       {
         cloudLead: {
+          ...CloudLeadService.unavailableHooks,
           prepare: () => Effect.die("not used"),
           syncToMac: () => Effect.void,
           release: (threadId) => Effect.sync(() => void released.push(threadId)),

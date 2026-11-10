@@ -31,6 +31,7 @@ import {
 } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
 import { CloudBadge } from "../CloudBadge";
+import { MoveTaskButton } from "../MoveTaskButton";
 import { DecisionCard } from "../chat/DecisionCard";
 import { PlanSummary } from "../chat/PlanMarkdown";
 import {
@@ -237,6 +238,7 @@ function TaskPlanBody(props: {
         </span>
         <TaskPhaseBadge view={taskPhaseView({ ...task, status: status.status })} />
         {task.location === "cloud" ? <CloudBadge /> : null}
+        <MoveTaskButton environmentId={environmentId} projectId={task.projectId} task={task} />
         {relations?.progress ? <SubtaskProgressBadge progress={relations.progress} /> : null}
         <WaitingMarker blockedBy={relations?.blockedBy ?? []} linkToTask />
         <div className="ml-auto">

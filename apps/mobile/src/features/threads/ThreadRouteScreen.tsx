@@ -89,6 +89,7 @@ import {
 import { threadRouteIsHydrating } from "./thread-route-hydration";
 import { useThreadPromptLink } from "../prompt-links/useThreadPromptLink";
 import { ThreadHeader } from "./ThreadHeader";
+import { useMoveTaskControl } from "./useMoveTaskControl";
 import {
   useAndroidWorkspaceBack,
   useWorkspaceListNavigation,
@@ -430,6 +431,7 @@ function ThreadRouteContent(
 
   const usesNativeHeaderGlass = NATIVE_LIQUID_GLASS_SUPPORTED;
   const runsInCloud = selectedThread?.location === "cloud";
+  const moveTask = useMoveTaskControl(selectedThread);
   const headerSubtitle = [
     selectedThreadProject?.title ?? null,
     selectedEnvironmentConnection?.environmentLabel ?? null,
@@ -1082,6 +1084,7 @@ function ThreadRouteContent(
         onOpenFilesInspector={handleOpenFilesInspector}
         onReturnToThread={props.onReturnToThread}
         runsInCloud={runsInCloud}
+        moveTask={moveTask}
       />
 
       {renderThreadRouteBody()}

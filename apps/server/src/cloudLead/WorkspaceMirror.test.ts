@@ -1,10 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 import * as NodeFs from "node:fs/promises";
 import * as NodeOs from "node:os";
+import * as NodeZlib from "node:zlib";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { localMirrorShell, mirrorWorkspace } from "./WorkspaceMirror.ts";
+import { captureWorkspace, localMirrorShell, mirrorWorkspace } from "./WorkspaceMirror.ts";
 
 const shell = localMirrorShell();
 const dirs: string[] = [];
@@ -107,6 +108,19 @@ describe("mirrorWorkspace", () => {
     expect(head).toBe(base);
     expect(await read(`${mac}/a.txt`)).toBe("one\nwip\n");
   });
+
+  it.runIf(process.platform === "darwin")(
+    "packs untracked files without macOS metadata entries",
+    async () => {
+      const { mac, base } = await twoRepos();
+      await git(mac, "echo new > new.txt && xattr -w com.apple.provenance x new.txt");
+      const state = await captureWorkspace(shell, mac, base);
+      // macOS tar -t hides AppleDouble entries, so read the raw archive like Linux tar would.
+      const raw = NodeZlib.gunzipSync(state.untracked!).toString("latin1");
+      expect(raw).toContain("new.txt");
+      expect(raw).not.toContain("._new.txt");
+    },
+  );
 
   it("works in linked worktrees, whose .git is a file", async () => {
     const { mac, sandbox, base } = await twoRepos();

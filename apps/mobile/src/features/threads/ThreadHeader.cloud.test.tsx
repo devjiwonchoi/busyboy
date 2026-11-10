@@ -47,9 +47,11 @@ vi.mock("react-native", () => {
       );
     };
   return {
+    ActivityIndicator: () => null,
     Alert: { alert: () => {} },
     Linking: {},
     Platform: {},
+    Pressable: passthrough("div"),
     View: passthrough("div"),
     Text: passthrough("span"),
     TextInput: passthrough("span"),

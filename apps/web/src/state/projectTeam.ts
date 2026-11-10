@@ -18,6 +18,7 @@ import type {
   ProjectId,
   ProjectTeamAnswerDecisionInput,
   ProjectTeamAskLeadInput,
+  ProjectTeamMoveTaskInput,
   ProjectTeamRestoreTaskSpecInput,
   ProjectTeamSetTaskRoleModelsInput,
   ProjectTeamSplitTaskTodoInput,
@@ -315,6 +316,13 @@ export function useSetTaskRoleModels() {
   const setTaskRoleModels = useAtomCommand(projectTeamEnvironment.setTaskRoleModels);
   return (environmentId: EnvironmentId, input: ProjectTeamSetTaskRoleModelsInput) =>
     setTaskRoleModels({ environmentId, input });
+}
+
+/** Moves a task's lead between the Mac and a cloud sandbox; resolves once the move is done. */
+export function useMoveTask() {
+  const moveTask = useAtomCommand(projectTeamEnvironment.moveTask, { reportFailure: false });
+  return (environmentId: EnvironmentId, input: ProjectTeamMoveTaskInput) =>
+    moveTask({ environmentId, input });
 }
 
 /** One task's detail, refetched whenever the team's attention changes. */

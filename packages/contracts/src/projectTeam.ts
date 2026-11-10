@@ -379,6 +379,8 @@ export const ProjectTask = Schema.Struct({
   leadThreadId: Schema.NullOr(ThreadId),
   /** Where the task's lead runs, set when the task starts; absent means local. */
   location: Schema.optional(ExecutionLocation),
+  /** Set while the lead is being moved there; null or absent otherwise. */
+  moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
   resultSummary: Schema.NullOr(Schema.String),
@@ -708,6 +710,24 @@ export function isTurnFailedBlocker(item: Pick<ProjectAttentionItem, "kind" | "o
     item.kind === "blocker" &&
     item.options.length === TURN_FAILED_OPTIONS.length &&
     item.options.every((option, index) => option === TURN_FAILED_OPTIONS[index])
+  );
+}
+
+/** The decision raised when a cloud lead's sandbox could not be replaced before its limit. */
+export const SANDBOX_ROTATION_MOVE_LOCAL = "로컬로 가져오기";
+export const SANDBOX_ROTATION_KEEP = "클라우드에 두기";
+export const SANDBOX_ROTATION_OPTIONS = [
+  SANDBOX_ROTATION_MOVE_LOCAL,
+  SANDBOX_ROTATION_KEEP,
+] as const;
+
+export function isSandboxRotationDecision(
+  item: Pick<ProjectAttentionItem, "kind" | "options">,
+): boolean {
+  return (
+    item.kind === "decision" &&
+    item.options.length === SANDBOX_ROTATION_OPTIONS.length &&
+    item.options.every((option, index) => option === SANDBOX_ROTATION_OPTIONS[index])
   );
 }
 
@@ -1788,6 +1808,8 @@ export const ProjectTaskReference = Schema.Struct({
   stage: ProjectTaskStage,
   leadThreadId: Schema.NullOr(ThreadId),
   location: Schema.optional(ExecutionLocation),
+  /** Where the lead is being moved; null or absent when it is not moving. */
+  moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
   /** The task's pull request, shown on its sidebar row while in review. */
   prUrl: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** How the lead's last turn ended; "stalled" marks a live task that stopped making progress. */
@@ -2115,6 +2137,14 @@ export const ProjectTeamSetTaskRoleModelsInput = Schema.Struct({
   roleModels: ProjectTaskRoleModelsPatch,
 });
 export type ProjectTeamSetTaskRoleModelsInput = typeof ProjectTeamSetTaskRoleModelsInput.Type;
+
+/** projectTeam.moveTask: the user moves a task's lead between the Mac and a cloud sandbox. */
+export const ProjectTeamMoveTaskInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  to: ExecutionLocation,
+});
+export type ProjectTeamMoveTaskInput = typeof ProjectTeamMoveTaskInput.Type;
 
 export class ProjectTeamError extends Schema.TaggedError<ProjectTeamError>()("ProjectTeamError", {
   message: Schema.String,

@@ -1,5 +1,5 @@
 import { StackActions, useNavigation } from "@react-navigation/native";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { isDuoDevice } from "../../lib/device-type";
 import type { AppNativeStackNavigationOptions } from "../../native/StackHeader";
 import { useDeviceType } from "../../native/native-layout-metrics";
@@ -7,6 +7,7 @@ import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspace
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import { CloudPill } from "./CloudPill";
+import { MoveTaskButton, type MoveTaskControlProps } from "./MoveTaskButton";
 import {
   ThreadGitControls,
   useThreadGitCenterHeaderItems,
@@ -31,6 +32,8 @@ export function useThreadHeaderOptions(props: {
   readonly onReturnToThread?: () => void;
   /** Set for a task lead that runs in a cloud sandbox; shows a small Cloud pill. */
   readonly runsInCloud?: boolean;
+  /** Set for a task lead's thread; shows the move between Mac and cloud button. */
+  readonly moveTask?: MoveTaskControlProps | null;
 }) {
   const usesNativeWorkspaceColumns = useNativeWorkspaceColumnsSupported();
   const deviceType = useDeviceType();
@@ -39,14 +42,45 @@ export function useThreadHeaderOptions(props: {
   const { layout, panes, togglePrimarySidebar } = useAdaptiveWorkspaceLayout();
   const gitCenterHeaderItems = useThreadGitCenterHeaderItems(props.gitControls);
   const gitRightHeaderItems = useThreadGitRightHeaderItems(props.gitControls);
-  // The Cloud pill leads the trailing items, so it sits nearest the title.
+  // The item re-renders only when what it shows changes; presses read the latest callbacks.
+  const moveTaskRef = useRef(props.moveTask);
+  moveTaskRef.current = props.moveTask;
+  const moveTaskShown = props.moveTask != null;
+  const moveLocation = props.moveTask?.location;
+  const movingTo = props.moveTask?.movingTo ?? null;
+  const moveDisabledReason = props.moveTask?.disabledReason ?? null;
+  const leadingHeaderItems = useMemo<NativeHeaderItems>(
+    () => [
+      ...(props.runsInCloud ? [CLOUD_HEADER_ITEM] : []),
+      ...(moveTaskShown && moveLocation !== undefined
+        ? [
+            {
+              type: "custom" as const,
+              identifier: "thread-right-move-task",
+              element: (
+                <MoveTaskButton
+                  location={moveLocation}
+                  movingTo={movingTo}
+                  disabledReason={moveDisabledReason}
+                  onMove={(to) => moveTaskRef.current?.onMove(to)}
+                  onExplainDisabled={(reason) => moveTaskRef.current?.onExplainDisabled(reason)}
+                />
+              ),
+              hidesSharedBackground: true,
+            },
+          ]
+        : []),
+    ],
+    [props.runsInCloud, moveTaskShown, moveLocation, movingTo, moveDisabledReason],
+  );
+  // The Cloud pill and move button lead the trailing items, so they sit nearest the title.
   const threadCenterHeaderItems = useMemo<NativeHeaderItems>(
-    () => (props.runsInCloud ? [CLOUD_HEADER_ITEM, ...gitCenterHeaderItems] : gitCenterHeaderItems),
-    [props.runsInCloud, gitCenterHeaderItems],
+    () => [...leadingHeaderItems, ...gitCenterHeaderItems],
+    [leadingHeaderItems, gitCenterHeaderItems],
   );
   const compactRightHeaderItems = useMemo<NativeHeaderItems>(
-    () => (props.runsInCloud ? [CLOUD_HEADER_ITEM, ...gitRightHeaderItems] : gitRightHeaderItems),
-    [props.runsInCloud, gitRightHeaderItems],
+    () => [...leadingHeaderItems, ...gitRightHeaderItems],
+    [leadingHeaderItems, gitRightHeaderItems],
   );
   const splitLeftHeaderItems = useMemo<NativeHeaderItems>(
     () => [

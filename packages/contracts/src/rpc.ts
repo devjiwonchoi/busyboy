@@ -353,6 +353,7 @@ import {
   ProjectTeamSplitTaskTodoInput,
   ProjectTeamSplitTaskTodoResult,
   ProjectTeamSetTaskRoleModelsInput,
+  ProjectTeamMoveTaskInput,
   ProjectTeamTaskDetail,
   ProjectTeamTaskRefInput,
   ProjectTeamUpdateTaskSpecInput,
@@ -531,6 +532,7 @@ export const WS_METHODS = {
   projectTeamRestoreTaskSpec: "projectTeam.restoreTaskSpec",
   projectTeamSplitTaskTodo: "projectTeam.splitTaskTodo",
   projectTeamSetTaskRoleModels: "projectTeam.setTaskRoleModels",
+  projectTeamMoveTask: "projectTeam.moveTask",
 
   pullRequestsList: "pullRequests.list",
   pullRequestsListStats: "pullRequests.listStats",
@@ -1882,6 +1884,12 @@ const WsProjectTeamSetTaskRoleModelsRpc = Rpc.make(WS_METHODS.projectTeamSetTask
   error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
 });
 
+const WsProjectTeamMoveTaskRpc = Rpc.make(WS_METHODS.projectTeamMoveTask, {
+  payload: ProjectTeamMoveTaskInput,
+  success: ProjectTeamTaskDetail,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
 const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
@@ -1986,6 +1994,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectTeamRestoreTaskSpecRpc,
   WsProjectTeamSplitTaskTodoRpc,
   WsProjectTeamSetTaskRoleModelsRpc,
+  WsProjectTeamMoveTaskRpc,
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,
   WsServerGetBackgroundPolicyRpc,

@@ -33,6 +33,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import { makeIsManagedWorktreePath } from "../worktreesDirectory.ts";
 import * as EventSink from "./EventSink.ts";
 import * as ContextHandoffService from "./ContextHandoffService.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import {
   DEFAULT_HANDOFF_TOKEN_CAP,
   handoffTokenCapConfig,
@@ -106,6 +107,7 @@ export const layer: Layer.Layer<
   Effect.gen(function* () {
     const eventSink = yield* EventSink.EventSinkV2;
     const contextHandoffService = yield* ContextHandoffService.ContextHandoffServiceV2;
+    const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -655,15 +657,19 @@ export const layer: Layer.Layer<
             handoff.delivery?.nativeThreadId === providerThread.nativeThreadRef?.nativeId &&
             handoff.delivery?.status === "pending",
         );
+        // A moved task lead whose transcript did not arrive starts fresh with a summary.
+        const movedWithoutTranscript = leadMoveGate.takeFreshSession(projection.thread.id);
         const resumed = yield* Effect.result(
-          uncertainDelivery
+          uncertainDelivery || movedWithoutTranscript
             ? Effect.fail(
                 new ProviderAdapter.ProviderAdapterTurnStartError({
                   driver: session.driver,
                   threadId: projection.thread.id,
                   providerThreadId: providerThread.id,
                   runId,
-                  cause: "Uncertain native history injection",
+                  cause: movedWithoutTranscript
+                    ? "The transcript did not move with the thread"
+                    : "Uncertain native history injection",
                 }),
               )
             : session.resumeThread({
@@ -681,7 +687,11 @@ export const layer: Layer.Layer<
           driver: session.driver,
           providerThreadId: providerThread.id,
           runId,
-          reason: uncertainDelivery ? "uncertain_history_delivery" : "resume_failed",
+          reason: movedWithoutTranscript
+            ? "moved_without_transcript"
+            : uncertainDelivery
+              ? "uncertain_history_delivery"
+              : "resume_failed",
           errorTag: resumed.failure._tag,
         });
         const replacement = yield* loadFromProvider(

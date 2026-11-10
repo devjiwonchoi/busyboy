@@ -44,6 +44,9 @@ const KEEPALIVE_EVERY_MS = 10 * 60 * 1000;
 const MAX_IDLE_SYNC_FAILURES = 3;
 const DEFAULT_IDLE_STOP_MS = 30 * 60 * 1000;
 const RELAY_CONNECT_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_ROTATION_MARGIN_MS = 30 * 60 * 1000;
+const DEFAULT_ROTATION_CHECK_MS = 60 * 1000;
 const SETUP_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** Secrets a cloud lead needs, passed to the sandbox only as command env. */
@@ -72,6 +75,27 @@ export interface CloudLeadRuntimeDeps {
   /** The model local claude picks when settings name none; see SyncLocations.defaultModel. */
   readonly defaultModel?: () => Promise<string | undefined>;
   readonly log?: (event: string, data: Record<string, unknown>) => void;
+  /** How long a sandbox may live; it is replaced rotationMarginMs before that. */
+  readonly maxLifetimeMs?: number;
+  readonly rotationMarginMs?: number;
+  /** How often a live sandbox looks at its age. */
+  readonly rotationCheckMs?: number;
+  /** The clock sandbox ages are read from; tests pass a fake one. */
+  readonly now?: () => number;
+}
+
+/**
+ * What the service layer does around a sandbox replaced mid-turn: stop the
+ * turn with its queue held, then let the queue run on the new sandbox. A
+ * failed replacement is reported so the user can bring the lead to the Mac.
+ */
+export interface CloudLeadRotationHandler {
+  /** True while the lead is being moved; the rotation waits for the next check. */
+  readonly busy?: (threadId: string) => boolean;
+  /** Stops the thread's running turn, holding its queue; resolves once it ended. */
+  readonly interrupt: (threadId: string) => Promise<void>;
+  readonly resume: (threadId: string) => Promise<void>;
+  readonly failed: (threadId: string, reason: string) => Promise<void>;
 }
 
 export interface CloudSpawnOptions {
@@ -104,6 +128,11 @@ interface CloudSession {
   /** How many turns prepared this sandbox; an idle stop gives up if it changes. */
   uses: number;
   released: boolean;
+  /** When the sandbox was created, on deps.now's clock. */
+  readonly createdAt: number;
+  rotationCheck: ReturnType<typeof setInterval> | null;
+  /** A failed replacement is not tried again on the same sandbox. */
+  rotation: "idle" | "rotating" | "failed";
 }
 
 /** SDK env keys that configure claude itself and mean the same in the sandbox. */
@@ -119,15 +148,44 @@ const DROP_ENV = new Set([
 
 const isScript = (path: string) => /\.(c|m)?js$/.test(path);
 
+/**
+ * Copies claude session files (<id>.jsonl and its <id>/ folder) from $1 to $2,
+ * readable only by the user. Project memory and other files stay put.
+ */
+const TRANSCRIPT_SHELL = `set -e
+umask 077
+copy_sessions() {
+  for f in "$1"/*.jsonl; do
+    [ -f "$f" ] || continue
+    name=$(basename "$f" .jsonl)
+    cp "$f" "$2/$name.jsonl"
+    chmod 600 "$2/$name.jsonl"
+    if [ -d "$1/$name" ]; then
+      rm -rf "$2/$name"
+      cp -R "$1/$name" "$2/$name"
+      chmod -R go-rwx "$2/$name"
+    fi
+  done
+}`;
+
 export class CloudLeadRuntime {
   private readonly deps: CloudLeadRuntimeDeps;
   private readonly sessions = new Map<string, Promise<CloudSession>>();
   private readonly syncs = new Map<string, Promise<{ readonly head: string } | null>>();
   /** Sandboxes being mirrored a last time and deleted; a new turn waits for these. */
   private readonly releasing = new Map<string, Promise<void>>();
+  private rotationHandler: CloudLeadRotationHandler | null = null;
 
   constructor(deps: CloudLeadRuntimeDeps) {
     this.deps = deps;
+  }
+
+  setRotationHandler(handler: CloudLeadRotationHandler | null) {
+    this.rotationHandler = handler;
+  }
+
+  private now() {
+    return (this.deps.now ?? Date.now)();
   }
 
   private get ports() {
@@ -143,6 +201,10 @@ export class CloudLeadRuntime {
     const session = await this.session(input);
     // Released between the lookup and now: wait for that and take a new sandbox.
     if (session.released) return this.prepare(input);
+    // Near its limit and between turns: replace it before this turn starts.
+    if (session.running === 0 && session.rotation === "idle" && this.rotationDue(session)) {
+      if (await this.rotate(session, false)) return this.prepare(input);
+    }
     this.cancelIdleStop(session);
     session.uses += 1;
     const mcpPath = new URL(input.mcpEndpoint).pathname;
@@ -224,6 +286,7 @@ export class CloudLeadRuntime {
         );
       }
       clearInterval(session.keepAlive);
+      if (session.rotationCheck !== null) clearInterval(session.rotationCheck);
       session.relay.close();
       await session.sandbox.delete().catch(() => undefined);
       this.log("cloud-lead.sandbox-released", { threadId, sandbox: session.sandbox.name });
@@ -271,10 +334,8 @@ export class CloudLeadRuntime {
     readonly mcpEndpoint: string;
   }): Promise<CloudSession> {
     const started = Date.now();
-    const [client, credentials] = await Promise.all([
-      this.deps.client(),
-      this.deps.credentials(),
-    ]);
+    const createdAt = this.now();
+    const [client, credentials] = await Promise.all([this.deps.client(), this.deps.credentials()]);
     const snapshotId = await this.deps.baseSnapshotId(client, input.worktreePath);
     const sandbox = await client.create({
       ...(snapshotId === null ? {} : { snapshotId }),
@@ -318,7 +379,7 @@ export class CloudLeadRuntime {
         );
       }, KEEPALIVE_EVERY_MS);
       keepAlive.unref?.();
-      return {
+      const session: CloudSession = {
         threadId: input.threadId,
         sandbox,
         relay,
@@ -332,7 +393,17 @@ export class CloudLeadRuntime {
         idleSyncFailures: 0,
         uses: 0,
         released: false,
+        createdAt,
+        rotationCheck: null,
+        rotation: "idle",
       };
+      session.rotationCheck = setInterval(() => {
+        if (session.rotation === "idle" && this.rotationDue(session)) {
+          void this.rotate(session, session.running > 0);
+        }
+      }, this.deps.rotationCheckMs ?? DEFAULT_ROTATION_CHECK_MS);
+      session.rotationCheck.unref?.();
+      return session;
     } catch (error) {
       await sandbox.delete().catch(() => undefined);
       throw error;
@@ -450,6 +521,69 @@ export class CloudLeadRuntime {
     return child;
   }
 
+  /**
+   * Puts the Mac's claude transcripts for `macCwd` into the thread's backup,
+   * over any older copies, so the next sandbox restores them and resumes.
+   */
+  async importTranscripts(threadId: string, macCwd: string): Promise<void> {
+    const backup = this.transcriptBackupPath(threadId);
+    await this.mac().run(
+      [
+        TRANSCRIPT_SHELL,
+        `src=${shellQuote(await this.macTranscriptDir(macCwd))}`,
+        `backup=${shellQuote(backup)}`,
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT",
+        'if [ -f "$backup" ]; then tar -xzf "$backup" -C "$tmp"; fi',
+        'if [ -d "$src" ]; then copy_sessions "$src" "$tmp"; fi',
+        'if [ -z "$(ls -A "$tmp")" ]; then exit 0; fi',
+        'mkdir -p "$(dirname "$backup")"; chmod 700 "$(dirname "$backup")"',
+        'tar -czf "$backup.part" -C "$tmp" .',
+        'chmod 600 "$backup.part"; mv -f "$backup.part" "$backup"',
+      ].join("\n"),
+    );
+  }
+
+  /** Unpacks the thread's transcript backup into the Mac's claude folder for `macCwd`. */
+  async exportTranscripts(threadId: string, macCwd: string): Promise<void> {
+    await this.mac().run(
+      [
+        TRANSCRIPT_SHELL,
+        `dst=${shellQuote(await this.macTranscriptDir(macCwd))}`,
+        `backup=${shellQuote(this.transcriptBackupPath(threadId))}`,
+        'if [ ! -f "$backup" ]; then exit 0; fi',
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT",
+        'tar -xzf "$backup" -C "$tmp"',
+        'mkdir -p "$dst"; chmod 700 "$dst"',
+        'copy_sessions "$tmp" "$dst"',
+      ].join("\n"),
+    );
+  }
+
+  /** Whether claude session `sessionId` can resume at `location` for this thread. */
+  async hasTranscript(input: {
+    readonly threadId: string;
+    readonly macCwd: string;
+    readonly sessionId: string;
+    readonly location: "local" | "cloud";
+  }): Promise<boolean> {
+    const name = `${input.sessionId}.jsonl`;
+    const script =
+      input.location === "local"
+        ? `if [ -f ${shellQuote(`${await this.macTranscriptDir(input.macCwd)}/${name}`)} ]; then echo yes; fi`
+        : `if tar -tzf ${shellQuote(this.transcriptBackupPath(input.threadId))} 2>/dev/null | grep -qxF -e ${shellQuote(`./${name}`)} -e ${shellQuote(name)}; then echo yes; fi`;
+    return (await this.mac().run(script)).trim() === "yes";
+  }
+
+  private mac() {
+    return this.deps.macShell ?? localMirrorShell();
+  }
+
+  /** Where Mac claude keeps transcripts for a cwd; it names the folder after the real path. */
+  private async macTranscriptDir(macCwd: string) {
+    const real = await NodeFs.realpath(macCwd).catch(() => macCwd);
+    return `${this.deps.host.env.HOME ?? ""}/.claude/projects/${encodeProjectDir(real)}`;
+  }
+
   private transcriptBackupPath(threadId: string) {
     const name = NodeCrypto.createHash("sha256").update(threadId).digest("hex").slice(0, 32);
     return `${this.deps.stateDir}/cloud-lead-sessions/${name}.tgz`;
@@ -469,7 +603,7 @@ export class CloudLeadRuntime {
     const content = await session.sandbox.readFile(archive);
     if (content === null) return;
     const path = this.transcriptBackupPath(session.threadId);
-    await NodeFs.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+    await NodeFs.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true, mode: 0o700 });
     await NodeFs.writeFile(path, content, { mode: 0o600 });
   }
 
@@ -489,6 +623,53 @@ export class CloudLeadRuntime {
     } catch (error) {
       // A transcript holding a token-shaped string is refused; the turn starts fresh instead.
       this.log("cloud-lead.transcript-restore-skipped", { threadId, error: String(error) });
+    }
+  }
+
+  private rotationDue(session: CloudSession) {
+    const lifetime = this.deps.maxLifetimeMs ?? DEFAULT_MAX_LIFETIME_MS;
+    const margin = this.deps.rotationMarginMs ?? DEFAULT_ROTATION_MARGIN_MS;
+    return this.now() - session.createdAt >= lifetime - margin;
+  }
+
+  /**
+   * Replaces a sandbox near its lifetime limit: stops a running turn through
+   * the handler, mirrors the work and transcripts to the Mac, and deletes the
+   * sandbox, so the next turn starts a new one and resumes the same session.
+   * True when the sandbox was replaced.
+   */
+  private async rotate(session: CloudSession, midTurn: boolean): Promise<boolean> {
+    if (session.released || session.rotation !== "idle") return false;
+    const handler = this.rotationHandler;
+    const threadId = session.threadId;
+    if (handler?.busy?.(threadId) === true) return false;
+    session.rotation = "rotating";
+    const uses = session.uses;
+    try {
+      if (midTurn) {
+        if (handler === null) throw new Error("Nothing can stop the running turn.");
+        await handler.interrupt(threadId);
+      }
+      if (session.released) return true;
+      // A failed mirror throws here and keeps the sandbox, so no work is lost.
+      await this.syncToMac(threadId);
+      // Between turns, a turn that began during the mirror keeps this sandbox for now.
+      if (!midTurn && (session.running > 0 || session.uses !== uses)) {
+        session.rotation = "idle";
+        return false;
+      }
+      await this.release(threadId, { synced: true });
+      this.log("cloud-lead.sandbox-rotated", { threadId, sandbox: session.sandbox.name, midTurn });
+      if (midTurn) await handler?.resume(threadId);
+      return true;
+    } catch (error) {
+      session.rotation = "failed";
+      this.log("cloud-lead.sandbox-rotation-failed", { threadId, error: String(error) });
+      if (midTurn) await handler?.resume(threadId).catch(() => undefined);
+      await handler
+        ?.failed(threadId, error instanceof Error ? error.message : String(error))
+        .catch(() => undefined);
+      return false;
     }
   }
 
