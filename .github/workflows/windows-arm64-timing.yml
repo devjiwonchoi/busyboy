@@ -18,10 +18,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: arm64, runner: windows-11-arm, variant: baseline }
-          - { arch: arm64, runner: windows-11-arm, variant: defender-off }
-          - { arch: arm64, runner: windows-11-arm, variant: dev-drive }
-          - { arch: x64, runner: windows-latest, variant: defender-off }
+          - { arch: arm64, runner: windows-11-arm, variant: exclusions, exclude: true, filter: false }
+          - { arch: arm64, runner: windows-11-arm, variant: no-mobile, exclude: false, filter: true }
+          - { arch: arm64, runner: windows-11-arm, variant: exclusions+no-mobile, exclude: true, filter: true }
+          - { arch: x64, runner: windows-latest, variant: exclusions+no-mobile, exclude: true, filter: true }
     defaults:
       run:
         shell: bash
@@ -30,28 +30,20 @@ jobs:
         shell: pwsh
         run: Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,IsTamperProtected | Format-List
 
-      - name: Turn off Defender real-time scanning
-        if: matrix.variant == 'defender-off'
+      # Real-time scanning can't be turned off on windows-11-arm (tamper protection),
+      # but it can skip the folders and tools the install writes with.
+      - name: Exclude build folders from Defender
+        if: matrix.exclude
         shell: pwsh
         run: |
-          Set-MpPreference -DisableRealtimeMonitoring $true
-          Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled | Format-List
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:RUNNER_TOOL_CACHE, $env:USERPROFILE, $env:TEMP
+          Add-MpPreference -ExclusionProcess node.exe, tar.exe, zstd.exe, cargo.exe, rustc.exe
+          (Get-MpPreference).ExclusionPath
+          (Get-MpPreference).ExclusionProcess
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-
-      - name: Set up Dev Drive
-        if: matrix.variant == 'dev-drive'
-        uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
-        with:
-          drive-size: 20GB
-          workspace-copy: true
-          env-mapping: |
-            npm_config_store_dir,{{ DEV_DRIVE }}/pnpm-store
-
-      - name: Pick working directory
-        run: echo "WORK=${DEV_DRIVE_WORKSPACE:-$GITHUB_WORKSPACE}" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
@@ -61,8 +53,12 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        working-directory: ${{ env.WORK }}
-        run: pnpm install --frozen-lockfile
+        run: |
+          if [ "${{ matrix.filter }}" = true ]; then
+            pnpm install --frozen-lockfile --filter '!@t3tools/mobile'
+          else
+            pnpm install --frozen-lockfile
+          fi
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch, 2026-11-05
         with:
@@ -70,18 +66,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: ${{ env.WORK }}/native/resource-monitor -> target
+          workspaces: native/resource-monitor -> target
 
       - name: Build NSIS installer
-        working-directory: ${{ env.WORK }}
         run: node scripts/build-desktop-release.ts --version 0.0.999 --arch "${{ matrix.arch }}" --out release
 
       - name: List artifacts
-        working-directory: ${{ env.WORK }}
         run: ls -la release
 
       - name: Install and launch the app
-        working-directory: ${{ env.WORK }}
         shell: pwsh
         run: |
           $installer = Get-ChildItem release/BusyBoy-Setup-*-${{ matrix.arch }}.exe | Select-Object -First 1
