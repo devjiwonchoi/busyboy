@@ -212,6 +212,7 @@ import {
   toDelegateTarget,
 } from "./roleModels.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
+import { liveTaskChildren, taskChildren } from "./taskChildren.ts";
 import { allocateTaskKeyPrefixes } from "./taskKeyPrefixes.ts";
 import { resolveUserLanguage } from "./userLanguage.ts";
 
@@ -3981,6 +3982,30 @@ const make = Effect.gen(function* () {
   const moveTask: ProjectTeamService["Service"]["moveTask"] = (input) =>
     Effect.gen(function* () {
       const task = yield* requireTask(input.taskId, input.projectId);
+      // Children on the lead's checkout run where it runs: none may be mid-turn during a move.
+      const sharedChildren = (lead: ThreadId, worktreePath: string, live: boolean) =>
+        threads.listProjectThreads({ projectId: task.projectId, includeSubagents: true }).pipe(
+          Effect.map((shells) =>
+            (live ? liveTaskChildren : taskChildren)(shells, lead).filter(
+              (child) => child.worktreePath === worktreePath,
+            ),
+          ),
+          orTeamError("Could not list the task's child sessions.", task.projectId),
+        );
+      if (task.leadThreadId !== null) {
+        const leadShell = yield* threads
+          .getThreadShell(task.leadThreadId)
+          .pipe(Effect.orElseSucceed(() => null));
+        if (leadShell?.worktreePath != null) {
+          const working = yield* sharedChildren(task.leadThreadId, leadShell.worktreePath, true);
+          if (working.length > 0) {
+            return yield* teamError(
+              `리드가 맡긴 작업(${working.map((child) => child.title).join(", ")})이 아직 진행 중이라 옮길 수 없어요. 끝난 뒤 다시 옮겨 주세요.`,
+              task.projectId,
+            );
+          }
+        }
+      }
       const moved = yield* moveTaskLead(
         {
           threads,
@@ -3998,6 +4023,10 @@ const make = Effect.gen(function* () {
           publish: (target) => router.publish(target.projectId),
           newKey: (prefix) => newId(prefix).pipe(Effect.orDie),
           isFinished: (target) => FinishedTaskCleanup.isFinishedStage(target.stage),
+          sharedChildren: (lead, worktreePath) =>
+            sharedChildren(lead, worktreePath, false).pipe(
+              Effect.map((children) => children.map((child) => child.id)),
+            ),
         },
         task,
         input.to,

@@ -257,6 +257,19 @@ export class CloudLeadRuntime {
     return this.deps.ports ?? { relay: RELAY_PORT, mcp: RELAY_MCP_PORT };
   }
 
+  /**
+   * The sandbox key (Mac worktree) for a thread that prepared a turn, or a Mac
+   * worktree itself: a move finds the sandbox even when only a child of the
+   * lead has run in it since it was started.
+   */
+  private keyOf(threadOrWorktree: string): string | undefined {
+    const key = this.worktrees.get(threadOrWorktree);
+    if (key !== undefined) return key;
+    return this.sessions.has(threadOrWorktree) || this.releasing.has(threadOrWorktree)
+      ? threadOrWorktree
+      : undefined;
+  }
+
   /** Gets the thread's sandbox ready and returns how to run claude or codex in it. */
   async prepare(input: PrepareInput): Promise<CloudLaunch> {
     this.worktrees.set(input.threadId, input.worktreePath);
@@ -352,7 +365,7 @@ export class CloudLeadRuntime {
    * syncs of one thread run one at a time.
    */
   syncToMac(threadId: string): Promise<{ readonly head: string } | null> {
-    const key = this.worktrees.get(threadId);
+    const key = this.keyOf(threadId);
     return key === undefined ? Promise.resolve(null) : this.syncKey(key);
   }
 
@@ -408,7 +421,7 @@ export class CloudLeadRuntime {
    * transcripts stay, so a later turn starts a new sandbox from them.
    */
   release(threadId: string, options: { readonly synced?: boolean } = {}): Promise<void> {
-    const key = this.worktrees.get(threadId);
+    const key = this.keyOf(threadId);
     return key === undefined ? Promise.resolve() : this.releaseKey(key, options);
   }
 
@@ -461,7 +474,7 @@ export class CloudLeadRuntime {
   }
 
   hasSession(threadId: string): boolean {
-    const key = this.worktrees.get(threadId);
+    const key = this.keyOf(threadId);
     return key !== undefined && this.sessions.has(key);
   }
 
@@ -939,7 +952,14 @@ export class CloudLeadRuntime {
     if (session.released || session.rotation !== "idle") return false;
     const handler = this.rotationHandler;
     const threadId = session.threadId;
-    if (handler?.busy?.(threadId) === true) return false;
+    // Any thread in this sandbox being moved (the lead, or a child that started it) waits it out.
+    const inSandbox = [...this.worktrees].filter(([, key]) => key === session.key);
+    if (
+      handler?.busy !== undefined &&
+      [threadId, ...inSandbox.map(([thread]) => thread)].some((thread) => handler.busy!(thread))
+    ) {
+      return false;
+    }
     session.rotation = "rotating";
     const uses = session.uses;
     // Every thread with a turn running here: the lead and the children sharing its sandbox.

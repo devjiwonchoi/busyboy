@@ -63,6 +63,14 @@ export interface TaskMoverDeps extends LeadControlDeps {
   readonly note: (task: ProjectTask, body: string) => Effect.Effect<unknown, ProjectTeamError>;
   readonly publish: (task: ProjectTask) => Effect.Effect<void>;
   readonly isFinished: (task: ProjectTask) => boolean;
+  /**
+   * The lead's children that work in its checkout (and so in its sandbox);
+   * they move with it. The caller refuses a move while one of them is working.
+   */
+  readonly sharedChildren?: (
+    lead: ThreadId,
+    worktreePath: string,
+  ) => Effect.Effect<ReadonlyArray<ThreadId>, ProjectTeamError>;
 }
 
 const PLACE: Record<ExecutionLocation, string> = { local: "로컬", cloud: "클라우드" };
@@ -111,24 +119,61 @@ export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: Executi
       .setMove({ task, moveTarget: to, expectedMoveTarget: null })
       .pipe(Effect.mapError((cause) => new TaskMoveError({ detail: detailOf(cause) })));
     if (Option.isNone(claimed)) return yield* fail("이미 옮기는 중이에요.");
+    const children =
+      deps.sharedChildren === undefined
+        ? []
+        : yield* deps
+            .sharedChildren(lead, worktreePath)
+            .pipe(Effect.orElseSucceed((): ReadonlyArray<ThreadId> => []));
+    // The children on the lead's checkout wait out the move too: a turn of theirs
+    // at the old place would edit the checkout the lead has left.
     deps.gate.hold(lead, "move");
+    for (const child of children) deps.gate.hold(child, "move");
     yield* deps.publish(claimed.value);
 
-    const { dispatch, tellLead, resumeQueue, stopTurn } = leadControl(deps, lead, "move");
-    const setThreadLocation = (location: ExecutionLocation) =>
+    const {
+      dispatch,
+      tellLead,
+      resumeQueue: resumeLead,
+      stopTurn,
+    } = leadControl(deps, lead, "move");
+    const resumeQueue = Effect.gen(function* () {
+      yield* resumeLead;
+      for (const child of children) yield* leadControl(deps, child, "move").resumeQueue;
+    });
+    const setLocation = (threadId: ThreadId, location: ExecutionLocation) =>
       dispatch(
         (key) => ({
           type: "thread.metadata.update",
           commandId: CommandId.make(key),
-          threadId: lead,
+          threadId,
           location,
         }),
         "location",
       );
+    // The lead's children share its checkout, so their next turns go where it went.
+    const setThreadLocation = (location: ExecutionLocation) =>
+      Effect.forEach([lead, ...children], (threadId) => setLocation(threadId, location), {
+        discard: true,
+      });
     const state = { interrupted: false, transcriptMissing: false };
 
     const steps = Effect.gen(function* () {
       // 1. Stop the lead's turn where it runs now; later messages wait.
+      // A child that started a turn before it was held must finish first.
+      for (const child of children) {
+        const shell = yield* deps.threads
+          .getThreadShell(child)
+          .pipe(Effect.orElseSucceed(() => null));
+        if (
+          shell !== null &&
+          (shell.activeRunId !== null || shell.pendingRuntimeRequest !== null)
+        ) {
+          return yield* fail(
+            `리드가 맡긴 작업(${shell.title})이 아직 진행 중이라 옮길 수 없어요. 끝난 뒤 다시 옮겨 주세요.`,
+          );
+        }
+      }
       state.interrupted = yield* stopTurn;
       // 2. Carry the transcripts and flip the place.
       if (to === "cloud") {
@@ -136,10 +181,11 @@ export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: Executi
           .importTranscripts({ threadId: lead, worktreePath })
           .pipe(Effect.mapError((error) => new TaskMoveError({ detail: error.detail })));
       } else {
+        // By worktree: the sandbox is the lead's checkout, whichever thread last started it.
         yield* deps.cloudLead
-          .syncToMac(lead)
+          .syncToMac(worktreePath)
           .pipe(Effect.mapError((error) => new TaskMoveError({ detail: error.detail })));
-        yield* deps.cloudLead.release(lead);
+        yield* deps.cloudLead.release(worktreePath);
         yield* deps.cloudLead
           .exportTranscripts({ threadId: lead, worktreePath })
           .pipe(Effect.mapError((error) => new TaskMoveError({ detail: error.detail })));
