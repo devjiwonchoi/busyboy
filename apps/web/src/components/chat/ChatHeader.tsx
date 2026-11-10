@@ -425,7 +425,7 @@ export const ChatHeader = memo(function ChatHeader({
               <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
             </Tooltip>
           )}
-          {renamingTitle === null && leadTask?.task.location === "cloud" ? (
+          {renamingTitle === null && activeThreadShell?.location === "cloud" ? (
             <CloudBadge className="ms-2 shrink-0 font-normal" />
           ) : null}
         </WorkspaceBreadcrumbItem>

@@ -31,7 +31,6 @@ import { Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useConnectionsReady } from "../../state/workspace";
 import { useEnvironmentShellReadiness } from "../../state/shell";
-import { useLeadThreadRunsInCloud } from "../../state/projectTeam";
 import { restoredNewTaskDraftKey } from "../../state/new-task-draft-key";
 import { clearPendingThreadCreationOutcome } from "../../state/pending-thread-creation";
 import { recoverFailedThreadDraft } from "../../state/recover-failed-thread-draft";
@@ -430,7 +429,7 @@ function ThreadRouteContent(
   );
 
   const usesNativeHeaderGlass = NATIVE_LIQUID_GLASS_SUPPORTED;
-  const runsInCloud = useLeadThreadRunsInCloud(selectedThread);
+  const runsInCloud = selectedThread?.location === "cloud";
   const headerSubtitle = [
     selectedThreadProject?.title ?? null,
     selectedEnvironmentConnection?.environmentLabel ?? null,

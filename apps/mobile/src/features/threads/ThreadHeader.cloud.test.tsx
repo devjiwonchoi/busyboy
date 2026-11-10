@@ -73,14 +73,16 @@ vi.mock("../settings/appearance/AppearancePreferencesProvider", () => ({
 
 import { ThreadHeader } from "./ThreadHeader";
 
-function Header(props: { readonly runsInCloud?: boolean }) {
+// The route screen passes `runsInCloud` from the thread's own location, so a cloud
+// delegate child with no task shows the pill too.
+function Header(props: { readonly location?: "local" | "cloud" }) {
   return (
     <ThreadHeader
       title="Fix drag scroll"
       subtitle=""
       headerColor="#000"
       usesNativeHeaderGlass
-      runsInCloud={props.runsInCloud}
+      runsInCloud={props.location === "cloud"}
       gitControls={{
         environmentId: "environment-1",
         threadId: "thread-1",
@@ -138,8 +140,8 @@ afterEach(() => {
 });
 
 describe("ThreadHeader cloud pill", () => {
-  it("shows a small Cloud pill for a cloud task lead", () => {
-    render(<Header runsInCloud />);
+  it("shows a small Cloud pill for a thread that runs in the cloud", () => {
+    render(<Header location="cloud" />);
     expect(nativeCloudItemText()).toBe("Cloud");
     // The pill comes first, nearest the title, ahead of the Git controls.
     expect(harness.rightItems[0]?.identifier).toBe("thread-right-cloud");
@@ -149,22 +151,22 @@ describe("ThreadHeader cloud pill", () => {
   });
 
   it("shows no Cloud pill for a local thread", () => {
-    render(<Header runsInCloud={false} />);
+    render(<Header location="local" />);
     expect(harness.rightItems.length).toBeGreaterThan(0);
     expect(nativeCloudItemText()).toBeNull();
     expect(container.textContent).not.toContain("Cloud");
   });
 
-  it("shows no Cloud pill when the location is unknown", () => {
+  it("shows no Cloud pill when the thread has no location", () => {
     render(<Header />);
     expect(nativeCloudItemText()).toBeNull();
     expect(container.querySelector('[data-testid="thread-cloud-pill"]')).toBeNull();
   });
 
-  it("adds the pill when a running thread turns out to be a cloud lead", () => {
+  it("adds the pill when the thread's location turns to cloud", () => {
     render(<Header />);
     expect(nativeCloudItemText()).toBeNull();
-    render(<Header runsInCloud />);
+    render(<Header location="cloud" />);
     expect(nativeCloudItemText()).toBe("Cloud");
   });
 });

@@ -1810,7 +1810,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const projectManagerBadges = projectManager ? (
     <SidebarProjectManagerBadges summary={projectManager} />
   ) : null;
-  const cloudIndicator = leadTask?.task.location === "cloud" ? <CloudBadge variant="icon" /> : null;
+  const cloudIndicator = thread.location === "cloud" ? <CloudBadge variant="icon" /> : null;
   const indicators =
     draftIndicator !== null ||
     pinIndicator !== null ||

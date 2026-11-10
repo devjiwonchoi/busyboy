@@ -96,6 +96,13 @@ describe("V2 client presentation", () => {
     expect(shell.branchPullRequest).toEqual(branchPullRequest);
   });
 
+  it("carries where the thread runs, leaving it absent for local threads", () => {
+    expect(presentThreadShell(environmentId, { ...v2ThreadShell, location: "cloud" }).location).toBe(
+      "cloud",
+    );
+    expect("location" in presentThreadShell(environmentId, v2ThreadShell)).toBe(false);
+  });
+
   it("presents provider errors carried by failed thread shells", () => {
     const runId = RunId.make("run-failed");
     const shell = presentThreadShell(environmentId, {
