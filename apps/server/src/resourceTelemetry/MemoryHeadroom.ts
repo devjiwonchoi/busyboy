@@ -1,6 +1,7 @@
 /**
  * How much room the Mac has for another agent session, judged from free
- * memory, the OS memory pressure level and swap.
+ * memory and the OS memory pressure level, with swap as an escalator under
+ * warn pressure.
  *
  * - ok: a new session may start locally, and paused ones may resume.
  * - tight: start nothing new locally; idle sessions may be released.
@@ -24,8 +25,10 @@ import * as HostResources from "./HostResources.ts";
 
 export type Headroom = "ok" | "tight" | "critical";
 
-/** Swap at least this free counts as fine; below the critical ratio the Mac is thrashing. */
-export const SWAP_OK_FREE_RATIO = 0.15;
+/**
+ * Below this much swap free, warn pressure counts as critical. macOS keeps swap
+ * nearly full long after pressure ends, so swap alone never makes it short.
+ */
 export const SWAP_CRITICAL_FREE_RATIO = 0.05;
 export const MEMORY_SAMPLE_INTERVAL_MS = 5_000;
 
@@ -47,18 +50,16 @@ export function judgeHeadroom(
 ): Headroom {
   const pressure = snapshot.memoryPressure ?? "normal";
   const swapFree = swapFreeRatio(snapshot);
+  // Swap only escalates pressure the OS already reports.
+  const swapExhausted = swapFree !== null && swapFree < SWAP_CRITICAL_FREE_RATIO;
   if (
     snapshot.availableMemoryBytes < settings.pauseBelowFreeBytes ||
     pressure === "critical" ||
-    (swapFree !== null && swapFree < SWAP_CRITICAL_FREE_RATIO)
+    (pressure === "warn" && swapExhausted)
   ) {
     return "critical";
   }
-  if (
-    snapshot.availableMemoryBytes >= settings.startMinFreeBytes &&
-    pressure === "normal" &&
-    (swapFree === null || swapFree >= SWAP_OK_FREE_RATIO)
-  ) {
+  if (snapshot.availableMemoryBytes >= settings.startMinFreeBytes && pressure === "normal") {
     return "ok";
   }
   return "tight";

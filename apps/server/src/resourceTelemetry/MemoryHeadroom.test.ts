@@ -43,27 +43,63 @@ describe("judgeHeadroom", () => {
     ).toBe("ok");
   });
 
-  it("is tight between the thresholds, under warn pressure or with little swap left", () => {
+  it("is ok under normal pressure even when swap is nearly full", () => {
+    // macOS keeps swap full long after pressure ends.
+    expect(
+      judgeHeadroom(
+        {
+          availableMemoryBytes: 2 * GIB,
+          memoryPressure: "normal",
+          swapTotalBytes: 100,
+          swapUsedBytes: 99,
+        },
+        settings,
+      ),
+    ).toBe("ok");
+    expect(
+      judgeHeadroom(
+        {
+          availableMemoryBytes: GIB,
+          memoryPressure: "normal",
+          swapTotalBytes: 100,
+          swapUsedBytes: 99,
+        },
+        settings,
+      ),
+    ).toBe("tight");
+  });
+
+  it("is tight between the thresholds or under warn pressure with swap left", () => {
     expect(judgeHeadroom({ availableMemoryBytes: GIB }, settings)).toBe("tight");
     expect(judgeHeadroom({ availableMemoryBytes: 2 * GIB, memoryPressure: "warn" }, settings)).toBe(
       "tight",
     );
     expect(
       judgeHeadroom(
-        { availableMemoryBytes: 2 * GIB, swapTotalBytes: 100, swapUsedBytes: 90 },
+        {
+          availableMemoryBytes: 2 * GIB,
+          memoryPressure: "warn",
+          swapTotalBytes: 100,
+          swapUsedBytes: 90,
+        },
         settings,
       ),
     ).toBe("tight");
   });
 
-  it("is critical below the pause threshold, under critical pressure or with swap almost full", () => {
+  it("is critical below the pause threshold, under critical pressure or warn with swap full", () => {
     expect(judgeHeadroom({ availableMemoryBytes: 0.5 * GIB }, settings)).toBe("critical");
     expect(
       judgeHeadroom({ availableMemoryBytes: 4 * GIB, memoryPressure: "critical" }, settings),
     ).toBe("critical");
     expect(
       judgeHeadroom(
-        { availableMemoryBytes: 4 * GIB, swapTotalBytes: 100, swapUsedBytes: 97 },
+        {
+          availableMemoryBytes: 4 * GIB,
+          memoryPressure: "warn",
+          swapTotalBytes: 100,
+          swapUsedBytes: 97,
+        },
         settings,
       ),
     ).toBe("critical");
