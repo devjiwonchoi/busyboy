@@ -6,8 +6,16 @@ import { makeSandboxClient, type SandboxSdk, type SdkSandbox } from "./SandboxCl
 const VERCEL_TOKEN = "vercel-token-value-123";
 const CLAUDE_TOKEN = "sk-ant-oat01-secretvalue";
 
-const fakeSdk = (stdout: (env: Record<string, string>) => string) => {
+const fakeSdk = (
+  stdout: (env: Record<string, string>) => string,
+  lookupTeam: SandboxSdk["lookupTeam"] = async (query) => ({
+    teamSlug: "jiwonchoi",
+    projectAccountId: query.teamId,
+  }),
+) => {
   const calls = {
+    sdk: 0,
+    lookups: 0,
     create: [] as Array<Record<string, unknown>>,
     commands: [] as Array<{ cmd: string; args?: string[]; env?: Record<string, string> }>,
     writes: [] as Array<{ path: string; content: Buffer }>,
@@ -33,12 +41,21 @@ const fakeSdk = (stdout: (env: Record<string, string>) => string) => {
   };
   const sdk: SandboxSdk = {
     createSandbox: async (params) => {
+      calls.sdk += 1;
       calls.create.push(params);
       return sandbox;
     },
-    getSandbox: async () => sandbox,
+    getSandbox: async () => {
+      calls.sdk += 1;
+      return sandbox;
+    },
     getSnapshot: async () => {
+      calls.sdk += 1;
       throw new Error(`lookup failed with token ${VERCEL_TOKEN}`);
+    },
+    lookupTeam: async (query) => {
+      calls.lookups += 1;
+      return lookupTeam(query);
     },
   };
   return { sdk, calls };
@@ -97,5 +114,61 @@ describe("makeSandboxClient", () => {
   it("reports a snapshot it cannot load as missing", async () => {
     const { sdk } = fakeSdk(() => "");
     expect(await makeSandboxClient(credentials, sdk).snapshotState("snap")).toBe("missing");
+  });
+});
+
+describe("makeSandboxClient team guard", () => {
+  const otherTeam: SandboxSdk["lookupTeam"] = async (query) => ({
+    teamSlug: "vercel",
+    projectAccountId: query.teamId,
+  });
+
+  it("refuses every sandbox call for a team outside the allowlist without calling the SDK", async () => {
+    const { sdk, calls } = fakeSdk(() => "", otherTeam);
+    const client = makeSandboxClient(credentials, sdk);
+
+    await expect(client.create({ vcpus: 1, timeoutMs: 1 })).rejects.toThrow(
+      /jiwonchoi 팀에서만 돌아요.*"vercel"/,
+    );
+    await expect(client.get("sbx")).rejects.toThrow(/jiwonchoi 팀에서만 돌아요/);
+    await expect(client.snapshotState("snap")).rejects.toThrow(/jiwonchoi 팀에서만 돌아요/);
+    expect(calls.sdk).toBe(0);
+  });
+
+  it("refuses a project that belongs to another team", async () => {
+    const { sdk, calls } = fakeSdk(
+      () => "",
+      async () => ({
+        teamSlug: "jiwonchoi",
+        projectAccountId: "team_other",
+      }),
+    );
+    await expect(
+      makeSandboxClient(credentials, sdk).create({ vcpus: 1, timeoutMs: 1 }),
+    ).rejects.toThrow(/project is not in that team/);
+    expect(calls.sdk).toBe(0);
+  });
+
+  it("refuses when the team cannot be checked, masks the token, and checks again next time", async () => {
+    let fail = true;
+    const { sdk, calls } = fakeSdk(
+      () => "",
+      async (query) => {
+        if (fail) throw new Error(`network down for ${query.token}`);
+        return { teamSlug: "jiwonchoi", projectAccountId: query.teamId };
+      },
+    );
+    const client = makeSandboxClient(credentials, sdk);
+
+    const failure = await client.create({ vcpus: 1, timeoutMs: 1 }).catch((error: Error) => error);
+    expect((failure as Error).message).toMatch(/jiwonchoi 팀에서만 돌아요.*could not check/);
+    expect((failure as Error).message).not.toContain(VERCEL_TOKEN);
+    expect(calls.sdk).toBe(0);
+
+    fail = false;
+    await client.create({ vcpus: 1, timeoutMs: 1 });
+    await client.get("sbx");
+    expect(calls.lookups).toBe(2);
+    expect(calls.sdk).toBe(2);
   });
 });
