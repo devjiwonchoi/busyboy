@@ -32,6 +32,7 @@ import { threadEnvironment } from "../../state/threads";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 import { CloudBadge } from "../CloudBadge";
+import { MoveTaskButton } from "../MoveTaskButton";
 import { ProjectFavicon } from "../ProjectFavicon";
 import {
   WorkspaceBreadcrumb,
@@ -427,6 +428,14 @@ export const ChatHeader = memo(function ChatHeader({
           )}
           {renamingTitle === null && activeThreadShell?.location === "cloud" ? (
             <CloudBadge className="ms-2 shrink-0 font-normal" />
+          ) : null}
+          {renamingTitle === null && leadTask !== null && activeThreadShell !== null ? (
+            <MoveTaskButton
+              environmentId={activeThreadEnvironmentId}
+              projectId={activeThreadShell.projectId}
+              task={leadTask.task}
+              className="ms-2"
+            />
           ) : null}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
