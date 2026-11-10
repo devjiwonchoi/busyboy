@@ -19,7 +19,12 @@ import { type ExecutionLocation, ThreadId } from "@t3tools/contracts";
 import * as ServerConfig from "../config.ts";
 import { ensureBaseSnapshot, fileBaseSnapshotStore, readLocalInputs } from "./BaseSnapshot.ts";
 import * as CloudLeadSecrets from "./CloudLeadSecrets.ts";
-import { CloudLeadRuntime, type CloudLaunch } from "./CloudLeadRuntime.ts";
+import {
+  CloudLeadRuntime,
+  type CloudLaunch,
+  type CodexCheck,
+  type PrepareInput,
+} from "./CloudLeadRuntime.ts";
 import { joinPath, nodeLocalHost } from "./LocalHost.ts";
 import { makeSandboxClient } from "./SandboxClient.ts";
 
@@ -32,11 +37,10 @@ export class CloudLeadError extends Schema.TaggedError<CloudLeadError>()("CloudL
 }
 
 export interface CloudLeadHooksShape {
-  readonly prepare: (input: {
-    readonly threadId: string;
-    readonly worktreePath: string;
-    readonly mcpEndpoint: string;
-  }) => Effect.Effect<CloudLaunch, CloudLeadError>;
+  /** Threads in the same Mac worktree (a lead and its children) share one sandbox. */
+  readonly prepare: (input: PrepareInput) => Effect.Effect<CloudLaunch, CloudLeadError>;
+  /** Whether a Codex child can start in the live sandbox of a Mac worktree; never fails. */
+  readonly checkCodex: (worktreePath: string) => Effect.Effect<CodexCheck>;
   /** Mirrors the sandbox onto the Mac worktree; a no-op without a live sandbox. */
   readonly syncToMac: (threadId: string) => Effect.Effect<void, CloudLeadError>;
   readonly release: (threadId: string) => Effect.Effect<void>;
@@ -78,6 +82,12 @@ export const unavailableHooks: CloudLeadHooksShape = {
     Effect.fail(
       new CloudLeadError({ detail: "Cloud task leads are not available in this server." }),
     ),
+  checkCodex: () =>
+    Effect.succeed({
+      ok: false,
+      reason: "cloud task leads are not available in this server",
+      transient: false,
+    }),
   syncToMac: () => Effect.void,
   release: () => Effect.void,
   importTranscripts: () =>
@@ -107,6 +117,10 @@ export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape
             detail: `Could not start the cloud sandbox: ${errorDetail(cause)}`,
           }),
       }).pipe(Effect.withSpan("CloudLeadHooks.prepare")),
+    checkCodex: (worktreePath) =>
+      Effect.promise(() => runtime.checkCodex(worktreePath)).pipe(
+        Effect.withSpan("CloudLeadHooks.checkCodex"),
+      ),
     syncToMac: (threadId) =>
       Effect.tryPromise({
         try: () => runtime.syncToMac(threadId),
@@ -241,6 +255,11 @@ const make = Effect.gen(function* () {
         inputs: await readLocalInputs(nodeLocalHost, worktreePath),
       });
       return result.state.snapshotId;
+    },
+    codexAuth: {
+      read: () => read("codex_auth_json"),
+      save: (value) =>
+        Effect.runPromise(secrets.save({ kind: "codex_auth_json", value }).pipe(Effect.asVoid)),
     },
     log: (event, data) => Effect.runFork(Effect.logInfo(event, data)),
   });

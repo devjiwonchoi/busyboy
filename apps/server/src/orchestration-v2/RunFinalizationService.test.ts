@@ -76,6 +76,7 @@ it.effect("mirrors a cloud thread's sandbox onto the Mac before the checkpoint",
         Layer.succeed(CloudLeadService.CloudLeadHooks, {
           ...CloudLeadService.unavailableHooks,
           prepare: () => Effect.die("not used"),
+          checkCodex: () => Effect.die("not used"),
           syncToMac: (id) => Effect.sync(() => void order.push(`sync ${id}`)),
           release: () => Effect.void,
         }),

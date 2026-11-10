@@ -77,11 +77,49 @@ process.stdin.on("data", (chunk) => {
 process.stdin.on("end", () => process.exit(0));
 `;
 
+/**
+ * The sandbox's codex: `login status` passes when the cloud login is in
+ * CODEX_HOME; otherwise it prints how it was started, echoes each stdin line,
+ * and "refresh" rewrites the login the way a token refresh does.
+ */
+const FAKE_CODEX = `#!/usr/bin/env node
+const fs = require("node:fs");
+const authPath = process.env.CODEX_HOME + "/auth.json";
+const args = process.argv.slice(2);
+if (args.includes("login")) {
+  const ok = fs.existsSync(authPath) && fs.readFileSync(authPath, "utf8").includes("valid");
+  process.stdout.write(ok ? "Logged in using ChatGPT\\n" : "Not logged in\\n");
+  process.exit(ok ? 0 : 1);
+}
+const say = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+say({
+  argv: args,
+  cwd: process.cwd(),
+  codexHome: process.env.CODEX_HOME,
+  auth: fs.readFileSync(authPath, "utf8"),
+  authEnv: process.env.BUSYBOY_CODEX_AUTH ?? null,
+  apiKey: process.env.OPENAI_API_KEY ?? null,
+});
+let buffer = "";
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  let index;
+  while ((index = buffer.indexOf("\\n")) !== -1) {
+    const line = buffer.slice(0, index);
+    buffer = buffer.slice(index + 1);
+    if (line === "refresh") fs.writeFileSync(authPath, '{"tokens":{"refresh_token":"valid-refreshed"}}');
+    say({ got: line });
+  }
+});
+process.stdin.on("end", () => process.exit(0));
+`;
+
 const setup = async (
   options: {
     readonly idleStopMs?: number;
     readonly macShell?: typeof shell;
     readonly runtime?: Partial<CloudLeadRuntimeDeps>;
+    readonly codexAuth?: { value: string | null; saved: string[] };
   } = {},
 ) => {
   const root = await tempDir("cloud-runtime-");
@@ -90,6 +128,7 @@ const setup = async (
   const binDir = `${root}/bin`;
   await NodeFs.mkdir(binDir, { recursive: true });
   await NodeFs.writeFile(`${binDir}/claude`, FAKE_CLAUDE, { mode: 0o755 });
+  await NodeFs.writeFile(`${binDir}/codex`, FAKE_CODEX, { mode: 0o755 });
   await shell.run(
     `mkdir -p '${mac}' && cd '${mac}' && ${GIT_ENV} && git init -q -b main && echo base > base.txt && git add . && git commit -qm base && git checkout -qb t3/task && echo mac > mac.txt && git add . && git commit -qm 'Mac commit' && echo wip >> base.txt`,
   );
@@ -117,12 +156,30 @@ const setup = async (
     client: async () => client,
     credentials: async () => ({ claudeOauthToken: CLAUDE_TOKEN, githubToken: GITHUB_TOKEN }),
     baseSnapshotId: async () => null,
-    host: { ...fakeLocalHost({ files: {} }), env: { HOME: macHome } },
+    host: {
+      ...fakeLocalHost({
+        files: {
+          [`${macHome}/.codex/config.toml`]: `model = "gpt-6.1-sol"\n[projects."${mac}"]\n`,
+        },
+      }),
+      env: { HOME: macHome },
+    },
     stateDir: `${root}/state`,
     ports,
     ...(options.idleStopMs === undefined ? {} : { idleStopMs: options.idleStopMs }),
     ...(options.macShell === undefined ? {} : { macShell: options.macShell }),
     ...options.runtime,
+    ...(options.codexAuth === undefined
+      ? {}
+      : {
+          codexAuth: {
+            read: async () => options.codexAuth!.value,
+            save: async (value: string) => {
+              options.codexAuth!.saved.push(value);
+              options.codexAuth!.value = value;
+            },
+          },
+        }),
   });
   cleanups.push(() => runtime.releaseAll());
   return { mac, macHome, client, runtime, mcpEndpoint, mcpCalls, ports };
@@ -142,9 +199,9 @@ const lines = (child: RemoteProcess) => {
   return seen;
 };
 
-const waitFor = async (check: () => boolean, timeoutMs = 10_000) => {
+const waitFor = async (check: () => boolean | Promise<boolean>, timeoutMs = 10_000) => {
   const started = Date.now();
-  while (!check()) {
+  while (!(await check())) {
     if (Date.now() - started > timeoutMs) throw new Error("timed out");
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -503,6 +560,44 @@ describe("CloudLeadRuntime", () => {
       expect(client.created).toHaveLength(2);
     });
 
+    it("stops the turns of the lead and of a child sharing its sandbox before replacing it", async () => {
+      const { clock, calls, runtime: clockDeps } = clocked();
+      const { mac, client, runtime, mcpEndpoint } = await setup({ runtime: clockDeps });
+      const lead = await runtime.prepare({ threadId: "lead-r", worktreePath: mac, mcpEndpoint });
+      const implement = await runtime.prepare({
+        threadId: "implement-r",
+        worktreePath: mac,
+        mcpEndpoint,
+      });
+      const running = new Map([
+        ["lead-r", lead.spawn({ command: "claude", args: [], env: {} })],
+        ["implement-r", implement.spawn({ command: "claude", args: [], env: {} })],
+      ]);
+      const outputs = [...running.values()].map(lines);
+      await waitFor(() => outputs.every((output) => output.length > 0));
+      runtime.setRotationHandler({
+        interrupt: async (threadId) => {
+          calls.push(`interrupt ${threadId}`);
+          const child = running.get(threadId)!;
+          const exited = new Promise((resolve) => child.once("exit", resolve));
+          child.kill("SIGTERM");
+          await exited;
+        },
+        resume: async (threadId) => void calls.push(`resume ${threadId}`),
+        failed: async (threadId, reason) => void calls.push(`failed ${threadId}: ${reason}`),
+      });
+
+      clock.now = 23.6 * HOUR;
+      await waitFor(() => calls.filter((call) => call.startsWith("resume")).length === 2);
+      expect(calls.toSorted()).toEqual([
+        "interrupt implement-r",
+        "interrupt lead-r",
+        "resume implement-r",
+        "resume lead-r",
+      ]);
+      expect(client.created[0]!.deleted()).toBe(true);
+    });
+
     it("keeps the sandbox and reports once when it cannot be replaced", async () => {
       const { clock, calls, handler, runtime: clockDeps } = clocked();
       let broken = false;
@@ -555,6 +650,157 @@ describe("CloudLeadRuntime", () => {
       await runtime.prepare({ threadId: "thread-r4", worktreePath: mac, mcpEndpoint });
       expect(client.created).toHaveLength(2);
       expect(client.created[0]!.deleted()).toBe(true);
+    });
+  });
+
+  it("runs a lead's children in the lead's sandbox and checkout, and mirrors their work", async () => {
+    const { mac, client, runtime, mcpEndpoint } = await setup();
+    await runtime.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    // An implement child that shares the lead's worktree.
+    const launch = await runtime.prepare({ threadId: "implement", worktreePath: mac, mcpEndpoint });
+    expect(client.created).toHaveLength(1);
+
+    const child = launch.spawn({ command: "claude", args: [], cwd: mac, env: {} });
+    const output = lines(child);
+    child.stdin.write("commit child.txt\n");
+    await waitFor(() => output.some((line) => line.done === "commit"));
+    const remote = `${client.created[0]!.home}/busyboy`;
+    expect(output[0]!.cwd).toBe(await NodeFs.realpath(remote));
+
+    // The child's turn end mirrors the shared sandbox onto the lead's Mac worktree.
+    await runtime.syncToMac("implement");
+    expect((await shell.run(`git -C '${mac}' log --format=%s -1`)).trim()).toBe("Add child.txt");
+
+    // The child finishing does not free the lead's sandbox; the lead's release does.
+    child.stdin.end();
+    await new Promise((resolve) => child.once("exit", resolve));
+    expect(client.created[0]!.deleted()).toBe(false);
+    await runtime.release("lead");
+    expect(client.created[0]!.deleted()).toBe(true);
+  });
+
+  it("runs codex app-server in the sandbox with the cloud login only as env, and saves its refresh", async () => {
+    const codexAuth = {
+      value: '{"tokens":{"refresh_token":"valid-cloud"}}' as string | null,
+      saved: [] as string[],
+    };
+    const { mac, client, runtime, mcpEndpoint, ports } = await setup({ codexAuth });
+    const launch = await runtime.prepare({ threadId: "fix", worktreePath: mac, mcpEndpoint });
+    expect(await runtime.checkCodex(mac)).toEqual({ ok: true });
+
+    const child = await launch.spawnCodex({
+      args: ["app-server", "--listen", "stdio://"],
+      env: { OPENAI_API_KEY: "mac-key", CODEX_HOME: "/mac/.codex", RUST_LOG: "warn" },
+    });
+    const output = lines(child);
+    await waitFor(() => output.length > 0);
+    const home = client.created[0]!.home;
+    expect(output[0]).toEqual({
+      argv: ["-c", 'sandbox_mode="danger-full-access"', "app-server", "--listen", "stdio://"],
+      cwd: await NodeFs.realpath(`${home}/busyboy`),
+      codexHome: `${home}/.codex`,
+      auth: '{"tokens":{"refresh_token":"valid-cloud"}}',
+      authEnv: null,
+      apiKey: null,
+    });
+
+    // What the adapter sends: Mac paths and the Mac MCP endpoint, as the sandbox sees them.
+    expect(launch.paths.toRemote(`{"cwd":"${mac}","url":"${mcpEndpoint}"}`)).toBe(
+      `{"cwd":"${home}/busyboy","url":"http://127.0.0.1:${ports.mcp}/mcp"}`,
+    );
+    expect(launch.paths.toMac(`${home}/busyboy/src/a.ts`)).toBe(`${mac}/src/a.ts`);
+    // The Mac's Codex config, with sandbox paths.
+    expect(await NodeFs.readFile(`${home}/.codex/config.toml`, "utf8")).toBe(
+      `model = "gpt-6.1-sol"\n[projects."${home}/busyboy"]\n`,
+    );
+
+    // Only one sandbox (one Mac worktree) uses the login at a time.
+    expect(await runtime.checkCodex(`${mac}-other`)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("another cloud sandbox"),
+    });
+
+    child.stdin.write("refresh\n");
+    await waitFor(() => output.some((line) => line.got === "refresh"));
+    child.stdin.end();
+    await waitFor(() => codexAuth.saved.length > 0);
+    expect(codexAuth.saved).toEqual(['{"tokens":{"refresh_token":"valid-refreshed"}}']);
+    await waitFor(async () => {
+      const check = await runtime.checkCodex(`${mac}-other`);
+      return !check.ok && check.reason.includes("not running");
+    });
+  });
+
+  it("refuses Codex without a cloud login or when the login fails in the sandbox", async () => {
+    const codexAuth = { value: null as string | null, saved: [] as string[] };
+    const { mac, runtime, mcpEndpoint } = await setup({ codexAuth });
+    expect(await runtime.checkCodex(mac)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("codex_auth_json"),
+    });
+    // A login file without tokens passes `codex login status`, so it is refused first.
+    codexAuth.value = '{"OPENAI_API_KEY":null,"tokens":null}';
+    expect(await runtime.checkCodex(mac)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("no tokens"),
+    });
+    codexAuth.value = '{"tokens":{"refresh_token":"expired"}}';
+    expect(await runtime.checkCodex(mac)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not running"),
+    });
+    await runtime.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    expect(await runtime.checkCodex(mac)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("Not logged in"),
+    });
+  });
+
+  it("keeps codex's refreshed login for the next codex in the sandbox, and saves it before release", async () => {
+    const codexAuth = {
+      value: '{"tokens":{"refresh_token":"valid-cloud"}}' as string | null,
+      saved: [] as string[],
+    };
+    const { mac, client, runtime, mcpEndpoint } = await setup({ codexAuth });
+    const launch = await runtime.prepare({ threadId: "implement", worktreePath: mac, mcpEndpoint });
+    const first = await launch.spawnCodex({ args: ["app-server"], env: {} });
+    const firstOutput = lines(first);
+    first.stdin.write("refresh\n");
+    await waitFor(() => firstOutput.some((line) => line.got === "refresh"));
+
+    // A fix step starts while the implement codex still runs: it must not put the old login back.
+    const second = await launch.spawnCodex({ args: ["app-server"], env: {} });
+    const secondOutput = lines(second);
+    await waitFor(() => secondOutput.length > 0);
+    expect(secondOutput[0]!.auth).toBe('{"tokens":{"refresh_token":"valid-refreshed"}}');
+
+    // Released while codex runs: the refreshed login is saved before the sandbox goes.
+    await runtime.release("implement");
+    expect(client.created[0]!.deleted()).toBe(true);
+    expect(codexAuth.saved).toEqual(['{"tokens":{"refresh_token":"valid-refreshed"}}']);
+    // The released sandbox no longer holds the login: another worktree may use it.
+    expect(await runtime.checkCodex(`${mac}-other`)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not running"),
+    });
+  });
+
+  it("does not start codex in a sandbox released while it was getting ready", async () => {
+    const codexAuth = {
+      value: '{"tokens":{"refresh_token":"valid-cloud"}}' as string | null,
+      saved: [] as string[],
+    };
+    const { mac, client, runtime, mcpEndpoint } = await setup({ codexAuth });
+    const launch = await runtime.prepare({ threadId: "implement", worktreePath: mac, mcpEndpoint });
+    // The first spawn copies the Codex config into the sandbox; the release lands meanwhile.
+    const spawning = launch.spawnCodex({ args: ["app-server"], env: {} });
+    const released = runtime.release("implement");
+    await expect(spawning).rejects.toThrow("was stopped");
+    await released;
+    expect(client.created[0]!.deleted()).toBe(true);
+    expect(await runtime.checkCodex(`${mac}-other`)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not running"),
     });
   });
 });

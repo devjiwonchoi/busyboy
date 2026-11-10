@@ -2306,9 +2306,11 @@ export const layerWithOptions = (
               });
               const sessionScope = yield* Scope.fork(sessionScopes);
               yield* agentScope.clear(input.threadId);
+              const cloud = yield* isCloudThread(input.threadId);
               const runtime = yield* adapter
                 .openSession({
                   threadId: input.threadId,
+                  ...(cloud ? { location: "cloud" as const } : {}),
                   providerSessionId: input.providerSessionId,
                   modelSelection: input.modelSelection,
                   runtimePolicy: input.runtimePolicy,

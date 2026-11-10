@@ -205,6 +205,8 @@ describe("buildTaskLeadPrompt", () => {
     expect(section).toContain("Vercel Sandbox (Linux)");
     expect(section).toContain("read-only mirror");
     expect(section).toContain("Commit, push and `gh` work as usual.");
+    expect(section).toContain("children run in this sandbox on this checkout");
+    expect(section).toContain("implement and fix move to the plan model");
     expect(section).toContain("Computer Use, the local app preview");
     expect(section).toContain("say so instead of trying");
     expect(buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] })).not.toContain("## Cloud");

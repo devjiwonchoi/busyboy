@@ -12,7 +12,7 @@ import {
   SANDBOX_ROTATION_MOVE_LOCAL,
   ProviderDriverKind,
   ProviderThreadId,
-  type ThreadId,
+  ThreadId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
@@ -431,6 +431,62 @@ describe("moving a task lead", () => {
     ),
   );
 
+  it.effect(
+    "waits for children on the lead's checkout, then holds and moves them with the lead",
+    () => {
+      const heldDuringMove: boolean[] = [];
+      let gate: LeadMoveGate.LeadMoveGateShape | null = null;
+      return withTeam(
+        (harness) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            gate = yield* LeadMoveGate.LeadMoveGate;
+            const { task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+            // An implement child on the lead's checkout, and a review child on its own.
+            const implement = harness.addThread(ThreadId.make("thread:implement"));
+            implement.title = "Add notes implement";
+            implement.worktreePath = "/tmp/lead";
+            implement.shell = { launchedByThreadId: lead };
+            implement.activeRunId = "run:implement";
+            const isolated = harness.addThread(ThreadId.make("thread:isolated"));
+            isolated.worktreePath = "/tmp/isolated";
+            isolated.shell = { launchedByThreadId: lead };
+
+            const refused = yield* team
+              .moveTask({ projectId: PROJECT_ID, taskId: task.id, to: "cloud" })
+              .pipe(Effect.flip);
+            assert.include(refused.message, "Add notes implement");
+            assert.include(refused.message, "아직 진행 중이라 옮길 수 없어요");
+
+            // Once the child is done, it is held through the move and moves with the lead;
+            // the isolated one stays where it is.
+            implement.activeRunId = null;
+            const moved = yield* team.moveTask({
+              projectId: PROJECT_ID,
+              taskId: task.id,
+              to: "cloud",
+            });
+            assert.strictEqual(moved.task.location, "cloud");
+            assert.deepEqual(heldDuringMove, [true]);
+            assert.isFalse(gate.isHeld(implement.id));
+            assert.deepEqual(moveSteps(yield* commandsTo(harness, implement.id)), [
+              "location cloud",
+              "resume queue",
+            ]);
+            assert.deepEqual(moveSteps(yield* commandsTo(harness, isolated.id)), []);
+          }),
+        {
+          cloudLead: fakeHooks({
+            importTranscripts: () =>
+              Effect.sync(() => {
+                heldDuringMove.push(gate!.isHeldFor(ThreadId.make("thread:implement"), "move"));
+              }),
+          }),
+        },
+      );
+    },
+  );
+
   it.effect("refuses a lead that is not a Claude thread", () =>
     withTeam(
       (harness) =>
@@ -493,7 +549,8 @@ describe("moving a task lead", () => {
             const after = yield* team.readTask(pm, { taskId: task.id });
             assert.strictEqual(after.task.location, "local");
             assert.strictEqual(thread.shell?.location, "local");
-            assert.deepEqual(released, [lead]);
+            // The sandbox is the lead's checkout, released by its worktree.
+            assert.deepEqual(released, ["/tmp/lead"]);
             assert.isFalse(after.openAttention.some(isSandboxRotationDecision));
             assert.include(yield* harness.messagesTo(lead), "[옮김] 클라우드→로컬");
           }),

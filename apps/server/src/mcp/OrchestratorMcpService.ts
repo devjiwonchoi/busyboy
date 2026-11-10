@@ -2099,19 +2099,29 @@ const make = Effect.gen(function* () {
           providers,
           skipProjectEnablementFilter: isRetryOfAcceptedDelegation,
         });
-        // A child runs locally unless asked; it never inherits its parent's cloud.
-        const cloud = input.location === "cloud";
+        // A cloud parent's children run in the cloud too; one sharing its
+        // checkout shares its sandbox, so the Mac mirror is never edited directly.
+        const parentCloud = parent.thread.location === "cloud";
+        const cloud = input.location === "cloud" || (parentCloud && input.location !== "local");
+        if (parentCloud && !cloud && input.isolation !== "worktree") {
+          return yield* failure(
+            "invalid_request",
+            "This thread runs in the cloud, so a local child would edit the Mac mirror of its checkout. Leave location unset, or give the child its own worktree with isolation worktree.",
+          );
+        }
         if (cloud) {
           const driver = providers.find(
             (provider) => provider.instanceId === target.modelSelection.instanceId,
           )?.driver;
-          if (driver !== "claudeAgent") {
+          if (driver !== "claudeAgent" && driver !== "codex") {
             return yield* failure(
               "invalid_request",
-              `Cloud runs only Claude leads for now; ${target.modelSelection.instanceId} uses ${driver ?? "an unknown driver"}. Pick a Claude target or run it locally.`,
+              `Cloud runs only Claude and Codex agents; ${target.modelSelection.instanceId} uses ${driver ?? "an unknown driver"}. Pick a Claude or Codex target, or run it locally.`,
             );
           }
         }
+        // A cloud child of a local parent needs its own checkout to mirror.
+        const ownWorktree = input.isolation === "worktree" || (cloud && !parentCloud);
         const runtimeMode = yield* resolveRuntimeMode(
           parent.thread.runtimeMode,
           input.runtimeMode,
@@ -2123,8 +2133,7 @@ const make = Effect.gen(function* () {
           input.interactionMode,
         );
         let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
-        // A cloud child needs its own checkout to mirror, so it always gets a worktree.
-        if ((input.isolation === "worktree" || cloud) && !isRetryOfAcceptedDelegation) {
+        if (ownWorktree && !isRetryOfAcceptedDelegation) {
           const project = yield* requireProject(parent.thread.projectId);
           if (options?.worktreeBase === "origin-default") {
             workspaceStrategy = yield* originDefaultWorktreeStrategy(

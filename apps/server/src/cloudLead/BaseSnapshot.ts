@@ -1,7 +1,7 @@
 /**
  * The base snapshot holds the heavy, slow-changing parts of a cloud lead's
- * machine: pinned claude and pnpm, gh, the busyboy clone and its node_modules.
- * Its key is the claude version, the pnpm version and the pnpm-lock.yaml hash
+ * machine: pinned claude, codex and pnpm, gh, the busyboy clone and its
+ * node_modules. Its key is the claude, codex and pnpm versions and the pnpm-lock.yaml hash
  * of origin/main, so it is rebuilt only when one of those changes (or the
  * snapshot is gone). It is built from the exact origin/main commit whose
  * lockfile was hashed; a task branch's own dependency changes are installed on
@@ -16,6 +16,8 @@ import type { SandboxClient } from "./SandboxClient.ts";
 export interface BaseSnapshotInputs {
   readonly claudeVersion: string;
   readonly pnpmVersion: string;
+  /** The Mac's codex, for Codex children in the cloud; null when the Mac has none. */
+  readonly codexVersion: string | null;
   readonly lockfileHash: string;
   /** The origin/main commit the lockfile came from; not part of the key. */
   readonly repoCommit: string;
@@ -34,7 +36,14 @@ const BUILD_TIMEOUT_MS = 40 * 60 * 1000;
 
 export const baseSnapshotKey = (inputs: BaseSnapshotInputs): string =>
   NodeCrypto.createHash("sha256")
-    .update(JSON.stringify([inputs.claudeVersion, inputs.pnpmVersion, inputs.lockfileHash]))
+    .update(
+      JSON.stringify([
+        inputs.claudeVersion,
+        inputs.pnpmVersion,
+        inputs.lockfileHash,
+        ...(inputs.codexVersion === null ? [] : [inputs.codexVersion]),
+      ]),
+    )
     .digest("hex")
     .slice(0, 16);
 
@@ -66,6 +75,9 @@ export const readLocalInputs = async (
       "pnpm",
       (await host.exec("pnpm", ["--version"], { cwd: repoRoot })).stdout,
     ),
+    codexVersion:
+      (await host.exec("codex", ["--version"]).catch(() => null))?.stdout.match(VERSION)?.[0] ??
+      null,
     lockfileHash: NodeCrypto.createHash("sha256").update(lockfile.stdout).digest("hex"),
     repoCommit: commit,
   };
@@ -92,7 +104,11 @@ export const fileBaseSnapshotStore = (host: LocalHost, path: string): BaseSnapsh
 /** The script that turns a fresh universal image into the base machine. Stderr is kept for errors. */
 export const buildScript = (inputs: BaseSnapshotInputs): string => {
   // Validated, so they are safe to interpolate into the script.
-  for (const version of [inputs.claudeVersion, inputs.pnpmVersion]) {
+  for (const version of [
+    inputs.claudeVersion,
+    inputs.pnpmVersion,
+    inputs.codexVersion ?? "0.0.0",
+  ]) {
     if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid version ${version}`);
   }
   if (!COMMIT.test(inputs.repoCommit)) throw new Error(`Invalid commit ${inputs.repoCommit}`);
@@ -100,6 +116,11 @@ export const buildScript = (inputs: BaseSnapshotInputs): string => {
     "set -e",
     `[ "$(claude --version 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1)" = "${inputs.claudeVersion}" ] || sudo npm i -g @anthropic-ai/claude-code@${inputs.claudeVersion} >/dev/null`,
     `[ "$(pnpm --version 2>/dev/null)" = "${inputs.pnpmVersion}" ] || sudo npm i -g pnpm@${inputs.pnpmVersion} >/dev/null`,
+    ...(inputs.codexVersion === null
+      ? []
+      : [
+          `[ "$(codex --version 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1)" = "${inputs.codexVersion}" ] || sudo npm i -g @openai/codex@${inputs.codexVersion} >/dev/null`,
+        ]),
     "command -v gh >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq gh) >/dev/null",
     "hash -r",
     `rm -rf ~/${REMOTE_REPO_DIR}`,

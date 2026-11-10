@@ -1284,7 +1284,7 @@ describe("OrchestratorMcpService provider resolution", () => {
     }),
   );
 
-  it.effect("runs a cloud child only on Claude, in its own worktree", () =>
+  it.effect("runs cloud children on Claude or Codex, sharing a cloud parent's checkout", () =>
     Effect.gen(function* () {
       const claudeInstanceId = ProviderInstanceId.make("claude");
       const task = {
@@ -1308,6 +1308,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         completedAt: null,
       };
       const dispatched = yield* Ref.make<ReadonlyArray<unknown>>([]);
+      let parentLocation: "cloud" | undefined;
       const layerDependencies = Layer.mergeAll(
         NodeServices.layer,
         Layer.mock(ThreadManagementService.ThreadManagementService)({
@@ -1316,11 +1317,16 @@ describe("OrchestratorMcpService provider resolution", () => {
           isProviderInstanceEnabledForProject: () => Effect.succeed(true),
           getThreadRecords: (threadId) =>
             Ref.get(dispatched).pipe(
-              Effect.map((commands) =>
-                threadId === parentThreadId
-                  ? parentProjection(commands.length === 0 ? [] : [task])
-                  : childProjection,
-              ),
+              Effect.map((commands) => {
+                if (threadId !== parentThreadId) return childProjection;
+                const parent = parentProjection(commands.length === 0 ? [] : [task]);
+                return parentLocation === undefined
+                  ? parent
+                  : ({
+                      ...parent,
+                      thread: { ...parent.thread, location: parentLocation },
+                    } as OrchestrationV2ThreadProjection);
+              }),
             ),
           dispatch: (command) =>
             Ref.update(dispatched, (commands) => [...commands, command]).pipe(
@@ -1368,18 +1374,14 @@ describe("OrchestratorMcpService provider resolution", () => {
 
       yield* Effect.gen(function* () {
         const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-        const refused = yield* service
-          .delegateTask(scope, {
-            task: "Build it.",
-            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
-            mode: "async",
-            location: "cloud",
-            clientRequestId: "delegate-cloud-codex",
-          })
-          .pipe(Effect.flip);
-        assert.include(refused.message, "Cloud runs only Claude leads for now");
-        assert.deepEqual(yield* Ref.get(dispatched), []);
-
+        // A local parent's cloud child gets its own checkout and sandbox.
+        yield* service.delegateTask(scope, {
+          task: "Build it.",
+          target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+          mode: "async",
+          location: "cloud",
+          clientRequestId: "delegate-cloud-codex",
+        });
         yield* service.delegateTask(scope, {
           task: "Build it.",
           target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
@@ -1393,6 +1395,34 @@ describe("OrchestratorMcpService provider resolution", () => {
           mode: "async",
           clientRequestId: "delegate-local-claude",
         });
+
+        // A cloud parent's children inherit the cloud and share its checkout (and
+        // so its sandbox), unless they ask for their own worktree.
+        parentLocation = "cloud";
+        yield* service.delegateTask(scope, {
+          task: "Build it.",
+          target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+          mode: "async",
+          clientRequestId: "delegate-cloud-parent-shared",
+        });
+        yield* service.delegateTask(scope, {
+          task: "Build it.",
+          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+          mode: "async",
+          isolation: "worktree",
+          clientRequestId: "delegate-cloud-parent-isolated",
+        });
+        const refused = yield* service
+          .delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            location: "local",
+            clientRequestId: "delegate-cloud-parent-local",
+          })
+          .pipe(Effect.flip);
+        assert.include(refused.message, "would edit the Mac mirror");
+
         const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
           location?: string;
           workspaceStrategy?: { type: string };
@@ -1401,7 +1431,10 @@ describe("OrchestratorMcpService provider resolution", () => {
           commands.map((command) => [command.location, command.workspaceStrategy?.type]),
           [
             ["cloud", "worktree"],
+            ["cloud", "worktree"],
             [undefined, undefined],
+            ["cloud", undefined],
+            ["cloud", "worktree"],
           ],
         );
       }).pipe(Effect.provide(layerWithGit.pipe(Layer.provide(layerDependencies))));

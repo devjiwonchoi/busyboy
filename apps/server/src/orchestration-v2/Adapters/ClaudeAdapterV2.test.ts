@@ -14805,9 +14805,12 @@ describe("ClaudeAdapterV2 cloud threads", () => {
               prepared.push(input);
               return {
                 spawn: remoteSpawn as never,
+                spawnCodex: () => Promise.reject(new Error("not used")),
                 mcpUrl: "http://127.0.0.1:8788/mcp",
+                paths: { toRemote: (text: string) => text, toMac: (text: string) => text },
               };
             }),
+          checkCodex: () => Effect.die("not used"),
           syncToMac: () => Effect.void,
           release: () => Effect.void,
         }),

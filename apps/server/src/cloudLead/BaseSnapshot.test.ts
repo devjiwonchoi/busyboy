@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   baseSnapshotKey,
+  buildScript,
   ensureBaseSnapshot,
   fileBaseSnapshotStore,
   readLocalInputs,
@@ -12,6 +13,7 @@ import { fakeLocalHost, fakeSandboxClient } from "./testkit.ts";
 const inputs: BaseSnapshotInputs = {
   claudeVersion: "2.1.311",
   pnpmVersion: "11.10.0",
+  codexVersion: "0.167.0",
   lockfileHash: "lock-a",
   repoCommit: "a".repeat(40),
 };
@@ -28,6 +30,7 @@ describe("baseSnapshotKey", () => {
     expect(baseSnapshotKey({ ...inputs })).toBe(key);
     expect(baseSnapshotKey({ ...inputs, claudeVersion: "2.1.312" })).not.toBe(key);
     expect(baseSnapshotKey({ ...inputs, pnpmVersion: "11.11.0" })).not.toBe(key);
+    expect(baseSnapshotKey({ ...inputs, codexVersion: "0.168.0" })).not.toBe(key);
     expect(baseSnapshotKey({ ...inputs, lockfileHash: "lock-b" })).not.toBe(key);
   });
 });
@@ -92,6 +95,7 @@ describe("readLocalInputs", () => {
   const exec = {
     "claude --version": "2.1.311 (Claude Code)\n",
     "pnpm --version": "11.10.0\n",
+    "codex --version": "codex-cli 0.167.0\n",
     "git rev-parse origin/main": `${commit}\n`,
     [`git show ${commit}:pnpm-lock.yaml`]: "lockfileVersion: 9",
   };
@@ -101,6 +105,7 @@ describe("readLocalInputs", () => {
     const read = await readLocalInputs(host, "/repo");
     expect(read.claudeVersion).toBe("2.1.311");
     expect(read.pnpmVersion).toBe("11.10.0");
+    expect(read.codexVersion).toBe("0.167.0");
     expect(read.lockfileHash).toMatch(/^[0-9a-f]{64}$/);
     expect(read.repoCommit).toBe(commit);
     // In the repo, so corepack reports the pinned pnpm rather than a global one.
@@ -110,5 +115,12 @@ describe("readLocalInputs", () => {
   it("refuses to build without a pinned version", async () => {
     const host = fakeLocalHost({ files: {}, exec: { ...exec, "claude --version": "" } });
     await expect(readLocalInputs(host, "/repo")).rejects.toThrow(/claude version/);
+  });
+});
+
+describe("buildScript", () => {
+  it("pins the Mac's codex for Codex children, and skips it when the Mac has none", () => {
+    expect(buildScript(inputs)).toContain("npm i -g @openai/codex@0.167.0");
+    expect(buildScript({ ...inputs, codexVersion: null })).not.toContain("codex");
   });
 });

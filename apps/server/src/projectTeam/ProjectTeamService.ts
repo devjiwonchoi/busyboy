@@ -99,6 +99,7 @@ import {
   type ProjectTeamSetTaskRoleModelsInput,
   type ProjectTeamMoveTaskInput,
   type ProjectTeamTaskDelegateInput,
+  type ProjectTaskDelegatedRole,
   type ProjectTaskModelRole,
   type ProjectTaskModelTarget,
   type ProjectMergeOwner,
@@ -207,13 +208,20 @@ import {
   DELEGATE_ROLE,
   modelStepEventBody,
   resolveRoleModels,
+  type ResolvedRoleModels,
   toDelegateTarget,
 } from "./roleModels.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
+import { liveTaskChildren, taskChildren } from "./taskChildren.ts";
 import { allocateTaskKeyPrefixes } from "./taskKeyPrefixes.ts";
 import { resolveUserLanguage } from "./userLanguage.ts";
 
 export const MAX_TASK_NUDGES = 2;
+const STEP_LABEL: Record<ProjectTaskDelegatedRole, string> = {
+  implement: "구현",
+  review: "리뷰",
+  fix: "수정",
+};
 const DEFAULT_TASK_EVENT_LIMIT = 20;
 /** Stages the PM presence counts; done and cancelled tasks never show. */
 /** A task waiting on another may start once that one is in review or done. */
@@ -1812,19 +1820,13 @@ const make = Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
         return yield* teamError(`#${task.number} is finished.`, role.projectId);
       }
-      if (task.location === "cloud") {
-        // A step's checkout is on the Mac, the cloud lead's is in its sandbox: only a
-        // review, which reads the mirrored diff, can run apart from the lead's work.
-        if (input.role !== "review") {
-          return yield* teamError(
-            `#${task.number} runs in the cloud: do the ${input.role} step yourself in the sandbox, then hand off only the review.`,
-            role.projectId,
-          );
-        }
-        if (task.leadThreadId !== null) yield* syncCloudLead(task.leadThreadId);
-      }
       const manager = yield* requireManager(role.projectId);
-      const model = resolveRoleModels(task.roleModels, manager.settings.roleModels)[input.role];
+      const resolved = resolveRoleModels(task.roleModels, manager.settings.roleModels);
+      // A cloud task's children share the lead's checkout, so they run in its sandbox.
+      const model =
+        task.location === "cloud" && input.isolation !== "worktree"
+          ? yield* cloudStepModel(task, input.role, resolved[input.role], resolved.plan)
+          : resolved[input.role];
       const key = yield* keyOf(task);
       // Links the child before it acts: its usage row, and for a review its reviewer
       // session. Opening the row again (a retry, or the call after the hook) is a no-op.
@@ -1855,12 +1857,7 @@ const make = Effect.gen(function* () {
           task: input.task,
           title: input.title ?? `${key} ${input.role}`,
           role: DELEGATE_ROLE[input.role],
-          // A cloud task's review gets its own checkout: later mirrors reset the lead's worktree.
-          ...(task.location === "cloud"
-            ? { isolation: "worktree" as const }
-            : input.isolation === undefined
-              ? {}
-              : { isolation: input.isolation }),
+          ...(input.isolation === undefined ? {} : { isolation: input.isolation }),
           ...(input.mode === undefined ? {} : { mode: input.mode }),
           ...(input.clientRequestId === undefined
             ? {}
@@ -1886,6 +1883,71 @@ const make = Effect.gen(function* () {
       yield* router.publish(role.projectId);
       return result;
     }).pipe(orTeamError("Could not delegate the step."));
+
+  /**
+   * The model a step of a cloud task runs on, in the lead's sandbox. Codex runs
+   * there only with the cloud Codex login; otherwise the step moves to the plan
+   * model, which the task's notes and model steps show. A lasting failure (no
+   * login, or one codex rejects) moves this task's implement and fix (or its
+   * review) for good; a passing one (the login busy elsewhere) only this step.
+   */
+  const cloudStepModel = (
+    task: ProjectTask,
+    role: ProjectTaskDelegatedRole,
+    model: ResolvedRoleModels[ProjectTaskModelRole],
+    plan: ResolvedRoleModels["plan"],
+  ) =>
+    Effect.gen(function* () {
+      if (model === null) return model;
+      const providers = yield* providerRegistry.getProviders;
+      const driver = providers.find(
+        (provider) => provider.instanceId === model.target.providerInstanceId,
+      )?.driver;
+      if (driver !== "codex") return model;
+      const shell =
+        task.leadThreadId === null
+          ? null
+          : yield* threads.getThreadShell(task.leadThreadId).pipe(Effect.orElseSucceed(() => null));
+      const check =
+        shell?.worktreePath == null
+          ? { ok: false as const, reason: "the lead has no worktree", transient: true }
+          : yield* cloudLead.checkCodex(shell.worktreePath);
+      if (check.ok) return model;
+      const target: ProjectTaskModelTarget | null =
+        plan?.target ??
+        (shell === null
+          ? null
+          : {
+              providerInstanceId: shell.modelSelection.instanceId,
+              model: shell.modelSelection.model,
+            });
+      if (target === null) return model;
+      const modelName = `${target.providerInstanceId} · ${target.model}`;
+      if (check.transient) {
+        yield* appendEvent(
+          task,
+          "note",
+          `클라우드에서 지금 Codex를 쓸 수 없어서 이번 ${STEP_LABEL[role]} 단계만 ${modelName}(으)로 돌려요. 이유: ${check.reason}`,
+          null,
+        );
+        return { target, source: "task" as const };
+      }
+      const updated = yield* repository.setTaskRoleModels({
+        id: task.id,
+        roleModels: applyRoleModelsPatch(
+          task.roleModels,
+          role === "review" ? { review: target } : { implement: target, fix: target },
+        ),
+        now: yield* nowIso,
+      });
+      yield* appendEvent(
+        Option.getOrElse(updated, () => task),
+        "note",
+        `클라우드에서 Codex를 쓸 수 없어서 이 태스크만 ${role === "review" ? "리뷰" : "구현·수정"} 모델을 ${modelName}(으)로 바꿨어요. 이유: ${check.reason}`,
+        null,
+      );
+      return { target, source: "task" as const };
+    });
 
   const startTask: ProjectTeamService["Service"]["startTask"] = (callerThreadId, input, delegate) =>
     Effect.gen(function* () {
@@ -3920,6 +3982,30 @@ const make = Effect.gen(function* () {
   const moveTask: ProjectTeamService["Service"]["moveTask"] = (input) =>
     Effect.gen(function* () {
       const task = yield* requireTask(input.taskId, input.projectId);
+      // Children on the lead's checkout run where it runs: none may be mid-turn during a move.
+      const sharedChildren = (lead: ThreadId, worktreePath: string, live: boolean) =>
+        threads.listProjectThreads({ projectId: task.projectId, includeSubagents: true }).pipe(
+          Effect.map((shells) =>
+            (live ? liveTaskChildren : taskChildren)(shells, lead).filter(
+              (child) => child.worktreePath === worktreePath,
+            ),
+          ),
+          orTeamError("Could not list the task's child sessions.", task.projectId),
+        );
+      if (task.leadThreadId !== null) {
+        const leadShell = yield* threads
+          .getThreadShell(task.leadThreadId)
+          .pipe(Effect.orElseSucceed(() => null));
+        if (leadShell?.worktreePath != null) {
+          const working = yield* sharedChildren(task.leadThreadId, leadShell.worktreePath, true);
+          if (working.length > 0) {
+            return yield* teamError(
+              `리드가 맡긴 작업(${working.map((child) => child.title).join(", ")})이 아직 진행 중이라 옮길 수 없어요. 끝난 뒤 다시 옮겨 주세요.`,
+              task.projectId,
+            );
+          }
+        }
+      }
       const moved = yield* moveTaskLead(
         {
           threads,
@@ -3937,6 +4023,10 @@ const make = Effect.gen(function* () {
           publish: (target) => router.publish(target.projectId),
           newKey: (prefix) => newId(prefix).pipe(Effect.orDie),
           isFinished: (target) => FinishedTaskCleanup.isFinishedStage(target.stage),
+          sharedChildren: (lead, worktreePath) =>
+            sharedChildren(lead, worktreePath, false).pipe(
+              Effect.map((children) => children.map((child) => child.id)),
+            ),
         },
         task,
         input.to,
