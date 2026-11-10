@@ -1,3 +1,4 @@
+import { useWaitingPulse } from "../WaitingAlerts";
 import type { LegendListRef } from "@legendapp/list/react";
 import type {
   EnvironmentId,
@@ -60,8 +61,12 @@ export function revealDecisionCard(list: LegendListRef | null, cardId: string): 
 }
 
 /** A pill beside "Scroll to end" that opens every waiting item in a dialog. */
-function PendingActionsPill(props: { count: number; children: (close: () => void) => ReactNode }) {
+export function PendingActionsPill(props: {
+  count: number;
+  children: (close: () => void) => ReactNode;
+}) {
   const [open, setOpen] = useState(false);
+  const pulse = useWaitingPulse(props.count);
   if (props.count === 0) {
     // The last item was answered: close, so the next item doesn't reopen the dialog.
     if (open) setOpen(false);
@@ -73,13 +78,14 @@ function PendingActionsPill(props: { count: number; children: (close: () => void
       <Button
         aria-label={`기다리는 일 ${props.count}개 보기`}
         data-pending-actions-button={props.count}
+        data-waiting-pulse={pulse}
         onPointerDown={(event) => event.preventDefault()}
         onClick={() => setOpen(true)}
-        className="pointer-events-auto"
+        className="pointer-events-auto border-warning/40 bg-warning/15 text-warning-foreground"
         size="xs"
         variant="glass"
       >
-        <BellDotIcon className="size-3.5 text-primary" />
+        <BellDotIcon className="size-3.5 text-warning-foreground" />
         기다리는 일 {props.count}개
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

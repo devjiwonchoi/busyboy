@@ -24,7 +24,6 @@ import {
   hasDesktopNotifications,
   hasNotificationSound,
   playNotificationSound,
-  setNotificationBadge,
   unlockNotificationAudio,
 } from "../threadNotifications";
 import { resolveSidebarThreadStatus } from "./Sidebar.logic";
@@ -40,32 +39,26 @@ export function ThreadNotificationCoordinator() {
   const onNotification = (environmentId: EnvironmentId, notification: Notification) => {
     pending.current.get(notification.tag)?.notification.close();
     pending.current.set(notification.tag, { environmentId, notification });
-    setNotificationBadge(pending.current.size);
   };
 
   useEffect(() => {
     const activeIds = new Set(environmentIds);
-    const count = pending.current.size;
     for (const [tag, entry] of pending.current) {
       if (activeIds.has(entry.environmentId)) continue;
       entry.notification.close();
       pending.current.delete(tag);
     }
-    if (count !== pending.current.size) setNotificationBadge(pending.current.size);
   }, [environmentIds]);
 
   useEffect(() => {
     const clear = () => {
       for (const { notification } of pending.current.values()) notification.close();
       pending.current.clear();
-      setNotificationBadge(0);
     };
     clear();
     if (!hasDesktopNotifications(mode)) return;
-    const unsubscribe = window.desktopBridge?.onNotificationBadgeClear?.(clear);
     window.addEventListener("focus", clear);
     return () => {
-      unsubscribe?.();
       window.removeEventListener("focus", clear);
       clear();
     };
@@ -252,11 +245,6 @@ function EnvironmentNotifications({
         });
       // Leads keep running while the PM is off, so its blockers still need the user.
       if (summary.latestBatchId !== null && summary.latestBatchId !== before.latestBatchId) {
-        if (hasNotificationSound(mode)) {
-          void playNotificationSound("input", () =>
-            hasNotificationSound(getClientSettings().notificationMode),
-          );
-        }
         notify(
           `${who} · Needs you: ${summary.openCount}`,
           "attention",

@@ -42,6 +42,7 @@ export function SettingsThreadsRouteScreen() {
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
         >
           <UsageLimitSettingsRows />
+          <NotificationsSettingsSection />
           <BetaSettingsSection />
           <LegacySettingsSection />
         </ScrollView>
@@ -112,6 +113,23 @@ function UsageLimitSettingsRows() {
         value={uniformMobileSetting(displayTargets, "autoResumeLimitedThreads")}
         disabled={disabled}
         onValueChange={(value) => writeToAll({ autoResumeLimitedThreads: value })}
+      />
+    </SettingsSection>
+  );
+}
+
+function NotificationsSettingsSection() {
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const preferences = useAtomValue(mobilePreferencesAtom);
+
+  return (
+    <SettingsSection title="Notifications">
+      <SettingsSwitchRow
+        label="Sound for items waiting on you"
+        value={
+          !AsyncResult.isSuccess(preferences) || preferences.value.waitingSoundEnabled !== false
+        }
+        onValueChange={(value) => savePreferences({ waitingSoundEnabled: value })}
       />
     </SettingsSection>
   );

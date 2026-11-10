@@ -1,3 +1,4 @@
+import { waitingItemKeys } from "@t3tools/shared/waitingAlerts";
 import type { ProjectManagerEntry } from "~/state/projectTeam";
 import { isDirectorSummary, isOpenDecisionCard } from "~/state/projectTeam.logic";
 
@@ -32,7 +33,7 @@ export function directorInbox(entries: readonly ProjectManagerEntry[]) {
         (a.oldestAt === null ? Infinity : Date.parse(a.oldestAt)) -
         (b.oldestAt === null ? Infinity : Date.parse(b.oldestAt)),
     );
-  return { groups, total: groups.reduce((total, group) => total + group.total, 0) };
+  return { groups, total: waitingItemKeys(entries).total };
 }
 
 export type DirectorInboxGroup = ReturnType<typeof directorInbox>["groups"][number];
