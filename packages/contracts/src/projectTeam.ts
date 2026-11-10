@@ -10,6 +10,7 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
+import { ExecutionLocation } from "./executionLocation.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
 import { ProjectIconOverride } from "./project.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
@@ -376,6 +377,8 @@ export const ProjectTask = Schema.Struct({
   /** The task this one was split from, shown as its parent. */
   parentTaskId: Schema.NullOr(ProjectTaskId).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   leadThreadId: Schema.NullOr(ThreadId),
+  /** Where the task's lead runs, set when the task starts; absent means local. */
+  location: Schema.optional(ExecutionLocation),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
   resultSummary: Schema.NullOr(Schema.String),
@@ -1245,6 +1248,10 @@ export const ProjectTeamTaskStartInput = Schema.Struct({
     description:
       "Provider and model for the task lead. Omit to use the PM's own. A plan model set for the project or task wins.",
   }),
+  location: Schema.optional(ExecutionLocation).annotate({
+    description:
+      "Where the task lead runs. local (default) runs it on the user's Mac. cloud runs a Claude lead's CLI in a Vercel Sandbox with the same settings; the app shows the same progress, cards and pull request, marked Cloud. Use cloud only when the user asks for it.",
+  }),
 });
 export type ProjectTeamTaskStartInput = typeof ProjectTeamTaskStartInput.Type;
 
@@ -1780,6 +1787,7 @@ export const ProjectTaskReference = Schema.Struct({
   title: Schema.String,
   stage: ProjectTaskStage,
   leadThreadId: Schema.NullOr(ThreadId),
+  location: Schema.optional(ExecutionLocation),
   /** The task's pull request, shown on its sidebar row while in review. */
   prUrl: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** How the lead's last turn ended; "stalled" marks a live task that stopped making progress. */

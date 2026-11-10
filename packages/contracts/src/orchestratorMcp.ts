@@ -25,6 +25,7 @@ import {
 import { ProviderInteractionMode, RuntimeMode } from "./providerPolicy.ts";
 import { ThreadLinkedPullRequest } from "./threadPullRequest.ts";
 import { ThreadTitleRegeneration } from "./threadTitle.ts";
+import { ExecutionLocation } from "./executionLocation.ts";
 import {
   OrchestrationV2Actor,
   OrchestrationV2CreationSource,
@@ -176,6 +177,10 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
   timeoutMs: Schema.optional(Schema.Number).annotate({
     description:
       "Wait budget for mode=wait only. Default 10 minutes. Elapsing it returns waitTimedOut=true on that call and does not cancel the child.",
+  }),
+  location: Schema.optional(ExecutionLocation).annotate({
+    description:
+      "Where the child runs. local (default) runs it on the user's Mac. cloud runs a Claude child in a Vercel Sandbox with its own checkout (implies isolation worktree); its worktree on the Mac is a read-only mirror updated after each turn.",
   }),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
   runtimeMode: Schema.optional(
