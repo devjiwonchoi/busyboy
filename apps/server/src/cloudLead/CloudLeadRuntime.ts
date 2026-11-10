@@ -14,6 +14,11 @@
  *
  * A sandbox idle for idleStopMs is deleted; the Mac mirror and the transcript
  * backup are enough for the next turn to start a new one and resume.
+ *
+ * One Mac worktree has one sandbox. A cloud lead's children (implement, fix,
+ * review) work in the lead's worktree, so they share its sandbox and checkout,
+ * and the mirror, idle stop and release cover all of them. Codex children run
+ * `codex app-server` there through the same relay.
  */
 import * as NodeCrypto from "node:crypto";
 import * as NodeFs from "node:fs/promises";
@@ -55,6 +60,24 @@ export interface CloudLeadCredentials {
   readonly githubToken: string | null;
 }
 
+/**
+ * The cloud's own ChatGPT login for Codex (an auth.json from a separate
+ * `codex login`, never the Mac's: two machines refreshing one login log each
+ * other out). Codex refreshes it while it runs, so the newest copy is saved back.
+ */
+export interface CodexCloudAuth {
+  readonly read: () => Promise<string | null>;
+  readonly save: (authJson: string) => Promise<void>;
+}
+
+/**
+ * transient: the login may work again soon (another sandbox holds it, the
+ * sandbox is not up), so a fallback should cover only the current step.
+ */
+export type CodexCheck =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string; readonly transient: boolean };
+
 export interface CloudLeadRuntimeDeps {
   readonly client: () => Promise<SandboxClient>;
   readonly credentials: () => Promise<CloudLeadCredentials>;
@@ -74,6 +97,8 @@ export interface CloudLeadRuntimeDeps {
   readonly ports?: { readonly relay: number; readonly mcp: number };
   /** The model local claude picks when settings name none; see SyncLocations.defaultModel. */
   readonly defaultModel?: () => Promise<string | undefined>;
+  /** Absent: Codex never runs in the cloud and its children fall back to Claude. */
+  readonly codexAuth?: CodexCloudAuth;
   readonly log?: (event: string, data: Record<string, unknown>) => void;
   /** How long a sandbox may live; it is replaced rotationMarginMs before that. */
   readonly maxLifetimeMs?: number;
@@ -108,12 +133,37 @@ export interface CloudSpawnOptions {
 
 export interface CloudLaunch {
   readonly spawn: (options: CloudSpawnOptions) => RemoteProcess;
+  /** Starts `codex app-server` in the sandbox with the cloud Codex login. */
+  readonly spawnCodex: (options: CodexSpawnOptions) => Promise<RemoteProcess>;
   /** The t3-code MCP URL as the sandbox sees it. */
   readonly mcpUrl: string;
+  /** Maps Mac paths and the Mac MCP endpoint to what the sandbox sees, and back. */
+  readonly paths: {
+    readonly toRemote: (text: string) => string;
+    readonly toMac: (text: string) => string;
+  };
+}
+
+export interface CodexSpawnOptions {
+  /** Arguments after `codex`, such as ["app-server"]. */
+  readonly args: ReadonlyArray<string>;
+  readonly env: Readonly<Record<string, string | undefined>>;
+}
+
+export interface PrepareInput {
+  readonly threadId: string;
+  /** The Mac worktree; threads in the same one share a sandbox. */
+  readonly worktreePath: string;
+  readonly mcpEndpoint: string;
 }
 
 interface CloudSession {
+  /** The Mac worktree this sandbox mirrors; every thread working there shares it. */
+  readonly key: string;
+  /** The thread whose turn started the sandbox, usually the lead. */
   readonly threadId: string;
+  /** Running remote processes per thread, so a replacement can stop each one's turn. */
+  readonly runningThreads: Map<string, number>;
   readonly sandbox: SandboxHandle;
   readonly relay: RelayClient;
   readonly macCwd: string;
@@ -122,8 +172,12 @@ interface CloudSession {
   readonly credentials: CloudLeadCredentials;
   idleTimer: ReturnType<typeof setTimeout> | null;
   readonly keepAlive: ReturnType<typeof setInterval>;
-  /** Remote claude processes still running; the sandbox only idles out at zero. */
+  /** Remote processes (claude, codex) still running; the sandbox only idles out at zero. */
   running: number;
+  codexRunning: number;
+  codexConfigSynced: boolean;
+  /** codex started here with the cloud login, so the sandbox may hold a refreshed copy. */
+  codexAuthInstalled: boolean;
   idleSyncFailures: number;
   /** How many turns prepared this sandbox; an idle stop gives up if it changes. */
   uses: number;
@@ -168,6 +222,13 @@ copy_sessions() {
   done
 }`;
 
+/** Codex env keys that configure codex itself; credentials never come from the Mac. */
+const CODEX_PASS_ENV = /^(CODEX_|RUST_LOG$)/;
+const CODEX_DROP_ENV = new Set(["CODEX_HOME", "CODEX_API_KEY", "OPENAI_API_KEY"]);
+/** Codex's own sandbox (bubblewrap) cannot start in a Vercel VM; the VM is the sandbox. */
+const CODEX_CLOUD_ARGS = ["-c", 'sandbox_mode="danger-full-access"'];
+const CODEX_CHECK_TIMEOUT_MS = 60_000;
+
 export class CloudLeadRuntime {
   private readonly deps: CloudLeadRuntimeDeps;
   private readonly sessions = new Map<string, Promise<CloudSession>>();
@@ -175,6 +236,10 @@ export class CloudLeadRuntime {
   /** Sandboxes being mirrored a last time and deleted; a new turn waits for these. */
   private readonly releasing = new Map<string, Promise<void>>();
   private rotationHandler: CloudLeadRotationHandler | null = null;
+  /** Thread -> the Mac worktree (session key) it last prepared in. */
+  private readonly worktrees = new Map<string, string>();
+  /** The one sandbox using the cloud Codex login: a login refreshed in two places logs out. */
+  private codexHolder: string | null = null;
 
   constructor(deps: CloudLeadRuntimeDeps) {
     this.deps = deps;
@@ -192,12 +257,9 @@ export class CloudLeadRuntime {
     return this.deps.ports ?? { relay: RELAY_PORT, mcp: RELAY_MCP_PORT };
   }
 
-  /** Gets the thread's sandbox ready and returns how to run claude in it. */
-  async prepare(input: {
-    readonly threadId: string;
-    readonly worktreePath: string;
-    readonly mcpEndpoint: string;
-  }): Promise<CloudLaunch> {
+  /** Gets the thread's sandbox ready and returns how to run claude or codex in it. */
+  async prepare(input: PrepareInput): Promise<CloudLaunch> {
+    this.worktrees.set(input.threadId, input.worktreePath);
     const session = await this.session(input);
     // Released between the lookup and now: wait for that and take a new sandbox.
     if (session.released) return this.prepare(input);
@@ -208,10 +270,80 @@ export class CloudLeadRuntime {
     this.cancelIdleStop(session);
     session.uses += 1;
     const mcpPath = new URL(input.mcpEndpoint).pathname;
+    const mcpUrl = `http://127.0.0.1:${this.ports.mcp}${mcpPath}`;
+    const macOrigin = new URL(input.mcpEndpoint).origin;
+    const remoteOrigin = new URL(mcpUrl).origin;
     return {
-      spawn: (options) => this.spawn(session, options),
-      mcpUrl: `http://127.0.0.1:${this.ports.mcp}${mcpPath}`,
+      spawn: (options) => this.spawn(session, options, input.threadId),
+      spawnCodex: (options) => this.spawnCodex(session, options, input.threadId),
+      mcpUrl,
+      paths: {
+        toRemote: (text) => this.toRemote(session, text).split(macOrigin).join(remoteOrigin),
+        toMac: (text) =>
+          rewriteHomePaths(text, { localHome: session.remoteCwd, remoteHome: session.macCwd }),
+      },
     };
+  }
+
+  /**
+   * Whether a Codex child can start in the live sandbox of this Mac worktree:
+   * the cloud login exists, no other sandbox holds it, and `codex login status`
+   * accepts it there.
+   */
+  async checkCodex(worktreePath: string): Promise<CodexCheck> {
+    const auth = await this.deps.codexAuth?.read().catch(() => null);
+    if (auth === null || auth === undefined) {
+      return {
+        ok: false,
+        reason: "no cloud Codex login is saved (cloud secret codex_auth_json)",
+        transient: false,
+      };
+    }
+    // `codex login status` trusts any auth.json, even one without tokens.
+    if (!hasCodexCredentials(auth)) {
+      return {
+        ok: false,
+        reason: "the saved cloud Codex login has no tokens or API key",
+        transient: false,
+      };
+    }
+    if (this.codexHolder !== null && this.codexHolder !== worktreePath) {
+      return {
+        ok: false,
+        reason: "another cloud sandbox is using the cloud Codex login",
+        transient: true,
+      };
+    }
+    const pending = this.sessions.get(worktreePath);
+    if (pending === undefined) {
+      return { ok: false, reason: "the lead's cloud sandbox is not running", transient: true };
+    }
+    try {
+      const session = await pending;
+      await this.syncCodexConfig(session);
+      const result = await session.sandbox.runCommand({
+        cmd: "bash",
+        args: ["-c", `${this.codexAuthScript(session)} && codex login status`],
+        env: { BUSYBOY_CODEX_AUTH: auth, CODEX_HOME: this.codexHome(session) },
+        timeoutMs: CODEX_CHECK_TIMEOUT_MS,
+      });
+      if (result.exitCode !== 0) {
+        return {
+          ok: false,
+          reason: `codex did not start in the sandbox (exit ${result.exitCode}): ${
+            (result.stderr || result.stdout).trim().slice(0, 300) || "no output"
+          }`,
+          transient: false,
+        };
+      }
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: `codex did not start in the sandbox: ${errorText(error)}`,
+        transient: true,
+      };
+    }
   }
 
   /**
@@ -220,12 +352,17 @@ export class CloudLeadRuntime {
    * syncs of one thread run one at a time.
    */
   syncToMac(threadId: string): Promise<{ readonly head: string } | null> {
-    const pending = this.sessions.get(threadId);
+    const key = this.worktrees.get(threadId);
+    return key === undefined ? Promise.resolve(null) : this.syncKey(key);
+  }
+
+  private syncKey(key: string): Promise<{ readonly head: string } | null> {
+    const pending = this.sessions.get(key);
     // During a release, wait for its final mirror so callers read a finished worktree.
     if (pending === undefined) {
-      return (this.releasing.get(threadId) ?? Promise.resolve()).then(() => null);
+      return (this.releasing.get(key) ?? Promise.resolve()).then(() => null);
     }
-    return this.syncLocked(threadId, pending);
+    return this.syncLocked(key, pending);
   }
 
   private syncLocked(
@@ -271,6 +408,11 @@ export class CloudLeadRuntime {
    * transcripts stay, so a later turn starts a new sandbox from them.
    */
   release(threadId: string, options: { readonly synced?: boolean } = {}): Promise<void> {
+    const key = this.worktrees.get(threadId);
+    return key === undefined ? Promise.resolve() : this.releaseKey(key, options);
+  }
+
+  private releaseKey(threadId: string, options: { readonly synced?: boolean } = {}): Promise<void> {
     const pending = this.sessions.get(threadId);
     if (pending === undefined) return this.releasing.get(threadId) ?? Promise.resolve();
     // Unmapped right away: a turn starting now waits for this and gets a new sandbox.
@@ -285,15 +427,27 @@ export class CloudLeadRuntime {
           this.log("cloud-lead.final-sync-failed", { threadId, error: String(error) }),
         );
       }
+      // Codex may have refreshed the cloud login; keep it before the sandbox goes.
+      await this.saveCodexAuth(session);
       clearInterval(session.keepAlive);
       if (session.rotationCheck !== null) clearInterval(session.rotationCheck);
       session.relay.close();
+      // Its codex processes end with the relay; the login is free for other sandboxes.
+      if (this.codexHolder === session.key) this.codexHolder = null;
       await session.sandbox.delete().catch(() => undefined);
-      this.log("cloud-lead.sandbox-released", { threadId, sandbox: session.sandbox.name });
+      this.log("cloud-lead.sandbox-released", {
+        worktree: threadId,
+        sandbox: session.sandbox.name,
+      });
     })();
     this.releasing.set(threadId, done);
     const forget = () => {
-      if (this.releasing.get(threadId) === done) this.releasing.delete(threadId);
+      if (this.releasing.get(threadId) !== done) return;
+      this.releasing.delete(threadId);
+      if (this.sessions.has(threadId)) return;
+      for (const [thread, worktree] of this.worktrees) {
+        if (worktree === threadId) this.worktrees.delete(thread);
+      }
     };
     done.then(forget, forget);
     return done;
@@ -301,38 +455,33 @@ export class CloudLeadRuntime {
 
   async releaseAll(): Promise<void> {
     await Promise.all([
-      ...[...this.sessions.keys()].map((threadId) => this.release(threadId)),
+      ...[...this.sessions.keys()].map((key) => this.releaseKey(key)),
       ...this.releasing.values(),
     ]);
   }
 
   hasSession(threadId: string): boolean {
-    return this.sessions.has(threadId);
+    const key = this.worktrees.get(threadId);
+    return key !== undefined && this.sessions.has(key);
   }
 
-  private session(input: {
-    readonly threadId: string;
-    readonly worktreePath: string;
-    readonly mcpEndpoint: string;
-  }): Promise<CloudSession> {
-    const existing = this.sessions.get(input.threadId);
+  private session(input: PrepareInput): Promise<CloudSession> {
+    const key = input.worktreePath;
+    const existing = this.sessions.get(key);
     if (existing !== undefined) return existing;
-    const releasing = this.releasing.get(input.threadId);
+    const releasing = this.releasing.get(key);
     if (releasing !== undefined) return releasing.then(() => this.session(input));
     const created = this.create(input);
-    this.sessions.set(input.threadId, created);
+    this.sessions.set(key, created);
     // A failed start must not stick: the next turn tries again.
     created.catch(() => {
-      if (this.sessions.get(input.threadId) === created) this.sessions.delete(input.threadId);
+      if (this.sessions.get(key) === created) this.sessions.delete(key);
     });
     return created;
   }
 
-  private async create(input: {
-    readonly threadId: string;
-    readonly worktreePath: string;
-    readonly mcpEndpoint: string;
-  }): Promise<CloudSession> {
+  private async create(input: PrepareInput): Promise<CloudSession> {
+    const key = input.worktreePath;
     const started = Date.now();
     const createdAt = this.now();
     const [client, credentials] = await Promise.all([this.deps.client(), this.deps.credentials()]);
@@ -357,12 +506,12 @@ export class CloudLeadRuntime {
       });
       await syncEnvironment(sandbox, bundle, remoteHome);
       await this.mirrorIn(sandbox, input.worktreePath, remoteCwd);
-      await this.restoreTranscripts(input.threadId, sandbox, remoteHome, remoteCwd);
+      await this.restoreTranscripts([key, input.threadId], sandbox, remoteHome, remoteCwd);
       const relay = await this.startRelay(sandbox, remoteHome, input.mcpEndpoint, () => {
         // The relay is gone (sandbox stopped or unreachable): mirror what the
         // sandbox API can still reach and start over on the next turn.
         this.log("cloud-lead.relay-unreachable", { threadId: input.threadId });
-        void this.release(input.threadId);
+        void this.releaseKey(key);
       });
       this.log("cloud-lead.sandbox-ready", {
         threadId: input.threadId,
@@ -380,7 +529,9 @@ export class CloudLeadRuntime {
       }, KEEPALIVE_EVERY_MS);
       keepAlive.unref?.();
       const session: CloudSession = {
+        key,
         threadId: input.threadId,
+        runningThreads: new Map(),
         sandbox,
         relay,
         keepAlive,
@@ -390,6 +541,9 @@ export class CloudLeadRuntime {
         credentials,
         idleTimer: null,
         running: 0,
+        codexRunning: 0,
+        codexConfigSynced: false,
+        codexAuthInstalled: false,
         idleSyncFailures: 0,
         uses: 0,
         released: false,
@@ -479,15 +633,23 @@ export class CloudLeadRuntime {
     return relay;
   }
 
-  private spawn(session: CloudSession, options: CloudSpawnOptions): RemoteProcess {
+  /** Mac worktree and home paths as the sandbox sees them. */
+  private toRemote(session: CloudSession, text: string): string {
+    return rewriteHomePaths(
+      rewriteHomePaths(text, { localHome: session.macCwd, remoteHome: session.remoteCwd }),
+      { localHome: this.deps.host.env.HOME ?? "/nonexistent", remoteHome: session.remoteHome },
+    );
+  }
+
+  private spawn(
+    session: CloudSession,
+    options: CloudSpawnOptions,
+    threadId: string,
+  ): RemoteProcess {
     if (session.released) {
       throw new Error("The cloud sandbox for this thread was stopped; start the turn again.");
     }
-    const rewrite = (text: string) =>
-      rewriteHomePaths(
-        rewriteHomePaths(text, { localHome: session.macCwd, remoteHome: session.remoteCwd }),
-        { localHome: this.deps.host.env.HOME ?? "/nonexistent", remoteHome: session.remoteHome },
-      );
+    const rewrite = (text: string) => this.toRemote(session, text);
     // The SDK runs a script entry as `node cli.js ...`; the sandbox has claude on PATH.
     const args = isScript(options.command)
       ? options.args
@@ -512,21 +674,101 @@ export class CloudLeadRuntime {
       if (options.signal.aborted) child.kill("SIGTERM");
       else options.signal.addEventListener("abort", () => child.kill("SIGTERM"), { once: true });
     }
+    this.track(session, child, threadId);
+    return child;
+  }
+
+  /** Counts a running process, so the sandbox does not idle out under it. */
+  private track(
+    session: CloudSession,
+    child: RemoteProcess,
+    threadId: string,
+    onExit?: () => void,
+  ) {
     this.cancelIdleStop(session);
     session.running += 1;
+    session.runningThreads.set(threadId, (session.runningThreads.get(threadId) ?? 0) + 1);
     child.once("exit", () => {
       session.running -= 1;
+      const left = (session.runningThreads.get(threadId) ?? 1) - 1;
+      if (left > 0) session.runningThreads.set(threadId, left);
+      else session.runningThreads.delete(threadId);
+      onExit?.();
       if (session.running === 0) this.scheduleIdleStop(session);
+    });
+  }
+
+  private codexHome(session: CloudSession) {
+    return `${session.remoteHome}/.codex`;
+  }
+
+  /**
+   * Puts the cloud Codex login from $BUSYBOY_CODEX_AUTH into the sandbox's
+   * CODEX_HOME, where codex reads and refreshes it. It comes in only as env,
+   * and only when the sandbox has none: a copy there may be newer (refreshed).
+   */
+  private codexAuthScript(session: CloudSession) {
+    const home = shellQuote(this.codexHome(session));
+    return [
+      `mkdir -p ${home}`,
+      `{ [ -s ${home}/auth.json ] || (umask 077 && printf '%s' "$BUSYBOY_CODEX_AUTH" > ${home}/auth.json); }`,
+      "unset BUSYBOY_CODEX_AUTH",
+    ].join(" && ");
+  }
+
+  private async spawnCodex(session: CloudSession, options: CodexSpawnOptions, threadId: string) {
+    if (session.released) {
+      throw new Error("The cloud sandbox for this thread was stopped; start the turn again.");
+    }
+    const auth = await this.deps.codexAuth?.read();
+    if (auth === null || auth === undefined) {
+      throw new Error("No cloud Codex login is saved (cloud secret codex_auth_json).");
+    }
+    if (this.codexHolder !== null && this.codexHolder !== session.key) {
+      throw new Error("Another cloud sandbox is using the cloud Codex login.");
+    }
+    await this.syncCodexConfig(session);
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(options.env)) {
+      if (value === undefined || CODEX_DROP_ENV.has(key) || !CODEX_PASS_ENV.test(key)) continue;
+      env[key] = this.toRemote(session, value);
+    }
+    env.HOME = session.remoteHome;
+    env.CODEX_HOME = this.codexHome(session);
+    env.BUSYBOY_CODEX_AUTH = auth;
+    if (session.credentials.githubToken !== null) env.GH_TOKEN = session.credentials.githubToken;
+    const args = [...CODEX_CLOUD_ARGS, ...options.args.map((arg) => this.toRemote(session, arg))];
+    // Re-checked after the awaits above; nothing awaits from here to the spawn.
+    if (session.released) {
+      throw new Error("The cloud sandbox for this thread was stopped; start the turn again.");
+    }
+    if (this.codexHolder !== null && this.codexHolder !== session.key) {
+      throw new Error("Another cloud sandbox is using the cloud Codex login.");
+    }
+    const child = session.relay.spawnRemote({
+      command: "bash",
+      args: ["-c", `${this.codexAuthScript(session)} && exec codex "$@"`, "codex", ...args],
+      cwd: session.remoteCwd,
+      env,
+    });
+    this.codexHolder = session.key;
+    session.codexRunning += 1;
+    session.codexAuthInstalled = true;
+    this.track(session, child, threadId, () => {
+      session.codexRunning -= 1;
+      // A release saves the login itself before deleting the sandbox.
+      if (!session.released) void this.saveCodexAuth(session);
     });
     return child;
   }
 
   /**
-   * Puts the Mac's claude transcripts for `macCwd` into the thread's backup,
-   * over any older copies, so the next sandbox restores them and resumes.
+   * Puts the Mac's claude transcripts for `macCwd` into the worktree's backup
+   * (shared by the lead and its children), over any older copies, so the next
+   * sandbox restores them and resumes.
    */
-  async importTranscripts(threadId: string, macCwd: string): Promise<void> {
-    const backup = this.transcriptBackupPath(threadId);
+  async importTranscripts(_threadId: string, macCwd: string): Promise<void> {
+    const backup = this.transcriptBackupPath(macCwd);
     await this.mac().run(
       [
         TRANSCRIPT_SHELL,
@@ -543,13 +785,13 @@ export class CloudLeadRuntime {
     );
   }
 
-  /** Unpacks the thread's transcript backup into the Mac's claude folder for `macCwd`. */
-  async exportTranscripts(threadId: string, macCwd: string): Promise<void> {
+  /** Unpacks the worktree's transcript backup into the Mac's claude folder for `macCwd`. */
+  async exportTranscripts(_threadId: string, macCwd: string): Promise<void> {
     await this.mac().run(
       [
         TRANSCRIPT_SHELL,
         `dst=${shellQuote(await this.macTranscriptDir(macCwd))}`,
-        `backup=${shellQuote(this.transcriptBackupPath(threadId))}`,
+        `backup=${shellQuote(this.transcriptBackupPath(macCwd))}`,
         'if [ ! -f "$backup" ]; then exit 0; fi',
         "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT",
         'tar -xzf "$backup" -C "$tmp"',
@@ -570,7 +812,7 @@ export class CloudLeadRuntime {
     const script =
       input.location === "local"
         ? `if [ -f ${shellQuote(`${await this.macTranscriptDir(input.macCwd)}/${name}`)} ]; then echo yes; fi`
-        : `if tar -tzf ${shellQuote(this.transcriptBackupPath(input.threadId))} 2>/dev/null | grep -qxF -e ${shellQuote(`./${name}`)} -e ${shellQuote(name)}; then echo yes; fi`;
+        : `if tar -tzf ${shellQuote(this.transcriptBackupPath(input.macCwd))} 2>/dev/null | grep -qxF -e ${shellQuote(`./${name}`)} -e ${shellQuote(name)}; then echo yes; fi`;
     return (await this.mac().run(script)).trim() === "yes";
   }
 
@@ -582,6 +824,56 @@ export class CloudLeadRuntime {
   private async macTranscriptDir(macCwd: string) {
     const real = await NodeFs.realpath(macCwd).catch(() => macCwd);
     return `${this.deps.host.env.HOME ?? ""}/.claude/projects/${encodeProjectDir(real)}`;
+  }
+
+  /**
+   * Copies the Mac's ~/.codex/config.toml (model, MCP servers, features) into
+   * the sandbox once, with home paths rewritten. A config that holds a secret
+   * is refused by writeFiles and left behind; codex then runs on its defaults.
+   */
+  private async syncCodexConfig(session: CloudSession) {
+    if (session.codexConfigSynced) return;
+    session.codexConfigSynced = true;
+    const localHome = this.deps.host.env.HOME ?? "";
+    const codexHome = this.deps.host.env.CODEX_HOME ?? `${localHome}/.codex`;
+    const config = await this.deps.host.readFile(`${codexHome}/config.toml`).catch(() => null);
+    if (config === null) return;
+    try {
+      await session.sandbox.writeFiles([
+        {
+          path: `${this.codexHome(session)}/config.toml`,
+          content: Buffer.from(this.toRemote(session, config.toString("utf8"))),
+        },
+      ]);
+    } catch (error) {
+      this.log("cloud-lead.codex-config-skipped", {
+        worktree: session.key,
+        error: errorText(error),
+      });
+    }
+  }
+
+  /**
+   * Keeps the login codex refreshed in the sandbox, and frees it for other
+   * sandboxes once no codex runs here.
+   */
+  private async saveCodexAuth(session: CloudSession) {
+    try {
+      if (!session.codexAuthInstalled) return;
+      const current = await session.sandbox.readFile(`${this.codexHome(session)}/auth.json`);
+      const text = current === null ? "" : current.toString("utf8");
+      const saved = await this.deps.codexAuth?.read();
+      if (hasCodexCredentials(text) && text !== saved) await this.deps.codexAuth?.save(text);
+    } catch (error) {
+      this.log("cloud-lead.codex-auth-save-failed", {
+        worktree: session.key,
+        error: errorText(error),
+      });
+    } finally {
+      if (session.codexRunning === 0 && this.codexHolder === session.key) {
+        this.codexHolder = null;
+      }
+    }
   }
 
   private transcriptBackupPath(threadId: string) {
@@ -602,19 +894,24 @@ export class CloudLeadRuntime {
     );
     const content = await session.sandbox.readFile(archive);
     if (content === null) return;
-    const path = this.transcriptBackupPath(session.threadId);
+    const path = this.transcriptBackupPath(session.key);
     await NodeFs.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true, mode: 0o700 });
     await NodeFs.writeFile(path, content, { mode: 0o600 });
   }
 
+  /** The first backup found: by worktree, else one kept by thread before sandboxes were shared. */
   private async restoreTranscripts(
-    threadId: string,
+    backupKeys: ReadonlyArray<string>,
     sandbox: SandboxHandle,
     remoteHome: string,
     remoteCwd: string,
   ) {
-    const content = await NodeFs.readFile(this.transcriptBackupPath(threadId)).catch(() => null);
+    let content: Buffer | null = null;
+    for (const backupKey of backupKeys) {
+      content ??= await NodeFs.readFile(this.transcriptBackupPath(backupKey)).catch(() => null);
+    }
     if (content === null) return;
+    const threadId = backupKeys.at(-1);
     const archive = "/tmp/busyboy-transcripts.tgz";
     const dir = this.transcriptDir({ remoteHome, remoteCwd });
     try {
@@ -645,27 +942,32 @@ export class CloudLeadRuntime {
     if (handler?.busy?.(threadId) === true) return false;
     session.rotation = "rotating";
     const uses = session.uses;
+    // Every thread with a turn running here: the lead and the children sharing its sandbox.
+    const stopped = midTurn ? [...session.runningThreads.keys()] : [];
+    if (midTurn && stopped.length === 0) stopped.push(threadId);
+    const resumeAll = () =>
+      Promise.all(stopped.map((thread) => handler?.resume(thread).catch(() => undefined)));
     try {
       if (midTurn) {
         if (handler === null) throw new Error("Nothing can stop the running turn.");
-        await handler.interrupt(threadId);
+        for (const thread of stopped) await handler.interrupt(thread);
       }
       if (session.released) return true;
       // A failed mirror throws here and keeps the sandbox, so no work is lost.
-      await this.syncToMac(threadId);
+      await this.syncKey(session.key);
       // Between turns, a turn that began during the mirror keeps this sandbox for now.
       if (!midTurn && (session.running > 0 || session.uses !== uses)) {
         session.rotation = "idle";
         return false;
       }
-      await this.release(threadId, { synced: true });
+      await this.releaseKey(session.key, { synced: true });
       this.log("cloud-lead.sandbox-rotated", { threadId, sandbox: session.sandbox.name, midTurn });
-      if (midTurn) await handler?.resume(threadId);
+      if (midTurn) await resumeAll();
       return true;
     } catch (error) {
       session.rotation = "failed";
       this.log("cloud-lead.sandbox-rotation-failed", { threadId, error: String(error) });
-      if (midTurn) await handler?.resume(threadId).catch(() => undefined);
+      if (midTurn) await resumeAll();
       await handler
         ?.failed(threadId, error instanceof Error ? error.message : String(error))
         .catch(() => undefined);
@@ -691,11 +993,11 @@ export class CloudLeadRuntime {
     if (session.running > 0 || session.released) return;
     const uses = session.uses;
     try {
-      await this.syncToMac(session.threadId);
+      await this.syncKey(session.key);
     } catch (error) {
       session.idleSyncFailures += 1;
       this.log("cloud-lead.idle-sync-failed", {
-        threadId: session.threadId,
+        worktree: session.key,
         attempt: session.idleSyncFailures,
         error: String(error),
       });
@@ -707,7 +1009,7 @@ export class CloudLeadRuntime {
     // A turn may have started, or been prepared, while the mirror ran. Nothing
     // awaits between this check and release() unmapping the session.
     if (session.running > 0 || session.uses !== uses || session.released) return;
-    await this.release(session.threadId, { synced: true });
+    await this.releaseKey(session.key, { synced: true });
   }
 
   private cancelIdleStop(session: CloudSession) {
@@ -719,3 +1021,22 @@ export class CloudLeadRuntime {
     this.deps.log?.(event, data);
   }
 }
+
+/** Whether an auth.json holds a ChatGPT refresh token or an API key. */
+export const hasCodexCredentials = (authJson: string): boolean => {
+  try {
+    const auth = JSON.parse(authJson) as {
+      tokens?: { refresh_token?: unknown } | null;
+      OPENAI_API_KEY?: unknown;
+    };
+    const refresh = auth.tokens?.refresh_token;
+    return (
+      (typeof refresh === "string" && refresh.length > 0) ||
+      (typeof auth.OPENAI_API_KEY === "string" && auth.OPENAI_API_KEY.length > 0)
+    );
+  } catch {
+    return false;
+  }
+};
+
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));

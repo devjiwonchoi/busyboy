@@ -6405,7 +6405,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         ...(command.title === undefined ? {} : { title: command.title }),
         ordinal: parentProjection.subagents.length + 1,
       });
-      // A child runs where its command says; it never inherits its parent's cloud.
+      // A child runs where its command says; delegate_task defaults it to the parent's place.
       const { location: _parentLocation, ...parentThread } = parentProjection.thread;
       const childThread: OrchestrationV2AppThread = {
         ...makeSubagentChildThread({

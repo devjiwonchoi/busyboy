@@ -121,6 +121,9 @@ import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEve
 import { codexAppServerArgs, resolveCodexLaunchArgs } from "../../provider/codexLaunchArgs.ts";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import * as CloudLeadService from "../../cloudLead/CloudLeadService.ts";
+import type { CloudLaunch } from "../../cloudLead/CloudLeadRuntime.ts";
+import { remoteCodexStdio } from "../../cloudLead/codexRemote.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import {
   MCP_APP_EXTENSION_ID,
@@ -1288,6 +1291,8 @@ export interface CodexAppServerClientFactoryShape {
     readonly runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
     readonly settings: CodexSettings;
     readonly environment: NodeJS.ProcessEnv;
+    /** A cloud thread's sandbox: codex app-server runs there instead of on the Mac. */
+    readonly cloud?: CloudLaunch | undefined;
   }) => Effect.Effect<
     CodexClient.CodexAppServerClient["Service"],
     ProviderAdapter.ProviderAdapterOpenSessionError,
@@ -1561,6 +1566,30 @@ export const layerAppServerClientFactory: Layer.Layer<
             ...codexAppServerEnvironment(input.environment),
             ...(input.settings.homePath ? { CODEX_HOME: input.settings.homePath } : {}),
           };
+          const protocolLogger = makeCodexAppServerProtocolLogger({
+            nativeEventLogger,
+            threadId: input.threadId,
+            providerSessionId: input.providerSessionId,
+          });
+          const clientOptions: CodexClient.CodexAppServerClientOptions =
+            protocolLogger === undefined
+              ? {}
+              : {
+                  logIncoming: true,
+                  logOutgoing: true,
+                  logger: protocolLogger,
+                };
+          if (input.cloud !== undefined) {
+            return yield* openCloudCodexClient({
+              cloud: input.cloud,
+              args: codexAppServerArgs(
+                resolveCodexLaunchArgs(input.settings.launchArgs, input.environment),
+              ),
+              environment,
+              providerSessionId: input.providerSessionId,
+              clientOptions,
+            });
+          }
           const command = yield* makeCodexAppServerSpawnCommand({
             command: input.settings.binaryPath || "codex",
             args: codexAppServerArgs(
@@ -1580,19 +1609,6 @@ export const layerAppServerClientFactory: Layer.Layer<
                 }),
             ),
           );
-          const protocolLogger = makeCodexAppServerProtocolLogger({
-            nativeEventLogger,
-            threadId: input.threadId,
-            providerSessionId: input.providerSessionId,
-          });
-          const clientOptions: CodexClient.CodexAppServerClientOptions =
-            protocolLogger === undefined
-              ? {}
-              : {
-                  logIncoming: true,
-                  logOutgoing: true,
-                  logger: protocolLogger,
-                };
           const context = yield* Layer.build(CodexClient.layerChildProcess(handle, clientOptions));
           return yield* Effect.service(CodexClient.CodexAppServerClient).pipe(
             Effect.provide(context),
@@ -1600,6 +1616,32 @@ export const layerAppServerClientFactory: Layer.Layer<
         }),
     });
   }),
+);
+
+/**
+ * Starts `codex app-server` in a cloud thread's sandbox through the relay. The
+ * Mac's Codex login and binary stay on the Mac: the sandbox has its own.
+ */
+export const openCloudCodexClient = Effect.fn("CodexAdapterV2.openCloudCodexClient")(
+  function* (input: {
+    readonly cloud: CloudLaunch;
+    readonly args: ReadonlyArray<string>;
+    readonly environment: NodeJS.ProcessEnv;
+    readonly providerSessionId: OrchestrationV2ProviderSession["id"];
+    readonly clientOptions: CodexClient.CodexAppServerClientOptions;
+  }) {
+    const child = yield* Effect.tryPromise({
+      try: () => input.cloud.spawnCodex({ args: input.args, env: input.environment }),
+      catch: (cause) =>
+        new ProviderAdapter.ProviderAdapterOpenSessionError({
+          driver: CODEX_PROVIDER,
+          providerSessionId: input.providerSessionId,
+          cause,
+        }),
+    });
+    const { stdio, terminationError } = yield* remoteCodexStdio(child, input.cloud.paths);
+    return yield* CodexClient.make(stdio, input.clientOptions, terminationError);
+  },
 );
 
 export type CodexAdapterV2DriverEnv =
@@ -1725,6 +1767,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
   adapterOptions: CodexAdapterV2Options,
 ) {
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+  const cloudLead = yield* CloudLeadService.CloudLeadHooks;
   const readMcpSession = (threadId: ThreadId | null) =>
     threadId === null ? Effect.succeed(undefined) : mcpSessions.read(threadId);
   const { clientFactory, crypto, fileSystem, idAllocator, serverConfig } = adapterOptions;
@@ -1751,6 +1794,34 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     }),
                 ),
               );
+        const openError = (cause: unknown) =>
+          new ProviderAdapter.ProviderAdapterOpenSessionError({
+            driver: CODEX_PROVIDER,
+            providerSessionId: input.providerSessionId,
+            cause,
+          });
+        // A cloud thread runs codex in its sandbox; its t3-code MCP calls come back over the relay.
+        const cloud =
+          input.location !== "cloud"
+            ? undefined
+            : yield* Effect.gen(function* () {
+                const cwd = input.runtimePolicy.cwd;
+                const mcpSession = yield* readMcpSession(input.threadId);
+                if (cwd === null || mcpSession === undefined) {
+                  return yield* openError(
+                    cwd === null
+                      ? "A cloud thread needs its own worktree."
+                      : "A cloud thread needs its t3-code MCP session.",
+                  );
+                }
+                return yield* cloudLead
+                  .prepare({
+                    threadId: input.threadId,
+                    worktreePath: cwd,
+                    mcpEndpoint: mcpSession.endpoint,
+                  })
+                  .pipe(Effect.mapError(openError));
+              });
         const client = yield* clientFactory.open({
           instanceId: adapterOptions.instanceId,
           threadId: input.threadId,
@@ -1758,6 +1829,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           runtimePolicy: input.runtimePolicy,
           settings: resolvedRuntime?.config ?? adapterOptions.settings,
           environment: resolvedRuntime?.environment ?? adapterOptions.environment,
+          ...(cloud === undefined ? {} : { cloud }),
         });
         const additionalContextByThread = yield* Ref.make(
           new Map<

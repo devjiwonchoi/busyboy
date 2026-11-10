@@ -180,7 +180,7 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
   }),
   location: Schema.optional(ExecutionLocation).annotate({
     description:
-      "Where the child runs. local (default) runs it on the user's Mac. cloud runs a Claude child in a Vercel Sandbox with its own checkout (implies isolation worktree); its worktree on the Mac is a read-only mirror updated after each turn.",
+      "Where the child runs. Defaults to the parent's location. local runs it on the user's Mac. cloud runs a Claude or Codex child in a Vercel Sandbox: a child of a cloud parent shares the parent's sandbox and checkout (its own with isolation worktree); a child of a local parent gets its own checkout. A cloud worktree on the Mac is a read-only mirror updated after each turn.",
   }),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
   runtimeMode: Schema.optional(
@@ -622,6 +622,8 @@ export const CloudLeadSecretKind = Schema.Literals([
   "vercel_project_id",
   "claude_oauth_token",
   "github_token",
+  // The cloud's own ChatGPT login for Codex: the auth.json of a separate `codex login`.
+  "codex_auth_json",
   "mcp",
 ]);
 export type CloudLeadSecretKind = typeof CloudLeadSecretKind.Type;
