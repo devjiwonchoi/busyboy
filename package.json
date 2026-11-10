@@ -19,6 +19,7 @@
     "test:computer-use": "cargo test --locked --manifest-path native/computer-use/Cargo.toml",
     "test:resource-monitor": "cargo test --locked --manifest-path native/resource-monitor/Cargo.toml",
     "lint:mobile": "node scripts/mobile-native-static-check.ts",
+    "check:licenses": "node scripts/check-third-party-licenses.ts",
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus",
