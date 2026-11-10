@@ -30,6 +30,7 @@ import {
 import type { CloudSessionRecord, CloudSessionStore } from "./CloudSessionStore.ts";
 import { joinPath, nodeLocalHost } from "./LocalHost.ts";
 import { makeSandboxClient } from "./SandboxClient.ts";
+import { resolveVercelTarget } from "./vercelTeamGuard.ts";
 
 export class CloudLeadError extends Schema.TaggedError<CloudLeadError>()("CloudLeadError", {
   detail: Schema.String,
@@ -297,32 +298,28 @@ const make = Effect.gen(function* () {
     stateDir: config.stateDir,
     store: sqlCloudSessionStore(sql, secretStore),
     client: async () => {
-      const [token, teamId, projectId] = await Promise.all([
+      const [token, savedTeamId, savedProjectId] = await Promise.all([
         read("vercel_token").then(async (saved) => saved ?? (await readVercelCliToken(home))),
         read("vercel_team_id"),
         read("vercel_project_id"),
       ]);
-      const missing = [
-        token === null ? "vercel_token" : null,
-        teamId === null ? "vercel_team_id" : null,
-        projectId === null ? "vercel_project_id" : null,
-      ].filter((kind) => kind !== null);
-      if (missing.length > 0) {
+      if (token === null) {
         throw new Error(
-          `Cloud leads need Vercel Sandbox access. Save ${missing.join(", ")} with request_secret and cloud_secret_save.`,
+          "Cloud leads need a Vercel login: run `npx vercel login` on this Mac, or save vercel_token with request_secret and cloud_secret_save (Mac에 Vercel 로그인이 없어요).",
         );
       }
-      return makeSandboxClient({
-        token: Redacted.make(token!),
-        teamId: teamId!,
-        projectId: projectId!,
+      // Unsaved ids are looked up in the allowed team; the team guard checks them again.
+      const { teamId, projectId } = await resolveVercelTarget(token, {
+        teamId: savedTeamId,
+        projectId: savedProjectId,
       });
+      return makeSandboxClient({ token: Redacted.make(token), teamId, projectId });
     },
     credentials: async () => {
       const claudeOauthToken = await read("claude_oauth_token");
       if (claudeOauthToken === null) {
         throw new Error(
-          "Cloud leads need a Claude setup-token. Run `claude setup-token`, then save it with request_secret and cloud_secret_save (kind claude_oauth_token).",
+          "Cloud leads need a Claude setup-token. Run `claude setup-token`, then save it with request_secret and cloud_secret_save (kind claude_oauth_token) (클라우드용 Claude 토큰이 저장돼 있지 않아요).",
         );
       }
       const githubToken = (await read("github_token")) ?? (await ghAuthToken());
