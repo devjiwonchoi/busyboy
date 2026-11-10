@@ -119,6 +119,26 @@ const DROP_ENV = new Set([
 
 const isScript = (path: string) => /\.(c|m)?js$/.test(path);
 
+/**
+ * Copies claude session files (<id>.jsonl and its <id>/ folder) from $1 to $2,
+ * readable only by the user. Project memory and other files stay put.
+ */
+const TRANSCRIPT_SHELL = `set -e
+umask 077
+copy_sessions() {
+  for f in "$1"/*.jsonl; do
+    [ -f "$f" ] || continue
+    name=$(basename "$f" .jsonl)
+    cp "$f" "$2/$name.jsonl"
+    chmod 600 "$2/$name.jsonl"
+    if [ -d "$1/$name" ]; then
+      rm -rf "$2/$name"
+      cp -R "$1/$name" "$2/$name"
+      chmod -R go-rwx "$2/$name"
+    fi
+  done
+}`;
+
 export class CloudLeadRuntime {
   private readonly deps: CloudLeadRuntimeDeps;
   private readonly sessions = new Map<string, Promise<CloudSession>>();
@@ -271,10 +291,7 @@ export class CloudLeadRuntime {
     readonly mcpEndpoint: string;
   }): Promise<CloudSession> {
     const started = Date.now();
-    const [client, credentials] = await Promise.all([
-      this.deps.client(),
-      this.deps.credentials(),
-    ]);
+    const [client, credentials] = await Promise.all([this.deps.client(), this.deps.credentials()]);
     const snapshotId = await this.deps.baseSnapshotId(client, input.worktreePath);
     const sandbox = await client.create({
       ...(snapshotId === null ? {} : { snapshotId }),
@@ -450,6 +467,69 @@ export class CloudLeadRuntime {
     return child;
   }
 
+  /**
+   * Puts the Mac's claude transcripts for `macCwd` into the thread's backup,
+   * over any older copies, so the next sandbox restores them and resumes.
+   */
+  async importTranscripts(threadId: string, macCwd: string): Promise<void> {
+    const backup = this.transcriptBackupPath(threadId);
+    await this.mac().run(
+      [
+        TRANSCRIPT_SHELL,
+        `src=${shellQuote(await this.macTranscriptDir(macCwd))}`,
+        `backup=${shellQuote(backup)}`,
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT",
+        'if [ -f "$backup" ]; then tar -xzf "$backup" -C "$tmp"; fi',
+        'if [ -d "$src" ]; then copy_sessions "$src" "$tmp"; fi',
+        'if [ -z "$(ls -A "$tmp")" ]; then exit 0; fi',
+        'mkdir -p "$(dirname "$backup")"; chmod 700 "$(dirname "$backup")"',
+        'tar -czf "$backup.part" -C "$tmp" .',
+        'chmod 600 "$backup.part"; mv -f "$backup.part" "$backup"',
+      ].join("\n"),
+    );
+  }
+
+  /** Unpacks the thread's transcript backup into the Mac's claude folder for `macCwd`. */
+  async exportTranscripts(threadId: string, macCwd: string): Promise<void> {
+    await this.mac().run(
+      [
+        TRANSCRIPT_SHELL,
+        `dst=${shellQuote(await this.macTranscriptDir(macCwd))}`,
+        `backup=${shellQuote(this.transcriptBackupPath(threadId))}`,
+        'if [ ! -f "$backup" ]; then exit 0; fi',
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT",
+        'tar -xzf "$backup" -C "$tmp"',
+        'mkdir -p "$dst"; chmod 700 "$dst"',
+        'copy_sessions "$tmp" "$dst"',
+      ].join("\n"),
+    );
+  }
+
+  /** Whether claude session `sessionId` can resume at `location` for this thread. */
+  async hasTranscript(input: {
+    readonly threadId: string;
+    readonly macCwd: string;
+    readonly sessionId: string;
+    readonly location: "local" | "cloud";
+  }): Promise<boolean> {
+    const name = `${input.sessionId}.jsonl`;
+    const script =
+      input.location === "local"
+        ? `if [ -f ${shellQuote(`${await this.macTranscriptDir(input.macCwd)}/${name}`)} ]; then echo yes; fi`
+        : `if tar -tzf ${shellQuote(this.transcriptBackupPath(input.threadId))} 2>/dev/null | grep -qxF -e ${shellQuote(`./${name}`)} -e ${shellQuote(name)}; then echo yes; fi`;
+    return (await this.mac().run(script)).trim() === "yes";
+  }
+
+  private mac() {
+    return this.deps.macShell ?? localMirrorShell();
+  }
+
+  /** Where Mac claude keeps transcripts for a cwd; it names the folder after the real path. */
+  private async macTranscriptDir(macCwd: string) {
+    const real = await NodeFs.realpath(macCwd).catch(() => macCwd);
+    return `${this.deps.host.env.HOME ?? ""}/.claude/projects/${encodeProjectDir(real)}`;
+  }
+
   private transcriptBackupPath(threadId: string) {
     const name = NodeCrypto.createHash("sha256").update(threadId).digest("hex").slice(0, 32);
     return `${this.deps.stateDir}/cloud-lead-sessions/${name}.tgz`;
@@ -469,7 +549,7 @@ export class CloudLeadRuntime {
     const content = await session.sandbox.readFile(archive);
     if (content === null) return;
     const path = this.transcriptBackupPath(session.threadId);
-    await NodeFs.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+    await NodeFs.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true, mode: 0o700 });
     await NodeFs.writeFile(path, content, { mode: 0o600 });
   }
 

@@ -7,6 +7,7 @@ import * as NodeOs from "node:os";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { CloudLeadRuntime } from "./CloudLeadRuntime.ts";
+import { encodeProjectDir } from "./pathRewrite.ts";
 import type { RemoteProcess } from "./RelayClient.ts";
 import { fakeLocalHost, localSandboxClient } from "./testkit.ts";
 import { localMirrorShell } from "./WorkspaceMirror.ts";
@@ -196,9 +197,7 @@ describe("CloudLeadRuntime", () => {
     await runtime.syncToMac("thread-1");
 
     expect((await shell.run(`git -C '${mac}' log --format=%s -1`)).trim()).toBe("Add cloud.txt");
-    expect((await shell.run(`git -C '${mac}' symbolic-ref --short HEAD`)).trim()).toBe(
-      "t3/task",
-    );
+    expect((await shell.run(`git -C '${mac}' symbolic-ref --short HEAD`)).trim()).toBe("t3/task");
     expect(await NodeFs.readFile(`${mac}/notes.txt`, "utf8")).toBe("edit\n");
     expect((await shell.run(`git -C '${mac}' rev-parse HEAD`)).trim()).toBe(
       (await shell.run(`git -C '${remote}' rev-parse HEAD`)).trim(),
@@ -224,9 +223,7 @@ describe("CloudLeadRuntime", () => {
     await runtime.prepare({ threadId: "thread-2", worktreePath: mac, mcpEndpoint });
     expect(client.created).toHaveLength(2);
     const remote = `${client.created[1]!.home}/busyboy`;
-    expect((await shell.run(`git -C '${remote}' log --format=%s -1`)).trim()).toBe(
-      "Add one.txt",
-    );
+    expect((await shell.run(`git -C '${remote}' log --format=%s -1`)).trim()).toBe("Add one.txt");
   });
 
   it("never writes the tokens into sandbox files", async () => {
@@ -291,7 +288,10 @@ describe("CloudLeadRuntime", () => {
         return shell.run(script);
       },
     };
-    const { mac, client, runtime, mcpEndpoint } = await setup({ idleStopMs: 50, macShell: slowMac });
+    const { mac, client, runtime, mcpEndpoint } = await setup({
+      idleStopMs: 50,
+      macShell: slowMac,
+    });
     const first = await runtime.prepare({ threadId: "thread-6", worktreePath: mac, mcpEndpoint });
     hold = new Promise<void>((resolve) => (release = resolve));
     const child = first.spawn({ command: "claude", args: [], env: {} });
@@ -332,5 +332,69 @@ describe("CloudLeadRuntime", () => {
     const output = lines(child);
     await waitFor(() => output.length > 0);
     child.stdin.end();
+  });
+
+  it("carries claude transcripts between the Mac and the thread's backup", async () => {
+    const { mac, macHome, client, runtime, mcpEndpoint } = await setup();
+    const macDir = `${macHome}/.claude/projects/${encodeProjectDir(await NodeFs.realpath(mac))}`;
+    await NodeFs.mkdir(`${macDir}/s1/subagents`, { recursive: true });
+    await NodeFs.mkdir(`${macDir}/memory`, { recursive: true });
+    await NodeFs.writeFile(`${macDir}/s1.jsonl`, "mac turn\n");
+    await NodeFs.writeFile(`${macDir}/s1/subagents/a.jsonl`, "sub\n");
+    await NodeFs.writeFile(`${macDir}/memory/MEMORY.md`, "memory\n");
+    const has = (sessionId: string, location: "local" | "cloud") =>
+      runtime.hasTranscript({ threadId: "thread-8", macCwd: mac, sessionId, location });
+
+    expect(await has("s1", "cloud")).toBe(false);
+    await runtime.importTranscripts("thread-8", mac);
+    // Again with a newer Mac copy: the backup takes it, nothing doubles.
+    await NodeFs.writeFile(`${macDir}/s1.jsonl`, "mac turn\nmac turn 2\n");
+    await runtime.importTranscripts("thread-8", mac);
+    expect(await has("s1", "cloud")).toBe(true);
+    expect(await has("s2", "cloud")).toBe(false);
+    const backups = `${macHome}/../state/cloud-lead-sessions`;
+    const [backup] = await NodeFs.readdir(backups);
+    expect((await NodeFs.stat(`${backups}/${backup}`)).mode & 0o777).toBe(0o600);
+    expect((await NodeFs.stat(backups)).mode & 0o777).toBe(0o700);
+    const listed = (await shell.run(`tar -tzf '${backups}/${backup}'`)).split("\n");
+    expect(listed.some((entry) => entry.includes("memory"))).toBe(false);
+
+    // A new sandbox restores the session under its own path.
+    await runtime.prepare({ threadId: "thread-8", worktreePath: mac, mcpEndpoint });
+    const home = client.created[0]!.home;
+    const remoteDir = `${home}/.claude/projects/${encodeProjectDir(`${home}/busyboy`)}`;
+    expect(await NodeFs.readFile(`${remoteDir}/s1.jsonl`, "utf8")).toBe("mac turn\nmac turn 2\n");
+    expect(await NodeFs.readFile(`${remoteDir}/s1/subagents/a.jsonl`, "utf8")).toBe("sub\n");
+
+    // The sandbox's session continues, then comes back to the Mac.
+    await NodeFs.appendFile(`${remoteDir}/s1.jsonl`, "cloud turn\n");
+    await runtime.release("thread-8");
+    await NodeFs.rm(`${macDir}/s1.jsonl`);
+    expect(await has("s1", "local")).toBe(false);
+    await runtime.exportTranscripts("thread-8", mac);
+    await runtime.exportTranscripts("thread-8", mac);
+    expect(await has("s1", "local")).toBe(true);
+    expect(await NodeFs.readFile(`${macDir}/s1.jsonl`, "utf8")).toBe(
+      "mac turn\nmac turn 2\ncloud turn\n",
+    );
+    expect((await NodeFs.stat(`${macDir}/s1.jsonl`)).mode & 0o777).toBe(0o600);
+    expect(await NodeFs.readFile(`${macDir}/memory/MEMORY.md`, "utf8")).toBe("memory\n");
+  });
+
+  it("leaves no backup when the Mac has no transcripts", async () => {
+    const { mac, macHome, runtime } = await setup();
+    await runtime.importTranscripts("thread-9", mac);
+    await runtime.exportTranscripts("thread-9", mac);
+    expect(await NodeFs.readdir(`${macHome}/../state/cloud-lead-sessions`).catch(() => [])).toEqual(
+      [],
+    );
+    expect(
+      await runtime.hasTranscript({
+        threadId: "thread-9",
+        macCwd: mac,
+        sessionId: "s1",
+        location: "cloud",
+      }),
+    ).toBe(false);
   });
 });

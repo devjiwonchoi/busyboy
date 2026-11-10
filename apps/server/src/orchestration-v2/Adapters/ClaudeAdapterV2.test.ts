@@ -14799,6 +14799,7 @@ describe("ClaudeAdapterV2 cloud threads", () => {
         },
       }).pipe(
         Effect.provideService(CloudLeadService.CloudLeadHooks, {
+          ...CloudLeadService.unavailableHooks,
           prepare: (input) =>
             Effect.sync(() => {
               prepared.push(input);
@@ -14874,7 +14875,9 @@ describe("ClaudeAdapterV2 cloud threads", () => {
         assert.equal(t3?.headers.Authorization, "Bearer thread-token");
       }),
     ).pipe(
-      Effect.provide(Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer)),
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
     ),
   );
 
@@ -14888,7 +14891,9 @@ describe("ClaudeAdapterV2 cloud threads", () => {
         assert.equal(t3?.url, "http://127.0.0.1:43123/mcp");
       }),
     ).pipe(
-      Effect.provide(Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer)),
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
     ),
   );
 });

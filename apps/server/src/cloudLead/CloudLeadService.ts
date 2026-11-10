@@ -14,6 +14,8 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
+import type { ExecutionLocation } from "@t3tools/contracts";
+
 import * as ServerConfig from "../config.ts";
 import { ensureBaseSnapshot, fileBaseSnapshotStore, readLocalInputs } from "./BaseSnapshot.ts";
 import * as CloudLeadSecrets from "./CloudLeadSecrets.ts";
@@ -38,18 +40,44 @@ export interface CloudLeadHooksShape {
   /** Mirrors the sandbox onto the Mac worktree; a no-op without a live sandbox. */
   readonly syncToMac: (threadId: string) => Effect.Effect<void, CloudLeadError>;
   readonly release: (threadId: string) => Effect.Effect<void>;
+  /** Packs the Mac's claude transcripts for a worktree into the thread's backup. */
+  readonly importTranscripts: (input: {
+    readonly threadId: string;
+    readonly worktreePath: string;
+  }) => Effect.Effect<void, CloudLeadError>;
+  /** Unpacks the thread's transcript backup into the Mac's claude folder. */
+  readonly exportTranscripts: (input: {
+    readonly threadId: string;
+    readonly worktreePath: string;
+  }) => Effect.Effect<void, CloudLeadError>;
+  /** Whether a claude session can resume at a location: the Mac folder, or the backup. */
+  readonly hasTranscript: (input: {
+    readonly threadId: string;
+    readonly worktreePath: string;
+    readonly sessionId: string;
+    readonly location: ExecutionLocation;
+  }) => Effect.Effect<boolean, CloudLeadError>;
 }
 
-const unavailable: CloudLeadHooksShape = {
+/** No cloud runtime: cloud work fails, local work does nothing. Tests spread it. */
+export const unavailableHooks: CloudLeadHooksShape = {
   prepare: () =>
-    Effect.fail(new CloudLeadError({ detail: "Cloud task leads are not available in this server." })),
+    Effect.fail(
+      new CloudLeadError({ detail: "Cloud task leads are not available in this server." }),
+    ),
   syncToMac: () => Effect.void,
   release: () => Effect.void,
+  importTranscripts: () =>
+    Effect.fail(
+      new CloudLeadError({ detail: "Cloud task leads are not available in this server." }),
+    ),
+  exportTranscripts: () => Effect.void,
+  hasTranscript: () => Effect.succeed(false),
 };
 
 export class CloudLeadHooks extends Context.Reference<CloudLeadHooksShape>(
   "t3/cloudLead/CloudLeadHooks",
-  { defaultValue: () => unavailable },
+  { defaultValue: () => unavailableHooks },
 ) {}
 
 const errorDetail = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
@@ -61,7 +89,9 @@ export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape
       Effect.tryPromise({
         try: () => runtime.prepare(input),
         catch: (cause) =>
-          new CloudLeadError({ detail: `Could not start the cloud sandbox: ${errorDetail(cause)}` }),
+          new CloudLeadError({
+            detail: `Could not start the cloud sandbox: ${errorDetail(cause)}`,
+          }),
       }).pipe(Effect.withSpan("CloudLeadHooks.prepare")),
     syncToMac: (threadId) =>
       Effect.tryPromise({
@@ -72,6 +102,30 @@ export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape
           }),
       }).pipe(Effect.asVoid, Effect.withSpan("CloudLeadHooks.syncToMac")),
     release: (threadId) => Effect.promise(() => runtime.release(threadId)),
+    importTranscripts: ({ threadId, worktreePath }) =>
+      Effect.tryPromise({
+        try: () => runtime.importTranscripts(threadId, worktreePath),
+        catch: (cause) =>
+          new CloudLeadError({
+            detail: `Could not copy the claude transcripts for the sandbox: ${errorDetail(cause)}`,
+          }),
+      }).pipe(Effect.withSpan("CloudLeadHooks.importTranscripts")),
+    exportTranscripts: ({ threadId, worktreePath }) =>
+      Effect.tryPromise({
+        try: () => runtime.exportTranscripts(threadId, worktreePath),
+        catch: (cause) =>
+          new CloudLeadError({
+            detail: `Could not copy the claude transcripts to the Mac: ${errorDetail(cause)}`,
+          }),
+      }).pipe(Effect.withSpan("CloudLeadHooks.exportTranscripts")),
+    hasTranscript: ({ worktreePath, ...input }) =>
+      Effect.tryPromise({
+        try: () => runtime.hasTranscript({ ...input, macCwd: worktreePath }),
+        catch: (cause) =>
+          new CloudLeadError({
+            detail: `Could not look for the transcript: ${errorDetail(cause)}`,
+          }),
+      }),
   });
 
 /** The Vercel CLI keeps its login token here on macOS; used when none was saved. */
@@ -172,6 +226,4 @@ const make = Effect.gen(function* () {
   return hooksFromRuntime(runtime);
 });
 
-export const layer = Layer.effect(CloudLeadHooks, make).pipe(
-  Layer.provide(CloudLeadSecrets.layer),
-);
+export const layer = Layer.effect(CloudLeadHooks, make).pipe(Layer.provide(CloudLeadSecrets.layer));
