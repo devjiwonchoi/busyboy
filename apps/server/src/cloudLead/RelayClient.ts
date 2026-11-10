@@ -28,12 +28,25 @@ export const globalWebSocketFactory: RelaySocketFactory = (url) =>
 export interface RelayClientOptions {
   readonly url: string;
   readonly token: string;
-  /** Where the sandbox's MCP requests go, e.g. http://127.0.0.1:3773 */
-  readonly mcpOrigin: string;
+  /**
+   * The Mac's t3-code MCP endpoint, e.g. http://127.0.0.1:3773/mcp. Sandbox
+   * requests are forwarded only to this path, never to other server routes.
+   */
+  readonly mcpEndpoint: string;
   readonly socketFactory?: RelaySocketFactory;
   readonly fetch?: typeof globalThis.fetch;
   readonly reconnectDelayMs?: (attempt: number) => number;
+  /**
+   * How long the relay may stay unreachable before the client gives up: its
+   * remote processes then exit, so a dead sandbox fails the turn instead of
+   * hanging it.
+   */
+  readonly giveUpAfterMs?: number;
+  /** Called once when the client gives up on an unreachable relay. */
+  readonly onGiveUp?: () => void;
 }
+
+const DEFAULT_GIVE_UP_AFTER_MS = 2 * 60 * 1000;
 
 export interface RemoteSpawnInput {
   readonly command: string;
@@ -75,11 +88,14 @@ export class RemoteProcess extends EventEmitter {
 
   /** @internal */
   handle(message: RelayMessage): void {
+    if (this.exitCode !== null) return;
     if (message.op === "stdout") this.stdout.write(Buffer.from(String(message.data), "base64"));
     else if (message.op === "stderr") {
       this.stderr.write(Buffer.from(String(message.data), "base64"));
-    } else if (message.op === "error") this.emit("error", new Error(String(message.message)));
-    else if (message.op === "exit") {
+    } else if (message.op === "error") {
+      // The SDK listens for "error"; without a listener it would throw.
+      if (this.listenerCount("error") > 0) this.emit("error", new Error(String(message.message)));
+    } else if (message.op === "exit") {
       this.exitCode = typeof message.code === "number" ? message.code : 1;
       this.stdout.end();
       this.stderr.end();
@@ -94,6 +110,8 @@ const HOP_BY_HOP = new Set([
   "keep-alive",
   "transfer-encoding",
   "content-length",
+  // fetch already decoded the body.
+  "content-encoding",
   "upgrade",
 ]);
 
@@ -107,6 +125,8 @@ export class RelayClient {
   private closed = false;
   private attempt = 0;
   private nextProcess = 0;
+  /** When the relay last stopped being reachable; null while connected. */
+  private unreachableSince: number | null = Date.now();
   private readonly ackTimer: ReturnType<typeof setInterval>;
   private readonly connectionWaiters: Array<() => void> = [];
   /** How many times a connection was established, for tests and logs. */
@@ -186,6 +206,12 @@ export class RelayClient {
       this.session.detach(link);
       if (this.socket === socket) this.socket = null;
       if (this.closed) return;
+      this.unreachableSince ??= Date.now();
+      if (Date.now() - this.unreachableSince > (this.options.giveUpAfterMs ?? DEFAULT_GIVE_UP_AFTER_MS)) {
+        this.close();
+        this.options.onGiveUp?.();
+        return;
+      }
       const delay =
         this.options.reconnectDelayMs?.(this.attempt) ?? Math.min(250 * 2 ** this.attempt, 5_000);
       this.attempt += 1;
@@ -206,6 +232,7 @@ export class RelayClient {
       }
       if (!wasConnected && this.session.connected) {
         this.attempt = 0;
+        this.unreachableSince = null;
         this.connections += 1;
         for (const waiter of this.connectionWaiters.splice(0)) waiter();
       }
@@ -246,9 +273,20 @@ export class RelayClient {
     }
     const method = String(message.method);
     const body = Buffer.from(String(message.body ?? ""), "base64");
+    const endpoint = new URL(this.options.mcpEndpoint);
+    const target = new URL(String(message.path), endpoint.origin);
+    if (
+      target.origin !== endpoint.origin ||
+      (target.pathname !== endpoint.pathname && !target.pathname.startsWith(`${endpoint.pathname}/`))
+    ) {
+      this.httpAborts.delete(id);
+      this.session.send({ ch: "http", op: "head", id, status: 403, headers: {} });
+      this.session.send({ ch: "http", op: "end", id });
+      return;
+    }
     try {
       const response = await (this.options.fetch ?? globalThis.fetch)(
-        `${this.options.mcpOrigin}${String(message.path)}`,
+        target.toString(),
         {
           method,
           headers,

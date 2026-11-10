@@ -1176,6 +1176,16 @@ const make = Effect.gen(function* () {
       ) {
         yield* wakeUnblockedProjects(updated.value);
       }
+      // A finished cloud task's sandbox is mirrored once more and deleted, in the background.
+      if (
+        FinishedTaskCleanup.isFinishedStage(updated.value.stage) &&
+        updated.value.location === "cloud" &&
+        updated.value.leadThreadId !== null
+      ) {
+        yield* cloudLead
+          .release(updated.value.leadThreadId)
+          .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
+      }
       // A finished task's questions can no longer be answered, so close them.
       if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
         if (answeringItem === undefined) {
@@ -1830,7 +1840,12 @@ const make = Effect.gen(function* () {
           task: input.task,
           title: input.title ?? `${key} ${input.role}`,
           role: DELEGATE_ROLE[input.role],
-          ...(input.isolation === undefined ? {} : { isolation: input.isolation }),
+          // A cloud task's review gets its own checkout: later mirrors reset the lead's worktree.
+          ...(task.location === "cloud"
+            ? { isolation: "worktree" as const }
+            : input.isolation === undefined
+              ? {}
+              : { isolation: input.isolation }),
           ...(input.mode === undefined ? {} : { mode: input.mode }),
           ...(input.clientRequestId === undefined
             ? {}

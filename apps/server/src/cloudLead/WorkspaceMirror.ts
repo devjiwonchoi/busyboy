@@ -60,6 +60,8 @@ export const captureWorkspace = async (
   const out = await shell.run(
     [
       "set -euo pipefail",
+      // The agent may be committing in this tree right now; reading it must not take index.lock.
+      "export GIT_OPTIONAL_LOCKS=0",
       `cd ${repo}`,
       `rm -rf ${staging} && mkdir -p ${staging}`,
       "head=$(git rev-parse HEAD)",

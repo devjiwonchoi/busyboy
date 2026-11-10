@@ -8251,15 +8251,20 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const cloudLaunch =
             turnInput.appThread.location !== "cloud"
               ? undefined
-              : turnInput.runtimePolicy.cwd === null
+              : turnInput.runtimePolicy.cwd === null || mcpSession === undefined
                 ? yield* Effect.fail(
-                    queryRunnerError("A cloud thread needs its own worktree.", "cloudLead.prepare"),
+                    queryRunnerError(
+                      turnInput.runtimePolicy.cwd === null
+                        ? "A cloud thread needs its own worktree."
+                        : "A cloud thread needs its t3-code MCP session.",
+                      "cloudLead.prepare",
+                    ),
                   )
                 : yield* cloudLead
                   .prepare({
                     threadId: turnInput.threadId,
                     worktreePath: turnInput.runtimePolicy.cwd,
-                    mcpEndpoint: mcpSession?.endpoint ?? "http://127.0.0.1/mcp",
+                    mcpEndpoint: mcpSession.endpoint,
                   })
                   .pipe(Effect.mapError((cause) => queryRunnerError(cause, "cloudLead.prepare")));
           const cloudMcpServers =

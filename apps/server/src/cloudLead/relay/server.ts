@@ -77,14 +77,21 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
         session.send({ ch: "proc", op: "stderr", id, data: chunk.toString("base64") }),
       );
       child.stdin?.on("error", () => {});
-      child.on("error", (error) =>
-        session.send({ ch: "proc", op: "error", id, message: error.message }),
-      );
-      child.on("exit", (code, signal) => {
+      // Exit goes out exactly once, after stdout and stderr are drained ("close",
+      // not "exit"), and also when the process could not start at all.
+      let finished = false;
+      const finish = (code: number | null, signal: NodeJS.Signals | null) => {
+        if (finished) return;
+        finished = true;
         children.delete(id);
         session.send({ ch: "proc", op: "exit", id, code, signal });
         killGroup(child, "SIGKILL");
+      };
+      child.on("error", (error) => {
+        session.send({ ch: "proc", op: "error", id, message: error.message });
+        if (child.pid === undefined) finish(1, null);
       });
+      child.on("close", (code, signal) => finish(code, signal));
       return;
     }
     const child = children.get(id);

@@ -72,7 +72,9 @@ process.stdin.on("data", (chunk) => {
 process.stdin.on("end", () => process.exit(0));
 `;
 
-const setup = async (options: { readonly idleStopMs?: number } = {}) => {
+const setup = async (
+  options: { readonly idleStopMs?: number; readonly macShell?: typeof shell } = {},
+) => {
   const root = await tempDir("cloud-runtime-");
   const macHome = `${root}/mac-home`;
   const mac = `${macHome}/worktrees/task`;
@@ -110,6 +112,7 @@ const setup = async (options: { readonly idleStopMs?: number } = {}) => {
     stateDir: `${root}/state`,
     ports,
     ...(options.idleStopMs === undefined ? {} : { idleStopMs: options.idleStopMs }),
+    ...(options.macShell === undefined ? {} : { macShell: options.macShell }),
   });
   cleanups.push(() => runtime.releaseAll());
   return { mac, macHome, client, runtime, mcpEndpoint, mcpCalls, ports };
@@ -250,5 +253,84 @@ describe("CloudLeadRuntime", () => {
     child.stdin.end();
     await waitFor(() => client.created[0]!.deleted());
     expect(runtime.hasSession("thread-4")).toBe(false);
+  });
+
+  it("mirrors unsynced work before deleting a sandbox, and runs overlapping syncs one at a time", async () => {
+    const { mac, client, runtime, mcpEndpoint } = await setup();
+    const launch = await runtime.prepare({ threadId: "thread-5", worktreePath: mac, mcpEndpoint });
+    const child = launch.spawn({ command: "claude", args: [], env: {} });
+    const output = lines(child);
+    child.stdin.write("commit late.txt\n");
+    await waitFor(() => output.some((line) => line.file === "late.txt"));
+
+    // A turn end, a gate and a review step can ask at once; all must succeed.
+    const results = await Promise.all([
+      runtime.syncToMac("thread-5"),
+      runtime.syncToMac("thread-5"),
+      runtime.syncToMac("thread-5"),
+    ]);
+    expect(new Set(results.map((result) => result?.head)).size).toBe(1);
+
+    child.stdin.write("commit last.txt\n");
+    await waitFor(() => output.some((line) => line.file === "last.txt"));
+    child.stdin.end();
+    // No sync since that commit: release mirrors it before the sandbox goes.
+    await runtime.release("thread-5");
+    expect(client.created[0]!.deleted()).toBe(true);
+    expect((await shell.run(`git -C '${mac}' log --format=%s -1`)).trim()).toBe("Add last.txt");
+  });
+
+  it("keeps a sandbox that a new turn picks up while its idle stop is mirroring", async () => {
+    // Holds the idle stop inside its mirror until the test lets it go.
+    let hold: Promise<void> | null = null;
+    let release = () => {};
+    const slowMac = {
+      ...shell,
+      run: async (script: string) => {
+        if (hold !== null && script.includes("git reset")) await hold;
+        return shell.run(script);
+      },
+    };
+    const { mac, client, runtime, mcpEndpoint } = await setup({ idleStopMs: 50, macShell: slowMac });
+    const first = await runtime.prepare({ threadId: "thread-6", worktreePath: mac, mcpEndpoint });
+    hold = new Promise<void>((resolve) => (release = resolve));
+    const child = first.spawn({ command: "claude", args: [], env: {} });
+    const output = lines(child);
+    await waitFor(() => output.length > 0);
+    child.stdin.end();
+    // The process ended, so the idle stop fires and blocks in its mirror.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // A new turn arrives meanwhile.
+    const second = await runtime.prepare({ threadId: "thread-6", worktreePath: mac, mcpEndpoint });
+    release();
+    hold = null;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(client.created).toHaveLength(1);
+    expect(client.created[0]!.deleted()).toBe(false);
+    const next = second.spawn({ command: "claude", args: [], env: {} });
+    const nextOutput = lines(next);
+    await waitFor(() => nextOutput.length > 0);
+    next.stdin.end();
+  });
+
+  it("makes a turn that starts during a release wait for a new sandbox", async () => {
+    const { mac, client, runtime, mcpEndpoint } = await setup();
+    await runtime.prepare({ threadId: "thread-7", worktreePath: mac, mcpEndpoint });
+    const released = runtime.release("thread-7");
+    // A checkpoint asking for a mirror during the release waits for its final mirror.
+    let releaseDone = false;
+    void released.then(() => (releaseDone = true));
+    await runtime.syncToMac("thread-7");
+    expect(releaseDone).toBe(true);
+    const launch = await runtime.prepare({ threadId: "thread-7", worktreePath: mac, mcpEndpoint });
+    await released;
+    expect(client.created).toHaveLength(2);
+    expect(client.created[0]!.deleted()).toBe(true);
+    expect(client.created[1]!.deleted()).toBe(false);
+    const child = launch.spawn({ command: "claude", args: [], env: {} });
+    const output = lines(child);
+    await waitFor(() => output.length > 0);
+    child.stdin.end();
   });
 });

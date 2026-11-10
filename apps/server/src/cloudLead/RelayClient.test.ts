@@ -19,11 +19,16 @@ const startRelay = async (): Promise<RelayServer> => {
   return relay;
 };
 
-const connect = (relay: RelayServer, options: { token?: string; mcpOrigin?: string } = {}) => {
+const connect = (
+  relay: RelayServer,
+  options: { token?: string; mcpEndpoint?: string; giveUpAfterMs?: number; onGiveUp?: () => void } = {},
+) => {
   const client = new RelayClient({
     url: `ws://127.0.0.1:${relay.port()}`,
     token: options.token ?? TOKEN,
-    mcpOrigin: options.mcpOrigin ?? "http://127.0.0.1:1",
+    mcpEndpoint: options.mcpEndpoint ?? "http://127.0.0.1:1/mcp",
+    ...(options.giveUpAfterMs === undefined ? {} : { giveUpAfterMs: options.giveUpAfterMs }),
+    ...(options.onGiveUp === undefined ? {} : { onGiveUp: options.onGiveUp }),
     reconnectDelayMs: () => 20,
   });
   cleanups.push(() => client.close());
@@ -127,7 +132,7 @@ describe("RelayClient", () => {
     const address = mac.address() as { port: number };
 
     const relay = await startRelay();
-    const client = connect(relay, { mcpOrigin: `http://127.0.0.1:${address.port}` });
+    const client = connect(relay, { mcpEndpoint: `http://127.0.0.1:${address.port}/mcp` });
     await client.waitUntilConnected(5_000);
 
     const response = await fetch(`http://127.0.0.1:${relay.mcpPort()}/mcp`, {
@@ -140,5 +145,56 @@ describe("RelayClient", () => {
     expect(await response.text()).toBe(
       'data: Bearer mcp-cred /mcp\n\ndata: {"jsonrpc":"2.0"}\n\n',
     );
+  });
+
+  it("refuses sandbox requests to Mac routes other than the MCP endpoint", async () => {
+    const seen: string[] = [];
+    const mac = NodeHttp.createServer((request, response) => {
+      seen.push(request.url ?? "");
+      response.writeHead(200).end("ok");
+    });
+    await new Promise<void>((resolve) => mac.listen(0, "127.0.0.1", () => resolve()));
+    cleanups.push(() => new Promise<void>((resolve) => mac.close(() => resolve())));
+    const address = mac.address() as { port: number };
+    const relay = await startRelay();
+    const client = connect(relay, { mcpEndpoint: `http://127.0.0.1:${address.port}/mcp` });
+    await client.waitUntilConnected(5_000);
+
+    for (const path of ["/api/orchestration/shell", "/mcpx", "/mcp/../api/auth/session"]) {
+      const response = await fetch(`http://127.0.0.1:${relay.mcpPort()}${path}`);
+      expect(response.status).toBe(403);
+    }
+    expect((await fetch(`http://127.0.0.1:${relay.mcpPort()}/mcp`)).status).toBe(200);
+    expect(seen).toEqual(["/mcp"]);
+  });
+
+  it("ends a remote process that could not start", async () => {
+    const relay = await startRelay();
+    const client = connect(relay);
+    await client.waitUntilConnected(5_000);
+    const child = client.spawnRemote({
+      command: "definitely-not-a-command",
+      args: [],
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH ?? "" },
+    });
+    expect(await exited(child)).toBe(1);
+  });
+
+  it("gives up on a relay that stays unreachable, ending its processes", async () => {
+    const relay = await startRelay();
+    let gaveUp = false;
+    const client = connect(relay, { giveUpAfterMs: 200, onGiveUp: () => (gaveUp = true) });
+    await client.waitUntilConnected(5_000);
+    const child = client.spawnRemote({
+      command: "sleep",
+      args: ["30"],
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH ?? "" },
+    });
+    const done = exited(child);
+    await relay.close();
+    expect(await done).toBe(1);
+    expect(gaveUp).toBe(true);
   });
 });

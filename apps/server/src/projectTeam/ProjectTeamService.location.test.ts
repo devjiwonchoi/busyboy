@@ -45,7 +45,9 @@ describe("ProjectTeamService location", () => {
             { role: "review", task: "Review main...HEAD against the criteria." },
             harness.delegate,
           );
-          assert.strictEqual((yield* Ref.get(harness.delegated)).at(-1)?.location, undefined);
+          const reviewCall = (yield* Ref.get(harness.delegated)).at(-1);
+          assert.strictEqual(reviewCall?.location, undefined);
+          assert.strictEqual(reviewCall?.isolation, "worktree");
           // Implementing needs the lead's sandbox checkout, so the lead does it itself.
           const refused = yield* team
             .delegateStep(leadThreadId, { role: "implement", task: "Build it." }, harness.delegate)
@@ -75,4 +77,36 @@ describe("ProjectTeamService location", () => {
       }),
     ),
   );
+
+  it.effect("releases a cloud task's sandbox when the task is cancelled", () => {
+    const released: string[] = [];
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const pm = yield* setUpManager;
+          const { task: created } = yield* createAcceptedTask(pm, {
+            title: "Add hello.sh",
+            request: "Add hello.sh.",
+            intake: "New work.",
+          });
+          const { leadThreadId } = yield* team.startTask(
+            pm,
+            { taskId: created.id, location: "cloud" },
+            harness.delegate,
+          );
+          yield* team.updateTask(pm, { taskId: created.id, stage: "cancelled" });
+          // The release runs in the background.
+          for (let i = 0; i < 20 && released.length === 0; i += 1) yield* Effect.yieldNow;
+          assert.deepEqual(released, [leadThreadId]);
+        }),
+      {
+        cloudLead: {
+          prepare: () => Effect.die("not used"),
+          syncToMac: () => Effect.void,
+          release: (threadId) => Effect.sync(() => void released.push(threadId)),
+        },
+      },
+    );
+  });
 });

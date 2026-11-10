@@ -41,6 +41,7 @@ export const RELAY_MCP_PORT = 8788;
  */
 const SANDBOX_TIMEOUT_MS = 45 * 60 * 1000;
 const KEEPALIVE_EVERY_MS = 10 * 60 * 1000;
+const MAX_IDLE_SYNC_FAILURES = 3;
 const DEFAULT_IDLE_STOP_MS = 30 * 60 * 1000;
 const RELAY_CONNECT_TIMEOUT_MS = 60_000;
 const SETUP_TIMEOUT_MS = 15 * 60 * 1000;
@@ -99,6 +100,10 @@ interface CloudSession {
   readonly keepAlive: ReturnType<typeof setInterval>;
   /** Remote claude processes still running; the sandbox only idles out at zero. */
   running: number;
+  idleSyncFailures: number;
+  /** How many turns prepared this sandbox; an idle stop gives up if it changes. */
+  uses: number;
+  released: boolean;
 }
 
 /** SDK env keys that configure claude itself and mean the same in the sandbox. */
@@ -117,6 +122,9 @@ const isScript = (path: string) => /\.(c|m)?js$/.test(path);
 export class CloudLeadRuntime {
   private readonly deps: CloudLeadRuntimeDeps;
   private readonly sessions = new Map<string, Promise<CloudSession>>();
+  private readonly syncs = new Map<string, Promise<{ readonly head: string } | null>>();
+  /** Sandboxes being mirrored a last time and deleted; a new turn waits for these. */
+  private readonly releasing = new Map<string, Promise<void>>();
 
   constructor(deps: CloudLeadRuntimeDeps) {
     this.deps = deps;
@@ -133,7 +141,10 @@ export class CloudLeadRuntime {
     readonly mcpEndpoint: string;
   }): Promise<CloudLaunch> {
     const session = await this.session(input);
+    // Released between the lookup and now: wait for that and take a new sandbox.
+    if (session.released) return this.prepare(input);
     this.cancelIdleStop(session);
+    session.uses += 1;
     const mcpPath = new URL(input.mcpEndpoint).pathname;
     return {
       spawn: (options) => this.spawn(session, options),
@@ -141,10 +152,38 @@ export class CloudLeadRuntime {
     };
   }
 
-  /** Copies the sandbox working tree onto the Mac worktree. A no-op without a live sandbox. */
-  async syncToMac(threadId: string): Promise<{ readonly head: string } | null> {
+  /**
+   * Copies the sandbox working tree onto the Mac worktree; a no-op without a
+   * live sandbox. Callers (turn end, team gates, release) may overlap, so
+   * syncs of one thread run one at a time.
+   */
+  syncToMac(threadId: string): Promise<{ readonly head: string } | null> {
     const pending = this.sessions.get(threadId);
-    if (pending === undefined) return null;
+    // During a release, wait for its final mirror so callers read a finished worktree.
+    if (pending === undefined) {
+      return (this.releasing.get(threadId) ?? Promise.resolve()).then(() => null);
+    }
+    return this.syncLocked(threadId, pending);
+  }
+
+  private syncLocked(
+    threadId: string,
+    pending: Promise<CloudSession>,
+  ): Promise<{ readonly head: string } | null> {
+    const previous = this.syncs.get(threadId) ?? Promise.resolve(null);
+    const next = previous.catch(() => null).then(() => this.syncOnce(threadId, pending));
+    this.syncs.set(threadId, next);
+    const forget = () => {
+      if (this.syncs.get(threadId) === next) this.syncs.delete(threadId);
+    };
+    next.then(forget, forget);
+    return next;
+  }
+
+  private async syncOnce(
+    threadId: string,
+    pending: Promise<CloudSession>,
+  ): Promise<{ readonly head: string } | null> {
     const session = await pending.catch(() => null);
     if (session === null) return null;
     const mac = this.deps.macShell ?? localMirrorShell();
@@ -157,29 +196,51 @@ export class CloudLeadRuntime {
       /^[0-9a-f]{40}$/.test(macHead) ? macHead : null,
     );
     await applyWorkspace(mac, session.macCwd, state);
+    session.idleSyncFailures = 0;
     await this.backupTranscripts(session).catch((error: unknown) =>
       this.log("cloud-lead.transcript-backup-failed", { threadId, error: String(error) }),
     );
-    this.scheduleIdleStop(session);
+    if (!session.released) this.scheduleIdleStop(session);
     return { head: state.head };
   }
 
-  /** Deletes the thread's sandbox. The Mac mirror and transcripts stay. */
-  async release(threadId: string): Promise<void> {
+  /**
+   * Mirrors the sandbox one last time, then deletes it. The Mac mirror and the
+   * transcripts stay, so a later turn starts a new sandbox from them.
+   */
+  release(threadId: string, options: { readonly synced?: boolean } = {}): Promise<void> {
     const pending = this.sessions.get(threadId);
-    if (pending === undefined) return;
+    if (pending === undefined) return this.releasing.get(threadId) ?? Promise.resolve();
+    // Unmapped right away: a turn starting now waits for this and gets a new sandbox.
     this.sessions.delete(threadId);
-    const session = await pending.catch(() => null);
-    if (session === null) return;
-    this.cancelIdleStop(session);
-    clearInterval(session.keepAlive);
-    session.relay.close();
-    await session.sandbox.delete().catch(() => undefined);
-    this.log("cloud-lead.sandbox-released", { threadId, sandbox: session.sandbox.name });
+    const done = (async () => {
+      const session = await pending.catch(() => null);
+      if (session === null) return;
+      session.released = true;
+      this.cancelIdleStop(session);
+      if (options.synced !== true) {
+        await this.syncLocked(threadId, pending).catch((error: unknown) =>
+          this.log("cloud-lead.final-sync-failed", { threadId, error: String(error) }),
+        );
+      }
+      clearInterval(session.keepAlive);
+      session.relay.close();
+      await session.sandbox.delete().catch(() => undefined);
+      this.log("cloud-lead.sandbox-released", { threadId, sandbox: session.sandbox.name });
+    })();
+    this.releasing.set(threadId, done);
+    const forget = () => {
+      if (this.releasing.get(threadId) === done) this.releasing.delete(threadId);
+    };
+    done.then(forget, forget);
+    return done;
   }
 
   async releaseAll(): Promise<void> {
-    await Promise.all([...this.sessions.keys()].map((threadId) => this.release(threadId)));
+    await Promise.all([
+      ...[...this.sessions.keys()].map((threadId) => this.release(threadId)),
+      ...this.releasing.values(),
+    ]);
   }
 
   hasSession(threadId: string): boolean {
@@ -193,6 +254,8 @@ export class CloudLeadRuntime {
   }): Promise<CloudSession> {
     const existing = this.sessions.get(input.threadId);
     if (existing !== undefined) return existing;
+    const releasing = this.releasing.get(input.threadId);
+    if (releasing !== undefined) return releasing.then(() => this.session(input));
     const created = this.create(input);
     this.sessions.set(input.threadId, created);
     // A failed start must not stick: the next turn tries again.
@@ -234,7 +297,12 @@ export class CloudLeadRuntime {
       await syncEnvironment(sandbox, bundle, remoteHome);
       await this.mirrorIn(sandbox, input.worktreePath, remoteCwd);
       await this.restoreTranscripts(input.threadId, sandbox, remoteHome, remoteCwd);
-      const relay = await this.startRelay(sandbox, remoteHome, input.mcpEndpoint);
+      const relay = await this.startRelay(sandbox, remoteHome, input.mcpEndpoint, () => {
+        // The relay is gone (sandbox stopped or unreachable): mirror what the
+        // sandbox API can still reach and start over on the next turn.
+        this.log("cloud-lead.relay-unreachable", { threadId: input.threadId });
+        void this.release(input.threadId);
+      });
       this.log("cloud-lead.sandbox-ready", {
         threadId: input.threadId,
         sandbox: sandbox.name,
@@ -261,6 +329,9 @@ export class CloudLeadRuntime {
         credentials,
         idleTimer: null,
         running: 0,
+        idleSyncFailures: 0,
+        uses: 0,
+        released: false,
       };
     } catch (error) {
       await sandbox.delete().catch(() => undefined);
@@ -300,6 +371,7 @@ export class CloudLeadRuntime {
     sandbox: SandboxHandle,
     remoteHome: string,
     mcpEndpoint: string,
+    onGiveUp: () => void,
   ): Promise<RelayClient> {
     const dir = `${remoteHome}/.busyboy-cloud/relay`;
     await sandbox.writeFiles(
@@ -323,7 +395,8 @@ export class CloudLeadRuntime {
     const relay = new RelayClient({
       url,
       token,
-      mcpOrigin: new URL(mcpEndpoint).origin,
+      mcpEndpoint,
+      onGiveUp,
       ...(this.deps.socketFactory === undefined ? {} : { socketFactory: this.deps.socketFactory }),
     });
     try {
@@ -336,6 +409,9 @@ export class CloudLeadRuntime {
   }
 
   private spawn(session: CloudSession, options: CloudSpawnOptions): RemoteProcess {
+    if (session.released) {
+      throw new Error("The cloud sandbox for this thread was stopped; start the turn again.");
+    }
     const rewrite = (text: string) =>
       rewriteHomePaths(
         rewriteHomePaths(text, { localHome: session.macCwd, remoteHome: session.remoteCwd }),
@@ -420,9 +496,37 @@ export class CloudLeadRuntime {
     this.cancelIdleStop(session);
     if (session.running > 0) return;
     session.idleTimer = setTimeout(() => {
-      void this.release(session.threadId);
+      void this.stopIdle(session);
     }, this.deps.idleStopMs ?? DEFAULT_IDLE_STOP_MS);
     session.idleTimer.unref?.();
+  }
+
+  /**
+   * An idle sandbox goes away only once its work is safely on the Mac. A failed
+   * mirror keeps it for another idle window, a few times, before giving up.
+   */
+  private async stopIdle(session: CloudSession) {
+    session.idleTimer = null;
+    if (session.running > 0 || session.released) return;
+    const uses = session.uses;
+    try {
+      await this.syncToMac(session.threadId);
+    } catch (error) {
+      session.idleSyncFailures += 1;
+      this.log("cloud-lead.idle-sync-failed", {
+        threadId: session.threadId,
+        attempt: session.idleSyncFailures,
+        error: String(error),
+      });
+      if (session.idleSyncFailures < MAX_IDLE_SYNC_FAILURES) {
+        this.scheduleIdleStop(session);
+        return;
+      }
+    }
+    // A turn may have started, or been prepared, while the mirror ran. Nothing
+    // awaits between this check and release() unmapping the session.
+    if (session.running > 0 || session.uses !== uses || session.released) return;
+    await this.release(session.threadId, { synced: true });
   }
 
   private cancelIdleStop(session: CloudSession) {
