@@ -22,6 +22,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as DelegatedTaskQuestionReactor from "./DelegatedTaskQuestionReactor.ts";
@@ -663,6 +664,80 @@ it.effect("marks a delegated child cloud only when its request asks for cloud", 
     assert.equal((yield* projections.getThreadShell(cloudChild!))?.location, "cloud");
     const localShell = yield* projections.getThreadShell(localChild!);
     assert.isFalse(localShell !== null && "location" in localShell);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("holds a moving lead's new turns until its queue resumes, and moves its location", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const gate = yield* LeadMoveGate.LeadMoveGate;
+    const threadId = ThreadId.make("thread:moving-lead");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-moving-lead"),
+      threadId,
+      projectId: ProjectId.make("project:moving"),
+      title: "Lead",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const send = (id: string) =>
+      orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make(id),
+        threadId,
+        messageId: MessageId.make(`message:${id}`),
+        text: id,
+        attachments: [],
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+    yield* send("first-turn");
+    // The first turn has ended; the lead is idle when the move starts.
+    const first = (yield* projections.getThreadProjection(threadId)).runs[0]!;
+    yield* projections.apply({
+      id: EventId.make("first-turn-ended"),
+      type: "run.updated",
+      threadId,
+      runId: first.id,
+      providerInstanceId: first.providerInstanceId,
+      occurredAt: yield* DateTime.now,
+      payload: { ...first, status: "interrupted", completedAt: yield* DateTime.now },
+    });
+
+    gate.hold(threadId);
+    yield* send("sent-mid-move");
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("move-to-cloud"),
+      threadId,
+      location: "cloud",
+    });
+    const moving = yield* projections.getThreadProjection(threadId);
+    assert.equal(moving.thread.location, "cloud");
+    assert.deepEqual(
+      moving.runs.map((run) => [run.status, run.queueHeld === true]),
+      [
+        ["interrupted", false],
+        ["queued", true],
+      ],
+    );
+
+    gate.release(threadId);
+    yield* orchestrator.dispatch({
+      type: "queue.resume",
+      commandId: CommandId.make("move-done"),
+      threadId,
+    });
+    const moved = (yield* projections.getThreadProjection(threadId)).runs[1]!;
+    assert.isFalse(moved.status === "queued" && moved.queueHeld === true);
   }).pipe(Effect.provide(layerTest)),
 );
 

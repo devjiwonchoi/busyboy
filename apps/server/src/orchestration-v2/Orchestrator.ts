@@ -132,6 +132,7 @@ import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { ProviderSwitchServiceV2 } from "./ProviderSwitchService.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import { isAutomaticCompletionRun, queuedRunsInDeliveryOrder } from "./QueuedRunOrder.ts";
 import { RuntimePolicyV2 } from "./RuntimePolicy.ts";
 import {
@@ -776,6 +777,14 @@ function rootProviderThreadsForProvider(
     );
 }
 
+/** A location update that moves the thread; absent counts as local. */
+function locationChanges(
+  command: { readonly location?: OrchestrationV2AppThread["location"] },
+  thread: Pick<OrchestrationV2AppThread, "location">,
+): boolean {
+  return command.location !== undefined && command.location !== (thread.location ?? "local");
+}
+
 function isHandoffSourceRun(run: OrchestrationV2Run): boolean {
   return run.status === "completed" || run.status === "failed" || run.status === "interrupted";
 }
@@ -825,6 +834,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const providerSessions = yield* ProviderSessionManagerV2;
   const providerSwitchService = yield* ProviderSwitchServiceV2;
+  const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const runtimePolicy = yield* RuntimePolicyV2;
   const threadForkService = yield* ThreadForkServiceV2;
@@ -2621,8 +2631,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       command.type === "provider.switch" ||
       command.type === "thread.archive" ||
       (command.type === "thread.metadata.update" &&
-        command.worktreePath !== undefined &&
-        command.worktreePath !== thread.worktreePath);
+        ((command.worktreePath !== undefined && command.worktreePath !== thread.worktreePath) ||
+          locationChanges(command, thread)));
     const providerContext = needsProviderState
       ? yield* projectionStore
           .getThreadProviderContext(
@@ -2757,6 +2767,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 }),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
+            ...(command.location === undefined ? {} : { location: command.location }),
             ...(command.linkedPullRequest === undefined
               ? {}
               : {
@@ -3141,8 +3152,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       command.type === "thread.archive"
         ? (providerContext?.providerSessions ?? []).map((session) => session.id)
         : command.type === "thread.metadata.update" &&
-            command.worktreePath !== undefined &&
-            command.worktreePath !== thread.worktreePath
+            ((command.worktreePath !== undefined && command.worktreePath !== thread.worktreePath) ||
+              locationChanges(command, thread))
           ? (providerContext?.providerSessions ?? []).map((session) => session.id)
           : command.type === "thread.runtime-mode.set"
             ? (providerContext?.providerSessions ?? [])
@@ -4671,7 +4682,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         projection.thread.worktreePath === null
           ? latestRun
           : undefined;
-      const queueBehindRun = activeRun ?? worktreeMissingRun;
+      // A message sent while a task lead moves waits, held, behind its last run.
+      const movingBehindRun =
+        activeRun === undefined && leadMoveGate.isHeld(command.threadId)
+          ? (latestRun ?? undefined)
+          : undefined;
+      const queueBehindRun = activeRun ?? worktreeMissingRun ?? movingBehindRun;
       const pendingMergeBackTransfers = pendingMergeBackTransfersForThread(projection);
       const shouldQueue =
         queueBehindRun !== undefined &&
@@ -4749,7 +4765,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         const attemptId = idAllocator.derive.runAttempt({ runId, attemptOrdinal: 1 });
         const rootNodeId = idAllocator.derive.rootNode({ runId });
         const checkpointScope =
-          queueBehindRun.status === "preparing" || worktreeMissingRun !== undefined
+          queueBehindRun.status === "preparing" ||
+          worktreeMissingRun !== undefined ||
+          movingBehindRun !== undefined
             ? null
             : yield* runtimePolicy.resolve({ thread: projection.thread, modelSelection }).pipe(
                 Effect.flatMap((resolvedRuntimePolicy) =>
@@ -4787,6 +4805,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           activeAttemptId: attemptId,
           status: "queued",
           ...(worktreeMissingRun !== undefined ||
+          movingBehindRun !== undefined ||
+          leadMoveGate.isHeld(command.threadId) ||
           projection.runs.some(
             (candidate) => candidate.status === "queued" && candidate.queueHeld === true,
           )
