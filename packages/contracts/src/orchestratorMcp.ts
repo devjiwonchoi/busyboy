@@ -611,6 +611,38 @@ export const OrchestratorMcpRequestSecretResult = Schema.Union([
 ]);
 export type OrchestratorMcpRequestSecretResult = typeof OrchestratorMcpRequestSecretResult.Type;
 
+export const CloudLeadSecretKind = Schema.Literals([
+  "vercel_token",
+  "vercel_team_id",
+  "vercel_project_id",
+  "claude_oauth_token",
+  "github_token",
+  "mcp",
+]);
+export type CloudLeadSecretKind = typeof CloudLeadSecretKind.Type;
+
+export const OrchestratorMcpCloudSecretSaveInput = Schema.Struct({
+  kind: CloudLeadSecretKind.annotate({
+    description:
+      "Which cloud lead secret this is. mcp is an auth value for an MCP server, named by name.",
+  }),
+  name: Schema.optional(TrimmedNonEmptyString).annotate({
+    description:
+      "Required for kind mcp: '<server>:<KEY>', KEY being the env var or header name. Omit for every other kind.",
+  }),
+  secretRef: SecretRef.annotate({
+    description: "The secretRef returned by request_secret. It is consumed by this save.",
+  }),
+});
+export type OrchestratorMcpCloudSecretSaveInput = typeof OrchestratorMcpCloudSecretSaveInput.Type;
+
+export const OrchestratorMcpCloudSecretSaveResult = Schema.Struct({
+  status: Schema.Literal("saved"),
+  kind: CloudLeadSecretKind,
+  name: Schema.optional(TrimmedNonEmptyString),
+});
+export type OrchestratorMcpCloudSecretSaveResult = typeof OrchestratorMcpCloudSecretSaveResult.Type;
+
 export const OrchestratorMcpDeleteScheduledTaskInput = Schema.Struct({
   scheduledTaskId: ScheduledTaskId,
 });

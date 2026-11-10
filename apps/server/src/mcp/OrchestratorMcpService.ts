@@ -21,6 +21,8 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpInteractionMode,
   type OrchestratorMcpDeleteScheduledTaskInput,
+  type OrchestratorMcpCloudSecretSaveInput,
+  type OrchestratorMcpCloudSecretSaveResult,
   type OrchestratorMcpRequestSecretInput,
   type OrchestratorMcpRequestSecretResult,
   type OrchestratorMcpDeleteScheduledTaskResult,
@@ -101,6 +103,7 @@ import {
 } from "./McpInvocationContext.ts";
 import * as Metrics from "../observability/Metrics.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as CloudLeadSecrets from "../cloudLead/CloudLeadSecrets.ts";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_WAIT_TIMEOUT_MS = 60 * 60 * 1_000;
@@ -216,6 +219,14 @@ export interface OrchestratorMcpServiceShape {
     scope: McpInvocationScope,
     input: OrchestratorMcpRequestSecretInput,
   ) => Effect.Effect<OrchestratorMcpRequestSecretResult, OrchestratorMcpFailure>;
+  /**
+   * Consumes a request_secret ref into the cloud lead secret store. The value
+   * never reaches the result, logs, spans or errors.
+   */
+  readonly cloudSecretSave: (
+    scope: McpInvocationScope,
+    input: OrchestratorMcpCloudSecretSaveInput,
+  ) => Effect.Effect<OrchestratorMcpCloudSecretSaveResult, OrchestratorMcpFailure>;
   readonly listThreads: (
     scope: McpInvocationScope,
     input: OrchestratorMcpThreadListInput,
@@ -1000,6 +1011,7 @@ const make = Effect.gen(function* () {
         )
       : Effect.succeed(project.defaultModelSelection);
   const secretRequests = yield* SecretRequests.SecretRequests;
+  const cloudLeadSecrets = yield* CloudLeadSecrets.CloudLeadSecrets;
 
   const requireCapability = (scope: McpInvocationScope) =>
     scope.capabilities.has("orchestration")
@@ -1965,6 +1977,39 @@ const make = Effect.gen(function* () {
         return { status, secretRef: secretRef.value };
       }).pipe(Effect.withSpan("OrchestratorMcpService.requestSecret")),
 
+    cloudSecretSave: (scope, input) =>
+      Effect.gen(function* () {
+        const { parent } = yield* loadThreadCaller(scope, "cloud_secret_save");
+        yield* Effect.annotateCurrentSpan({ "cloud_lead_secret.kind": input.kind });
+        const key = { kind: input.kind, name: input.name };
+        const cloudSecretFailure = (error: CloudLeadSecrets.CloudLeadSecretsError) =>
+          failure(
+            error.reason === "store_failed" ? "orchestration_error" : "invalid_request",
+            error.message,
+          );
+        // Check the name before consuming: a ref is used once, so a request
+        // the store would refuse must not spend it.
+        yield* CloudLeadSecrets.storeName(key).pipe(Effect.mapError(cloudSecretFailure));
+        const value = yield* secretRequests
+          .consume({ ref: input.secretRef, projectId: parent.thread.projectId })
+          .pipe(
+            Effect.mapError((error) =>
+              failure(
+                error.reason === "read_failed" || error.reason === "consume_failed"
+                  ? "orchestration_error"
+                  : "invalid_request",
+                error.message,
+              ),
+            ),
+          );
+        yield* cloudLeadSecrets.save({ ...key, value }).pipe(Effect.mapError(cloudSecretFailure));
+        return {
+          status: "saved" as const,
+          kind: input.kind,
+          ...(input.name === undefined ? {} : { name: input.name }),
+        };
+      }).pipe(Effect.withSpan("OrchestratorMcpService.cloudSecretSave")),
+
     capabilities: (scope) =>
       Effect.gen(function* () {
         const { parent, limits } = yield* loadCaller(scope);
@@ -2777,5 +2822,6 @@ export const layer: Layer.Layer<
   | ScheduledTaskService.ScheduledTaskService
   | ProjectService.ProjectService
   | SecretRequests.SecretRequests
+  | CloudLeadSecrets.CloudLeadSecrets
   | ServerSettings.ServerSettingsService
 > = Layer.effect(OrchestratorMcpService, make);

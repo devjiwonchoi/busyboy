@@ -50,6 +50,7 @@ import * as PreviewBrowser from "../../preview/PreviewBrowser.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
 import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
 import * as SecretRequests from "../../secrets/SecretRequests.ts";
+import * as CloudLeadSecrets from "../../cloudLead/CloudLeadSecrets.ts";
 import * as ScheduledTaskService from "../../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as McpHttpServer from "../McpHttpServer.ts";
@@ -655,7 +656,12 @@ it.effect("refuses act-as-caller tools to a client caller", () =>
         Layer.provide(Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({})),
         Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
         Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
-        Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
+        Layer.provide(
+          Layer.merge(
+            Layer.mock(SecretRequests.SecretRequests)({}),
+            Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
+          ),
+        ),
       ),
     ),
   ),
@@ -708,7 +714,12 @@ it.effect("a caller cannot rewrite a scheduled task that runs above its own mode
           }),
         ),
         Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
-        Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
+        Layer.provide(
+          Layer.merge(
+            Layer.mock(SecretRequests.SecretRequests)({}),
+            Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
+          ),
+        ),
       ),
     ),
   ),
@@ -792,7 +803,12 @@ it.effect.each(["t3_thread_interrupt", "t3_workflow_stop"])(
           Layer.provide(Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({})),
           Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
           Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
-          Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
+          Layer.provide(
+            Layer.merge(
+              Layer.mock(SecretRequests.SecretRequests)({}),
+              Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
+            ),
+          ),
         ),
       ),
     ),
@@ -884,7 +900,12 @@ it.effect("discovers workflow stop targets and requires orchestration capability
         Layer.provide(Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({})),
         Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
         Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
-        Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
+        Layer.provide(
+          Layer.merge(
+            Layer.mock(SecretRequests.SecretRequests)({}),
+            Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
+          ),
+        ),
       ),
     ),
   );
