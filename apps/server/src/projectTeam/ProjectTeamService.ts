@@ -156,6 +156,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
@@ -999,6 +1000,9 @@ const make = Effect.gen(function* () {
   // Prefixes belong to the whole server, so different projects share this lock.
   const taskKeyLocks = yield* KeyedLock.make<"prefixes">();
   const taskStartLocks = yield* KeyedLock.make<ProjectId>();
+  // The safety cap counts leads in every project, so its check and the start it
+  // admits run one at a time app-wide. Taken inside a project's start lock, never around it.
+  const leadStartLock = yield* Semaphore.make(1);
   const specLocks = yield* KeyedLock.make<ProjectTaskId>();
   // Goal writes read, change and save the whole goal; parallel calls must not drop each other's changes.
   const goalLocks = yield* KeyedLock.make<"goals">();
@@ -2170,7 +2174,7 @@ const make = Effect.gen(function* () {
             .pipe(orTeamError("Could not record the plan step.", role.projectId));
           yield* router.publish(role.projectId);
           return { task: withStep, leadThreadId: lead.childThreadId };
-        }),
+        }).pipe(leadStartLock.withPermits(1)),
       );
     }).pipe(orTeamError("Could not start the task."));
 

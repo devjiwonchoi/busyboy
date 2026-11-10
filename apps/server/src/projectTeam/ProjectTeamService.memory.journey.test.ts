@@ -22,7 +22,9 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Fiber from "effect/Fiber";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
@@ -627,6 +629,37 @@ describe("memory-based task admission", () => {
       { memory: fake.read, settings: { taskExecution: { maxConcurrentSessions: 2 } } },
     );
   });
+
+  it.effect("two projects starting at once never pass the app-wide cap together", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const { firstPm, secondPm } = yield* setUpWorkspace(harness);
+          // A slow start: without one lock across projects, both would pass the cap check.
+          const slow: DelegateTaskLead = (input) =>
+            Effect.sleep("1 second").pipe(Effect.andThen(harness.delegate(input)));
+          const first = yield* startLead(firstPm, "First project", slow).pipe(
+            Effect.result,
+            Effect.forkChild,
+          );
+          const second = yield* startLead(secondPm, "Second project", slow).pipe(
+            Effect.result,
+            Effect.forkChild,
+          );
+          yield* TestClock.adjust("1 second");
+          yield* TestClock.adjust("1 second");
+          const results = [yield* Fiber.join(first), yield* Fiber.join(second)];
+          assert.strictEqual(results.filter(Result.isSuccess).length, 1);
+          const refused = results.find(Result.isFailure);
+          assert.include(
+            refused === undefined ? "" : refused.failure.message,
+            "1 of 1 task leads are already running",
+          );
+          assert.strictEqual((yield* Ref.get(harness.delegated)).length, 1);
+        }),
+      { settings: { taskExecution: { maxConcurrentSessions: 1 } } },
+    ),
+  );
 
   it.effect("spaces out local starts so each one's memory shows before the next", () => {
     const fake = fakeMac(PLENTY);
