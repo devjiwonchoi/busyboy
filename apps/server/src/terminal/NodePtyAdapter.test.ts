@@ -1,3 +1,4 @@
+import * as NodeChildProcess from "node:child_process";
 import * as NodeEvents from "node:events";
 import * as NodeNet from "node:net";
 
@@ -15,6 +16,12 @@ import { expect, vi } from "vite-plus/test";
 
 import * as NodePtyAdapter from "./NodePtyAdapter.ts";
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
+import {
+  descendantsFromTable,
+  posixProcessTreeSignaler,
+  ProcessTreeSignalerRef,
+  type ProcessTreeSignaler,
+} from "./ProcessTree.ts";
 
 function makeNativeProcess(pid = 42) {
   const events = new NodeEvents.EventEmitter();
@@ -61,14 +68,29 @@ const spawnInput = { shell: "powershell.exe", cwd: ".", cols: 80, rows: 24, env:
 
 const fakeNodePty = { spawn } as unknown as typeof import("node-pty");
 
-const layerTestFor = (platform: NodeJS.Platform = "win32") =>
+// Fake pids like 42 must never reach the real process table.
+const signalCalls: Array<[number, NodeJS.Signals]> = [];
+const fakeDescendants = vi.fn((_roots: ReadonlyArray<number>): ReadonlyArray<number> => []);
+const fakeTreeSignaler: ProcessTreeSignaler = {
+  descendants: (roots) => fakeDescendants(roots),
+  signal: (pid, signal) => {
+    signalCalls.push([pid, signal]);
+  },
+};
+
+const layerTestFor = (
+  platform: NodeJS.Platform = "win32",
+  treeSignaler: ProcessTreeSignaler = fakeTreeSignaler,
+  nodePty: typeof import("node-pty") = fakeNodePty,
+) =>
   NodePtyAdapter.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
         NodeServices.layer,
         Layer.succeed(HostProcess.Platform, platform),
         Layer.succeed(HostProcess.Architecture, "x64"),
-        Layer.succeed(NodePtyAdapter.NodePtyModuleLoaderRef, () => Promise.resolve(fakeNodePty)),
+        Layer.succeed(NodePtyAdapter.NodePtyModuleLoaderRef, () => Promise.resolve(nodePty)),
+        Layer.succeed(ProcessTreeSignalerRef, treeSignaler),
       ),
     ),
   );
@@ -362,4 +384,117 @@ it.effect.each(["spawn", "interrupt"] as const)(
       assert.equal(nativeProcess.events.listenerCount("exit"), 0);
       assert.equal(nativeProcess._socket.listenerCount("ready_datapipe"), 0);
     }).pipe(Effect.provide(layerTest)),
+);
+
+it("finds descendants across process groups from the process table", () => {
+  const table = ["  1     0", " 10     1", " 11    10", " 12    11", " 13    10", " 20     1"].join(
+    "\n",
+  );
+  assert.deepEqual([...descendantsFromTable(table, [10])].toSorted(), [11, 12, 13]);
+  assert.deepEqual([...descendantsFromTable(table, [12, 20])], []);
+});
+
+it.effect("signals the process group and descendants, then force-kills orphans", () =>
+  Effect.gen(function* () {
+    vi.useFakeTimers();
+    signalCalls.length = 0;
+    fakeDescendants.mockImplementation((roots) => (roots.includes(42) ? [43, 44] : [45]));
+    const adapter = yield* PtyAdapter.PtyAdapter;
+    const process = yield* adapter.spawn({ ...spawnInput, shell: "/bin/zsh" });
+    const nativeProcess = spawn.mock.results.at(-1)!.value;
+
+    process.kill("SIGTERM");
+    assert.deepEqual(signalCalls, [
+      [-42, "SIGTERM"],
+      [43, "SIGTERM"],
+      [44, "SIGTERM"],
+    ]);
+    assert.deepEqual(nativeProcess.kill.mock.calls, [["SIGTERM"]]);
+
+    // The shell exits on SIGTERM but a job ignoring it stays behind.
+    signalCalls.length = 0;
+    nativeProcess.events.emit("exit", { exitCode: 0, signal: 15 });
+    vi.advanceTimersByTime(3_000);
+    assert.deepEqual(fakeDescendants.mock.calls.at(-1)?.[0].toSorted(), [43, 44]);
+    assert.deepEqual(signalCalls, [
+      [-42, "SIGKILL"],
+      [43, "SIGKILL"],
+      [44, "SIGKILL"],
+      [45, "SIGKILL"],
+    ]);
+    // The exited shell's pid is never signalled directly.
+    assert.deepEqual(nativeProcess.kill.mock.calls, [["SIGTERM"]]);
+  }).pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.useRealTimers();
+        fakeDescendants.mockReset();
+        fakeDescendants.mockImplementation(() => []);
+      }),
+    ),
+    Effect.provide(layerTestFor("darwin")),
+  ),
+);
+
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Runs a real detached shell behind the node-pty surface the adapter uses. */
+const childProcessNodePty = {
+  spawn: (shell: string, args: string[]) => {
+    const child = NodeChildProcess.spawn(shell, args, { detached: true, stdio: "ignore" });
+    return {
+      pid: child.pid!,
+      write: () => {},
+      resize: () => {},
+      kill: (signal?: string) => child.kill((signal ?? "SIGHUP") as NodeJS.Signals),
+      onData: () => ({ dispose: () => {} }),
+      onExit: (callback: (event: { exitCode: number; signal?: number }) => void) => {
+        const listener = (code: number | null) => callback({ exitCode: code ?? 0 });
+        child.once("exit", listener);
+        return { dispose: () => child.off("exit", listener) };
+      },
+    };
+  },
+} as unknown as typeof import("node-pty");
+
+it.effect.skipIf(process.platform === "win32")(
+  "leaves no descendants of a closed shell running",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* PtyAdapter.PtyAdapter;
+      // One job stays in the shell's group; perl moves the other into its own group.
+      const shell = yield* adapter.spawn({
+        ...spawnInput,
+        shell: "/bin/sh",
+        args: ["-c", 'sleep 60 & perl -e "setpgrp(0, 0); sleep 60" & sleep 60 & wait'],
+      });
+      let descendants: ReadonlyArray<number> = [];
+      for (let attempt = 0; attempt < 50 && descendants.length < 3; attempt++) {
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+        descendants = posixProcessTreeSignaler.descendants([shell.pid]);
+      }
+      assert.isAtLeast(descendants.length, 3);
+
+      try {
+        shell.kill("SIGTERM");
+        for (let attempt = 0; attempt < 50; attempt++) {
+          if (!descendants.some(isAlive) && !isAlive(shell.pid)) break;
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+        }
+        assert.deepEqual(descendants.filter(isAlive), []);
+        assert.isFalse(isAlive(shell.pid));
+      } finally {
+        for (const pid of [shell.pid, ...descendants])
+          posixProcessTreeSignaler.signal(pid, "SIGKILL");
+      }
+    }).pipe(
+      Effect.provide(layerTestFor(process.platform, posixProcessTreeSignaler, childProcessNodePty)),
+    ),
 );

@@ -11,6 +11,14 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 
+import { ProcessTreeSignalerRef, type ProcessTreeSignaler } from "./ProcessTree.ts";
+
+/**
+ * After a graceful signal, how long jobs that outlived the shell get before
+ * they are force-killed. The manager only escalates while the shell is alive.
+ */
+const ORPHAN_KILL_GRACE_MS = 3_000;
+
 export class NodePtyModuleLoadError extends Schema.TaggedError<NodePtyModuleLoadError>()(
   "NodePtyModuleLoadError",
   {
@@ -171,10 +179,19 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
   private exitEvent: PtyAdapter.PtyExitEvent | undefined;
   private readonly exitListeners = new Set<(event: PtyAdapter.PtyExitEvent) => void>();
   private readonly exitSubscription: import("node-pty").IDisposable;
+  private readonly treeSignaler: ProcessTreeSignaler;
+  /** Descendants seen while the shell was alive; they reparent away once it exits. */
+  private readonly trackedDescendants = new Set<number>();
+  private orphanKillTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(process: import("node-pty").IPty, platform: NodeJS.Platform) {
+  constructor(
+    process: import("node-pty").IPty,
+    platform: NodeJS.Platform,
+    treeSignaler: ProcessTreeSignaler,
+  ) {
     this.process = process;
     this.platform = platform;
+    this.treeSignaler = treeSignaler;
     this.exitSubscription = process.onExit((event) => {
       if (this.exitEvent) return;
       this.exitEvent = { exitCode: event.exitCode, signal: event.signal ?? null };
@@ -198,7 +215,39 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
 
   kill(signal?: string): void {
     // node-pty terminates the Windows process tree without a POSIX signal.
-    this.process.kill(this.platform === "win32" ? undefined : signal);
+    if (this.platform === "win32") {
+      this.process.kill(undefined);
+      return;
+    }
+    const shellAlive = this.exitEvent === undefined;
+    const treeSignal = (signal ?? "SIGHUP") as NodeJS.Signals;
+    this.signalTree(treeSignal, shellAlive);
+    if (shellAlive) this.process.kill(signal);
+    if (treeSignal !== "SIGKILL") this.scheduleOrphanKill();
+  }
+
+  /**
+   * Signals the shell's process group and every descendant, including jobs a
+   * job-control shell moved into their own groups, so dev servers and other
+   * background jobs do not outlive the terminal.
+   */
+  private signalTree(signal: NodeJS.Signals, shellAlive: boolean): void {
+    const roots = shellAlive ? [this.pid] : [...this.trackedDescendants];
+    for (const pid of this.treeSignaler.descendants(roots)) this.trackedDescendants.add(pid);
+    this.treeSignaler.signal(-this.pid, signal);
+    for (const pid of this.trackedDescendants) this.treeSignaler.signal(pid, signal);
+  }
+
+  private scheduleOrphanKill(): void {
+    if (this.orphanKillTimer !== undefined) return;
+    this.orphanKillTimer = setTimeout(() => {
+      this.orphanKillTimer = undefined;
+      // Only jobs left behind: while the shell lives the manager owns escalation.
+      if (this.exitEvent === undefined) return;
+      this.signalTree("SIGKILL", false);
+      this.trackedDescendants.clear();
+    }, ORPHAN_KILL_GRACE_MS);
+    this.orphanKillTimer.unref?.();
   }
 
   onData(callback: (data: string) => void): () => void {
@@ -227,6 +276,7 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
 
 export const make = Effect.fn("NodePtyAdapter.make")(function* () {
   const loadNodePtyModule = yield* NodePtyModuleLoaderRef;
+  const treeSignaler = yield* ProcessTreeSignalerRef;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform = yield* HostProcess.Platform;
@@ -271,7 +321,10 @@ export const make = Effect.fn("NodePtyAdapter.make")(function* () {
             env,
             name: "xterm-256color",
           });
-          return { nativeProcess, process: new NodePtyProcess(nativeProcess, platform) };
+          return {
+            nativeProcess,
+            process: new NodePtyProcess(nativeProcess, platform, treeSignaler),
+          };
         },
         catch: (cause) =>
           new PtyAdapter.PtySpawnError({
