@@ -105,7 +105,7 @@ export interface FakeThread {
   pullRequests?: Array<Pick<ThreadPullRequestLink, "host" | "repository" | "number" | "url">>;
   /** Shell fields a test sets directly, e.g. `status` or `pendingRuntimeRequest`. */
   shell?: Partial<OrchestrationV2ThreadShell>;
-  /** Turn items; only `user_input_request` and `approval_request` matter to the team services. */
+  /** Turn items: pending requests and the tool calls a permission-denial check reads. */
   turnItems?: Array<OrchestrationV2TurnItem>;
 }
 
@@ -362,7 +362,10 @@ export const withTeam = <A, E>(
       getThreadRecords: ((
         threadId: ThreadId,
         _fields: unknown,
-        filter?: { messageRunIds?: ReadonlyArray<string> },
+        filter?: {
+          messageRunIds?: ReadonlyArray<string>;
+          turnItemRunIds?: ReadonlyArray<string>;
+        },
       ) =>
         Effect.sync(() => {
           const thread = threads.get(threadId);
@@ -377,7 +380,11 @@ export const withTeam = <A, E>(
             subagents: thread?.subagents ?? [],
             providerTurns: thread?.providerTurns ?? [],
             attempts: thread?.attempts ?? [],
-            turnItems: thread?.turnItems ?? [],
+            turnItems: (thread?.turnItems ?? []).filter(
+              (item) =>
+                filter?.turnItemRunIds === undefined ||
+                (item.runId !== null && filter.turnItemRunIds.includes(item.runId)),
+            ),
           };
         })) as never,
     });

@@ -427,7 +427,7 @@ it("opens a Director card's task in its actual project without a lead thread", a
         pmThreadId: "pm-a" as never,
         tasks: [
           {
-            id: decision.item.taskId,
+            id: decision.item.taskId as never,
             number: 1,
             title: decision.taskTitle,
             stage: "running",
@@ -473,6 +473,62 @@ it("opens a Director card's task in its actual project without a lead thread", a
   await userEvent.click(link);
   await vi.waitFor(() => expect(router.state.location.pathname).toContain("/tasks/env/a/task-"));
   expect(container.textContent).toContain("태스크 화면");
+});
+
+it("shows a PM's own blocker with the project name and opens that PM's chat", async () => {
+  const base = card("a", "릴리스막힘", "blocker", 1);
+  const blocker: ProjectDecisionCard = {
+    ...base,
+    taskNumber: null,
+    taskTitle: "Jota",
+    item: {
+      ...base.item,
+      taskId: null,
+      askerThreadId: "pm-a" as never,
+      options: ["내가 직접 실행할게요"],
+    },
+  };
+  state.managers = [
+    {
+      environmentId: "env" as never,
+      summary: makeProjectManagerSummaryFixture({
+        projectId: "a" as never,
+        pmThreadId: "pm-a" as never,
+        decisionCards: [blocker],
+      }),
+    },
+  ];
+  const rootRoute = createRootRoute({ component: Outlet });
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: ["/inbox"] }),
+    routeTree: rootRoute.addChildren([
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: "/inbox",
+        component: () => <DirectorInbox highlightCardId={null} showEmpty />,
+      }),
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: "/$environmentId/$threadId",
+        component: () => <p>PM 채팅</p>,
+      }),
+    ]),
+  });
+  await act(async () => root.render(<RouterProvider router={router} />));
+  const link = await vi.waitFor(() => {
+    const element = container.querySelector<HTMLAnchorElement>("[data-director-inbox-task-link]");
+    expect(element).toBeTruthy();
+    return element!;
+  });
+  expect(link.textContent).toBe("Jota · 프로젝트 A");
+  await page.viewport(1280, 844);
+  await page.screenshot({ path: "__screenshots__/director-inbox-pm-blocker-1280.png" });
+  expect(container.querySelector("[data-decision-card-meta]")?.textContent).toBe(
+    "Blocker · Jota · 프로젝트 A",
+  );
+  await userEvent.click(link);
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/pm-a"));
+  expect(container.textContent).toContain("PM 채팅");
 });
 
 it("does not present the Director's chat project as an unresolved task's owner", async () => {

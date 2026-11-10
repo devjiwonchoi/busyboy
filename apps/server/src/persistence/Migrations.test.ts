@@ -80,6 +80,7 @@ describe("runMigrations", () => {
       assert.deepStrictEqual(yield* runMigrations(), [
         [18, "ProjectAttentionContext"],
         [19, "RemoveTaskProposals"],
+        [20, "ProjectAttentionOptionalTask"],
       ]);
       const rows = yield* sql`
         SELECT question, options_json, context_json FROM project_attention_items
@@ -125,7 +126,10 @@ describe("runMigrations", () => {
           ('attention:decision', 'project-1', 'task:running', 'decision', 'Which?', '[]',
             'batch:3', ${at}, NULL, NULL)
       `;
-      assert.deepStrictEqual(yield* runMigrations(), [[19, "RemoveTaskProposals"]]);
+      assert.deepStrictEqual(yield* runMigrations(), [
+        [19, "RemoveTaskProposals"],
+        [20, "ProjectAttentionOptionalTask"],
+      ]);
       const tasks = yield* sql`SELECT task_id, stage FROM project_tasks ORDER BY number`;
       assert.deepStrictEqual(tasks, [
         { task_id: "task:open", stage: "inbox" },
@@ -138,6 +142,48 @@ describe("runMigrations", () => {
         SELECT task_id, body FROM project_task_events WHERE kind = 'created'
       `;
       assert.deepStrictEqual(created, [{ task_id: "task:open", body: "Open" }]);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("keeps task cards and accepts cards without a task", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* Migrator.make({})({
+        loader: Migrator.fromRecord(
+          Object.fromEntries(
+            migrationEntries
+              .filter(([id]) => id < 20)
+              .map(([id, name, migration]) => [`${id}_${name}`, migration]),
+          ),
+        ),
+      });
+      const at = "2026-11-10T00:00:00.000Z";
+      yield* sql`
+        INSERT INTO project_tasks (
+          task_id, project_id, number, title, request, stage, waits_on_json,
+          stage_changed_at, created_at, updated_at
+        ) VALUES ('task:a', 'project-1', 1, 'A', 'Request', 'running', '[]', ${at}, ${at}, ${at})
+      `;
+      yield* sql`
+        INSERT INTO project_attention_items (
+          item_id, project_id, task_id, kind, question, options_json, batch_id, created_at,
+          context_json
+        ) VALUES ('attention:task', 'project-1', 'task:a', 'blocker', 'Q', '[]', 'batch:1',
+          ${at}, '{"action":"a"}')
+      `;
+      assert.deepStrictEqual(yield* runMigrations(), [[20, "ProjectAttentionOptionalTask"]]);
+      yield* sql`
+        INSERT INTO project_attention_items (
+          item_id, project_id, task_id, kind, question, options_json, batch_id, created_at
+        ) VALUES ('attention:pm', 'project-1', NULL, 'blocker', 'PM', '[]', 'batch:2', ${at})
+      `;
+      const rows = yield* sql`
+        SELECT item_id, task_id, context_json FROM project_attention_items ORDER BY item_id
+      `;
+      assert.deepStrictEqual(rows, [
+        { item_id: "attention:pm", task_id: null, context_json: null },
+        { item_id: "attention:task", task_id: "task:a", context_json: '{"action":"a"}' },
+      ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 

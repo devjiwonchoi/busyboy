@@ -135,7 +135,7 @@ export interface AppendProjectTaskEventInput {
 export interface CreateProjectAttentionItemInput {
   readonly id: ProjectAttentionItemId;
   readonly projectId: ProjectId;
-  readonly taskId: ProjectTaskId;
+  readonly taskId: ProjectTaskId | null;
   readonly kind: ProjectAttentionKind;
   readonly question: string;
   readonly options: ReadonlyArray<string>;
@@ -1237,7 +1237,7 @@ export const make = Effect.gen(function* () {
     Request: Schema.Struct({
       id: ProjectAttentionItemId,
       projectId: ProjectId,
-      taskId: ProjectTaskId,
+      taskId: Schema.NullOr(ProjectTaskId),
       kind: ProjectAttentionKind,
       question: Schema.String,
       options: OptionsJson,

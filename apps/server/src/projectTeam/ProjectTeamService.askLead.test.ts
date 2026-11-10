@@ -25,7 +25,7 @@ describe("ProjectTeamService.askLead", () => {
           question: "Ship the fix today?",
           options: ["Approve", "Request changes"],
         });
-        const before = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: item.taskId });
+        const before = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: lead.task.id });
 
         const sentBefore = (yield* Ref.get(harness.sent)).length;
         yield* team.askLead({
@@ -51,7 +51,7 @@ describe("ProjectTeamService.askLead", () => {
         );
         assert.strictEqual(card?.item.answeredAt, null);
         assert.strictEqual(card?.item.supersededAt, null);
-        const after = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: item.taskId });
+        const after = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: lead.task.id });
         assert.strictEqual(after.task.stage, before.task.stage);
         assert.strictEqual(after.versions.length, before.versions.length);
       }),

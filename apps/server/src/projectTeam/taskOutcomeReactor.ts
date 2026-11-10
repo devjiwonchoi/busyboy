@@ -23,6 +23,7 @@ import { PRE_APPROVAL_STAGES } from "./breakdown.ts";
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
 import { memoryOverBudgetNote } from "./memoryPrompt.ts";
+import { unresolvedPermissionDenial } from "./permissionBlocker.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 
@@ -236,6 +237,29 @@ const make = Effect.gen(function* () {
       });
     });
 
+  /**
+   * A completed turn whose last permission denial nothing moved past is stuck on the
+   * user even when the agent only said so in chat. Failed turns get their own blocker,
+   * and a stopped turn was the user's doing.
+   */
+  const raiseBlockerOnDenial = (run: OrchestrationV2Run) =>
+    Effect.gen(function* () {
+      if (run.status !== "completed") return;
+      const { turnItems } = yield* threads.getThreadRecords(run.threadId, ["turnItems"], {
+        turnItemRunIds: [run.id],
+      });
+      const denial = unresolvedPermissionDenial(turnItems);
+      if (denial === null) return;
+      yield* team.raisePermissionBlocker({ threadId: run.threadId, denial });
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("could not check the turn for a permission denial", {
+          threadId: run.threadId,
+          cause,
+        }),
+      ),
+    );
+
   const handle: TaskOutcomeReactor["Service"]["handle"] = (event) =>
     Effect.gen(function* () {
       // Every lead run counts, not just the first: once the PM has the delegated
@@ -249,11 +273,21 @@ const make = Effect.gen(function* () {
       if (previous === runKey) return;
 
       const task = yield* repository.findTaskByLeadThreadId(run.threadId);
+      if (Option.isNone(task)) {
+        // A PM turn that ended on a permission denial waits on the user.
+        const manager = yield* repository.getManagerByThreadId(run.threadId);
+        if (Option.isNone(manager)) return;
+        yield* Ref.update(lastSeen, (current) => new Map(current).set(run.threadId, runKey));
+        yield* raiseBlockerOnDenial(run);
+        return;
+      }
       // A lead that parked its task in the inbox has nothing left to report.
-      if (Option.isNone(task) || task.value.stage === "cancelled" || task.value.stage === "inbox") {
+      if (task.value.stage === "cancelled" || task.value.stage === "inbox") {
         return;
       }
       yield* Ref.update(lastSeen, (current) => new Map(current).set(run.threadId, runKey));
+      // Raised before classifying, so the turn counts as waiting on the user.
+      yield* raiseBlockerOnDenial(run);
       const open = yield* repository.listOpenAttentionItems({
         projectId: task.value.projectId,
         taskId: task.value.id,

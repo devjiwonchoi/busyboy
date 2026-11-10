@@ -119,6 +119,7 @@ import type {
   ThreadFeedLatestRun,
 } from "../../lib/threadActivity";
 import { PendingApprovalCard } from "./PendingApprovalCard";
+import { ProjectTeamCards } from "./ProjectTeamCards";
 import { ComposerErrorNotice } from "./ComposerErrorNotice";
 import { ComposerFeedback } from "./ComposerFeedback";
 import { ComposerUsageLimits } from "./ComposerUsageLimits";
@@ -1234,6 +1235,11 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                       />
                     </Animated.View>
                   ) : null}
+                  <ProjectTeamCards
+                    environmentId={props.environmentId}
+                    threadId={props.selectedThread.id}
+                    canOperateThread={props.canOperateThread}
+                  />
                   {props.activePendingApproval || props.activePendingUserInput ? (
                     <Animated.View
                       className="shrink-0 gap-3 px-4 pb-3"

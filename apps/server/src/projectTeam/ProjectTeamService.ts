@@ -193,6 +193,7 @@ import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
+import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import {
@@ -321,7 +322,8 @@ export function buildJournal(input: {
 }): Array<ProjectTeamJournalEntry> {
   const taskById = new Map(input.tasks.map((task) => [task.id as string, task]));
   const label = (taskId: string | null) => {
-    const task = taskId === null ? undefined : taskById.get(taskId);
+    if (taskId === null) return "a PM question";
+    const task = taskById.get(taskId);
     return task === undefined ? "a task" : `#${task.number}`;
   };
   const entries: Array<ProjectTeamJournalEntry> = [];
@@ -852,6 +854,15 @@ export class ProjectTeamService extends Context.Service<
     /** The current snapshot, then a fresh one after every change. */
     readonly streamAttention: Stream.Stream<ProjectTeamAttentionSnapshot, ProjectTeamError>;
 
+    /**
+     * A PM or task lead turn ended on a permission denial nothing moved past: raise a
+     * blocker for the user unless that thread already has an open card. None when no
+     * card was raised.
+     */
+    readonly raisePermissionBlocker: (input: {
+      readonly threadId: ThreadId;
+      readonly denial: PermissionDenial;
+    }) => Effect.Effect<Option.Option<ProjectAttentionItem>, ProjectTeamError>;
     /** Records how a task lead's turn ended; failed blocks the task and raises a blocker. */
     readonly recordOutcome: (input: {
       readonly task: ProjectTask;
@@ -3482,7 +3493,7 @@ const make = Effect.gen(function* () {
    */
   const afterPlanApprovalAnswer = (item: ProjectAttentionItem, actorThreadId: ThreadId | null) =>
     Effect.gen(function* () {
-      if (item.kind !== "approval" || item.answer === null) return;
+      if (item.kind !== "approval" || item.answer === null || item.taskId === null) return;
       const task = yield* requireTask(item.taskId, item.projectId);
       if (task.stage !== "awaiting_approval") return;
       const outcome = planApprovalOutcome(item.answer);
@@ -3501,8 +3512,9 @@ const make = Effect.gen(function* () {
 
   const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["lead", "director"], "ask_user");
+      const role = yield* requireRole(callerThreadId, ["lead", "director", "pm"], "ask_user");
       if (role.type === "director") return yield* askAsDirector(callerThreadId, role, input);
+      if (role.type === "pm") return yield* askAsManager(callerThreadId, role, input);
       const task = yield* requireTask(role.taskId, role.projectId);
       if (input.kind === "approval") return yield* askPlanApproval(callerThreadId, task, input);
       const item = yield* router.ask({
@@ -3517,6 +3529,40 @@ const make = Effect.gen(function* () {
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
       return { item };
     }).pipe(orTeamError("Could not ask the user."));
+
+  /**
+   * The PM's own blocker or decision card: about the project, not a task. It shows in
+   * the PM chat and the Director's waiting list, and the answer comes back to the PM.
+   */
+  const askAsManager = (
+    callerThreadId: ThreadId,
+    role: Extract<ProjectTeamRole, { readonly type: "pm" }>,
+    input: ProjectTeamAskUserInput,
+  ) =>
+    Effect.gen(function* () {
+      if (input.kind === "approval") {
+        return yield* teamError(
+          "A PM asks the user only for blockers and decisions (kind: blocker or decision). Plan approvals come from task leads.",
+          role.projectId,
+        );
+      }
+      if (input.taskId !== undefined) {
+        return yield* teamError(
+          "A PM's ask_user has no taskId: the card is about the project. A task's lead asks about its own task.",
+          role.projectId,
+        );
+      }
+      const item = yield* router.ask({
+        task: null,
+        projectId: role.projectId,
+        kind: input.kind,
+        question: input.question,
+        context: input.context,
+        options: input.options ?? [],
+        askerThreadId: callerThreadId,
+      });
+      return { item };
+    });
 
   /**
    * The Director's decision card: about a task in any project, shown in the Director's
@@ -3559,6 +3605,7 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       if (
         !isTurnFailedBlocker(item) ||
+        item.taskId === null ||
         item.answeredAt !== null ||
         item.supersededAt !== null ||
         answer.split("\nNote:")[0]?.trim() !== TURN_FAILED_RETRY
@@ -3654,7 +3701,7 @@ const make = Effect.gen(function* () {
         item.value.supersededAt === null &&
         isTurnFailedBlocker(item.value) &&
         input.answer.split("\nNote:")[0]?.trim() === TURN_FAILED_CANCEL;
-      if (cancel) {
+      if (cancel && item.value.taskId !== null) {
         yield* updateTask(
           callerThreadId,
           {
@@ -3671,7 +3718,8 @@ const make = Effect.gen(function* () {
           item: item.value,
           answer: input.answer,
           senderThreadId: callerThreadId,
-          relay: !cancel,
+          // The PM relaying the answer to its own card already has it.
+          relay: !cancel && item.value.askerThreadId !== callerThreadId,
           answeredBy: "pm",
         })
         .pipe(
@@ -3718,17 +3766,23 @@ const make = Effect.gen(function* () {
       if (role.type === "director" && item.value.kind !== "decision") {
         return yield* teamError("The Director can only close decision cards.", role.projectId);
       }
+      const taskId = item.value.taskId;
       const task =
-        role.type === "director"
-          ? yield* requireAnyTask(item.value.taskId, role.projectId)
-          : { id: item.value.taskId, projectId: item.value.projectId };
+        taskId === null
+          ? null
+          : role.type === "director"
+            ? yield* requireAnyTask(taskId, role.projectId)
+            : { id: taskId, projectId: item.value.projectId };
       const dismissed = yield* router.dismiss({
         item: item.value,
         reason: input.reason,
         senderThreadId: callerThreadId,
-        notifyAsker: role.type === "pm",
+        // The PM closing its own card needs no message about it.
+        notifyAsker: role.type === "pm" && item.value.askerThreadId !== callerThreadId,
       });
-      yield* appendEvent(task, "note", `Question closed: ${input.reason}`, callerThreadId);
+      if (task !== null) {
+        yield* appendEvent(task, "note", `Question closed: ${input.reason}`, callerThreadId);
+      }
       return { item: dismissed };
     }).pipe(orTeamError("Could not close the question."));
 
@@ -3899,7 +3953,7 @@ const make = Effect.gen(function* () {
         item.value.supersededAt === null &&
         isTurnFailedBlocker(item.value) &&
         input.answer.split("\nNote:")[0]?.trim() === TURN_FAILED_CANCEL;
-      if (cancel) {
+      if (cancel && item.value.taskId !== null) {
         yield* updateTask(
           manager.threadId,
           {
@@ -3931,9 +3985,11 @@ const make = Effect.gen(function* () {
             }),
           ),
         );
-      // The Director's cards are about tasks in other projects.
-      const task = yield* requireAnyTask(answered.taskId, answered.projectId);
-      yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
+      if (answered.taskId !== null) {
+        // The Director's cards are about tasks in other projects.
+        const task = yield* requireAnyTask(answered.taskId, answered.projectId);
+        yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
+      }
       yield* afterPlanApprovalAnswer(answered, null);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
@@ -3947,6 +4003,29 @@ const make = Effect.gen(function* () {
           `Attention item ${input.attentionItemId} was not found in this project.`,
           input.projectId,
         );
+      }
+      // A card without a task came from the PM, which answers questions about it itself.
+      if (item.value.taskId === null) {
+        const askerThreadId = item.value.askerThreadId ?? manager.threadId;
+        const key = `project-team:ask-lead:${yield* newId(item.value.id)}`;
+        yield* threads.sendToThread({
+          projectId: item.value.projectId,
+          commandId: CommandId.make(key),
+          threadId: askerThreadId,
+          messageId: MessageId.make(key),
+          senderThreadId: manager.threadId,
+          text: formatLeadQuestion({
+            cardId: item.value.id,
+            cardLabel: `${LEAD_QUESTION_CARD_LABEL[item.value.kind]} · ${resolvePersona(manager.projectId, manager.settings).name}`,
+            question: input.question,
+            quotes: input.quotes,
+          }),
+          attachments: [],
+          mode: "auto",
+          createdBy: "user",
+          creationSource: "server",
+        });
+        return { messageId: key };
       }
       // The task's own lead: on a Director card the asker is the Director, not the lead.
       const task = yield* requireAnyTask(item.value.taskId, item.value.projectId);
@@ -4455,8 +4534,15 @@ const make = Effect.gen(function* () {
       } satisfies ProjectManagerPresence;
     });
 
-  /** Open questions and the latest closed ones, oldest first, each with its task's name. */
-  const listDecisionCards = (projectId: ProjectId, open: ReadonlyArray<ProjectAttentionItem>) =>
+  /**
+   * Open questions and the latest closed ones, oldest first, each with its task's name.
+   * A card without a task carries the PM's name instead.
+   */
+  const listDecisionCards = (
+    projectId: ProjectId,
+    open: ReadonlyArray<ProjectAttentionItem>,
+    pmName: string,
+  ) =>
     Effect.gen(function* () {
       const closed = yield* repository.listRecentClosedAttentionItems({
         projectId,
@@ -4470,6 +4556,15 @@ const make = Effect.gen(function* () {
       );
       return yield* Effect.forEach(items, (item) =>
         Effect.gen(function* () {
+          if (item.taskId === null) {
+            const card: ProjectDecisionCard = {
+              item,
+              taskNumber: null,
+              taskTitle: pmName,
+              plan: null,
+            };
+            return [card];
+          }
           // The Director's cards may be about tasks in other projects.
           const task =
             tasks.get(item.taskId) ?? Option.getOrUndefined(yield* repository.getTask(item.taskId));
@@ -4498,16 +4593,17 @@ const make = Effect.gen(function* () {
   /** A plan approval card shows the summary and todos of the spec version it asks about. */
   const approvalPlanFor = (item: ProjectAttentionItem) => {
     const specVersion = item.specVersion;
-    return item.kind !== "approval" || specVersion === null
+    const taskId = item.taskId;
+    return item.kind !== "approval" || specVersion === null || taskId === null
       ? Effect.succeed(null)
       : Effect.gen(function* () {
           const version = yield* repository.getSpecVersion({
-            taskId: item.taskId,
+            taskId,
             version: specVersion,
           });
           if (Option.isNone(version)) return null;
           // The breakdown this one approval covers.
-          const subtasks = (yield* repository.listChildTasks(item.taskId))
+          const subtasks = (yield* repository.listChildTasks(taskId))
             .filter((child) => child.stage !== "cancelled")
             .map((child) => ({
               taskId: child.id,
@@ -4619,7 +4715,11 @@ const make = Effect.gen(function* () {
           );
           const otherThreadsWaiting = waitingThreads.length;
           const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
-          const decisionCards = yield* listDecisionCards(projectId, open);
+          const decisionCards = yield* listDecisionCards(
+            projectId,
+            open,
+            resolvePersona(projectId, manager.settings).name,
+          );
           const tasks = yield* repository.listTasks({ projectId });
           const projectTaskIds = new Set(tasks.map((task) => task.id));
           // Top-level tasks are the goals: no parent, or a parent outside this project.
@@ -4810,6 +4910,55 @@ const make = Effect.gen(function* () {
       return { task: updated, event };
     }).pipe(orTeamError("Could not record the task outcome.", input.task.projectId));
 
+  const raisePermissionBlocker: ProjectTeamService["Service"]["raisePermissionBlocker"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* repository.findTaskByLeadThreadId(input.threadId);
+      if (Option.isSome(task)) {
+        const current = task.value;
+        if (!LIVE_TASK_STAGES.has(current.stage)) return Option.none();
+        const open = yield* repository.listOpenAttentionItems({
+          projectId: current.projectId,
+          taskId: current.id,
+        });
+        if (open.length > 0) return Option.none();
+        const card = permissionBlockerCard({
+          who: `${yield* keyOf(current)} ${current.title}`,
+          denial: input.denial,
+        });
+        const item = yield* router.ask({
+          task: current,
+          kind: "blocker",
+          ...card,
+          askerThreadId: input.threadId,
+        });
+        yield* appendEvent(current, "note", "Raised a blocker for a permission denial.", null);
+        return Option.some(item);
+      }
+      const manager = yield* repository.getManagerByThreadId(input.threadId);
+      if (
+        Option.isNone(manager) ||
+        manager.value.kind === "director" ||
+        !manager.value.settings.enabled
+      ) {
+        return Option.none();
+      }
+      const projectId = manager.value.projectId;
+      const open = yield* repository.listOpenAttentionItems({ projectId });
+      if (open.some((item) => item.askerThreadId === input.threadId)) return Option.none();
+      const card = permissionBlockerCard({
+        who: resolvePersona(projectId, manager.value.settings).name,
+        denial: input.denial,
+      });
+      const item = yield* router.ask({
+        task: null,
+        projectId,
+        kind: "blocker",
+        ...card,
+        askerThreadId: input.threadId,
+      });
+      return Option.some(item);
+    }).pipe(orTeamError("Could not raise the permission blocker."));
+
   const modelSessionOf: ProjectTeamService["Service"]["modelSessionOf"] = (threadId) =>
     repository
       .findModelRunByThreadId(threadId)
@@ -4893,6 +5042,7 @@ const make = Effect.gen(function* () {
     afkSweep,
     streamAttention,
     recordOutcome,
+    raisePermissionBlocker,
     recordShipWake,
     modelSessionOf,
     recordRunUsage,

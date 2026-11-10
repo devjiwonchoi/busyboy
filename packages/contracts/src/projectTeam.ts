@@ -659,7 +659,8 @@ export type ProjectAttentionContext = typeof ProjectAttentionContext.Type;
 export const ProjectAttentionItem = Schema.Struct({
   id: ProjectAttentionItemId,
   projectId: ProjectId,
-  taskId: ProjectTaskId,
+  /** Null for a card about the project rather than a task, e.g. a blocked PM. */
+  taskId: Schema.NullOr(ProjectTaskId),
   kind: ProjectAttentionKind,
   question: Schema.String,
   options: Schema.Array(Schema.String),
@@ -774,10 +775,13 @@ export function approvalPlanOf(
   };
 }
 
-/** A question shown to the user as a card, with the name of the task that asked it. */
+/**
+ * A question shown to the user as a card, with the name of the task that asked it.
+ * A card without a task has a null taskNumber and the PM's name as taskTitle.
+ */
 export const ProjectDecisionCard = Schema.Struct({
   item: ProjectAttentionItem,
-  taskNumber: PositiveInt,
+  taskNumber: Schema.NullOr(PositiveInt),
   taskTitle: Schema.String,
   /** For a plan approval: the plan it asks about. Null for other kinds and missing versions. */
   plan: Schema.NullOr(ProjectApprovalPlan).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -1435,7 +1439,7 @@ export type ProjectTeamSettingsResult = typeof ProjectTeamSettingsResult.Type;
 export const ProjectTeamAskUserInput = Schema.Struct({
   kind: Schema.Literals(["decision", "approval", "blocker"]).annotate({
     description:
-      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card with the spec's summary and todos. blocker: something only a person can unblock.",
+      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card with the spec's summary and todos. blocker: something only a person can unblock. A PM may ask only decision or blocker.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description:
@@ -1455,7 +1459,7 @@ export const ProjectTeamAskUserInput = Schema.Struct({
   }),
   taskId: Schema.optional(ProjectTaskId).annotate({
     description:
-      "Director only, required: the task (in any project) the decision is mainly about. The card shows in your own chat and the answer comes back to you. A task lead leaves it out.",
+      "Director only, required: the task (in any project) the decision is mainly about. The card shows in your own chat and the answer comes back to you. A task lead and a PM leave it out.",
   }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;

@@ -4,6 +4,7 @@ import {
   MessageId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2Run,
+  type OrchestrationV2TurnItem,
   ProjectId,
   ProviderInstanceId,
   RunId,
@@ -165,6 +166,38 @@ describe("outcomeWakeText merge owner", () => {
   });
 });
 
+const DENIED_OUTPUT =
+  "Error: Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Production Deploy]. If you have other tasks that don't depend on this action, continue working on those.";
+
+/** A tool call in the thread's first run; `denied` marks it blocked by the auto-mode classifier. */
+function toolCall(input: {
+  readonly thread: ThreadId;
+  readonly ordinal: number;
+  readonly command: string;
+  readonly denied?: boolean;
+}): OrchestrationV2TurnItem {
+  return {
+    id: `turn-item-${input.thread}-${input.ordinal}`,
+    threadId: input.thread,
+    runId: RunId.make(`run-${input.thread}-1`),
+    nodeId: null,
+    providerThreadId: null,
+    providerTurnId: null,
+    parentItemId: null,
+    ordinal: input.ordinal,
+    status: input.denied === true ? "failed" : "completed",
+    title: null,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: "2026-11-04T00:05:00.000Z",
+    type: "command_execution",
+    input: input.command,
+    ...(input.denied === true
+      ? { output: DENIED_OUTPUT, toolNonExecutionKind: "automode-blocked" }
+      : { output: "ok" }),
+  } as unknown as OrchestrationV2TurnItem;
+}
+
 describe("TaskOutcomeReactor", () => {
   it.effect("marks a quiet turn stalled and a turn with an open question waiting_user", () =>
     withTeam((harness) =>
@@ -207,6 +240,135 @@ describe("TaskOutcomeReactor", () => {
         );
         const repeated = yield* team.readTask(pm, { taskId: quiet.task.id });
         assert.strictEqual(repeated.events.filter((event) => event.kind === "outcome").length, 1);
+      }),
+    ),
+  );
+
+  it.effect("raises one blocker in the PM chat when a PM turn ends on a permission denial", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const thread = harness.threads.get(pm) ?? harness.addThread(pm);
+        thread.turnItems = [
+          toolCall({ thread: pm, ordinal: 1, command: "gh release list" }),
+          toolCall({
+            thread: pm,
+            ordinal: 2,
+            command: "gh workflow run release.yml --ref main",
+            denied: true,
+          }),
+        ];
+        const ended = leadTurnEnded({
+          lead: pm,
+          status: "completed",
+          completedAt: "2026-11-04T00:05:00.000Z",
+        });
+        yield* reactor.handle(ended);
+        yield* reactor.handle(ended);
+
+        const open = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+        assert.strictEqual(open.length, 1);
+        const [blocker] = open;
+        assert.strictEqual(blocker?.kind, "blocker");
+        assert.strictEqual(blocker?.taskId, null);
+        assert.strictEqual(blocker?.askerThreadId, pm);
+        assert.include(blocker?.question, "gh workflow run release.yml --ref main");
+        assert.include(blocker?.question, "Production Deploy");
+        assert.deepStrictEqual(blocker?.context?.impacts, ["deploy"]);
+
+        // The answer comes back to the PM as a message.
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: blocker!.id,
+          answer: "내가 직접 실행할게요",
+        });
+        const relayed = (yield* Ref.get(harness.sent)).filter((entry) => entry.threadId === pm);
+        assert.strictEqual(relayed.length, 1);
+        assert.include(relayed[0]?.text, "내가 직접 실행할게요");
+      }),
+    ),
+  );
+
+  it.effect("raises no blocker when the turn moved past the denial or already asked", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const thread = harness.threads.get(pm) ?? harness.addThread(pm);
+        thread.turnItems = [
+          toolCall({ thread: pm, ordinal: 1, command: "git commit --amend", denied: true }),
+          toolCall({ thread: pm, ordinal: 2, command: "git commit -m fix" }),
+        ];
+        yield* reactor.handle(
+          leadTurnEnded({ lead: pm, status: "completed", completedAt: "2026-11-04T00:05:00.000Z" }),
+        );
+        assert.strictEqual(
+          (yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID })).length,
+          0,
+        );
+
+        // The PM raised its own card in the turn that ended on a denial.
+        yield* team.askUser(pm, {
+          context: attentionContext({ action: "Release v1" }),
+          kind: "blocker",
+          question: "Release is blocked",
+        });
+        thread.turnItems = [
+          toolCall({ thread: pm, ordinal: 1, command: "gh workflow run", denied: true }),
+        ].map((item) => ({ ...item, runId: RunId.make(`run-${pm}-2`) }));
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: pm,
+            status: "completed",
+            completedAt: "2026-11-04T00:06:00.000Z",
+            ordinal: 2,
+          }),
+        );
+        const open = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+        assert.deepStrictEqual(
+          open.map((item) => item.question),
+          ["Release is blocked"],
+        );
+      }),
+    ),
+  );
+
+  it.effect("raises a task blocker and waits on the user when a lead turn ends on a denial", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Release", harness.delegate);
+        const thread =
+          harness.threads.get(lead.leadThreadId) ?? harness.addThread(lead.leadThreadId);
+        thread.turnItems = [
+          toolCall({
+            thread: lead.leadThreadId,
+            ordinal: 1,
+            command: "gh workflow run release.yml",
+            denied: true,
+          }),
+        ];
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "completed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        const [blocker] = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+        assert.strictEqual(blocker?.kind, "blocker");
+        assert.strictEqual(blocker?.taskId, lead.task.id);
+        assert.strictEqual(blocker?.askerThreadId, lead.leadThreadId);
+        const { task } = yield* team.readTask(pm, { taskId: lead.task.id });
+        assert.strictEqual(task.lastOutcome, "waiting_user");
       }),
     ),
   );
