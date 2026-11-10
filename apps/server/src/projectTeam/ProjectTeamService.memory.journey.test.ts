@@ -962,6 +962,7 @@ describe("memory stall time", () => {
       { memory: fake.read, settings: LOCAL_ONLY },
     );
   });
+
   it.effect("stops a waiting task's clock once memory recovers", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(
@@ -997,6 +998,43 @@ describe("memory stall time", () => {
           assert.strictEqual(yield* stallOf(task.id), 6 * MINUTE);
         }),
       { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+
+  it.effect("moving a paused lead ends its hold and its stall", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const gate = yield* LeadMoveGate.LeadMoveGate;
+          const pm = yield* setUpManager;
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead", {
+            running: { startedMsAgo: MINUTE },
+          });
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          yield* TestClock.adjust(6 * MINUTE);
+
+          yield* team.moveTask({ projectId: task.projectId, taskId: task.id, to: "cloud" });
+          const moved = yield* readTask(task.id);
+          assert.strictEqual(moved.location, "cloud");
+          assert.isNull(moved.memoryHold ?? null);
+          yield* TestClock.adjust(20 * MINUTE);
+          // The next pass lets its held messages run in the cloud.
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, []);
+          assert.isFalse(gate.isHeld(lead));
+          assert.strictEqual(yield* stallOf(task.id), 6 * MINUTE);
+        }),
+      {
+        memory: fake.read,
+        sessions: fake.sessions,
+        cloudLead: fake.cloudLead,
+        settings: LOCAL_ONLY,
+      },
     );
   });
 });

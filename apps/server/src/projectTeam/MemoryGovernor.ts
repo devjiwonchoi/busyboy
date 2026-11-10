@@ -498,6 +498,25 @@ const make = Effect.gen(function* () {
     }
   });
 
+  /**
+   * A paused lead the user moved off this Mac no longer waits for its memory:
+   * its held messages run there, and its hold ends.
+   */
+  const releaseMoved = Effect.gen(function* () {
+    for (const unit of yield* Ref.get(pausedRef)) {
+      const task = yield* repository.getTask(unit.taskId).pipe(
+        Effect.map(Option.getOrNull),
+        Effect.orElseSucceed(() => null),
+      );
+      if (task !== null && (task.location ?? "local") === "local") continue;
+      for (const member of unit.members) yield* control(member.threadId).resumeQueue;
+      yield* Ref.update(pausedRef, (all) =>
+        all.filter((entry) => entry.leadThreadId !== unit.leadThreadId),
+      );
+      if (task !== null && task.memoryHold != null) yield* setHold(task, null);
+    }
+  });
+
   /** A task waiting to start stalls only while memory is short, not while it waits on the cap. */
   const clockWaiting = (memoryShort: boolean) =>
     Effect.gen(function* () {
@@ -508,6 +527,7 @@ const make = Effect.gen(function* () {
 
   const tick: MemoryGovernor["Service"]["tick"] = Effect.gen(function* () {
     yield* restorePauses;
+    yield* releaseMoved;
     yield* markHeldWork;
     const execution = yield* settings;
     // Uncached: the last pass's pause must show in this reading.

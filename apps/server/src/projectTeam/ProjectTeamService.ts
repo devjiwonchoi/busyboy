@@ -4152,7 +4152,13 @@ const make = Effect.gen(function* () {
         task,
         input.to,
       ).pipe(Effect.mapError((error) => teamError(error.detail, task.projectId)));
-      return yield* taskDetail(moved);
+      // A lead paused for memory and moved away no longer waits for this Mac's
+      // memory; the governor lets its held messages run.
+      const released =
+        moved.memoryHold == null
+          ? moved
+          : Option.getOrElse(yield* setMemoryHold(moved, null), () => moved);
+      return yield* taskDetail(released);
     }).pipe(orTeamError("Could not move the task.", input.projectId));
 
   /**
