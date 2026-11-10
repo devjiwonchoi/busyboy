@@ -21,6 +21,8 @@ interface Frame {
   readonly a: number;
   readonly m?: RelayMessage;
   readonly token?: string;
+  /** The sender's session id: a new one means the peer restarted and starts over. */
+  readonly sid?: string;
 }
 
 /** A connection: a socket that may close at any time. */
@@ -76,9 +78,10 @@ export class RelaySession {
   /**
    * Starts using a new connection. The caller then feeds every received line
    * to `receive` and calls `detach` when it closes. `token` goes in the hello
-   * so the relay can check it before trusting anything else.
+   * so the relay can check it before trusting anything else; `sid` names this
+   * session, so the relay can tell a reconnect from a restarted Mac.
    */
-  attach(link: RelayLink, token?: string): void {
+  attach(link: RelayLink, token?: string, sid?: string): void {
     this.link?.close();
     this.link = link;
     this.ready = false;
@@ -87,6 +90,7 @@ export class RelaySession {
         t: "hello",
         a: this.lastReceived,
         ...(token === undefined ? {} : { token }),
+        ...(sid === undefined ? {} : { sid }),
       } satisfies Frame),
     );
   }

@@ -15,6 +15,14 @@
  * A sandbox idle for idleStopMs is deleted; the Mac mirror and the transcript
  * backup are enough for the next turn to start a new one and resume.
  *
+ * The sandbox does not need the Mac to stay alive: it is persistent, and its
+ * relay holds a Vercel credential scoped to the sandbox project, extends the
+ * sandbox while work runs and stops it (files kept) once idle. Each sandbox is
+ * recorded in a CloudSessionStore, so a Mac that slept past the relay giving
+ * up, or a restarted server, attaches to the same sandbox again (resuming it
+ * if it stopped), lets a claude process left from before a restart finish its
+ * turn, and mirrors the worktree back before anything reads it.
+ *
  * One Mac worktree has one sandbox. A cloud lead's children (implement, fix,
  * review) work in the lead's worktree, so they share its sandbox and checkout,
  * and the mirror, idle stop and release cover all of them. Codex children run
@@ -28,8 +36,15 @@ import { collectLocalBundle, shellQuote, syncEnvironment } from "./EnvironmentSy
 import type { LocalHost } from "./LocalHost.ts";
 import { encodeProjectDir, rewriteHomePaths } from "./pathRewrite.ts";
 import { RELAY_FILES } from "./relay/relaySource.generated.ts";
+import type { RelayMessage } from "./relay/session.ts";
 import { RelayClient, type RelaySocketFactory, type RemoteProcess } from "./RelayClient.ts";
 import type { SandboxClient, SandboxHandle } from "./SandboxClient.ts";
+import {
+  memoryCloudSessionStore,
+  type CloudProcessRecord,
+  type CloudSessionRecord,
+  type CloudSessionStore,
+} from "./CloudSessionStore.ts";
 import {
   captureWorkspace,
   applyWorkspace,
@@ -45,7 +60,20 @@ export const RELAY_MCP_PORT = 8788;
  * so a crashed or killed server does not leave one billing for hours.
  */
 const SANDBOX_TIMEOUT_MS = 45 * 60 * 1000;
+/** The Mac extends the sandbox only when the relay could not get its own credential. */
 const KEEPALIVE_EVERY_MS = 10 * 60 * 1000;
+/** The relay's project token lasts about 12 hours; it is renewed well before. */
+const RELAY_CREDENTIAL_EVERY_MS = 60 * 60 * 1000;
+/**
+ * The relay waits this much longer than the Mac's idle stop, so an awake Mac
+ * mirrors and releases an idle sandbox itself; the relay's own stop is for a
+ * Mac that is asleep or off.
+ */
+const RELAY_IDLE_MARGIN_MS = 10 * 60 * 1000;
+/** A claude left running by a restarted Mac gets this long to finish its turn. */
+const ORPHAN_KILL_AFTER_MS = 10 * 60 * 1000;
+const RELAY_PROCESS = ".busyboy-cloud/relay/server.ts";
+const MAX_REATTACH_FAILURES = 3;
 const MAX_IDLE_SYNC_FAILURES = 3;
 const DEFAULT_IDLE_STOP_MS = 30 * 60 * 1000;
 const RELAY_CONNECT_TIMEOUT_MS = 60_000;
@@ -107,6 +135,12 @@ export interface CloudLeadRuntimeDeps {
   readonly rotationCheckMs?: number;
   /** The clock sandbox ages are read from; tests pass a fake one. */
   readonly now?: () => number;
+  /** Where sandboxes are recorded for a restarted server; in memory by default. */
+  readonly store?: CloudSessionStore;
+  /** How long the relay waits with nothing running before it stops its sandbox. */
+  readonly relayIdleStopMs?: number;
+  /** How long an unreachable relay goes before the Mac asks whether its sandbox lives. */
+  readonly relayGiveUpAfterMs?: number;
 }
 
 /**
@@ -165,13 +199,24 @@ interface CloudSession {
   /** Running remote processes per thread, so a replacement can stop each one's turn. */
   readonly runningThreads: Map<string, number>;
   readonly sandbox: SandboxHandle;
+  readonly client: SandboxClient;
   readonly relay: RelayClient;
+  readonly relayTokenRef: string;
+  /** Remote processes by relay id, recorded so a restarted Mac finds them. */
+  readonly processes: Map<string, CloudProcessRecord>;
+  /** Processes a restarted Mac left running; a new turn waits for them to end. */
+  readonly orphans: Set<Promise<void>>;
+  readonly mcpEndpoint: string;
+  /** Store writes run in order. */
+  persisted: Promise<void>;
+  credentialTimer: ReturnType<typeof setInterval> | null;
   readonly macCwd: string;
   readonly remoteHome: string;
   readonly remoteCwd: string;
   readonly credentials: CloudLeadCredentials;
   idleTimer: ReturnType<typeof setTimeout> | null;
-  readonly keepAlive: ReturnType<typeof setInterval>;
+  /** Only when the relay has no credential of its own. */
+  keepAlive: ReturnType<typeof setInterval> | null;
   /** Remote processes (claude, codex) still running; the sandbox only idles out at zero. */
   running: number;
   codexRunning: number;
@@ -236,6 +281,9 @@ export class CloudLeadRuntime {
   /** Sandboxes being mirrored a last time and deleted; a new turn waits for these. */
   private readonly releasing = new Map<string, Promise<void>>();
   private rotationHandler: CloudLeadRotationHandler | null = null;
+  private readonly store: CloudSessionStore;
+  /** Failed attaches per worktree; past MAX_REATTACH_FAILURES a new sandbox is made. */
+  private readonly reattachFailures = new Map<string, number>();
   /** Thread -> the Mac worktree (session key) it last prepared in. */
   private readonly worktrees = new Map<string, string>();
   /** The one sandbox using the cloud Codex login: a login refreshed in two places logs out. */
@@ -243,6 +291,7 @@ export class CloudLeadRuntime {
 
   constructor(deps: CloudLeadRuntimeDeps) {
     this.deps = deps;
+    this.store = deps.store ?? memoryCloudSessionStore();
   }
 
   setRotationHandler(handler: CloudLeadRotationHandler | null) {
@@ -276,6 +325,12 @@ export class CloudLeadRuntime {
     const session = await this.session(input);
     // Released between the lookup and now: wait for that and take a new sandbox.
     if (session.released) return this.prepare(input);
+    // A claude a restarted Mac left running finishes its turn before a new one resumes it.
+    if (session.orphans.size > 0) {
+      await Promise.all(session.orphans);
+      return this.prepare(input);
+    }
+    session.relay.setMcpEndpoint(input.mcpEndpoint);
     // Near its limit and between turns: replace it before this turn starts.
     if (session.running === 0 && session.rotation === "idle" && this.rotationDue(session)) {
       if (await this.rotate(session, false)) return this.prepare(input);
@@ -365,15 +420,22 @@ export class CloudLeadRuntime {
    * syncs of one thread run one at a time.
    */
   syncToMac(threadId: string): Promise<{ readonly head: string } | null> {
-    const key = this.keyOf(threadId);
-    return key === undefined ? Promise.resolve(null) : this.syncKey(key);
+    // An unknown id may still be a worktree with a recorded sandbox (a move passes the worktree).
+    return this.syncKey(this.keyOf(threadId) ?? threadId);
   }
 
   private syncKey(key: string): Promise<{ readonly head: string } | null> {
     const pending = this.sessions.get(key);
     // During a release, wait for its final mirror so callers read a finished worktree.
+    const releasing = this.releasing.get(key);
+    if (pending === undefined && releasing !== undefined) return releasing.then(() => null);
+    // A recorded sandbox nothing is attached to (it stopped while the Mac slept) may
+    // hold work the Mac has not seen: attach again, which mirrors it.
+    // A failed attach throws: a caller about to rely on the mirror must not go on.
     if (pending === undefined) {
-      return (this.releasing.get(key) ?? Promise.resolve()).then(() => null);
+      return this.attachRecorded(key).then((attached) =>
+        attached === "attached" ? this.syncKey(key) : null,
+      );
     }
     return this.syncLocked(key, pending);
   }
@@ -421,13 +483,21 @@ export class CloudLeadRuntime {
    * transcripts stay, so a later turn starts a new sandbox from them.
    */
   release(threadId: string, options: { readonly synced?: boolean } = {}): Promise<void> {
-    const key = this.keyOf(threadId);
-    return key === undefined ? Promise.resolve() : this.releaseKey(key, options);
+    return this.releaseKey(this.keyOf(threadId) ?? threadId, options);
   }
 
   private releaseKey(threadId: string, options: { readonly synced?: boolean } = {}): Promise<void> {
     const pending = this.sessions.get(threadId);
-    if (pending === undefined) return this.releasing.get(threadId) ?? Promise.resolve();
+    if (pending === undefined) {
+      const releasing = this.releasing.get(threadId);
+      if (releasing !== undefined) return releasing;
+      // A recorded sandbox nothing is attached to: attach (mirroring its work), then
+      // release it. One that cannot be attached keeps its record for a later try.
+      return this.attachRecorded(threadId).then(
+        (attached) => (attached === "attached" ? this.releaseKey(threadId, options) : undefined),
+        () => undefined,
+      );
+    }
     // Unmapped right away: a turn starting now waits for this and gets a new sandbox.
     this.sessions.delete(threadId);
     const done = (async () => {
@@ -442,12 +512,13 @@ export class CloudLeadRuntime {
       }
       // Codex may have refreshed the cloud login; keep it before the sandbox goes.
       await this.saveCodexAuth(session);
-      clearInterval(session.keepAlive);
-      if (session.rotationCheck !== null) clearInterval(session.rotationCheck);
+      this.stopTimers(session);
       session.relay.close();
       // Its codex processes end with the relay; the login is free for other sandboxes.
       if (this.codexHolder === session.key) this.codexHolder = null;
       await session.sandbox.delete().catch(() => undefined);
+      await session.persisted;
+      await this.forget(session.key, session.relayTokenRef);
       this.log("cloud-lead.sandbox-released", {
         worktree: threadId,
         sandbox: session.sandbox.name,
@@ -473,6 +544,85 @@ export class CloudLeadRuntime {
     ]);
   }
 
+  /**
+   * Lets go of every sandbox without stopping it, for a server shutting down:
+   * its processes keep running and the next server attaches again (restore).
+   */
+  async detachAll(): Promise<void> {
+    const pending = [...this.sessions.entries()];
+    this.sessions.clear();
+    await Promise.all(
+      pending.map(async ([, promise]) => {
+        const session = await promise.catch(() => null);
+        if (session === null) return;
+        this.cancelIdleStop(session);
+        this.stopTimers(session);
+        // Saves still queued go through first; after this, exits are not recorded,
+        // so the record keeps the processes the next server lets finish.
+        await session.persisted;
+        session.released = true;
+        session.relay.close();
+      }),
+    );
+  }
+
+  /**
+   * Attaches again to every recorded sandbox, at server start: resumes a
+   * stopped one, lets claude processes left by the previous server finish
+   * their turn, and mirrors each worktree to the Mac.
+   */
+  async restore(): Promise<void> {
+    const records = await this.store.list();
+    await Promise.all(
+      records.map(async (record) => {
+        if (this.sessions.has(record.worktreeKey)) return;
+        await this.attachRecord(record).catch(() => undefined);
+      }),
+    );
+  }
+
+  /**
+   * Attaches to the recorded sandbox of a worktree. "none" when nothing is
+   * recorded or the sandbox is gone; throws when the attach fails.
+   */
+  private async attachRecorded(key: string): Promise<"attached" | "none"> {
+    if (!this.sessions.has(key)) {
+      const record = (await this.store.list()).find((candidate) => candidate.worktreeKey === key);
+      if (record === undefined) return "none";
+      if (!this.sessions.has(key)) return this.attachRecord(record);
+    }
+    await this.sessions.get(key)!;
+    return "attached";
+  }
+
+  /** Maps the worktree to an attach of its recorded sandbox; rejects when that fails. */
+  private attachRecord(record: CloudSessionRecord): Promise<"attached" | "none"> {
+    this.worktrees.set(record.threadId, record.worktreeKey);
+    const attached = this.reattach(record, record.mcpEndpoint).then((session) => {
+      if (session === null) throw new Error("The recorded sandbox is gone.");
+      return session;
+    });
+    this.sessions.set(record.worktreeKey, attached);
+    return attached.then(
+      () => "attached" as const,
+      async (error: unknown) => {
+        if (this.sessions.get(record.worktreeKey) === attached) {
+          this.sessions.delete(record.worktreeKey);
+        }
+        // Gone or stale: forgotten by reattach, so there is nothing to attach.
+        if (!(await this.store.list()).some((r) => r.worktreeKey === record.worktreeKey)) {
+          return "none" as const;
+        }
+        this.log("cloud-lead.reattach-failed", {
+          worktree: record.worktreeKey,
+          sandbox: record.sandboxName,
+          error: errorText(error),
+        });
+        throw error;
+      },
+    );
+  }
+
   hasSession(threadId: string): boolean {
     const key = this.keyOf(threadId);
     return key !== undefined && this.sessions.has(key);
@@ -484,13 +634,133 @@ export class CloudLeadRuntime {
     if (existing !== undefined) return existing;
     const releasing = this.releasing.get(key);
     if (releasing !== undefined) return releasing.then(() => this.session(input));
-    const created = this.create(input);
+    const created = this.attachOrCreate(input);
     this.sessions.set(key, created);
     // A failed start must not stick: the next turn tries again.
     created.catch(() => {
       if (this.sessions.get(key) === created) this.sessions.delete(key);
     });
     return created;
+  }
+
+  /** The recorded sandbox of this worktree when it still exists, else a new one. */
+  private async attachOrCreate(input: PrepareInput): Promise<CloudSession> {
+    const record = (await this.store.list()).find(
+      (candidate) => candidate.worktreeKey === input.worktreePath,
+    );
+    if (record !== undefined) {
+      try {
+        const attached = await this.reattach(record, input.mcpEndpoint);
+        this.reattachFailures.delete(record.worktreeKey);
+        if (attached !== null) return attached;
+      } catch (error) {
+        const failures = (this.reattachFailures.get(record.worktreeKey) ?? 0) + 1;
+        this.reattachFailures.set(record.worktreeKey, failures);
+        if (failures < MAX_REATTACH_FAILURES) throw error;
+        // Stop retrying a sandbox that will not take us back. It is not deleted:
+        // it may hold work, and its relay stops it once idle.
+        this.reattachFailures.delete(record.worktreeKey);
+        await this.forget(record.worktreeKey, record.relayTokenRef);
+        this.log("cloud-lead.recorded-sandbox-abandoned", {
+          worktree: record.worktreeKey,
+          sandbox: record.sandboxName,
+          error: errorText(error),
+        });
+      }
+    }
+    return this.create(input);
+  }
+
+  /**
+   * Attaches to a recorded sandbox: resumes it if it stopped, restarts its
+   * relay if that is not running, and mirrors its worktree to the Mac. Null
+   * when the sandbox no longer exists (the record is dropped).
+   */
+  private async reattach(
+    record: CloudSessionRecord,
+    mcpEndpoint: string,
+  ): Promise<CloudSession | null> {
+    const started = Date.now();
+    const [client, credentials] = await Promise.all([this.deps.client(), this.deps.credentials()]);
+    // Through the team guard, like every sandbox call.
+    if ((await client.status(record.sandboxName)) === "missing") {
+      await this.forget(record.worktreeKey, record.relayTokenRef);
+      this.log("cloud-lead.recorded-sandbox-gone", {
+        worktree: record.worktreeKey,
+        sandbox: record.sandboxName,
+      });
+      return null;
+    }
+    const sandbox = await client.get(record.sandboxName, { resume: true });
+    // The Mac worktree moved on without this sandbox (the task came back to the Mac
+    // and got new commits): mirroring would overwrite that work, so leave it.
+    if (!(await this.macWithinSandbox(sandbox, record))) {
+      await this.forget(record.worktreeKey, record.relayTokenRef);
+      this.log("cloud-lead.recorded-sandbox-stale", {
+        worktree: record.worktreeKey,
+        sandbox: record.sandboxName,
+      });
+      return null;
+    }
+    let token = await this.store.readToken(record.relayTokenRef);
+    const relayScript = `${record.remoteHome}/${RELAY_PROCESS}`;
+    // A resumed sandbox runs a new session: nothing from before is running in it.
+    const sameSession = record.sandboxSessionId === sandbox.sessionId;
+    const relayRunning =
+      sameSession &&
+      token !== null &&
+      (await sandbox
+        .runCommand({ cmd: "pgrep", args: ["-f", relayScript] })
+        .then((result) => result.exitCode === 0)
+        .catch(() => false));
+    if (!relayRunning) {
+      if (token === null) {
+        token = NodeCrypto.randomBytes(32).toString("base64url");
+        await this.store.saveToken(record.relayTokenRef, token);
+      }
+      if (sameSession) {
+        // The relay died but its processes may not have: a new relay cannot hand
+        // them over, so end them before a new turn resumes the same claude session.
+        await this.killLeftovers(sandbox, record);
+        await sandbox
+          .runCommand({ cmd: "pkill", args: ["-f", relayScript] })
+          .catch(() => undefined);
+      }
+      await this.startRelayProcess(sandbox, record.remoteHome, token);
+    }
+    const connection = this.connectRelay(record.worktreeKey, client, sandbox, token!, mcpEndpoint);
+    await this.waitForRelay(connection.relay);
+    const session = this.newSession({
+      key: record.worktreeKey,
+      threadId: record.threadId,
+      sandbox,
+      client,
+      relay: connection.relay,
+      relayTokenRef: record.relayTokenRef,
+      macCwd: record.worktreeKey,
+      remoteHome: record.remoteHome,
+      remoteCwd: record.remoteCwd,
+      credentials,
+      createdAt: record.createdAt,
+      mcpEndpoint,
+      processes: record.processes,
+    });
+    connection.bind(session);
+    await this.afterConnect(session);
+    this.log("cloud-lead.sandbox-reattached", {
+      worktree: record.worktreeKey,
+      sandbox: sandbox.name,
+      resumed: !relayRunning,
+      ms: Date.now() - started,
+    });
+    // The Mac mirror may be older than the sandbox: catch it up before gates read it.
+    await this.syncLocked(record.worktreeKey, Promise.resolve(session)).catch((error: unknown) =>
+      this.log("cloud-lead.reattach-sync-failed", {
+        worktree: record.worktreeKey,
+        error: errorText(error),
+      }),
+    );
+    return session;
   }
 
   private async create(input: PrepareInput): Promise<CloudSession> {
@@ -503,6 +773,8 @@ export class CloudLeadRuntime {
       ...(snapshotId === null ? {} : { snapshotId }),
       vcpus: this.deps.vcpus ?? 4,
       timeoutMs: SANDBOX_TIMEOUT_MS,
+      // A stopped sandbox keeps its files; the next call resumes it.
+      persistent: true,
       ports: [this.ports.relay],
     });
     try {
@@ -520,61 +792,176 @@ export class CloudLeadRuntime {
       await syncEnvironment(sandbox, bundle, remoteHome);
       await this.mirrorIn(sandbox, input.worktreePath, remoteCwd);
       await this.restoreTranscripts([key, input.threadId], sandbox, remoteHome, remoteCwd);
-      const relay = await this.startRelay(sandbox, remoteHome, input.mcpEndpoint, () => {
-        // The relay is gone (sandbox stopped or unreachable): mirror what the
-        // sandbox API can still reach and start over on the next turn.
-        this.log("cloud-lead.relay-unreachable", { threadId: input.threadId });
-        void this.releaseKey(key);
-      });
+      const token = NodeCrypto.randomBytes(32).toString("base64url");
+      const relayTokenRef = relayTokenRefFor(key);
+      await this.startRelayProcess(sandbox, remoteHome, token);
+      const connection = this.connectRelay(key, client, sandbox, token, input.mcpEndpoint);
+      await this.waitForRelay(connection.relay);
       this.log("cloud-lead.sandbox-ready", {
         threadId: input.threadId,
         sandbox: sandbox.name,
         ms: Date.now() - started,
         envSynced: bundle.files.length,
       });
-      const keepAlive = setInterval(() => {
-        sandbox.extendTimeout(KEEPALIVE_EVERY_MS).catch((error: unknown) =>
-          this.log("cloud-lead.keepalive-failed", {
-            threadId: input.threadId,
-            error: String(error),
-          }),
-        );
-      }, KEEPALIVE_EVERY_MS);
-      keepAlive.unref?.();
-      const session: CloudSession = {
+      const session = this.newSession({
         key,
         threadId: input.threadId,
-        runningThreads: new Map(),
         sandbox,
-        relay,
-        keepAlive,
+        client,
+        relay: connection.relay,
+        relayTokenRef,
         macCwd: input.worktreePath,
         remoteHome,
         remoteCwd,
         credentials,
-        idleTimer: null,
-        running: 0,
-        codexRunning: 0,
-        codexConfigSynced: false,
-        codexAuthInstalled: false,
-        idleSyncFailures: 0,
-        uses: 0,
-        released: false,
         createdAt,
-        rotationCheck: null,
-        rotation: "idle",
-      };
-      session.rotationCheck = setInterval(() => {
-        if (session.rotation === "idle" && this.rotationDue(session)) {
-          void this.rotate(session, session.running > 0);
-        }
-      }, this.deps.rotationCheckMs ?? DEFAULT_ROTATION_CHECK_MS);
-      session.rotationCheck.unref?.();
+        mcpEndpoint: input.mcpEndpoint,
+        processes: [],
+      });
+      connection.bind(session);
+      await this.store.saveToken(relayTokenRef, token);
+      await this.afterConnect(session);
       return session;
     } catch (error) {
       await sandbox.delete().catch(() => undefined);
       throw error;
     }
+  }
+
+  private newSession(input: {
+    readonly key: string;
+    readonly threadId: string;
+    readonly sandbox: SandboxHandle;
+    readonly client: SandboxClient;
+    readonly relay: RelayClient;
+    readonly relayTokenRef: string;
+    readonly macCwd: string;
+    readonly remoteHome: string;
+    readonly remoteCwd: string;
+    readonly credentials: CloudLeadCredentials;
+    readonly createdAt: number;
+    readonly mcpEndpoint: string;
+    readonly processes: ReadonlyArray<CloudProcessRecord>;
+  }): CloudSession {
+    const { processes, ...rest } = input;
+    const session: CloudSession = {
+      ...rest,
+      runningThreads: new Map(),
+      processes: new Map(processes.map((process) => [process.id, process])),
+      orphans: new Set(),
+      persisted: Promise.resolve(),
+      credentialTimer: null,
+      keepAlive: null,
+      idleTimer: null,
+      running: 0,
+      codexRunning: 0,
+      codexConfigSynced: false,
+      codexAuthInstalled: false,
+      idleSyncFailures: 0,
+      uses: 0,
+      released: false,
+      rotationCheck: null,
+      rotation: "idle",
+    };
+    session.rotationCheck = setInterval(() => {
+      if (session.rotation === "idle" && this.rotationDue(session)) {
+        void this.rotate(session, session.running > 0);
+      }
+    }, this.deps.rotationCheckMs ?? DEFAULT_ROTATION_CHECK_MS);
+    session.rotationCheck.unref?.();
+    return session;
+  }
+
+  /**
+   * Gives the relay its credential (falling back to extending the sandbox from
+   * the Mac when there is none), renews it hourly, and records the session.
+   */
+  private async afterConnect(session: CloudSession) {
+    if (!(await this.sendCredential(session)) && session.keepAlive === null) {
+      session.keepAlive = setInterval(() => {
+        session.sandbox.extendTimeout(KEEPALIVE_EVERY_MS).catch((error: unknown) =>
+          this.log("cloud-lead.keepalive-failed", {
+            worktree: session.key,
+            error: String(error),
+          }),
+        );
+      }, KEEPALIVE_EVERY_MS);
+      session.keepAlive.unref?.();
+    }
+    session.credentialTimer = setInterval(
+      () => void this.sendCredential(session),
+      RELAY_CREDENTIAL_EVERY_MS,
+    );
+    session.credentialTimer.unref?.();
+    this.persist(session);
+  }
+
+  /** Hands the relay a token that reaches only the sandbox project. False when there is none. */
+  private async sendCredential(session: CloudSession): Promise<boolean> {
+    try {
+      const credential = await session.client.relayCredential();
+      session.relay.sendControl({
+        op: "credential",
+        token: credential.token,
+        sessionId: session.sandbox.sessionId,
+        teamId: credential.teamId,
+        projectId: credential.projectId,
+        ...(session.sandbox.expiresAt === undefined
+          ? {}
+          : { expiresAt: session.sandbox.expiresAt }),
+      });
+      return true;
+    } catch (error) {
+      this.log("cloud-lead.relay-credential-failed", {
+        worktree: session.key,
+        error: errorText(error),
+      });
+      return false;
+    }
+  }
+
+  private stopTimers(session: CloudSession) {
+    if (session.keepAlive !== null) clearInterval(session.keepAlive);
+    if (session.credentialTimer !== null) clearInterval(session.credentialTimer);
+    if (session.rotationCheck !== null) clearInterval(session.rotationCheck);
+    session.keepAlive = null;
+    session.credentialTimer = null;
+    session.rotationCheck = null;
+  }
+
+  /** Writes the session's record; writes run in order and stop once it is released. */
+  private persist(session: CloudSession) {
+    session.persisted = session.persisted
+      .then(async () => {
+        if (session.released) return;
+        await this.store.save({
+          worktreeKey: session.key,
+          threadId: session.threadId,
+          sandboxName: session.sandbox.name,
+          sandboxSessionId: session.sandbox.sessionId,
+          relayTokenRef: session.relayTokenRef,
+          remoteHome: session.remoteHome,
+          remoteCwd: session.remoteCwd,
+          mcpEndpoint: session.mcpEndpoint,
+          processes: [...session.processes.values()],
+          createdAt: session.createdAt,
+        });
+      })
+      .catch((error: unknown) =>
+        this.log("cloud-lead.session-save-failed", {
+          worktree: session.key,
+          error: errorText(error),
+        }),
+      );
+  }
+
+  private async forget(key: string, relayTokenRef: string) {
+    await this.store
+      .remove(key)
+      .catch((error: unknown) =>
+        this.log("cloud-lead.session-forget-failed", { worktree: key, error: errorText(error) }),
+      );
+    await this.store.removeToken(relayTokenRef).catch(() => undefined);
   }
 
   /** Puts the Mac worktree (branch, commits, edits) into the sandbox clone. */
@@ -605,12 +992,8 @@ export class CloudLeadRuntime {
     );
   }
 
-  private async startRelay(
-    sandbox: SandboxHandle,
-    remoteHome: string,
-    mcpEndpoint: string,
-    onGiveUp: () => void,
-  ): Promise<RelayClient> {
+  /** Uploads the relay and starts it with its bearer; it keeps running without the Mac. */
+  private async startRelayProcess(sandbox: SandboxHandle, remoteHome: string, token: string) {
     const dir = `${remoteHome}/.busyboy-cloud/relay`;
     await sandbox.writeFiles(
       Object.entries(RELAY_FILES).map(([name, content]) => ({
@@ -618,7 +1001,6 @@ export class CloudLeadRuntime {
         content: Buffer.from(content),
       })),
     );
-    const token = NodeCrypto.randomBytes(32).toString("base64url");
     await sandbox.startDetached({
       cmd: "node",
       args: ["--experimental-strip-types", "--no-warnings", `${dir}/server.ts`],
@@ -626,24 +1008,193 @@ export class CloudLeadRuntime {
         BUSYBOY_RELAY_TOKEN: token,
         BUSYBOY_RELAY_PORT: String(this.ports.relay),
         BUSYBOY_RELAY_MCP_PORT: String(this.ports.mcp),
+        BUSYBOY_RELAY_IDLE_STOP_MS: String(
+          this.deps.relayIdleStopMs ??
+            (this.deps.idleStopMs ?? DEFAULT_IDLE_STOP_MS) + RELAY_IDLE_MARGIN_MS,
+        ),
       },
     });
+  }
+
+  /**
+   * Opens the Mac end of a sandbox's relay. It keeps retrying while the
+   * sandbox lives; once it is gone or stopped, the session is let go (not
+   * deleted) and the next turn attaches again. `bind` hands it the session
+   * once built, with any processes a previous Mac server left running.
+   */
+  private connectRelay(
+    key: string,
+    client: SandboxClient,
+    sandbox: SandboxHandle,
+    token: string,
+    mcpEndpoint: string,
+  ): { readonly relay: RelayClient; readonly bind: (session: CloudSession) => void } {
+    let bound: CloudSession | null = null;
+    let leftover: ReadonlyArray<Record<string, unknown>> | null = null;
+    // A sandbox resumed in a new session (a mirror call wakes a stopped one) has no relay running.
+    const relaySession = sandbox.sessionId;
     const url =
       this.deps.relayUrl?.(sandbox) ?? sandbox.domain(this.ports.relay).replace(/^http/, "ws");
-    const relay = new RelayClient({
+    const relay: RelayClient = new RelayClient({
       url,
       token,
       mcpEndpoint,
-      onGiveUp,
+      ...(this.deps.relayGiveUpAfterMs === undefined
+        ? {}
+        : { giveUpAfterMs: this.deps.relayGiveUpAfterMs }),
+      isAlive: async () =>
+        (await client.status(sandbox.name)) === "running" &&
+        (await client.get(sandbox.name)).sessionId === relaySession,
+      onGiveUp: () => {
+        this.log("cloud-lead.relay-unreachable", { worktree: key, sandbox: sandbox.name });
+        if (bound !== null) this.letGo(bound);
+      },
+      onReconnect: () => {
+        if (bound === null || bound.released) return;
+        this.log("cloud-lead.relay-reconnected", { worktree: key, sandbox: sandbox.name });
+        void this.sendCredential(bound);
+        void this.syncKey(key).catch((error: unknown) =>
+          this.log("cloud-lead.reconnect-sync-failed", { worktree: key, error: errorText(error) }),
+        );
+      },
+      onControl: (message: RelayMessage) => {
+        if (message.op !== "procs" || !Array.isArray(message.list)) return;
+        const list = message.list as ReadonlyArray<Record<string, unknown>>;
+        if (bound === null) leftover = list;
+        else this.finishOrphans(bound, list);
+      },
       ...(this.deps.socketFactory === undefined ? {} : { socketFactory: this.deps.socketFactory }),
     });
+    return {
+      relay,
+      bind: (session) => {
+        bound = session;
+        if (leftover !== null) this.finishOrphans(session, leftover);
+        leftover = null;
+      },
+    };
+  }
+
+  /** Whether the Mac worktree's HEAD is in the sandbox's history, so a mirror loses nothing. */
+  private async macWithinSandbox(sandbox: SandboxHandle, record: CloudSessionRecord) {
+    const macHead = (
+      await this.mac()
+        .run(`git -C ${shellQuote(record.worktreeKey)} rev-parse HEAD`)
+        .catch(() => "")
+    ).trim();
+    if (!/^[0-9a-f]{40}$/.test(macHead)) return true;
+    const result = await sandbox.runCommand({
+      cmd: "git",
+      args: ["-C", record.remoteCwd, "merge-base", "--is-ancestor", macHead, "HEAD"],
+    });
+    return result.exitCode === 0;
+  }
+
+  /** Ends the processes a dead relay left running; it kept their process groups in a file. */
+  private async killLeftovers(sandbox: SandboxHandle, record: CloudSessionRecord) {
+    const pids = `${record.remoteHome}/.busyboy-cloud/relay/children.json`;
+    await sandbox
+      .runCommand({
+        cmd: "node",
+        args: [
+          "-e",
+          "for (const pid of JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))) { try { process.kill(-pid, 'SIGTERM') } catch {} }",
+          pids,
+        ],
+      })
+      .catch(() => undefined);
+    this.log("cloud-lead.leftovers-ended", {
+      worktree: record.worktreeKey,
+      processes: record.processes.map((process) => ({
+        id: process.id,
+        claudeSession: process.claudeSessionId,
+      })),
+    });
+  }
+
+  private async waitForRelay(relay: RelayClient) {
     try {
       await relay.waitUntilConnected(RELAY_CONNECT_TIMEOUT_MS);
     } catch (error) {
       relay.close();
       throw error;
     }
-    return relay;
+  }
+
+  /**
+   * The sandbox stopped or went away while this session used it: drop the
+   * session but keep its record, so the next turn resumes the same sandbox.
+   */
+  private letGo(session: CloudSession) {
+    if (session.released) return;
+    session.released = true;
+    this.cancelIdleStop(session);
+    this.stopTimers(session);
+    if (this.sessions.has(session.key)) {
+      void this.sessions.get(session.key)!.then((current) => {
+        if (current === session) this.sessions.delete(session.key);
+      });
+    }
+    if (this.codexHolder === session.key) this.codexHolder = null;
+  }
+
+  /**
+   * Processes a previous Mac server started: each gets end of input, so a
+   * claude finishes the turn it is in and exits (its transcript stays in the
+   * sandbox); one that hangs is killed after ORPHAN_KILL_AFTER_MS.
+   */
+  private finishOrphans(session: CloudSession, list: ReadonlyArray<Record<string, unknown>>) {
+    // Recorded processes that ended while no Mac was attached.
+    const running = new Set(list.map((entry) => String(entry.id)));
+    for (const id of session.processes.keys()) {
+      if (!running.has(id) && !id.startsWith(`${session.relay.sid}:`)) session.processes.delete(id);
+    }
+    this.persist(session);
+    for (const entry of list) {
+      const id = String(entry.id);
+      if (id.startsWith(`${session.relay.sid}:`)) continue;
+      const child = session.relay.adopt(id);
+      const recorded = session.processes.get(id);
+      // It may have ended between the relay's list and now.
+      if (child.exitCode !== null) {
+        session.processes.delete(id);
+        this.persist(session);
+        continue;
+      }
+      const threadId = recorded?.threadId ?? session.threadId;
+      const done = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+      session.orphans.add(done);
+      this.track(session, child, threadId, () => {
+        session.orphans.delete(done);
+        session.processes.delete(id);
+        this.persist(session);
+        // Its last turn's work reaches the Mac before the next turn or a gate reads it.
+        if (session.orphans.size === 0 && !session.released) {
+          void this.syncKey(session.key).catch(() => undefined);
+        }
+      });
+      const kill = setTimeout(() => child.kill("SIGKILL"), ORPHAN_KILL_AFTER_MS);
+      kill.unref?.();
+      child.once("exit", () => clearTimeout(kill));
+      child.stdin.end();
+      this.log("cloud-lead.orphan-finishing", {
+        worktree: session.key,
+        process: id,
+        threadId,
+        claudeSession: recorded?.claudeSessionId ?? null,
+      });
+    }
+  }
+
+  /** Records a remote process so a restarted Mac knows which thread and claude session it ran. */
+  private recordProcess(session: CloudSession, threadId: string, args: ReadonlyArray<string>) {
+    const id = session.relay.lastProcessId;
+    session.processes.set(id, { id, threadId, claudeSessionId: claudeSessionIdOf(args) });
+    this.persist(session);
+    return () => {
+      session.processes.delete(id);
+      this.persist(session);
+    };
   }
 
   /** Mac worktree and home paths as the sandbox sees them. */
@@ -687,7 +1238,7 @@ export class CloudLeadRuntime {
       if (options.signal.aborted) child.kill("SIGTERM");
       else options.signal.addEventListener("abort", () => child.kill("SIGTERM"), { once: true });
     }
-    this.track(session, child, threadId);
+    this.track(session, child, threadId, this.recordProcess(session, threadId, args));
     return child;
   }
 
@@ -767,7 +1318,9 @@ export class CloudLeadRuntime {
     this.codexHolder = session.key;
     session.codexRunning += 1;
     session.codexAuthInstalled = true;
+    const unrecord = this.recordProcess(session, threadId, []);
     this.track(session, child, threadId, () => {
+      unrecord();
       session.codexRunning -= 1;
       // A release saves the login itself before deleting the sandbox.
       if (!session.released) void this.saveCodexAuth(session);
@@ -1057,6 +1610,19 @@ export const hasCodexCredentials = (authJson: string): boolean => {
   } catch {
     return false;
   }
+};
+
+/** The secret store name of a worktree's relay bearer. */
+const relayTokenRefFor = (key: string) =>
+  `cloud-lead-relay-${NodeCrypto.createHash("sha256").update(key).digest("hex").slice(0, 32)}`;
+
+/** The claude session a spawn resumes or starts, from its --resume / --session-id flag. */
+const claudeSessionIdOf = (args: ReadonlyArray<string>): string | null => {
+  for (const flag of ["--resume", "--session-id"]) {
+    const index = args.indexOf(flag);
+    if (index !== -1 && args[index + 1] !== undefined) return args[index + 1]!;
+  }
+  return null;
 };
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));

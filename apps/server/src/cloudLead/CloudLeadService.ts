@@ -13,9 +13,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import { type ExecutionLocation, ThreadId } from "@t3tools/contracts";
 
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import { ensureBaseSnapshot, fileBaseSnapshotStore, readLocalInputs } from "./BaseSnapshot.ts";
 import * as CloudLeadSecrets from "./CloudLeadSecrets.ts";
@@ -25,6 +27,7 @@ import {
   type CodexCheck,
   type PrepareInput,
 } from "./CloudLeadRuntime.ts";
+import type { CloudSessionRecord, CloudSessionStore } from "./CloudSessionStore.ts";
 import { joinPath, nodeLocalHost } from "./LocalHost.ts";
 import { makeSandboxClient } from "./SandboxClient.ts";
 
@@ -192,9 +195,92 @@ const ghAuthToken = () =>
 
 const BUSYBOY_REMOTE = /github\.com[:/]devjiwonchoi\/busyboy(\.git)?$/;
 
+interface CloudSessionRow {
+  readonly worktree_key: string;
+  readonly thread_id: string;
+  readonly sandbox_name: string;
+  readonly sandbox_session_id: string | null;
+  readonly relay_token_ref: string;
+  readonly remote_home: string;
+  readonly remote_cwd: string;
+  readonly mcp_endpoint: string;
+  readonly processes_json: string;
+  readonly created_at: number;
+}
+
+/** Cloud sessions in the server database; relay bearers in the secret store. */
+export const sqlCloudSessionStore = (
+  sql: SqlClient.SqlClient,
+  secrets: ServerSecretStore.ServerSecretStore["Service"],
+): CloudSessionStore => ({
+  list: () =>
+    Effect.runPromise(
+      sql<CloudSessionRow>`
+        SELECT worktree_key, thread_id, sandbox_name, sandbox_session_id, relay_token_ref,
+          remote_home, remote_cwd, mcp_endpoint, processes_json, created_at
+        FROM cloud_lead_sessions
+      `,
+    ).then((rows) =>
+      rows.map((row): CloudSessionRecord => ({
+        worktreeKey: row.worktree_key,
+        threadId: row.thread_id,
+        sandboxName: row.sandbox_name,
+        sandboxSessionId: row.sandbox_session_id,
+        relayTokenRef: row.relay_token_ref,
+        remoteHome: row.remote_home,
+        remoteCwd: row.remote_cwd,
+        mcpEndpoint: row.mcp_endpoint,
+        processes: JSON.parse(row.processes_json) as CloudSessionRecord["processes"],
+        createdAt: Number(row.created_at),
+      })),
+    ),
+  save: (record) =>
+    Effect.runPromise(
+      sql`
+        INSERT INTO cloud_lead_sessions (
+          worktree_key, thread_id, sandbox_name, sandbox_session_id, relay_token_ref,
+          remote_home, remote_cwd, mcp_endpoint, processes_json, created_at, updated_at
+        ) VALUES (
+          ${record.worktreeKey}, ${record.threadId}, ${record.sandboxName},
+          ${record.sandboxSessionId}, ${record.relayTokenRef}, ${record.remoteHome},
+          ${record.remoteCwd}, ${record.mcpEndpoint}, ${JSON.stringify(record.processes)},
+          ${record.createdAt}, ${new Date().toISOString()}
+        )
+        ON CONFLICT (worktree_key) DO UPDATE SET
+          thread_id = excluded.thread_id,
+          sandbox_name = excluded.sandbox_name,
+          sandbox_session_id = excluded.sandbox_session_id,
+          relay_token_ref = excluded.relay_token_ref,
+          remote_home = excluded.remote_home,
+          remote_cwd = excluded.remote_cwd,
+          mcp_endpoint = excluded.mcp_endpoint,
+          processes_json = excluded.processes_json,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at
+      `,
+    ).then(() => undefined),
+  remove: (worktreeKey) =>
+    Effect.runPromise(
+      sql`DELETE FROM cloud_lead_sessions WHERE worktree_key = ${worktreeKey}`,
+    ).then(() => undefined),
+  saveToken: (ref, token) => Effect.runPromise(secrets.set(ref, new TextEncoder().encode(token))),
+  readToken: (ref) =>
+    Effect.runPromise(
+      secrets
+        .get(ref)
+        .pipe(
+          Effect.map(Option.map((bytes) => new TextDecoder().decode(bytes))),
+          Effect.map(Option.getOrNull),
+        ),
+    ),
+  removeToken: (ref) => Effect.runPromise(secrets.remove(ref)),
+});
+
 const make = Effect.gen(function* () {
   const secrets = yield* CloudLeadSecrets.CloudLeadSecrets;
   const config = yield* ServerConfig.ServerConfig;
+  const sql = yield* SqlClient.SqlClient;
+  const secretStore = yield* ServerSecretStore.ServerSecretStore;
   const home = nodeLocalHost.env.HOME ?? "";
 
   const read = (kind: Parameters<typeof secrets.read>[0]["kind"]) =>
@@ -209,6 +295,7 @@ const make = Effect.gen(function* () {
   const runtime = new CloudLeadRuntime({
     host: nodeLocalHost,
     stateDir: config.stateDir,
+    store: sqlCloudSessionStore(sql, secretStore),
     client: async () => {
       const [token, teamId, projectId] = await Promise.all([
         read("vercel_token").then(async (saved) => saved ?? (await readVercelCliToken(home))),
@@ -268,7 +355,13 @@ const make = Effect.gen(function* () {
     log: (event, data) => Effect.runFork(Effect.logInfo(event, data)),
   });
 
-  yield* Effect.addFinalizer(() => Effect.promise(() => runtime.releaseAll()));
+  // A stopping server lets its sandboxes run on; the next one attaches again.
+  yield* Effect.addFinalizer(() => Effect.promise(() => runtime.detachAll()));
+  yield* Effect.forkDetach(
+    Effect.promise(() => runtime.restore()).pipe(
+      Effect.catchCause((cause) => Effect.logWarning("cloud-lead.restore-failed", { cause })),
+    ),
+  );
 
   return hooksFromRuntime(runtime);
 });

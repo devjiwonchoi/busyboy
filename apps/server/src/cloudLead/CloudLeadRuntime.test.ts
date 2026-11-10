@@ -13,6 +13,7 @@ import {
 } from "./CloudLeadRuntime.ts";
 import { encodeProjectDir } from "./pathRewrite.ts";
 import type { RemoteProcess } from "./RelayClient.ts";
+import { memoryCloudSessionStore } from "./CloudSessionStore.ts";
 import { fakeLocalHost, localSandboxClient } from "./testkit.ts";
 import { localMirrorShell } from "./WorkspaceMirror.ts";
 
@@ -74,7 +75,11 @@ process.stdin.on("data", (chunk) => {
     say({ done: verb, file });
   }
 });
-process.stdin.on("end", () => process.exit(0));
+// --linger: keep running after input ends, like a claude still finishing its turn.
+process.stdin.on("end", () => {
+  if (process.argv.includes("--linger")) setInterval(() => {}, 1000);
+  else process.exit(0);
+});
 `;
 
 /**
@@ -152,37 +157,42 @@ const setup = async (
   cleanups.push(() => new Promise((resolve) => mcp.close(resolve)));
   const mcpEndpoint = `http://127.0.0.1:${(mcp.address() as NodeNet.AddressInfo).port}/mcp`;
   const ports = { relay: await freePort(), mcp: await freePort() };
-  const runtime = new CloudLeadRuntime({
-    client: async () => client,
-    credentials: async () => ({ claudeOauthToken: CLAUDE_TOKEN, githubToken: GITHUB_TOKEN }),
-    baseSnapshotId: async () => null,
-    host: {
-      ...fakeLocalHost({
-        files: {
-          [`${macHome}/.codex/config.toml`]: `model = "gpt-6.1-sol"\n[projects."${mac}"]\n`,
-        },
-      }),
-      env: { HOME: macHome },
-    },
-    stateDir: `${root}/state`,
-    ports,
-    ...(options.idleStopMs === undefined ? {} : { idleStopMs: options.idleStopMs }),
-    ...(options.macShell === undefined ? {} : { macShell: options.macShell }),
-    ...options.runtime,
-    ...(options.codexAuth === undefined
-      ? {}
-      : {
-          codexAuth: {
-            read: async () => options.codexAuth!.value,
-            save: async (value: string) => {
-              options.codexAuth!.saved.push(value);
-              options.codexAuth!.value = value;
-            },
+  const makeRuntime = (extra: Partial<CloudLeadRuntimeDeps> = {}) => {
+    const made = new CloudLeadRuntime({
+      client: async () => client,
+      credentials: async () => ({ claudeOauthToken: CLAUDE_TOKEN, githubToken: GITHUB_TOKEN }),
+      baseSnapshotId: async () => null,
+      host: {
+        ...fakeLocalHost({
+          files: {
+            [`${macHome}/.codex/config.toml`]: `model = "gpt-6.1-sol"\n[projects."${mac}"]\n`,
           },
         }),
-  });
-  cleanups.push(() => runtime.releaseAll());
-  return { mac, macHome, client, runtime, mcpEndpoint, mcpCalls, ports };
+        env: { HOME: macHome },
+      },
+      stateDir: `${root}/state`,
+      ports,
+      ...(options.idleStopMs === undefined ? {} : { idleStopMs: options.idleStopMs }),
+      ...(options.macShell === undefined ? {} : { macShell: options.macShell }),
+      ...options.runtime,
+      ...(options.codexAuth === undefined
+        ? {}
+        : {
+            codexAuth: {
+              read: async () => options.codexAuth!.value,
+              save: async (value: string) => {
+                options.codexAuth!.saved.push(value);
+                options.codexAuth!.value = value;
+              },
+            },
+          }),
+      ...extra,
+    });
+    cleanups.push(() => made.releaseAll());
+    return made;
+  };
+  const runtime = makeRuntime();
+  return { mac, macHome, client, runtime, makeRuntime, mcpEndpoint, mcpCalls, ports };
 };
 
 const lines = (child: RemoteProcess) => {
@@ -206,6 +216,199 @@ const waitFor = async (check: () => boolean | Promise<boolean>, timeoutMs = 10_0
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
 };
+
+describe("CloudLeadRuntime after a server restart", () => {
+  it("attaches to the same sandbox, lets the old claude finish its turn, and mirrors its work", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup({ runtime: { store } });
+    const before = makeRuntime({ store });
+    const launch = await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    const child = launch.spawn({
+      command: "claude",
+      args: ["--resume", "claude-session-1"],
+      env: {},
+    });
+    const output = lines(child);
+    await waitFor(() => output.length > 0);
+
+    const [record] = await store.list();
+    expect(record).toMatchObject({
+      worktreeKey: mac,
+      threadId: "lead",
+      sandboxName: "local-0",
+      processes: [{ threadId: "lead", claudeSessionId: "claude-session-1" }],
+    });
+    expect(store.tokens.get(record!.relayTokenRef)?.length).toBeGreaterThanOrEqual(32);
+
+    // A turn commits in the sandbox, and the Mac server stops before mirroring it.
+    child.stdin.write("commit late.txt\n");
+    await waitFor(() => output.some((line) => line.file === "late.txt"));
+    await before.detachAll();
+    expect(client.created[0]!.deleted()).toBe(false);
+
+    // The next server attaches to the recorded sandbox; no new one is made.
+    const after = makeRuntime({ store });
+    await after.restore();
+    expect(client.created).toHaveLength(1);
+    expect(client.gets).toEqual([{ name: "local-0", resume: true }]);
+    expect((await shell.run(`git -C '${mac}' log --format=%s -1`)).trim()).toBe("Add late.txt");
+
+    // The old claude got end of input and finished; the next turn resumes in the same sandbox.
+    const next = await after.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    expect((await store.list())[0]!.processes).toEqual([]);
+    const resumed = next.spawn({
+      command: "claude",
+      args: ["--resume", "claude-session-1"],
+      env: {},
+    });
+    const resumedOutput = lines(resumed);
+    await waitFor(() => resumedOutput.length > 0);
+    expect(resumedOutput[0]!.argv).toEqual(["--resume", "claude-session-1"]);
+    expect(client.created).toHaveLength(1);
+    resumed.stdin.end();
+
+    await after.release("lead");
+    expect(await store.list()).toEqual([]);
+    expect(store.tokens.size).toBe(0);
+  });
+
+  it("resumes a sandbox that stopped itself and starts its relay again", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    await before.detachAll();
+    // The relay stopped its idle sandbox: processes gone, files kept.
+    await client.created[0]!.stop();
+
+    const after = makeRuntime({ store });
+    const launch = await after.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    expect(client.created).toHaveLength(1);
+    expect(client.created[0]!.stopped()).toBe(false);
+    expect(client.gets).toEqual([{ name: "local-0", resume: true }]);
+    const child = launch.spawn({ command: "claude", args: [], env: {} });
+    const output = lines(child);
+    await waitFor(() => output.length > 0);
+    child.stdin.end();
+  });
+
+  it("mirrors and then releases a sandbox that stopped while the Mac slept", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const runtime = makeRuntime({ store, relayGiveUpAfterMs: 50 });
+    const launch = await runtime.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    const child = launch.spawn({ command: "claude", args: [], env: {} });
+    const output = lines(child);
+    child.stdin.write("commit asleep.txt\n");
+    await waitFor(() => output.some((line) => line.file === "asleep.txt"));
+    child.stdin.end();
+    await new Promise((resolve) => child.once("exit", resolve));
+    // The relay stops its idle sandbox; the Mac finds it stopped and lets go.
+    await client.created[0]!.stop();
+    await waitFor(() => !runtime.hasSession("lead"), 20_000);
+    expect(await store.list()).toHaveLength(1);
+
+    // A move to the Mac mirrors by worktree: the stopped sandbox is resumed and its work copied.
+    await runtime.syncToMac(mac);
+    expect((await shell.run(`git -C '${mac}' log --format=%s -1`)).trim()).toBe("Add asleep.txt");
+    expect(client.created).toHaveLength(1);
+
+    await runtime.release(mac);
+    expect(client.created[0]!.deleted()).toBe(true);
+    expect(await store.list()).toEqual([]);
+  });
+
+  it("fails a move to the Mac when the recorded sandbox cannot be reached, and keeps its record", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    await before.detachAll();
+
+    // Vercel is briefly unreachable when the next server tries to attach.
+    const unreachable = makeRuntime({
+      store,
+      client: async () => ({
+        ...client,
+        get: async () => {
+          throw new Error("Vercel API answered 503");
+        },
+      }),
+    });
+    await expect(unreachable.syncToMac(mac)).rejects.toThrow("503");
+    await unreachable.release(mac);
+    expect((await store.list()).map((record) => record.sandboxName)).toEqual(["local-0"]);
+    expect(client.created[0]!.deleted()).toBe(false);
+
+    // Once Vercel answers again, the same sandbox is mirrored and released.
+    const after = makeRuntime({ store });
+    await after.syncToMac(mac);
+    await after.release(mac);
+    expect(client.created[0]!.deleted()).toBe(true);
+    expect(await store.list()).toEqual([]);
+  });
+
+  it("ends what a dead relay left running before a new turn resumes its session", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    const launch = await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    const session = `leftover-${Date.now()}`;
+    const child = launch.spawn({
+      command: "claude",
+      args: ["--session-id", session, "--linger"],
+      env: {},
+    });
+    const output = lines(child);
+    await waitFor(() => output.length > 0);
+    await before.detachAll();
+    // The relay dies on its own; its claude keeps running.
+    const home = client.created[0]!.home;
+    await shell.run(`pkill -f '${home}/.busyboy-cloud/relay/server.ts' || true`);
+    expect((await shell.run(`pgrep -f -- '${session}' || true`)).trim()).not.toBe("");
+
+    const after = makeRuntime({ store });
+    await after.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    await waitFor(async () => (await shell.run(`pgrep -f -- '${session}' || true`)).trim() === "");
+    expect(client.created).toHaveLength(1);
+  });
+
+  it("never mirrors a recorded sandbox over Mac work it does not have", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    await before.detachAll();
+    // Its relay stopped it once idle (local sandboxes share the relay port).
+    await client.created[0]!.stop();
+    // The task came back to the Mac and got a commit the sandbox never saw.
+    await shell.run(
+      `cd '${mac}' && ${GIT_ENV} && echo local > local.txt && git add . && git commit -qm 'Mac work'`,
+    );
+
+    const after = makeRuntime({ store });
+    await after.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    expect((await shell.run(`git -C '${mac}' log --format=%s -1`)).trim()).toBe("Mac work");
+    expect(client.created).toHaveLength(2);
+    expect(client.created[0]!.deleted()).toBe(false);
+    expect((await store.list()).map((record) => record.sandboxName)).toEqual(["local-1"]);
+    await client.created[0]!.delete();
+  });
+
+  it("starts a new sandbox when the recorded one is gone", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    await before.detachAll();
+    await client.created[0]!.delete();
+
+    const after = makeRuntime({ store });
+    await after.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    expect(client.created).toHaveLength(2);
+    expect((await store.list()).map((record) => record.sandboxName)).toEqual(["local-1"]);
+  });
+});
 
 describe("CloudLeadRuntime", () => {
   it("runs claude in the sandbox on the Mac branch and mirrors its work back", async () => {
@@ -371,12 +574,13 @@ describe("CloudLeadRuntime", () => {
     const second = await runtime.prepare({ threadId: "thread-6", worktreePath: mac, mcpEndpoint });
     release();
     hold = null;
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(client.created).toHaveLength(1);
-    expect(client.created[0]!.deleted()).toBe(false);
+    // The turn starts its claude right away, as the adapter does.
     const next = second.spawn({ command: "claude", args: [], env: {} });
     const nextOutput = lines(next);
     await waitFor(() => nextOutput.length > 0);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(client.created).toHaveLength(1);
+    expect(client.created[0]!.deleted()).toBe(false);
     next.stdin.end();
   });
 

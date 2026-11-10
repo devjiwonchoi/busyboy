@@ -76,6 +76,8 @@ export const fakeSandbox = (
   };
   return {
     name: options.name ?? "fake",
+    sessionId: `${options.name ?? "fake"}-session`,
+    expiresAt: undefined,
     files,
     commands,
     writes,
@@ -114,9 +116,21 @@ export const fakeSandboxClient = (
       return sandbox;
     },
     get: async (name) => fakeSandbox({ name }),
+    status: async () => "running",
+    relayCredential: async () => {
+      throw new Error("no relay credential in tests");
+    },
     snapshotState: async (id) => snapshots[id] ?? "missing",
     masker: () => makeSecretMasker([]),
   };
+};
+
+export type LocalSandbox = SandboxHandle & {
+  readonly home: string;
+  readonly deleted: () => boolean;
+  readonly stopped: () => boolean;
+  /** What an SDK call on a stopped persistent sandbox does: start a new session. */
+  readonly resume: () => void;
 };
 
 /**
@@ -130,10 +144,15 @@ export const localSandboxClient = (input: {
   /** Makes the sandbox home, e.g. clones the repo into <home>/busyboy. */
   readonly makeHome: (home: string) => Promise<void>;
   readonly binDir: string;
+  /** The relay's Vercel credential; absent, the runtime falls back to Mac keep-alive. */
+  readonly relayCredential?: SandboxClient["relayCredential"];
 }): SandboxClient & {
-  readonly created: Array<SandboxHandle & { readonly home: string; readonly deleted: () => boolean }>;
+  readonly created: Array<LocalSandbox>;
+  /** Names passed to get, with whether they asked to resume. */
+  readonly gets: Array<{ readonly name: string; readonly resume: boolean }>;
 } => {
-  const created: Array<SandboxHandle & { home: string; deleted: () => boolean }> = [];
+  const created: Array<LocalSandbox> = [];
+  const gets: Array<{ name: string; resume: boolean }> = [];
   const children: NodeChildProcess.ChildProcess[] = [];
   const env = (home: string, extra: Readonly<Record<string, string>> = {}) => ({
     ...process.env,
@@ -171,12 +190,25 @@ export const localSandboxClient = (input: {
       const home = await NodeFs.mkdtemp(`${NodeOs.tmpdir()}/sbx-home-`);
       await input.makeHome(home);
       let deleted = false;
+      let stopped = false;
+      let session = 0;
       const runCommand = (command: RunCommandInput) => run(home, command);
       const ports = options.ports ?? [];
-      const handle = {
-        name: `local-${created.length}`,
+      const name = `local-${created.length}`;
+      const handle: LocalSandbox = {
+        name,
+        get sessionId() {
+          return `${name}-session-${session}`;
+        },
+        expiresAt: undefined,
         home,
         deleted: () => deleted,
+        stopped: () => stopped,
+        resume: () => {
+          if (!stopped) return;
+          stopped = false;
+          session += 1;
+        },
         runCommand,
         sh: async (script: string, rest: Omit<RunCommandInput, "cmd" | "args"> = {}) => {
           const result = await runCommand({ ...rest, cmd: "bash", args: ["-c", script] });
@@ -208,19 +240,39 @@ export const localSandboxClient = (input: {
         readFile: (path: string) => NodeFs.readFile(path).catch(() => null),
         extendTimeout: async () => undefined,
         snapshot: async () => ({ snapshotId: "local", sizeBytes: 0 }),
-        stop: async () => undefined,
+        // Like a VM stop: its processes end, its files stay.
+        stop: async () => {
+          stopped = true;
+          for (const child of children.splice(0)) child.kill("SIGKILL");
+          await run(home, { cmd: "pkill", args: ["-KILL", "-f", home] });
+        },
         delete: async () => {
           deleted = true;
           for (const child of children.splice(0)) child.kill("SIGKILL");
+          await run(home, { cmd: "pkill", args: ["-KILL", "-f", home] });
           await NodeFs.rm(home, { recursive: true, force: true });
         },
       };
       created.push(handle);
       return handle;
     },
-    get: async () => {
-      throw new Error("not used");
+    gets,
+    get: async (name, options = {}) => {
+      gets.push({ name, resume: options.resume === true });
+      const found = created.find((sandbox) => sandbox.name === name && !sandbox.deleted());
+      if (found === undefined) throw new Error(`No sandbox ${name}`);
+      if (options.resume === true) found.resume();
+      return found;
     },
+    status: async (name) => {
+      const found = created.find((sandbox) => sandbox.name === name && !sandbox.deleted());
+      return found === undefined ? "missing" : found.stopped() ? "stopped" : "running";
+    },
+    relayCredential:
+      input.relayCredential ??
+      (async () => {
+        throw new Error("no relay credential in tests");
+      }),
     snapshotState: async () => "missing",
     masker: () => makeSecretMasker([]),
   };

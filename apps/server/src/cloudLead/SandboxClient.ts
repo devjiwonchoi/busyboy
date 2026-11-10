@@ -1,4 +1,4 @@
-// @effect-diagnostics globalDate:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
+// @effect-diagnostics globalDate:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /**
  * A thin, secret-safe wrapper over @vercel/sandbox.
  *
@@ -13,6 +13,7 @@ import { containsSecret, makeSecretMasker, type SecretMasker } from "./secretMas
 import {
   assertAllowedVercelTeam,
   fetchVercelTeamInfo,
+  VercelTeamNotAllowedError,
   type VercelTeamInfo,
   type VercelTeamQuery,
 } from "./vercelTeamGuard.ts";
@@ -46,6 +47,10 @@ export interface SandboxFile {
 
 export interface SandboxHandle {
   readonly name: string;
+  /** The running session; the relay extends and stops the sandbox through it. */
+  readonly sessionId: string;
+  /** When the session stops unless extended, if known. */
+  readonly expiresAt: number | undefined;
   readonly runCommand: (input: RunCommandInput) => Promise<CommandResult>;
   /** Runs `bash -lc <script>` and throws (masked) on a non-zero exit. */
   readonly sh: (script: string, options?: Omit<RunCommandInput, "cmd" | "args">) => Promise<string>;
@@ -77,9 +82,28 @@ export interface CreateSandboxInput {
 
 export type SnapshotState = "available" | "missing";
 
+/** "running" also covers starting; "stopped" keeps a persistent sandbox's files. */
+export type SandboxStatus = "running" | "stopped" | "missing";
+
+/**
+ * A Vercel token that reaches only this client's sandbox project (an OIDC
+ * token scoped to the team and project). The relay holds it to keep its own
+ * sandbox alive; the Mac's own token never leaves the Mac.
+ */
+export interface RelayVercelCredential {
+  readonly token: string;
+  readonly teamId: string;
+  readonly projectId: string;
+  /** When the token stops working, in epoch ms. */
+  readonly expiresAt: number;
+}
+
 export interface SandboxClient {
   readonly create: (input: CreateSandboxInput) => Promise<SandboxHandle>;
   readonly get: (name: string, options?: { readonly resume?: boolean }) => Promise<SandboxHandle>;
+  /** Reads a sandbox's state without resuming it. */
+  readonly status: (name: string) => Promise<SandboxStatus>;
+  readonly relayCredential: () => Promise<RelayVercelCredential>;
   readonly snapshotState: (snapshotId: string) => Promise<SnapshotState>;
   readonly masker: () => SecretMasker;
 }
@@ -91,6 +115,8 @@ export interface SandboxSdk {
   readonly getSnapshot: (params: Record<string, unknown>) => Promise<SdkSnapshot>;
   /** Reads the team slug and project owner; checked before any sandbox call. */
   readonly lookupTeam: (query: VercelTeamQuery) => Promise<VercelTeamInfo>;
+  /** Mints a project-scoped OIDC token (as `vercel env pull` does). */
+  readonly mintProjectToken: (query: VercelTeamQuery) => Promise<string>;
 }
 
 export interface SdkSnapshot {
@@ -102,6 +128,9 @@ export interface SdkSnapshot {
 
 export interface SdkSandbox {
   readonly name: string;
+  readonly status: string;
+  readonly expiresAt?: Date | undefined;
+  currentSession(): { readonly sessionId: string };
   runCommand(params: {
     cmd: string;
     args?: string[];
@@ -125,6 +154,34 @@ export const vercelSandboxSdk: SandboxSdk = {
   getSandbox: (params) => Sandbox.get(params as never) as unknown as Promise<SdkSandbox>,
   getSnapshot: (params) => Snapshot.get(params as never) as unknown as Promise<SdkSnapshot>,
   lookupTeam: fetchVercelTeamInfo,
+  mintProjectToken: async (query) => {
+    const response = await fetch(
+      `https://api.vercel.com/v1/projects/${encodeURIComponent(query.projectId)}/token?source=vercel-oidc-refresh&teamId=${encodeURIComponent(query.teamId)}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${query.token}` },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    if (!response.ok)
+      throw new Error(`Vercel API answered ${response.status} for the project token`);
+    const token = ((await response.json()) as { token?: unknown }).token;
+    if (typeof token !== "string" || token.length === 0) {
+      throw new Error("Vercel API returned no project token");
+    }
+    return token;
+  },
+};
+
+/** Reads a JWT's claims without checking it; the token came straight from Vercel. */
+const jwtClaims = (token: string): Record<string, unknown> => {
+  try {
+    return JSON.parse(
+      Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 };
 
 export const makeSandboxClient = (
@@ -182,6 +239,13 @@ export const makeSandboxClient = (
 
     return {
       name: sandbox.name,
+      // A persistent sandbox resumed by a later call has a new session.
+      get sessionId() {
+        return sandbox.currentSession().sessionId;
+      },
+      get expiresAt() {
+        return sandbox.expiresAt?.getTime();
+      },
       runCommand,
       sh: async (script, options = {}) => {
         const result = await runCommand({ ...options, cmd: "bash", args: ["-lc", script] });
@@ -259,6 +323,42 @@ export const makeSandboxClient = (
             ...(options.resume === undefined ? {} : { resume: options.resume }),
           }),
         );
+      }),
+    status: (name) =>
+      guarded(async () => {
+        await checkTeam();
+        let sandbox: SdkSandbox;
+        try {
+          sandbox = await sdk.getSandbox({ ...sdkCredentials(), name, resume: false });
+        } catch (error) {
+          if ((error as { response?: { status?: number } }).response?.status === 404) {
+            return "missing";
+          }
+          throw error;
+        }
+        return sandbox.status === "running" || sandbox.status === "pending"
+          ? "running"
+          : sandbox.status === "failed" || sandbox.status === "aborted"
+            ? "missing"
+            : "stopped";
+      }),
+    relayCredential: () =>
+      guarded(async () => {
+        await checkTeam();
+        const token = await sdk.mintProjectToken(sdkCredentials());
+        // Fail closed: a token for any other team or project never reaches a sandbox.
+        const claims = jwtClaims(token);
+        if (claims.owner_id !== credentials.teamId || claims.project_id !== credentials.projectId) {
+          throw new VercelTeamNotAllowedError("the project token is for another team or project");
+        }
+        secrets.add(token);
+        return {
+          token,
+          teamId: credentials.teamId,
+          projectId: credentials.projectId,
+          expiresAt:
+            typeof claims.exp === "number" ? claims.exp * 1000 : Date.now() + 60 * 60 * 1000,
+        };
       }),
     snapshotState: (snapshotId) =>
       guarded(async () => {

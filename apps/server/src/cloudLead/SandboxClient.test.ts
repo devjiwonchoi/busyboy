@@ -22,6 +22,8 @@ const fakeSdk = (
   };
   const sandbox: SdkSandbox = {
     name: "sbx",
+    status: "running",
+    currentSession: () => ({ sessionId: "sess" }),
     runCommand: async (params) => {
       calls.commands.push(params);
       const env = params.env ?? {};
@@ -57,11 +59,25 @@ const fakeSdk = (
       calls.lookups += 1;
       return lookupTeam(query);
     },
+    mintProjectToken: async (query) => {
+      calls.sdk += 1;
+      return projectToken(query.teamId, query.projectId);
+    },
   };
   return { sdk, calls };
 };
 
 const credentials = { token: Redacted.make(VERCEL_TOKEN), teamId: "team", projectId: "prj" };
+
+/** An unsigned OIDC-shaped token with the claims the client checks. */
+const projectToken = (teamId: string, projectId: string) =>
+  [
+    "e30",
+    Buffer.from(
+      JSON.stringify({ owner_id: teamId, project_id: projectId, exp: 2_000_000_000 }),
+    ).toString("base64url"),
+    "sig",
+  ].join(".");
 
 describe("makeSandboxClient", () => {
   it("passes secrets only as command env and masks them in output", async () => {
@@ -111,6 +127,25 @@ describe("makeSandboxClient", () => {
     expect(client.masker().mask(`${VERCEL_TOKEN} ${CLAUDE_TOKEN}`)).toBe("*** ***");
   });
 
+  it("creates persistent sandboxes and mints a relay token scoped to the project", async () => {
+    const { sdk, calls } = fakeSdk(() => "");
+    const client = makeSandboxClient(credentials, sdk);
+    const sandbox = await client.create({ vcpus: 1, timeoutMs: 1, persistent: true });
+    expect(calls.create[0]).toMatchObject({ persistent: true });
+    expect(sandbox.sessionId).toBe("sess");
+    expect(await client.status("sbx")).toBe("running");
+
+    const credential = await client.relayCredential();
+    expect(credential).toMatchObject({
+      teamId: "team",
+      projectId: "prj",
+      expiresAt: 2_000_000_000_000,
+    });
+    expect(credential.token).not.toBe(VERCEL_TOKEN);
+    // The minted token is masked like the Mac token.
+    expect(client.masker().mask(credential.token)).toBe("***");
+  });
+
   it("reports a snapshot it cannot load as missing", async () => {
     const { sdk } = fakeSdk(() => "");
     expect(await makeSandboxClient(credentials, sdk).snapshotState("snap")).toBe("missing");
@@ -131,8 +166,20 @@ describe("makeSandboxClient team guard", () => {
       /jiwonchoi 팀에서만 돌아요.*"vercel"/,
     );
     await expect(client.get("sbx")).rejects.toThrow(/jiwonchoi 팀에서만 돌아요/);
+    await expect(client.get("sbx", { resume: true })).rejects.toThrow(/jiwonchoi 팀에서만 돌아요/);
+    await expect(client.status("sbx")).rejects.toThrow(/jiwonchoi 팀에서만 돌아요/);
+    await expect(client.relayCredential()).rejects.toThrow(/jiwonchoi 팀에서만 돌아요/);
     await expect(client.snapshotState("snap")).rejects.toThrow(/jiwonchoi 팀에서만 돌아요/);
     expect(calls.sdk).toBe(0);
+  });
+
+  it("refuses a project token that reaches another team or project", async () => {
+    const { sdk } = fakeSdk(() => "");
+    const client = makeSandboxClient(credentials, {
+      ...sdk,
+      mintProjectToken: async () => projectToken("team_other", "prj"),
+    });
+    await expect(client.relayCredential()).rejects.toThrow(/another team or project/);
   });
 
   it("refuses a project that belongs to another team", async () => {
