@@ -77,22 +77,32 @@ export function relayedAnswerText(
 export class AttentionRouter extends Context.Service<
   AttentionRouter,
   {
-    readonly ask: (input: {
-      readonly task: ProjectTask;
-      readonly kind: ProjectAttentionKind;
-      readonly question: string;
-      readonly options: ReadonlyArray<string>;
-      readonly askerThreadId: ThreadId | null;
-      /** The project whose chat shows the card. Defaults to the task's project. */
-      readonly projectId?: ProjectId;
-      /** For a plan approval: the spec version under review. */
-      readonly specVersion?: number;
-      /** For a plan approval: the card's Goal section. */
-      readonly summary?: string;
-      /** For a plan approval: the card's Verification section. */
-      readonly verification?: string;
-      readonly context?: ProjectAttentionContext;
-    }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
+    readonly ask: (
+      input: (
+        | {
+            readonly task: ProjectTask;
+            /** The project whose chat shows the card. Defaults to the task's project. */
+            readonly projectId?: ProjectId;
+          }
+        | {
+            /** No task: the card is about the project, e.g. a blocked PM. */
+            readonly task: null;
+            readonly projectId: ProjectId;
+          }
+      ) & {
+        readonly kind: ProjectAttentionKind;
+        readonly question: string;
+        readonly options: ReadonlyArray<string>;
+        readonly askerThreadId: ThreadId | null;
+        /** For a plan approval: the spec version under review. */
+        readonly specVersion?: number;
+        /** For a plan approval: the card's Goal section. */
+        readonly summary?: string;
+        /** For a plan approval: the card's Verification section. */
+        readonly verification?: string;
+        readonly context?: ProjectAttentionContext;
+      },
+    ) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /** Saves the answer and relays it to the thread that asked. */
     readonly answer: (input: {
       readonly item: ProjectAttentionItem;
@@ -132,7 +142,8 @@ const make = Effect.gen(function* () {
 
   const ask: AttentionRouter["Service"]["ask"] = (input) =>
     Effect.gen(function* () {
-      const projectId = input.projectId ?? input.task.projectId;
+      const projectId =
+        input.task === null ? input.projectId : (input.projectId ?? input.task.projectId);
       const now = yield* nowIso;
       const latest = yield* repository.getLatestAttentionItem(projectId);
       const batchId =
@@ -143,7 +154,7 @@ const make = Effect.gen(function* () {
       const item = yield* repository.createAttentionItem({
         id: ProjectAttentionItemId.make(yield* newId("attention")),
         projectId,
-        taskId: input.task.id,
+        taskId: input.task === null ? null : input.task.id,
         kind: input.kind,
         question: input.question,
         options: input.options,
@@ -157,7 +168,12 @@ const make = Effect.gen(function* () {
       });
       yield* publish(projectId);
       return item;
-    }).pipe(orTeamError("Could not save the question.", input.task.projectId));
+    }).pipe(
+      orTeamError(
+        "Could not save the question.",
+        input.task === null ? input.projectId : input.task.projectId,
+      ),
+    );
 
   const requireOpen = (item: ProjectAttentionItem): Effect.Effect<void, ProjectTeamError> =>
     item.answeredAt !== null
