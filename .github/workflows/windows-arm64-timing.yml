@@ -1,0 +1,101 @@
+name: Windows arm64 timing (temporary)
+
+# Temporary: measures the Windows release build with different disk setups.
+# Unsigned, publishes nothing. Removed before the pull request is opened.
+on:
+  push:
+    branches: [jiwon/windows-arm64-build-time]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.arch }} / ${{ matrix.variant }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: windows-11-arm, variant: baseline }
+          - { arch: arm64, runner: windows-11-arm, variant: defender-off }
+          - { arch: arm64, runner: windows-11-arm, variant: dev-drive }
+          - { arch: x64, runner: windows-latest, variant: defender-off }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Defender status
+        shell: pwsh
+        run: Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,IsTamperProtected | Format-List
+
+      - name: Turn off Defender real-time scanning
+        if: matrix.variant == 'defender-off'
+        shell: pwsh
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled | Format-List
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Dev Drive
+        if: matrix.variant == 'dev-drive'
+        uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
+        with:
+          drive-size: 20GB
+          workspace-copy: true
+          env-mapping: |
+            npm_config_store_dir,{{ DEV_DRIVE }}/pnpm-store
+
+      - name: Pick working directory
+        run: echo "WORK=${DEV_DRIVE_WORKSPACE:-$GITHUB_WORKSPACE}" >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORK }}
+        run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch, 2026-11-05
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: ${{ env.WORK }}/native/resource-monitor -> target
+
+      - name: Build NSIS installer
+        working-directory: ${{ env.WORK }}
+        run: node scripts/build-desktop-release.ts --version 0.0.999 --arch "${{ matrix.arch }}" --out release
+
+      - name: List artifacts
+        working-directory: ${{ env.WORK }}
+        run: ls -la release
+
+      - name: Install and launch the app
+        working-directory: ${{ env.WORK }}
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/BusyBoy-Setup-*-${{ matrix.arch }}.exe | Select-Object -First 1
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter BusyBoy.exe | Select-Object -First 1
+          if (-not $exe) { throw "BusyBoy.exe not installed" }
+          Write-Host "Installed at $($exe.FullName)"
+          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+          $machine = '0x{0:X4}' -f [BitConverter]::ToUInt16($bytes, $pe + 4)
+          Write-Host "PE machine: $machine (0xAA64 = arm64, 0x8664 = x64)"
+          $proc = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 30
+          $alive = Get-Process -Name BusyBoy -ErrorAction SilentlyContinue
+          if (-not $alive) { throw "BusyBoy exited within 30s (exit code $($proc.ExitCode))" }
+          Write-Host "BusyBoy running after 30s: $($alive.Count) processes"
+          $alive | Stop-Process -Force
