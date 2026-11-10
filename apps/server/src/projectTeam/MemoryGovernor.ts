@@ -46,7 +46,7 @@ import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import { MINUTE_MS, makeIdGenerator, makePeriodicGate, nowIso } from "./common.ts";
-import { leadCap, MEMORY_WAIT_REASON, pauseOrder, type SessionCandidate } from "./memoryPolicy.ts";
+import { MEMORY_WAIT_REASON, pauseOrder, type SessionCandidate } from "./memoryPolicy.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 import { taskChildren } from "./taskChildren.ts";
@@ -353,10 +353,7 @@ const make = Effect.gen(function* () {
         projectId: task.projectId,
         stages: ACTIVE_TASK_STAGES,
       });
-      const cap = leadCap(
-        manager.value.settings.maxConcurrentTasks,
-        execution.maxConcurrentSessions,
-      );
+      const cap = execution.maxConcurrentSessions;
       if (active.length >= cap) continue;
       const pm = manager.value.threadId;
       const shell = yield* threads.getThreadShell(pm).pipe(Effect.orElseSucceed(() => null));

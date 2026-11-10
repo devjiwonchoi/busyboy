@@ -16,6 +16,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_SERVER_SETTINGS,
   resolveTaskExecutionSettings,
+  type ExecutionLocation,
   type IsoDateTime,
   MessageId,
   type OrchestrationV2ConversationMessage,
@@ -203,7 +204,7 @@ import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
-import { admitTaskLead, leadCap, MEMORY_WAIT_REASON } from "./memoryPolicy.ts";
+import { admitTaskLead, CLOUD_FALLBACK_NOTE, MEMORY_WAIT_REASON } from "./memoryPolicy.ts";
 import { leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
@@ -1745,12 +1746,8 @@ const make = Effect.gen(function* () {
   /** Why an inbox task cannot start yet: every lead slot is busy or a dependency is unfinished. */
   const startWaitReason = (task: ProjectTask) =>
     Effect.gen(function* () {
-      const manager = yield* requireManager(task.projectId);
       const active = yield* activeTasks(task.projectId);
-      const limit = leadCap(
-        manager.settings.maxConcurrentTasks,
-        (yield* taskExecutionSettings).maxConcurrentSessions,
-      );
+      const limit = (yield* taskExecutionSettings).maxConcurrentSessions;
       if (active.length >= limit) {
         return `${active.length} of ${limit} task leads are already running.`;
       }
@@ -1984,10 +1981,7 @@ const make = Effect.gen(function* () {
           const manager = yield* requireManager(role.projectId);
           const active = yield* activeTasks(role.projectId);
           const execution = yield* taskExecutionSettings;
-          const limit = leadCap(
-            manager.settings.maxConcurrentTasks,
-            execution.maxConcurrentSessions,
-          );
+          const limit = execution.maxConcurrentSessions;
           if (active.length >= limit) {
             return yield* teamError(
               `#${task.number} stays in the inbox: ${active.length} of ${limit} task leads are already running.`,
@@ -2036,7 +2030,7 @@ const make = Effect.gen(function* () {
             headroom: (yield* memoryHeadroom.check).headroom,
             requested: input.location,
           });
-          if (admission.type === "wait") {
+          const waitForMemory = Effect.gen(function* () {
             if (task.memoryHold !== "waiting") {
               yield* setMemoryHold(task, "waiting");
               yield* appendEvent(
@@ -2047,13 +2041,17 @@ const make = Effect.gen(function* () {
               );
               yield* router.publish(role.projectId);
             }
+          });
+          if (admission.type === "wait") {
+            if (admission.memory) yield* waitForMemory;
             return yield* teamError(
               `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
               role.projectId,
             );
           }
-          const location = admission.location;
-          const lead = yield* delegate({
+          const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
+            Effect.gen(function* () {
+              return yield* delegate({
             task: buildTaskLeadPrompt({
               task: { ...task, location },
               key,
@@ -2074,8 +2072,8 @@ const make = Effect.gen(function* () {
             mode: "async",
             clientRequestId:
               earlierSessions === 0
-                ? `task-start:${task.id}`
-                : `task-start:${task.id}:${earlierSessions + 1}`,
+                ? `task-start:${task.id}${requestSuffix}`
+                : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
             ...(leadTarget === undefined ? {} : { target: leadTarget }),
             ...(location === "local" ? {} : { location }),
           }).pipe(
@@ -2084,6 +2082,28 @@ const make = Effect.gen(function* () {
                 `Could not start a task lead for #${task.number}: ${failure.message}`,
                 role.projectId,
               ),
+            ),
+          );
+            });
+          // The setting, not the PM, sent it to the cloud: when the cloud cannot
+          // take it, start here if the Mac has room, else wait for memory.
+          const { lead, location, note } = yield* delegateLead(admission.location, "").pipe(
+            Effect.map((lead) => ({ lead, location: admission.location, note: admission.note })),
+            Effect.catch((failure) =>
+              Effect.gen(function* () {
+                if (admission.location !== "cloud" || input.location === "cloud") {
+                  return yield* Effect.fail(failure);
+                }
+                if ((yield* memoryHeadroom.check).headroom !== "ok") {
+                  yield* waitForMemory;
+                  return yield* teamError(
+                    `#${task.number} stays in the inbox: the cloud could not start it (${failure.message}) and ${MEMORY_WAIT_REASON}. It starts once the Mac has room; do not retry it.`,
+                    role.projectId,
+                  );
+                }
+                const lead = yield* delegateLead("local", ":local");
+                return { lead, location: "local" as const, note: CLOUD_FALLBACK_NOTE };
+              }),
             ),
           );
           const started = yield* setTask({
@@ -2103,8 +2123,8 @@ const make = Effect.gen(function* () {
             createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
-          if (admission.note !== null) {
-            yield* appendEvent(started, "note", admission.note, null);
+          if (note !== null) {
+            yield* appendEvent(started, "note", note, null);
           }
           if (task.memoryHold != null) yield* setMemoryHold(started, null);
           // Logged as the lead's, so the PM's latest action still reads "started".

@@ -34,10 +34,11 @@ export type ProjectMemoryEntryId = typeof ProjectMemoryEntryId.Type;
 export const ProjectSitrepId = TrimmedNonEmptyString.pipe(Schema.brand("ProjectSitrepId"));
 export type ProjectSitrepId = typeof ProjectSitrepId.Type;
 
-/** Only a safety cap: task leads start by free memory (ServerSettings.taskExecution). */
+/**
+ * No longer enforced: task leads start by free memory under the user's safety cap
+ * (ServerSettings.taskExecution.maxConcurrentSessions). Kept so stored settings decode.
+ */
 export const DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 10;
-/** The default before memory-based admission; a project still on it is not capped by it. */
-export const LEGACY_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 6;
 export const MAX_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 32;
 export const DEFAULT_PROJECT_TEAM_SITREP_INTERVAL_MINUTES = 60;
 /** Bounds for an interval the user sets directly. */

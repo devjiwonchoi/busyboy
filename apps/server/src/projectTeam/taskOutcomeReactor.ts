@@ -26,7 +26,6 @@ import { untrustedFrame } from "../untrustedText.ts";
 import { PRE_APPROVAL_STAGES } from "./breakdown.ts";
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
-import { leadCap } from "./memoryPolicy.ts";
 import { memoryOverBudgetNote } from "./memoryPrompt.ts";
 import { unresolvedPermissionDenial } from "./permissionBlocker.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
@@ -230,10 +229,7 @@ const make = Effect.gen(function* () {
         previousOutcome: input.previousOutcome,
         projectTasks,
         otherStages,
-        maxConcurrentTasks: leadCap(
-          manager.value.settings.maxConcurrentTasks,
-          execution.maxConcurrentSessions,
-        ),
+        maxConcurrentTasks: execution.maxConcurrentSessions,
         memoryAllowsStart:
           execution.location !== "local_only" || (yield* memory.check).headroom === "ok",
         mergeOwner: mergeOwnerOf(manager.value.settings),

@@ -6,6 +6,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
   type ExecutionLocation,
+  OrchestratorMcpFailure,
   type OrchestrationV2ServerCommand,
   ProviderDriverKind,
   ProviderSessionId,
@@ -23,8 +24,9 @@ import type * as ProviderSessionManager from "../orchestration-v2/ProviderSessio
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import type { MemorySnapshot } from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as MemoryGovernor from "./MemoryGovernor.ts";
-import { MEMORY_WAIT_REASON, STARTED_IN_CLOUD_NOTE } from "./memoryPolicy.ts";
+import { CLOUD_FALLBACK_NOTE, MEMORY_WAIT_REASON, STARTED_IN_CLOUD_NOTE } from "./memoryPolicy.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
+import type { DelegateTaskLead } from "./ProjectTeamService.ts";
 import { createAcceptedTask, setUpManager, START, type TeamHarness, withTeam } from "./testkit.ts";
 
 const GIB = 1024 ** 3;
@@ -358,6 +360,42 @@ describe("memory-based task admission", () => {
           assert.strictEqual((yield* Ref.get(harness.delegated)).length, 1);
         }),
       { memory: fake.read },
+    );
+  });
+  it.effect("when the cloud cannot start it, starts here with room, else waits for memory", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const pm = yield* setUpManager;
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const noCloud: DelegateTaskLead = (input) =>
+            input.location === "cloud"
+              ? Effect.fail(
+                  new OrchestratorMcpFailure({ code: "invalid_request", message: "no sandbox" }),
+                )
+              : harness.delegate(input);
+          const create = (title: string) =>
+            createAcceptedTask(pm, { title, request: `${title}.`, intake: "New work." });
+
+          // cloud_first with room: falls back to this Mac.
+          const { task: first } = yield* create("First");
+          const started = yield* team.startTask(pm, { taskId: first.id }, noCloud);
+          assert.strictEqual(started.task.location, "local");
+          assert.include(yield* notesOf(first.id), CLOUD_FALLBACK_NOTE);
+
+          // Short on memory: waits instead of failing.
+          fake.mac.memory = TIGHT;
+          const { task: second } = yield* create("Second");
+          const refused = yield* team
+            .startTask(pm, { taskId: second.id }, noCloud)
+            .pipe(Effect.flip);
+          assert.include(refused.message, MEMORY_WAIT_REASON);
+          const waiting = yield* readTask(second.id);
+          assert.strictEqual(waiting.stage, "inbox");
+          assert.strictEqual(waiting.memoryHold, "waiting");
+        }),
+      { memory: fake.read, settings: { taskExecution: { location: "cloud_first" } } },
     );
   });
 });

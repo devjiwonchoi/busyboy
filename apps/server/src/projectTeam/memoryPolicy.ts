@@ -8,7 +8,6 @@
  */
 import {
   type ExecutionLocation,
-  LEGACY_PROJECT_TEAM_MAX_CONCURRENT_TASKS,
   type TaskExecutionLocationPolicy,
 } from "@t3tools/contracts";
 
@@ -21,19 +20,9 @@ export const RECENT_VISIT_MS = 10 * 60_000;
 
 export const FORCED_LOCAL_NOTE =
   "실행 위치 설정이 '로컬만'이라 클라우드 대신 이 Mac에서 시작했어요. 클라우드 사용은 사용자가 설정에서 정해요.";
+export const CLOUD_FALLBACK_NOTE =
+  "클라우드에서 시작하지 못해 이 Mac에서 시작했어요.";
 export const STARTED_IN_CLOUD_NOTE = "이 Mac의 메모리 여유가 부족해 클라우드에서 시작했어요.";
-
-/**
- * How many task leads a project may run at once. The project's own limit only
- * counts when it was set below the old default; the user's safety cap always does.
- */
-export function leadCap(projectMaxConcurrentTasks: number, maxConcurrentSessions: number): number {
-  const project =
-    projectMaxConcurrentTasks === LEGACY_PROJECT_TEAM_MAX_CONCURRENT_TASKS
-      ? Number.POSITIVE_INFINITY
-      : projectMaxConcurrentTasks;
-  return Math.min(project, maxConcurrentSessions);
-}
 
 export type LeadAdmission =
   | {
