@@ -962,4 +962,41 @@ describe("memory stall time", () => {
       { memory: fake.read, settings: LOCAL_ONLY },
     );
   });
+  it.effect("stops a waiting task's clock once memory recovers", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          yield* startWithSession(harness, fake.mac, pm, "First");
+          fake.mac.memory = TIGHT;
+          const { task } = yield* createAcceptedTask(pm, {
+            title: "Second",
+            request: "Second.",
+            intake: "New work.",
+          });
+          yield* team.startTask(pm, { taskId: task.id }, harness.delegate).pipe(Effect.flip);
+          yield* TestClock.adjust(5 * MINUTE);
+
+          // Memory is back, but the task still waits (here, for the PM to start it).
+          fake.mac.memory = PLENTY;
+          yield* governor.tick;
+          assert.strictEqual((yield* readTask(task.id)).memoryHold, "waiting");
+          yield* TestClock.adjust(10 * MINUTE);
+          // Short again: the clock runs again.
+          fake.mac.memory = TIGHT;
+          yield* governor.tick;
+          yield* TestClock.adjust(MINUTE);
+          fake.mac.memory = PLENTY;
+          yield* governor.tick;
+          yield* TestClock.adjust(10 * MINUTE);
+
+          yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+          assert.strictEqual(yield* stallOf(task.id), 6 * MINUTE);
+        }),
+      { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
 });

@@ -498,12 +498,21 @@ const make = Effect.gen(function* () {
     }
   });
 
+  /** A task waiting to start stalls only while memory is short, not while it waits on the cap. */
+  const clockWaiting = (memoryShort: boolean) =>
+    Effect.gen(function* () {
+      for (const task of yield* repository.listMemoryHeldTasks()) {
+        if (task.memoryHold === "waiting") yield* setStall(task.id, memoryShort);
+      }
+    }).pipe(Effect.ignore);
+
   const tick: MemoryGovernor["Service"]["tick"] = Effect.gen(function* () {
     yield* restorePauses;
     yield* markHeldWork;
     const execution = yield* settings;
     // Uncached: the last pass's pause must show in this reading.
     const { headroom } = yield* memory.checkFresh;
+    yield* clockWaiting(headroom !== "ok");
     if (headroom !== "ok") {
       yield* Ref.set(okStreak, 0);
       yield* relieve(execution.location, headroom);
