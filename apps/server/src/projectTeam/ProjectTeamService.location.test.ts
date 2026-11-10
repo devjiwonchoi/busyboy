@@ -9,7 +9,7 @@ const service = ProjectTeamService.ProjectTeamService;
 
 describe("ProjectTeamService location", () => {
   it.effect(
-    "starts a cloud lead in the cloud, keeps the task cloud, and runs its steps there",
+    "starts a cloud lead in the cloud, keeps the task cloud, and keeps its steps with the lead",
     () =>
       withTeam((harness) =>
         Effect.gen(function* () {
@@ -39,12 +39,18 @@ describe("ProjectTeamService location", () => {
             ?.tasks.find((entry) => entry.id === task.id);
           assert.strictEqual(reference?.location, "cloud");
 
+          // The review reads the mirrored diff on the Mac; it runs locally.
           yield* team.delegateStep(
             leadThreadId,
             { role: "review", task: "Review main...HEAD against the criteria." },
             harness.delegate,
           );
-          assert.strictEqual((yield* Ref.get(harness.delegated)).at(-1)?.location, "cloud");
+          assert.strictEqual((yield* Ref.get(harness.delegated)).at(-1)?.location, undefined);
+          // Implementing needs the lead's sandbox checkout, so the lead does it itself.
+          const refused = yield* team
+            .delegateStep(leadThreadId, { role: "implement", task: "Build it." }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(refused.message, "runs in the cloud: do the implement step yourself");
         }),
       ),
   );

@@ -72,7 +72,7 @@ process.stdin.on("data", (chunk) => {
 process.stdin.on("end", () => process.exit(0));
 `;
 
-const setup = async () => {
+const setup = async (options: { readonly idleStopMs?: number } = {}) => {
   const root = await tempDir("cloud-runtime-");
   const macHome = `${root}/mac-home`;
   const mac = `${macHome}/worktrees/task`;
@@ -109,6 +109,7 @@ const setup = async () => {
     host: { ...fakeLocalHost({ files: {} }), env: { HOME: macHome } },
     stateDir: `${root}/state`,
     ports,
+    ...(options.idleStopMs === undefined ? {} : { idleStopMs: options.idleStopMs }),
   });
   cleanups.push(() => runtime.releaseAll());
   return { mac, macHome, client, runtime, mcpEndpoint, mcpCalls, ports };
@@ -233,5 +234,21 @@ describe("CloudLeadRuntime", () => {
       `grep -rl -e '${CLAUDE_TOKEN}' -e '${GITHUB_TOKEN}' '${home}' --exclude-dir=.git || true`,
     );
     expect(found.trim()).toBe("");
+  });
+
+  it("stops an idle sandbox only once no claude process is running", async () => {
+    const { mac, client, runtime, mcpEndpoint } = await setup({ idleStopMs: 50 });
+    const launch = await runtime.prepare({ threadId: "thread-4", worktreePath: mac, mcpEndpoint });
+    const child = launch.spawn({ command: "claude", args: [], env: {} });
+    const output = lines(child);
+    await waitFor(() => output.length > 0);
+    // A mid-turn sync (a gate reading the mirror) must not stop a running turn.
+    await runtime.syncToMac("thread-4");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(client.created[0]!.deleted()).toBe(false);
+
+    child.stdin.end();
+    await waitFor(() => client.created[0]!.deleted());
+    expect(runtime.hasSession("thread-4")).toBe(false);
   });
 });

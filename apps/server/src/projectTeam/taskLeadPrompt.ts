@@ -151,6 +151,7 @@ function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
 const CLOUD_SECTION = `## Cloud
 - You run in a Vercel Sandbox (Linux) on your own checkout of the task branch. The worktree on the user's Mac is a read-only mirror of yours, updated after each of your turns.
 - Commit, push and \`gh\` work as usual.
+- Implement and fix yourself here: task_delegate children cannot see your sandbox checkout, so only the review step can be handed off. It reads your work from the Mac mirror.
 - Computer Use, the local app preview and MCP servers that run only on the Mac are unavailable here. When the work needs one, say so instead of trying.`;
 
 /** The parent whose approved breakdown covers this subtask. */

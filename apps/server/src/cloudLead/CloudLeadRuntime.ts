@@ -91,6 +91,8 @@ interface CloudSession {
   readonly remoteCwd: string;
   readonly credentials: CloudLeadCredentials;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  /** Remote claude processes still running; the sandbox only idles out at zero. */
+  running: number;
 }
 
 /** SDK env keys that configure claude itself and mean the same in the sandbox. */
@@ -241,6 +243,7 @@ export class CloudLeadRuntime {
         remoteCwd,
         credentials,
         idleTimer: null,
+        running: 0,
       };
     } catch (error) {
       await sandbox.delete().catch(() => undefined);
@@ -346,6 +349,11 @@ export class CloudLeadRuntime {
       else options.signal.addEventListener("abort", () => child.kill("SIGTERM"), { once: true });
     }
     this.cancelIdleStop(session);
+    session.running += 1;
+    child.once("exit", () => {
+      session.running -= 1;
+      if (session.running === 0) this.scheduleIdleStop(session);
+    });
     return child;
   }
 
@@ -393,6 +401,7 @@ export class CloudLeadRuntime {
 
   private scheduleIdleStop(session: CloudSession) {
     this.cancelIdleStop(session);
+    if (session.running > 0) return;
     session.idleTimer = setTimeout(() => {
       void this.release(session.threadId);
     }, this.deps.idleStopMs ?? DEFAULT_IDLE_STOP_MS);
