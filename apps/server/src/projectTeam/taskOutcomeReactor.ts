@@ -24,6 +24,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { untrustedFrame } from "../untrustedText.ts";
+import { activeLocalLeads } from "./memoryPolicy.ts";
 import { PRE_APPROVAL_STAGES } from "./breakdown.ts";
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
@@ -127,8 +128,10 @@ export function outcomeWakeText(input: {
   >;
   /** Stages of dependencies in other projects, by task id. */
   readonly otherStages?: ReadonlyMap<string, ProjectTask["stage"]>;
-  /** How many task leads may run at once (the project's and the user's cap). */
+  /** How many task leads may run at once (the user's app-wide cap). */
   readonly maxConcurrentTasks: number;
+  /** Leads running on this Mac in every project; defaults to this project's active tasks. */
+  readonly activeLeads?: number;
   /** False when the Mac is short on memory and the next lead would have to wait. */
   readonly memoryAllowsStart?: boolean;
   /** Who merges; a ready wake says whether the PM merges or sends the user a merge brief. */
@@ -157,8 +160,9 @@ export function outcomeWakeText(input: {
   const active = input.projectTasks.filter((task) =>
     (ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage),
   ).length;
+  const running = input.activeLeads ?? active;
   const next =
-    active < input.maxConcurrentTasks && input.memoryAllowsStart !== false
+    running < input.maxConcurrentTasks && input.memoryAllowsStart !== false
       ? nextInboxTask(input.projectTasks, input.otherStages)
       : null;
   if (next !== null) parts.push(`#${next.number} is next in the inbox`);
@@ -232,6 +236,7 @@ const make = Effect.gen(function* () {
         projectTasks,
         otherStages,
         maxConcurrentTasks: execution.maxConcurrentSessions,
+        activeLeads: yield* activeLocalLeads(repository),
         memoryAllowsStart:
           execution.location !== "local_only" || (yield* memory.check).headroom === "ok",
         mergeOwner: mergeOwnerOf(manager.value.settings),

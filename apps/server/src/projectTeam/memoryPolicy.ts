@@ -7,8 +7,11 @@
  * waits instead.
  */
 import { type ExecutionLocation, type TaskExecutionLocationPolicy } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
 
+import type * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import type { Headroom } from "../resourceTelemetry/MemoryHeadroom.ts";
+import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 
 /** What a task waiting for memory shows as its reason. */
 export const MEMORY_WAIT_REASON = "메모리 여유 부족";
@@ -68,6 +71,28 @@ export function admitTaskLead(input: {
       return { type: "start", location: input.requested ?? "local", note: null };
   }
 }
+
+/**
+ * Task leads running on this Mac, in every project: the safety cap
+ * (maxConcurrentSessions) is for the whole app, not one project.
+ */
+export const activeLocalLeads = (
+  repository: Pick<
+    ProjectTeamRepository.ProjectTeamRepository["Service"],
+    "listManagers" | "listTasks"
+  >,
+) =>
+  Effect.gen(function* () {
+    let count = 0;
+    for (const manager of yield* repository.listManagers()) {
+      const tasks = yield* repository.listTasks({
+        projectId: manager.projectId,
+        stages: ACTIVE_TASK_STAGES,
+      });
+      count += tasks.filter((task) => (task.location ?? "local") === "local").length;
+    }
+    return count;
+  });
 
 /** A local task lead, with its children, the governor could pause to free memory. */
 export interface SessionCandidate {

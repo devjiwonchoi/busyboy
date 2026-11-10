@@ -36,7 +36,15 @@ import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 import { CLOUD_FALLBACK_NOTE, MEMORY_WAIT_REASON, STARTED_IN_CLOUD_NOTE } from "./memoryPolicy.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import type { DelegateTaskLead } from "./ProjectTeamService.ts";
-import { createAcceptedTask, setUpManager, START, type TeamHarness, withTeam } from "./testkit.ts";
+import {
+  createAcceptedTask,
+  setUpManager,
+  setUpWorkspace,
+  START,
+  startLead,
+  type TeamHarness,
+  withTeam,
+} from "./testkit.ts";
 
 const GIB = 1024 ** 3;
 const PLENTY: MemorySnapshot = { availableMemoryBytes: 6 * GIB, memoryPressure: "normal" };
@@ -596,6 +604,24 @@ describe("memory-based task admission", () => {
       );
     },
   );
+
+  it.effect("counts the safety cap across every project", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const { firstPm, secondPm } = yield* setUpWorkspace(harness);
+          const started = yield* startLead(firstPm, "First project", harness.delegate);
+          assert.strictEqual(started.task.stage, "planning");
+          yield* startLead(secondPm, "Second project", harness.delegate);
+          const refused = yield* startLead(firstPm, "One too many", harness.delegate).pipe(
+            Effect.flip,
+          );
+          assert.include(refused.message, "2 of 2 task leads are already running");
+        }),
+      { memory: fake.read, settings: { taskExecution: { maxConcurrentSessions: 2 } } },
+    );
+  });
 
   it.effect("waits below the cap when memory is low", () => {
     const fake = fakeMac(PLENTY);

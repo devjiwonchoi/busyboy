@@ -204,7 +204,12 @@ import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
-import { admitTaskLead, CLOUD_FALLBACK_NOTE, MEMORY_WAIT_REASON } from "./memoryPolicy.ts";
+import {
+  activeLocalLeads,
+  admitTaskLead,
+  CLOUD_FALLBACK_NOTE,
+  MEMORY_WAIT_REASON,
+} from "./memoryPolicy.ts";
 import { leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
@@ -1746,10 +1751,11 @@ const make = Effect.gen(function* () {
   /** Why an inbox task cannot start yet: every lead slot is busy or a dependency is unfinished. */
   const startWaitReason = (task: ProjectTask) =>
     Effect.gen(function* () {
-      const active = yield* activeTasks(task.projectId);
+      // The cap is app-wide: leads running on this Mac in every project count.
+      const running = yield* activeLocalLeads(repository);
       const limit = (yield* taskExecutionSettings).maxConcurrentSessions;
-      if (active.length >= limit) {
-        return `${active.length} of ${limit} task leads are already running.`;
+      if (running >= limit) {
+        return `${running} of ${limit} task leads are already running.`;
       }
       for (const dependencyId of task.waitsOn) {
         const dependency = yield* requireAnyTask(dependencyId, task.projectId);
@@ -1982,9 +1988,11 @@ const make = Effect.gen(function* () {
           const active = yield* activeTasks(role.projectId);
           const execution = yield* taskExecutionSettings;
           const limit = execution.maxConcurrentSessions;
-          if (active.length >= limit) {
+          // The cap is app-wide: leads running on this Mac in every project count.
+          const running = yield* activeLocalLeads(repository);
+          if (running >= limit) {
             return yield* teamError(
-              `#${task.number} stays in the inbox: ${active.length} of ${limit} task leads are already running.`,
+              `#${task.number} stays in the inbox: ${running} of ${limit} task leads are already running.`,
               role.projectId,
             );
           }
@@ -2024,7 +2032,7 @@ const make = Effect.gen(function* () {
             roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
           // The user's execution-location setting and the Mac's free memory pick the place.
           const admission = admitTaskLead({
-            active: active.length,
+            active: running,
             cap: limit,
             policy: execution.location,
             headroom: (yield* memoryHeadroom.check).headroom,
@@ -2052,38 +2060,40 @@ const make = Effect.gen(function* () {
           const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
             Effect.gen(function* () {
               return yield* delegate({
-            task: buildTaskLeadPrompt({
-              task: { ...task, location },
-              key,
-              spec,
-              resume,
-              memory,
-              otherTasks: active,
-              ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
-              ...(userLanguage === null ? {} : { userLanguage }),
-              ...(coveredBy === null
-                ? {}
-                : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
-              roleModels,
-            }),
-            title: `${key} ${task.title}`,
-            role: "implementation",
-            isolation: "worktree",
-            mode: "async",
-            clientRequestId:
-              earlierSessions === 0
-                ? `task-start:${task.id}${requestSuffix}`
-                : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
-            ...(leadTarget === undefined ? {} : { target: leadTarget }),
-            ...(location === "local" ? {} : { location }),
-          }).pipe(
-            Effect.mapError((failure) =>
-              teamError(
-                `Could not start a task lead for #${task.number}: ${failure.message}`,
-                role.projectId,
-              ),
-            ),
-          );
+                task: buildTaskLeadPrompt({
+                  task: { ...task, location },
+                  key,
+                  spec,
+                  resume,
+                  memory,
+                  otherTasks: active,
+                  ...((yield* activeAfk(manager.settings)) === null
+                    ? {}
+                    : { afkRule: AFK_AGENT_RULE }),
+                  ...(userLanguage === null ? {} : { userLanguage }),
+                  ...(coveredBy === null
+                    ? {}
+                    : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
+                  roleModels,
+                }),
+                title: `${key} ${task.title}`,
+                role: "implementation",
+                isolation: "worktree",
+                mode: "async",
+                clientRequestId:
+                  earlierSessions === 0
+                    ? `task-start:${task.id}${requestSuffix}`
+                    : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
+                ...(leadTarget === undefined ? {} : { target: leadTarget }),
+                ...(location === "local" ? {} : { location }),
+              }).pipe(
+                Effect.mapError((failure) =>
+                  teamError(
+                    `Could not start a task lead for #${task.number}: ${failure.message}`,
+                    role.projectId,
+                  ),
+                ),
+              );
             });
           // The setting, not the PM, sent it to the cloud: when the cloud cannot
           // take it, start here if the Mac has room, else wait for memory.
