@@ -608,6 +608,64 @@ it.effect("keeps delegated child pull-request links independent of the parent", 
   }).pipe(Effect.provide(layerTest)),
 );
 
+it.effect("marks a delegated child cloud only when its request asks for cloud", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const parentThreadId = ThreadId.make("thread:cloud-parent");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-cloud-parent"),
+      threadId: parentThreadId,
+      projectId: ProjectId.make("project:cloud"),
+      title: "Parent",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* orchestrator.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("start-cloud-parent"),
+      threadId: parentThreadId,
+      messageId: MessageId.make("message:cloud-parent"),
+      text: "Delegate the work",
+      attachments: [],
+      dispatchMode: { type: "start_immediately" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const parentRun = (yield* projections.getThreadProjection(parentThreadId)).runs[0]!;
+    const delegate = (id: string, location?: "cloud") =>
+      orchestrator.dispatch({
+        type: "delegated_task.request",
+        commandId: CommandId.make(id),
+        parentThreadId,
+        parentRunId: parentRun.id,
+        parentNodeId: parentRun.rootNodeId!,
+        task: "Build it",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        ...(location === undefined ? {} : { location }),
+        createdBy: "agent",
+        creationSource: "mcp",
+      });
+    yield* delegate("delegate-cloud", "cloud");
+    yield* delegate("delegate-local");
+    const [cloudChild, localChild] = (yield* projections.getThreadProjection(
+      parentThreadId,
+    )).subagents.map((subagent) => subagent.childThreadId!);
+    assert.equal((yield* projections.getThreadProjection(cloudChild!)).thread.location, "cloud");
+    assert.equal((yield* projections.getThreadShell(cloudChild!))?.location, "cloud");
+    const localShell = yield* projections.getThreadShell(localChild!);
+    assert.isFalse(localShell !== null && "location" in localShell);
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect("wakes the parent once when its delegated task asks a question", () =>
   Effect.gen(function* () {
     const orchestrator = yield* Orchestrator.OrchestratorV2;

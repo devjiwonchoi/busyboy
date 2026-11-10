@@ -2099,6 +2099,19 @@ const make = Effect.gen(function* () {
           providers,
           skipProjectEnablementFilter: isRetryOfAcceptedDelegation,
         });
+        // A child runs locally unless asked; it never inherits its parent's cloud.
+        const cloud = input.location === "cloud";
+        if (cloud) {
+          const driver = providers.find(
+            (provider) => provider.instanceId === target.modelSelection.instanceId,
+          )?.driver;
+          if (driver !== "claudeAgent") {
+            return yield* failure(
+              "invalid_request",
+              `Cloud runs only Claude leads for now; ${target.modelSelection.instanceId} uses ${driver ?? "an unknown driver"}. Pick a Claude target or run it locally.`,
+            );
+          }
+        }
         const runtimeMode = yield* resolveRuntimeMode(
           parent.thread.runtimeMode,
           input.runtimeMode,
@@ -2110,7 +2123,8 @@ const make = Effect.gen(function* () {
           input.interactionMode,
         );
         let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
-        if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
+        // A cloud child needs its own checkout to mirror, so it always gets a worktree.
+        if ((input.isolation === "worktree" || cloud) && !isRetryOfAcceptedDelegation) {
           const project = yield* requireProject(parent.thread.projectId);
           if (options?.worktreeBase === "origin-default") {
             workspaceStrategy = yield* originDefaultWorktreeStrategy(
@@ -2154,6 +2168,7 @@ const make = Effect.gen(function* () {
             runtimeMode,
             interactionMode,
             ...(workspaceStrategy === undefined ? {} : { workspaceStrategy }),
+            ...(cloud ? { location: "cloud" as const } : {}),
             // Async delegations wake the parent on every child terminal; wait
             // delegations deliver through the blocking tool call, so a wake is
             // only needed if the parent settled first (timeout, disconnect).

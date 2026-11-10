@@ -8,6 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as VcsStatusBroadcaster from "../vcs/VcsStatusBroadcaster.ts";
 import * as WorkspaceEntries from "../workspace/WorkspaceEntries.ts";
@@ -34,6 +35,7 @@ it.effect("refreshes workspace after checkpoint capture without reading history"
           getThreadProjection: () =>
             Effect.die("workspace refresh must not load transcript history"),
           getCheckpointContext: () => Effect.succeed(checkpointContext),
+          getThreadShell: () => Effect.succeed(null),
         }),
         Layer.succeed(RunFinalization.RunFinalizationObserver, {
           refresh,
@@ -47,6 +49,42 @@ it.effect("refreshes workspace after checkpoint capture without reading history"
     yield* service.finalize({ threadId, runId, scopeId });
     assert.equal(capture.mock.calls.length, 1);
     assert.deepEqual(refresh.mock.calls[0], [{ cwd: "/repo", threadId, runId }]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("mirrors a cloud thread's sandbox onto the Mac before the checkpoint", () => {
+  const threadId = ThreadId.make("thread_cloud");
+  const runId = RunId.make("run_cloud");
+  const scopeId = CheckpointScopeId.make("scope_cloud");
+  const order: string[] = [];
+  const layer = RunFinalization.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.mock(CheckpointCapture.CheckpointCaptureServiceV2)({
+          execute: () => Effect.sync(() => void order.push("checkpoint")),
+        }),
+        Layer.mock(ProjectionStore.ProjectionStoreV2)({
+          getThreadShell: () =>
+            Effect.succeed({ location: "cloud" } as unknown as OrchestrationV2ThreadShell),
+          getCheckpointContext: () =>
+            Effect.succeed({ runs: [], checkpointScopes: [], checkpoints: [] }),
+        }),
+        Layer.succeed(RunFinalization.RunFinalizationObserver, {
+          refresh: () => Effect.void,
+          refreshAfterTurn: () => Effect.void,
+        }),
+        Layer.succeed(CloudLeadService.CloudLeadHooks, {
+          prepare: () => Effect.die("not used"),
+          syncToMac: (id) => Effect.sync(() => void order.push(`sync ${id}`)),
+          release: () => Effect.void,
+        }),
+      ),
+    ),
+  );
+  return Effect.gen(function* () {
+    const service = yield* RunFinalization.RunFinalizationService;
+    yield* service.finalize({ threadId, runId, scopeId });
+    assert.deepEqual(order, ["sync thread_cloud", "checkpoint"]);
   }).pipe(Effect.provide(layer));
 });
 

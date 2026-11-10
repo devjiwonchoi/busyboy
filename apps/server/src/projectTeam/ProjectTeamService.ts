@@ -192,6 +192,7 @@ import { pullRequestFormatProblems } from "./pullRequestFormat.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
+import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
@@ -946,6 +947,7 @@ const make = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
+  const cloudLead = yield* CloudLeadService.CloudLeadHooks;
   const shipGate = yield* PullRequestShipGate.PullRequestShipGate;
 
   // At boot the provider cache may still be empty, so probe once before giving up.
@@ -1173,6 +1175,16 @@ const make = Effect.gen(function* () {
         isDependencyCleared(updated.value.stage)
       ) {
         yield* wakeUnblockedProjects(updated.value);
+      }
+      // A finished cloud task's sandbox is mirrored once more and deleted, in the background.
+      if (
+        FinishedTaskCleanup.isFinishedStage(updated.value.stage) &&
+        updated.value.location === "cloud" &&
+        updated.value.leadThreadId !== null
+      ) {
+        yield* cloudLead
+          .release(updated.value.leadThreadId)
+          .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
       }
       // A finished task's questions can no longer be answered, so close them.
       if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
@@ -1785,6 +1797,17 @@ const make = Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
         return yield* teamError(`#${task.number} is finished.`, role.projectId);
       }
+      if (task.location === "cloud") {
+        // A step's checkout is on the Mac, the cloud lead's is in its sandbox: only a
+        // review, which reads the mirrored diff, can run apart from the lead's work.
+        if (input.role !== "review") {
+          return yield* teamError(
+            `#${task.number} runs in the cloud: do the ${input.role} step yourself in the sandbox, then hand off only the review.`,
+            role.projectId,
+          );
+        }
+        if (task.leadThreadId !== null) yield* syncCloudLead(task.leadThreadId);
+      }
       const manager = yield* requireManager(role.projectId);
       const model = resolveRoleModels(task.roleModels, manager.settings.roleModels)[input.role];
       const key = yield* keyOf(task);
@@ -1817,7 +1840,12 @@ const make = Effect.gen(function* () {
           task: input.task,
           title: input.title ?? `${key} ${input.role}`,
           role: DELEGATE_ROLE[input.role],
-          ...(input.isolation === undefined ? {} : { isolation: input.isolation }),
+          // A cloud task's review gets its own checkout: later mirrors reset the lead's worktree.
+          ...(task.location === "cloud"
+            ? { isolation: "worktree" as const }
+            : input.isolation === undefined
+              ? {}
+              : { isolation: input.isolation }),
           ...(input.mode === undefined ? {} : { mode: input.mode }),
           ...(input.clientRequestId === undefined
             ? {}
@@ -1897,9 +1925,11 @@ const make = Effect.gen(function* () {
           // A plan model the user picked wins over the PM's choice.
           const leadTarget =
             roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
+          // Each start picks its own place; a restart without one runs locally.
+          const location = input.location ?? "local";
           const lead = yield* delegate({
             task: buildTaskLeadPrompt({
-              task,
+              task: { ...task, location },
               key,
               spec,
               resume,
@@ -1921,6 +1951,7 @@ const make = Effect.gen(function* () {
                 ? `task-start:${task.id}`
                 : `task-start:${task.id}:${earlierSessions + 1}`,
             ...(leadTarget === undefined ? {} : { target: leadTarget }),
+            ...(location === "local" ? {} : { location }),
           }).pipe(
             Effect.mapError((failure) =>
               teamError(
@@ -1933,6 +1964,7 @@ const make = Effect.gen(function* () {
             id: task.id,
             stage: "planning",
             leadThreadId: lead.childThreadId,
+            location,
             // The parent's approved breakdown is this subtask's approved plan.
             ...(coveredBy === null || task.planSummary !== null
               ? {}
@@ -2204,8 +2236,23 @@ const make = Effect.gen(function* () {
         .getThreadShell(task.leadThreadId)
         .pipe(Effect.orElseSucceed(() => null));
       if (shell === null || shell.worktreePath === null) return Option.none<string>();
+      if (shell.location === "cloud") yield* syncCloudLead(task.leadThreadId);
       return yield* worktreeHeads.read(shell.worktreePath);
     });
+
+  /**
+   * A cloud lead's Mac worktree is a mirror updated at turn end. Gates and
+   * review steps run mid-turn, so they mirror the sandbox first.
+   */
+  const syncCloudLead = (leadThreadId: ThreadId) =>
+    cloudLead.syncToMac(leadThreadId).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("could not mirror a cloud lead before reading its worktree", {
+          leadThreadId,
+          detail: error.message,
+        }),
+      ),
+    );
 
   const shortSha = (sha: string) => sha.slice(0, 7);
 
@@ -4792,6 +4839,7 @@ const make = Effect.gen(function* () {
               title: task.title,
               stage: task.stage,
               leadThreadId: task.leadThreadId,
+              location: task.location,
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),

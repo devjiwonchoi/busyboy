@@ -401,6 +401,26 @@ export const layerWithOptions = (
         },
       );
       /**
+       * A cloud thread's agent runs in a sandbox, so the Mac-only preview and
+       * computer use are never granted to it. An unreadable thread counts as local.
+       */
+      const isCloudThread = (threadId: ThreadId) =>
+        projectionStore.getThread(threadId).pipe(
+          Effect.map((thread) => thread.location === "cloud"),
+          Effect.orElseSucceed(() => false),
+        );
+      const localToolGrants = (threadId: ThreadId) =>
+        Effect.gen(function* () {
+          if (yield* isCloudThread(threadId)) {
+            return { cloud: true, browserToolsAvailable: false, computerUseGranted: false };
+          }
+          return {
+            cloud: false,
+            browserToolsAvailable: yield* agentAccessSettings(threadId),
+            computerUseGranted: yield* computerUseAvailable(),
+          };
+        });
+      /**
        * Reads the repository directly rather than through ProjectTeamService:
        * that service depends on thread management, which depends on this one.
        * An unreadable role must not stop the session from opening, so it
@@ -528,12 +548,12 @@ export const layerWithOptions = (
                 // the credential it started with, so a thread that detaches and
                 // re-attaches across a workspace handoff must come back to the
                 // same token or the process's tool calls fail auth.
-                const browserToolsAvailable = yield* agentAccessSettings(threadId);
+                const { cloud, browserToolsAvailable, computerUseGranted } =
+                  yield* localToolGrants(threadId);
                 const capabilities = new Set<
                   import("../mcp/McpInvocationContext.ts").McpCapability
                 >(["orchestration", "worktree", "pull-requests"]);
                 if (browserToolsAvailable) capabilities.add("preview");
-                const computerUseGranted = yield* computerUseAvailable();
                 if (computerUseGranted) capabilities.add("computer-use");
                 const existing = yield* mcpSessions.read(threadId);
                 // A failed role read keeps the live session's instructions rather than stripping them.
@@ -571,7 +591,8 @@ export const layerWithOptions = (
                     resolved.thread.threadId === threadId &&
                     resolved.thread.providerInstanceId === providerInstanceId &&
                     resolved.capabilities.has("preview") === browserToolsAvailable &&
-                    resolved.capabilities.has("computer-use") === computerUseGranted
+                    resolved.capabilities.has("computer-use") === computerUseGranted &&
+                    (resolved.thread.location === "cloud") === cloud
                   ) {
                     // A thread can become a PM while it keeps its credential.
                     if (existing.teamInstructions !== teamInstructions) {
@@ -587,6 +608,7 @@ export const layerWithOptions = (
                   providerInstanceId,
                   browserToolsAvailable,
                   capabilities,
+                  ...(cloud ? { location: "cloud" as const } : {}),
                 });
                 yield* mcpSessions.set(withTeamInstructions(credential.config));
                 reserveMcpCredential(threadId, credential.config.providerSessionId);
@@ -611,8 +633,8 @@ export const layerWithOptions = (
                   existing.authorizationHeader.replace(/^Bearer\s+/, ""),
                 );
                 if (resolved === undefined || resolved.thread.threadId !== threadId) return;
-                const browserToolsAvailable = yield* agentAccessSettings(threadId);
-                const computerUseGranted = yield* computerUseAvailable();
+                const { browserToolsAvailable, computerUseGranted } =
+                  yield* localToolGrants(threadId);
                 if (
                   resolved.capabilities.has("preview") === browserToolsAvailable &&
                   resolved.capabilities.has("computer-use") === computerUseGranted

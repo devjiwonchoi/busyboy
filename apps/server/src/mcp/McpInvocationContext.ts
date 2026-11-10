@@ -1,6 +1,7 @@
 import {
   type AuthMcpClientAccess,
   type EnvironmentId,
+  type ExecutionLocation,
   McpCapabilityUnavailableError,
   OrchestratorMcpFailure,
   PreviewAutomationUnavailableError,
@@ -10,6 +11,8 @@ import {
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+
+import { localOnlyError } from "../cloudLead/localOnly.ts";
 
 const ALL_MCP_CAPABILITIES = [
   "preview",
@@ -24,6 +27,8 @@ export interface McpThreadCaller {
   readonly threadId: ThreadId;
   readonly providerSessionId: string;
   readonly providerInstanceId: ProviderInstanceId;
+  /** Set for a thread whose agent runs in a cloud sandbox; absent means local. */
+  readonly location?: ExecutionLocation;
 }
 
 export interface McpClientCaller {
@@ -94,11 +99,22 @@ export const requireMcpCapability = <const C extends McpCapability>(
     Effect.withSpan("mcp.requireCapability"),
   );
 
+/** The caller's agent runs in a cloud sandbox, where Mac-only tools never work. */
+export const isCloudCaller = (invocation: McpInvocationScope): boolean =>
+  invocation.thread?.location === "cloud";
+
+/** Why a cloud caller cannot use a preview tool, with what to do instead. */
+export const cloudPreviewUnavailable = () =>
+  new OrchestratorMcpFailure({
+    code: "capability_denied",
+    message: localOnlyError("preview-local-app", "미리보기 도구").message,
+  });
+
 export const requireThreadMcpCapability = (
   capability: "preview",
 ): Effect.Effect<
   McpThreadInvocationScope,
-  PreviewAutomationUnavailableError,
+  PreviewAutomationUnavailableError | OrchestratorMcpFailure,
   McpInvocationContext
 > =>
   McpInvocationContext.pipe(
@@ -106,10 +122,12 @@ export const requireThreadMcpCapability = (
       (invocation): invocation is McpThreadInvocationScope =>
         invocation.capabilities.has(capability) && invocation.thread !== undefined,
       (invocation) =>
-        new PreviewAutomationUnavailableError({
-          capability,
-          ...missingCapabilityFields(invocation),
-        }),
+        isCloudCaller(invocation)
+          ? cloudPreviewUnavailable()
+          : new PreviewAutomationUnavailableError({
+              capability,
+              ...missingCapabilityFields(invocation),
+            }),
     ),
     Effect.withSpan("mcp.requireCapability"),
   );

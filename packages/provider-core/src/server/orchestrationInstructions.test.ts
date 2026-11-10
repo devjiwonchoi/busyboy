@@ -24,6 +24,18 @@ describe("T3 orchestration provider instructions", () => {
     );
   });
 
+  it("tells the PM to start a cloud lead only when the user asks", () => {
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      'Only when the user asks for it, call `task_start` with location "cloud"',
+    );
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "The app marks such a task Cloud.");
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      "Computer Use and the local app preview don't work there.",
+    );
+  });
+
   it("documents structured schedules instead of JSON strings", () => {
     assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "structured object, never as JSON text");
     assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, '"everyMs":3600000');

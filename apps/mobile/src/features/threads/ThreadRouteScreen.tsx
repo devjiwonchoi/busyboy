@@ -429,6 +429,7 @@ function ThreadRouteContent(
   );
 
   const usesNativeHeaderGlass = NATIVE_LIQUID_GLASS_SUPPORTED;
+  const runsInCloud = selectedThread?.location === "cloud";
   const headerSubtitle = [
     selectedThreadProject?.title ?? null,
     selectedEnvironmentConnection?.environmentLabel ?? null,
@@ -1080,6 +1081,7 @@ function ThreadRouteContent(
         onOpenGitInspector={handleOpenGitInspector}
         onOpenFilesInspector={handleOpenFilesInspector}
         onReturnToThread={props.onReturnToThread}
+        runsInCloud={runsInCloud}
       />
 
       {renderThreadRouteBody()}

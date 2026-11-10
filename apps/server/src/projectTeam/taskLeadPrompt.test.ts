@@ -30,6 +30,7 @@ const task: ProjectTask = {
   waitsOn: [],
   parentTaskId: null,
   leadThreadId: null,
+  location: "local",
   prUrl: null,
   planSummary: null,
   resultSummary: null,
@@ -191,6 +192,22 @@ describe("buildTaskLeadPrompt", () => {
     expect(rule).toContain("Do not change the plan, spec, todos or code because of it.");
     expect(rule).toContain('"변경 요청으로 보낼까요?"');
     expect(rule).toContain("change the plan only when the user requests changes through the card");
+  });
+
+  it("tells a cloud lead where it runs and what it cannot reach, and a local one nothing", () => {
+    const cloud = buildTaskLeadPrompt({
+      ...base,
+      task: { ...base.task, location: "cloud" },
+      memory: [],
+      otherTasks: [],
+    });
+    const section = cloud.slice(cloud.indexOf("## Cloud"), cloud.indexOf("## Rules"));
+    expect(section).toContain("Vercel Sandbox (Linux)");
+    expect(section).toContain("read-only mirror");
+    expect(section).toContain("Commit, push and `gh` work as usual.");
+    expect(section).toContain("Computer Use, the local app preview");
+    expect(section).toContain("say so instead of trying");
+    expect(buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] })).not.toContain("## Cloud");
   });
 
   it("keeps the whole prompt stable", () => {

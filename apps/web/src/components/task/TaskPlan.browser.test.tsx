@@ -292,6 +292,22 @@ describe("TaskPlan status", () => {
     expect(link?.getAttribute("href")).toBe("https://github.com/acme/busyboy/pull/81");
   });
 
+  it("marks a cloud task with a small Cloud pill next to its status", async () => {
+    state.detail = { ...state.detail, task: { ...state.detail.task, location: "cloud" } };
+    await render();
+    const pill = container.querySelector<HTMLElement>('[data-cloud-badge="pill"]');
+    expect(pill?.textContent).toBe("Cloud");
+    expect(pill?.title).toBe("Runs in a cloud sandbox");
+    expect(pill?.parentElement).toBe(header().parentElement);
+  });
+
+  it("shows no Cloud pill for a local task", async () => {
+    state.detail = { ...state.detail, task: { ...state.detail.task, location: "local" } };
+    await render();
+    expect(header().textContent).toBe("Planning");
+    expect(container.querySelector("[data-cloud-badge]")).toBeNull();
+  });
+
   it("shows a finished task as Done and archived, at phone width too", async () => {
     await page.viewport(390, 844);
     state.detail = { ...state.detail, task: { ...state.detail.task, stage: "cancelled" } };

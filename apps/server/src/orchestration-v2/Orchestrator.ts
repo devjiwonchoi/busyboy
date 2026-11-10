@@ -6385,9 +6385,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         ...(command.title === undefined ? {} : { title: command.title }),
         ordinal: parentProjection.subagents.length + 1,
       });
+      // A child runs where its command says; it never inherits its parent's cloud.
+      const { location: _parentLocation, ...parentThread } = parentProjection.thread;
       const childThread: OrchestrationV2AppThread = {
         ...makeSubagentChildThread({
-          parentThread: parentProjection.thread,
+          parentThread,
           childThreadId,
           parentNodeId: taskNodeId,
           activeProviderThreadId: null,
@@ -6401,6 +6403,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         runtimeMode: command.runtimeMode,
         interactionMode: command.interactionMode,
         ...(command.workspaceStrategy === undefined ? {} : { branch: null, worktreePath: null }),
+        ...(command.location === "cloud" ? { location: "cloud" as const } : {}),
       };
       const task: OrchestrationV2Subagent = {
         id: taskNodeId,

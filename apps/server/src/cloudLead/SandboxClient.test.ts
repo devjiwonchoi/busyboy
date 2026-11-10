@@ -25,6 +25,8 @@ const fakeSdk = (stdout: (env: Record<string, string>) => string) => {
     },
     writeFiles: async (files) => void calls.writes.push(...files),
     readFileToBuffer: async () => null,
+    domain: (port) => `https://sbx-${port}.vercel.run`,
+    extendTimeout: async () => undefined,
     snapshot: async () => ({ snapshotId: "snap", sizeBytes: 1, status: "created" }),
     stop: async () => undefined,
     delete: async () => undefined,

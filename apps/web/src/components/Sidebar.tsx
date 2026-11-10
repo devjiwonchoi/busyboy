@@ -170,6 +170,7 @@ import { formatRelativeTimeLabel } from "../timestampFormat";
 import type { SidebarThreadSummary } from "../types";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { cn } from "~/lib/utils";
+import { CloudBadge } from "./CloudBadge";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectEnvironmentBadge } from "./ProjectEnvironmentBadge";
 import {
@@ -1809,14 +1810,17 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const projectManagerBadges = projectManager ? (
     <SidebarProjectManagerBadges summary={projectManager} />
   ) : null;
+  const cloudIndicator = thread.location === "cloud" ? <CloudBadge variant="icon" /> : null;
   const indicators =
     draftIndicator !== null ||
     pinIndicator !== null ||
+    cloudIndicator !== null ||
     projectIndicator !== null ||
     projectManagerBadges !== null ? (
       <>
         {draftIndicator}
         {pinIndicator}
+        {cloudIndicator}
         {projectIndicator}
         {projectManagerBadges}
       </>

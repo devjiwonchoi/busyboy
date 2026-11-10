@@ -2,6 +2,7 @@ import { expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   McpCapabilityUnavailableError,
+  OrchestratorMcpFailure,
   PreviewAutomationUnavailableError,
   ProviderInstanceId,
   ThreadId,
@@ -93,6 +94,38 @@ it.effect("refuses thread-owned capabilities to a caller signed in from outside 
     );
     expect(error).toBeInstanceOf(PreviewAutomationUnavailableError);
     expect(error).toMatchObject({ capability: "preview", environmentId: "environment-1" });
-    expect(error.threadId).toBeUndefined();
+    expect("threadId" in error ? error.threadId : undefined).toBeUndefined();
+  });
+});
+
+it.effect("tells a cloud thread that preview tools work only on the Mac", () => {
+  const threadScope = (location?: "cloud"): McpInvocationContext.McpInvocationScope => ({
+    environmentId: EnvironmentId.make("environment-1"),
+    requestNamespace: "provider-session-1",
+    thread: {
+      threadId: ThreadId.make("thread-1"),
+      providerSessionId: "provider-session-1",
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+      ...(location === undefined ? {} : { location }),
+    },
+    client: undefined,
+    capabilities: new Set(["orchestration"]),
+    issuedAt: 1,
+  });
+
+  return Effect.gen(function* () {
+    const cloud = yield* McpInvocationContext.requireThreadMcpCapability("preview").pipe(
+      Effect.provideService(McpInvocationContext.McpInvocationContext, threadScope("cloud")),
+      Effect.flip,
+    );
+    expect(cloud).toBeInstanceOf(OrchestratorMcpFailure);
+    expect(cloud.message).toContain("로컬에서만 가능해요");
+
+    const local = yield* McpInvocationContext.requireThreadMcpCapability("preview").pipe(
+      Effect.provideService(McpInvocationContext.McpInvocationContext, threadScope()),
+      Effect.flip,
+    );
+    expect(local).toBeInstanceOf(PreviewAutomationUnavailableError);
+    expect(local.message).not.toContain("로컬에서만 가능해요");
   });
 });

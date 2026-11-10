@@ -1,4 +1,9 @@
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /** In-memory fakes for the cloud lead tests. */
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFs from "node:fs/promises";
+import * as NodeOs from "node:os";
+
 import type { LocalHost } from "./LocalHost.ts";
 import type {
   CommandResult,
@@ -85,6 +90,9 @@ export const fakeSandbox = (
       writes.push(batch);
       for (const file of batch) files.set(file.path, file.content);
     },
+    startDetached: async (input) => void (await runCommand(input)),
+    domain: (port) => `https://${options.name ?? "fake"}-${port}.example.test`,
+    extendTimeout: async () => undefined,
     readFile: async (path) => files.get(path) ?? null,
     snapshot: async () => ({ snapshotId: `snap-${commands.length}`, sizeBytes: 1 }),
     stop: async () => undefined,
@@ -107,6 +115,113 @@ export const fakeSandboxClient = (
     },
     get: async (name) => fakeSandbox({ name }),
     snapshotState: async (id) => snapshots[id] ?? "missing",
+    masker: () => makeSecretMasker([]),
+  };
+};
+
+/**
+ * A "sandbox" that is a temp directory on this machine: commands run with
+ * HOME set to it, files land at their absolute paths, and detached commands
+ * (the relay) run as local processes. With `binDir` first on PATH, a fake
+ * `claude` script answers the relay's spawn. Lets the cloud runtime run end
+ * to end in tests without Vercel.
+ */
+export const localSandboxClient = (input: {
+  /** Makes the sandbox home, e.g. clones the repo into <home>/busyboy. */
+  readonly makeHome: (home: string) => Promise<void>;
+  readonly binDir: string;
+}): SandboxClient & {
+  readonly created: Array<SandboxHandle & { readonly home: string; readonly deleted: () => boolean }>;
+} => {
+  const created: Array<SandboxHandle & { home: string; deleted: () => boolean }> = [];
+  const children: NodeChildProcess.ChildProcess[] = [];
+  const env = (home: string, extra: Readonly<Record<string, string>> = {}) => ({
+    ...process.env,
+    HOME: home,
+    PATH: `${input.binDir}:${process.env.PATH ?? ""}`,
+    GIT_AUTHOR_NAME: "t",
+    GIT_AUTHOR_EMAIL: "t@t",
+    GIT_COMMITTER_NAME: "t",
+    GIT_COMMITTER_EMAIL: "t@t",
+    GIT_CONFIG_GLOBAL: `${home}/.gitconfig`,
+    ...extra,
+  });
+  const run = (home: string, command: RunCommandInput) =>
+    new Promise<CommandResult>((resolve) => {
+      NodeChildProcess.execFile(
+        command.cmd,
+        [...(command.args ?? [])],
+        {
+          cwd: command.cwd ?? home,
+          env: env(home, command.env),
+          maxBuffer: 64 * 1024 * 1024,
+          encoding: "buffer",
+        },
+        (error, stdout, stderr) =>
+          resolve({
+            exitCode: error === null ? 0 : typeof error.code === "number" ? error.code : 1,
+            stdout: stdout.toString("utf8"),
+            stderr: stderr.toString("utf8"),
+          }),
+      );
+    });
+  return {
+    created,
+    create: async (options) => {
+      const home = await NodeFs.mkdtemp(`${NodeOs.tmpdir()}/sbx-home-`);
+      await input.makeHome(home);
+      let deleted = false;
+      const runCommand = (command: RunCommandInput) => run(home, command);
+      const ports = options.ports ?? [];
+      const handle = {
+        name: `local-${created.length}`,
+        home,
+        deleted: () => deleted,
+        runCommand,
+        sh: async (script: string, rest: Omit<RunCommandInput, "cmd" | "args"> = {}) => {
+          const result = await runCommand({ ...rest, cmd: "bash", args: ["-c", script] });
+          if (result.exitCode !== 0) {
+            throw new Error(`exit ${result.exitCode}: ${result.stderr.slice(-2000)}`);
+          }
+          return result.stdout;
+        },
+        writeFiles: async (files: ReadonlyArray<SandboxFile>) => {
+          for (const file of files) {
+            await NodeFs.mkdir(file.path.slice(0, file.path.lastIndexOf("/")), { recursive: true });
+            await NodeFs.writeFile(file.path, file.content);
+          }
+        },
+        startDetached: async (command: RunCommandInput) => {
+          const child = NodeChildProcess.spawn(command.cmd, [...(command.args ?? [])], {
+            cwd: command.cwd ?? home,
+            env: env(home, command.env),
+            stdio: "ignore",
+          });
+          children.push(child);
+          // Give the relay a moment to listen; the client retries anyway.
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        },
+        domain: (port: number) => {
+          if (!ports.includes(port)) throw new Error(`Port ${port} is not exposed`);
+          return `http://127.0.0.1:${port}`;
+        },
+        readFile: (path: string) => NodeFs.readFile(path).catch(() => null),
+        extendTimeout: async () => undefined,
+        snapshot: async () => ({ snapshotId: "local", sizeBytes: 0 }),
+        stop: async () => undefined,
+        delete: async () => {
+          deleted = true;
+          for (const child of children.splice(0)) child.kill("SIGKILL");
+          await NodeFs.rm(home, { recursive: true, force: true });
+        },
+      };
+      created.push(handle);
+      return handle;
+    },
+    get: async () => {
+      throw new Error("not used");
+    },
+    snapshotState: async () => "missing",
     masker: () => makeSecretMasker([]),
   };
 };

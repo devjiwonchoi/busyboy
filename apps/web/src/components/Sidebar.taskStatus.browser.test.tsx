@@ -192,6 +192,8 @@ function leadThread(task: (typeof TASKS)[number]): EnvironmentThreadShell {
   return {
     ...thread,
     title: `Task ${task.number}`,
+    // Task 4's lead runs in a cloud sandbox; the rest run locally.
+    ...(task.number === 4 ? { location: "cloud" as const } : {}),
     lineage: {
       rootThreadId: "pm-thread",
       parentThreadId: "pm-thread",
@@ -226,6 +228,8 @@ beforeEach(() => {
           title: `Task ${task.number}`,
           stage: task.stage,
           leadThreadId: `lead-${task.number}` as never,
+          // Task 4's lead runs in a cloud sandbox; the rest run locally.
+          location: task.number === 4 ? "cloud" : "local",
           prUrl: task.prUrl ?? null,
           lastOutcome: task.lastOutcome ?? null,
           openQuestion: task.openQuestion ?? false,
@@ -376,6 +380,44 @@ describe("sidebar task status", () => {
         document.querySelector('[data-testid="sidebar-task-status-tooltip"]')?.textContent,
       ).toBe("In Review · PR #81"),
     );
+  });
+
+  it("marks only a cloud thread's row with a quiet cloud icon", async () => {
+    // Task 5 was cloud once but its lead was restarted locally: the thread's own location wins.
+    state.managers = state.managers.map((manager) => ({
+      ...manager,
+      summary: {
+        ...manager.summary,
+        tasks: manager.summary.tasks.map((task) =>
+          task.number === 5 ? { ...task, location: "cloud" as const } : task,
+        ),
+      },
+    }));
+    await renderSidebarApp().render();
+    await vi.waitFor(() => expect(rowStatus(4).icon).toBe("task-in_progress"), { timeout: 3000 });
+    const cloud = taskRow(4).querySelector<SVGElement>('[data-cloud-badge="icon"]');
+    expect(cloud?.getAttribute("aria-label")).toBe("Runs in a cloud sandbox");
+    expect(cloud?.getBoundingClientRect().width).toBeGreaterThan(0);
+    for (const number of [1, 2, 5, 9]) {
+      expect(taskRow(number).querySelector("[data-cloud-badge]"), `task ${number}`).toBeNull();
+    }
+  });
+
+  it("marks a cloud delegate child that leads no task with the cloud icon", async () => {
+    const child = threadShell("cloud-child", "busyboy", "2026-11-05T08:30:00.000Z");
+    state.threads.push(
+      { ...child, location: "cloud" },
+      threadShell("local-child", "busyboy", "2026-11-05T08:29:00.000Z"),
+    );
+    await renderSidebarApp().render();
+    await vi.waitFor(() => expect(rowStatus(1).icon).toBe("task-todo"));
+    const row = (title: string) =>
+      [...container.querySelectorAll<HTMLElement>('[data-testid="sidebar-row-card"]')].find(
+        (card) => card.querySelector("span.sr-only")?.textContent === title,
+      );
+    expect(row("cloud-child")?.querySelector('[data-cloud-badge="icon"]')).not.toBeNull();
+    expect(row("local-child")).toBeDefined();
+    expect(row("local-child")?.querySelector("[data-cloud-badge]")).toBeNull();
   });
 
   it("leaves ordinary thread rows without a task status", async () => {
