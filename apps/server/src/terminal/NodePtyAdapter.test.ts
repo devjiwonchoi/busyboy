@@ -18,8 +18,10 @@ import { expect, vi } from "vite-plus/test";
 import * as NodePtyAdapter from "./NodePtyAdapter.ts";
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import {
-  descendantsFromTable,
+  descendantsOf,
+  parseProcessTable,
   posixProcessTreeSignaler,
+  type ProcessEntry,
   ProcessTreeSignalerRef,
   type ProcessTreeSignaler,
 } from "./ProcessTree.ts";
@@ -71,9 +73,9 @@ const fakeNodePty = { spawn } as unknown as typeof import("node-pty");
 
 // Fake pids like 42 must never reach the real process table.
 const signalCalls: Array<[number, NodeJS.Signals]> = [];
-const fakeDescendants = vi.fn((_roots: ReadonlyArray<number>): ReadonlyArray<number> => []);
+let fakeTable: ReadonlyArray<ProcessEntry> = [];
 const fakeTreeSignaler: ProcessTreeSignaler = {
-  descendants: (roots) => fakeDescendants(roots),
+  table: () => Promise.resolve(fakeTable),
   signal: (pid, signal) => {
     signalCalls.push([pid, signal]);
   },
@@ -205,6 +207,10 @@ it.effect.each(["win32", "linux", "darwin"] as const)(
       process.kill("SIGTERM");
       process.kill("SIGKILL");
       process.kill();
+      // On POSIX each signal goes out, in order, after a process-table read.
+      yield* Effect.promise(async () => {
+        for (let index = 0; index < 20; index += 1) await Promise.resolve();
+      });
 
       assert.deepEqual(
         nativeProcess.kill.mock.calls,
@@ -388,23 +394,54 @@ it.effect.each(["spawn", "interrupt"] as const)(
 );
 
 it("finds descendants across process groups from the process table", () => {
-  const table = ["  1     0", " 10     1", " 11    10", " 12    11", " 13    10", " 20     1"].join(
-    "\n",
+  const table = parseProcessTable(
+    [
+      "    1     0     1 Mon Nov 10 09:00:00 2026",
+      "   10     1    10 Mon Nov 10 09:00:01 2026",
+      "   11    10    11 Mon Nov 10 09:00:02 2026",
+      "   12    11    11 Mon Nov 10 09:00:03 2026",
+      "   13    10    10 Mon Nov 10 09:00:04 2026",
+      "   20     1    20 Mon Nov 10 09:00:05 2026",
+    ].join("\n"),
   );
-  assert.deepEqual([...descendantsFromTable(table, [10])].toSorted(), [11, 12, 13]);
-  assert.deepEqual([...descendantsFromTable(table, [12, 20])], []);
+  assert.deepEqual(table[2], {
+    pid: 11,
+    ppid: 10,
+    pgid: 11,
+    startedAt: "Mon Nov 10 09:00:02 2026",
+  });
+  const pids = (roots: ReadonlyArray<number>) =>
+    descendantsOf(table, roots)
+      .map((entry) => entry.pid)
+      .toSorted();
+  assert.deepEqual(pids([10]), [11, 12, 13]);
+  assert.deepEqual(pids([12, 20]), []);
+});
+
+const entry = (pid: number, ppid: number, pgid: number, startedAt: string): ProcessEntry => ({
+  pid,
+  ppid,
+  pgid,
+  startedAt,
+});
+
+/** Lets queued signalling, which waits on a process-table read, run. */
+const flushSignals = Effect.promise(async () => {
+  for (let index = 0; index < 20; index += 1) await Promise.resolve();
 });
 
 it.effect("signals the process group and descendants, then force-kills orphans", () =>
   Effect.gen(function* () {
     vi.useFakeTimers();
     signalCalls.length = 0;
-    fakeDescendants.mockImplementation((roots) => (roots.includes(42) ? [43, 44] : [45]));
+    // 43 stays in the shell's group; a job-control shell moved 44 into its own.
+    fakeTable = [entry(42, 1, 42, "t0"), entry(43, 42, 42, "t1"), entry(44, 42, 44, "t2")];
     const adapter = yield* PtyAdapter.PtyAdapter;
     const process = yield* adapter.spawn({ ...spawnInput, shell: "/bin/zsh" });
     const nativeProcess = spawn.mock.results.at(-1)!.value;
 
     process.kill("SIGTERM");
+    yield* flushSignals;
     assert.deepEqual(signalCalls, [
       [-42, "SIGTERM"],
       [43, "SIGTERM"],
@@ -412,15 +449,16 @@ it.effect("signals the process group and descendants, then force-kills orphans",
     ]);
     assert.deepEqual(nativeProcess.kill.mock.calls, [["SIGTERM"]]);
 
-    // The shell exits on SIGTERM but a job ignoring it stays behind.
+    // The shell exits on SIGTERM. 43 ignores it and has started 45; 44 exited and
+    // the OS gave its pid to an unrelated process, which must be left alone.
     signalCalls.length = 0;
     nativeProcess.events.emit("exit", { exitCode: 0, signal: 15 });
+    fakeTable = [entry(43, 1, 42, "t1"), entry(44, 1, 44, "t9"), entry(45, 43, 42, "t3")];
     vi.advanceTimersByTime(3_000);
-    assert.deepEqual(fakeDescendants.mock.calls.at(-1)?.[0].toSorted(), [43, 44]);
+    yield* flushSignals;
     assert.deepEqual(signalCalls, [
       [-42, "SIGKILL"],
       [43, "SIGKILL"],
-      [44, "SIGKILL"],
       [45, "SIGKILL"],
     ]);
     // The exited shell's pid is never signalled directly.
@@ -429,8 +467,7 @@ it.effect("signals the process group and descendants, then force-kills orphans",
     Effect.ensuring(
       Effect.sync(() => {
         vi.useRealTimers();
-        fakeDescendants.mockReset();
-        fakeDescendants.mockImplementation(() => []);
+        fakeTable = [];
       }),
     ),
     Effect.provide(layerTestFor("darwin")),
@@ -479,7 +516,8 @@ it.effect.skipIf(process.platform === "win32")(
       let descendants: ReadonlyArray<number> = [];
       for (let attempt = 0; attempt < 50 && descendants.length < 3; attempt++) {
         yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
-        descendants = posixProcessTreeSignaler.descendants([shell.pid]);
+        const table = yield* Effect.promise(() => posixProcessTreeSignaler.table());
+        descendants = descendantsOf(table, [shell.pid]).map((entry) => entry.pid);
       }
       assert.isAtLeast(descendants.length, 3);
 
