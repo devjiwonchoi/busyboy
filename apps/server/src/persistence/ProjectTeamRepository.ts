@@ -32,6 +32,7 @@ import {
   ProjectTaskOutcome,
   ProjectTaskReady,
   ProjectTaskModelRole,
+  ProjectTaskMemoryHold,
   ProjectTaskModelStep,
   ProjectTaskModelSteps,
   ProjectTaskMetrics,
@@ -281,6 +282,14 @@ export class ProjectTeamRepository extends Context.Service<
     }) => Result<Option.Option<ProjectTask>>;
     /** Tasks with a move in progress, in any project. */
     readonly listMovingTasks: () => Result<ReadonlyArray<ProjectTask>>;
+    /** Sets or clears why the task is held for memory. */
+    readonly setTaskMemoryHold: (input: {
+      readonly id: ProjectTaskId;
+      readonly memoryHold: ProjectTaskMemoryHold | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Tasks held for memory, in any project, lowest number first. */
+    readonly listMemoryHeldTasks: () => Result<ReadonlyArray<ProjectTask>>;
     /** Replaces the task's own model per role. */
     readonly setTaskRoleModels: (input: {
       readonly id: ProjectTaskId;
@@ -567,6 +576,7 @@ export const make = Effect.gen(function* () {
     lead_thread_id AS "leadThreadId",
     location AS "location",
     move_target AS "moveTarget",
+    memory_hold AS "memoryHold",
     pr_url AS "prUrl",
     plan_summary AS "planSummary",
     result_summary AS "resultSummary",
@@ -887,6 +897,31 @@ export const make = Effect.gen(function* () {
       WHERE task_id = ${input.id}
         AND (${input.checkExpected ? 1 : 0} = 0 OR move_target IS ${input.expectedMoveTarget})
       RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskMemoryHold = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectTaskId,
+      memoryHold: Schema.NullOr(ProjectTaskMemoryHold),
+      now: IsoDateTime,
+    }),
+    Result: TaskRow,
+    execute: (input) => sql`
+      UPDATE project_tasks SET
+        memory_hold = ${input.memoryHold},
+        updated_at = ${input.now}
+      WHERE task_id = ${input.id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const findMemoryHeldTasks = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: TaskRow,
+    execute: () => sql`
+      SELECT ${taskColumns}
+      FROM project_tasks
+      WHERE memory_hold IS NOT NULL
+      ORDER BY number ASC
     `,
   });
   const findMovingTasks = SqlSchema.findAll({
@@ -1698,6 +1733,12 @@ export const make = Effect.gen(function* () {
       }).pipe(Effect.mapError(toRepositoryError("setTaskMove"))),
     listMovingTasks: () =>
       findMovingTasks(undefined).pipe(Effect.mapError(toRepositoryError("listMovingTasks"))),
+    setTaskMemoryHold: (input) =>
+      updateTaskMemoryHold(input).pipe(Effect.mapError(toRepositoryError("setTaskMemoryHold"))),
+    listMemoryHeldTasks: () =>
+      findMemoryHeldTasks(undefined).pipe(
+        Effect.mapError(toRepositoryError("listMemoryHeldTasks")),
+      ),
     setTaskRoleModels: (input) =>
       updateTaskRoleModels(input).pipe(Effect.mapError(toRepositoryError("setTaskRoleModels"))),
     recordModelStep: (input) =>

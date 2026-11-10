@@ -42,6 +42,7 @@ import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.t
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
@@ -195,6 +196,9 @@ function failureDetail(error: unknown): string {
   return `Workspace preparation failed: ${error instanceof Error ? error.message : String(error)}`;
 }
 
+/** A setup script waits at most this long for free memory. */
+const SETUP_HEADROOM_WAIT_MS = 5 * 60_000;
+
 const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
   const setupTracker = yield* WorktreeSetupTracker.WorktreeSetupTracker;
@@ -204,6 +208,7 @@ const make = Effect.gen(function* () {
   const setupScripts = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
   const textGeneration = yield* TextGeneration.TextGeneration;
   const receipts = yield* CommandReceiptStore.CommandReceiptStoreV2;
   const ids = yield* IdAllocator.IdAllocatorV2;
@@ -576,6 +581,16 @@ const make = Effect.gen(function* () {
           .pipe(Effect.mapError(mapError(input, "update-thread", threadId)));
       }
       yield* setupTracker.stageStatus(threadId, "setup-script", "running");
+      // Setup scripts (installs, builds) are memory-heavy: they wait a bounded time
+      // for free memory, then run anyway so the thread is not left unprepared.
+      if ((memoryHeadroom.latest()?.headroom ?? "ok") !== "ok") {
+        if (tracked) {
+          yield* setupTracker.appendTail(threadId, "setup-script", "Waiting for free memory…");
+        }
+        yield* MemoryHeadroom.waitForHeadroom(memoryHeadroom, {
+          timeoutMs: SETUP_HEADROOM_WAIT_MS,
+        });
+      }
       const setup = yield* setupScripts
         .runForThread({
           threadId,

@@ -1,5 +1,6 @@
 import {
   CommandId,
+  DEFAULT_SERVER_SETTINGS,
   MessageId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2Run,
@@ -8,6 +9,7 @@ import {
   type ProjectMergeOwner,
   type ProjectTask,
   type ProjectTaskOutcome,
+  resolveTaskExecutionSettings,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -18,10 +20,13 @@ import * as Stream from "effect/Stream";
 
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { untrustedFrame } from "../untrustedText.ts";
 import { PRE_APPROVAL_STAGES } from "./breakdown.ts";
 import { forkParked } from "../serverActivation.ts";
 import { isLeadBusy } from "./common.ts";
+import { leadCap } from "./memoryPolicy.ts";
 import { memoryOverBudgetNote } from "./memoryPrompt.ts";
 import { unresolvedPermissionDenial } from "./permissionBlocker.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
@@ -122,7 +127,10 @@ export function outcomeWakeText(input: {
   >;
   /** Stages of dependencies in other projects, by task id. */
   readonly otherStages?: ReadonlyMap<string, ProjectTask["stage"]>;
+  /** How many task leads may run at once (the project's and the user's cap). */
   readonly maxConcurrentTasks: number;
+  /** False when the Mac is short on memory and the next lead would have to wait. */
+  readonly memoryAllowsStart?: boolean;
   /** Who merges; a ready wake says whether the PM merges or sends the user a merge brief. */
   readonly mergeOwner?: ProjectMergeOwner;
   /** The project memory; a done wake asks the PM to fold the task in and flags overgrowth. */
@@ -150,7 +158,9 @@ export function outcomeWakeText(input: {
     (ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage),
   ).length;
   const next =
-    active < input.maxConcurrentTasks ? nextInboxTask(input.projectTasks, input.otherStages) : null;
+    active < input.maxConcurrentTasks && input.memoryAllowsStart !== false
+      ? nextInboxTask(input.projectTasks, input.otherStages)
+      : null;
   if (next !== null) parts.push(`#${next.number} is next in the inbox`);
   const lines = [parts.join(" · ")];
   if (summary.length > 0) {
@@ -184,6 +194,8 @@ const make = Effect.gen(function* () {
   const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
   const team = yield* ProjectTeamService.ProjectTeamService;
   const threads = yield* ThreadManagement.ThreadManagementService;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const memory = yield* MemoryHeadroom.MemoryHeadroom;
   // A terminal run can be reported more than once; key by lead thread.
   const lastSeen = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
 
@@ -197,6 +209,10 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const manager = yield* repository.getManager(input.task.projectId);
       if (Option.isNone(manager) || !manager.value.settings.enabled) return;
+      const execution = yield* serverSettings.getSettings.pipe(
+        Effect.map((settings) => resolveTaskExecutionSettings(settings.taskExecution)),
+        Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskExecution),
+      );
       const projectTasks = yield* repository.listTasks({ projectId: input.task.projectId });
       const own = new Set<string>(projectTasks.map((task) => task.id));
       const otherStages = new Map<string, ProjectTask["stage"]>();
@@ -214,7 +230,12 @@ const make = Effect.gen(function* () {
         previousOutcome: input.previousOutcome,
         projectTasks,
         otherStages,
-        maxConcurrentTasks: manager.value.settings.maxConcurrentTasks,
+        maxConcurrentTasks: leadCap(
+          manager.value.settings.maxConcurrentTasks,
+          execution.maxConcurrentSessions,
+        ),
+        memoryAllowsStart:
+          execution.location !== "local_only" || (yield* memory.check).headroom === "ok",
         mergeOwner: mergeOwnerOf(manager.value.settings),
         memory: input.outcome === "done" ? yield* repository.listMemory(input.task.projectId) : [],
       });

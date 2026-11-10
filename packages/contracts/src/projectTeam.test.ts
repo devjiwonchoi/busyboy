@@ -57,7 +57,7 @@ describe("ProjectTeamSettings", () => {
         intervalPinnedAt: "2026-11-05T00:00:00.000Z",
       }),
     ).toEqual({
-      maxConcurrentTasks: 6,
+      maxConcurrentTasks: 10,
       sitrepIntervalMinutes: 30,
       sitrepNotify: true,
       quietHours: { start: "22:00", end: "07:30" },

@@ -106,7 +106,9 @@ const make = Effect.fn("makeHostResources")(function* () {
       availableMemoryBytes = darwinAvailableMemory(output) ?? availableMemoryBytes;
       const sysctl = (args: ReadonlyArray<string>) =>
         spawner
-          .string(ChildProcess.make("/usr/sbin/sysctl", args, { stdin: "ignore", stderr: "ignore" }))
+          .string(
+            ChildProcess.make("/usr/sbin/sysctl", args, { stdin: "ignore", stderr: "ignore" }),
+          )
           .pipe(
             Effect.timeout("1 second"),
             Effect.orElseSucceed(() => ""),
@@ -123,7 +125,9 @@ const make = Effect.fn("makeHostResources")(function* () {
       availableMemoryBytes: Math.min(totalMemoryBytes, Math.max(0, availableMemoryBytes)),
       totalMemoryBytes,
       ...(memoryPressure === undefined ? {} : { memoryPressure }),
-      ...(swap === undefined ? {} : { swapUsedBytes: swap.usedBytes, swapTotalBytes: swap.totalBytes }),
+      ...(swap === undefined
+        ? {}
+        : { swapUsedBytes: swap.usedBytes, swapTotalBytes: swap.totalBytes }),
     };
   });
 

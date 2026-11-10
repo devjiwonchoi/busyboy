@@ -112,7 +112,8 @@ export const make = (input: {
       yield* SubscriptionRef.set(current, reading.headroom);
       return reading;
     });
-    const every = input.sampleEveryMs === undefined ? MEMORY_SAMPLE_INTERVAL_MS : input.sampleEveryMs;
+    const every =
+      input.sampleEveryMs === undefined ? MEMORY_SAMPLE_INTERVAL_MS : input.sampleEveryMs;
     if (every !== null) {
       yield* check.pipe(
         Effect.catchCause((cause) => Effect.logWarning("memory headroom sample failed", { cause })),
@@ -156,3 +157,24 @@ export const layerFromSource = (read: () => MemorySnapshot) =>
       });
     }),
   );
+
+/** How long new local work waits for memory before giving up or going ahead. */
+export const HEADROOM_WAIT_MS = 10 * 60_000;
+
+/**
+ * Waits until there is room for a new local session, re-sampling every
+ * `pollMs`. True once there is, false when `timeoutMs` passed first.
+ */
+export const waitForHeadroom = (
+  memory: MemoryHeadroomShape,
+  options: { readonly timeoutMs?: number; readonly pollMs?: number } = {},
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const pollMs = options.pollMs ?? MEMORY_SAMPLE_INTERVAL_MS;
+    const attempts = Math.max(1, Math.ceil((options.timeoutMs ?? HEADROOM_WAIT_MS) / pollMs));
+    for (let attempt = 0; ; attempt += 1) {
+      if ((yield* memory.check).headroom === "ok") return true;
+      if (attempt >= attempts) return false;
+      yield* Effect.sleep(pollMs);
+    }
+  });

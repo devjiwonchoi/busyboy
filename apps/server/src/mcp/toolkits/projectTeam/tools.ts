@@ -74,7 +74,7 @@ const TaskStartTool = Tool.make("task_start", {
   ...shared,
   dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "PM only. Start an inbox task: a task lead runs it in its own worktree as your async child, and each of its turn ends wakes you. Refused while maxConcurrentTasks leads run or a waitsOn task is unfinished; leave the task in the inbox then.",
+    "PM only. Start an inbox task: a task lead runs it in its own worktree as your async child, and each of its turn ends wakes you. Refused while the lead cap is full, a waitsOn task is unfinished, or the Mac is short on memory and the user keeps work local; leave the task in the inbox then. A task waiting for memory is marked so; you are told when to start it.",
   parameters: ProjectTeamTaskStartInput,
   success: ProjectTeamTaskStartResult,
 })

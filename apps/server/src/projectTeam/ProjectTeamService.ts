@@ -14,6 +14,8 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROJECT_TEAM_SETTINGS,
   DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_SERVER_SETTINGS,
+  resolveTaskExecutionSettings,
   type IsoDateTime,
   MessageId,
   type OrchestrationV2ConversationMessage,
@@ -38,6 +40,7 @@ import {
   type ProjectManagerVoice,
   ProjectMemoryEntryId,
   type ProjectTask,
+  type ProjectTaskMemoryHold,
   type ProjectTaskBrief,
   ProjectTaskStatus,
   type ProjectTaskStatusSignals,
@@ -199,6 +202,8 @@ import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
+import { admitTaskLead, leadCap, MEMORY_WAIT_REASON } from "./memoryPolicy.ts";
 import { leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
@@ -971,6 +976,7 @@ const make = Effect.gen(function* () {
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
   const cloudLead = yield* CloudLeadService.CloudLeadHooks;
   const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
   const shipGate = yield* PullRequestShipGate.PullRequestShipGate;
 
   // At boot the provider cache may still be empty, so probe once before giving up.
@@ -1403,6 +1409,16 @@ const make = Effect.gen(function* () {
   const activeTasks = (projectId: ProjectId) =>
     repository.listTasks({ projectId, stages: SitrepScheduler.ACTIVE_TASK_STAGES });
 
+  const taskExecutionSettings = serverSettings.getSettings.pipe(
+    Effect.map((settings) => resolveTaskExecutionSettings(settings.taskExecution)),
+    Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskExecution),
+  );
+
+  const setMemoryHold = (task: ProjectTask, memoryHold: ProjectTaskMemoryHold | null) =>
+    Effect.flatMap(nowIso, (now) =>
+      repository.setTaskMemoryHold({ id: task.id, memoryHold, now }),
+    ).pipe(orTeamError("Could not record the memory hold.", task.projectId));
+
   /** Notes a sitrep milestone when a stage change left nothing running. */
   const noteIdleMilestone = (projectId: ProjectId, previousStage: ProjectTaskStage) =>
     Effect.gen(function* () {
@@ -1731,7 +1747,10 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const manager = yield* requireManager(task.projectId);
       const active = yield* activeTasks(task.projectId);
-      const limit = manager.settings.maxConcurrentTasks;
+      const limit = leadCap(
+        manager.settings.maxConcurrentTasks,
+        (yield* taskExecutionSettings).maxConcurrentSessions,
+      );
       if (active.length >= limit) {
         return `${active.length} of ${limit} task leads are already running.`;
       }
@@ -1740,6 +1759,9 @@ const make = Effect.gen(function* () {
         if (!isDependencyCleared(dependency.stage)) {
           return `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`;
         }
+      }
+      if (task.memoryHold === "waiting") {
+        return `${MEMORY_WAIT_REASON}: #${task.number} starts by itself once the Mac has room.`;
       }
       return null;
     });
@@ -1961,7 +1983,11 @@ const make = Effect.gen(function* () {
           }
           const manager = yield* requireManager(role.projectId);
           const active = yield* activeTasks(role.projectId);
-          const limit = manager.settings.maxConcurrentTasks;
+          const execution = yield* taskExecutionSettings;
+          const limit = leadCap(
+            manager.settings.maxConcurrentTasks,
+            execution.maxConcurrentSessions,
+          );
           if (active.length >= limit) {
             return yield* teamError(
               `#${task.number} stays in the inbox: ${active.length} of ${limit} task leads are already running.`,
@@ -2002,8 +2028,31 @@ const make = Effect.gen(function* () {
           // A plan model the user picked wins over the PM's choice.
           const leadTarget =
             roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
-          // Each start picks its own place; a restart without one runs locally.
-          const location = input.location ?? "local";
+          // The user's execution-location setting and the Mac's free memory pick the place.
+          const admission = admitTaskLead({
+            active: active.length,
+            cap: limit,
+            policy: execution.location,
+            headroom: (yield* memoryHeadroom.check).headroom,
+            requested: input.location,
+          });
+          if (admission.type === "wait") {
+            if (task.memoryHold !== "waiting") {
+              yield* setMemoryHold(task, "waiting");
+              yield* appendEvent(
+                task,
+                "note",
+                `${MEMORY_WAIT_REASON}: 메모리 여유가 생기면 시작해요.`,
+                null,
+              );
+              yield* router.publish(role.projectId);
+            }
+            return yield* teamError(
+              `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
+              role.projectId,
+            );
+          }
+          const location = admission.location;
           const lead = yield* delegate({
             task: buildTaskLeadPrompt({
               task: { ...task, location },
@@ -2054,6 +2103,10 @@ const make = Effect.gen(function* () {
             createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
+          if (admission.note !== null) {
+            yield* appendEvent(started, "note", admission.note, null);
+          }
+          if (task.memoryHold != null) yield* setMemoryHold(started, null);
           // Logged as the lead's, so the PM's latest action still reads "started".
           const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
           yield* repository
@@ -5097,6 +5150,7 @@ const make = Effect.gen(function* () {
               leadThreadId: task.leadThreadId,
               location: task.location,
               moveTarget: task.moveTarget ?? null,
+              memoryHold: task.memoryHold ?? null,
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),
