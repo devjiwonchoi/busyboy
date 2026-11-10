@@ -240,6 +240,7 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
 
   private scheduleOrphanKill(): void {
     if (this.orphanKillTimer !== undefined) return;
+    // @effect-diagnostics-next-line globalTimers:off -- PtyProcess.kill is synchronous and fire-and-forget.
     this.orphanKillTimer = setTimeout(() => {
       this.orphanKillTimer = undefined;
       // Only jobs left behind: while the shell lives the manager owns escalation.

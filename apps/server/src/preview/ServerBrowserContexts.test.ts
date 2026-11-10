@@ -31,7 +31,7 @@ const makeContext = () => {
   const pages = new Set<ReturnType<typeof makePage>>();
   let closed = false;
   return {
-    on: vi.fn((event: string, listener: (...args: Array<never>) => void) =>
+    on: vi.fn((event: string, listener: (...args: Array<unknown>) => void) =>
       events.on(event, listener),
     ),
     pages: vi.fn(() => [...pages]),

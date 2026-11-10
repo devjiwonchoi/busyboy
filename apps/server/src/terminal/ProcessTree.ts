@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - PtyProcess.kill is synchronous, so the process table is read synchronously.
 import * as NodeChildProcess from "node:child_process";
 
 import * as Context from "effect/Context";
