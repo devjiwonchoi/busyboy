@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
@@ -138,9 +139,17 @@ const startWithSession = (
     return { task, lead, thread };
   });
 
-/** Ticks until a resume is due: two ok samples in a row. */
+/** Two ok samples in a row: the first resume after a shortage is due. */
 const resumeTicks = (governor: MemoryGovernor.MemoryGovernor["Service"]) =>
   Effect.gen(function* () {
+    yield* governor.tick;
+    yield* governor.tick;
+  });
+
+/** A pass once the cooldown after the last resume or start has passed. */
+const tickAfterCooldown = (governor: MemoryGovernor.MemoryGovernor["Service"]) =>
+  Effect.gen(function* () {
+    yield* TestClock.adjust(MemoryGovernor.RESUME_COOLDOWN_MS);
     yield* governor.tick;
   });
 
@@ -242,8 +251,11 @@ describe("memory-based task admission", () => {
               (yield* commandsTo(harness, pm)).some((command) => command.type === "run.interrupt"),
             );
 
-            // Memory comes back: the last paused lead resumes first, on its own session.
+            // Memory comes back: after two ok samples the last paused lead resumes
+            // first, on its own session.
             fake.mac.memory = PLENTY;
+            yield* governor.tick;
+            assert.deepStrictEqual(yield* governor.paused, [idle.lead, busy.lead]);
             yield* governor.tick;
             assert.deepStrictEqual(yield* governor.paused, [idle.lead]);
             assert.isFalse(gate.isHeld(busy.lead));
@@ -260,13 +272,13 @@ describe("memory-based task admission", () => {
               busy.thread.providerThreads?.[0]?.nativeThreadRef?.nativeId,
               `claude-${busy.lead}`,
             );
-            yield* governor.tick;
+            yield* tickAfterCooldown(governor);
             assert.deepStrictEqual(yield* governor.paused, []);
             assert.isNull((yield* readTask(idle.task.id)).memoryHold ?? null);
             assert.include(yield* notesOf(idle.task.id), MemoryGovernor.RESUMED_NOTE);
 
             // Then the PM is told to start the waiting task, and it starts locally.
-            yield* governor.tick;
+            yield* tickAfterCooldown(governor);
             const toPm = yield* harness.messagesTo(pm);
             assert.isTrue(toPm.some((text) => text.includes(`#${waiting.number}`)));
             const started = yield* team.startTask(pm, { taskId: waiting.id }, harness.delegate);
@@ -307,6 +319,42 @@ describe("memory-based task admission", () => {
           assert.strictEqual(fake.mac.released.length, 1);
           yield* governor.tick;
           assert.strictEqual((yield* governor.paused).length, 2);
+        }),
+      { memory: fake.read, sessions: fake.sessions },
+    );
+  });
+
+  it.effect("resumes only after two ok samples, and one lead per cooldown", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const first = yield* startWithSession(harness, fake.mac, pm, "First");
+          const second = yield* startWithSession(harness, fake.mac, pm, "Second");
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [first.lead, second.lead]);
+
+          fake.mac.memory = PLENTY;
+          yield* governor.tick;
+          assert.strictEqual((yield* governor.paused).length, 2);
+          // A dip resets the count.
+          fake.mac.memory = TIGHT;
+          yield* governor.tick;
+          fake.mac.memory = PLENTY;
+          yield* governor.tick;
+          assert.strictEqual((yield* governor.paused).length, 2);
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [first.lead]);
+          // Within the cooldown nothing more resumes.
+          yield* TestClock.adjust(MemoryGovernor.RESUME_COOLDOWN_MS - 1_000);
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [first.lead]);
+          yield* tickAfterCooldown(governor);
+          assert.deepStrictEqual(yield* governor.paused, []);
         }),
       { memory: fake.read, sessions: fake.sessions },
     );

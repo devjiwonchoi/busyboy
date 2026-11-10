@@ -6,8 +6,9 @@
  *   pause gets a few seconds to free memory before the next is weighed.
  *   Under local_first or cloud_first a Claude lead moves to the cloud instead.
  * - tight: pause idle sessions only.
- * - ok: resume paused sessions, last paused first, one per pass; then tell a
- *   PM to start the next task waiting for memory, one at a time.
+ * - ok: resume paused leads, last paused first; then tell a PM to start the
+ *   next task waiting for memory. Either happens only after two ok samples in
+ *   a row, and at most once a minute, so memory settles between them.
  *
  * A lead and its local delegated children pause and resume as one unit: a
  * child stopped alone would never be woken, and its result would wake a lead
@@ -55,6 +56,10 @@ import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 import { taskChildren } from "./taskChildren.ts";
 
 export const MEMORY_GOVERNOR_INTERVAL_MS = 5_000;
+/** Ok samples in a row before anything resumes or starts. */
+export const OK_SAMPLES_BEFORE_RESUME = 2;
+/** At most one resume or start in this long, so each one's memory shows first. */
+export const RESUME_COOLDOWN_MS = MINUTE_MS;
 /** A PM told to start a waiting task gets this long before it is told again. */
 const WAITING_WAKE_COOLDOWN_MS = 2 * MINUTE_MS;
 /** Stages whose lead may hold a live session. */
@@ -114,6 +119,8 @@ const make = Effect.gen(function* () {
   const pausedRef = yield* Ref.make<ReadonlyArray<PausedUnit>>([]);
   const wokenAt = yield* Ref.make<ReadonlyMap<ProjectTaskId, number>>(new Map());
   const started = yield* Ref.make(false);
+  const okStreak = yield* Ref.make(0);
+  const lastResumeAt = yield* Ref.make<number | null>(null);
 
   const newKey = (prefix: string) => newId(prefix).pipe(Effect.orDie);
   const control = (threadId: ThreadId) =>
@@ -362,7 +369,7 @@ const make = Effect.gen(function* () {
         return at !== undefined && nowMs - at < WAITING_WAKE_COOLDOWN_MS;
       })
     ) {
-      return;
+      return false;
     }
     const execution = yield* settings;
     for (const task of waiting) {
@@ -392,8 +399,9 @@ const make = Effect.gen(function* () {
         })
         .pipe(Effect.ignore);
       yield* Ref.update(wokenAt, (all) => new Map(all).set(task.id, nowMs));
-      return;
+      return true;
     }
+    return false;
   });
 
   /**
@@ -440,14 +448,21 @@ const make = Effect.gen(function* () {
     // Uncached: the last pass's pause must show in this reading.
     const { headroom } = yield* memory.checkFresh;
     if (headroom !== "ok") {
+      yield* Ref.set(okStreak, 0);
       yield* relieve(execution.location, headroom);
       // Waiting tasks start in the cloud when the user allows it.
       if (execution.location !== "local_only") yield* startNextWaiting;
       return;
     }
+    if ((yield* Ref.updateAndGet(okStreak, (count) => count + 1)) < OK_SAMPLES_BEFORE_RESUME) {
+      return;
+    }
+    const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
+    const last = yield* Ref.get(lastResumeAt);
+    if (last !== null && nowMs - last < RESUME_COOLDOWN_MS) return;
     // Paused sessions come back before anything new starts.
-    if (yield* resumeOne) return;
-    yield* startNextWaiting;
+    const acted = (yield* resumeOne) || (yield* startNextWaiting);
+    if (acted) yield* Ref.set(lastResumeAt, nowMs);
   }).pipe(
     Effect.catchCause((cause) => Effect.logWarning("memory governor pass failed", { cause })),
   );
