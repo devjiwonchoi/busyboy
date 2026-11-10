@@ -62,6 +62,8 @@ export const captureWorkspace = async (
       "set -euo pipefail",
       // The agent may be committing in this tree right now; reading it must not take index.lock.
       "export GIT_OPTIONAL_LOCKS=0",
+      // macOS tar would add AppleDouble `._*` entries that unpack as stray files on Linux.
+      "export COPYFILE_DISABLE=1",
       `cd ${repo}`,
       `rm -rf ${staging} && mkdir -p ${staging}`,
       "head=$(git rev-parse HEAD)",
