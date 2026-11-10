@@ -396,16 +396,46 @@ const make = Effect.gen(function* () {
     }
   });
 
-  /** After a restart no session is held any more, so stale "paused" marks are cleared. */
-  const clearStalePauses = Effect.gen(function* () {
+  /**
+   * After a restart the held queues are still held, but this pass's paused list
+   * and the gate are empty. A lead still marked paused is held again and
+   * listed, so the usual resume continues it and its children once there is room.
+   */
+  const restorePauses = Effect.gen(function* () {
     if (yield* Ref.getAndSet(started, true)) return;
     for (const task of yield* repository.listMemoryHeldTasks()) {
-      if (task.memoryHold === "paused") yield* setHold(task, null);
+      if (task.memoryHold !== "paused") continue;
+      const leadThreadId = task.leadThreadId;
+      if (leadThreadId === null || !LIVE_STAGES.includes(task.stage)) {
+        yield* setHold(task, null);
+        continue;
+      }
+      const shells = yield* threads
+        .listProjectThreads({ projectId: task.projectId, includeSubagents: true })
+        .pipe(Effect.orElseSucceed((): ReadonlyArray<OrchestrationV2ThreadShell> => []));
+      const lead = shells.find((shell) => shell.id === leadThreadId);
+      const members = [
+        ...(lead === undefined ? [] : [lead]),
+        ...taskChildren(shells, leadThreadId).filter((child) => child.location !== "cloud"),
+      ];
+      for (const member of members) gate.hold(member.id, "memory");
+      yield* Ref.update(pausedRef, (all) => [
+        ...all,
+        {
+          leadThreadId,
+          taskId: task.id,
+          projectId: task.projectId,
+          members: members.map((member) => ({
+            threadId: member.id,
+            interrupted: member.status === "interrupted",
+          })),
+        },
+      ]);
     }
   });
 
   const tick: MemoryGovernor["Service"]["tick"] = Effect.gen(function* () {
-    yield* clearStalePauses;
+    yield* restorePauses;
     const execution = yield* settings;
     // Uncached: the last pass's pause must show in this reading.
     const { headroom } = yield* memory.checkFresh;

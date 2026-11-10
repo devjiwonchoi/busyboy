@@ -460,7 +460,8 @@ export const withTeam = <A, E>(
       Layer.provideMerge(SqlitePersistence.layerMemory),
       // Each test gets its own gate: holds must not leak between tests.
       Layer.provideMerge(Layer.sync(LeadMoveGate.LeadMoveGate, LeadMoveGate.makeLeadMoveGate)),
-      Layer.provide(
+      // Merged, so a test can build another service over the same fakes (e.g. a restart).
+      Layer.provideMerge(
         Layer.mergeAll(
           threadManagement,
           gitWorkflow,

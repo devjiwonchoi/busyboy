@@ -15,6 +15,7 @@ import {
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 
@@ -352,6 +353,60 @@ describe("memory-based task admission", () => {
             "queue.resume",
           ]);
           assert.strictEqual(types(yield* commandsTo(harness, lead)).at(-1), "queue.resume");
+        }),
+      { memory: fake.read, sessions: fake.sessions },
+    );
+  });
+
+  it.effect("resumes a paused lead after a restart once there is room", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead", {
+            running: { startedMsAgo: 60_000 },
+          });
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          harness.threads.get(lead)!.shell = {
+            ...harness.threads.get(lead)!.shell,
+            status: "interrupted",
+          };
+
+          // The server restarts: a new governor and gate over the same storage.
+          yield* Effect.gen(function* () {
+            const restarted = yield* MemoryGovernor.MemoryGovernor;
+            const gate = yield* LeadMoveGate.LeadMoveGate;
+            const before = (yield* commandsTo(harness, lead)).length;
+            yield* restarted.tick;
+            assert.deepStrictEqual(yield* restarted.paused, [lead]);
+            assert.isTrue(gate.isHeldFor(lead, "memory"));
+            assert.strictEqual((yield* readTask(task.id)).memoryHold, "paused");
+
+            fake.mac.memory = PLENTY;
+            yield* resumeTicks(restarted);
+            assert.deepStrictEqual(yield* restarted.paused, []);
+            assert.isFalse(gate.isHeld(lead));
+            const after = (yield* commandsTo(harness, lead)).slice(before);
+            assert.deepStrictEqual(
+              after.map((command) =>
+                command.type === "message.dispatch" ? `message ${command.text}` : command.type,
+              ),
+              [`message ${MemoryGovernor.RESUME_NOTICE}`, "queue.resume"],
+            );
+            assert.isNull((yield* readTask(task.id)).memoryHold ?? null);
+          }).pipe(
+            Effect.provide(
+              Layer.fresh(MemoryGovernor.layer).pipe(
+                Layer.provideMerge(
+                  Layer.sync(LeadMoveGate.LeadMoveGate, LeadMoveGate.makeLeadMoveGate),
+                ),
+              ),
+            ),
+          );
         }),
       { memory: fake.read, sessions: fake.sessions },
     );
