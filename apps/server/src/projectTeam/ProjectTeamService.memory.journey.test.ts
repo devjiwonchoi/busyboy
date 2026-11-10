@@ -11,7 +11,7 @@ import {
   ProviderDriverKind,
   ProviderSessionId,
   ProviderThreadId,
-  type ThreadId,
+  ThreadId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -71,6 +71,44 @@ const fakeMac = (initial: MemorySnapshot, freedPerRelease = 0) => {
 
 const iso = (offsetMs: number) => DateTime.makeUnsafe(Date.parse(START) + offsetMs);
 
+interface SessionState {
+  readonly running?: { readonly startedMsAgo: number };
+  readonly visitedMsAgo?: number;
+}
+
+/** Gives a thread a live Claude session, idle or mid-turn. */
+const giveSession = (
+  harness: TeamHarness,
+  mac: ReturnType<typeof fakeMac>["mac"],
+  threadId: ThreadId,
+  state: SessionState & { readonly launchedBy?: ThreadId } = {},
+) => {
+  const thread = harness.threads.get(threadId) ?? harness.addThread(threadId);
+  thread.worktreePath = `/worktrees/${threadId}`;
+  const driver = ProviderDriverKind.make("claudeAgent");
+  const providerThreadId = ProviderThreadId.make(`provider-thread:${threadId}`);
+  const providerSessionId = ProviderSessionId.make(`session:${threadId}`);
+  thread.providerThreads = [
+    {
+      id: providerThreadId,
+      driver,
+      nativeThreadRef: { driver, nativeId: `claude-${threadId}`, strength: "strong" },
+      providerSessionId,
+    },
+  ];
+  mac.live.add(providerSessionId);
+  thread.activeRunId = state.running === undefined ? null : `run:${threadId}`;
+  thread.shell = {
+    activeProviderThreadId: providerThreadId,
+    ...(state.launchedBy === undefined ? {} : { launchedByThreadId: state.launchedBy }),
+    ...(state.running === undefined
+      ? {}
+      : { latestRunStartedAt: iso(-state.running.startedMsAgo) }),
+    ...(state.visitedMsAgo === undefined ? {} : { lastVisitedAt: iso(-state.visitedMsAgo) }),
+  };
+  return thread;
+};
+
 /** Starts a task's lead and gives it a Claude session, idle or mid-turn. */
 const startWithSession = (
   harness: TeamHarness,
@@ -95,29 +133,14 @@ const startWithSession = (
       { taskId: created.id, ...(state.location === undefined ? {} : { location: state.location }) },
       harness.delegate,
     );
-    const thread = harness.addThread(lead);
-    thread.worktreePath = `/worktrees/${lead}`;
-    const driver = ProviderDriverKind.make("claudeAgent");
-    const providerThreadId = ProviderThreadId.make(`provider-thread:${lead}`);
-    const providerSessionId = ProviderSessionId.make(`session:${lead}`);
-    thread.providerThreads = [
-      {
-        id: providerThreadId,
-        driver,
-        nativeThreadRef: { driver, nativeId: `claude-${lead}`, strength: "strong" },
-        providerSessionId,
-      },
-    ];
-    mac.live.add(providerSessionId);
-    thread.activeRunId = state.running === undefined ? null : `run:${lead}`;
-    thread.shell = {
-      activeProviderThreadId: providerThreadId,
-      ...(state.running === undefined
-        ? {}
-        : { latestRunStartedAt: iso(-state.running.startedMsAgo) }),
-      ...(state.visitedMsAgo === undefined ? {} : { lastVisitedAt: iso(-state.visitedMsAgo) }),
-    };
+    const thread = giveSession(harness, mac, lead, state);
     return { task, lead, thread };
+  });
+
+/** Ticks until a resume is due: two ok samples in a row. */
+const resumeTicks = (governor: MemoryGovernor.MemoryGovernor["Service"]) =>
+  Effect.gen(function* () {
+    yield* governor.tick;
   });
 
 const commandsTo = (harness: TeamHarness, threadId: ThreadId) =>
@@ -283,6 +306,52 @@ describe("memory-based task admission", () => {
           assert.strictEqual(fake.mac.released.length, 1);
           yield* governor.tick;
           assert.strictEqual((yield* governor.paused).length, 2);
+        }),
+      { memory: fake.read, sessions: fake.sessions },
+    );
+  });
+
+  it.effect("pauses and resumes a lead together with its delegated children", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const gate = yield* LeadMoveGate.LeadMoveGate;
+          const pm = yield* setUpManager;
+          const { lead } = yield* startWithSession(harness, fake.mac, pm, "Lead with a child");
+          const child = ThreadId.make("child-of-lead");
+          giveSession(harness, fake.mac, child, {
+            launchedBy: lead,
+            running: { startedMsAgo: 60_000 },
+          });
+
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          assert.isTrue(gate.isHeldFor(lead, "memory"));
+          assert.isTrue(gate.isHeldFor(child, "memory"));
+          assert.isNull(harness.threads.get(child)?.activeRunId ?? null);
+          assert.sameMembers(
+            fake.mac.released.map((entry) => entry.id),
+            [`session:${lead}`, `session:${child}`],
+          );
+
+          fake.mac.memory = PLENTY;
+          yield* resumeTicks(governor);
+          assert.deepStrictEqual(yield* governor.paused, []);
+          assert.isFalse(gate.isHeld(lead));
+          assert.isFalse(gate.isHeld(child));
+          const types = (commands: ReadonlyArray<OrchestrationV2ServerCommand>) =>
+            commands.map((command) =>
+              command.type === "message.dispatch" ? `message ${command.text}` : command.type,
+            );
+          assert.deepStrictEqual(types(yield* commandsTo(harness, child)), [
+            "run.interrupt",
+            `message ${MemoryGovernor.RESUME_NOTICE}`,
+            "queue.resume",
+          ]);
+          assert.strictEqual(types(yield* commandsTo(harness, lead)).at(-1), "queue.resume");
         }),
       { memory: fake.read, sessions: fake.sessions },
     );

@@ -9,8 +9,10 @@
  * - ok: resume paused sessions, last paused first, one per pass; then tell a
  *   PM to start the next task waiting for memory, one at a time.
  *
- * A pause holds the thread's queue, stops its turn and releases its provider
- * session, so the claude process exits. The worktree and the claude session
+ * A lead and its local delegated children pause and resume as one unit: a
+ * child stopped alone would never be woken, and its result would wake a lead
+ * that is paused. A pause holds each thread's queue, stops its turn and
+ * releases its provider session, so the claude process exits. The worktree and the claude session
  * stay, and the next turn resumes the same session. PM and Director threads,
  * and any session the user opened in the last ten minutes, are never paused.
  * Under local_only nothing here moves work to the cloud.
@@ -67,18 +69,26 @@ export const MOVING_NOTE = "이 Mac의 메모리가 부족해 리드를 클라�
 export const waitingStartText = (task: Pick<ProjectTask, "number" | "title">) =>
   `메모리 여유가 생겼어요. #${task.number} ${task.title} 을(를) 지금 task_start로 시작하세요. (${MEMORY_WAIT_REASON}로 기다리던 태스크)`;
 
+/** A task lead with its local children, paused and resumed together. */
 interface Candidate extends SessionCandidate {
+  /** The lead's thread. */
   readonly threadId: ThreadId;
   readonly task: ProjectTask;
-  readonly title: string;
+  /** The lead first, then its local children. */
+  readonly members: ReadonlyArray<ThreadId>;
 }
 
-interface PausedSession {
+interface PausedMember {
   readonly threadId: ThreadId;
-  readonly taskId: ProjectTaskId;
-  readonly projectId: ProjectId;
   /** A turn was stopped, so the session is told to go on when it resumes. */
   readonly interrupted: boolean;
+}
+
+interface PausedUnit {
+  readonly leadThreadId: ThreadId;
+  readonly taskId: ProjectTaskId;
+  readonly projectId: ProjectId;
+  readonly members: ReadonlyArray<PausedMember>;
 }
 
 export class MemoryGovernor extends Context.Service<
@@ -86,7 +96,7 @@ export class MemoryGovernor extends Context.Service<
   {
     /** One pass: sample memory and pause, move, resume or start as needed. */
     readonly tick: Effect.Effect<void>;
-    /** Threads paused for memory, in pause order. */
+    /** Leads paused for memory (each with its children), in pause order. */
     readonly paused: Effect.Effect<ReadonlyArray<ThreadId>>;
   }
 >()("t3/projectTeam/MemoryGovernor") {}
@@ -101,7 +111,7 @@ const make = Effect.gen(function* () {
   const gate = yield* LeadMoveGate.LeadMoveGate;
   const sessions = yield* Effect.serviceOption(ProviderSessionManager.ProviderSessionManagerV2);
   const newId = yield* makeIdGenerator;
-  const pausedRef = yield* Ref.make<ReadonlyArray<PausedSession>>([]);
+  const pausedRef = yield* Ref.make<ReadonlyArray<PausedUnit>>([]);
   const wokenAt = yield* Ref.make<ReadonlyMap<ProjectTaskId, number>>(new Map());
   const started = yield* Ref.make(false);
 
@@ -147,11 +157,7 @@ const make = Effect.gen(function* () {
       );
     }).pipe(Effect.orElseSucceed(() => null));
 
-  const toCandidate = (
-    shell: OrchestrationV2ThreadShell,
-    task: ProjectTask,
-    kind: "lead" | "child",
-  ) =>
+  const sessionState = (shell: OrchestrationV2ThreadShell) =>
     Effect.gen(function* () {
       const providerSessionId = yield* providerSessionOf(shell);
       const hasLiveSession =
@@ -161,18 +167,14 @@ const make = Effect.gen(function* () {
       const millis = (value: DateTime.Utc | null | undefined) =>
         value == null ? null : DateTime.toEpochMillis(value);
       return {
-        threadId: shell.id,
-        task,
-        title: shell.title,
-        kind,
         running: shell.activeRunId !== null,
         runStartedAtMs: shell.activeRunId === null ? null : millis(shell.latestRunStartedAt),
         lastVisitedAtMs: millis(shell.lastVisitedAt),
         hasLiveSession,
-      } satisfies Candidate;
+      };
     });
 
-  /** Local task leads and their local children, minus held, moving and manager threads. */
+  /** Local task leads with their local children, minus held, moving and manager threads. */
   const candidates = Effect.gen(function* () {
     const managers = yield* repository.listManagers();
     const managerThreads = new Set<string>(managers.map((manager) => manager.threadId));
@@ -194,25 +196,39 @@ const make = Effect.gen(function* () {
         .pipe(Effect.orElseSucceed((): ReadonlyArray<OrchestrationV2ThreadShell> => []));
       for (const task of local) {
         const lead = shells.find((shell) => shell.id === task.leadThreadId);
-        if (lead === undefined) continue;
-        const sessionShells = [
-          { shell: lead, kind: "lead" as const },
-          ...taskChildren(shells, lead.id).map((shell) => ({ shell, kind: "child" as const })),
+        if (lead === undefined || lead.location === "cloud") continue;
+        if (managerThreads.has(lead.id) || gate.isHeld(lead.id)) continue;
+        const members = [
+          lead,
+          ...taskChildren(shells, lead.id).filter(
+            (child) =>
+              child.location !== "cloud" && !managerThreads.has(child.id) && !gate.isHeld(child.id),
+          ),
         ];
-        for (const { shell, kind } of sessionShells) {
-          if (managerThreads.has(shell.id) || gate.isHeld(shell.id)) continue;
-          if (shell.location === "cloud") continue;
-          found.push(yield* toCandidate(shell, task, kind));
-        }
+        const states = yield* Effect.forEach(members, sessionState);
+        const starts = states.flatMap((state) =>
+          state.runStartedAtMs === null ? [] : [state.runStartedAtMs],
+        );
+        const visits = states.flatMap((state) =>
+          state.lastVisitedAtMs === null ? [] : [state.lastVisitedAtMs],
+        );
+        found.push({
+          threadId: lead.id,
+          task,
+          members: members.map((member) => member.id),
+          running: states.some((state) => state.running),
+          runStartedAtMs: starts.length === 0 ? null : Math.min(...starts),
+          lastVisitedAtMs: visits.length === 0 ? null : Math.max(...visits),
+          hasLiveSession: states.some((state) => state.hasLiveSession),
+        });
       }
     }
     return found;
   });
 
-  const pause = (candidate: Candidate) =>
+  /** Stops one thread's turn, holding its queue, and releases its provider session. */
+  const pauseThread = (threadId: ThreadId) =>
     Effect.gen(function* () {
-      const threadId = candidate.threadId;
-      gate.hold(threadId, "memory");
       const interrupted = yield* control(threadId).stopTurn.pipe(
         Effect.catch((error) =>
           Effect.logWarning("memory governor could not stop a turn", {
@@ -239,9 +255,22 @@ const make = Effect.gen(function* () {
             ),
           );
       }
+      return { threadId, interrupted } satisfies PausedMember;
+    });
+
+  const pause = (candidate: Candidate) =>
+    Effect.gen(function* () {
+      // Every member holds first, so a stopped child's result waits for its lead.
+      for (const threadId of candidate.members) gate.hold(threadId, "memory");
+      const members = yield* Effect.forEach(candidate.members, pauseThread);
       yield* Ref.update(pausedRef, (all) => [
         ...all,
-        { threadId, taskId: candidate.task.id, projectId: candidate.task.projectId, interrupted },
+        {
+          leadThreadId: candidate.threadId,
+          taskId: candidate.task.id,
+          projectId: candidate.task.projectId,
+          members,
+        },
       ]);
       const current = yield* repository.getTask(candidate.task.id).pipe(
         Effect.map(Option.getOrNull),
@@ -249,12 +278,12 @@ const make = Effect.gen(function* () {
       );
       if (current?.memoryHold !== "paused") {
         yield* setHold(candidate.task, "paused");
-        yield* note(
-          candidate.task,
-          candidate.kind === "lead" ? PAUSED_NOTE : `${candidate.title}: ${PAUSED_NOTE}`,
-        );
+        yield* note(candidate.task, PAUSED_NOTE);
       }
-      yield* Effect.logInfo("memory governor paused a session", { threadId, interrupted });
+      yield* Effect.logInfo("memory governor paused a lead", {
+        threadId: candidate.threadId,
+        members: members.length,
+      });
     });
 
   /** Moves a Claude lead to the cloud; false when that is not possible here. */
@@ -279,28 +308,24 @@ const make = Effect.gen(function* () {
       const next = pauseOrder(yield* candidates, nowMs, level)[0];
       if (next === undefined) return;
       // local_only never reaches the cloud: it pauses.
-      const moved =
-        policy !== "local_only" && next.kind === "lead" ? yield* moveToCloud(next) : false;
+      const moved = policy !== "local_only" ? yield* moveToCloud(next) : false;
       if (!moved) yield* pause(next);
     });
 
-  /** Resumes the last paused session. */
+  /** Resumes the last paused lead with its children. */
   const resumeOne = Effect.gen(function* () {
     const paused = yield* Ref.get(pausedRef);
     const last = paused.at(-1);
     if (last === undefined) return false;
-    const lead = control(last.threadId);
-    if (last.interrupted) {
-      yield* lead.tellLead(RESUME_NOTICE).pipe(Effect.ignore);
+    for (const member of last.members) {
+      const thread = control(member.threadId);
+      if (member.interrupted) yield* thread.tellLead(RESUME_NOTICE).pipe(Effect.ignore);
+      yield* thread.resumeQueue;
     }
-    yield* lead.resumeQueue;
-    const remaining = paused.slice(0, -1);
-    yield* Ref.set(pausedRef, remaining);
-    if (!remaining.some((entry) => entry.taskId === last.taskId)) {
-      yield* setHold({ id: last.taskId, projectId: last.projectId }, null);
-      yield* note({ id: last.taskId, projectId: last.projectId }, RESUMED_NOTE);
-    }
-    yield* Effect.logInfo("memory governor resumed a session", { threadId: last.threadId });
+    yield* Ref.set(pausedRef, paused.slice(0, -1));
+    yield* setHold({ id: last.taskId, projectId: last.projectId }, null);
+    yield* note({ id: last.taskId, projectId: last.projectId }, RESUMED_NOTE);
+    yield* Effect.logInfo("memory governor resumed a lead", { threadId: last.leadThreadId });
     return true;
   });
 
@@ -399,7 +424,7 @@ const make = Effect.gen(function* () {
 
   return {
     tick,
-    paused: Ref.get(pausedRef).pipe(Effect.map((all) => all.map((entry) => entry.threadId))),
+    paused: Ref.get(pausedRef).pipe(Effect.map((all) => all.map((entry) => entry.leadThreadId))),
   } satisfies MemoryGovernor["Service"];
 });
 

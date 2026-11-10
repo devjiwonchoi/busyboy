@@ -6,10 +6,7 @@
  * `local_only` never sends or moves work to the cloud: short on memory, work
  * waits instead.
  */
-import {
-  type ExecutionLocation,
-  type TaskExecutionLocationPolicy,
-} from "@t3tools/contracts";
+import { type ExecutionLocation, type TaskExecutionLocationPolicy } from "@t3tools/contracts";
 
 import type { Headroom } from "../resourceTelemetry/MemoryHeadroom.ts";
 
@@ -20,8 +17,7 @@ export const RECENT_VISIT_MS = 10 * 60_000;
 
 export const FORCED_LOCAL_NOTE =
   "실행 위치 설정이 '로컬만'이라 클라우드 대신 이 Mac에서 시작했어요. 클라우드 사용은 사용자가 설정에서 정해요.";
-export const CLOUD_FALLBACK_NOTE =
-  "클라우드에서 시작하지 못해 이 Mac에서 시작했어요.";
+export const CLOUD_FALLBACK_NOTE = "클라우드에서 시작하지 못해 이 Mac에서 시작했어요.";
 export const STARTED_IN_CLOUD_NOTE = "이 Mac의 메모리 여유가 부족해 클라우드에서 시작했어요.";
 
 export type LeadAdmission =
@@ -73,11 +69,10 @@ export function admitTaskLead(input: {
   }
 }
 
-/** A local session the governor could pause to free memory. */
+/** A local task lead, with its children, the governor could pause to free memory. */
 export interface SessionCandidate {
   readonly threadId: string;
-  readonly kind: "lead" | "child";
-  /** A turn is running now. */
+  /** A turn is running now (the lead's or a child's). */
   readonly running: boolean;
   /** When the running turn started; null when unknown or idle. */
   readonly runStartedAtMs: number | null;
