@@ -92,6 +92,7 @@ export const fakeSandbox = (
     },
     startDetached: async (input) => void (await runCommand(input)),
     domain: (port) => `https://${options.name ?? "fake"}-${port}.example.test`,
+    extendTimeout: async () => undefined,
     readFile: async (path) => files.get(path) ?? null,
     snapshot: async () => ({ snapshotId: `snap-${commands.length}`, sizeBytes: 1 }),
     stop: async () => undefined,
@@ -205,6 +206,7 @@ export const localSandboxClient = (input: {
           return `http://127.0.0.1:${port}`;
         },
         readFile: (path: string) => NodeFs.readFile(path).catch(() => null),
+        extendTimeout: async () => undefined,
         snapshot: async () => ({ snapshotId: "local", sizeBytes: 0 }),
         stop: async () => undefined,
         delete: async () => {

@@ -46,6 +46,8 @@ export interface SandboxHandle {
   readonly writeFiles: (files: ReadonlyArray<SandboxFile>) => Promise<void>;
   /** Starts a long-running command and returns once it started; output is not kept. */
   readonly startDetached: (input: RunCommandInput) => Promise<void>;
+  /** Pushes the sandbox's stop time back by this much. */
+  readonly extendTimeout: (ms: number) => Promise<void>;
   /** The public https origin of an exposed port, without a trailing slash. */
   readonly domain: (port: number) => string;
   readonly readFile: (path: string) => Promise<Buffer | null>;
@@ -102,6 +104,7 @@ export interface SdkSandbox {
     detached?: boolean;
   }): Promise<{ exitCode: number | null; stdout(): Promise<string>; stderr(): Promise<string> }>;
   domain(port: number): string;
+  extendTimeout(duration: number): Promise<void>;
   writeFiles(files: { path: string; content: Buffer }[]): Promise<void>;
   readFileToBuffer(file: { path: string }): Promise<Buffer | null>;
   snapshot(opts?: { expiration?: number }): Promise<SdkSnapshot>;
@@ -196,6 +199,7 @@ export const makeSandboxClient = (
           });
         }),
       domain: (port) => sandbox.domain(port).replace(/\/$/, ""),
+      extendTimeout: (ms) => guarded(() => sandbox.extendTimeout(ms)),
       readFile: (path) => guarded(() => sandbox.readFileToBuffer({ path })),
       snapshot: ({ expirationMs }) =>
         guarded(async () => {

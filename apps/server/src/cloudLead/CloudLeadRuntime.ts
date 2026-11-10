@@ -35,7 +35,12 @@ import {
 
 export const RELAY_PORT = 8787;
 export const RELAY_MCP_PORT = 8788;
-const SANDBOX_TIMEOUT_MS = 5 * 60 * 60 * 1000;
+/**
+ * A sandbox stops on its own this long after the server stops extending it,
+ * so a crashed or killed server does not leave one billing for hours.
+ */
+const SANDBOX_TIMEOUT_MS = 45 * 60 * 1000;
+const KEEPALIVE_EVERY_MS = 10 * 60 * 1000;
 const DEFAULT_IDLE_STOP_MS = 30 * 60 * 1000;
 const RELAY_CONNECT_TIMEOUT_MS = 60_000;
 const SETUP_TIMEOUT_MS = 15 * 60 * 1000;
@@ -91,6 +96,7 @@ interface CloudSession {
   readonly remoteCwd: string;
   readonly credentials: CloudLeadCredentials;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  readonly keepAlive: ReturnType<typeof setInterval>;
   /** Remote claude processes still running; the sandbox only idles out at zero. */
   running: number;
 }
@@ -166,6 +172,7 @@ export class CloudLeadRuntime {
     const session = await pending.catch(() => null);
     if (session === null) return;
     this.cancelIdleStop(session);
+    clearInterval(session.keepAlive);
     session.relay.close();
     await session.sandbox.delete().catch(() => undefined);
     this.log("cloud-lead.sandbox-released", { threadId, sandbox: session.sandbox.name });
@@ -234,10 +241,20 @@ export class CloudLeadRuntime {
         ms: Date.now() - started,
         envSynced: bundle.files.length,
       });
+      const keepAlive = setInterval(() => {
+        sandbox.extendTimeout(KEEPALIVE_EVERY_MS).catch((error: unknown) =>
+          this.log("cloud-lead.keepalive-failed", {
+            threadId: input.threadId,
+            error: String(error),
+          }),
+        );
+      }, KEEPALIVE_EVERY_MS);
+      keepAlive.unref?.();
       return {
         threadId: input.threadId,
         sandbox,
         relay,
+        keepAlive,
         macCwd: input.worktreePath,
         remoteHome,
         remoteCwd,
