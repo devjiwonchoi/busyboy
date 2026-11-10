@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
@@ -195,6 +196,7 @@ const make = Effect.gen(function* () {
   const threads = yield* ThreadManagement.ThreadManagementService;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const memory = yield* MemoryHeadroom.MemoryHeadroom;
+  const gate = yield* LeadMoveGate.LeadMoveGate;
   // A terminal run can be reported more than once; key by lead thread.
   const lastSeen = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
 
@@ -300,6 +302,13 @@ const make = Effect.gen(function* () {
       }
       // A lead that parked its task in the inbox has nothing left to report.
       if (task.value.stage === "cancelled" || task.value.stage === "inbox") {
+        return;
+      }
+      // A turn stopped to free memory is not stalled: the governor resumes it.
+      if (
+        run.status === "interrupted" &&
+        (gate.isHeldFor(run.threadId, "memory") || task.value.memoryHold === "paused")
+      ) {
         return;
       }
       yield* Ref.update(lastSeen, (current) => new Map(current).set(run.threadId, runKey));

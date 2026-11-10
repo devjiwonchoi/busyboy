@@ -5,7 +5,12 @@
  */
 import { assert, describe, it } from "@effect/vitest";
 import {
+  EventId,
   type ExecutionLocation,
+  MessageId,
+  type OrchestrationV2DomainEvent,
+  ProviderInstanceId,
+  RunId,
   OrchestratorMcpFailure,
   type OrchestrationV2ServerCommand,
   ProviderDriverKind,
@@ -26,6 +31,8 @@ import type * as ProviderSessionManager from "../orchestration-v2/ProviderSessio
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import type { MemorySnapshot } from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as MemoryGovernor from "./MemoryGovernor.ts";
+import * as StalledTaskSweep from "./StalledTaskSweep.ts";
+import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 import { CLOUD_FALLBACK_NOTE, MEMORY_WAIT_REASON, STARTED_IN_CLOUD_NOTE } from "./memoryPolicy.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import type { DelegateTaskLead } from "./ProjectTeamService.ts";
@@ -152,6 +159,34 @@ const tickAfterCooldown = (governor: MemoryGovernor.MemoryGovernor["Service"]) =
     yield* TestClock.adjust(MemoryGovernor.RESUME_COOLDOWN_MS);
     yield* governor.tick;
   });
+
+/** The domain event for a lead turn the governor stopped. */
+const interruptedRun = (lead: ThreadId): OrchestrationV2DomainEvent => {
+  const at = DateTime.makeUnsafe(START);
+  return {
+    id: EventId.make(`event-${lead}-interrupted`),
+    threadId: lead,
+    occurredAt: at,
+    type: "run.updated",
+    payload: {
+      id: RunId.make(`run:${lead}`),
+      threadId: lead,
+      ordinal: 1,
+      providerInstanceId: ProviderInstanceId.make("claude"),
+      modelSelection: { instanceId: ProviderInstanceId.make("claude"), model: "claude-opus-5-5" },
+      providerThreadId: null,
+      userMessageId: MessageId.make(`message-${lead}`),
+      rootNodeId: null,
+      activeAttemptId: null,
+      status: "interrupted",
+      requestedAt: at,
+      startedAt: at,
+      completedAt: at,
+      checkpointId: null,
+      contextHandoffId: null,
+    },
+  } as OrchestrationV2DomainEvent;
+};
 
 const commandsTo = (harness: TeamHarness, threadId: ThreadId) =>
   Ref.get(harness.dispatched).pipe(
@@ -455,6 +490,36 @@ describe("memory-based task admission", () => {
               ),
             ),
           );
+        }),
+      { memory: fake.read, sessions: fake.sessions },
+    );
+  });
+
+  it.effect("a lead paused for memory is not stalled and does not wake the PM", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const reactor = yield* TaskOutcomeReactor.TaskOutcomeReactor;
+          const sweep = yield* StalledTaskSweep.StalledTaskSweep;
+          const pm = yield* setUpManager;
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Busy lead", {
+            running: { startedMsAgo: 60_000 },
+          });
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          const toPmBefore = (yield* harness.messagesTo(pm)).length;
+
+          yield* reactor.handle(interruptedRun(lead));
+          yield* TestClock.adjust(StalledTaskSweep.STALLED_TASK_NOTICE_MS * 2);
+          yield* sweep.sweep;
+
+          const paused = yield* readTask(task.id);
+          assert.notStrictEqual(paused.lastOutcome, "stalled");
+          assert.strictEqual(paused.memoryHold, "paused");
+          assert.strictEqual((yield* harness.messagesTo(pm)).length, toPmBefore);
         }),
       { memory: fake.read, sessions: fake.sessions },
     );
