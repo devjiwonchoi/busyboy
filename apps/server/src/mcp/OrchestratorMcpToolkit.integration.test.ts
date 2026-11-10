@@ -44,6 +44,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -77,6 +78,7 @@ import * as ProviderRegistryMock from "../provider/testUtils/providerRegistryMoc
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as CloudLeadSecrets from "../cloudLead/CloudLeadSecrets.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
@@ -704,6 +706,7 @@ describe("orchestrator MCP toolkit", () => {
                 Layer.provide(layerOrchestration),
               ),
             ),
+            Layer.provideMerge(CloudLeadSecrets.layer.pipe(Layer.provide(layerMemorySecretStore))),
             Layer.provide(NodeServices.layer),
           );
 
@@ -1631,6 +1634,63 @@ describe("orchestrator MCP toolkit", () => {
               .consume({ ref: secretResult.secretRef as never, projectId })
               .pipe(Effect.flip);
             expect(reused.message).toContain("already used");
+
+            // A cloud lead secret: the user enters it once, the agent stores the
+            // ref under a fixed name, and only the stored copy keeps the value.
+            const tokenFiber = yield* invoke("request_secret", {
+              label: "Vercel token",
+              reason: "Starts cloud task leads in a Vercel Sandbox.",
+              clientRequestId: "cloud-vercel-token",
+            }).pipe(Effect.forkChild);
+            const tokenCard = yield* Effect.gen(function* () {
+              while (true) {
+                const item = (yield* orchestrator.getThreadProjection(
+                  parentThreadId,
+                )).turnItems.find(
+                  (candidate) =>
+                    candidate.type === "secret_request" &&
+                    candidate.label === "Vercel token" &&
+                    candidate.secretStatus === "pending",
+                );
+                if (item !== undefined) return item;
+                yield* Effect.sleep("5 millis");
+              }
+            });
+            yield* secretRequests.answer({
+              threadId: parentThreadId,
+              turnItemId: tokenCard.id,
+              answer: { type: "save", secret: "vercel-token-value" },
+            });
+            const tokenRef = (
+              (yield* Fiber.join(tokenFiber)).structuredContent as { secretRef: string }
+            ).secretRef;
+            const misnamed = yield* invoke("cloud_secret_save", {
+              kind: "mcp",
+              secretRef: tokenRef,
+            });
+            expect(misnamed.isError).toBe(true);
+            const saveCall = yield* invoke("cloud_secret_save", {
+              kind: "vercel_token",
+              secretRef: tokenRef,
+            });
+            expect(saveCall.isError).toBe(false);
+            expect(saveCall.structuredContent).toEqual({ status: "saved", kind: "vercel_token" });
+            expect(JSON.stringify(saveCall)).not.toContain("vercel-token-value");
+            const cloudLeadSecrets = yield* CloudLeadSecrets.CloudLeadSecrets;
+            const stored = yield* cloudLeadSecrets.read({ kind: "vercel_token" });
+            expect(Option.map(stored, Redacted.value)).toEqual(Option.some("vercel-token-value"));
+            const reusedSave = yield* invoke("cloud_secret_save", {
+              kind: "vercel_token",
+              secretRef: tokenRef,
+            });
+            expect(reusedSave.isError).toBe(true);
+            expect(JSON.stringify(reusedSave)).toContain("already used");
+            const invalidSave = yield* invoke("cloud_secret_save", {
+              kind: "github_token",
+              secretRef: "secret-ref:not-a-ref",
+            });
+            expect(invalidSave.isError).toBe(true);
+            expect(JSON.stringify(invalidSave)).toContain("not valid");
 
             const delegatedCall = yield* invoke("delegate_task", {
               task: delegatedPrompt,
@@ -3727,6 +3787,7 @@ describe("orchestrator MCP toolkit", () => {
               Layer.provide(layerOrchestration),
             ),
           ),
+          Layer.provide(Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({})),
           Layer.provide(NodeServices.layer),
         );
 

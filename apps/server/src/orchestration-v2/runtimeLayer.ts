@@ -53,6 +53,7 @@ import * as ThreadForkService from "./ThreadForkService.ts";
 import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as CloudLeadSecrets from "../cloudLead/CloudLeadSecrets.ts";
 import * as BrowserRequests from "../browserRequests/BrowserRequests.ts";
 import * as OperationPermissions from "../permissions/OperationPermissions.ts";
 
@@ -373,6 +374,7 @@ export const layerProduction = Layer.mergeAll(
   layerThreadLifecycleProvided,
   layerScheduledTaskProvided,
   layerSecretRequestsProvided,
+  CloudLeadSecrets.layer,
   layerBrowserRequestsProvided,
   layerOperationPermissionsProvided,
   UsageLimitRecoveryWorker.layer.pipe(
