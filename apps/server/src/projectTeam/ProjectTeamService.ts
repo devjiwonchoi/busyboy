@@ -1823,6 +1823,8 @@ const make = Effect.gen(function* () {
             ? {}
             : { clientRequestId: input.clientRequestId }),
           ...(model === null ? {} : { target: toDelegateTarget(model.target) }),
+          // A cloud task's steps run in the cloud too, next to its checkout.
+          ...(task.location === "cloud" ? { location: task.location } : {}),
         },
         (child) =>
           linkChild(child).pipe(
@@ -1897,9 +1899,11 @@ const make = Effect.gen(function* () {
           // A plan model the user picked wins over the PM's choice.
           const leadTarget =
             roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
+          // Each start picks its own place; a restart without one runs locally.
+          const location = input.location ?? "local";
           const lead = yield* delegate({
             task: buildTaskLeadPrompt({
-              task,
+              task: { ...task, location },
               key,
               spec,
               resume,
@@ -1921,6 +1925,7 @@ const make = Effect.gen(function* () {
                 ? `task-start:${task.id}`
                 : `task-start:${task.id}:${earlierSessions + 1}`,
             ...(leadTarget === undefined ? {} : { target: leadTarget }),
+            ...(location === "local" ? {} : { location }),
           }).pipe(
             Effect.mapError((failure) =>
               teamError(
@@ -1933,6 +1938,7 @@ const make = Effect.gen(function* () {
             id: task.id,
             stage: "planning",
             leadThreadId: lead.childThreadId,
+            location,
             // The parent's approved breakdown is this subtask's approved plan.
             ...(coveredBy === null || task.planSummary !== null
               ? {}
@@ -4792,6 +4798,7 @@ const make = Effect.gen(function* () {
               title: task.title,
               stage: task.stage,
               leadThreadId: task.leadThreadId,
+              location: task.location,
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),

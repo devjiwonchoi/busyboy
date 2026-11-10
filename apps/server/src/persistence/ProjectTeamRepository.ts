@@ -8,6 +8,7 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 
 import {
   emptyProjectTaskSpec,
+  ExecutionLocation,
   IsoDateTime,
   NonNegativeInt,
   PositiveInt,
@@ -106,6 +107,8 @@ export interface UpdateProjectTaskInput {
   /** null removes the parent. */
   readonly parentTaskId?: ProjectTaskId | null;
   readonly leadThreadId?: ThreadId;
+  /** Where the task's lead runs; set when the task starts. */
+  readonly location?: ExecutionLocation;
   readonly prUrl?: string;
   readonly planSummary?: string;
   readonly resultSummary?: string;
@@ -549,6 +552,7 @@ export const make = Effect.gen(function* () {
     waits_on_json AS "waitsOn",
     parent_task_id AS "parentTaskId",
     lead_thread_id AS "leadThreadId",
+    location AS "location",
     pr_url AS "prUrl",
     plan_summary AS "planSummary",
     result_summary AS "resultSummary",
@@ -762,6 +766,7 @@ export const make = Effect.gen(function* () {
       waitsOn: Schema.optional(WaitsOnJson),
       parentTaskId: Schema.optional(Schema.NullOr(ProjectTaskId)),
       leadThreadId: Schema.optional(ThreadId),
+      location: Schema.optional(ExecutionLocation),
       prUrl: Schema.optional(Schema.String),
       planSummary: Schema.optional(Schema.String),
       resultSummary: Schema.optional(Schema.String),
@@ -798,6 +803,7 @@ export const make = Effect.gen(function* () {
             ELSE parent_task_id
           END,
           lead_thread_id = COALESCE(${input.leadThreadId ?? null}, lead_thread_id),
+          location = COALESCE(${input.location ?? null}, location),
           pr_url = COALESCE(${input.prUrl ?? null}, pr_url),
           plan_summary = COALESCE(${input.planSummary ?? null}, plan_summary),
           result_summary = COALESCE(${input.resultSummary ?? null}, result_summary),

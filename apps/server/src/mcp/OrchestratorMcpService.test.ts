@@ -1284,6 +1284,130 @@ describe("OrchestratorMcpService provider resolution", () => {
     }),
   );
 
+  it.effect("runs a cloud child only on Claude, in its own worktree", () =>
+    Effect.gen(function* () {
+      const claudeInstanceId = ProviderInstanceId.make("claude");
+      const task = {
+        id: taskId,
+        threadId: parentThreadId,
+        runId: parentRunId,
+        parentNodeId,
+        origin: "app_owned",
+        createdBy: "agent",
+        driver: ProviderDriverKind.make("claudeAgent"),
+        providerInstanceId: claudeInstanceId,
+        providerThreadId: null,
+        childThreadId,
+        nativeTaskRef: null,
+        prompt: "Build it.",
+        title: null,
+        model: "claude-opus-5-5",
+        status: "running",
+        result: null,
+        startedAt: null,
+        completedAt: null,
+      };
+      const dispatched = yield* Ref.make<ReadonlyArray<unknown>>([]);
+      const layerDependencies = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.mock(ThreadManagementService.ThreadManagementService)({
+          hasReceipt: () => Effect.succeed(false),
+          assertProviderInstanceEnabled: () => Effect.void,
+          isProviderInstanceEnabledForProject: () => Effect.succeed(true),
+          getThreadRecords: (threadId) =>
+            Ref.get(dispatched).pipe(
+              Effect.map((commands) =>
+                threadId === parentThreadId
+                  ? parentProjection(commands.length === 0 ? [] : [task])
+                  : childProjection,
+              ),
+            ),
+          dispatch: (command) =>
+            Ref.update(dispatched, (commands) => [...commands, command]).pipe(
+              Effect.as({
+                sequence: 1,
+                storedEvents: [
+                  {
+                    sequence: 1,
+                    commandId: null,
+                    event: { type: "subagent.updated", payload: task },
+                  },
+                ],
+              } as never),
+            ),
+        }),
+        ServerSettings.layerTest(),
+        providerRegistryLayer([
+          providerSnapshot({
+            instanceId: codexInstanceId,
+            driver: ProviderDriverKind.make("codex"),
+            model: "gpt-5.4",
+          }),
+          providerSnapshot({
+            instanceId: claudeInstanceId,
+            driver: ProviderDriverKind.make("claudeAgent"),
+            model: "claude-opus-5-5",
+          }),
+        ]),
+        adapterRegistryLayer([codexInstanceId, claudeInstanceId]),
+        Layer.mock(ProjectService.ProjectService)({
+          getById: () => Effect.succeed(Option.some({ workspaceRoot: "/repo" } as never)),
+        }),
+        Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
+        Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+      );
+      const layerWithGit = OrchestratorMcpService.layer.pipe(
+        Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),
+        Layer.provide(
+          Layer.mock(GitVcsDriver.GitVcsDriver)({
+            resolveCommit: () => Effect.succeed({ commitSha: "abc1234" } as never),
+          }),
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+        const refused = yield* service
+          .delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "delegate-cloud-codex",
+          })
+          .pipe(Effect.flip);
+        assert.include(refused.message, "Cloud runs only Claude leads for now");
+        assert.deepEqual(yield* Ref.get(dispatched), []);
+
+        yield* service.delegateTask(scope, {
+          task: "Build it.",
+          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+          mode: "async",
+          location: "cloud",
+          clientRequestId: "delegate-cloud-claude",
+        });
+        yield* service.delegateTask(scope, {
+          task: "Build it.",
+          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+          mode: "async",
+          clientRequestId: "delegate-local-claude",
+        });
+        const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+          location?: string;
+          workspaceStrategy?: { type: string };
+        }>;
+        assert.deepEqual(
+          commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+          [
+            ["cloud", "worktree"],
+            [undefined, undefined],
+          ],
+        );
+      }).pipe(Effect.provide(layerWithGit.pipe(Layer.provide(layerDependencies))));
+    }),
+  );
+
   it.effect("resolves a driverKind target to a capable Antigravity instance", () =>
     Effect.gen(function* () {
       const dispatched = yield* Ref.make<ReadonlyArray<unknown>>([]);

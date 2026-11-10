@@ -147,6 +147,12 @@ function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
   ].join("\n");
 }
 
+/** How a lead running in a cloud sandbox differs from one on the user's Mac. */
+const CLOUD_SECTION = `## Cloud
+- You run in a Vercel Sandbox (Linux) on your own checkout of the task branch. The worktree on the user's Mac is a read-only mirror of yours, updated after each of your turns.
+- Commit, push and \`gh\` work as usual.
+- Computer Use, the local app preview and MCP servers that run only on the Mac are unavailable here. When the work needs one, say so instead of trying.`;
+
 /** The parent whose approved breakdown covers this subtask. */
 export interface CoveredBy {
   /** Such as BB-7. */
@@ -200,7 +206,7 @@ ${
 ${roleModelsPromptSection(input.roleModels)}
 `
 }
-## Rules
+${task.location === "cloud" ? `${CLOUD_SECTION}\n\n` : ""}## Rules
 - When the server's failed-turn blocker is answered "다시 시도", your last turn failed and the server has put your stage back: pick up where you stopped and follow the note if there is one. "태스크 취소" cancels the task and you won't hear about it.
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "approval" for the plan (never for a subtask covered by its parent's approved breakdown), "decision" for a choice only the user can make and "blocker" for something only a person can unblock.
 - Ask only when you are truly blocked or the choice is the user's to make. The user has not followed your thread. Start every ask_user question, including a plan for approval, with one plain line saying what is asked and which task it is about; the card shows that line as its title and folds the rest. Refer to other tasks by name and project, using a task link. Supply the required context fields so the reason, impacts, and recommendation stay visible. For a decision, write each option as "Label: one-line tradeoff" and mark your recommendation "(Recommended)".
