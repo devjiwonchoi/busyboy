@@ -1,8 +1,12 @@
+// @effect-diagnostics nodeBuiltinImport:off - effect/Crypto has no sync sha256; cloud lead modules are promise-based.
 /**
  * Starts claude on the Mac and in the sandbox, reads each one's SDK init
  * message, and compares them item by item. Differences that come from the
- * local-only list are tagged as expected.
+ * local-only list are tagged as expected. Codex's setup (config, MCP servers,
+ * model, version) is compared too, for Codex children in the cloud.
  */
+import * as NodeCrypto from "node:crypto";
+
 import type { LocalHost } from "./LocalHost.ts";
 import {
   classifyAccountFeature,
@@ -113,7 +117,11 @@ export type ParityCategory =
   | "permissionMode"
   | "model"
   | "claudeVersion"
-  | "settingsHash";
+  | "settingsHash"
+  | "codexModel"
+  | "codexMcpServers"
+  | "codexConfigHash"
+  | "codexVersion";
 
 export interface ParityItem {
   readonly name: string;
@@ -261,10 +269,101 @@ const compareValue = (category: ParityCategory, local: string, remote: string): 
   };
 };
 
+export interface CodexSetup {
+  readonly model: string;
+  readonly mcpServers: ReadonlyArray<string>;
+  /** The config with the home directory as "~", so Mac and sandbox compare equal. */
+  readonly configHash: string;
+  readonly codexVersion: string;
+}
+
+const TOML_KEY = /^\s*model\s*=\s*"([^"]*)"/;
+const TOML_TABLE = /^\s*\[([^\]]+)\]\s*$/;
+const MCP_TABLE = /^mcp_servers\.(?:"([^"]+)"|([A-Za-z0-9_-]+))$/;
+
+/** The top-level model and the MCP server names of a ~/.codex/config.toml. */
+export const parseCodexConfig = (
+  toml: string,
+): { readonly model: string; readonly mcpServers: ReadonlyArray<string> } => {
+  let model = "";
+  let inTable = false;
+  const servers = new Set<string>();
+  for (const line of toml.split("\n")) {
+    const table = line.match(TOML_TABLE)?.[1]?.trim();
+    if (table !== undefined) {
+      inTable = true;
+      const server = table.match(MCP_TABLE);
+      if (server !== null) servers.add(server[1] ?? server[2]!);
+      continue;
+    }
+    const key = inTable ? null : line.match(TOML_KEY);
+    if (key !== null && key !== undefined) model = key[1]!;
+  }
+  return { model, mcpServers: [...servers].sort() };
+};
+
+export const codexSetup = (input: {
+  readonly config: string;
+  readonly versionOutput: string;
+  readonly home: string;
+}): CodexSetup => ({
+  ...parseCodexConfig(input.config),
+  configHash: NodeCrypto.createHash("sha256")
+    .update(input.home.length === 0 ? input.config : input.config.split(input.home).join("~"))
+    .digest("hex")
+    .slice(0, 16),
+  codexVersion: input.versionOutput.match(/\d+\.\d+\.\d+/)?.[0] ?? "",
+});
+
+/** The Mac's codex setup; a missing config counts as empty. Never reads auth.json. */
+export const captureLocalCodex = async (host: LocalHost): Promise<CodexSetup> => {
+  const home = host.env.HOME ?? "";
+  const codexHome = host.env.CODEX_HOME ?? `${home}/.codex`;
+  const config = await host.readFile(`${codexHome}/config.toml`);
+  const version = await host.exec("codex", ["--version"]).catch(() => ({ stdout: "" }));
+  return codexSetup({
+    config: config?.toString("utf8") ?? "",
+    versionOutput: version.stdout,
+    home,
+  });
+};
+
+export const captureRemoteCodex = async (
+  sandbox: SandboxHandle,
+  remoteHome: string,
+): Promise<CodexSetup> => {
+  const config = await sandbox.readFile(`${remoteHome}/.codex/config.toml`);
+  const version = await sandbox.sh("codex --version 2>/dev/null || true");
+  return codexSetup({
+    config: config?.toString("utf8") ?? "",
+    versionOutput: version,
+    home: remoteHome,
+  });
+};
+
+/** BusyBoy adds t3-code to each Codex thread itself, so a config entry for it is not compared. */
+const notT3Code = (name: string) => name !== "t3-code";
+
+export const compareCodex = (
+  local: CodexSetup,
+  remote: CodexSetup,
+): ReadonlyArray<CategoryResult> => [
+  compareValue("codexModel", local.model, remote.model),
+  compareList(
+    "codexMcpServers",
+    local.mcpServers.filter(notT3Code),
+    remote.mcpServers.filter(notT3Code),
+    () => undefined,
+  ),
+  compareValue("codexConfigHash", local.configHash, remote.configHash),
+  compareValue("codexVersion", local.codexVersion, remote.codexVersion),
+];
+
 export const compareInit = (
   local: ParitySide,
   remote: ParitySide,
   mcpConfig: McpConfigLookup = () => undefined,
+  codex?: { readonly local: CodexSetup; readonly remote: CodexSetup },
 ): ParityResult => {
   const categories: CategoryResult[] = [
     compareList("skills", local.init.skills, remote.init.skills, mcpConfig),
@@ -277,6 +376,7 @@ export const compareInit = (
     compareValue("model", local.init.model, remote.init.model),
     compareValue("claudeVersion", local.init.claudeVersion, remote.init.claudeVersion),
     compareValue("settingsHash", local.settingsHash, remote.settingsHash),
+    ...(codex === undefined ? [] : compareCodex(codex.local, codex.remote)),
   ];
   const remoteStatus = new Map(
     remote.init.mcpServers.map((server) => [mcpIdentity(server.name), server.status]),
@@ -301,6 +401,10 @@ const LABELS: Record<ParityCategory, string> = {
   model: "모델",
   claudeVersion: "claude 버전",
   settingsHash: "설정 해시",
+  codexModel: "Codex 모델",
+  codexMcpServers: "Codex MCP 서버",
+  codexConfigHash: "Codex 설정 해시",
+  codexVersion: "codex 버전",
 };
 
 /** A short Korean summary, one line per category, for logs and task notes. */

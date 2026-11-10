@@ -2,7 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   cleanLocalEnv,
+  codexSetup,
   compareInit,
+  parseCodexConfig,
   parseInitLine,
   renderParitySummary,
   type ClaudeInit,
@@ -151,5 +153,68 @@ describe("cleanLocalEnv", () => {
         ANTHROPIC_API_KEY: "x",
       }),
     ).toEqual({ HOME: "/Users/me", PATH: "/bin" });
+  });
+});
+
+describe("Codex parity", () => {
+  const CONFIG = (home: string) => `model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+
+[mcp_servers.context7]
+command = "npx"
+
+[mcp_servers."t3-code"]
+url = "http://127.0.0.1:3773/mcp"
+
+[projects."${home}/code/busyboy"]
+trust_level = "trusted"
+`;
+  const mac = codexSetup({
+    config: CONFIG("/Users/me"),
+    versionOutput: "codex-cli 0.167.0\n",
+    home: "/Users/me",
+  });
+  const sandbox = codexSetup({
+    config: CONFIG("/vercel"),
+    versionOutput: "codex-cli 0.167.0",
+    home: "/vercel",
+  });
+
+  it("reads the model and MCP servers, quoted or not, from config.toml", () => {
+    expect(parseCodexConfig(CONFIG("/Users/me"))).toEqual({
+      model: "gpt-6.1-sol",
+      mcpServers: ["context7", "t3-code"],
+    });
+  });
+
+  it("passes when the setups match across different homes", () => {
+    expect(sandbox.configHash).toBe(mac.configHash);
+    const result = compareInit(side(init()), side(init()), undefined, {
+      local: mac,
+      remote: sandbox,
+    });
+    expect(result.ok).toBe(true);
+    expect(renderParitySummary(result)).toContain("- Codex 모델: 같음");
+  });
+
+  it("names the Codex model, MCP server or version that differs", () => {
+    const result = compareInit(side(init()), side(init()), undefined, {
+      local: mac,
+      remote: { ...sandbox, model: "gpt-5.5", mcpServers: ["t3-code"], codexVersion: "0.160.0" },
+    });
+    expect(result.ok).toBe(false);
+    expect(category(result, "codexModel").ok).toBe(false);
+    expect(category(result, "codexMcpServers").onlyLocal).toEqual([{ name: "context7" }]);
+    expect(category(result, "codexVersion").ok).toBe(false);
+    // BusyBoy adds t3-code per thread, so it never counts.
+    expect(
+      category(
+        compareInit(side(init()), side(init()), undefined, {
+          local: mac,
+          remote: { ...sandbox, mcpServers: ["context7"] },
+        }),
+        "codexMcpServers",
+      ).ok,
+    ).toBe(true);
   });
 });
