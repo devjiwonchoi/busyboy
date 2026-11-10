@@ -267,6 +267,7 @@ import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarRowSwipe, type SidebarRowSwipeAction } from "./sidebar/SidebarRowSwipe";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
 import {
+  MemoryHoldLabel,
   SidebarTaskRow,
   SidebarTreeToggle,
   SidebarThreadGroupRow,
@@ -1811,8 +1812,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     <SidebarProjectManagerBadges summary={projectManager} />
   ) : null;
   const cloudIndicator = thread.location === "cloud" ? <CloudBadge variant="icon" /> : null;
+  const memoryHoldIndicator =
+    leadTask?.task.memoryHold != null ? <MemoryHoldLabel task={leadTask.task} /> : null;
   const indicators =
     draftIndicator !== null ||
+    memoryHoldIndicator !== null ||
     pinIndicator !== null ||
     cloudIndicator !== null ||
     projectIndicator !== null ||
@@ -1820,6 +1824,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       <>
         {draftIndicator}
         {pinIndicator}
+        {memoryHoldIndicator}
         {cloudIndicator}
         {projectIndicator}
         {projectManagerBadges}

@@ -62,10 +62,30 @@ export function SidebarTaskRow(props: {
             </span>
           }
           status={status}
-          indicators={task.location === "cloud" ? <CloudBadge variant="icon" /> : undefined}
+          indicators={
+            task.location === "cloud" || task.memoryHold != null ? (
+              <>
+                <MemoryHoldLabel task={task} />
+                {task.location === "cloud" ? <CloudBadge variant="icon" /> : null}
+              </>
+            ) : undefined
+          }
         />
       </button>
     </li>
+  );
+}
+
+/** A task held for memory, waiting to start or paused: a small muted "메모리 대기". */
+export function MemoryHoldLabel(props: { task: Pick<ProjectTaskReference, "memoryHold"> }) {
+  if (props.task.memoryHold == null) return null;
+  return (
+    <span
+      data-memory-hold={props.task.memoryHold}
+      className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground"
+    >
+      메모리 대기
+    </span>
   );
 }
 
