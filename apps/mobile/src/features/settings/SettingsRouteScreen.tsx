@@ -156,6 +156,12 @@ function SettingsIndexSections() {
           disabled={noServerTargets}
         />
         <SettingsRow
+          icon="slider.horizontal.3"
+          label="작업 실행"
+          target="SettingsEnvironmentTaskExecution"
+          disabled={noServerTargets}
+        />
+        <SettingsRow
           icon="arrow.clockwise"
           label="Maintenance"
           target="SettingsEnvironmentMaintenance"

@@ -85,6 +85,7 @@ import {
 import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { TaskExecutionSettingsSection } from "./TaskExecutionSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useRestoreRemovedProject } from "../../hooks/useRestoreRemovedProject";
 import { useSideChatStore } from "../../sideChatStore";
@@ -2653,6 +2654,8 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      <TaskExecutionSettingsSection />
 
       <SettingsSection id="projects-and-threads" title="Projects & threads">
         <SettingsRow
