@@ -421,7 +421,13 @@ for (const viewport of [
               costUsd: 2.1,
             },
           },
-          metrics: { size: "medium", reviewFindings: 3, fixRounds: 1, ciFailures: 0 },
+          metrics: {
+            size: "medium",
+            reviewFindings: 3,
+            fixRounds: 1,
+            ciFailures: 0,
+            memoryStallMs: 0,
+          },
         },
       };
       await act(async () =>
