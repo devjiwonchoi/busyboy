@@ -1286,13 +1286,13 @@ describe("OrchestratorMcpService provider resolution", () => {
 
   const claudeInstanceId = ProviderInstanceId.make("claude");
   /** Runs `body` against a delegate_task service whose parent can turn cloud. */
-  const withDelegations = <A>(
+  const withDelegations = <A, E>(
     settings: Parameters<typeof ServerSettings.layerTest>[0],
     body: (input: {
       readonly service: OrchestratorMcpService.OrchestratorMcpService["Service"];
       readonly setParentCloud: () => void;
       readonly dispatched: Ref.Ref<ReadonlyArray<unknown>>;
-    }) => Effect.Effect<A, unknown>,
+    }) => Effect.Effect<A, E>,
   ) =>
     Effect.gen(function* () {
       const task = {

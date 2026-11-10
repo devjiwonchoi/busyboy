@@ -3,6 +3,7 @@ import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as NodePath from "node:path";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import type * as Crypto from "effect/Crypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   MessageId,
@@ -178,7 +179,10 @@ export type TeamServices =
   | RoleStepReactor.RoleStepReactor
   | FinishedTaskCleanup.FinishedTaskCleanup
   | SqlClient.SqlClient
-  | ServerConfig.ServerConfig;
+  | ServerConfig.ServerConfig
+  | Crypto.Crypto
+  | ServerSettings.ServerSettingsService
+  | ThreadManagement.ThreadManagementService;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
