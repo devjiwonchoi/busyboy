@@ -1511,6 +1511,41 @@ describe("OrchestratorMcpService provider resolution", () => {
     ),
   );
 
+  it.effect(
+    "sends a short Mac's child to the cloud only when it asked for its own checkout",
+    () => {
+      let memory = TIGHT;
+      return withDelegations(
+        { taskExecution: { location: "local_first" } },
+        ({ service, dispatched }) =>
+          Effect.gen(function* () {
+            yield* service.delegateTask(scope, localChild("short-isolated", "worktree"));
+            // Sharing the parent's checkout: it stays here and waits for memory.
+            const shared = yield* service
+              .delegateTask(scope, localChild("short-shared"))
+              .pipe(Effect.forkChild);
+            yield* TestClock.adjust(MemoryHeadroom.MEMORY_SAMPLE_INTERVAL_MS * 2);
+            assert.strictEqual((yield* Ref.get(dispatched)).length, 1);
+            memory = PLENTY;
+            yield* TestClock.adjust(MemoryHeadroom.MEMORY_SAMPLE_INTERVAL_MS);
+            yield* Fiber.join(shared);
+            const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+              location?: string;
+              workspaceStrategy?: { type: string };
+            }>;
+            assert.deepEqual(
+              commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+              [
+                ["cloud", "worktree"],
+                [undefined, undefined],
+              ],
+            );
+          }),
+        () => memory,
+      );
+    },
+  );
+
   it.effect("keeps a local parent's cloud child on the Mac under local only", () =>
     withDelegations(
       { taskExecution: { location: "local_only" } },

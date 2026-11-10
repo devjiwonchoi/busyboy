@@ -2153,7 +2153,9 @@ const make = Effect.gen(function* () {
         }
         // A new local child needs room on the Mac; a cloud parent's children run in
         // its sandbox and are not counted against it. When the Mac is short and the
-        // user allows the cloud, a child with no place of its own goes there instead.
+        // user allows the cloud, a child with no place of its own goes there instead,
+        // but only one that asked for its own checkout: one sharing its parent's
+        // checkout stays here and waits for memory.
         if (!cloud && !isRetryOfAcceptedDelegation && options?.localStart !== "claimed") {
           const driver = providers.find(
             (provider) => provider.instanceId === target.modelSelection.instanceId,
@@ -2161,6 +2163,7 @@ const make = Effect.gen(function* () {
           const mayUseCloud =
             policy !== "local_only" &&
             input.location === undefined &&
+            input.isolation === "worktree" &&
             (driver === "claudeAgent" || driver === "codex");
           if (mayUseCloud && (yield* memoryHeadroom.check).headroom !== "ok") {
             cloud = true;
