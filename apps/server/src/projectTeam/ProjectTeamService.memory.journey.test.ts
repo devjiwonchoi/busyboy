@@ -332,7 +332,7 @@ describe("memory-based task admission", () => {
             // Nothing went to the cloud or was moved.
             assert.deepStrictEqual(fake.mac.cloudCalls, []);
             const delegated = yield* Ref.get(harness.delegated);
-            assert.isTrue(delegated.every((input) => input.location === undefined));
+            assert.isTrue(delegated.every((input) => input.location === "local"));
             assert.isFalse(
               (yield* Ref.get(harness.dispatched)).some(
                 (command) =>

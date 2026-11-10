@@ -979,20 +979,18 @@ const make = Effect.gen(function* () {
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
 
-  /**
-   * Under the user's local-only setting a new local child waits for memory
-   * instead of going to the cloud; after HEADROOM_WAIT_MS it is refused.
-   */
+  /** The user's execution-location setting; local_only when it cannot be read. */
+  const executionLocation = serverSettings.getSettings.pipe(
+    Effect.map((settings) => settings.taskExecution.location),
+    Effect.orElseSucceed(() => "local_only" as const),
+  );
+
+  /** A new local child waits for memory; after HEADROOM_WAIT_MS it is refused. */
   const awaitLocalHeadroom = Effect.gen(function* () {
-    const location = yield* serverSettings.getSettings.pipe(
-      Effect.map((settings) => settings.taskExecution.location),
-      Effect.orElseSucceed(() => "local_only" as const),
-    );
-    if (location !== "local_only") return;
     if (yield* MemoryHeadroom.waitForHeadroom(memoryHeadroom)) return;
     return yield* failure(
       "orchestration_error",
-      "The Mac has been short on memory for 10 minutes, so the delegated task did not start (메모리 여유 부족). Try again later or do the work in this thread.",
+      "Mac memory is short; this child waits. Try again later. (메모리 여유 부족)",
     );
   });
 
@@ -2121,7 +2119,13 @@ const make = Effect.gen(function* () {
         // A cloud parent's children run in the cloud too; one sharing its
         // checkout shares its sandbox, so the Mac mirror is never edited directly.
         const parentCloud = parent.thread.location === "cloud";
-        const cloud = input.location === "cloud" || (parentCloud && input.location !== "local");
+        const policy = yield* executionLocation;
+        // Under local_only nothing leaves this Mac: a cloud request from a local
+        // parent runs here. A cloud parent's children share its sandbox, as before.
+        const forcedLocal = policy === "local_only" && !parentCloud && input.location === "cloud";
+        let cloud =
+          !forcedLocal &&
+          (input.location === "cloud" || (parentCloud && input.location !== "local"));
         if (parentCloud && !cloud && input.isolation !== "worktree") {
           return yield* failure(
             "invalid_request",
@@ -2139,9 +2143,23 @@ const make = Effect.gen(function* () {
             );
           }
         }
-        // A new local child waits while the Mac is short on memory; a cloud parent's
-        // children run in its sandbox and are not counted against the Mac.
-        if (!cloud && !isRetryOfAcceptedDelegation) yield* awaitLocalHeadroom;
+        // A new local child needs room on the Mac; a cloud parent's children run in
+        // its sandbox and are not counted against it. When the Mac is short and the
+        // user allows the cloud, a child with no place of its own goes there instead.
+        if (!cloud && !isRetryOfAcceptedDelegation) {
+          const driver = providers.find(
+            (provider) => provider.instanceId === target.modelSelection.instanceId,
+          )?.driver;
+          const mayUseCloud =
+            policy !== "local_only" &&
+            input.location === undefined &&
+            (driver === "claudeAgent" || driver === "codex");
+          if (mayUseCloud && (yield* memoryHeadroom.check).headroom !== "ok") {
+            cloud = true;
+          } else {
+            yield* awaitLocalHeadroom;
+          }
+        }
         // A cloud child of a local parent needs its own checkout to mirror.
         const ownWorktree = input.isolation === "worktree" || (cloud && !parentCloud);
         const runtimeMode = yield* resolveRuntimeMode(

@@ -1284,9 +1284,17 @@ describe("OrchestratorMcpService provider resolution", () => {
     }),
   );
 
-  it.effect("runs cloud children on Claude or Codex, sharing a cloud parent's checkout", () =>
+  const claudeInstanceId = ProviderInstanceId.make("claude");
+  /** Runs `body` against a delegate_task service whose parent can turn cloud. */
+  const withDelegations = <A>(
+    settings: Parameters<typeof ServerSettings.layerTest>[0],
+    body: (input: {
+      readonly service: OrchestratorMcpService.OrchestratorMcpService["Service"];
+      readonly setParentCloud: () => void;
+      readonly dispatched: Ref.Ref<ReadonlyArray<unknown>>;
+    }) => Effect.Effect<A, unknown>,
+  ) =>
     Effect.gen(function* () {
-      const claudeInstanceId = ProviderInstanceId.make("claude");
       const task = {
         id: taskId,
         threadId: parentThreadId,
@@ -1342,7 +1350,7 @@ describe("OrchestratorMcpService provider resolution", () => {
               } as never),
             ),
         }),
-        ServerSettings.layerTest(),
+        ServerSettings.layerTest(settings),
         providerRegistryLayer([
           providerSnapshot({
             instanceId: codexInstanceId,
@@ -1372,73 +1380,123 @@ describe("OrchestratorMcpService provider resolution", () => {
         ),
       );
 
-      yield* Effect.gen(function* () {
+      return yield* Effect.gen(function* () {
         const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-        // A local parent's cloud child gets its own checkout and sandbox.
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
-          mode: "async",
-          location: "cloud",
-          clientRequestId: "delegate-cloud-codex",
+        return yield* body({
+          service,
+          setParentCloud: () => {
+            parentLocation = "cloud";
+          },
+          dispatched,
         });
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
-          mode: "async",
-          location: "cloud",
-          clientRequestId: "delegate-cloud-claude",
-        });
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
-          mode: "async",
-          clientRequestId: "delegate-local-claude",
-        });
+      }).pipe(Effect.provide(layerWithGit.pipe(Layer.provide(layerDependencies))));
+    });
 
-        // A cloud parent's children inherit the cloud and share its checkout (and
-        // so its sandbox), unless they ask for their own worktree.
-        parentLocation = "cloud";
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
-          mode: "async",
-          clientRequestId: "delegate-cloud-parent-shared",
-        });
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
-          mode: "async",
-          isolation: "worktree",
-          clientRequestId: "delegate-cloud-parent-isolated",
-        });
-        const refused = yield* service
-          .delegateTask(scope, {
+  it.effect("runs cloud children on Claude or Codex, sharing a cloud parent's checkout", () =>
+    withDelegations(
+      { taskExecution: { location: "cloud_first" } },
+      ({ service, setParentCloud, dispatched }) =>
+        Effect.gen(function* () {
+          // A local parent's cloud child gets its own checkout and sandbox.
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "delegate-cloud-codex",
+          });
+          yield* service.delegateTask(scope, {
             task: "Build it.",
             target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
             mode: "async",
-            location: "local",
-            clientRequestId: "delegate-cloud-parent-local",
-          })
-          .pipe(Effect.flip);
-        assert.include(refused.message, "would edit the Mac mirror");
+            location: "cloud",
+            clientRequestId: "delegate-cloud-claude",
+          });
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            clientRequestId: "delegate-local-claude",
+          });
 
-        const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
-          location?: string;
-          workspaceStrategy?: { type: string };
-        }>;
-        assert.deepEqual(
-          commands.map((command) => [command.location, command.workspaceStrategy?.type]),
-          [
-            ["cloud", "worktree"],
-            ["cloud", "worktree"],
-            [undefined, undefined],
-            ["cloud", undefined],
-            ["cloud", "worktree"],
-          ],
-        );
-      }).pipe(Effect.provide(layerWithGit.pipe(Layer.provide(layerDependencies))));
-    }),
+          // A cloud parent's children inherit the cloud and share its checkout (and
+          // so its sandbox), unless they ask for their own worktree.
+          setParentCloud();
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+            mode: "async",
+            clientRequestId: "delegate-cloud-parent-shared",
+          });
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            isolation: "worktree",
+            clientRequestId: "delegate-cloud-parent-isolated",
+          });
+          const refused = yield* service
+            .delegateTask(scope, {
+              task: "Build it.",
+              target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+              mode: "async",
+              location: "local",
+              clientRequestId: "delegate-cloud-parent-local",
+            })
+            .pipe(Effect.flip);
+          assert.include(refused.message, "would edit the Mac mirror");
+
+          const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+            location?: string;
+            workspaceStrategy?: { type: string };
+          }>;
+          assert.deepEqual(
+            commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+            [
+              ["cloud", "worktree"],
+              ["cloud", "worktree"],
+              [undefined, undefined],
+              ["cloud", undefined],
+              ["cloud", "worktree"],
+            ],
+          );
+        }),
+    ),
+  );
+
+  it.effect("keeps a local parent's cloud child on the Mac under local only", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, setParentCloud, dispatched }) =>
+        Effect.gen(function* () {
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "local-only-cloud-request",
+          });
+          // A cloud parent's children still share its sandbox.
+          setParentCloud();
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            clientRequestId: "local-only-cloud-parent",
+          });
+          const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+            location?: string;
+            workspaceStrategy?: { type: string };
+          }>;
+          assert.deepEqual(
+            commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+            [
+              [undefined, undefined],
+              ["cloud", undefined],
+            ],
+          );
+        }),
+    ),
   );
 
   it.effect("resolves a driverKind target to a capable Antigravity instance", () =>

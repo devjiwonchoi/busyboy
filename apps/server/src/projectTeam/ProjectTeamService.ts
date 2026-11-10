@@ -2085,7 +2085,9 @@ const make = Effect.gen(function* () {
                     ? `task-start:${task.id}${requestSuffix}`
                     : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
                 ...(leadTarget === undefined ? {} : { target: leadTarget }),
-                ...(location === "local" ? {} : { location }),
+                // Always explicit, so delegate_task never re-places a lead the
+                // admission already placed (it may move an unplaced child to the cloud).
+                location,
               }).pipe(
                 Effect.mapError((failure) =>
                   teamError(

@@ -171,8 +171,8 @@ export const layerFromSource = (read: () => MemorySnapshot) =>
     }),
   );
 
-/** How long new local work waits for memory before giving up or going ahead. */
-export const HEADROOM_WAIT_MS = 10 * 60_000;
+/** How long new local work waits for memory before giving up. */
+export const HEADROOM_WAIT_MS = 3 * 60_000;
 
 /**
  * Waits until there is room for a new local session, re-sampling every
