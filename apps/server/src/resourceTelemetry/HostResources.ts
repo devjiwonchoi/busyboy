@@ -1,5 +1,5 @@
 import * as NodeOS from "node:os";
-import type { HostResourcesSnapshot } from "@t3tools/contracts";
+import type { HostMemoryPressure, HostResourcesSnapshot } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
@@ -38,6 +38,38 @@ function darwinAvailableMemory(output: string): number | null {
   return Number.isSafeInteger(available) && Number(pageSize) > 0 ? available : null;
 }
 
+/** `sysctl -n kern.memorystatus_vm_pressure_level`: 1 normal, 2 warn, 4 critical. */
+export function parseDarwinMemoryPressure(output: string): HostMemoryPressure | null {
+  switch (output.trim()) {
+    case "1":
+      return "normal";
+    case "2":
+      return "warn";
+    case "4":
+      return "critical";
+    default:
+      return null;
+  }
+}
+
+const SWAP_UNITS: Record<string, number> = { K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
+
+/** `sysctl vm.swapusage`, e.g. "vm.swapusage: total = 2048.00M  used = 698.00M  free = 1350.00M  (encrypted)". */
+export function parseDarwinSwapUsage(
+  output: string,
+): { readonly totalBytes: number; readonly usedBytes: number } | null {
+  const amount = (name: string) => {
+    const match = new RegExp(`${name} = ([\\d.]+)([KMGT])`).exec(output);
+    if (!match) return null;
+    const bytes = Math.round(Number(match[1]) * SWAP_UNITS[match[2]!]!);
+    return Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : null;
+  };
+  const totalBytes = amount("total");
+  const usedBytes = amount("used");
+  if (totalBytes === null || usedBytes === null) return null;
+  return { totalBytes, usedBytes: Math.min(usedBytes, totalBytes) };
+}
+
 const make = Effect.fn("makeHostResources")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const platform = yield* HostProcess.Platform;
@@ -56,6 +88,8 @@ const make = Effect.fn("makeHostResources")(function* () {
     const totalMemoryBytes = NodeOS.totalmem();
     // On Windows libuv returns GlobalMemoryStatusEx.ullAvailPhys, including standby memory.
     let availableMemoryBytes = NodeOS.freemem();
+    let memoryPressure: HostMemoryPressure | undefined;
+    let swap: { readonly totalBytes: number; readonly usedBytes: number } | undefined;
     if (platform === "linux") {
       const meminfo = yield* fs
         .readFileString("/proc/meminfo")
@@ -70,6 +104,17 @@ const make = Effect.fn("makeHostResources")(function* () {
           Effect.orElseSucceed(() => ""),
         );
       availableMemoryBytes = darwinAvailableMemory(output) ?? availableMemoryBytes;
+      const sysctl = (args: ReadonlyArray<string>) =>
+        spawner
+          .string(ChildProcess.make("/usr/sbin/sysctl", args, { stdin: "ignore", stderr: "ignore" }))
+          .pipe(
+            Effect.timeout("1 second"),
+            Effect.orElseSucceed(() => ""),
+          );
+      memoryPressure =
+        parseDarwinMemoryPressure(yield* sysctl(["-n", "kern.memorystatus_vm_pressure_level"])) ??
+        undefined;
+      swap = parseDarwinSwapUsage(yield* sysctl(["vm.swapusage"])) ?? undefined;
     }
     return {
       sampledAt: DateTime.toEpochMillis(yield* DateTime.now),
@@ -77,6 +122,8 @@ const make = Effect.fn("makeHostResources")(function* () {
       cpuCount: cpu.count,
       availableMemoryBytes: Math.min(totalMemoryBytes, Math.max(0, availableMemoryBytes)),
       totalMemoryBytes,
+      ...(memoryPressure === undefined ? {} : { memoryPressure }),
+      ...(swap === undefined ? {} : { swapUsedBytes: swap.usedBytes, swapTotalBytes: swap.totalBytes }),
     };
   });
 
