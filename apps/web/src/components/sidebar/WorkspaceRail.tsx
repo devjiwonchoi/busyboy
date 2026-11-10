@@ -1,3 +1,4 @@
+import { useWaitingPulse } from "../WaitingAlerts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { LayoutGridIcon, MessageSquareIcon, type LucideIcon } from "lucide-react";
@@ -34,6 +35,7 @@ function DirectorRailButton({
 }) {
   const { persona } = director.entry.summary;
   const { total: waiting } = useDirectorInbox();
+  const pulse = useWaitingPulse(waiting);
   const label = waiting > 0 ? `${persona.name}, 기다리는 일 ${waiting}개` : persona.name;
   return (
     <button
@@ -53,6 +55,7 @@ function DirectorRailButton({
       <PmAvatar persona={persona} status={director.status} size="md" />
       {waiting > 0 ? (
         <span
+          data-waiting-pulse={pulse}
           aria-hidden
           className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-warning px-1 text-center font-semibold text-2xs text-white tabular-nums leading-4 ring-2 ring-sidebar"
         >

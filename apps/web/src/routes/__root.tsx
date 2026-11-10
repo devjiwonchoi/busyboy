@@ -1,3 +1,4 @@
+import { WaitingAlerts, WaitingTitle } from "../components/WaitingAlerts";
 import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
@@ -233,6 +234,7 @@ function RootRouteView() {
           <SshPasswordPromptDialog />
           <SnapShotCoordinator />
           <ThreadNotificationCoordinator />
+          <WaitingAlerts />
           <ReopenClosedViewShortcut />
           <ConfirmDialogHost />
           <SlowRpcRequestToastCoordinator />
@@ -353,11 +355,7 @@ function DocumentTitleSync() {
     primaryServerVersion,
   });
 
-  useEffect(() => {
-    document.title = title;
-  }, [title]);
-
-  return null;
+  return <WaitingTitle title={title} />;
 }
 
 function HostedStaticEnvironmentBootstrap() {

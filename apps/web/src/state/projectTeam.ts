@@ -51,6 +51,21 @@ import { useAtomCommand } from "./use-atom-command";
 
 export const projectTeamEnvironment = createProjectTeamEnvironmentAtoms(connectionAtomRuntime);
 
+// Only successful streams establish an alert baseline, including after reconnects.
+const loadedAttentionEnvironmentsAtom = Atom.family((environmentIdsKey: string) =>
+  Atom.make((get) =>
+    (environmentIdsKey.split(",") as EnvironmentId[]).filter(
+      (environmentId) =>
+        environmentId !== "" &&
+        AsyncResult.isSuccess(get(projectTeamEnvironment.attention({ environmentId, input: {} }))),
+    ),
+  ),
+);
+
+export function useLoadedProjectTeamEnvironmentIds(environmentIds: ReadonlyArray<EnvironmentId>) {
+  return useAtomValue(loadedAttentionEnvironmentsAtom(environmentIds.join(",")));
+}
+
 const EMPTY_SUMMARY_ATOM = Atom.make<ProjectTeamAttentionSummary | null>(null).pipe(
   Atom.withLabel("web-project-team:empty"),
 );

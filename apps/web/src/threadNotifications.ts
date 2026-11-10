@@ -23,6 +23,12 @@ let originalFavicon: HTMLLinkElement | undefined;
 let badgeFavicon: HTMLLinkElement | undefined;
 
 export function setNotificationBadge(count: number) {
+  const badgeApi = navigator as Navigator & {
+    setAppBadge?: (count: number) => Promise<void>;
+    clearAppBadge?: () => Promise<void>;
+  };
+  const update = count > 0 ? badgeApi.setAppBadge?.(count) : badgeApi.clearAppBadge?.();
+  void update?.catch((error) => console.warn("Could not update app badge", error));
   const bridge = window.desktopBridge;
   let image: string | null = null;
   if (count > 0 && (!bridge || bridge.getClientPlatform?.() === "win32")) {
@@ -65,6 +71,7 @@ export function setNotificationBadge(count: number) {
 }
 
 let audioContext: AudioContext | undefined;
+let lastSoundAt = -Infinity;
 const buffers = new Map<string, Promise<AudioBuffer>>();
 
 /** Called from a gesture so browsers allow later background playback. */
@@ -90,6 +97,10 @@ export async function playNotificationSound(
     }
     const decoded = await buffer;
     if (!shouldPlay() || context.state !== "running") return;
+    if (Date.now() - lastSoundAt < 5000) {
+      return;
+    }
+    lastSoundAt = Date.now();
     const source = context.createBufferSource();
     source.buffer = decoded;
     source.connect(context.destination);

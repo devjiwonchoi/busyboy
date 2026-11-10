@@ -5,6 +5,9 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const native = vi.hoisted(() => ({
   setBadgeCount: vi.fn(),
+  bounce: vi.fn(),
+  flashFrame: vi.fn(),
+  isVisible: vi.fn(() => true),
   setOverlayIcon: vi.fn(),
   isDestroyed: vi.fn(() => false),
   getFocusedWindow: vi.fn(() => null as object | null),
@@ -16,6 +19,7 @@ const native = vi.hoisted(() => ({
 vi.mock("electron", () => ({
   app: {
     setBadgeCount: native.setBadgeCount,
+    dock: { bounce: native.bounce },
     on: (event: string, listener: () => void) => native.listeners.set(event, listener),
     removeListener: (event: string) => native.listeners.delete(event),
   },
@@ -28,7 +32,11 @@ vi.mock("electron", () => ({
 
 import * as ElectronApp from "../../electron/ElectronApp.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
-import { applyNotificationBadge, installNotificationBadge } from "./notificationBadge.ts";
+import {
+  applyNotificationBadge,
+  installNotificationBadge,
+  requestAttention,
+} from "./notificationBadge.ts";
 
 const badge = { count: 2, image: "data:image/png;base64,aGVsbG8=" };
 
@@ -60,15 +68,32 @@ it("sets and clears the Windows taskbar overlay", () => {
 });
 
 it.each(["win32", "darwin", "linux"] as const)(
-  "rejects a late positive count while %s is focused",
+  "keeps the waiting badge while %s is focused",
   (platform) => {
     native.getFocusedWindow.mockReturnValue({});
     applyNotificationBadge(platform, badge);
-    if (platform === "win32") expect(native.setOverlayIcon).toHaveBeenCalledWith(null, "");
-    else expect(native.setBadgeCount).toHaveBeenCalledWith(0);
-    expect(native.createFromDataURL).not.toHaveBeenCalled();
+    if (platform === "win32") {
+      expect(native.setOverlayIcon).toHaveBeenCalledWith(
+        native.image,
+        "2 threads with new notifications",
+      );
+    } else {
+      expect(native.setBadgeCount).toHaveBeenCalledWith(2);
+    }
   },
 );
+
+it("bounces once informationally on macOS and flashes Windows only while unfocused", () => {
+  requestAttention("darwin");
+  expect(native.bounce.mock.calls).toEqual([["informational"]]);
+  requestAttention("win32");
+  expect(native.flashFrame.mock.calls).toEqual([[true]]);
+  native.getFocusedWindow.mockReturnValue({});
+  requestAttention("darwin");
+  requestAttention("win32");
+  expect(native.bounce).toHaveBeenCalledTimes(1);
+  expect(native.flashFrame).toHaveBeenCalledTimes(1);
+});
 
 it("ignores destroyed windows and clears invalid images", () => {
   native.isDestroyed.mockReturnValue(true);
@@ -87,7 +112,7 @@ it("keeps notifications working when the native badge API fails", () => {
   expect(() => applyNotificationBadge("linux", badge)).not.toThrow();
 });
 
-it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
+it.effect("validates IPC, retains counts on focus, and clears on quit and disposal", () =>
   Effect.gen(function* () {
     const handlers = new Map<string, DesktopIpc.DesktopIpcHandleListener>();
     yield* Effect.scoped(
@@ -108,14 +133,10 @@ it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
         yield* Effect.promise(() => Promise.resolve(handler(event, badge)));
         expect(native.setBadgeCount).toHaveBeenLastCalledWith(2);
         native.listeners.get("browser-window-focus")!();
-        expect(native.setBadgeCount).toHaveBeenLastCalledWith(0);
-        expect(native.webContents.send).toHaveBeenCalledWith("desktop:set-notification-badge");
+        expect(native.setBadgeCount).toHaveBeenLastCalledWith(2);
         native.getFocusedWindow.mockReturnValue({});
         yield* Effect.promise(() => Promise.resolve(handler(event, badge)));
-        expect(native.setBadgeCount).toHaveBeenLastCalledWith(0);
-        expect(native.webContents.send).toHaveBeenCalledTimes(2);
-        yield* Effect.promise(() => Promise.resolve(handler(event, { count: 0, image: null })));
-        expect(native.webContents.send).toHaveBeenCalledTimes(2);
+        expect(native.setBadgeCount).toHaveBeenLastCalledWith(2);
         native.getFocusedWindow.mockReturnValue(null);
         yield* Effect.promise(() => Promise.resolve(handler(event, badge)));
         native.listeners.get("before-quit")!();
@@ -144,4 +165,44 @@ it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
     expect(native.listeners.size).toBe(0);
     expect(handlers.size).toBe(0);
   }),
+);
+
+it.effect("stops Windows attention on focus while retaining the overlay badge", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const handlers = new Map<string, DesktopIpc.DesktopIpcHandleListener>();
+      yield* installNotificationBadge().pipe(
+        Effect.provideService(HostProcess.Platform, "win32"),
+        Effect.provide([
+          ElectronApp.layer,
+          DesktopIpc.layer(
+            {
+              handle: (channel, handler) => {
+                handlers.set(channel, handler);
+              },
+              removeHandler: (channel) => {
+                handlers.delete(channel);
+              },
+              on: vi.fn(),
+              removeAllListeners: vi.fn(),
+            },
+            () => true,
+          ),
+        ]),
+      );
+      const event = { sender: { id: 1 } };
+      yield* Effect.promise(() =>
+        Promise.resolve(handlers.get("desktop:request-attention")!(event, undefined)),
+      );
+      expect(native.flashFrame).toHaveBeenLastCalledWith(true);
+      applyNotificationBadge("win32", badge);
+      native.listeners.get("browser-window-focus")!();
+      expect(native.flashFrame).toHaveBeenLastCalledWith(false);
+      expect(native.setOverlayIcon).toHaveBeenCalledTimes(1);
+      expect(native.setOverlayIcon).toHaveBeenLastCalledWith(
+        native.image,
+        "2 threads with new notifications",
+      );
+    }),
+  ),
 );
