@@ -94,6 +94,7 @@ import {
   type ProjectTeamSplitTaskTodoInput,
   type ProjectTeamSplitTaskTodoResult,
   type ProjectTeamSetTaskRoleModelsInput,
+  type ProjectTeamMoveTaskInput,
   type ProjectTeamTaskDelegateInput,
   type ProjectTaskModelRole,
   type ProjectTaskModelTarget,
@@ -193,6 +194,8 @@ import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
+import { moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
@@ -798,6 +801,14 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamSetTaskRoleModelsInput,
     ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
 
+    /**
+     * projectTeam.moveTask RPC: moves the task's lead between the Mac and a cloud
+     * sandbox, keeping its work, plan and claude session.
+     */
+    readonly moveTask: (
+      input: ProjectTeamMoveTaskInput,
+    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
+
     /** projectTeam.answerDecision RPC: the user answered a card; goes straight to the lead. */
     readonly answerDecision: (
       input: ProjectTeamAnswerDecisionInput,
@@ -948,6 +959,7 @@ const make = Effect.gen(function* () {
   const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
   const cloudLead = yield* CloudLeadService.CloudLeadHooks;
+  const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
   const shipGate = yield* PullRequestShipGate.PullRequestShipGate;
 
   // At boot the provider cache may still be empty, so probe once before giving up.
@@ -3902,6 +3914,72 @@ const make = Effect.gen(function* () {
       return yield* taskDetail(next);
     }).pipe(orTeamError("Could not set the task's models.", input.projectId));
 
+  const moveTask: ProjectTeamService["Service"]["moveTask"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* requireTask(input.taskId, input.projectId);
+      const moved = yield* moveTaskLead(
+        {
+          threads,
+          cloudLead,
+          gate: leadMoveGate,
+          providers: providerRegistry.getProviders,
+          setMove: ({ task: target, ...rest }) =>
+            Effect.flatMap(nowIso, (now) =>
+              repository.setTaskMove({ id: target.id, now, ...rest }),
+            ).pipe(orTeamError("Could not record the move.", target.projectId)),
+          note: (target, body) =>
+            appendEvent(target, "note", body, null).pipe(
+              orTeamError("Could not note the move.", target.projectId),
+            ),
+          publish: (target) => router.publish(target.projectId),
+          newKey: (prefix) => newId(prefix).pipe(Effect.orDie),
+          isFinished: (target) => FinishedTaskCleanup.isFinishedStage(target.stage),
+        },
+        task,
+        input.to,
+      ).pipe(Effect.mapError((error) => teamError(error.detail, task.projectId)));
+      return yield* taskDetail(moved);
+    }).pipe(orTeamError("Could not move the task.", input.projectId));
+
+  /**
+   * A move cut short by a server restart: the task stays where it was, its lead's
+   * thread is pointed back there, and its held messages run.
+   */
+  const recoverInterruptedMoves = Effect.gen(function* () {
+    for (const task of yield* repository.listMovingTasks()) {
+      yield* repository.setTaskMove({ id: task.id, moveTarget: null, now: yield* nowIso });
+      if (task.leadThreadId !== null) {
+        const lead = task.leadThreadId;
+        const key = yield* newId("task-move:recover");
+        yield* threads
+          .dispatch({
+            type: "thread.metadata.update",
+            commandId: CommandId.make(`${key}:location`),
+            threadId: lead,
+            location: task.location ?? "local",
+          })
+          .pipe(Effect.ignore);
+        yield* threads
+          .dispatch({
+            type: "queue.resume",
+            commandId: CommandId.make(`${key}:resume`),
+            threadId: lead,
+          })
+          .pipe(Effect.ignore);
+      }
+      yield* appendEvent(
+        task,
+        "note",
+        "서버가 다시 시작돼 리드 이동이 중단됐어요. 위치는 그대로예요.",
+        null,
+      );
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("could not recover interrupted moves", { cause }),
+    ),
+  );
+
   const updateTaskSpec: ProjectTeamService["Service"]["updateTaskSpec"] = (input) =>
     Effect.gen(function* () {
       const task = yield* requireTask(input.taskId, input.projectId);
@@ -4840,6 +4918,7 @@ const make = Effect.gen(function* () {
               stage: task.stage,
               leadThreadId: task.leadThreadId,
               location: task.location,
+              moveTarget: task.moveTarget ?? null,
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),
@@ -5048,6 +5127,8 @@ const make = Effect.gen(function* () {
 
   yield* taskKeyLocks.withLock("prefixes", reconcileTaskKeyPrefixes);
 
+  yield* recoverInterruptedMoves;
+
   return {
     ensureManager,
     roleOf,
@@ -5073,6 +5154,7 @@ const make = Effect.gen(function* () {
     restoreTaskSpec,
     splitTaskTodo,
     setTaskRoleModels,
+    moveTask,
     delegateStep,
     answerDecision,
     askLead,

@@ -8,6 +8,7 @@ import {
   MessageId,
   NodeId,
   type OrchestrationV2ConversationMessage,
+  type OrchestrationV2ProviderThread,
   type OrchestrationV2ProviderTurn,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2Subagent,
@@ -97,6 +98,8 @@ export interface FakeThread {
     Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage"> &
       Partial<Pick<OrchestrationV2ProviderTurn, "runAttemptId" | "turnTokenUsage">>
   >;
+  /** Provider threads; `id`, `driver` and `nativeThreadRef` matter to a lead move. */
+  providerThreads?: Array<Pick<OrchestrationV2ProviderThread, "id" | "driver" | "nativeThreadRef">>;
   /** Run attempts; only `id` and `runId` matter, to tie provider turns to their run. */
   attempts?: Array<{ readonly id: string; readonly runId: string }>;
   worktreePath?: string | null;
@@ -126,6 +129,8 @@ export interface TeamHarness {
   worktreeHead: (worktreePath: string) => string | null;
   /** Runs after a thread is archived, like the server's worktree cleanup effect. */
   onArchive: (threadId: ThreadId) => Effect.Effect<void>;
+  /** Runs when a run is interrupted; by default the run stops at once. */
+  onInterrupt: (threadId: ThreadId, runId: string) => Effect.Effect<void>;
   /** Runs after a thread is unarchived with restoreWorktree, like the restore effect. */
   onRestore: (threadId: ThreadId) => Effect.Effect<void>;
   /** Starts every task lead on a thread named lead-<n>. */
@@ -312,6 +317,9 @@ export const withTeam = <A, E>(
           if (command.type === "thread.metadata.update" && command.branch !== undefined) {
             target.branch = command.branch;
           }
+          if (command.type === "thread.metadata.update" && command.location !== undefined) {
+            target.shell = { ...target.shell, location: command.location };
+          }
           if (command.type === "thread.archive") target.archivedAt = START;
           if (command.type === "thread.unarchive") target.archivedAt = null;
           if (command.type === "thread.delete") target.deletedAt = START;
@@ -323,7 +331,9 @@ export const withTeam = <A, E>(
                 ? harness.onArchive(command.threadId)
                 : command.type === "thread.unarchive" && command.restoreWorktree === true
                   ? harness.onRestore(command.threadId)
-                  : Effect.void,
+                  : command.type === "run.interrupt"
+                    ? harness.onInterrupt(command.threadId, command.runId)
+                    : Effect.void,
             ),
           ),
           Effect.as({ sequence: 1, storedEvents: [] }),
@@ -384,6 +394,7 @@ export const withTeam = <A, E>(
             messages,
             subagents: thread?.subagents ?? [],
             providerTurns: thread?.providerTurns ?? [],
+            providerThreads: thread?.providerThreads ?? [],
             attempts: thread?.attempts ?? [],
             turnItems: (thread?.turnItems ?? []).filter(
               (item) =>
@@ -496,6 +507,11 @@ export const withTeam = <A, E>(
       worktreeHead: () => null,
       onArchive: () => Effect.void,
       onRestore: () => Effect.void,
+      onInterrupt: (threadId) =>
+        Effect.sync(() => {
+          const thread = threads.get(threadId);
+          if (thread !== undefined) thread.activeRunId = null;
+        }),
       delegate: (input) =>
         Effect.gen(function* () {
           yield* Ref.update(delegated, (all) => [...all, input]);

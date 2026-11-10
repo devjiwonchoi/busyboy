@@ -109,6 +109,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.projectTeamRestoreTaskSpec]: "projectTeam",
   [WS_METHODS.projectTeamSplitTaskTodo]: "projectTeam",
   [WS_METHODS.projectTeamSetTaskRoleModels]: "projectTeam",
+  [WS_METHODS.projectTeamMoveTask]: "projectTeam",
   [WS_METHODS.secretsAnswerRequest]: "secrets",
   [WS_METHODS.browserRequestsAnswer]: "browser",
   [WS_METHODS.operationPermissionsAnswer]: "orchestrationV2",

@@ -268,6 +268,19 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectTaskId;
       readonly now: IsoDateTime;
     }) => Result<Option.Option<ProjectTask>>;
+    /**
+     * Sets or clears where the task's lead is being moved, and its location when given.
+     * `expectedMoveTarget` makes the write conditional; none when it does not match.
+     */
+    readonly setTaskMove: (input: {
+      readonly id: ProjectTaskId;
+      readonly moveTarget: ExecutionLocation | null;
+      readonly location?: ExecutionLocation;
+      readonly expectedMoveTarget?: ExecutionLocation | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Tasks with a move in progress, in any project. */
+    readonly listMovingTasks: () => Result<ReadonlyArray<ProjectTask>>;
     /** Replaces the task's own model per role. */
     readonly setTaskRoleModels: (input: {
       readonly id: ProjectTaskId;
@@ -553,6 +566,7 @@ export const make = Effect.gen(function* () {
     parent_task_id AS "parentTaskId",
     lead_thread_id AS "leadThreadId",
     location AS "location",
+    move_target AS "moveTarget",
     pr_url AS "prUrl",
     plan_summary AS "planSummary",
     result_summary AS "resultSummary",
@@ -853,6 +867,35 @@ export const make = Effect.gen(function* () {
         updated_at = ${now}
       WHERE task_id = ${id} AND stage = 'in_review'
       RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskMove = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectTaskId,
+      moveTarget: Schema.NullOr(ExecutionLocation),
+      location: Schema.NullOr(ExecutionLocation),
+      checkExpected: Schema.Boolean,
+      expectedMoveTarget: Schema.NullOr(ExecutionLocation),
+      now: IsoDateTime,
+    }),
+    Result: TaskRow,
+    execute: (input) => sql`
+      UPDATE project_tasks SET
+        move_target = ${input.moveTarget},
+        location = COALESCE(${input.location}, location),
+        updated_at = ${input.now}
+      WHERE task_id = ${input.id}
+        AND (${input.checkExpected ? 1 : 0} = 0 OR move_target IS ${input.expectedMoveTarget})
+      RETURNING ${taskColumns}
+    `,
+  });
+  const findMovingTasks = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: TaskRow,
+    execute: () => sql`
+      SELECT ${taskColumns}
+      FROM project_tasks
+      WHERE move_target IS NOT NULL
     `,
   });
   const updateTaskRoleModels = SqlSchema.findOneOption({
@@ -1644,6 +1687,17 @@ export const make = Effect.gen(function* () {
       updateTaskReady(input).pipe(Effect.mapError(toRepositoryError("setTaskReady"))),
     reopenShipRound: (input) =>
       reopenShipRoundRow(input).pipe(Effect.mapError(toRepositoryError("reopenShipRound"))),
+    setTaskMove: (input) =>
+      updateTaskMove({
+        id: input.id,
+        moveTarget: input.moveTarget,
+        location: input.location ?? null,
+        checkExpected: input.expectedMoveTarget !== undefined,
+        expectedMoveTarget: input.expectedMoveTarget ?? null,
+        now: input.now,
+      }).pipe(Effect.mapError(toRepositoryError("setTaskMove"))),
+    listMovingTasks: () =>
+      findMovingTasks(undefined).pipe(Effect.mapError(toRepositoryError("listMovingTasks"))),
     setTaskRoleModels: (input) =>
       updateTaskRoleModels(input).pipe(Effect.mapError(toRepositoryError("setTaskRoleModels"))),
     recordModelStep: (input) =>

@@ -379,6 +379,8 @@ export const ProjectTask = Schema.Struct({
   leadThreadId: Schema.NullOr(ThreadId),
   /** Where the task's lead runs, set when the task starts; absent means local. */
   location: Schema.optional(ExecutionLocation),
+  /** Set while the lead is being moved there; null or absent otherwise. */
+  moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
   resultSummary: Schema.NullOr(Schema.String),
@@ -1788,6 +1790,8 @@ export const ProjectTaskReference = Schema.Struct({
   stage: ProjectTaskStage,
   leadThreadId: Schema.NullOr(ThreadId),
   location: Schema.optional(ExecutionLocation),
+  /** Where the lead is being moved; null or absent when it is not moving. */
+  moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
   /** The task's pull request, shown on its sidebar row while in review. */
   prUrl: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** How the lead's last turn ended; "stalled" marks a live task that stopped making progress. */
@@ -2115,6 +2119,14 @@ export const ProjectTeamSetTaskRoleModelsInput = Schema.Struct({
   roleModels: ProjectTaskRoleModelsPatch,
 });
 export type ProjectTeamSetTaskRoleModelsInput = typeof ProjectTeamSetTaskRoleModelsInput.Type;
+
+/** projectTeam.moveTask: the user moves a task's lead between the Mac and a cloud sandbox. */
+export const ProjectTeamMoveTaskInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  to: ExecutionLocation,
+});
+export type ProjectTeamMoveTaskInput = typeof ProjectTeamMoveTaskInput.Type;
 
 export class ProjectTeamError extends Schema.TaggedError<ProjectTeamError>()("ProjectTeamError", {
   message: Schema.String,
