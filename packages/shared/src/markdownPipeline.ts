@@ -154,6 +154,8 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
       // Task chips: "#N" in PM and task-lead threads, linked by the web app's remark plugin.
       "t3-task",
       "t3-task-key",
+      // Reply chips that point at one open request.
+      "t3-request",
     ],
     src: [...(defaultSchema.protocols?.src ?? []), "file", "t3-context"],
   },

@@ -226,6 +226,12 @@ describe("buildTaskLeadPrompt", () => {
       "required context describing its action, reason, impacts, cost, reversibility, and recommendation",
     );
     expect(prompt).toContain("Supply the required context fields");
+    expect(prompt).toContain("No task keys at all in request text");
+    expect(prompt).toContain("Optional details contains up to 8 label/text pairs");
+    expect(prompt).toContain("Write the whole ask_user message in question");
+    expect(prompt).toContain("Pass senderName on ask_user");
+    expect(prompt).toContain("at most 40 characters");
+    expect(prompt).toContain("Keep done-when and order in doneWhen/dependsOn");
     expect(prompt).toContain("A plan approval authorizes only the scope the plan states");
     expect(prompt).toContain("Merging a pull request still needs the user's explicit OK.");
   });
