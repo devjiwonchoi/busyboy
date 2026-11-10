@@ -11,7 +11,12 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export class HostResources extends Context.Service<
   HostResources,
-  { readonly read: Effect.Effect<HostResourcesSnapshot> }
+  {
+    /** A sample at most a few seconds old. */
+    readonly read: Effect.Effect<HostResourcesSnapshot>;
+    /** A new sample, bypassing the cache. */
+    readonly readFresh: Effect.Effect<HostResourcesSnapshot>;
+  }
 >()("t3/resourceTelemetry/HostResources") {}
 
 function readCpu() {
@@ -136,7 +141,10 @@ const make = Effect.fn("makeHostResources")(function* () {
     lookup: (_key: "host") => sample(),
     timeToLive: "5 seconds",
   });
-  return HostResources.of({ read: Cache.get(cache, "host") });
+  return HostResources.of({
+    read: Cache.get(cache, "host"),
+    readFresh: Cache.invalidate(cache, "host").pipe(Effect.andThen(Cache.get(cache, "host"))),
+  });
 });
 
 export const layer = Layer.effect(HostResources, make());

@@ -1,8 +1,9 @@
 /**
  * Keeps the Mac out of swap while task leads run, every few seconds:
  *
- * - critical: pause local task sessions one at a time (idle ones first, then
- *   the longest-running), re-sampling after each, until it is not critical.
+ * - critical: pause one local task session per pass (idle ones first, then
+ *   the longest-running), judging each pass on a fresh, uncached sample, so a
+ *   pause gets a few seconds to free memory before the next is weighed.
  *   Under local_first or cloud_first a Claude lead moves to the cloud instead.
  * - tight: pause idle sessions only.
  * - ok: resume paused sessions, last paused first, one per pass; then tell a
@@ -52,8 +53,6 @@ import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
 import { taskChildren } from "./taskChildren.ts";
 
 export const MEMORY_GOVERNOR_INTERVAL_MS = 5_000;
-/** At most this many pauses in one pass; the next pass continues. */
-const MAX_PAUSES_PER_PASS = 6;
 /** A PM told to start a waiting task gets this long before it is told again. */
 const WAITING_WAKE_COOLDOWN_MS = 2 * MINUTE_MS;
 /** Stages whose lead may hold a live session. */
@@ -63,7 +62,7 @@ export const PAUSED_NOTE =
   "메모리가 부족해 세션을 잠시 멈췄어요. 여유가 생기면 같은 세션으로 이어가요.";
 export const RESUMED_NOTE = "메모리 여유가 생겨 멈췄던 세션을 이어가요.";
 export const RESUME_NOTICE = "[메모리] 메모리 여유가 생겨 이어서 진행해요.";
-export const MOVING_NOTE = "이 Mac의 메모리가 부족해 리드를 클라우드로 옮겨요.";
+export const MOVING_NOTE = "이 Mac의 메모리가 부족해 리드를 클라우드로 옮겼어요.";
 
 export const waitingStartText = (task: Pick<ProjectTask, "number" | "title">) =>
   `메모리 여유가 생겼어요. #${task.number} ${task.title} 을(를) 지금 task_start로 시작하세요. (${MEMORY_WAIT_REASON}로 기다리던 태스크)`;
@@ -260,34 +259,29 @@ const make = Effect.gen(function* () {
 
   /** Moves a Claude lead to the cloud; false when that is not possible here. */
   const moveToCloud = (candidate: Candidate) =>
-    Effect.gen(function* () {
-      yield* note(candidate.task, MOVING_NOTE);
-      return yield* team
-        .moveTask({ projectId: candidate.task.projectId, taskId: candidate.task.id, to: "cloud" })
-        .pipe(
-          Effect.as(true),
-          Effect.catch((error) =>
-            Effect.logInfo("memory governor could not move a lead; pausing it", {
-              taskId: candidate.task.id,
-              detail: error.message,
-            }).pipe(Effect.as(false)),
-          ),
-        );
-    });
+    team
+      .moveTask({ projectId: candidate.task.projectId, taskId: candidate.task.id, to: "cloud" })
+      .pipe(
+        Effect.andThen(note(candidate.task, MOVING_NOTE)),
+        Effect.as(true),
+        Effect.catch((error) =>
+          Effect.logInfo("memory governor could not move a lead; pausing it", {
+            taskId: candidate.task.id,
+            detail: error.message,
+          }).pipe(Effect.as(false)),
+        ),
+      );
 
-  const relieve = (policy: TaskExecutionLocationPolicy, first: "tight" | "critical") =>
+  /** Frees one session; the next pass judges its effect on a fresh sample. */
+  const relieve = (policy: TaskExecutionLocationPolicy, level: "tight" | "critical") =>
     Effect.gen(function* () {
-      let level: MemoryHeadroom.Headroom = first;
-      for (let pass = 0; pass < MAX_PAUSES_PER_PASS && level !== "ok"; pass += 1) {
-        const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
-        const next = pauseOrder(yield* candidates, nowMs, level)[0];
-        if (next === undefined) return;
-        // local_only never reaches the cloud: it pauses.
-        const moved =
-          policy !== "local_only" && next.kind === "lead" ? yield* moveToCloud(next) : false;
-        if (!moved) yield* pause(next);
-        level = (yield* memory.check).headroom;
-      }
+      const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
+      const next = pauseOrder(yield* candidates, nowMs, level)[0];
+      if (next === undefined) return;
+      // local_only never reaches the cloud: it pauses.
+      const moved =
+        policy !== "local_only" && next.kind === "lead" ? yield* moveToCloud(next) : false;
+      if (!moved) yield* pause(next);
     });
 
   /** Resumes the last paused session. */
@@ -388,7 +382,8 @@ const make = Effect.gen(function* () {
   const tick: MemoryGovernor["Service"]["tick"] = Effect.gen(function* () {
     yield* clearStalePauses;
     const execution = yield* settings;
-    const { headroom } = yield* memory.check;
+    // Uncached: the last pass's pause must show in this reading.
+    const { headroom } = yield* memory.checkFresh;
     if (headroom !== "ok") {
       yield* relieve(execution.location, headroom);
       // Waiting tasks start in the cloud when the user allows it.

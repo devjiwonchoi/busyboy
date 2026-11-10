@@ -71,8 +71,10 @@ export interface MemoryReading {
 }
 
 export interface MemoryHeadroomShape {
-  /** Samples now. */
+  /** Samples now; the host may answer from a sample a few seconds old. */
   readonly check: Effect.Effect<MemoryReading>;
+  /** Samples now, never from a cached sample: for judging the effect of a pause. */
+  readonly checkFresh: Effect.Effect<MemoryReading>;
   /** The last sample, for synchronous callers; null before the first one. */
   readonly latest: () => MemoryReading | null;
   /** The headroom each time it changes, sampled every few seconds. */
@@ -84,6 +86,7 @@ const UNLIMITED: MemoryReading = { headroom: "ok", snapshot: null };
 /** No sampler: always ok, so code run without one behaves as before. */
 export const unlimited: MemoryHeadroomShape = {
   check: Effect.succeed(UNLIMITED),
+  checkFresh: Effect.succeed(UNLIMITED),
   latest: () => UNLIMITED,
   changes: Stream.make("ok" as const),
 };
@@ -99,20 +102,24 @@ export class MemoryHeadroom extends Context.Reference<MemoryHeadroomShape>(
  */
 export const make = (input: {
   readonly read: Effect.Effect<MemorySnapshot>;
+  /** An uncached read; defaults to `read`. */
+  readonly readFresh?: Effect.Effect<MemorySnapshot>;
   readonly settings: Effect.Effect<TaskExecutionSettings>;
   readonly sampleEveryMs?: number | null;
 }) =>
   Effect.gen(function* () {
     let latest: MemoryReading | null = null;
     const current = yield* SubscriptionRef.make<Headroom>("ok");
-    const check = Effect.gen(function* () {
-      const snapshot = yield* input.read;
-      const settings = resolveTaskExecutionSettings(yield* input.settings);
-      const reading = { headroom: judgeHeadroom(snapshot, settings), snapshot };
-      latest = reading;
-      yield* SubscriptionRef.set(current, reading.headroom);
-      return reading;
-    });
+    const judge = (read: Effect.Effect<MemorySnapshot>) =>
+      Effect.gen(function* () {
+        const snapshot = yield* read;
+        const settings = resolveTaskExecutionSettings(yield* input.settings);
+        const reading = { headroom: judgeHeadroom(snapshot, settings), snapshot };
+        latest = reading;
+        yield* SubscriptionRef.set(current, reading.headroom);
+        return reading;
+      });
+    const check = judge(input.read);
     const every =
       input.sampleEveryMs === undefined ? MEMORY_SAMPLE_INTERVAL_MS : input.sampleEveryMs;
     if (every !== null) {
@@ -124,6 +131,7 @@ export const make = (input: {
     }
     return {
       check,
+      checkFresh: judge(input.readFresh ?? input.read),
       latest: () => latest,
       changes: SubscriptionRef.changes(current).pipe(Stream.changes),
     } satisfies MemoryHeadroomShape;
@@ -142,7 +150,11 @@ export const layer = Layer.effect(
   MemoryHeadroom,
   Effect.gen(function* () {
     const host = yield* HostResources.HostResources;
-    return yield* make({ read: host.read, settings: yield* taskExecutionSettings });
+    return yield* make({
+      read: host.read,
+      readFresh: host.readFresh,
+      settings: yield* taskExecutionSettings,
+    });
   }),
 );
 

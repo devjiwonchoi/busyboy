@@ -46,6 +46,7 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProviderSessionManager from "../orchestration-v2/ProviderSessionManager.ts";
 import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import type { DeepPartial } from "@t3tools/shared/Struct";
 import type { ServerSettings as ServerSettingsValue } from "@t3tools/contracts";
 import * as UsageService from "../usage/UsageService.ts";
@@ -457,6 +458,8 @@ export const withTeam = <A, E>(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
       Layer.provideMerge(SqlitePersistence.layerMemory),
+      // Each test gets its own gate: holds must not leak between tests.
+      Layer.provideMerge(Layer.sync(LeadMoveGate.LeadMoveGate, LeadMoveGate.makeLeadMoveGate)),
       Layer.provide(
         Layer.mergeAll(
           threadManagement,

@@ -266,6 +266,28 @@ describe("memory-based task admission", () => {
     },
   );
 
+  it.effect("pauses one session per pass while the reading has not changed", () => {
+    // Releasing frees nothing the sampler sees yet, as with a cached reading.
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const first = yield* startWithSession(harness, fake.mac, pm, "First");
+          yield* startWithSession(harness, fake.mac, pm, "Second");
+          yield* startWithSession(harness, fake.mac, pm, "Third");
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [first.lead]);
+          assert.strictEqual(fake.mac.released.length, 1);
+          yield* governor.tick;
+          assert.strictEqual((yield* governor.paused).length, 2);
+        }),
+      { memory: fake.read, sessions: fake.sessions },
+    );
+  });
+
   it.effect("local first: starts new work in the cloud and moves a running lead there", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(
