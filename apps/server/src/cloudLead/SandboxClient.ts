@@ -44,6 +44,10 @@ export interface SandboxHandle {
   /** Runs `bash -lc <script>` and throws (masked) on a non-zero exit. */
   readonly sh: (script: string, options?: Omit<RunCommandInput, "cmd" | "args">) => Promise<string>;
   readonly writeFiles: (files: ReadonlyArray<SandboxFile>) => Promise<void>;
+  /** Starts a long-running command and returns once it started; output is not kept. */
+  readonly startDetached: (input: RunCommandInput) => Promise<void>;
+  /** The public https origin of an exposed port, without a trailing slash. */
+  readonly domain: (port: number) => string;
   readonly readFile: (path: string) => Promise<Buffer | null>;
   readonly snapshot: (input: { readonly expirationMs: number }) => Promise<{
     readonly snapshotId: string;
@@ -59,6 +63,8 @@ export interface CreateSandboxInput {
   readonly vcpus: number;
   readonly timeoutMs: number;
   readonly persistent?: boolean;
+  /** Ports to expose on a public https domain. */
+  readonly ports?: ReadonlyArray<number>;
 }
 
 export type SnapshotState = "available" | "missing";
@@ -93,7 +99,9 @@ export interface SdkSandbox {
     env?: Record<string, string>;
     sudo?: boolean;
     signal?: AbortSignal;
+    detached?: boolean;
   }): Promise<{ exitCode: number | null; stdout(): Promise<string>; stderr(): Promise<string> }>;
+  domain(port: number): string;
   writeFiles(files: { path: string; content: Buffer }[]): Promise<void>;
   readFileToBuffer(file: { path: string }): Promise<Buffer | null>;
   snapshot(opts?: { expiration?: number }): Promise<SdkSnapshot>;
@@ -175,6 +183,19 @@ export const makeSandboxClient = (
             files.map((file) => ({ path: file.path, content: file.content })),
           );
         }),
+      startDetached: (input) =>
+        guarded(async () => {
+          for (const value of Object.values(input.env ?? {})) secrets.add(value);
+          await sandbox.runCommand({
+            cmd: input.cmd,
+            ...(input.args === undefined ? {} : { args: [...input.args] }),
+            ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+            ...(input.env === undefined ? {} : { env: { ...input.env } }),
+            ...(input.sudo === undefined ? {} : { sudo: input.sudo }),
+            detached: true,
+          });
+        }),
+      domain: (port) => sandbox.domain(port).replace(/\/$/, ""),
       readFile: (path) => guarded(() => sandbox.readFileToBuffer({ path })),
       snapshot: ({ expirationMs }) =>
         guarded(async () => {
@@ -197,6 +218,7 @@ export const makeSandboxClient = (
               ? {}
               : { source: { type: "snapshot", snapshotId: input.snapshotId } }),
             ...(input.persistent === undefined ? {} : { persistent: input.persistent }),
+            ...(input.ports === undefined ? {} : { ports: [...input.ports] }),
             resources: { vcpus: input.vcpus },
             timeout: input.timeoutMs,
           }),

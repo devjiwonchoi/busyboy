@@ -64,7 +64,8 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
     if (message.op === "spawn") {
       const child = NodeChildProcess.spawn(String(message.cmd), message.args as string[], {
         cwd: message.cwd as string,
-        env: message.env as NodeJS.ProcessEnv,
+        // The sandbox's own environment (PATH, HOME) under what the Mac sent.
+        env: { ...process.env, ...(message.env as NodeJS.ProcessEnv) },
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
       });

@@ -92,6 +92,8 @@ export const applyWorkspace = async (
   shell: MirrorShell,
   repoDir: string,
   state: WorkspaceState,
+  /** Check this branch out at the head first, e.g. on a fresh clone in detached HEAD. */
+  branch?: string,
 ): Promise<void> => {
   if (!COMMIT.test(state.head)) throw new Error("Invalid workspace head.");
   const dir = await stagingDir(shell, repoDir);
@@ -109,6 +111,9 @@ export const applyWorkspace = async (
         ? ":"
         : `git fetch --quiet --no-write-fetch-head ${staging}/commits.bundle ` +
           `+HEAD:refs/busyboy-mirror/head`,
+      branch === undefined
+        ? ":"
+        : `git checkout --quiet --force -B ${shellQuote(branch)} ${state.head}`,
       `git reset --quiet --hard ${state.head}`,
       "git clean -fdq",
       state.patch.length === 0
@@ -128,9 +133,10 @@ export const mirrorWorkspace = async (input: {
   readonly to: MirrorShell;
   readonly toDir: string;
   readonly knownCommit: string | null;
+  readonly branch?: string;
 }): Promise<{ readonly head: string }> => {
   const state = await captureWorkspace(input.from, input.fromDir, input.knownCommit);
-  await applyWorkspace(input.to, input.toDir, state);
+  await applyWorkspace(input.to, input.toDir, state, input.branch);
   return { head: state.head };
 };
 
