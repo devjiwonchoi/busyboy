@@ -10,6 +10,7 @@ import {
   NodeId,
   type OrchestrationV2ConversationMessage,
   type OrchestrationV2ProviderThread,
+  type OrchestrationV2Run,
   type OrchestrationV2ProviderTurn,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2Subagent,
@@ -110,6 +111,8 @@ export interface FakeThread {
     Pick<OrchestrationV2ProviderThread, "id" | "driver" | "nativeThreadRef"> &
       Partial<Pick<OrchestrationV2ProviderThread, "providerSessionId">>
   >;
+  /** Runs; only `status`, `queueHeld` and `requestedAt` matter, to see held messages. */
+  runs?: Array<Pick<OrchestrationV2Run, "status" | "queueHeld" | "requestedAt">>;
   /** Run attempts; only `id` and `runId` matter, to tie provider turns to their run. */
   attempts?: Array<{ readonly id: string; readonly runId: string }>;
   worktreePath?: string | null;
@@ -414,6 +417,7 @@ export const withTeam = <A, E>(
             subagents: thread?.subagents ?? [],
             providerTurns: thread?.providerTurns ?? [],
             providerThreads: thread?.providerThreads ?? [],
+            runs: thread?.runs ?? [],
             attempts: thread?.attempts ?? [],
             turnItems: (thread?.turnItems ?? []).filter(
               (item) =>

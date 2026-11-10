@@ -769,14 +769,16 @@ describe("memory stall time", () => {
   const stallOf = (id: Parameters<typeof readTask>[0]) =>
     readTask(id).pipe(Effect.map((task) => task.metrics.memoryStallMs));
 
-  it.effect("local only: counts the time a lead stayed paused for memory", () => {
+  it.effect("local only: counts the time a lead was stopped mid-turn for memory", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(
       (harness) =>
         Effect.gen(function* () {
           const governor = yield* MemoryGovernor.MemoryGovernor;
           const pm = yield* setUpManager;
-          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead");
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead", {
+            running: { startedMsAgo: MINUTE },
+          });
           fake.mac.memory = CRITICAL;
           yield* governor.tick;
           assert.deepStrictEqual(yield* governor.paused, [lead]);
@@ -854,7 +856,9 @@ describe("memory stall time", () => {
         Effect.gen(function* () {
           const governor = yield* MemoryGovernor.MemoryGovernor;
           const pm = yield* setUpManager;
-          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead");
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead", {
+            running: { startedMsAgo: MINUTE },
+          });
           fake.mac.memory = CRITICAL;
           yield* governor.tick;
           assert.deepStrictEqual(yield* governor.paused, [lead]);
@@ -881,6 +885,81 @@ describe("memory stall time", () => {
           assert.strictEqual(yield* stallOf(task.id), 7 * MINUTE);
         }),
       { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+
+  it.effect("an idle lead waiting on the user is not stalled while paused", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+          const pm = yield* setUpManager;
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "In review");
+          yield* repository.updateTask({ id: task.id, stage: "in_review", now: START });
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          yield* TestClock.adjust(30 * MINUTE);
+
+          fake.mac.memory = PLENTY;
+          yield* resumeTicks(governor);
+          assert.deepStrictEqual(yield* governor.paused, []);
+          assert.strictEqual(yield* stallOf(task.id), 0);
+        }),
+      { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+
+  it.effect("an idle paused lead stalls from when a message waits in its held queue", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const { task, lead, thread } = yield* startWithSession(harness, fake.mac, pm, "Idle");
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          yield* TestClock.adjust(10 * MINUTE);
+          // A message arrives and waits, held, behind the pause.
+          thread.runs = [{ status: "queued", queueHeld: true, requestedAt: yield* DateTime.now }];
+          yield* TestClock.adjust(20 * MINUTE);
+
+          fake.mac.memory = PLENTY;
+          yield* resumeTicks(governor);
+          assert.deepStrictEqual(yield* governor.paused, []);
+          assert.strictEqual(yield* stallOf(task.id), 20 * MINUTE);
+        }),
+      { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+
+  it.effect("a start spaced out with plenty of memory is not stalled", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const create = (title: string) =>
+            createAcceptedTask(pm, { title, request: `${title}.`, intake: "New work." });
+          const { task: first } = yield* create("First");
+          const { task: second } = yield* create("Second");
+          yield* team.startTask(pm, { taskId: first.id }, harness.delegate);
+          yield* team.startTask(pm, { taskId: second.id }, harness.delegate).pipe(Effect.flip);
+          assert.strictEqual((yield* readTask(second.id)).memoryHold, "waiting");
+
+          yield* TestClock.adjust(START_SPACING_MS);
+          yield* resumeTicks(governor);
+          yield* TestClock.adjust(2 * MINUTE);
+          yield* team.startTask(pm, { taskId: second.id }, harness.delegate);
+          assert.strictEqual(yield* stallOf(second.id), 0);
+        }),
+      { memory: fake.read, settings: LOCAL_ONLY },
     );
   });
 });

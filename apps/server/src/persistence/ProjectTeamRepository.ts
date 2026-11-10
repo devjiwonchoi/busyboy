@@ -282,11 +282,20 @@ export class ProjectTeamRepository extends Context.Service<
     }) => Result<Option.Option<ProjectTask>>;
     /** Tasks with a move in progress, in any project. */
     readonly listMovingTasks: () => Result<ReadonlyArray<ProjectTask>>;
-    /** Sets or clears why the task is held for memory. */
+    /** Sets or clears why the task is held for memory; clearing it ends any stall. */
     readonly setTaskMemoryHold: (input: {
       readonly id: ProjectTaskId;
       readonly memoryHold: ProjectTaskMemoryHold | null;
       readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /**
+     * Starts (from `at`, unless one is running) or ends (at `at`) the time a held
+     * task's hold is holding back work, which ending adds to its memoryStallMs.
+     */
+    readonly setTaskMemoryStall: (input: {
+      readonly id: ProjectTaskId;
+      readonly stalling: boolean;
+      readonly at: IsoDateTime;
     }) => Result<Option.Option<ProjectTask>>;
     /** Tasks held for memory, in any project, lowest number first. */
     readonly listMemoryHeldTasks: () => Result<ReadonlyArray<ProjectTask>>;
@@ -783,12 +792,12 @@ export const make = Effect.gen(function* () {
   });
   /** metrics_json with the open memory hold's length, up to `now`, added to memoryStallMs. */
   const metricsWithMemoryStall = (now: string) => sql`
-    CASE WHEN memory_hold_since IS NULL THEN metrics_json ELSE json_set(
+    CASE WHEN memory_stall_since IS NULL THEN metrics_json ELSE json_set(
       metrics_json,
       '$.memoryStallMs',
       COALESCE(json_extract(metrics_json, '$.memoryStallMs'), 0) + MAX(
         0,
-        CAST(ROUND((julianday(${now}) - julianday(memory_hold_since)) * 86400000) AS INTEGER)
+        CAST(ROUND((julianday(${now}) - julianday(memory_stall_since)) * 86400000) AS INTEGER)
       )
     ) END
   `;
@@ -836,9 +845,9 @@ export const make = Effect.gen(function* () {
               THEN ${metricsWithMemoryStall(input.now)}
             ELSE metrics_json
           END,
-          memory_hold_since = CASE
+          memory_stall_since = CASE
             WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') THEN NULL
-            ELSE memory_hold_since
+            ELSE memory_stall_since
           END,
           title = COALESCE(${input.title ?? null}, title),
           waits_on_json = COALESCE(${input.waitsOn ?? null}, waits_on_json),
@@ -926,21 +935,42 @@ export const make = Effect.gen(function* () {
       now: IsoDateTime,
     }),
     Result: TaskRow,
-    // A hold opens its clock once (waiting then paused is one stall); clearing it
-    // adds the time held to the task's memory stall time.
+    // Clearing the hold ends its stall, adding the time it held work back.
     execute: (input) => sql`
       UPDATE project_tasks SET
         metrics_json = CASE
           WHEN ${input.memoryHold} IS NULL THEN ${metricsWithMemoryStall(input.now)}
           ELSE metrics_json
         END,
-        memory_hold_since = CASE
+        memory_stall_since = CASE
           WHEN ${input.memoryHold} IS NULL THEN NULL
-          ELSE COALESCE(memory_hold_since, ${input.now})
+          ELSE memory_stall_since
         END,
         memory_hold = ${input.memoryHold},
         updated_at = ${input.now}
       WHERE task_id = ${input.id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const startTaskMemoryStall = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, since: IsoDateTime }),
+    Result: TaskRow,
+    // A stall already running keeps its start; a task not held cannot stall.
+    execute: ({ id, since }) => sql`
+      UPDATE project_tasks SET
+        memory_stall_since = COALESCE(memory_stall_since, ${since})
+      WHERE task_id = ${id} AND memory_hold IS NOT NULL
+      RETURNING ${taskColumns}
+    `,
+  });
+  const stopTaskMemoryStall = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, now }) => sql`
+      UPDATE project_tasks SET
+        metrics_json = ${metricsWithMemoryStall(now)},
+        memory_stall_since = NULL
+      WHERE task_id = ${id} AND memory_stall_since IS NOT NULL
       RETURNING ${taskColumns}
     `,
   });
@@ -1765,6 +1795,11 @@ export const make = Effect.gen(function* () {
       findMovingTasks(undefined).pipe(Effect.mapError(toRepositoryError("listMovingTasks"))),
     setTaskMemoryHold: (input) =>
       updateTaskMemoryHold(input).pipe(Effect.mapError(toRepositoryError("setTaskMemoryHold"))),
+    setTaskMemoryStall: (input) =>
+      (input.stalling
+        ? startTaskMemoryStall({ id: input.id, since: input.at })
+        : stopTaskMemoryStall({ id: input.id, now: input.at })
+      ).pipe(Effect.mapError(toRepositoryError("setTaskMemoryStall"))),
     listMemoryHeldTasks: () =>
       findMemoryHeldTasks(undefined).pipe(
         Effect.mapError(toRepositoryError("listMemoryHeldTasks")),

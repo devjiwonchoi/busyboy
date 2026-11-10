@@ -2035,14 +2035,15 @@ const make = Effect.gen(function* () {
           const leadTarget =
             roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
           // The user's execution-location setting and the Mac's free memory pick the place.
+          const headroom = (yield* memoryHeadroom.checkFresh).headroom;
           const admission = admitTaskLead({
             active: running,
             cap: limit,
             policy: execution.location,
-            headroom: (yield* memoryHeadroom.checkFresh).headroom,
+            headroom,
             requested: input.location,
           });
-          const waitForMemory = Effect.gen(function* () {
+          const waitInTodo = Effect.gen(function* () {
             if (task.memoryHold !== "waiting") {
               yield* setMemoryHold(task, "waiting");
               yield* appendEvent(
@@ -2054,8 +2055,22 @@ const make = Effect.gen(function* () {
               yield* router.publish(role.projectId);
             }
           });
+          /**
+           * Holds the task in Todo. Only a wait while memory is short stalls it:
+           * a wait for start spacing is deliberate pacing.
+           */
+          const waitForMemory = (memoryShort: boolean) =>
+            Effect.gen(function* () {
+              yield* waitInTodo;
+              if (memoryShort) {
+                const at = yield* nowIso;
+                yield* repository
+                  .setTaskMemoryStall({ id: task.id, stalling: true, at })
+                  .pipe(orTeamError("Could not record the memory stall.", task.projectId));
+              }
+            });
           if (admission.type === "wait") {
-            if (admission.memory) yield* waitForMemory;
+            if (admission.memory) yield* waitForMemory(headroom !== "ok");
             return yield* teamError(
               `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
               role.projectId,
@@ -2070,7 +2085,7 @@ const make = Effect.gen(function* () {
             Effect.gen(function* () {
               const claim = yield* memoryHeadroom.claimStart(MemoryHeadroom.START_SPACING_MS);
               if (claim.type === "started") return;
-              yield* waitForMemory;
+              yield* waitForMemory(claim.type === "short");
               return yield* teamError(
                 `#${task.number} stays in the inbox: ${why(claim)} It starts by itself once the Mac has room; do not retry it.`,
                 role.projectId,

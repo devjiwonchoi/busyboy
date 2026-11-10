@@ -19,6 +19,11 @@
  * stay, and the next turn resumes the same session. PM and Director threads,
  * and any session the user opened in the last ten minutes, are never paused.
  * Under local_only nothing here moves work to the cloud.
+ *
+ * A hold counts toward the task's memory stall time only while it holds back
+ * work: a paused lead that was mid-turn, or one whose held queue got a message;
+ * a task waiting to start while memory is short. An idle lead waiting on the
+ * user, or a start spaced out on purpose, is not stalled.
  */
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -101,6 +106,8 @@ interface PausedUnit {
   readonly taskId: ProjectTaskId;
   readonly projectId: ProjectId;
   readonly members: ReadonlyArray<PausedMember>;
+  /** Its stall clock runs: it was mid-turn, or a message waits in a held queue. */
+  readonly stalling: boolean;
 }
 
 export class MemoryGovernor extends Context.Service<
@@ -158,6 +165,15 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* repository.setTaskMemoryHold({ id: task.id, memoryHold: hold, now: yield* nowIso });
       yield* router.publish(task.projectId);
+    }).pipe(Effect.ignore);
+
+  const setStall = (taskId: ProjectTaskId, stalling: boolean, at?: string) =>
+    Effect.gen(function* () {
+      yield* repository.setTaskMemoryStall({
+        id: taskId,
+        stalling,
+        at: at ?? (yield* nowIso),
+      });
     }).pipe(Effect.ignore);
 
   /** The provider session behind the thread's current provider thread, if any. */
@@ -284,6 +300,7 @@ const make = Effect.gen(function* () {
           taskId: candidate.task.id,
           projectId: candidate.task.projectId,
           members,
+          stalling: candidate.running,
         },
       ]);
       const current = yield* repository.getTask(candidate.task.id).pipe(
@@ -294,6 +311,8 @@ const make = Effect.gen(function* () {
         yield* setHold(candidate.task, "paused");
         yield* note(candidate.task, PAUSED_NOTE);
       }
+      // A stopped turn is work held back; an idle lead stalls only once a message waits.
+      if (candidate.running) yield* setStall(candidate.task.id, true);
       yield* Effect.logInfo("memory governor paused a lead", {
         threadId: candidate.threadId,
         members: members.length,
@@ -440,13 +459,48 @@ const make = Effect.gen(function* () {
             threadId: member.id,
             interrupted: member.status === "interrupted",
           })),
+          // A stall that ran before the restart kept its start in storage.
+          stalling: false,
         },
       ]);
     }
   });
 
+  /** When the earliest message held in a paused unit's queues was sent, if any. */
+  const heldWorkSince = (unit: PausedUnit) =>
+    Effect.gen(function* () {
+      let earliest: number | null = null;
+      for (const member of unit.members) {
+        const { runs } = yield* threads
+          .getThreadRecords(member.threadId, ["runs"])
+          .pipe(Effect.orElseSucceed(() => ({ runs: [] as ReadonlyArray<never> })));
+        for (const run of runs) {
+          if (run.status !== "queued" || run.queueHeld !== true) continue;
+          const at = DateTime.toEpochMillis(run.requestedAt);
+          if (earliest === null || at < earliest) earliest = at;
+        }
+      }
+      return earliest;
+    });
+
+  /** Starts the stall clock of an idle paused lead once a message waits in its held queue. */
+  const markHeldWork = Effect.gen(function* () {
+    for (const unit of yield* Ref.get(pausedRef)) {
+      if (unit.stalling) continue;
+      const since = yield* heldWorkSince(unit);
+      if (since === null) continue;
+      yield* setStall(unit.taskId, true, new Date(since).toISOString());
+      yield* Ref.update(pausedRef, (all) =>
+        all.map((entry) =>
+          entry.leadThreadId === unit.leadThreadId ? { ...entry, stalling: true } : entry,
+        ),
+      );
+    }
+  });
+
   const tick: MemoryGovernor["Service"]["tick"] = Effect.gen(function* () {
     yield* restorePauses;
+    yield* markHeldWork;
     const execution = yield* settings;
     // Uncached: the last pass's pause must show in this reading.
     const { headroom } = yield* memory.checkFresh;
