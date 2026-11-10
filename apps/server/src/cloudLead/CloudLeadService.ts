@@ -166,7 +166,11 @@ export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape
       ),
   });
 
-/** The Vercel CLI keeps its login token here on macOS; used when none was saved. */
+/**
+ * The Vercel CLI keeps its login token here on macOS; used when none was saved.
+ * That token can reach every team the user belongs to, so makeSandboxClient
+ * checks the team against ALLOWED_VERCEL_TEAM_SLUGS before any sandbox call.
+ */
 const VERCEL_CLI_AUTH = "Library/Application Support/com.vercel.cli/auth.json";
 
 const readVercelCliToken = async (home: string): Promise<string | null> => {

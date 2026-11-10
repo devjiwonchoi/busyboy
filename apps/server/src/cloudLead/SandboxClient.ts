@@ -10,6 +10,12 @@ import { Sandbox, Snapshot } from "@vercel/sandbox";
 import * as Redacted from "effect/Redacted";
 
 import { containsSecret, makeSecretMasker, type SecretMasker } from "./secretMask.ts";
+import {
+  assertAllowedVercelTeam,
+  fetchVercelTeamInfo,
+  type VercelTeamInfo,
+  type VercelTeamQuery,
+} from "./vercelTeamGuard.ts";
 
 export interface SandboxCredentials {
   readonly token: Redacted.Redacted<string>;
@@ -83,6 +89,8 @@ export interface SandboxSdk {
   readonly createSandbox: (params: Record<string, unknown>) => Promise<SdkSandbox>;
   readonly getSandbox: (params: Record<string, unknown>) => Promise<SdkSandbox>;
   readonly getSnapshot: (params: Record<string, unknown>) => Promise<SdkSnapshot>;
+  /** Reads the team slug and project owner; checked before any sandbox call. */
+  readonly lookupTeam: (query: VercelTeamQuery) => Promise<VercelTeamInfo>;
 }
 
 export interface SdkSnapshot {
@@ -116,6 +124,7 @@ export const vercelSandboxSdk: SandboxSdk = {
   createSandbox: (params) => Sandbox.create(params as never) as unknown as Promise<SdkSandbox>,
   getSandbox: (params) => Sandbox.get(params as never) as unknown as Promise<SdkSandbox>,
   getSnapshot: (params) => Snapshot.get(params as never) as unknown as Promise<SdkSnapshot>,
+  lookupTeam: fetchVercelTeamInfo,
 };
 
 export const makeSandboxClient = (
@@ -136,6 +145,17 @@ export const makeSandboxClient = (
     } catch (error) {
       throw masker().maskError(error);
     }
+  };
+
+  // Every call that reaches Vercel waits for the team check first. A passed
+  // check is kept; a failed one is retried on the next call.
+  let teamChecked: Promise<void> | null = null;
+  const checkTeam = () => {
+    teamChecked ??= assertAllowedVercelTeam(sdkCredentials(), sdk.lookupTeam).catch((error) => {
+      teamChecked = null;
+      throw error;
+    });
+    return teamChecked;
   };
 
   const wrap = (sandbox: SdkSandbox): SandboxHandle => {
@@ -213,8 +233,9 @@ export const makeSandboxClient = (
 
   return {
     create: (input) =>
-      guarded(async () =>
-        wrap(
+      guarded(async () => {
+        await checkTeam();
+        return wrap(
           await sdk.createSandbox({
             ...sdkCredentials(),
             ...(input.name === undefined ? {} : { name: input.name }),
@@ -226,20 +247,22 @@ export const makeSandboxClient = (
             resources: { vcpus: input.vcpus },
             timeout: input.timeoutMs,
           }),
-        ),
-      ),
+        );
+      }),
     get: (name, options = {}) =>
-      guarded(async () =>
-        wrap(
+      guarded(async () => {
+        await checkTeam();
+        return wrap(
           await sdk.getSandbox({
             ...sdkCredentials(),
             name,
             ...(options.resume === undefined ? {} : { resume: options.resume }),
           }),
-        ),
-      ),
+        );
+      }),
     snapshotState: (snapshotId) =>
       guarded(async () => {
+        await checkTeam();
         const snapshot = await sdk
           .getSnapshot({ ...sdkCredentials(), snapshotId })
           .catch(() => null);
