@@ -2035,7 +2035,7 @@ const make = Effect.gen(function* () {
             active: running,
             cap: limit,
             policy: execution.location,
-            headroom: (yield* memoryHeadroom.check).headroom,
+            headroom: (yield* memoryHeadroom.checkFresh).headroom,
             requested: input.location,
           });
           const waitForMemory = Effect.gen(function* () {
@@ -2057,6 +2057,26 @@ const make = Effect.gen(function* () {
               role.projectId,
             );
           }
+          /**
+           * Every local start claims the shared start gate: a fresh ok reading and
+           * time since the last local start for its memory to show. When it cannot,
+           * the task waits for memory and the governor has the PM start it later.
+           */
+          const claimLocalStart = (why: (claim: MemoryHeadroom.StartClaim) => string) =>
+            Effect.gen(function* () {
+              const claim = yield* memoryHeadroom.claimStart(MemoryHeadroom.START_SPACING_MS);
+              if (claim.type === "started") return;
+              yield* waitForMemory;
+              return yield* teamError(
+                `#${task.number} stays in the inbox: ${why(claim)} It starts by itself once the Mac has room; do not retry it.`,
+                role.projectId,
+              );
+            });
+          const notNow = (claim: MemoryHeadroom.StartClaim) =>
+            claim.type === "spaced"
+              ? `another session started on this Mac moments ago, and its memory has not shown yet (${MEMORY_WAIT_REASON}).`
+              : `${MEMORY_WAIT_REASON}.`;
+          if (admission.location === "local") yield* claimLocalStart(notNow);
           const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
             Effect.gen(function* () {
               return yield* delegate({
@@ -2106,13 +2126,10 @@ const make = Effect.gen(function* () {
                 if (admission.location !== "cloud" || input.location === "cloud") {
                   return yield* Effect.fail(failure);
                 }
-                if ((yield* memoryHeadroom.check).headroom !== "ok") {
-                  yield* waitForMemory;
-                  return yield* teamError(
-                    `#${task.number} stays in the inbox: the cloud could not start it (${failure.message}) and ${MEMORY_WAIT_REASON}. It starts once the Mac has room; do not retry it.`,
-                    role.projectId,
-                  );
-                }
+                yield* claimLocalStart(
+                  (claim) =>
+                    `the cloud could not start it (${failure.message}) and ${notNow(claim)}`,
+                );
                 const lead = yield* delegateLead("local", ":local");
                 return { lead, location: "local" as const, note: CLOUD_FALLBACK_NOTE };
               }),

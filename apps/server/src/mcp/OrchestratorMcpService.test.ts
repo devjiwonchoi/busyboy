@@ -22,6 +22,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 
 import {
   DispatchModeLimit,
@@ -41,6 +43,7 @@ import { buildUnavailableProviderSnapshot } from "../provider/unavailableProvide
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as CloudLeadSecrets from "../cloudLead/CloudLeadSecrets.ts";
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
@@ -1293,6 +1296,8 @@ describe("OrchestratorMcpService provider resolution", () => {
       readonly setParentCloud: () => void;
       readonly dispatched: Ref.Ref<ReadonlyArray<unknown>>;
     }) => Effect.Effect<A, E>,
+    /** The Mac's memory as the sampler reads it; defaults to no sampler (always room). */
+    memory?: () => MemoryHeadroom.MemorySnapshot,
   ) =>
     Effect.gen(function* () {
       const task = {
@@ -1351,6 +1356,13 @@ describe("OrchestratorMcpService provider resolution", () => {
             ),
         }),
         ServerSettings.layerTest(settings),
+        ...(memory === undefined
+          ? []
+          : [
+              MemoryHeadroom.layerFromSource(memory).pipe(
+                Layer.provide(ServerSettings.layerTest(settings)),
+              ),
+            ]),
         providerRegistryLayer([
           providerSnapshot({
             instanceId: codexInstanceId,
@@ -1461,6 +1473,41 @@ describe("OrchestratorMcpService provider resolution", () => {
             ],
           );
         }),
+    ),
+  );
+
+  const PLENTY: MemoryHeadroom.MemorySnapshot = {
+    availableMemoryBytes: 6 * 1024 ** 3,
+    memoryPressure: "normal",
+  };
+  const TIGHT: MemoryHeadroom.MemorySnapshot = {
+    availableMemoryBytes: 1 * 1024 ** 3,
+    memoryPressure: "normal",
+  };
+  const localChild = (clientRequestId: string, isolation?: "worktree") => ({
+    task: "Build it.",
+    target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+    mode: "async" as const,
+    ...(isolation === undefined ? {} : { isolation }),
+    clientRequestId,
+  });
+
+  it.effect("starts a second local child only once the first one's memory can show", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, dispatched }) =>
+        Effect.gen(function* () {
+          yield* service.delegateTask(scope, localChild("spaced-first"));
+          const second = yield* service
+            .delegateTask(scope, localChild("spaced-second"))
+            .pipe(Effect.forkChild);
+          yield* TestClock.adjust(MemoryHeadroom.START_SPACING_MS - 1_000);
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 1);
+          yield* TestClock.adjust(1_000);
+          yield* Fiber.join(second);
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 2);
+        }),
+      () => PLENTY,
     ),
   );
 

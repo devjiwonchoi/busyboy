@@ -13,10 +13,12 @@ import {
   resolveTaskExecutionSettings,
   type TaskExecutionSettings,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
@@ -70,6 +72,19 @@ export interface MemoryReading {
   readonly snapshot: MemorySnapshot | null;
 }
 
+/**
+ * Least time between two local session starts or resumes, by any path: a new
+ * session's memory takes a while to show, so a reading right after a start
+ * still looks like the Mac before it.
+ */
+export const START_SPACING_MS = 20_000;
+
+export type StartClaim =
+  | { readonly type: "started" }
+  | { readonly type: "short"; readonly headroom: Exclude<Headroom, "ok"> }
+  /** Another local session started or resumed too recently; try again in `waitMs`. */
+  | { readonly type: "spaced"; readonly waitMs: number };
+
 export interface MemoryHeadroomShape {
   /** Samples now; the host may answer from a sample a few seconds old. */
   readonly check: Effect.Effect<MemoryReading>;
@@ -79,6 +94,16 @@ export interface MemoryHeadroomShape {
   readonly latest: () => MemoryReading | null;
   /** The headroom each time it changes, sampled every few seconds. */
   readonly changes: Stream.Stream<Headroom>;
+  /**
+   * The one gate for starting a local session (task leads, delegated children):
+   * a fresh ok reading and `spacingMs` since the last local start or resume.
+   * A claim that passes records the start. Claims run one at a time.
+   */
+  readonly claimStart: (spacingMs?: number) => Effect.Effect<StartClaim>;
+  /** Records a local start or resume that did not claim (the governor's resumes). */
+  readonly recordStart: Effect.Effect<void>;
+  /** Milliseconds since the last local start or resume; null when none yet. */
+  readonly sinceLastStart: Effect.Effect<number | null>;
 }
 
 const UNLIMITED: MemoryReading = { headroom: "ok", snapshot: null };
@@ -89,6 +114,9 @@ export const unlimited: MemoryHeadroomShape = {
   checkFresh: Effect.succeed(UNLIMITED),
   latest: () => UNLIMITED,
   changes: Stream.make("ok" as const),
+  claimStart: () => Effect.succeed({ type: "started" }),
+  recordStart: Effect.void,
+  sinceLastStart: Effect.succeed(null),
 };
 
 export class MemoryHeadroom extends Context.Reference<MemoryHeadroomShape>(
@@ -120,6 +148,28 @@ export const make = (input: {
         return reading;
       });
     const check = judge(input.read);
+    const checkFresh = judge(input.readFresh ?? input.read);
+    let lastStartAt: number | null = null;
+    const claims = yield* Semaphore.make(1);
+    const sinceLastStart = Effect.map(Clock.currentTimeMillis, (now) =>
+      lastStartAt === null ? null : now - lastStartAt,
+    );
+    const recordStart = Effect.map(Clock.currentTimeMillis, (now) => {
+      lastStartAt = now;
+    });
+    const claimStart = (spacingMs = START_SPACING_MS) =>
+      claims.withPermits(1)(
+        Effect.gen(function* () {
+          const since = yield* sinceLastStart;
+          if (since !== null && since < spacingMs) {
+            return { type: "spaced", waitMs: spacingMs - since } satisfies StartClaim;
+          }
+          const { headroom } = yield* checkFresh;
+          if (headroom !== "ok") return { type: "short", headroom } satisfies StartClaim;
+          yield* recordStart;
+          return { type: "started" } satisfies StartClaim;
+        }),
+      );
     const every =
       input.sampleEveryMs === undefined ? MEMORY_SAMPLE_INTERVAL_MS : input.sampleEveryMs;
     if (every !== null) {
@@ -131,9 +181,12 @@ export const make = (input: {
     }
     return {
       check,
-      checkFresh: judge(input.readFresh ?? input.read),
+      checkFresh,
       latest: () => latest,
       changes: SubscriptionRef.changes(current).pipe(Stream.changes),
+      claimStart,
+      recordStart,
+      sinceLastStart,
     } satisfies MemoryHeadroomShape;
   });
 
@@ -189,5 +242,30 @@ export const waitForHeadroom = (
       if ((yield* memory.check).headroom === "ok") return true;
       if (attempt >= attempts) return false;
       yield* Effect.sleep(pollMs);
+    }
+  });
+
+/**
+ * Claims a local start, waiting while memory is short or another start was
+ * too recent. True once claimed, false when `timeoutMs` passed first.
+ */
+export const waitToStart = (
+  memory: MemoryHeadroomShape,
+  options: {
+    readonly timeoutMs?: number;
+    readonly pollMs?: number;
+    readonly spacingMs?: number;
+  } = {},
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const pollMs = options.pollMs ?? MEMORY_SAMPLE_INTERVAL_MS;
+    const deadline = (yield* Clock.currentTimeMillis) + (options.timeoutMs ?? HEADROOM_WAIT_MS);
+    while (true) {
+      const claim = yield* memory.claimStart(options.spacingMs);
+      if (claim.type === "started") return true;
+      const left = deadline - (yield* Clock.currentTimeMillis);
+      if (left <= 0) return false;
+      const pause = claim.type === "spaced" ? Math.min(claim.waitMs, pollMs) : pollMs;
+      yield* Effect.sleep(Math.min(pause, left));
     }
   });

@@ -8,7 +8,9 @@
  * - tight: pause idle sessions only.
  * - ok: resume paused leads, last paused first; then tell a PM to start the
  *   next task waiting for memory. Either happens only after two ok samples in
- *   a row, and at most once a minute, so memory settles between them.
+ *   a row, at most once a minute, and never within START_SPACING_MS of any
+ *   local start (PM starts and delegated children share MemoryHeadroom's start
+ *   clock), so memory settles between them.
  *
  * A lead and its local delegated children pause and resume as one unit: a
  * child stopped alone would never be woken, and its result would wake a lead
@@ -461,9 +463,17 @@ const make = Effect.gen(function* () {
     const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
     const last = yield* Ref.get(lastResumeAt);
     if (last !== null && nowMs - last < RESUME_COOLDOWN_MS) return;
+    // Any local start, by a PM or a delegated child, needs its memory to show first too.
+    const sinceStart = yield* memory.sinceLastStart;
+    if (sinceStart !== null && sinceStart < MemoryHeadroom.START_SPACING_MS) return;
     // Paused sessions come back before anything new starts.
-    const acted = (yield* resumeOne) || (yield* startNextWaiting);
-    if (acted) yield* Ref.set(lastResumeAt, nowMs);
+    if (yield* resumeOne) {
+      yield* memory.recordStart;
+      yield* Ref.set(lastResumeAt, nowMs);
+      return;
+    }
+    // The PM's task_start claims the start itself, so a wake does not record one.
+    if (yield* startNextWaiting) yield* Ref.set(lastResumeAt, nowMs);
   }).pipe(
     Effect.catchCause((cause) => Effect.logWarning("memory governor pass failed", { cause })),
   );

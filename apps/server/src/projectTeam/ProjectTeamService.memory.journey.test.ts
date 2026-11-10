@@ -29,7 +29,7 @@ import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import type * as ProviderSessionManager from "../orchestration-v2/ProviderSessionManager.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import type { MemorySnapshot } from "../resourceTelemetry/MemoryHeadroom.ts";
+import { type MemorySnapshot, START_SPACING_MS } from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as MemoryGovernor from "./MemoryGovernor.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
 import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
@@ -151,6 +151,8 @@ const startWithSession = (
       harness.delegate,
     );
     const thread = giveSession(harness, mac, lead, state);
+    // The next local start waits this long for this one's memory to show.
+    yield* TestClock.adjust(START_SPACING_MS);
     return { task, lead, thread };
   });
 
@@ -596,6 +598,7 @@ describe("memory-based task admission", () => {
             for (let index = 1; index <= 7; index += 1) {
               const started = yield* start(`Task ${index}`);
               assert.strictEqual(started.task.stage, "planning");
+              yield* TestClock.adjust(START_SPACING_MS);
             }
             const eighth = yield* start("Task 8").pipe(Effect.flip);
             assert.include(eighth.message, "7 of 7 task leads are already running");
@@ -613,13 +616,54 @@ describe("memory-based task admission", () => {
           const { firstPm, secondPm } = yield* setUpWorkspace(harness);
           const started = yield* startLead(firstPm, "First project", harness.delegate);
           assert.strictEqual(started.task.stage, "planning");
+          yield* TestClock.adjust(START_SPACING_MS);
           yield* startLead(secondPm, "Second project", harness.delegate);
+          yield* TestClock.adjust(START_SPACING_MS);
           const refused = yield* startLead(firstPm, "One too many", harness.delegate).pipe(
             Effect.flip,
           );
           assert.include(refused.message, "2 of 2 task leads are already running");
         }),
       { memory: fake.read, settings: { taskExecution: { maxConcurrentSessions: 2 } } },
+    );
+  });
+
+  it.effect("spaces out local starts so each one's memory shows before the next", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const pm = yield* setUpManager;
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const create = (title: string) =>
+            createAcceptedTask(pm, { title, request: `${title}.`, intake: "New work." });
+          const { task: first } = yield* create("First");
+          const { task: second } = yield* create("Second");
+
+          // Plenty of memory, but the first start's memory has not shown yet.
+          yield* team.startTask(pm, { taskId: first.id }, harness.delegate);
+          const refused = yield* team
+            .startTask(pm, { taskId: second.id }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(refused.message, "another session started on this Mac moments ago");
+          const waiting = yield* readTask(second.id);
+          assert.strictEqual(waiting.stage, "inbox");
+          assert.strictEqual(waiting.memoryHold, "waiting");
+          assert.strictEqual((yield* Ref.get(harness.delegated)).length, 1);
+
+          // Once the spacing has passed, the governor has the PM start it, and it starts.
+          yield* TestClock.adjust(START_SPACING_MS);
+          yield* resumeTicks(governor);
+          assert.isTrue(
+            (yield* harness.messagesTo(pm)).some((text) => text.includes(`#${second.number}`)),
+          );
+          const started = yield* team.startTask(pm, { taskId: second.id }, harness.delegate);
+          assert.strictEqual(started.task.stage, "planning");
+          assert.strictEqual(started.task.location, "local");
+          assert.isNull((yield* readTask(second.id)).memoryHold ?? null);
+        }),
+      { memory: fake.read },
     );
   });
 
@@ -668,6 +712,7 @@ describe("memory-based task admission", () => {
           const started = yield* team.startTask(pm, { taskId: first.id }, noCloud);
           assert.strictEqual(started.task.location, "local");
           assert.include(yield* notesOf(first.id), CLOUD_FALLBACK_NOTE);
+          yield* TestClock.adjust(START_SPACING_MS);
 
           // Short on memory: waits instead of failing.
           fake.mac.memory = TIGHT;
