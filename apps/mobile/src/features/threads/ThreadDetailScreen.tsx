@@ -1239,6 +1239,13 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                     environmentId={props.environmentId}
                     threadId={props.selectedThread.id}
                     canOperateThread={props.canOperateThread}
+                    onReply={(text) => props.onChangeDraftMessage(`${text}${props.draftMessage}`)}
+                    onOpenLead={(threadId) => {
+                      navigation.navigate("Thread", {
+                        environmentId: props.environmentId,
+                        threadId,
+                      });
+                    }}
                   />
                   {props.activePendingApproval || props.activePendingUserInput ? (
                     <Animated.View

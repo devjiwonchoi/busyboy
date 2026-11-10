@@ -1,27 +1,51 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import {
+  isTurnFailedBlocker,
+  isSandboxRotationDecision,
+  type EnvironmentId,
+  type ThreadId,
+} from "@t3tools/contracts";
+import {
+  approveAnswerFor,
+  defaultRequestOption,
+  formatRequestAnswer,
+  formatRequestLink,
+  parseRequestMessage,
+  REQUEST_APPROVE_LABEL,
+  REQUEST_BLOCKER_DONE,
+  REQUEST_DETAILS_LABEL,
+} from "@t3tools/shared/requestMessage";
+import * as Clipboard from "expo-clipboard";
 import { AsyncResult } from "effect/reactivity";
 import { useMemo, useState } from "react";
-import { View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { useProjects } from "../../state/entities";
-import { useAnswerDecision, useEnvironmentProjectTeamAttention } from "../../state/projectTeam";
+import {
+  projectTeamEnvironment,
+  useAnswerDecision,
+  useEnvironmentProjectTeamAttention,
+} from "../../state/projectTeam";
+import { useEnvironmentQuery } from "../../state/query";
 import {
   cardOptionLabel,
   openTeamCardsForThread,
   splitCardQuestion,
+  requestTodoRows,
   type ThreadTeamCard,
 } from "./projectTeamCards.logic";
 import { RequestActionButton } from "./RequestActionButton";
 
 /**
- * Open blocker and decision cards above the composer of a PM or Director chat, with the
- * project each one is about. Picking an option answers it; the server relays the answer.
+ * Open requests stay above the PM or Director composer as individual messages.
+ * Recovery requests retain their existing actions; the server relays every answer.
  */
 export function ProjectTeamCards(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly canOperateThread: boolean;
+  readonly onReply: (text: string) => void;
+  readonly onOpenLead: (threadId: ThreadId) => void;
 }) {
   const attention = useEnvironmentProjectTeamAttention(props.environmentId);
   const projects = useProjects();
@@ -36,7 +60,9 @@ export function ProjectTeamCards(props: {
       }),
     [attention, projects, props.environmentId, props.threadId],
   );
-  if (cards.length === 0) return null;
+  if (cards.length === 0) {
+    return null;
+  }
   return (
     <View className="shrink-0 gap-3 px-4 pb-3" testID="project-team-cards">
       {cards.map((entry) => (
@@ -45,16 +71,20 @@ export function ProjectTeamCards(props: {
           entry={entry}
           environmentId={props.environmentId}
           canOperateThread={props.canOperateThread}
+          onReply={props.onReply}
+          onOpenLead={props.onOpenLead}
         />
       ))}
     </View>
   );
 }
 
-export function ProjectTeamCard(props: {
+function LegacyProjectTeamCard(props: {
   readonly entry: ThreadTeamCard;
   readonly environmentId: EnvironmentId;
   readonly canOperateThread: boolean;
+  readonly onReply: (text: string) => void;
+  readonly onOpenLead: (threadId: ThreadId) => void;
 }) {
   const answerDecision = useAnswerDecision();
   const [sending, setSending] = useState<string | null>(null);
@@ -71,8 +101,11 @@ export function ProjectTeamCard(props: {
         attentionItemId: card.item.id,
         answer: option,
       });
-      if (AsyncResult.isFailure(result)) setFailed(true);
-    } catch {
+      if (AsyncResult.isFailure(result)) {
+        setFailed(true);
+      }
+    } catch (error) {
+      console.error("Failed to answer project request", error);
       setFailed(true);
     } finally {
       setSending(null);
@@ -122,6 +155,260 @@ export function ProjectTeamCard(props: {
           선택지가 없는 질문이에요. 채팅으로 답해 주세요.
         </Text>
       )}
+    </View>
+  );
+}
+
+type ProjectTeamCardProps = Parameters<typeof LegacyProjectTeamCard>[0];
+
+export function ProjectTeamCard(props: ProjectTeamCardProps) {
+  if (
+    isTurnFailedBlocker(props.entry.card.item) ||
+    isSandboxRotationDecision(props.entry.card.item)
+  ) {
+    return <LegacyProjectTeamCard {...props} />;
+  }
+  return <RequestMessageCard {...props} />;
+}
+
+function RequestMessageCard(props: ProjectTeamCardProps) {
+  const { card, sender, leadThreadId } = props.entry;
+  const { item } = card;
+  const message = parseRequestMessage(item.question);
+  // Plan approvals read the task's spec for live done marks and the folded full plan.
+  const detail = useEnvironmentQuery(
+    item.kind === "approval" && item.taskId !== null
+      ? projectTeamEnvironment.taskDetail({
+          environmentId: props.environmentId,
+          input: { projectId: item.projectId, taskId: item.taskId },
+        })
+      : null,
+  );
+  const versions = detail.data?.versions ?? [];
+  const asked = versions.find((entry) => entry.version === item.specVersion)?.spec ?? null;
+  const live = versions.at(-1)?.spec ?? null;
+  const todos = requestTodoRows(card).map((row) => ({
+    ...row,
+    done: live?.todos.find((todo) => todo.id === row.id)?.done ?? row.done,
+  }));
+  const [planOpen, setPlanOpen] = useState(false);
+  const lead =
+    item.senderRole === "lead" || (item.senderRole == null && leadThreadId !== null);
+  const chatThreadId = lead && leadThreadId !== null ? leadThreadId : item.askerThreadId;
+  const answerDecision = useAnswerDecision();
+  const [expanded, setExpanded] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(() =>
+    defaultRequestOption(item.options),
+  );
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const disabled = sending || !props.canOperateThread;
+
+  // Keep failed requests visible and retryable instead of clearing the user's choices.
+  const answer = async (text: string) => {
+    setSending(true);
+    setError(null);
+    try {
+      const result = await answerDecision(props.environmentId, {
+        projectId: item.projectId,
+        attentionItemId: item.id,
+        answer: text,
+      });
+      if (AsyncResult.isFailure(result)) {
+        setError("답을 보내지 못했어요. 다시 눌러 주세요.");
+      }
+    } catch (cause) {
+      console.error("Failed to answer project request", cause);
+      setError("답을 보내지 못했어요. 다시 눌러 주세요.");
+    } finally {
+      setSending(false);
+    }
+  };
+  const link = formatRequestLink(item.id, message.headline);
+  const copyLink = async () => {
+    try {
+      await Clipboard.setStringAsync(link);
+      setActionsOpen(false);
+    } catch (cause) {
+      console.error("Failed to copy request link", cause);
+      setError("링크를 복사하지 못했어요. 다시 눌러 주세요.");
+    }
+  };
+
+  return (
+    <View className="gap-1.5" testID={`project-team-card-${item.kind}`}>
+      <Text className="font-sans text-xs text-foreground-muted">{sender}</Text>
+      <View
+        className="gap-3 rounded-[20px] border border-border bg-card-alt p-4"
+        testID="request-bubble"
+      >
+        <View className="flex-row items-start gap-2">
+          <Text className="flex-1 font-t3-bold text-base text-foreground">{message.headline}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="요청 동작"
+            hitSlop={8}
+            onPress={() => setActionsOpen(!actionsOpen)}
+          >
+            <Text className="text-foreground-muted">⋯</Text>
+          </Pressable>
+        </View>
+        {actionsOpen ? (
+          <View className="flex-row gap-2">
+            {props.entry.replyable ? (
+              <RequestActionButton
+                label="답장"
+                tone="secondary"
+                disabled={!props.canOperateThread}
+                onPress={() => {
+                  props.onReply(`${link} `);
+                  setActionsOpen(false);
+                }}
+              />
+            ) : null}
+            <RequestActionButton
+              label="링크 복사"
+              tone="secondary"
+              onPress={() => void copyLink()}
+            />
+          </View>
+        ) : null}
+        {message.paragraphs.map((paragraph, index) => (
+          <Text key={index} className="font-sans text-sm leading-normal text-foreground-secondary">
+            {paragraph}
+          </Text>
+        ))}
+        {(item.kind === "approval"
+          ? todos
+          : message.steps.map((text, index) => ({ text, done: false, number: index + 1 }))
+        ).map((row) => (
+          <Text
+            key={row.number}
+            className={
+              row.done
+                ? "font-sans text-sm text-foreground-muted line-through opacity-50"
+                : "font-sans text-sm text-foreground-secondary"
+            }
+          >
+            {row.number}. {row.text}
+          </Text>
+        ))}
+        {expanded ? (
+          <View className="gap-3" testID="request-details">
+            {(item.details ?? []).map((detail, index) => (
+              <Text key={index} className="font-sans text-sm text-foreground-secondary">
+                {detail.label}: {detail.text}
+              </Text>
+            ))}
+            {item.kind === "approval" && todos.length > 0 ? (
+              <View className="gap-1">
+                <Text className="font-t3-bold text-sm text-foreground">단계</Text>
+                {todos.map((todo) => (
+                  <Text key={todo.number} className="font-sans text-sm text-foreground-secondary">
+                    {todo.number}. {todo.detail}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {item.kind === "decision" && item.options.length > 0 ? (
+              <View className="gap-2">
+                {item.options.map((option) => (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected === option, disabled }}
+                    disabled={disabled}
+                    onPress={() => setSelected(option)}
+                    className="flex-row gap-2 rounded-xl border border-border p-3"
+                  >
+                    <Text className="text-foreground">{selected === option ? "●" : "○"}</Text>
+                    <Text className="flex-1 font-sans text-sm text-foreground">
+                      {option.replace(/\((?:Recommended|추천)\)/gi, "").trim()}
+                    </Text>
+                    {/\((?:Recommended|추천)\)/i.test(option) ? (
+                      <Text className="text-xs text-foreground-muted">추천</Text>
+                    ) : null}
+                  </Pressable>
+                ))}
+                <TextInput
+                  accessibilityLabel="추가 의견"
+                  placeholder="추가 의견 (선택)"
+                  value={note}
+                  onChangeText={setNote}
+                  editable={!disabled}
+                  multiline
+                  className="rounded-xl border border-border p-3 text-foreground"
+                />
+                <RequestActionButton
+                  label="보내기"
+                  disabled={disabled || selected === null}
+                  onPress={() => {
+                    if (selected !== null) {
+                      void answer(formatRequestAnswer(selected, note));
+                    }
+                  }}
+                />
+              </View>
+            ) : null}
+            {asked?.nonGoals ? (
+              <View className="gap-1">
+                <Text className="font-t3-bold text-sm text-foreground">안 하는 것</Text>
+                <Text className="font-sans text-sm text-foreground-secondary">{asked.nonGoals}</Text>
+              </View>
+            ) : null}
+            {asked !== null ? (
+              <RequestActionButton
+                label="전체 플랜"
+                tone="secondary"
+                accessibilityState={{ expanded: planOpen }}
+                onPress={() => setPlanOpen(!planOpen)}
+              />
+            ) : null}
+            {planOpen && asked !== null ? (
+              // The phone has no plan review screen, so the full plan unfolds here; changes go by reply.
+              <View className="gap-2" testID="request-full-plan">
+                <Text className="font-sans text-sm text-foreground-secondary">{asked.summary}</Text>
+                <Text className="font-sans text-sm text-foreground-secondary">{asked.goal}</Text>
+                {asked.criteria.map((criterion) => (
+                  <Text key={criterion.id} className="font-sans text-sm text-foreground-secondary">
+                    · {criterion.text}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {chatThreadId !== null ? (
+              <RequestActionButton
+                label={lead ? "💬 리드와 대화" : "대화하기"}
+                tone="secondary"
+                onPress={() => props.onOpenLead(chatThreadId)}
+              />
+            ) : null}
+          </View>
+        ) : null}
+        {error !== null ? (
+          <Text className="font-sans text-xs text-danger-foreground">{error}</Text>
+        ) : null}
+        <View className="h-px bg-border" />
+        <View className="flex-row gap-2" testID="request-actions">
+          <View className="flex-1">
+            <RequestActionButton
+              label={item.kind === "blocker" ? REQUEST_BLOCKER_DONE : REQUEST_APPROVE_LABEL}
+              disabled={disabled}
+              onPress={() => void answer(approveAnswerFor(item))}
+            />
+          </View>
+          <View className="flex-1">
+            <RequestActionButton
+              label={REQUEST_DETAILS_LABEL}
+              tone="secondary"
+              accessibilityState={{ expanded }}
+              onPress={() => setExpanded(!expanded)}
+            />
+          </View>
+        </View>
+      </View>
     </View>
   );
 }
