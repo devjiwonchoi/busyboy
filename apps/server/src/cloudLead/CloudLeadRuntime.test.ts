@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 import * as NodeFs from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
@@ -85,10 +86,11 @@ const setup = async () => {
   // Like the base snapshot: a clone of the repo, detached at an older main commit.
   const client = localSandboxClient({
     binDir,
-    makeHome: (home) =>
-      shell.run(
+    makeHome: async (home) => {
+      await shell.run(
         `git clone -q '${mac}' '${home}/busyboy' && git -C '${home}/busyboy' checkout -q --detach ${baseCommit}`,
-      ),
+      );
+    },
   });
   // The Mac's t3-code MCP endpoint.
   const mcpCalls: Array<{ url: string; auth: string | undefined }> = [];

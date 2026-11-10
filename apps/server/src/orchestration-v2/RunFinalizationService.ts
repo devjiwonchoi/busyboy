@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
+import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as VcsStatusBroadcaster from "../vcs/VcsStatusBroadcaster.ts";
 import * as WorkspaceEntries from "../workspace/WorkspaceEntries.ts";
@@ -52,10 +53,26 @@ const make = Effect.gen(function* () {
   const checkpointCapture = yield* CheckpointCapture.CheckpointCaptureServiceV2;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const observer = yield* RunFinalizationObserver;
+  const cloudLead = yield* CloudLeadService.CloudLeadHooks;
 
   const finalize: RunFinalizationService["Service"]["finalize"] = Effect.fn(
     "RunFinalizationService.finalize",
   )(function* (input) {
+    // A cloud thread's work lives in its sandbox: mirror it onto the Mac worktree
+    // first, so the checkpoint, diff, review gate and PR linking see it.
+    const shell = yield* projections
+      .getThreadShell(input.threadId)
+      .pipe(Effect.orElseSucceed(() => null));
+    if (shell?.location === "cloud") {
+      yield* cloudLead.syncToMac(input.threadId).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("cloud lead sync to the Mac failed before checkpoint", {
+            threadId: input.threadId,
+            detail: error.message,
+          }),
+        ),
+      );
+    }
     yield* checkpointCapture
       .execute(input)
       .pipe(

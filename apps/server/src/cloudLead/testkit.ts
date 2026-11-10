@@ -1,5 +1,5 @@
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /** In-memory fakes for the cloud lead tests. */
-// @effect-diagnostics nodeBuiltinImport:off globalTimers:off - test helpers for promise-based cloud lead modules.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFs from "node:fs/promises";
 import * as NodeOs from "node:os";

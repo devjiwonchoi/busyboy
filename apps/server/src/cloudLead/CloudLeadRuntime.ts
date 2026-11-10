@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off globalDate:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /**
  * Runs a cloud thread's claude CLI in its own Vercel Sandbox.
  *

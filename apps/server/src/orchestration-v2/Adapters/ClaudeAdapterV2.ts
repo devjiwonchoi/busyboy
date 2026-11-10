@@ -150,6 +150,7 @@ import {
 } from "@t3tools/provider-core/server/mcpToolPresentation";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as CloudLeadService from "../../cloudLead/CloudLeadService.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import {
   makeProviderFailure,
@@ -761,7 +762,9 @@ export const layerQueryRunner: Layer.Layer<
         // which lets the agent scope wrapper go in front of the CLI. The SDK
         // runs a script entry through node instead, so those launch unwrapped.
         const binaryPath = queryOptions.pathToClaudeCodeExecutable;
+        // A custom spawner (a cloud thread's remote claude) runs elsewhere: no local wrapper.
         const launch =
+          queryOptions.spawnClaudeCodeProcess !== undefined ||
           binaryPath === undefined ||
           CLAUDE_SCRIPT_EXTENSIONS.some((ext) => binaryPath.endsWith(ext))
             ? undefined
@@ -3427,6 +3430,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
   adapterOptions: ClaudeAdapterV2Options,
 ) {
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+  const cloudLead = yield* CloudLeadService.CloudLeadHooks;
   const { attachmentsDir, fileSystem, path, crypto, idAllocator, queryRunner } = adapterOptions;
   const subagentModelCatalog = scopeClaudeModelCatalog(
     BUNDLED_CLAUDE_MODEL_CATALOG,
@@ -8243,6 +8247,32 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               ? {}
               : { allowedTools: queryPolicy.allowedTools }),
           });
+          // A cloud thread runs claude in its sandbox; its t3-code MCP calls come back over the relay.
+          const cloudLaunch =
+            turnInput.appThread.location !== "cloud"
+              ? undefined
+              : turnInput.runtimePolicy.cwd === null
+                ? yield* Effect.fail(
+                    queryRunnerError("A cloud thread needs its own worktree.", "cloudLead.prepare"),
+                  )
+                : yield* cloudLead
+                  .prepare({
+                    threadId: turnInput.threadId,
+                    worktreePath: turnInput.runtimePolicy.cwd,
+                    mcpEndpoint: mcpSession?.endpoint ?? "http://127.0.0.1/mcp",
+                  })
+                  .pipe(Effect.mapError((cause) => queryRunnerError(cause, "cloudLead.prepare")));
+          const cloudMcpServers =
+            cloudLaunch === undefined || mcpOverrides.mcpServers === undefined
+              ? mcpOverrides.mcpServers
+              : Object.fromEntries(
+                  Object.entries(mcpOverrides.mcpServers).map(([name, server]) => [
+                    name,
+                    name === CLAUDE_T3_MCP_SERVER_NAME && "url" in server
+                      ? { ...server, url: cloudLaunch.mcpUrl }
+                      : server,
+                  ]),
+                );
           const queryPolicyKey = claudeEffectiveQueryPolicyKey(queryPolicy, mcpOverrides);
           const compiledSelection = compileClaudeModelSelection(turnInput.modelSelection);
           const resumeSessionAt = yield* getNativeConversationHeadId(turnInput.providerThread);
@@ -8362,9 +8392,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ...(mcpOverrides.allowedTools === undefined
               ? {}
               : { allowedTools: mcpOverrides.allowedTools }),
-            ...(mcpOverrides.mcpServers === undefined
-              ? {}
-              : { mcpServers: mcpOverrides.mcpServers }),
+            ...(cloudMcpServers === undefined ? {} : { mcpServers: cloudMcpServers }),
             ...(mcpOverrides.teamInstructions === undefined
               ? {}
               : { teamInstructions: mcpOverrides.teamInstructions }),
@@ -8382,7 +8410,15 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             .open({
               threadId: turnInput.threadId,
               providerSessionId: input.providerSessionId,
-              options: queryOptions,
+              options:
+                cloudLaunch === undefined
+                  ? queryOptions
+                  : {
+                      ...queryOptions,
+                      spawnClaudeCodeProcess: cloudLaunch.spawn as unknown as NonNullable<
+                        ClaudeQueryOptions["spawnClaudeCodeProcess"]
+                      >,
+                    },
             })
             .pipe(
               Effect.onError(() =>

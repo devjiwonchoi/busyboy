@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /**
  * The relay that runs inside a cloud lead's sandbox (`node relay/server.ts`).
  *
@@ -8,7 +9,6 @@
  *   endpoint (channel "http"), so the Mac server is never exposed.
  * Messages go through RelaySession, so a dropped WebSocket loses nothing.
  */
-// @effect-diagnostics nodeBuiltinImport:off globalDate:off - runs standalone inside the sandbox, outside the Effect runtime.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";

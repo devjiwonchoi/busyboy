@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 import * as NodeHttp from "node:http";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";

@@ -1,9 +1,9 @@
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /**
  * The smallest WebSocket server the relay needs: text messages, ping/pong and
  * close (RFC 6455). The sandbox relay runs from plain files with no
  * node_modules, so it cannot use a WebSocket package.
  */
-// @effect-diagnostics nodeBuiltinImport:off - runs standalone inside the sandbox, outside the Effect runtime.
 import * as NodeCrypto from "node:crypto";
 import type * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";

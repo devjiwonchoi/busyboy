@@ -1,4 +1,4 @@
-// @effect-diagnostics globalDate:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /**
  * The Mac end of a cloud lead's relay. It keeps one WebSocket to the sandbox
  * relay open, reconnecting after drops, and carries:

@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
 /**
  * Copies a git working tree from one machine to another: the commits (as a git
  * bundle), the uncommitted tracked changes (a binary patch) and the untracked
