@@ -4,7 +4,14 @@ import {
   EMPTY_PROJECT_TEAM_ATTENTION_INDEX,
   type ProjectTeamAttentionIndex,
 } from "@t3tools/client-runtime/state/project-team";
-import type { EnvironmentId, ProjectTeamAnswerDecisionInput } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProjectId,
+  ProjectTaskReference,
+  ProjectTeamAnswerDecisionInput,
+  ProjectTeamMoveTaskInput,
+  ThreadId,
+} from "@t3tools/contracts";
 import type { GoalMapEntry } from "@t3tools/shared/goalMap";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -63,4 +70,32 @@ export function useAnswerDecision() {
   const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
   return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision({ environmentId, input });
+}
+
+const NO_ATTENTION_ATOM = Atom.make(EMPTY_PROJECT_TEAM_ATTENTION_INDEX);
+
+/** The task this thread leads, or null when it leads none. */
+export function useLeadThreadTask(
+  thread: {
+    readonly environmentId: EnvironmentId;
+    readonly projectId: ProjectId;
+    readonly id: ThreadId;
+  } | null,
+): ProjectTaskReference | null {
+  const attention = useAtomValue(
+    thread === null ? NO_ATTENTION_ATOM : environmentProjectTeamAttentionAtom(thread.environmentId),
+  );
+  if (thread === null) return null;
+  return (
+    attention.byProjectId
+      .get(thread.projectId)
+      ?.tasks.find((task) => task.leadThreadId === thread.id) ?? null
+  );
+}
+
+/** Moves a task's lead between the Mac and a cloud sandbox; resolves once the move is done. */
+export function useMoveTask() {
+  const moveTask = useAtomCommand(projectTeamEnvironment.moveTask, { reportFailure: false });
+  return (environmentId: EnvironmentId, input: ProjectTeamMoveTaskInput) =>
+    moveTask({ environmentId, input });
 }

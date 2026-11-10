@@ -5,6 +5,7 @@ import type { AppBarAction } from "../../components/ui/AppBar.types";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import type { ThreadInspectorMode } from "./thread-inspector-content-stack";
 import { CloudPill } from "./CloudPill";
+import { MoveTaskButton } from "./MoveTaskButton";
 import { useThreadHeaderOptions } from "./useThreadHeaderOptions";
 import { useWorkspaceListNavigation } from "../workspace/useAndroidWorkspaceNavigation";
 
@@ -84,10 +85,13 @@ export function ThreadHeader(
         options={native.options}
         optionsVersion={native.optionsVersion}
         trailing={
-          props.runsInCloud || (props.fileInspectorSupported && props.hasThreadCwd) ? (
+          props.runsInCloud ||
+          props.moveTask != null ||
+          (props.fileInspectorSupported && props.hasThreadCwd) ? (
             <>
-              {/* iOS shows the pill among its native header items; Android here. */}
+              {/* iOS shows these among its native header items; Android here. */}
               {props.runsInCloud ? <CloudPill /> : null}
+              {props.moveTask != null ? <MoveTaskButton {...props.moveTask} /> : null}
               {props.fileInspectorSupported && props.hasThreadCwd ? (
                 <ScreenHeaderButton
                   accessibilityLabel={
