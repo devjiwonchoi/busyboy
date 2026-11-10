@@ -54,6 +54,26 @@ export class CloudLeadHooks extends Context.Reference<CloudLeadHooksShape>(
 
 const errorDetail = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
+/** The hooks over a runtime; the server builds one from saved secrets, tests from fakes. */
+export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape =>
+  CloudLeadHooks.of({
+    prepare: (input) =>
+      Effect.tryPromise({
+        try: () => runtime.prepare(input),
+        catch: (cause) =>
+          new CloudLeadError({ detail: `Could not start the cloud sandbox: ${errorDetail(cause)}` }),
+      }).pipe(Effect.withSpan("CloudLeadHooks.prepare")),
+    syncToMac: (threadId) =>
+      Effect.tryPromise({
+        try: () => runtime.syncToMac(threadId),
+        catch: (cause) =>
+          new CloudLeadError({
+            detail: `Could not copy the cloud sandbox's work to the Mac: ${errorDetail(cause)}`,
+          }),
+      }).pipe(Effect.asVoid, Effect.withSpan("CloudLeadHooks.syncToMac")),
+    release: (threadId) => Effect.promise(() => runtime.release(threadId)),
+  });
+
 /** The Vercel CLI keeps its login token here on macOS; used when none was saved. */
 const VERCEL_CLI_AUTH = "Library/Application Support/com.vercel.cli/auth.json";
 
@@ -149,23 +169,7 @@ const make = Effect.gen(function* () {
 
   yield* Effect.addFinalizer(() => Effect.promise(() => runtime.releaseAll()));
 
-  return CloudLeadHooks.of({
-    prepare: (input) =>
-      Effect.tryPromise({
-        try: () => runtime.prepare(input),
-        catch: (cause) =>
-          new CloudLeadError({ detail: `Could not start the cloud sandbox: ${errorDetail(cause)}` }),
-      }).pipe(Effect.withSpan("CloudLeadHooks.prepare")),
-    syncToMac: (threadId) =>
-      Effect.tryPromise({
-        try: () => runtime.syncToMac(threadId),
-        catch: (cause) =>
-          new CloudLeadError({
-            detail: `Could not copy the cloud sandbox's work to the Mac: ${errorDetail(cause)}`,
-          }),
-      }).pipe(Effect.asVoid, Effect.withSpan("CloudLeadHooks.syncToMac")),
-    release: (threadId) => Effect.promise(() => runtime.release(threadId)),
-  });
+  return hooksFromRuntime(runtime);
 });
 
 export const layer = Layer.effect(CloudLeadHooks, make).pipe(

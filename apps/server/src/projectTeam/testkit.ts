@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as NodePath from "node:path";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
@@ -271,6 +272,10 @@ const toShell = (thread: FakeThread): OrchestrationV2ThreadShell =>
 /** Runs `body` against the team services with in-memory storage and fake threads. */
 export const withTeam = <A, E>(
   body: (harness: TeamHarness) => Effect.Effect<A, E, TeamServices>,
+  options: {
+    /** The cloud lead runtime the team reads; defaults to none (cloud refused, sync a no-op). */
+    readonly cloudLead?: CloudLeadService.CloudLeadHooksShape;
+  } = {},
 ): Effect.Effect<A, E> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(Date.parse(START));
@@ -445,6 +450,9 @@ export const withTeam = <A, E>(
               ),
           }),
           NodeCrypto.layer,
+          ...(options.cloudLead === undefined
+            ? []
+            : [Layer.succeed(CloudLeadService.CloudLeadHooks, options.cloudLead)]),
           managedProjectFolders,
           Path.layer,
           PullRequestTextReader.layerTest((url) => Option.fromNullishOr(pullRequests.get(url))),
