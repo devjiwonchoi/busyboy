@@ -178,7 +178,7 @@ describe("ProjectTask", () => {
       roleModels: {},
       modelSteps: {},
       stepUsage: {},
-      metrics: { size: null, reviewFindings: 0, fixRounds: 0, ciFailures: 0 },
+      metrics: { size: null, reviewFindings: 0, fixRounds: 0, ciFailures: 0, memoryStallMs: 0 },
     });
     // A review stored before review sessions existed was the lead's own.
     expect(

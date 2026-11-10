@@ -249,6 +249,11 @@ export const ProjectTaskMetrics = Schema.Struct({
   fixRounds: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
   /** Failed pull request checks that woke the lead. */
   ciFailures: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /**
+   * Milliseconds the task was held for memory (waiting to start, or its lead
+   * paused) when it could have run: time the system stopped it, not the user.
+   */
+  memoryStallMs: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
 });
 export type ProjectTaskMetrics = typeof ProjectTaskMetrics.Type;
 
@@ -257,6 +262,7 @@ export const EMPTY_PROJECT_TASK_METRICS: ProjectTaskMetrics = {
   reviewFindings: 0,
   fixRounds: 0,
   ciFailures: 0,
+  memoryStallMs: 0,
 };
 
 export const ProjectTaskOutcome = Schema.Literals([

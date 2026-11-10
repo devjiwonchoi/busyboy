@@ -762,3 +762,125 @@ describe("memory-based task admission", () => {
     );
   });
 });
+
+describe("memory stall time", () => {
+  const MINUTE = 60_000;
+  const LOCAL_ONLY = { taskExecution: { location: "local_only" as const } };
+  const stallOf = (id: Parameters<typeof readTask>[0]) =>
+    readTask(id).pipe(Effect.map((task) => task.metrics.memoryStallMs));
+
+  it.effect("local only: counts the time a lead stayed paused for memory", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead");
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          yield* TestClock.adjust(12 * MINUTE);
+          // Still paused: nothing counted until it resumes.
+          assert.strictEqual(yield* stallOf(task.id), 0);
+
+          fake.mac.memory = PLENTY;
+          yield* resumeTicks(governor);
+          assert.deepStrictEqual(yield* governor.paused, []);
+          assert.strictEqual(yield* stallOf(task.id), 12 * MINUTE);
+        }),
+      { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+
+  it.effect("local only: counts the time a task waited for memory to start", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const pm = yield* setUpManager;
+          yield* startWithSession(harness, fake.mac, pm, "First");
+          fake.mac.memory = TIGHT;
+          const { task } = yield* createAcceptedTask(pm, {
+            title: "Second",
+            request: "Second.",
+            intake: "New work.",
+          });
+          yield* team.startTask(pm, { taskId: task.id }, harness.delegate).pipe(Effect.flip);
+          assert.strictEqual((yield* readTask(task.id)).memoryHold, "waiting");
+          yield* TestClock.adjust(5 * MINUTE);
+
+          fake.mac.memory = PLENTY;
+          const started = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+          assert.strictEqual(started.task.stage, "planning");
+          assert.strictEqual(yield* stallOf(task.id), 5 * MINUTE);
+        }),
+      { memory: fake.read, settings: LOCAL_ONLY },
+    );
+  });
+
+  it.effect("local first: a lead moved to the cloud is not counted as stalled", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const running = yield* startWithSession(harness, fake.mac, pm, "Running lead", {
+            running: { startedMsAgo: 5 * MINUTE },
+          });
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.strictEqual((yield* readTask(running.task.id)).location, "cloud");
+          yield* TestClock.adjust(10 * MINUTE);
+          fake.mac.memory = PLENTY;
+          yield* resumeTicks(governor);
+          assert.strictEqual(yield* stallOf(running.task.id), 0);
+        }),
+      {
+        memory: fake.read,
+        sessions: fake.sessions,
+        cloudLead: fake.cloudLead,
+        settings: { taskExecution: { location: "local_first" } },
+      },
+    );
+  });
+
+  it.effect("keeps counting a pause across a restart from when it began", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead");
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          yield* TestClock.adjust(3 * MINUTE);
+
+          // The server restarts: a new governor and gate over the same storage.
+          yield* Effect.gen(function* () {
+            const restarted = yield* MemoryGovernor.MemoryGovernor;
+            yield* restarted.tick;
+            assert.deepStrictEqual(yield* restarted.paused, [lead]);
+            yield* TestClock.adjust(4 * MINUTE);
+            fake.mac.memory = PLENTY;
+            yield* resumeTicks(restarted);
+            assert.deepStrictEqual(yield* restarted.paused, []);
+          }).pipe(
+            Effect.provide(
+              Layer.fresh(MemoryGovernor.layer).pipe(
+                Layer.provideMerge(
+                  Layer.sync(LeadMoveGate.LeadMoveGate, LeadMoveGate.makeLeadMoveGate),
+                ),
+              ),
+            ),
+          );
+          assert.strictEqual(yield* stallOf(task.id), 7 * MINUTE);
+        }),
+      { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+});

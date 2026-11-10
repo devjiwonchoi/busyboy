@@ -781,6 +781,17 @@ export const make = Effect.gen(function* () {
       LIMIT 1
     `,
   });
+  /** metrics_json with the open memory hold's length, up to `now`, added to memoryStallMs. */
+  const metricsWithMemoryStall = (now: string) => sql`
+    CASE WHEN memory_hold_since IS NULL THEN metrics_json ELSE json_set(
+      metrics_json,
+      '$.memoryStallMs',
+      COALESCE(json_extract(metrics_json, '$.memoryStallMs'), 0) + MAX(
+        0,
+        CAST(ROUND((julianday(${now}) - julianday(memory_hold_since)) * 86400000) AS INTEGER)
+      )
+    ) END
+  `;
   const updateTaskRow = SqlSchema.findOneOption({
     Request: Schema.Struct({
       id: ProjectTaskId,
@@ -820,6 +831,15 @@ export const make = Effect.gen(function* () {
             ELSE ship_round
           END,
           ready_json = CASE WHEN ${stageChanged} THEN NULL ELSE ready_json END,
+          metrics_json = CASE
+            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled')
+              THEN ${metricsWithMemoryStall(input.now)}
+            ELSE metrics_json
+          END,
+          memory_hold_since = CASE
+            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') THEN NULL
+            ELSE memory_hold_since
+          END,
           title = COALESCE(${input.title ?? null}, title),
           waits_on_json = COALESCE(${input.waitsOn ?? null}, waits_on_json),
           parent_task_id = CASE
@@ -906,8 +926,18 @@ export const make = Effect.gen(function* () {
       now: IsoDateTime,
     }),
     Result: TaskRow,
+    // A hold opens its clock once (waiting then paused is one stall); clearing it
+    // adds the time held to the task's memory stall time.
     execute: (input) => sql`
       UPDATE project_tasks SET
+        metrics_json = CASE
+          WHEN ${input.memoryHold} IS NULL THEN ${metricsWithMemoryStall(input.now)}
+          ELSE metrics_json
+        END,
+        memory_hold_since = CASE
+          WHEN ${input.memoryHold} IS NULL THEN NULL
+          ELSE COALESCE(memory_hold_since, ${input.now})
+        END,
         memory_hold = ${input.memoryHold},
         updated_at = ${input.now}
       WHERE task_id = ${input.id}

@@ -204,6 +204,7 @@ describe("ProjectTeamService step usage", () => {
           reviewFindings: 2,
           fixRounds: 1,
           ciFailures: 1,
+          memoryStallMs: 0,
         });
       }),
     ),
