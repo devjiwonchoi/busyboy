@@ -99,7 +99,8 @@ export function taskUsageTotal(
     `수정 ${metrics.fixRounds}회`,
     `CI 실패 ${metrics.ciFailures}`,
   );
-  if (metrics.memoryStallMs > 0) {
+  // Under half a second reads "0초": not worth a part.
+  if (Math.round(metrics.memoryStallMs / 1000) > 0) {
     parts.push(`메모리로 멈춘 시간 ${formatKoreanDuration(metrics.memoryStallMs)}`);
   }
   if (metrics.size !== null) parts.push(`크기 ${TASK_SIZE_LABELS[metrics.size]}`);

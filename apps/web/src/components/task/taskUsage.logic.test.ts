@@ -53,5 +53,8 @@ describe("task usage formatting", () => {
     expect(
       taskUsageTotal(usage, { ...EMPTY_PROJECT_TASK_METRICS, memoryStallMs: 12 * 60_000 }),
     ).toBe("합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0 · 메모리로 멈춘 시간 12분");
+    expect(taskUsageTotal(usage, { ...EMPTY_PROJECT_TASK_METRICS, memoryStallMs: 400 })).toBe(
+      "합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0",
+    );
   });
 });
