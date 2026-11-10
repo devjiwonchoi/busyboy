@@ -47,6 +47,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
+import { localOnlyError } from "../cloudLead/localOnly.ts";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -107,6 +108,12 @@ interface Caller {
 /** Step 1. Never touches the channel, so a stale call never starts the helper. */
 const requireAvailable = Effect.gen(function* () {
   const scope = yield* McpInvocationContext.McpInvocationContext;
+  if (McpInvocationContext.isCloudCaller(scope)) {
+    return yield* ComputerUseError.unavailable(
+      "disabled",
+      localOnlyError("computer-use", "Computer Use").message,
+    );
+  }
   if (!scope.capabilities.has("computer-use") || scope.thread === undefined) {
     return yield* ComputerUseError.unavailable(
       "disabled",

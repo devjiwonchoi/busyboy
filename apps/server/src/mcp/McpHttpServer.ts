@@ -394,6 +394,7 @@ const saveScreenshot = Effect.fn("McpHttpServer.saveScreenshot")(function* (
 });
 
 const isPreviewAutomationError = Schema.is(PreviewAutomationError);
+const isOrchestratorMcpFailure = Schema.is(OrchestratorMcpFailure);
 
 const previewSnapshotFailure = <E>(cause: Cause.Cause<E>) => {
   if (Cause.hasInterrupts(cause) || cause.reasons.some(Cause.isDieReason)) {
@@ -408,9 +409,12 @@ const previewSnapshotFailure = <E>(cause: Cause.Cause<E>) => {
     typeof firstFailure._tag === "string"
       ? firstFailure._tag
       : "PreviewSnapshotError";
-  // Preview errors build their message on the server, never from page output,
-  // and it tells the agent what to do next, such as falling back to a shell browser.
-  const message = isPreviewAutomationError(firstFailure) ? firstFailure.message : undefined;
+  // Preview and orchestrator errors build their message on the server, never from page
+  // output, and it tells the agent what to do next, such as falling back to a shell browser.
+  const message =
+    isPreviewAutomationError(firstFailure) || isOrchestratorMcpFailure(firstFailure)
+      ? firstFailure.message
+      : undefined;
   const result = new McpSchema.CallToolResult({
     isError: true,
     structuredContent: {
@@ -690,8 +694,6 @@ const registerImageTool = <T extends Tool.Any, E, R>(
         }),
     });
   });
-
-const isOrchestratorMcpFailure = Schema.is(OrchestratorMcpFailure);
 
 const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(function* () {
   const htmlRender = yield* HtmlRender.HtmlRender;

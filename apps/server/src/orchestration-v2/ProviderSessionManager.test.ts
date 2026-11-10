@@ -243,6 +243,7 @@ function makeThreadCreatedEvent(input: {
   readonly threadId: ThreadId;
   readonly now: DateTime.Utc;
   readonly projectId?: ProjectId;
+  readonly location?: "cloud";
 }) {
   return Effect.gen(function* () {
     const projectId =
@@ -266,6 +267,7 @@ function makeThreadCreatedEvent(input: {
       interactionMode: "default",
       branch: null,
       worktreePath: null,
+      ...(input.location === undefined ? {} : { location: input.location }),
       activeProviderThreadId: providerThreadId,
       lineage: {
         parentThreadId: null,
@@ -2204,6 +2206,49 @@ for (const enableAgentComputerUse of [true, false]) {
       }),
   );
 }
+
+it.effect("ProviderSessionManagerV2 withholds preview and computer use from a cloud thread", () =>
+  Effect.gen(function* () {
+    const threadId = ThreadId.make("thread-provider-session-manager-cloud");
+    const state = yield* Ref.make(emptyState);
+    const mcpConfigs = yield* Ref.make<
+      ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
+    >([]);
+
+    yield* Effect.gen(function* () {
+      const eventSink = yield* EventSink.EventSinkV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const now = yield* DateTime.now;
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      yield* eventSink.write({
+        events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now, location: "cloud" })],
+      });
+      yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+      yield* manager.close(providerSessionId);
+    }).pipe(
+      Effect.provide(
+        layerTest({
+          state,
+          idleTimeoutMs: 1_000,
+          mcpConfigs,
+          serverConfigLayer: layerComputerUseServerConfig,
+          serverSettingsLayer: ServerSettings.layerTest({ enableAgentComputerUse: true }).pipe(
+            Layer.orDie,
+          ),
+        }),
+      ),
+    );
+
+    const [config] = yield* Ref.get(mcpConfigs);
+    assert.isFalse(config?.capabilities?.has("computer-use"));
+    assert.isFalse(config?.capabilities?.has("preview"));
+    assert.isTrue(config?.capabilities?.has("orchestration"));
+  }),
+);
 
 it.effect(
   "ProviderSessionManagerV2 gives an open thread computer use on its next turn, keeping its token",

@@ -477,6 +477,34 @@ it.effect(
     ),
 );
 
+it.effect("a cloud thread is told computer use works only on the Mac", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const t = yield* setup();
+      const cloudScope: McpInvocationContext.McpInvocationScope = {
+        ...scope(THREAD_A),
+        thread: {
+          threadId: THREAD_A,
+          providerSessionId: "session",
+          providerInstanceId: PROVIDER,
+          location: "cloud",
+        },
+      };
+      const error = yield* snapshotTextEdit.pipe(
+        Effect.provideService(McpInvocationContext.McpInvocationContext, cloudScope),
+        Effect.provide(t.context),
+        Effect.flip,
+      );
+      expect(error.code).toBe("computer_use_unavailable");
+      expect(error.message).toContain("로컬에서만 가능해요");
+      expect(t.harness.requests).toEqual([]);
+
+      const local = yield* t.run(snapshotTextEdit, THREAD_A, []).pipe(Effect.flip);
+      expect(local.message).not.toContain("로컬에서만 가능해요");
+    }),
+  ),
+);
+
 it.effect("turning the setting off makes stale sessions unavailable without helper traffic", () =>
   Effect.scoped(
     Effect.gen(function* () {
