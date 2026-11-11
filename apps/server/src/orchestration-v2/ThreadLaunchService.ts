@@ -33,7 +33,7 @@ import {
   buildTemporaryWorktreeBranchName,
   flattenTemporaryWorktreeBranchName,
   isTemporaryWorktreeBranch,
-  WORKTREE_BRANCH_PREFIX,
+  resolveWorktreeBranchPrefix,
 } from "@t3tools/shared/git";
 
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
@@ -184,6 +184,12 @@ export class ThreadLaunchService extends Context.Service<
     readonly prepareRun: (input: ThreadLaunchPreparationInput) => Effect.Effect<void>;
   }
 >()("t3/orchestration-v2/ThreadLaunchService") {}
+
+/** The ref directory a temporary branch lives in, e.g. `jiwon` for `jiwon/1a2b3c4d`. */
+function temporaryBranchParent(branch: string): string {
+  const normalized = branch.trim().toLowerCase();
+  return normalized.slice(0, normalized.lastIndexOf("/"));
+}
 
 const isThreadLaunchError = Schema.is(ThreadLaunchError);
 
@@ -368,10 +374,18 @@ const make = Effect.gen(function* () {
         });
 
       const requestedBranch = input.workspaceStrategy.branch;
+      const branchPrefix = yield* serverSettings.getSettings.pipe(
+        Effect.map((settings) =>
+          resolveWorktreeBranchPrefix(
+            resolveProjectSettings(settings, input.projectId).settings.branchNamePrefix,
+          ),
+        ),
+        Effect.orElseSucceed(() => resolveWorktreeBranchPrefix(null)),
+      );
       let branch: string | null;
       if (input.workspaceStrategy.type === "worktree" && requestedBranch === undefined) {
         const uuid = yield* randomUuidV4;
-        branch = buildTemporaryWorktreeBranchName(() => uuid.replaceAll("-", ""));
+        branch = buildTemporaryWorktreeBranchName(() => uuid.replaceAll("-", ""), branchPrefix);
       } else {
         branch = requestedBranch ?? null;
       }
@@ -429,15 +443,16 @@ const make = Effect.gen(function* () {
         if (startFromOrigin) yield* setupTracker.stageStatus(threadId, "fetch", "done");
         if (
           branch !== null &&
-          isTemporaryWorktreeBranch(branch) &&
+          isTemporaryWorktreeBranch(branch, branchPrefix) &&
+          branch.includes("/") &&
           (yield* git
             .hasCommit({
               cwd: project.workspaceRoot,
-              refName: `refs/heads/${WORKTREE_BRANCH_PREFIX}`,
+              refName: `refs/heads/${temporaryBranchParent(branch)}`,
             })
             .pipe(Effect.mapError(mapError(input, "provision-worktree", threadId))))
         ) {
-          branch = flattenTemporaryWorktreeBranchName(branch);
+          branch = flattenTemporaryWorktreeBranchName(branch, temporaryBranchParent(branch));
         }
         yield* setupTracker.stageStatus(threadId, "checkout", "running");
         const worktree = yield* git
@@ -488,7 +503,7 @@ const make = Effect.gen(function* () {
         worktreePath !== null &&
         branch !== null &&
         initialMessage !== undefined &&
-        isTemporaryWorktreeBranch(branch)
+        isTemporaryWorktreeBranch(branch, branchPrefix)
       ) {
         const oldBranch = branch;
         const worktreeCwd = worktreePath;

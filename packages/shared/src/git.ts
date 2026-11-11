@@ -11,13 +11,41 @@ import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import { detectSourceControlProviderFromRemoteUrl } from "./sourceControl.ts";
 
-export const WORKTREE_BRANCH_PREFIX = "t3";
+export const DEFAULT_WORKTREE_BRANCH_PREFIX = "busyboy";
 const TEMP_WORKTREE_HEX_TOKEN = "[0-9a-f]{8}";
 const TEMP_WORKTREE_UUID_V4_TOKEN =
   "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+// Earlier builds named temporary branches t3/<hex> and t3code/<hex|uuid>; keep
+// recognizing them so existing worktrees still get their generated name.
 const TEMP_WORKTREE_BRANCH_PATTERN = new RegExp(
-  `^(?:${WORKTREE_BRANCH_PREFIX}[-/]${TEMP_WORKTREE_HEX_TOKEN}|t3code(?:[-/]${TEMP_WORKTREE_HEX_TOKEN}|\\/${TEMP_WORKTREE_UUID_V4_TOKEN}))$`,
+  `^(?:(?:t3|${DEFAULT_WORKTREE_BRANCH_PREFIX})[-/]${TEMP_WORKTREE_HEX_TOKEN}|t3code(?:[-/]${TEMP_WORKTREE_HEX_TOKEN}|\\/${TEMP_WORKTREE_UUID_V4_TOKEN}))$`,
 );
+const TEMP_WORKTREE_TOKEN_PATTERN = new RegExp(
+  `(?:^|[-/])(${TEMP_WORKTREE_HEX_TOKEN})(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$`,
+);
+
+function normalizeBranchPrefix(prefix: string): string {
+  return prefix
+    .split("/")
+    .map((part) =>
+      part
+        .replace(/[^a-zA-Z0-9_-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, ""),
+    )
+    .filter(Boolean)
+    .join("/");
+}
+
+/** The prefix for temporary worktree branches: the user's branch prefix, else "busyboy". */
+export function resolveWorktreeBranchPrefix(prefix?: string | null): string {
+  const normalized = normalizeBranchPrefix(prefix ?? "").toLowerCase();
+  return normalized.length > 0 ? normalized : DEFAULT_WORKTREE_BRANCH_PREFIX;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 export function sanitizeBranchFragment(raw: string): string {
   const normalized = raw
@@ -41,16 +69,7 @@ export function formatGeneratedBranchName(raw: string, naming?: BranchNamingOpti
   if (naming?.mode === "custom") return raw.trim();
   const branch = sanitizeBranchFragment(raw);
   if (naming?.mode !== "static") return branch;
-  const prefix = naming.prefix
-    .split("/")
-    .map((part) =>
-      part
-        .replace(/[^a-zA-Z0-9_-]+/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-+|-+$/g, ""),
-    )
-    .filter(Boolean)
-    .join("/");
+  const prefix = normalizeBranchPrefix(naming.prefix);
   return prefix ? `${prefix}/${branch}` : branch;
 }
 
@@ -102,27 +121,46 @@ export function deriveLocalBranchNameFromRemoteRef(branchName: string): string {
 
 export function buildTemporaryWorktreeBranchName(
   randomHex: (byteLength: number) => string,
+  prefix?: string | null,
 ): string {
   const token = randomHex(4)
     .toLowerCase()
     .replace(/[^0-9a-f]/g, "")
     .slice(0, 8);
-  return `${WORKTREE_BRANCH_PREFIX}/${token}`;
+  return `${resolveWorktreeBranchPrefix(prefix)}/${token}`;
 }
 
 /**
- * Git stores refs as paths, so a plain `t3` branch makes every `t3/<hex>`
- * ref impossible. This moves a temporary name to the flat `t3-<hex>` sibling.
+ * Git stores refs as paths, so a plain `busyboy` branch makes every `busyboy/<hex>`
+ * ref impossible. This moves a temporary name to the flat `busyboy-<hex>` sibling.
  */
-export function flattenTemporaryWorktreeBranchName(refName: string): string {
+export function flattenTemporaryWorktreeBranchName(
+  refName: string,
+  prefix?: string | null,
+): string {
   const normalized = refName.trim().toLowerCase();
-  const tokenStart = normalized.search(/[-/]/) + 1;
-  const token = normalized.slice(tokenStart, tokenStart + 8);
-  return `${WORKTREE_BRANCH_PREFIX}-${token}`;
+  const token = TEMP_WORKTREE_TOKEN_PATTERN.exec(normalized)?.[1] ?? normalized.slice(-8);
+  return `${resolveWorktreeBranchPrefix(prefix)}-${token}`;
 }
 
-export function isTemporaryWorktreeBranch(refName: string): boolean {
-  return TEMP_WORKTREE_BRANCH_PATTERN.test(refName.trim().toLowerCase());
+/** True for a temporary worktree branch name, given the user's branch prefix when there is one. */
+export function isTemporaryWorktreeBranch(refName: string, prefix?: string | null): boolean {
+  const normalized = refName.trim().toLowerCase();
+  if (TEMP_WORKTREE_BRANCH_PATTERN.test(normalized)) return true;
+  if (prefix === undefined || prefix === null) return false;
+  const resolved = escapeRegExp(resolveWorktreeBranchPrefix(prefix));
+  return new RegExp(`^${resolved}[-/]${TEMP_WORKTREE_HEX_TOKEN}$`).test(normalized);
+}
+
+/**
+ * Like isTemporaryWorktreeBranch, for callers that can't read the user's branch prefix:
+ * any `<prefix>/<8 hex>` counts. Use it only where a wrong guess is cheap.
+ */
+export function looksLikeTemporaryWorktreeBranch(refName: string): boolean {
+  const normalized = refName.trim().toLowerCase();
+  const slash = normalized.lastIndexOf("/");
+  if (slash === -1) return isTemporaryWorktreeBranch(normalized);
+  return isTemporaryWorktreeBranch(normalized, normalized.slice(0, slash));
 }
 
 /**

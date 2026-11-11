@@ -1168,6 +1168,15 @@ describe("resolveLiveThreadBranchUpdate", () => {
     assert.equal(update, null);
   });
 
+  it("does not regress a semantic thread ref back to a prefixed temporary ref", () => {
+    const update = resolveLiveThreadBranchUpdate({
+      threadBranch: "jiwon/github-query-rate-limit",
+      gitStatus: status({ refName: "jiwon/bda76797" }),
+    });
+
+    assert.equal(update, null);
+  });
+
   it("allows a temporary worktree ref to reconcile to a semantic branch", () => {
     const update = resolveLiveThreadBranchUpdate({
       threadBranch: "t3code/a9628676",

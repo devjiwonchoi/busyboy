@@ -1126,6 +1126,30 @@ it.effect("falls back when the source control writer is unavailable", () =>
   }),
 );
 
+it.effect.each([
+  { branchNamePrefix: "jiwon", expected: /^jiwon\/[0-9a-f]{8}$/ },
+  { branchNamePrefix: "", expected: /^busyboy\/[0-9a-f]{8}$/ },
+])("names a new worktree's temporary branch with prefix %j", ({ branchNamePrefix, expected }) =>
+  Effect.gen(function* () {
+    const harness = makeHarness({ serverSettings: { branchNamePrefix } });
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      yield* launches.launch(
+        launchInput({
+          command: `command:launch:temporary-prefix-${branchNamePrefix || "default"}`,
+          thread: `thread:launch:temporary-prefix-${branchNamePrefix || "default"}`,
+          message: "Build the feature",
+          workspace: { type: "worktree", baseRef: "main" },
+        }),
+      );
+      yield* waitUntil(() => Effect.sync(() => harness.renameBranch.mock.calls.length === 1));
+      const temporary = harness.createWorktree.mock.calls[0]?.[0]?.newRefName ?? "";
+      assert.match(temporary, expected);
+      assert.equal(harness.renameBranch.mock.calls[0]?.[0]?.oldBranch, temporary);
+    }).pipe(Effect.provide(harness.layer));
+  }),
+);
+
 it.effect("runs a Scratch thread launched at the root in its own folder", () =>
   Effect.gen(function* () {
     const claimed: Array<{ readonly threadId: ThreadId; readonly text: string }> = [];
@@ -1194,7 +1218,7 @@ it.effect("names the worktree itself when the client provides no branch", () =>
       yield* waitUntil(() => Effect.sync(() => harness.createWorktree.mock.calls.length === 1));
       assert.match(
         harness.createWorktree.mock.calls[0]?.[0]?.newRefName ?? "",
-        /^t3\/[0-9a-f]{8}$/u,
+        /^busyboy\/[0-9a-f]{8}$/u,
       );
       yield* waitUntil(() =>
         threads
@@ -1388,7 +1412,7 @@ it.effect.each(
   ),
 );
 
-it.effect("provisions under t3-<hash> when a plain t3 branch blocks t3/*", () =>
+it.effect("provisions under t3-<hash> when a plain t3 branch blocks an old t3/* name", () =>
   Effect.gen(function* () {
     const harness = makeHarness({
       hasCommit: (input) => Effect.succeed(input.refName === "refs/heads/t3"),
