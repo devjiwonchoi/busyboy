@@ -14,8 +14,9 @@ import {
 import { USER_FACING_TASK_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
+import { PLAN_GATES } from "./planGates.ts";
 import { resolveRoleModels } from "./roleModels.ts";
-import { buildTaskLeadPrompt } from "./taskLeadPrompt.ts";
+import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
 const projectId = ProjectId.make("project-1");
 const at = "2026-11-04T00:00:00.000Z";
@@ -124,9 +125,11 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("goal: the end state.");
     // The card no longer takes goal and verification bullets.
     expect(prompt).not.toContain("goal and verification");
-    expect(prompt).toContain("provenBy: how you will prove it");
     expect(prompt).toContain(
-      "Every criterion needs a todo that builds it, and every todo serves a criterion.",
+      "provenBy names the proof (a named test, a check you run, a screenshot)",
+    );
+    expect(prompt).toContain(
+      "every criterion has a todo that builds it, every todo serves a criterion",
     );
     expect(prompt).toContain('No delivery todos such as "open a PR" or "run the tests"');
     expect(prompt).toContain("The server refuses the request and lists what is missing");
@@ -143,13 +146,16 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).not.toContain("## Language");
     // Leads ask the user to approve the plan and read inline review comments.
     expect(prompt).toContain('ask_user(kind: "approval")');
-    expect(prompt).toContain("The card shows the user your summary and todos");
+    expect(prompt).toContain("the user gets the card, which shows your summary and todos");
     expect(prompt).toContain(
-      "summary: 2-4 sentences in your own words: what is wrong today, and what the user sees when it is done.",
+      "The user approves from the summary: 2-4 plain sentences in your own words on what is wrong today and what the user sees when it is done.",
     );
-    expect(prompt).toContain(
-      "Each one has a doneWhen line saying how the user can tell it is done",
-    );
+    expect(prompt).toContain("with a doneWhen saying how the user can tell it is done");
+    // Each spec field is described once: the gates own summary, todos and criteria.
+    expect(prompt.match(/2-4 plain sentences/g)).toHaveLength(1);
+    expect(prompt).not.toContain("   - summary:");
+    expect(prompt).not.toContain("   - todos:");
+    expect(prompt).not.toContain("   - criteria:");
     expect(prompt).toContain(
       "### Summary\nThere is no hello script. Running hello.sh prints hello.",
     );
@@ -181,6 +187,28 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("withdraw it with attention_dismiss");
     expect(prompt).toContain("Merging a pull request still needs the user's explicit OK.");
     expect(prompt).not.toMatch(/jwn|\/[a-z-]+:[a-z-]+|plugin/i);
+  });
+
+  it("teaches BusyBoy's plan gates and the separate checker", () => {
+    const prompt = buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] });
+    for (const gate of PLAN_GATES) {
+      expect(prompt).toContain(`${gate.id} "${gate.label}" (${gate.fields.join(", ")}`);
+      expect(prompt).toContain(gate.instruction);
+    }
+    expect(prompt).toContain("a small task gets a light plan (gates 1-8)");
+    expect(prompt).toContain("set the task's size with task_update(size)");
+    expect(prompt).toContain(
+      "a separate checker session, on a different model when one is set up, reviews each gate",
+    );
+    expect(prompt).toContain(
+      "If you are told the checker's task ended and no verdict message came, call ask_user",
+    );
+    expect(prompt).toContain("fix the failing gates with task_spec_write and ask again");
+    expect(prompt).not.toContain("jwn");
+    expect(prompt).not.toMatch(/\balign\b skill|\/align/i);
+    expect(nextStepHint("planning")).toContain(
+      "A separate checker session, on a different model when one is set up, reviews the gates",
+    );
   });
 
   it("tells the lead to answer side chat questions without changing the plan", () => {
