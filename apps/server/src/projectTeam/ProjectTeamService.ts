@@ -123,6 +123,7 @@ import {
   type ProjectTaskModelTarget,
   type ProjectMergeOwner,
   mergeOwnerOf,
+  type ProjectTaskRoleModels,
   type ProjectTaskRoleModelsPatch,
   applyRoleModelsPatch,
   type ProjectTeamTaskDetail,
@@ -256,6 +257,7 @@ import {
   DELEGATE_ROLE,
   modelStepEventBody,
   resolveRoleModels,
+  withoutUnavailableAppSteps,
   type ResolvedRoleModels,
   toDelegateTarget,
 } from "./roleModels.ts";
@@ -1522,6 +1524,18 @@ const make = Effect.gen(function* () {
     Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskExecution),
   );
 
+  /** The app-wide model and thinking level per step. */
+  const appStepModels = serverSettings.getSettings.pipe(
+    Effect.map((settings) => settings.taskStepModels),
+    Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskStepModels),
+  );
+  const roleModelsFor = (task: ProjectTask, project: ProjectTaskRoleModels | undefined) =>
+    Effect.gen(function* () {
+      const app = yield* appStepModels;
+      const providers = yield* providerRegistry.getProviders;
+      return withoutUnavailableAppSteps(resolveRoleModels(task.roleModels, project, app), providers);
+    });
+
   const setMemoryHold = (task: ProjectTask, memoryHold: ProjectTaskMemoryHold | null) =>
     Effect.flatMap(nowIso, (now) =>
       repository.setTaskMemoryHold({ id: task.id, memoryHold, now }),
@@ -1948,7 +1962,7 @@ const make = Effect.gen(function* () {
         return yield* teamError(`#${task.number} is finished.`, role.projectId);
       }
       const manager = yield* requireManager(role.projectId);
-      const resolved = resolveRoleModels(task.roleModels, manager.settings.roleModels);
+      const resolved = yield* roleModelsFor(task, manager.settings.roleModels);
       // A cloud task's children share the lead's checkout, so they run in its sandbox.
       const model =
         task.location === "cloud" && input.isolation !== "worktree"
@@ -2168,7 +2182,7 @@ const make = Effect.gen(function* () {
         );
         // A restart must not reuse the first lead's request id, or it gets that lead back.
         const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
-        const roleModels = resolveRoleModels(task.roleModels, manager.settings.roleModels);
+        const roleModels = yield* roleModelsFor(task, manager.settings.roleModels);
         // A plan model the user picked wins over the PM's choice.
         const leadTarget =
           roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
@@ -2713,10 +2727,11 @@ const make = Effect.gen(function* () {
 
   /** The review model a task's reviews must come from, or null when none is set. */
   const reviewModelOf = (task: ProjectTask) =>
-    Effect.map(
-      requireManager(task.projectId),
-      (manager) =>
-        resolveRoleModels(task.roleModels, manager.settings.roleModels).review?.target ?? null,
+    Effect.flatMap(requireManager(task.projectId), (manager) =>
+      Effect.map(
+        roleModelsFor(task, manager.settings.roleModels),
+        (resolved) => resolved.review?.target ?? null,
+      ),
     );
 
   /**
