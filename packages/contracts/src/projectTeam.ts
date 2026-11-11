@@ -240,6 +240,60 @@ export type ProjectTaskStepUsages = typeof ProjectTaskStepUsages.Type;
 export const ProjectTaskSize = Schema.Literals(["small", "medium", "large"]);
 export type ProjectTaskSize = typeof ProjectTaskSize.Type;
 
+/**
+ * Why a task sat still when it could have moved:
+ * - no_progress: its lead stopped without finishing, asking or holding.
+ * - answered_idle: the user answered, but the lead did not move on.
+ * - not_started: it could start (a free slot, nothing it waits on) but nobody started it.
+ * - start_failed: its lead failed to start.
+ * - hold_not_resumed: its resume condition was met, but nobody started it.
+ */
+export const ProjectTaskStallCause = Schema.Literals([
+  "no_progress",
+  "answered_idle",
+  "not_started",
+  "start_failed",
+  "hold_not_resumed",
+]);
+export type ProjectTaskStallCause = typeof ProjectTaskStallCause.Type;
+
+/** What each stall cause reads as on the task and in messages. */
+export const PROJECT_TASK_STALL_CAUSE_LABELS: Record<ProjectTaskStallCause, string> = {
+  no_progress: "진행 없음",
+  answered_idle: "답을 받고도 멈춤",
+  not_started: "시작되지 않음",
+  start_failed: "시작 실패",
+  hold_not_resumed: "조건이 풀렸는데 시작 안 됨",
+};
+
+/** What lets a held task start again. */
+export const ProjectTaskResumeWhen = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("task"),
+    /** Resume once this task is done or cancelled. */
+    taskId: ProjectTaskId,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("time"),
+    /** Resume at this time. */
+    at: IsoDateTime,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("user"),
+    /** What the user decides; the task waits on them, so the wait is not a stall. */
+    note: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
+  }),
+]);
+export type ProjectTaskResumeWhen = typeof ProjectTaskResumeWhen.Type;
+
+/** A deliberate stop and the condition that ends it. */
+export const ProjectTaskHold = Schema.Struct({
+  resumeWhen: ProjectTaskResumeWhen,
+  reason: Schema.String,
+  since: IsoDateTime,
+});
+export type ProjectTaskHold = typeof ProjectTaskHold.Type;
+
 /** Outcome counts kept per task, to compare model choices later. */
 export const ProjectTaskMetrics = Schema.Struct({
   size: Schema.NullOr(ProjectTaskSize).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -254,6 +308,14 @@ export const ProjectTaskMetrics = Schema.Struct({
    * paused) when it could have run: time the system stopped it, not the user.
    */
   memoryStallMs: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /** The part of memoryStallMs that happened while the location setting was local only. */
+  memoryLocalOnlyStallMs: Schema.optionalKey(NonNegativeInt),
+  /**
+   * Finished avoidable stalls by cause, in milliseconds: time the task could have
+   * moved but the system or the process stopped it. Waits on the user and holds
+   * with a resume condition are not stalls. Memory stalls stay in memoryStallMs.
+   */
+  avoidableStallMs: Schema.optionalKey(Schema.Record(Schema.String, NonNegativeInt)),
 });
 export type ProjectTaskMetrics = typeof ProjectTaskMetrics.Type;
 
@@ -400,6 +462,8 @@ export const ProjectTask = Schema.Struct({
   moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
   /** Held for memory: waiting to start, or its lead paused; null or absent otherwise. */
   memoryHold: Schema.optional(Schema.NullOr(ProjectTaskMemoryHold)),
+  /** Stopped on purpose until its resume condition holds; null when not held. */
+  hold: Schema.optional(Schema.NullOr(ProjectTaskHold)),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
   resultSummary: Schema.NullOr(Schema.String),
@@ -743,6 +807,17 @@ export function isTurnFailedBlocker(item: Pick<ProjectAttentionItem, "kind" | "o
     item.options.length === TURN_FAILED_OPTIONS.length &&
     item.options.every((option, index) => option === TURN_FAILED_OPTIONS[index])
   );
+}
+
+/** The one button on a card the server raises when a task stalled or failed to start. */
+export const STALL_RESTART = "다시 시작";
+export const STALL_OPTIONS = [STALL_RESTART] as const;
+
+export function isStallBlocker(item: {
+  readonly kind: string;
+  readonly options: ReadonlyArray<string>;
+}): boolean {
+  return item.kind === "blocker" && item.options.length === 1 && item.options[0] === STALL_RESTART;
 }
 
 /** The decision raised when a cloud lead's sandbox could not be replaced before its limit. */
@@ -1351,6 +1426,15 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
   waitsOn: Schema.optional(Schema.Array(ProjectTaskId)).annotate({
     description:
       "PM only. Replaces the tasks this one waits on; [] clears them. May be tasks in other projects.",
+  }),
+  hold: Schema.optional(
+    Schema.Struct({
+      resumeWhen: ProjectTaskResumeWhen,
+      reason: ProjectTaskSummaryText,
+    }),
+  ).annotate({
+    description:
+      'Required to stop a started task (stage "inbox"); the PM may also hold a Todo task. resumeWhen is {type:"task",taskId} (resumes when that task is done or cancelled), {type:"time",at} (an ISO time), or {type:"user",note} (waits on the user\'s decision). The server tells the PM to start it once the condition holds. task_start clears it.',
   }),
   parentTaskId: Schema.optional(Schema.NullOr(ProjectTaskId)).annotate({
     description:

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { PLAN_APPROVAL_START } from "@t3tools/contracts";
 import {
   approveAnswerFor,
+  primaryActionLabel,
   defaultRequestOption,
   formatRequestAnswer,
   plainTextProblems,
@@ -196,6 +197,10 @@ describe("request messages", () => {
     ]);
     expect(approveAnswerFor({ kind: "approval", options: [] })).toBe(PLAN_APPROVAL_START);
     expect(approveAnswerFor({ kind: "blocker", options: [] })).toBe("처리했어요");
+    expect(approveAnswerFor({ kind: "blocker", options: ["다시 시작"] })).toBe("다시 시작");
+    expect(primaryActionLabel({ kind: "blocker", options: ["다시 시작"] })).toBe("다시 시작");
+    expect(primaryActionLabel({ kind: "blocker", options: [] })).toBe("처리했어요");
+    expect(primaryActionLabel({ kind: "decision", options: ["A", "B"] })).toBe("승인");
     expect(approveAnswerFor({ kind: "decision", options: [] })).toBe("승인");
     expect(approveAnswerFor({ kind: "decision", options: ["유일한 선택"] })).toBe("유일한 선택");
     // Older decisions without a recommendation fall back to the first option, like the folded list.

@@ -1,18 +1,18 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type {
-  EnvironmentId,
-  ProjectApprovalPlanTodo,
-  ProjectDecisionCard,
-  ScopedThreadRef,
+import {
+  type EnvironmentId,
+  isStallBlocker,
+  type ProjectApprovalPlanTodo,
+  type ProjectDecisionCard,
+  type ScopedThreadRef,
 } from "@t3tools/contracts";
 import {
   approveAnswerFor,
+  primaryActionLabel,
   defaultRequestOption,
   formatRequestAnswer,
   formatRequestLink,
   parseRequestMessage,
-  REQUEST_APPROVE_LABEL,
-  REQUEST_BLOCKER_DONE,
   REQUEST_DETAILS_LABEL,
   replyWithRequestLink,
   requestParagraphs,
@@ -205,7 +205,8 @@ function MessageBody({
                 </div>
               ) : null}
             </dl>
-            {!planApproval && card.item.options.length > 0 ? (
+            {/* A stalled task's card has one answer, already the main button. */}
+            {!planApproval && !isStallBlocker(card.item) && card.item.options.length > 0 ? (
               <div className="space-y-2">
                 <fieldset disabled={sending} className="space-y-2">
                   <legend className="sr-only">{message.headline}</legend>
@@ -294,7 +295,7 @@ function MessageBody({
         ) : null}
         <div data-request-actions className="flex gap-2 border-t border-border pt-3">
           <Button size="sm" disabled={sending} onClick={() => submit(approveAnswerFor(card.item))}>
-            {card.item.kind === "blocker" ? REQUEST_BLOCKER_DONE : REQUEST_APPROVE_LABEL}
+            {primaryActionLabel(card.item)}
           </Button>
           <Button
             size="sm"

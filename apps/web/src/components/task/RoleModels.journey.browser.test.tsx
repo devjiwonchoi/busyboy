@@ -429,7 +429,9 @@ for (const viewport of [
             reviewFindings: 3,
             fixRounds: 1,
             ciFailures: 0,
-            memoryStallMs: 0,
+            memoryStallMs: 18 * 60_000,
+            memoryLocalOnlyStallMs: 13 * 60_000,
+            avoidableStallMs: { no_progress: 20 * 60_000, answered_idle: 20 * 60_000 },
           },
         },
       };
@@ -452,8 +454,14 @@ for (const viewport of [
       expect(total.textContent).toBe(
         "합계 20m · 1.4M/47k 토큰 · 약 $3.00 · 리뷰 지적 3 · 수정 1회 · CI 실패 0 · 크기 중",
       );
+      const stalls = section.querySelector<HTMLElement>("[data-task-avoidable-stalls]")!;
+      expect(stalls.textContent).toBe(
+        "피할 수 있었던 멈춤 58분 · 진행 없음 20분 · 답을 받고도 멈춤 20분 · 메모리 부족 5분 · '로컬만' 설정에서 메모리 부족 13분",
+      );
       expectInside(implement, container);
       expectInside(total, container);
+      expectInside(stalls, container);
+      await page.screenshot({ path: `__screenshots__/task-avoidable-stalls-${viewport.name}.png` });
     });
 
     it("sets who merges in team settings and keeps it", async () => {

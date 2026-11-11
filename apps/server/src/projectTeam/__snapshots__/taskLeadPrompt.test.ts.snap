@@ -91,6 +91,7 @@ No other tasks are in progress.
 
 ## Rules
 - When the server's failed-turn blocker is answered "다시 시도", your last turn failed and the server has put your stage back: pick up where you stopped and follow the note if there is one. "태스크 취소" cancels the task and you won't hear about it.
+- A card the server raised because your task stalled or failed to start has one button, "다시 시작": when it is answered, pick up where you stopped. A "[자동 재개]" message means the server saw no progress for 10 minutes: continue, ask, or stop on purpose. To stop on purpose, call task_update(stage: "inbox", hold: {resumeWhen, reason}) with the condition that lets it start again (another task finishing, a time, or the user's decision); a stop without one is refused.
 - Plan todo text must be one short plain line (at most 40 characters), with no task keys or jargon. Keep done-when and order in doneWhen/dependsOn; the card shows these only under details.
 - Pass senderName on ask_user: a short plain name for your work (at most 24 characters), such as 목표 그래프, with no task keys.
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "approval" for the plan (never for a subtask covered by its parent's approved breakdown), "decision" for a choice only the user can make and "blocker" for something only a person can unblock.
@@ -181,6 +182,7 @@ No other tasks are in progress.
 
 ## Rules
 - When the server's failed-turn blocker is answered "다시 시도", your last turn failed and the server has put your stage back: pick up where you stopped and follow the note if there is one. "태스크 취소" cancels the task and you won't hear about it.
+- A card the server raised because your task stalled or failed to start has one button, "다시 시작": when it is answered, pick up where you stopped. A "[자동 재개]" message means the server saw no progress for 10 minutes: continue, ask, or stop on purpose. To stop on purpose, call task_update(stage: "inbox", hold: {resumeWhen, reason}) with the condition that lets it start again (another task finishing, a time, or the user's decision); a stop without one is refused.
 - Plan todo text must be one short plain line (at most 40 characters), with no task keys or jargon. Keep done-when and order in doneWhen/dependsOn; the card shows these only under details.
 - Pass senderName on ask_user: a short plain name for your work (at most 24 characters), such as 목표 그래프, with no task keys.
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "approval" for the plan (never for a subtask covered by its parent's approved breakdown), "decision" for a choice only the user can make and "blocker" for something only a person can unblock.
@@ -288,6 +290,7 @@ No other tasks are in progress.
 
 ## Rules
 - When the server's failed-turn blocker is answered "다시 시도", your last turn failed and the server has put your stage back: pick up where you stopped and follow the note if there is one. "태스크 취소" cancels the task and you won't hear about it.
+- A card the server raised because your task stalled or failed to start has one button, "다시 시작": when it is answered, pick up where you stopped. A "[자동 재개]" message means the server saw no progress for 10 minutes: continue, ask, or stop on purpose. To stop on purpose, call task_update(stage: "inbox", hold: {resumeWhen, reason}) with the condition that lets it start again (another task finishing, a time, or the user's decision); a stop without one is refused.
 - Plan todo text must be one short plain line (at most 40 characters), with no task keys or jargon. Keep done-when and order in doneWhen/dependsOn; the card shows these only under details.
 - Pass senderName on ask_user: a short plain name for your work (at most 24 characters), such as 목표 그래프, with no task keys.
 - Reach the user only with ask_user. You cannot talk to the user directly. Use kind "approval" for the plan (never for a subtask covered by its parent's approved breakdown), "decision" for a choice only the user can make and "blocker" for something only a person can unblock.

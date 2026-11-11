@@ -1,5 +1,7 @@
 import {
+  isStallBlocker,
   PLAN_APPROVAL_START,
+  STALL_RESTART,
   type ProjectAttentionContext,
   type ProjectDecisionCard,
 } from "@t3tools/contracts";
@@ -320,8 +322,19 @@ export function approveAnswerFor(item: { kind: string; options: ReadonlyArray<st
   if (item.kind === "approval") {
     return PLAN_APPROVAL_START;
   }
+  if (isStallBlocker(item)) {
+    return STALL_RESTART;
+  }
   if (item.kind === "blocker") {
     return REQUEST_BLOCKER_DONE;
   }
   return defaultRequestOption(item.options) ?? REQUEST_APPROVE_LABEL;
+}
+
+/** The label of a request's main button: 승인, 처리했어요, or 다시 시작 on a stalled task's card. */
+export function primaryActionLabel(item: { kind: string; options: ReadonlyArray<string> }): string {
+  if (isStallBlocker(item)) {
+    return STALL_RESTART;
+  }
+  return item.kind === "blocker" ? REQUEST_BLOCKER_DONE : REQUEST_APPROVE_LABEL;
 }

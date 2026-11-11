@@ -34,6 +34,8 @@ import {
   ProjectTaskReady,
   ProjectTaskModelRole,
   ProjectTaskMemoryHold,
+  ProjectTaskHold,
+  ProjectTaskStallCause,
   ProjectTaskModelStep,
   ProjectTaskModelSteps,
   ProjectTaskMetrics,
@@ -169,6 +171,17 @@ export interface CreateProjectSitrepInput {
 
 type Result<A> = Effect.Effect<A, ProjectTeamRepositoryError>;
 
+export const ProjectTaskStallRecord = Schema.Struct({
+  stallId: Schema.String,
+  taskId: ProjectTaskId,
+  cause: ProjectTaskStallCause,
+  startedAt: IsoDateTime,
+  wokeAt: Schema.NullOr(IsoDateTime),
+  notifiedAt: Schema.NullOr(IsoDateTime),
+  endedAt: Schema.NullOr(IsoDateTime),
+});
+export type ProjectTaskStallRecord = typeof ProjectTaskStallRecord.Type;
+
 export class ProjectTeamRepository extends Context.Service<
   ProjectTeamRepository,
   {
@@ -300,7 +313,41 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectTaskId;
       readonly stalling: boolean;
       readonly at: IsoDateTime;
+      /** When a stall starts: whether the location setting is local only, kept apart in the metrics. */
+      readonly localOnly?: boolean;
     }) => Result<Option.Option<ProjectTask>>;
+    /** Sets or clears the task's hold: a deliberate stop and its resume condition. */
+    readonly setTaskHold: (input: {
+      readonly id: ProjectTaskId;
+      readonly hold: ProjectTaskHold | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Opens a stall of this cause for the task unless one is open; returns the open one. */
+    readonly openTaskStall: (input: {
+      readonly stallId: string;
+      readonly taskId: ProjectTaskId;
+      readonly cause: ProjectTaskStallCause;
+      readonly startedAt: IsoDateTime;
+    }) => Result<ProjectTaskStallRecord>;
+    /** Every stall of a task, open or ended, oldest first. */
+    readonly listTaskStalls: (input: {
+      readonly taskId: ProjectTaskId;
+    }) => Result<ReadonlyArray<ProjectTaskStallRecord>>;
+    /** Open stalls, of one task or of every task. */
+    readonly listOpenTaskStalls: (input: {
+      readonly taskId?: ProjectTaskId;
+    }) => Result<ReadonlyArray<ProjectTaskStallRecord>>;
+    /** Records that the server woke the lead or told the user about an open stall. */
+    readonly markTaskStall: (input: {
+      readonly stallId: string;
+      readonly wokeAt?: IsoDateTime;
+      readonly notifiedAt?: IsoDateTime;
+    }) => Result<void>;
+    /** Ends the task's open stalls at `endedAt` and adds their time to its metrics. */
+    readonly closeTaskStalls: (input: {
+      readonly taskId: ProjectTaskId;
+      readonly endedAt: IsoDateTime;
+    }) => Result<ReadonlyArray<ProjectTaskStallRecord>>;
     /** Tasks held for memory, in any project, lowest number first. */
     readonly listMemoryHeldTasks: () => Result<ReadonlyArray<ProjectTask>>;
     /** Replaces the task's own model per role. */
@@ -521,7 +568,9 @@ const TaskRow = Schema.Struct({
   modelSteps: Schema.fromJsonString(ProjectTaskModelSteps),
   stepUsage: Schema.fromJsonString(ProjectTaskStepUsages),
   metrics: Schema.fromJsonString(ProjectTaskMetrics),
+  hold: Schema.NullOr(Schema.fromJsonString(ProjectTaskHold)),
 });
+const HoldJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskHold));
 const RoleModelsJson = Schema.fromJsonString(ProjectTaskRoleModels);
 const ModelStepJson = Schema.fromJsonString(ProjectTaskModelStep);
 const ReviewJson = Schema.fromJsonString(ProjectTaskReview);
@@ -593,6 +642,7 @@ export const make = Effect.gen(function* () {
     location AS "location",
     move_target AS "moveTarget",
     memory_hold AS "memoryHold",
+    hold_json AS "hold",
     pr_url AS "prUrl",
     plan_summary AS "planSummary",
     result_summary AS "resultSummary",
@@ -800,17 +850,26 @@ export const make = Effect.gen(function* () {
       LIMIT 1
     `,
   });
-  /** metrics_json with the open memory hold's length, up to `now`, added to memoryStallMs. */
-  const metricsWithMemoryStall = (now: string) => sql`
-    CASE WHEN memory_stall_since IS NULL THEN metrics_json ELSE json_set(
-      metrics_json,
-      '$.memoryStallMs',
-      COALESCE(json_extract(metrics_json, '$.memoryStallMs'), 0) + MAX(
-        0,
-        CAST(ROUND((julianday(${now}) - julianday(memory_stall_since)) * 86400000) AS INTEGER)
-      )
-    ) END
-  `;
+  /**
+   * metrics_json with the open memory hold's length, up to `now`, added to
+   * memoryStallMs, and to memoryLocalOnlyStallMs when it began under local only.
+   */
+  const metricsWithMemoryStall = (now: string) => {
+    const elapsed = sql`MAX(
+      0,
+      CAST(ROUND((julianday(${now}) - julianday(memory_stall_since)) * 86400000) AS INTEGER)
+    )`;
+    return sql`
+      CASE WHEN memory_stall_since IS NULL THEN metrics_json ELSE json_set(
+        metrics_json,
+        '$.memoryStallMs',
+        COALESCE(json_extract(metrics_json, '$.memoryStallMs'), 0) + ${elapsed},
+        '$.memoryLocalOnlyStallMs',
+        COALESCE(json_extract(metrics_json, '$.memoryLocalOnlyStallMs'), 0) +
+          CASE WHEN memory_stall_local_only = 1 THEN ${elapsed} ELSE 0 END
+      ) END
+    `;
+  };
   const updateTaskRow = SqlSchema.findOneOption({
     Request: Schema.Struct({
       id: ProjectTaskId,
@@ -971,11 +1030,15 @@ export const make = Effect.gen(function* () {
     `,
   });
   const startTaskMemoryStall = SqlSchema.findOneOption({
-    Request: Schema.Struct({ id: ProjectTaskId, since: IsoDateTime }),
+    Request: Schema.Struct({ id: ProjectTaskId, since: IsoDateTime, localOnly: Schema.Boolean }),
     Result: TaskRow,
     // A stall already running keeps its start; a task not held, or finished, cannot stall.
-    execute: ({ id, since }) => sql`
+    execute: ({ id, since, localOnly }) => sql`
       UPDATE project_tasks SET
+        memory_stall_local_only = CASE
+          WHEN memory_stall_since IS NULL THEN ${localOnly ? 1 : 0}
+          ELSE memory_stall_local_only
+        END,
         memory_stall_since = COALESCE(memory_stall_since, ${since})
       WHERE task_id = ${id}
         AND memory_hold IS NOT NULL
@@ -992,6 +1055,103 @@ export const make = Effect.gen(function* () {
         memory_stall_since = NULL
       WHERE task_id = ${id} AND memory_stall_since IS NOT NULL
       RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskHold = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, hold: HoldJson, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, hold, now }) => sql`
+      UPDATE project_tasks SET
+        hold_json = ${hold},
+        updated_at = ${now}
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const stallColumns = sql.literal(`
+    stall_id AS "stallId",
+    task_id AS "taskId",
+    cause AS "cause",
+    started_at AS "startedAt",
+    woke_at AS "wokeAt",
+    notified_at AS "notifiedAt",
+    ended_at AS "endedAt"
+  `);
+  const insertTaskStall = SqlSchema.void({
+    Request: Schema.Struct({
+      stallId: Schema.String,
+      taskId: ProjectTaskId,
+      cause: ProjectTaskStallCause,
+      startedAt: IsoDateTime,
+    }),
+    // One open stall per task and cause.
+    execute: (input) => sql`
+      INSERT INTO project_task_stalls (stall_id, task_id, cause, started_at)
+      SELECT ${input.stallId}, ${input.taskId}, ${input.cause}, ${input.startedAt}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM project_task_stalls
+        WHERE task_id = ${input.taskId} AND cause = ${input.cause} AND ended_at IS NULL
+      )
+    `,
+  });
+  const findOpenTaskStalls = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: Schema.NullOr(ProjectTaskId) }),
+    Result: ProjectTaskStallRecord,
+    execute: ({ taskId }) => sql`
+      SELECT ${stallColumns}
+      FROM project_task_stalls
+      WHERE ended_at IS NULL AND (${taskId} IS NULL OR task_id = ${taskId})
+      ORDER BY started_at ASC
+    `,
+  });
+  const findTaskStalls = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: ProjectTaskStallRecord,
+    execute: ({ taskId }) => sql`
+      SELECT ${stallColumns}
+      FROM project_task_stalls
+      WHERE task_id = ${taskId}
+      ORDER BY started_at ASC
+    `,
+  });
+  const updateTaskStallMarks = SqlSchema.void({
+    Request: Schema.Struct({
+      stallId: Schema.String,
+      wokeAt: Schema.NullOr(IsoDateTime),
+      notifiedAt: Schema.NullOr(IsoDateTime),
+    }),
+    execute: ({ stallId, wokeAt, notifiedAt }) => sql`
+      UPDATE project_task_stalls SET
+        woke_at = COALESCE(woke_at, ${wokeAt}),
+        notified_at = COALESCE(notified_at, ${notifiedAt})
+      WHERE stall_id = ${stallId}
+    `,
+  });
+  const endTaskStall = SqlSchema.void({
+    Request: Schema.Struct({ stallId: Schema.String, endedAt: IsoDateTime }),
+    execute: ({ stallId, endedAt }) => sql`
+      UPDATE project_task_stalls SET ended_at = ${endedAt}
+      WHERE stall_id = ${stallId} AND ended_at IS NULL
+    `,
+  });
+  const addAvoidableStall = SqlSchema.void({
+    Request: Schema.Struct({
+      taskId: ProjectTaskId,
+      cause: ProjectTaskStallCause,
+      ms: Schema.Number,
+    }),
+    // json_set needs the parent object, so it is created first when missing.
+    execute: ({ taskId, cause, ms }) => sql`
+      UPDATE project_tasks SET
+        metrics_json = json_set(
+          CASE WHEN json_type(metrics_json, '$.avoidableStallMs') = 'object'
+            THEN metrics_json
+            ELSE json_set(metrics_json, '$.avoidableStallMs', json('{}'))
+          END,
+          '$.avoidableStallMs.' || ${cause},
+          COALESCE(json_extract(metrics_json, '$.avoidableStallMs.' || ${cause}), 0) + ${ms}
+        )
+      WHERE task_id = ${taskId}
     `,
   });
   const findMemoryHeldTasks = SqlSchema.findAll({
@@ -1820,9 +1980,44 @@ export const make = Effect.gen(function* () {
       updateTaskMemoryHold(input).pipe(Effect.mapError(toRepositoryError("setTaskMemoryHold"))),
     setTaskMemoryStall: (input) =>
       (input.stalling
-        ? startTaskMemoryStall({ id: input.id, since: input.at })
+        ? startTaskMemoryStall({
+            id: input.id,
+            since: input.at,
+            localOnly: input.localOnly ?? false,
+          })
         : stopTaskMemoryStall({ id: input.id, now: input.at })
       ).pipe(Effect.mapError(toRepositoryError("setTaskMemoryStall"))),
+    setTaskHold: (input) =>
+      updateTaskHold(input).pipe(Effect.mapError(toRepositoryError("setTaskHold"))),
+    openTaskStall: (input) =>
+      Effect.gen(function* () {
+        yield* insertTaskStall(input);
+        const open = yield* findOpenTaskStalls({ taskId: input.taskId });
+        return open.find((stall) => stall.cause === input.cause)!;
+      }).pipe(Effect.mapError(toRepositoryError("openTaskStall"))),
+    listTaskStalls: (input) =>
+      findTaskStalls(input).pipe(Effect.mapError(toRepositoryError("listTaskStalls"))),
+    listOpenTaskStalls: (input) =>
+      findOpenTaskStalls({ taskId: input.taskId ?? null }).pipe(
+        Effect.mapError(toRepositoryError("listOpenTaskStalls")),
+      ),
+    markTaskStall: (input) =>
+      updateTaskStallMarks({
+        stallId: input.stallId,
+        wokeAt: input.wokeAt ?? null,
+        notifiedAt: input.notifiedAt ?? null,
+      }).pipe(Effect.mapError(toRepositoryError("markTaskStall"))),
+    closeTaskStalls: (input) =>
+      Effect.gen(function* () {
+        const open = yield* findOpenTaskStalls({ taskId: input.taskId });
+        const endedMs = Date.parse(input.endedAt);
+        for (const stall of open) {
+          yield* endTaskStall({ stallId: stall.stallId, endedAt: input.endedAt });
+          const ms = Math.max(0, endedMs - Date.parse(stall.startedAt));
+          yield* addAvoidableStall({ taskId: stall.taskId, cause: stall.cause, ms });
+        }
+        return open.map((stall) => ({ ...stall, endedAt: input.endedAt }));
+      }).pipe(sql.withTransaction, Effect.mapError(toRepositoryError("closeTaskStalls"))),
     listMemoryHeldTasks: () =>
       findMemoryHeldTasks(undefined).pipe(
         Effect.mapError(toRepositoryError("listMemoryHeldTasks")),

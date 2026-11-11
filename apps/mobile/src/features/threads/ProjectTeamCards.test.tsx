@@ -408,6 +408,30 @@ describe("ProjectTeamCards", () => {
     await act(async () => button("승인").click());
     expect(mocks.answer.mock.calls[0]?.[1].answer).toBe("지금: 출시 (Recommended)");
   });
+  it("restarts a stalled task from 다시 시작 beside 자세히 보기", async () => {
+    render(
+      {
+        ...approval,
+        plan: null,
+        item: {
+          ...approval.item,
+          id: "stall" as never,
+          kind: "blocker",
+          question:
+            "로그인 수정 작업이 20분째 멈춰 있어요. 다시 시작할까요?\n\n리드가 멈춰서 10분 전에 한 번 깨웠는데 그대로예요.",
+          options: ["다시 시작"],
+        },
+      },
+      true,
+    );
+    const actions = host.querySelector('[data-testid="request-actions"]')!;
+    expect([...actions.querySelectorAll("button")].map((element) => element.textContent)).toEqual([
+      "다시 시작",
+      "자세히 보기",
+    ]);
+    await act(async () => button("다시 시작").click());
+    expect(mocks.answer.mock.calls[0]?.[1].answer).toBe("다시 시작");
+  });
   it("uses 처리했어요 for a regular blocker and disables sending without control", () => {
     render({ ...approval, item: { ...approval.item, kind: "blocker" } }, false);
     expect(button("처리했어요").disabled).toBe(true);

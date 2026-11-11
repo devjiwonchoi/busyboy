@@ -34,6 +34,7 @@ import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts"
 import { type MemorySnapshot, START_SPACING_MS } from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as MemoryGovernor from "./MemoryGovernor.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
+import { STALL_NOTIFY_AFTER_MS } from "./stallLedger.ts";
 import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 import { CLOUD_FALLBACK_NOTE, MEMORY_WAIT_REASON, STARTED_IN_CLOUD_NOTE } from "./memoryPolicy.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
@@ -525,7 +526,7 @@ describe("memory-based task admission", () => {
           const toPmBefore = (yield* harness.messagesTo(pm)).length;
 
           yield* reactor.handle(interruptedRun(lead));
-          yield* TestClock.adjust(StalledTaskSweep.STALLED_TASK_NOTICE_MS * 2);
+          yield* TestClock.adjust(STALL_NOTIFY_AFTER_MS * 2);
           yield* sweep.sweep;
 
           const paused = yield* readTask(task.id);

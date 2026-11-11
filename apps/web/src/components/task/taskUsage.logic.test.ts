@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { EMPTY_PROJECT_TASK_METRICS } from "@t3tools/contracts";
 
 import {
+  avoidableStallText,
   formatCostUsd,
   formatKoreanDuration,
   formatStepDuration,
@@ -50,11 +51,24 @@ describe("task usage formatting", () => {
     expect(taskUsageTotal(usage, EMPTY_PROJECT_TASK_METRICS)).toBe(
       "합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0",
     );
+    // Memory stalls moved to the avoidable stall line.
     expect(
       taskUsageTotal(usage, { ...EMPTY_PROJECT_TASK_METRICS, memoryStallMs: 12 * 60_000 }),
-    ).toBe("합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0 · 메모리로 멈춘 시간 12분");
-    expect(taskUsageTotal(usage, { ...EMPTY_PROJECT_TASK_METRICS, memoryStallMs: 400 })).toBe(
-      "합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0",
+    ).toBe("합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0");
+  });
+
+  it("sums avoidable stalls by cause, keeping local-only memory stalls apart", () => {
+    expect(avoidableStallText(EMPTY_PROJECT_TASK_METRICS)).toBeNull();
+    expect(avoidableStallText({ ...EMPTY_PROJECT_TASK_METRICS, memoryStallMs: 400 })).toBeNull();
+    expect(
+      avoidableStallText({
+        ...EMPTY_PROJECT_TASK_METRICS,
+        memoryStallMs: 18 * 60_000,
+        memoryLocalOnlyStallMs: 13 * 60_000,
+        avoidableStallMs: { no_progress: 20 * 60_000, start_failed: 60_000 },
+      }),
+    ).toBe(
+      "피할 수 있었던 멈춤 39분 · 진행 없음 20분 · 시작 실패 1분 · 메모리 부족 5분 · '로컬만' 설정에서 메모리 부족 13분",
     );
   });
 });

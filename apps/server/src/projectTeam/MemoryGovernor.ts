@@ -173,6 +173,8 @@ const make = Effect.gen(function* () {
         id: taskId,
         stalling,
         at: at ?? (yield* nowIso),
+        // Kept apart: under local only, this time could have run in the cloud.
+        ...(stalling ? { localOnly: (yield* settings).location === "local_only" } : {}),
       });
     }).pipe(Effect.ignore);
 

@@ -9,9 +9,11 @@ import {
   type ProjectMergeOwner,
   type ProjectTask,
   type ProjectTaskOutcome,
+  ProjectTaskEventId,
   resolveTaskExecutionSettings,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -27,7 +29,15 @@ import { untrustedFrame } from "../untrustedText.ts";
 import { activeLocalLeads } from "./memoryPolicy.ts";
 import { PRE_APPROVAL_STAGES } from "./breakdown.ts";
 import { forkParked } from "../serverActivation.ts";
-import { isLeadBusy } from "./common.ts";
+import { isLeadBusy, nowIso } from "./common.ts";
+import { latestRootProviderFailure } from "@t3tools/shared/orchestrationV2ThreadError";
+import {
+  classifyStartFailure,
+  CLOUD_PINNED_NOTE,
+  redactTokens,
+  startFailureAction,
+  startFailureCard,
+} from "./startFailure.ts";
 import { memoryOverBudgetNote } from "./memoryPrompt.ts";
 import { unresolvedPermissionDenial } from "./permissionBlocker.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
@@ -284,16 +294,120 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  /** What the failed turn said went wrong, so the card shows the cause rather than "failed". */
-  const failureDetail = (run: OrchestrationV2Run) =>
+  /**
+   * What the failed turn said went wrong, so the card shows the cause rather than
+   * "failed": the provider's own words, else the thread's last error.
+   */
+  const runErrorText = (run: OrchestrationV2Run) =>
     Effect.gen(function* () {
       const { turnItems } = yield* threads.getThreadRecords(run.threadId, ["turnItems"], {
         turnItemRunIds: [run.id],
       });
-      const error = turnItems.findLast((item) => item.runId === run.id && item.type === "error");
-      const message = error?.type === "error" ? error.failure.message.trim() : "";
-      return message === "" ? run.status : message;
-    }).pipe(Effect.orElseSucceed(() => run.status));
+      const failure =
+        latestRootProviderFailure(run, turnItems) ??
+        turnItems.findLast(
+          (item): item is Extract<typeof item, { type: "error" }> =>
+            item.runId === run.id && item.type === "error",
+        )?.failure ??
+        null;
+      const message = failure?.message.trim() ?? "";
+      if (message !== "") return redactTokens(message);
+      const shell = yield* threads.getThreadShell(run.threadId);
+      return shell?.lastError == null ? null : redactTokens(shell.lastError);
+    }).pipe(Effect.orElseSucceed(() => null));
+
+  /**
+   * A lead whose first turn failed never started. When the failure is the cloud's
+   * and the location setting allows this Mac, the lead moves here and goes on;
+   * otherwise the user gets one card that names the real cause. False leaves the
+   * failure to the usual failed-turn card.
+   */
+  const handleStartFailure = (task: ProjectTask, run: OrchestrationV2Run, error: string | null) =>
+    Effect.gen(function* () {
+      // Only a cloud start is retried elsewhere; a local failure keeps the usual card.
+      const location = task.location ?? "local";
+      if (task.stage !== "planning" || location !== "cloud") return false;
+      // The lead never got going: since this lead's session began, no turn of it
+      // ended any way but failed (a retry or a restart that fails the same way counts).
+      const sessions = yield* repository.listTaskSessions(task.id);
+      const since = sessions.findLast((session) => session.threadId === run.threadId)?.createdAt;
+      const outcomes = yield* repository.listTaskEvents({ taskId: task.id, limit: 200 });
+      const finishedTurn = outcomes.some(
+        (event) =>
+          event.kind === "outcome" &&
+          !event.body.startsWith("failed") &&
+          (since === undefined || event.createdAt >= since),
+      );
+      if (finishedTurn) return false;
+      const failure = classifyStartFailure(error ?? "", location);
+      const failedAt =
+        run.completedAt === null ? yield* nowIso : DateTime.formatIso(run.completedAt);
+      yield* repository
+        .openTaskStall({
+          stallId: `stall:start:${run.id}`,
+          taskId: task.id,
+          cause: "start_failed",
+          startedAt: failedAt,
+        })
+        .pipe(Effect.ignore);
+      const policy = yield* serverSettings.getSettings.pipe(
+        Effect.map((settings) => resolveTaskExecutionSettings(settings.taskExecution).location),
+        Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskExecution.location),
+      );
+      const events = yield* repository.listTaskEvents({ taskId: task.id, limit: 50 });
+      const pinnedToCloud = events.some(
+        (event) => event.kind === "note" && event.body === CLOUD_PINNED_NOTE,
+      );
+      let moveError: string | null = null;
+      if (startFailureAction({ failure, location, policy, pinnedToCloud }) === "retry_local") {
+        yield* repository
+          .appendTaskEvent({
+            id: ProjectTaskEventId.make(`task-event:start-failed:${run.id}`),
+            projectId: task.projectId,
+            taskId: task.id,
+            kind: "note",
+            body: `클라우드에서 리드를 시작하지 못해(${failure.summary}) 이 Mac으로 옮겨 다시 시작해요.`,
+            actorThreadId: null,
+            createdAt: failedAt,
+          })
+          .pipe(Effect.ignore);
+        const moved = yield* team
+          .moveTask({ projectId: task.projectId, taskId: task.id, to: "local" })
+          .pipe(
+            Effect.as(true),
+            Effect.catch((failed) =>
+              Effect.sync(() => {
+                moveError = failed.message;
+                return false;
+              }),
+            ),
+          );
+        if (moved) return true;
+      }
+      const current = Option.getOrElse(yield* repository.getTask(task.id), () => task);
+      const card = startFailureCard({
+        title: current.title,
+        failure,
+        location,
+        pinnedToCloud,
+        error: [error, moveError === null ? null : `이 Mac으로 옮기기 실패: ${moveError}`]
+          .filter((part): part is string => part !== null && part.length > 0)
+          .join(" · "),
+      });
+      const recorded = yield* team.recordOutcome({
+        task: current,
+        outcome: "failed",
+        detail: error ?? run.status,
+        startFailureCard: card,
+      });
+      yield* wakeManager({
+        task: recorded.task,
+        outcome: "failed",
+        previousOutcome: task.lastOutcome,
+        runId: run.id,
+      });
+      return true;
+    });
 
   const handle: TaskOutcomeReactor["Service"]["handle"] = (event) =>
     Effect.gen(function* () {
@@ -342,10 +456,12 @@ const make = Effect.gen(function* () {
       // A lead that fanned out delegated children ends its turn while they work;
       // their completion wakes it, and that turn's end reclassifies.
       if (outcome === "stalled" && (yield* isLeadBusy(threads, run.threadId, run.id))) return;
+      const error = outcome === "failed" ? yield* runErrorText(run) : null;
+      if (outcome === "failed" && (yield* handleStartFailure(task.value, run, error))) return;
       const recorded = yield* team.recordOutcome({
         task: task.value,
         outcome,
-        ...(outcome === "failed" ? { detail: yield* failureDetail(run) } : {}),
+        ...(outcome === "failed" ? { detail: error ?? run.status } : {}),
       });
       yield* wakeManager({
         task: recorded.task,

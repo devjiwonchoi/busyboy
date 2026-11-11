@@ -12,6 +12,11 @@ import {
   SANDBOX_ROTATION_MOVE_LOCAL,
   SANDBOX_ROTATION_OPTIONS,
   isTurnFailedBlocker,
+  isStallBlocker,
+  STALL_RESTART,
+  type ProjectTaskHold,
+  type ProjectAttentionDetail,
+  type ProjectAttentionContext,
   TURN_FAILED_CANCEL,
   TURN_FAILED_OPTIONS,
   TURN_FAILED_RETRY,
@@ -226,6 +231,8 @@ import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
+import { resumeWhenText } from "./stallLedger.ts";
+import { CLOUD_PINNED_NOTE } from "./startFailure.ts";
 import {
   DELEGATE_ROLE,
   modelStepEventBody,
@@ -920,6 +927,15 @@ export class ProjectTeamService extends Context.Service<
       readonly task: ProjectTask;
       readonly outcome: ProjectTaskOutcome;
       readonly detail?: string;
+      /**
+       * For a lead that failed to start: the message naming the real cause, raised
+       * with a single 다시 시작 button instead of the usual failed-turn card.
+       */
+      readonly startFailureCard?: {
+        readonly question: string;
+        readonly details: ReadonlyArray<ProjectAttentionDetail>;
+        readonly context: ProjectAttentionContext;
+      };
     }) => Effect.Effect<
       { readonly task: ProjectTask; readonly event: ProjectTaskEvent },
       ProjectTeamError
@@ -1223,37 +1239,51 @@ const make = Effect.gen(function* () {
         input.parentTaskId !== undefined
           ? yield* repository.getTask(input.id)
           : Option.none<ProjectTask>();
-      const updated = yield* repository.updateTask({ ...input, now });
-      if (Option.isNone(updated)) return yield* teamError(`Task ${input.id} was not found.`);
+      const written = yield* repository.updateTask({ ...input, now });
+      if (Option.isNone(written)) return yield* teamError(`Task ${input.id} was not found.`);
+      let current = written.value;
+      if (input.stage !== undefined && current.stageChangedAt === now) {
+        // A stage change is progress: any stall the task was in ends here.
+        yield* repository
+          .closeTaskStalls({ taskId: current.id, endedAt: now })
+          .pipe(orTeamError("Could not close the task's stalls.", current.projectId));
+        // A hold belongs to a stopped task; one that moves on is no longer held.
+        if (current.stage !== "inbox" && current.hold != null) {
+          const cleared = yield* repository
+            .setTaskHold({ id: current.id, hold: null, now })
+            .pipe(orTeamError("Could not clear the hold.", current.projectId));
+          if (Option.isSome(cleared)) current = cleared.value;
+        }
+      }
       if (
         Option.isSome(before) &&
         !isDependencyCleared(before.value.stage) &&
-        isDependencyCleared(updated.value.stage)
+        isDependencyCleared(current.stage)
       ) {
-        yield* wakeUnblockedProjects(updated.value);
+        yield* wakeUnblockedProjects(current);
       }
       // A finished cloud task's sandbox is mirrored once more and deleted, in the background.
       if (
-        FinishedTaskCleanup.isFinishedStage(updated.value.stage) &&
-        updated.value.location === "cloud" &&
-        updated.value.leadThreadId !== null
+        FinishedTaskCleanup.isFinishedStage(current.stage) &&
+        current.location === "cloud" &&
+        current.leadThreadId !== null
       ) {
         yield* cloudLead
-          .release(updated.value.leadThreadId)
+          .release(current.leadThreadId)
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
       }
       // A finished task's questions can no longer be answered, so close them.
-      if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
+      if (FinishedTaskCleanup.isFinishedStage(current.stage)) {
         if (answeringItem === undefined) {
           yield* repository.supersedeOpenAttentionItems({
-            taskId: updated.value.id,
+            taskId: current.id,
             supersededAt: now,
           });
         } else {
           // Keep the cancellation card open until the stage update succeeds and its answer is saved.
           const open = yield* repository.listOpenAttentionItems({
-            projectId: updated.value.projectId,
-            taskId: updated.value.id,
+            projectId: current.projectId,
+            taskId: current.id,
           });
           for (const item of open) {
             if (item.id !== answeringItem.id) {
@@ -1266,13 +1296,13 @@ const make = Effect.gen(function* () {
       const previous = Option.isSome(before) ? before.value : undefined;
       if (input.stage !== undefined || input.parentTaskId !== undefined) {
         const parents = new Set<ProjectTaskId>();
-        if (updated.value.parentTaskId !== null) parents.add(updated.value.parentTaskId);
+        if (current.parentTaskId !== null) parents.add(current.parentTaskId);
         if (input.parentTaskId !== undefined && previous?.parentTaskId) {
           parents.add(previous.parentTaskId);
         }
         for (const parentId of parents) yield* syncEpic(parentId);
       }
-      return updated.value;
+      return current;
     });
 
   /**
@@ -2122,7 +2152,12 @@ const make = Effect.gen(function* () {
             if (memoryShort) {
               const at = yield* nowIso;
               yield* repository
-                .setTaskMemoryStall({ id: task.id, stalling: true, at })
+                .setTaskMemoryStall({
+                  id: task.id,
+                  stalling: true,
+                  at,
+                  localOnly: execution.location === "local_only",
+                })
                 .pipe(orTeamError("Could not record the memory stall.", task.projectId));
             }
           });
@@ -2266,7 +2301,17 @@ const make = Effect.gen(function* () {
         if (note !== null) {
           yield* appendEvent(started, "note", note, null);
         }
+        if (location === "cloud" && input.location === "cloud") {
+          yield* appendEvent(started, "note", CLOUD_PINNED_NOTE, null);
+        }
         if (task.memoryHold != null) yield* setMemoryHold(started, null);
+        // Starting ends a hold and any stall it was in (not started, condition not acted on).
+        if (task.hold != null) yield* setHold(started, null, callerThreadId);
+        else {
+          yield* repository
+            .closeTaskStalls({ taskId: started.id, endedAt: started.stageChangedAt })
+            .pipe(orTeamError("Could not close the task's stalls.", role.projectId));
+        }
         // Logged as the lead's, so the PM's latest action still reads "started".
         const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
         yield* repository
@@ -3060,6 +3105,79 @@ const make = Effect.gen(function* () {
       }
     });
 
+  /**
+   * A started task stops only with a resume condition, so the server can start it
+   * again; a Todo task may be held too. The condition must name a real task.
+   */
+  const checkHold = (task: ProjectTask, input: ProjectTeamTaskUpdateInput, projectId: ProjectId) =>
+    Effect.gen(function* () {
+      const parking = input.stage === "inbox" && task.stage !== "inbox";
+      if (parking && input.hold === undefined) {
+        return yield* teamError(
+          `Stopping #${task.number} needs a resume condition: pass hold: {resumeWhen, reason}, where resumeWhen is {type:"task",taskId} (another task finishing), {type:"time",at} (an ISO time) or {type:"user",note} (the user's decision). A stop with no condition is refused, because nobody would start it again.`,
+          projectId,
+        );
+      }
+      if (input.hold === undefined) return null;
+      if (!parking && task.stage !== "inbox") {
+        return yield* teamError(
+          `Only a task that stops (stage "inbox") or waits in Todo can be held; #${task.number} is ${task.stage}.`,
+          projectId,
+        );
+      }
+      const { resumeWhen } = input.hold;
+      if (resumeWhen.type === "task") {
+        if (resumeWhen.taskId === task.id) {
+          return yield* teamError("A task cannot wait on itself.", projectId);
+        }
+        yield* requireAnyTask(resumeWhen.taskId, projectId);
+      }
+      if (resumeWhen.type === "time" && Number.isNaN(Date.parse(resumeWhen.at))) {
+        return yield* teamError(`resumeWhen.at is not a time: ${resumeWhen.at}`, projectId);
+      }
+      const hold: ProjectTaskHold = {
+        resumeWhen,
+        reason: input.hold.reason,
+        since: yield* nowIso,
+      };
+      return hold;
+    });
+
+  /** Saves a hold; a deliberate stop ends any stall the task was in. */
+  const setHold = (task: ProjectTask, hold: ProjectTaskHold | null, actor: ThreadId | null) =>
+    Effect.gen(function* () {
+      const now = yield* nowIso;
+      const saved = yield* repository
+        .setTaskHold({ id: task.id, hold, now })
+        .pipe(orTeamError("Could not save the hold.", task.projectId));
+      yield* repository
+        .closeTaskStalls({ taskId: task.id, endedAt: now })
+        .pipe(orTeamError("Could not close the task's stalls.", task.projectId));
+      if (hold !== null) {
+        const condition = yield* holdConditionText(hold);
+        yield* appendEvent(
+          task,
+          "note",
+          `멈춤: ${hold.reason} · 다시 시작 조건: ${condition}`,
+          actor,
+        );
+      }
+      yield* router.publish(task.projectId);
+      return Option.getOrElse(saved, () => task);
+    });
+
+  const holdConditionText = (hold: ProjectTaskHold) =>
+    Effect.gen(function* () {
+      const titles = new Map<string, string>();
+      if (hold.resumeWhen.type === "task") {
+        const other = yield* repository
+          .getTask(hold.resumeWhen.taskId)
+          .pipe(Effect.orElseSucceed(() => Option.none<ProjectTask>()));
+        if (Option.isSome(other)) titles.set(other.value.id, other.value.title);
+      }
+      return resumeWhenText(hold.resumeWhen, (id) => titles.get(id));
+    });
+
   const updateTask = (
     callerThreadId: ThreadId,
     input: ProjectTeamTaskUpdateInput,
@@ -3098,6 +3216,7 @@ const make = Effect.gen(function* () {
       if (input.stage !== undefined && input.stage !== task.stage) {
         yield* checkStageGate(task, input.stage, input.prUrl);
       }
+      const hold = yield* checkHold(task, input, role.projectId);
       const dependencies =
         input.waitsOn === undefined
           ? undefined
@@ -3145,6 +3264,9 @@ const make = Effect.gen(function* () {
       }
       if (input.note !== undefined) {
         yield* appendEvent(updated, "note", input.note, callerThreadId);
+      }
+      if (hold !== null) {
+        yield* setHold(updated, hold, callerThreadId);
       }
       if (input.title !== undefined && input.title !== task.title) {
         yield* appendEvent(updated, "note", `Renamed from "${task.title}"`, callerThreadId);
@@ -4052,12 +4174,15 @@ const make = Effect.gen(function* () {
   // Restore before relaying so even an immediately failed retry can open a new blocker.
   const restoreFailedTurnStage = (item: ProjectAttentionItem, answer: string) =>
     Effect.gen(function* () {
+      const choice = answer.split("\nNote:")[0]?.trim();
+      const retry =
+        (isTurnFailedBlocker(item) && choice === TURN_FAILED_RETRY) ||
+        (isStallBlocker(item) && choice === STALL_RESTART);
       if (
-        !isTurnFailedBlocker(item) ||
+        !retry ||
         item.taskId === null ||
         item.answeredAt !== null ||
-        item.supersededAt !== null ||
-        answer.split("\nNote:")[0]?.trim() !== TURN_FAILED_RETRY
+        item.supersededAt !== null
       ) {
         return;
       }
@@ -5557,11 +5682,13 @@ const make = Effect.gen(function* () {
         (event) => event.kind === "stage_changed" && event.body.startsWith("blocked → "),
       );
       // A retry's previous card can still be open while its answer is being relayed.
+      const failureCard = (item: ProjectAttentionItem) =>
+        isTurnFailedBlocker(item) || isStallBlocker(item);
       const stale = (item: ProjectAttentionItem) =>
-        isTurnFailedBlocker(item) &&
+        failureCard(item) &&
         retry !== undefined &&
         isoMillis(item.createdAt) < isoMillis(retry.createdAt);
-      if (failed && !open.some((item) => isTurnFailedBlocker(item) && !stale(item))) {
+      if (failed && !open.some((item) => failureCard(item) && !stale(item))) {
         // Replace server escalations, but preserve questions the lead asked itself.
         for (const item of open) {
           const nudgeLimit =
@@ -5577,14 +5704,26 @@ const make = Effect.gen(function* () {
             });
           }
         }
-        const reason = turnFailedReason(input.detail);
-        yield* router.ask({
-          task: updated,
-          kind: "blocker",
-          question: `#${task.number} ${task.title}: 리드 작업이 실패했어요${reason ? ` (${reason})` : ""}${input.detail ? `\n\n오류: ${input.detail}` : ""}\n\n다시 시도하면 리드가 멈춘 곳부터 이어서 해요. 리드에게 전할 말이 있으면 함께 적어 주세요.`,
-          options: [...TURN_FAILED_OPTIONS],
-          askerThreadId: task.leadThreadId,
-        });
+        if (input.startFailureCard !== undefined) {
+          yield* router.ask({
+            task: updated,
+            kind: "blocker",
+            question: input.startFailureCard.question,
+            details: input.startFailureCard.details,
+            context: input.startFailureCard.context,
+            options: [STALL_RESTART],
+            askerThreadId: task.leadThreadId,
+          });
+        } else {
+          const reason = turnFailedReason(input.detail);
+          yield* router.ask({
+            task: updated,
+            kind: "blocker",
+            question: `#${task.number} ${task.title}: 리드 작업이 실패했어요${reason ? ` (${reason})` : ""}${input.detail ? `\n\n오류: ${input.detail}` : ""}\n\n다시 시도하면 리드가 멈춘 곳부터 이어서 해요. 리드에게 전할 말이 있으면 함께 적어 주세요.`,
+            options: [...TURN_FAILED_OPTIONS],
+            askerThreadId: task.leadThreadId,
+          });
+        }
       }
       yield* router.publish(task.projectId);
       return { task: updated, event };

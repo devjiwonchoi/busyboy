@@ -289,6 +289,43 @@ for (const width of [1000, 390]) {
       await vi.waitFor(() => expect(server.answers[0]?.answer).toBe(OPTIONS[0]));
     });
 
+    it("restarts a stalled task from 다시 시작, with the cause under 자세히 보기", async () => {
+      const element = await open(
+        card({
+          kind: "blocker",
+          question:
+            "로그인 리다이렉트 수정 작업이 20분째 멈춰 있어요. 다시 시작할까요?\n\n리드가 끝내지도 묻지도 않고 멈춰서 10분 전에 한 번 깨웠는데 그대로예요.\n\n다시 시작하면 리드가 멈춘 곳부터 이어서 해요. 되돌릴 수 있어요.",
+          options: ["다시 시작"],
+          details: [
+            { label: "원인", text: "진행 없음" },
+            { label: "멈춘 시간", text: "20분" },
+          ],
+          context: {
+            action: "멈춘 작업을 리드가 멈춘 곳부터 이어서 하도록 다시 시작해요.",
+            reason: "진행할 수 있었는데 시스템이나 절차 때문에 멈춰 있어요.",
+            impacts: [],
+            cost: null,
+            reversibility: "reversible",
+            recommendation: "다시 시작을 추천해요.",
+          },
+        }),
+      );
+      const bubble = element.querySelector<HTMLElement>("[data-request-bubble]")!;
+      expect([...bubble.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+        "다시 시작",
+        "자세히 보기",
+      ]);
+      await userEvent.click(buttonIn(element, "자세히 보기"));
+      expect(element.querySelector("[data-request-details]")?.textContent).toContain("진행 없음");
+      // One answer only: no option list or note form under details.
+      expect(element.querySelectorAll('input[type="radio"]')).toHaveLength(0);
+      expect(element.textContent?.includes("영향 확인 필요")).toBe(false);
+      await page.screenshot({ path: `__screenshots__/request-message-stall-${width}.png` });
+      await userEvent.click(buttonIn(element, "다시 시작"));
+      await vi.waitFor(() => expect(server.answers[0]?.answer).toBe("다시 시작"));
+      expect(server.leadMessages.at(-1)).toContain("→ 다시 시작");
+    });
+
     it("opens details and sends another option with a note", async () => {
       const element = await open(
         card({ question: RELEASE, details: [{ label: "위험", text: "되돌리기 쉬워요" }] }),
