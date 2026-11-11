@@ -23,6 +23,9 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROJECT_TEAM_SETTINGS,
   DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_SERVER_SETTINGS,
+  resolveTaskExecutionSettings,
+  type ExecutionLocation,
   type IsoDateTime,
   MessageId,
   type OrchestrationV2ConversationMessage,
@@ -48,6 +51,7 @@ import {
   type ProjectManagerVoice,
   ProjectMemoryEntryId,
   type ProjectTask,
+  type ProjectTaskMemoryHold,
   type ProjectTaskBrief,
   ProjectTaskStatus,
   type ProjectTaskStatusSignals,
@@ -162,6 +166,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
@@ -209,6 +214,13 @@ import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
+import {
+  activeLocalLeads,
+  admitTaskLead,
+  CLOUD_FALLBACK_NOTE,
+  MEMORY_WAIT_REASON,
+} from "./memoryPolicy.ts";
 import { leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
@@ -981,6 +993,7 @@ const make = Effect.gen(function* () {
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
   const cloudLead = yield* CloudLeadService.CloudLeadHooks;
   const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
   const shipGate = yield* PullRequestShipGate.PullRequestShipGate;
 
   // At boot the provider cache may still be empty, so probe once before giving up.
@@ -997,6 +1010,9 @@ const make = Effect.gen(function* () {
   // Prefixes belong to the whole server, so different projects share this lock.
   const taskKeyLocks = yield* KeyedLock.make<"prefixes">();
   const taskStartLocks = yield* KeyedLock.make<ProjectId>();
+  // The safety cap counts leads in every project, so its check and the start it
+  // admits run one at a time app-wide. Taken inside a project's start lock, never around it.
+  const leadStartLock = yield* Semaphore.make(1);
   const specLocks = yield* KeyedLock.make<ProjectTaskId>();
   // Goal writes read, change and save the whole goal; parallel calls must not drop each other's changes.
   const goalLocks = yield* KeyedLock.make<"goals">();
@@ -1413,6 +1429,16 @@ const make = Effect.gen(function* () {
   const activeTasks = (projectId: ProjectId) =>
     repository.listTasks({ projectId, stages: SitrepScheduler.ACTIVE_TASK_STAGES });
 
+  const taskExecutionSettings = serverSettings.getSettings.pipe(
+    Effect.map((settings) => resolveTaskExecutionSettings(settings.taskExecution)),
+    Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskExecution),
+  );
+
+  const setMemoryHold = (task: ProjectTask, memoryHold: ProjectTaskMemoryHold | null) =>
+    Effect.flatMap(nowIso, (now) =>
+      repository.setTaskMemoryHold({ id: task.id, memoryHold, now }),
+    ).pipe(orTeamError("Could not record the memory hold.", task.projectId));
+
   /** Notes a sitrep milestone when a stage change left nothing running. */
   const noteIdleMilestone = (projectId: ProjectId, previousStage: ProjectTaskStage) =>
     Effect.gen(function* () {
@@ -1739,17 +1765,20 @@ const make = Effect.gen(function* () {
   /** Why an inbox task cannot start yet: every lead slot is busy or a dependency is unfinished. */
   const startWaitReason = (task: ProjectTask) =>
     Effect.gen(function* () {
-      const manager = yield* requireManager(task.projectId);
-      const active = yield* activeTasks(task.projectId);
-      const limit = manager.settings.maxConcurrentTasks;
-      if (active.length >= limit) {
-        return `${active.length} of ${limit} task leads are already running.`;
+      // The cap is app-wide: leads running on this Mac in every project count.
+      const running = yield* activeLocalLeads(repository);
+      const limit = (yield* taskExecutionSettings).maxConcurrentSessions;
+      if (running >= limit) {
+        return `${running} of ${limit} task leads are already running.`;
       }
       for (const dependencyId of task.waitsOn) {
         const dependency = yield* requireAnyTask(dependencyId, task.projectId);
         if (!isDependencyCleared(dependency.stage)) {
           return `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`;
         }
+      }
+      if (task.memoryHold === "waiting") {
+        return `${MEMORY_WAIT_REASON}: #${task.number} starts by itself once the Mac has room.`;
       }
       return null;
     });
@@ -1971,10 +2000,13 @@ const make = Effect.gen(function* () {
           }
           const manager = yield* requireManager(role.projectId);
           const active = yield* activeTasks(role.projectId);
-          const limit = manager.settings.maxConcurrentTasks;
-          if (active.length >= limit) {
+          const execution = yield* taskExecutionSettings;
+          const limit = execution.maxConcurrentSessions;
+          // The cap is app-wide: leads running on this Mac in every project count.
+          const running = yield* activeLocalLeads(repository);
+          if (running >= limit) {
             return yield* teamError(
-              `#${task.number} stays in the inbox: ${active.length} of ${limit} task leads are already running.`,
+              `#${task.number} stays in the inbox: ${running} of ${limit} task leads are already running.`,
               role.projectId,
             );
           }
@@ -2012,39 +2044,124 @@ const make = Effect.gen(function* () {
           // A plan model the user picked wins over the PM's choice.
           const leadTarget =
             roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
-          // Each start picks its own place; a restart without one runs locally.
-          const location = input.location ?? "local";
-          const lead = yield* delegate({
-            task: buildTaskLeadPrompt({
-              task: { ...task, location },
-              key,
-              spec,
-              resume,
-              memory,
-              otherTasks: active,
-              ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
-              ...(userLanguage === null ? {} : { userLanguage }),
-              ...(coveredBy === null
-                ? {}
-                : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
-              roleModels,
-            }),
-            title: `${key} ${task.title}`,
-            role: "implementation",
-            isolation: "worktree",
-            mode: "async",
-            clientRequestId:
-              earlierSessions === 0
-                ? `task-start:${task.id}`
-                : `task-start:${task.id}:${earlierSessions + 1}`,
-            ...(leadTarget === undefined ? {} : { target: leadTarget }),
-            ...(location === "local" ? {} : { location }),
-          }).pipe(
-            Effect.mapError((failure) =>
-              teamError(
-                `Could not start a task lead for #${task.number}: ${failure.message}`,
+          // The user's execution-location setting and the Mac's free memory pick the place.
+          const headroom = (yield* memoryHeadroom.checkFresh).headroom;
+          const admission = admitTaskLead({
+            active: running,
+            cap: limit,
+            policy: execution.location,
+            headroom,
+            requested: input.location,
+          });
+          const waitInTodo = Effect.gen(function* () {
+            if (task.memoryHold !== "waiting") {
+              yield* setMemoryHold(task, "waiting");
+              yield* appendEvent(
+                task,
+                "note",
+                `${MEMORY_WAIT_REASON}: 메모리 여유가 생기면 시작해요.`,
+                null,
+              );
+              yield* router.publish(role.projectId);
+            }
+          });
+          /**
+           * Holds the task in Todo. Only a wait while memory is short stalls it:
+           * a wait for start spacing is deliberate pacing.
+           */
+          const waitForMemory = (memoryShort: boolean) =>
+            Effect.gen(function* () {
+              yield* waitInTodo;
+              if (memoryShort) {
+                const at = yield* nowIso;
+                yield* repository
+                  .setTaskMemoryStall({ id: task.id, stalling: true, at })
+                  .pipe(orTeamError("Could not record the memory stall.", task.projectId));
+              }
+            });
+          if (admission.type === "wait") {
+            if (admission.memory) yield* waitForMemory(headroom !== "ok");
+            return yield* teamError(
+              `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
+              role.projectId,
+            );
+          }
+          /**
+           * Every local start claims the shared start gate: a fresh ok reading and
+           * time since the last local start for its memory to show. When it cannot,
+           * the task waits for memory and the governor has the PM start it later.
+           */
+          const claimLocalStart = (why: (claim: MemoryHeadroom.StartClaim) => string) =>
+            Effect.gen(function* () {
+              const claim = yield* memoryHeadroom.claimStart(MemoryHeadroom.START_SPACING_MS);
+              if (claim.type === "started") return;
+              yield* waitForMemory(claim.type === "short");
+              return yield* teamError(
+                `#${task.number} stays in the inbox: ${why(claim)} It starts by itself once the Mac has room; do not retry it.`,
                 role.projectId,
-              ),
+              );
+            });
+          const notNow = (claim: MemoryHeadroom.StartClaim) =>
+            claim.type === "spaced"
+              ? `another session started on this Mac moments ago, and its memory has not shown yet (${MEMORY_WAIT_REASON}).`
+              : `${MEMORY_WAIT_REASON}.`;
+          if (admission.location === "local") yield* claimLocalStart(notNow);
+          const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
+            Effect.gen(function* () {
+              return yield* delegate({
+                task: buildTaskLeadPrompt({
+                  task: { ...task, location },
+                  key,
+                  spec,
+                  resume,
+                  memory,
+                  otherTasks: active,
+                  ...((yield* activeAfk(manager.settings)) === null
+                    ? {}
+                    : { afkRule: AFK_AGENT_RULE }),
+                  ...(userLanguage === null ? {} : { userLanguage }),
+                  ...(coveredBy === null
+                    ? {}
+                    : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
+                  roleModels,
+                }),
+                title: `${key} ${task.title}`,
+                role: "implementation",
+                isolation: "worktree",
+                mode: "async",
+                clientRequestId:
+                  earlierSessions === 0
+                    ? `task-start:${task.id}${requestSuffix}`
+                    : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
+                ...(leadTarget === undefined ? {} : { target: leadTarget }),
+                // Always explicit, so delegate_task never re-places a lead the
+                // admission already placed (it may move an unplaced child to the cloud).
+                location,
+              }).pipe(
+                Effect.mapError((failure) =>
+                  teamError(
+                    `Could not start a task lead for #${task.number}: ${failure.message}`,
+                    role.projectId,
+                  ),
+                ),
+              );
+            });
+          // The setting, not the PM, sent it to the cloud: when the cloud cannot
+          // take it, start here if the Mac has room, else wait for memory.
+          const { lead, location, note } = yield* delegateLead(admission.location, "").pipe(
+            Effect.map((lead) => ({ lead, location: admission.location, note: admission.note })),
+            Effect.catch((failure) =>
+              Effect.gen(function* () {
+                if (admission.location !== "cloud" || input.location === "cloud") {
+                  return yield* Effect.fail(failure);
+                }
+                yield* claimLocalStart(
+                  (claim) =>
+                    `the cloud could not start it (${failure.message}) and ${notNow(claim)}`,
+                );
+                const lead = yield* delegateLead("local", ":local");
+                return { lead, location: "local" as const, note: CLOUD_FALLBACK_NOTE };
+              }),
             ),
           );
           const started = yield* setTask({
@@ -2064,6 +2181,10 @@ const make = Effect.gen(function* () {
             createdAt: started.stageChangedAt,
           });
           yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
+          if (note !== null) {
+            yield* appendEvent(started, "note", note, null);
+          }
+          if (task.memoryHold != null) yield* setMemoryHold(started, null);
           // Logged as the lead's, so the PM's latest action still reads "started".
           const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
           yield* repository
@@ -2078,7 +2199,7 @@ const make = Effect.gen(function* () {
             .pipe(orTeamError("Could not record the plan step.", role.projectId));
           yield* router.publish(role.projectId);
           return { task: withStep, leadThreadId: lead.childThreadId };
-        }),
+        }).pipe(leadStartLock.withPermits(1)),
       );
     }).pipe(orTeamError("Could not start the task."));
 
@@ -4123,7 +4244,13 @@ const make = Effect.gen(function* () {
         task,
         input.to,
       ).pipe(Effect.mapError((error) => teamError(error.detail, task.projectId)));
-      return yield* taskDetail(moved);
+      // A lead paused for memory and moved away no longer waits for this Mac's
+      // memory; the governor lets its held messages run.
+      const released =
+        moved.memoryHold == null
+          ? moved
+          : Option.getOrElse(yield* setMemoryHold(moved, null), () => moved);
+      return yield* taskDetail(released);
     }).pipe(orTeamError("Could not move the task.", input.projectId));
 
   /**
@@ -5189,6 +5316,11 @@ const make = Effect.gen(function* () {
               leadThreadId: task.leadThreadId,
               location: task.location,
               moveTarget: task.moveTarget ?? null,
+              // A finished task keeps its pause only as a marker for reopening.
+              memoryHold:
+                task.stage === "done" || task.stage === "cancelled"
+                  ? null
+                  : (task.memoryHold ?? null),
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),

@@ -81,6 +81,7 @@ import * as PreviewManager from "./Manager.ts";
 import * as ServerBrowserPage from "./ServerBrowserPage.ts";
 import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
 
@@ -458,6 +459,7 @@ const make = Effect.gen(function* () {
   const environment = yield* ServerEnvironment.ServerEnvironment;
   const previewBrowser = yield* PreviewBrowser.PreviewBrowser;
   const desktopChannel = yield* DesktopBrowserChannel.DesktopBrowserChannel;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
   // Keeps passwords filled in any tab away from agent tools.
   const credentials = CredentialGuard.makeCredentialGuard();
@@ -1244,6 +1246,12 @@ const make = Effect.gen(function* () {
       AGENT_TAB_LIMIT;
 
   const assertTabCapacity = (agentSessionId: string) => {
+    // Each headless tab is a renderer process; none are added while the Mac is out of memory.
+    if (memoryHeadroom.latest()?.headroom === "critical")
+      throw new BrowserControlInterrupted(
+        "The Mac is critically short on memory, so no new server browser tab opens now (메모리 여유 부족). Reuse an open tab from preview_status tabs, close one with t3_preview_close, or try again later.",
+        "tabLimit",
+      );
     if (atTabLimit(agentSessionId))
       throw new BrowserControlInterrupted(
         `Too many server browser tabs are open (${AGENT_TAB_LIMIT} per agent session, ${SERVER_TAB_LIMIT} per server). Close one with t3_preview_close or reuse one from preview_status tabs.`,

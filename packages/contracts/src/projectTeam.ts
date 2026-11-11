@@ -34,7 +34,11 @@ export type ProjectMemoryEntryId = typeof ProjectMemoryEntryId.Type;
 export const ProjectSitrepId = TrimmedNonEmptyString.pipe(Schema.brand("ProjectSitrepId"));
 export type ProjectSitrepId = typeof ProjectSitrepId.Type;
 
-export const DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 6;
+/**
+ * No longer enforced: task leads start by free memory under the user's safety cap
+ * (ServerSettings.taskExecution.maxConcurrentSessions). Kept so stored settings decode.
+ */
+export const DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 10;
 export const MAX_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 32;
 export const DEFAULT_PROJECT_TEAM_SITREP_INTERVAL_MINUTES = 60;
 /** Bounds for an interval the user sets directly. */
@@ -245,6 +249,11 @@ export const ProjectTaskMetrics = Schema.Struct({
   fixRounds: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
   /** Failed pull request checks that woke the lead. */
   ciFailures: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /**
+   * Milliseconds the task was held for memory (waiting to start, or its lead
+   * paused) when it could have run: time the system stopped it, not the user.
+   */
+  memoryStallMs: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
 });
 export type ProjectTaskMetrics = typeof ProjectTaskMetrics.Type;
 
@@ -253,6 +262,7 @@ export const EMPTY_PROJECT_TASK_METRICS: ProjectTaskMetrics = {
   reviewFindings: 0,
   fixRounds: 0,
   ciFailures: 0,
+  memoryStallMs: 0,
 };
 
 export const ProjectTaskOutcome = Schema.Literals([
@@ -366,6 +376,13 @@ const ProjectTaskPullRequestUrl = TrimmedNonEmptyString.check(Schema.isMaxLength
   description: "Pull request URL.",
 });
 
+/**
+ * Why a task is held for memory: `waiting` stays in Todo until there is room to
+ * start its lead; `paused` had its lead's session stopped and resumes later.
+ */
+export const ProjectTaskMemoryHold = Schema.Literals(["waiting", "paused"]);
+export type ProjectTaskMemoryHold = typeof ProjectTaskMemoryHold.Type;
+
 export const ProjectTask = Schema.Struct({
   id: ProjectTaskId,
   projectId: ProjectId,
@@ -381,6 +398,8 @@ export const ProjectTask = Schema.Struct({
   location: Schema.optional(ExecutionLocation),
   /** Set while the lead is being moved there; null or absent otherwise. */
   moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
+  /** Held for memory: waiting to start, or its lead paused; null or absent otherwise. */
+  memoryHold: Schema.optional(Schema.NullOr(ProjectTaskMemoryHold)),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
   resultSummary: Schema.NullOr(Schema.String),
@@ -1283,7 +1302,7 @@ export const ProjectTeamTaskStartInput = Schema.Struct({
   }),
   location: Schema.optional(ExecutionLocation).annotate({
     description:
-      "Where the task lead runs. local (default) runs it on the user's Mac. cloud runs a Claude lead's CLI in a Vercel Sandbox with the same settings; the app shows the same progress, cards and pull request, marked Cloud. Use cloud only when the user asks for it.",
+      "Where the task lead runs follows the user's execution-location setting, which also decides when the Mac is short on memory. local runs it on the user's Mac. cloud runs a Claude lead's CLI in a Vercel Sandbox with the same settings; the app shows the same progress, cards and pull request, marked Cloud. cloud is honored only when the setting allows the cloud; under local only it runs locally. Use cloud only when the user asks for it.",
   }),
 });
 export type ProjectTeamTaskStartInput = typeof ProjectTeamTaskStartInput.Type;
@@ -1836,6 +1855,8 @@ export const ProjectTaskReference = Schema.Struct({
   location: Schema.optional(ExecutionLocation),
   /** Where the lead is being moved; null or absent when it is not moving. */
   moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
+  /** Held for memory ("메모리 대기"); null or absent when not held. */
+  memoryHold: Schema.optional(Schema.NullOr(ProjectTaskMemoryHold)),
   /** The task's pull request, shown on its sidebar row while in review. */
   prUrl: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** How the lead's last turn ended; "stalled" marks a live task that stopped making progress. */

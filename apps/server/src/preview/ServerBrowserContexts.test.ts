@@ -16,12 +16,36 @@ vi.spyOn(chromium, "launch").mockImplementation(launches.launch);
 vi.spyOn(chromium, "launchPersistentContext").mockImplementation(launches.persistent);
 vi.mock("node:fs/promises", () => ({ mkdir: launches.mkdir, rm: launches.rm }));
 
+const makePage = () => {
+  const events = new NodeEvents.EventEmitter();
+  return {
+    once: vi.fn((event: string, listener: () => void) => events.once(event, listener)),
+    close: vi.fn(async () => {
+      events.emit("close");
+    }),
+  };
+};
+
 const makeContext = () => {
   const events = new NodeEvents.EventEmitter();
+  const pages = new Set<ReturnType<typeof makePage>>();
   let closed = false;
   return {
-    on: vi.fn((event: string, listener: () => void) => events.on(event, listener)),
-    pages: vi.fn(() => []),
+    on: vi.fn((event: string, listener: (...args: Array<unknown>) => void) =>
+      events.on(event, listener),
+    ),
+    pages: vi.fn(() => [...pages]),
+    /** Like a tab opening a page in the context. */
+    openPage: () => {
+      const page = makePage();
+      pages.add(page);
+      page.once("close", () => pages.delete(page));
+      events.emit("page", page);
+      return page;
+    },
+    get closed() {
+      return closed;
+    },
     close: vi.fn(async () => {
       if (!closed) {
         closed = true;
@@ -33,17 +57,18 @@ const makeContext = () => {
 
 const makeBrowser = () => {
   const events = new NodeEvents.EventEmitter();
-  const contexts: ReturnType<typeof makeContext>[] = [];
+  const created: ReturnType<typeof makeContext>[] = [];
   return {
-    contexts,
+    created,
+    contexts: vi.fn(() => created.filter((context) => !context.closed)),
     on: vi.fn((event: string, listener: () => void) => events.on(event, listener)),
     newContext: vi.fn(async () => {
       const context = makeContext();
-      contexts.push(context);
+      created.push(context);
       return context as unknown as BrowserContext;
     }),
     close: vi.fn(async () => {
-      for (const context of contexts) await context.close();
+      for (const context of created) await context.close();
       events.emit("disconnected");
     }),
   };
@@ -86,7 +111,7 @@ describe("ServerBrowserContexts", () => {
     });
     await pool.close();
     expect(browser.close).toHaveBeenCalledTimes(1);
-    for (const context of browser.contexts) expect(context.close).toHaveBeenCalled();
+    for (const context of browser.created) expect(context.close).toHaveBeenCalled();
   });
 
   it("keeps human profiles persistent without sharing their storage with agents", async () => {
@@ -126,7 +151,7 @@ describe("ServerBrowserContexts", () => {
       force: true,
     });
     expect(await pool.contextFor("work/team", "agent")).toBe(agent);
-    expect(browser.contexts[0]?.close).not.toHaveBeenCalled();
+    expect(browser.created[0]?.close).not.toHaveBeenCalled();
     launches.persistent.mockResolvedValue(makeContext() as unknown as BrowserContext);
     expect(await pool.contextFor("work/team")).not.toBe(persistent);
     await pool.clearProfile("never-opened");
@@ -238,6 +263,115 @@ describe("ServerBrowserContexts", () => {
     await expect(pool.contextFor("default", "agent")).rejects.toThrow("closed");
     await pool.close();
     expect(browser.close).toHaveBeenCalledTimes(1);
-    expect(browser.contexts[0]?.close).toHaveBeenCalled();
+    expect(browser.created[0]?.close).toHaveBeenCalled();
+  });
+
+  describe("when idle", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      return () => vi.useRealTimers();
+    });
+
+    it("closes a profile's browser after its last tab closes and relaunches it on demand", async () => {
+      const human = makeContext();
+      launches.persistent.mockResolvedValueOnce(human as unknown as BrowserContext);
+      const pool = new ServerBrowserContexts({ ...options(), idleCloseMs: 1_000 });
+      await pool.contextFor("work");
+      const first = human.openPage();
+      const second = human.openPage();
+
+      await first.close();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(human.close).not.toHaveBeenCalled();
+
+      await second.close();
+      await vi.advanceTimersByTimeAsync(999);
+      expect(human.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(human.close).toHaveBeenCalledTimes(1);
+
+      const relaunched = makeContext();
+      launches.persistent.mockResolvedValueOnce(relaunched as unknown as BrowserContext);
+      expect(await pool.contextFor("work")).toBe(relaunched);
+      expect(launches.persistent).toHaveBeenCalledTimes(2);
+      await pool.close();
+    });
+
+    it("keeps a context that was just handed out until its tab has had time to open", async () => {
+      const human = makeContext();
+      launches.persistent.mockResolvedValueOnce(human as unknown as BrowserContext);
+      const pool = new ServerBrowserContexts({ ...options(), idleCloseMs: 1_000 });
+      await pool.contextFor("work");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(await pool.contextFor("work")).toBe(human);
+      await vi.advanceTimersByTimeAsync(800);
+      expect(human.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(human.close).toHaveBeenCalledTimes(1);
+      await pool.close();
+    });
+
+    it("closes the shared browser once its last context closes and relaunches it lazily", async () => {
+      const browser = makeBrowser();
+      launches.launch.mockResolvedValueOnce(browser as unknown as Browser);
+      const pool = new ServerBrowserContexts({ ...options(), idleCloseMs: 1_000 });
+      const a = await pool.contextFor("default", "agent-a");
+      const b = await pool.contextFor("default", "agent-b");
+      // Each agent tab keeps a page open in its own context.
+      for (const context of browser.created) context.openPage();
+
+      await a.close();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(browser.close).not.toHaveBeenCalled();
+
+      await b.close();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(browser.close).toHaveBeenCalledTimes(1);
+
+      const next = makeBrowser();
+      launches.launch.mockResolvedValueOnce(next as unknown as Browser);
+      await pool.contextFor("default", "agent-c");
+      expect(launches.launch).toHaveBeenCalledTimes(2);
+      expect(next.newContext).toHaveBeenCalledTimes(1);
+      await pool.close();
+      expect(next.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("closes what it launched when a context fails to open", async () => {
+    // The shared browser launched, but its context did not open.
+    const browser = makeBrowser();
+    browser.newContext.mockRejectedValueOnce(new Error("no context"));
+    launches.launch.mockResolvedValueOnce(browser as unknown as Browser);
+    const pool = new ServerBrowserContexts(options());
+    await expect(pool.contextFor("default", "agent-a")).rejects.toThrow("no context");
+    expect(browser.close).toHaveBeenCalledTimes(1);
+
+    // A scratch page that fails to open closes its context.
+    const next = makeBrowser();
+    launches.launch.mockResolvedValueOnce(next as unknown as Browser);
+    next.newContext.mockImplementationOnce(async () => {
+      const context = makeContext();
+      next.created.push(context);
+      return Object.assign(context, {
+        newPage: vi.fn(async () => {
+          throw new Error("no page");
+        }),
+      }) as unknown as BrowserContext;
+    });
+    await expect(pool.scratchPage()).rejects.toThrow("no page");
+    expect(next.created[0]?.close).toHaveBeenCalled();
+
+    // A persistent Chrome whose context the pool closed meanwhile is closed too.
+    const human = makeContext();
+    const launched = Promise.withResolvers<BrowserContext>();
+    launches.persistent.mockReturnValueOnce(launched.promise);
+    const opening = pool.contextFor("default");
+    await vi.waitFor(() => expect(launches.persistent).toHaveBeenCalled());
+    const closing = pool.close();
+    launched.resolve(human as unknown as BrowserContext);
+    await expect(opening).rejects.toThrow("closed");
+    await closing;
+    expect(human.close).toHaveBeenCalled();
   });
 });

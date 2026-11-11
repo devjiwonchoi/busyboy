@@ -80,6 +80,8 @@ export const ProviderSessionReleaseReason = Schema.Literals([
   "runtime_error",
   "manual_shutdown",
   "server_shutdown",
+  // Paused while the Mac is short on memory; the next turn resumes the same session.
+  "memory_pressure",
 ]);
 export type ProviderSessionReleaseReason = typeof ProviderSessionReleaseReason.Type;
 

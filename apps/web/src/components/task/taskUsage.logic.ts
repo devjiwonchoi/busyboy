@@ -17,6 +17,17 @@ export function formatStepDuration(ms: number): string {
   return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
 
+/** "40초", "12분", "1시간 5분": formatStepDuration in Korean units. */
+export function formatKoreanDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}초`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}분`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}시간` : `${hours}시간 ${rest}분`;
+}
+
 /** "950", "12k", "1.2M". */
 export function formatTokenCount(tokens: number): string {
   if (tokens < 1000) return String(tokens);
@@ -56,7 +67,8 @@ export const TASK_SIZE_LABELS: Record<ProjectTaskSize, string> = {
 
 /**
  * The task's total line, such as "합계 27m · 2.1M/68k 토큰 · 약 $4.90 · 리뷰 지적 3 · 수정 1회 ·
- * CI 실패 0". Null before any step has finished.
+ * CI 실패 0 · 메모리로 멈춘 시간 12분", the last part only when memory held it. Null before
+ * any step has finished.
  */
 export function taskUsageTotal(
   usage: ProjectTaskStepUsages,
@@ -87,6 +99,10 @@ export function taskUsageTotal(
     `수정 ${metrics.fixRounds}회`,
     `CI 실패 ${metrics.ciFailures}`,
   );
+  // Under half a second reads "0초": not worth a part.
+  if (Math.round(metrics.memoryStallMs / 1000) > 0) {
+    parts.push(`메모리로 멈춘 시간 ${formatKoreanDuration(metrics.memoryStallMs)}`);
+  }
   if (metrics.size !== null) parts.push(`크기 ${TASK_SIZE_LABELS[metrics.size]}`);
   return parts.join(" · ");
 }

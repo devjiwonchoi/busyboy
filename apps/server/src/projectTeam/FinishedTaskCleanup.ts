@@ -14,9 +14,10 @@ import * as Stream from "effect/Stream";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as PreviewManager from "../preview/Manager.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import { forkParked } from "../serverActivation.ts";
-import { isLeadBusy, makeIdGenerator } from "./common.ts";
+import { isLeadBusy, makeIdGenerator, nowIso } from "./common.ts";
 
 /** Stages whose lead thread is archived, which also removes its worktree. */
 export const FINISHED_TASK_STAGES: ReadonlyArray<ProjectTaskStage> = ["done", "cancelled"];
@@ -55,8 +56,8 @@ export class FinishedTaskCleanup extends Context.Service<
   FinishedTaskCleanup,
   {
     /**
-     * Archives a done or cancelled task's lead thread and its helpers; the archive
-     * then removes the worktree. Waits for an idle lead unless `stopLead` is set,
+     * Archives a done or cancelled task's lead thread and its helpers and closes
+     * their previews; the archive then closes their terminals and removes the worktree. Waits for an idle lead unless `stopLead` is set,
      * so a lead that marks its own task done can finish its turn.
      */
     readonly archiveLead: (
@@ -75,10 +76,30 @@ const make = Effect.gen(function* () {
   const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const git = yield* GitWorkflowService.GitWorkflowService;
+  // Optional so the team's test harness needs no preview stack; the server provides it.
+  const previews = yield* Effect.serviceOption(PreviewManager.PreviewManager);
   const newId = yield* makeIdGenerator;
 
   const commandId = (kind: string, threadId: ThreadId) =>
     newId(`project-team:${kind}:${threadId}`).pipe(Effect.map(CommandId.make));
+
+  /**
+   * Archiving closes a thread's terminals (and the jobs in them) but not its
+   * previews, whose server-side tabs keep a headless browser running.
+   */
+  const closePreviews = (threadId: ThreadId) =>
+    Option.match(previews, {
+      onNone: () => Effect.void,
+      onSome: (manager) =>
+        manager.close({ threadId }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logInfo("project team could not close a finished thread's previews", {
+              threadId,
+              cause,
+            }),
+          ),
+        ),
+    });
 
   /**
    * A lead may check out its own branch name instead of the one the thread was
@@ -137,6 +158,7 @@ const make = Effect.gen(function* () {
           commandId: yield* commandId("archive", thread.id),
           threadId: thread.id,
         });
+        yield* closePreviews(thread.id);
       }
     }).pipe(
       Effect.catchCause((cause) =>
@@ -151,13 +173,30 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       if (task.leadThreadId === null) return;
       const lead = yield* threads.getThreadShell(task.leadThreadId);
-      if (lead === null || lead.deletedAt !== null || lead.archivedAt === null) return;
-      yield* threads.dispatch({
-        type: "thread.unarchive",
-        commandId: yield* commandId("unarchive", lead.id),
-        threadId: lead.id,
-        restoreWorktree: true,
-      });
+      if (lead === null || lead.deletedAt !== null) return;
+      if (lead.archivedAt !== null) {
+        yield* threads.dispatch({
+          type: "thread.unarchive",
+          commandId: yield* commandId("unarchive", lead.id),
+          threadId: lead.id,
+          restoreWorktree: true,
+        });
+      }
+      // The task finished while its lead was paused for memory: the messages held
+      // then run now. A queue held for any other reason (a user's stop) stays held.
+      const current = yield* repository.getTask(task.id);
+      if (Option.isSome(current) && current.value.memoryHold === "paused") {
+        yield* threads.dispatch({
+          type: "queue.resume",
+          commandId: yield* commandId("resume", lead.id),
+          threadId: lead.id,
+        });
+        yield* repository.setTaskMemoryHold({
+          id: task.id,
+          memoryHold: null,
+          now: yield* nowIso,
+        });
+      }
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("project team could not revive a reopened task's lead", {

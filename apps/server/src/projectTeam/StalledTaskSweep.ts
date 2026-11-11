@@ -53,6 +53,8 @@ const make = Effect.gen(function* () {
       }> = [];
       for (const task of tasks) {
         if (task.lastOutcome !== "stalled") continue;
+        // Paused for memory: the governor resumes it, so it is not stuck.
+        if (task.memoryHold === "paused") continue;
         if (nowMs - isoMillis(task.stageChangedAt) <= STALLED_TASK_NOTICE_MS) continue;
         const events = yield* repository.listTaskEvents({ taskId: task.id, limit: EVENT_LOOKBACK });
         const outcome = events.findLast((event) => event.kind === "outcome");

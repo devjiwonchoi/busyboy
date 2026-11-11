@@ -100,6 +100,7 @@ import {
   SettingsEnvironmentMaintenanceRouteScreen,
   SettingsEnvironmentNewThreadsRouteScreen,
   SettingsEnvironmentSourceControlRouteScreen,
+  SettingsEnvironmentTaskExecutionRouteScreen,
 } from "./features/settings/SettingsServerControlsRouteScreen";
 import {
   SettingsScheduledTasksRouteScreen,
@@ -250,6 +251,11 @@ const SettingsContentStack = createV5SheetStackNavigator({
       screen: SettingsEnvironmentMaintenanceRouteScreen,
       linking: "maintenance",
       options: { title: "Maintenance" },
+    }),
+    SettingsEnvironmentTaskExecution: createNativeStackScreen({
+      screen: SettingsEnvironmentTaskExecutionRouteScreen,
+      linking: "task-execution",
+      options: { title: "작업 실행" },
     }),
     SettingsThreads: createNativeStackScreen({
       screen: SettingsThreadsRouteScreen,

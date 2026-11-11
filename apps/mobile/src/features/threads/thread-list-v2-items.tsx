@@ -17,6 +17,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { AuthOrchestrationOperateScope, type EnvironmentMachineKind } from "@t3tools/contracts";
+import { memoryHoldLabel } from "@t3tools/shared/taskExecutionSettings";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useMemo, type ComponentProps } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
@@ -32,6 +33,7 @@ import { ProviderIcon, ProviderInstanceIcon } from "../../components/ProviderIco
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { useLeadThreadTask } from "../../state/projectTeam";
 import { useEnvironmentScope } from "../../state/session";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useThreadPr } from "../../state/use-thread-pr";
@@ -445,6 +447,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
 
   const providerInstance = props.providerInstance;
   const pr = useThreadPr(thread);
+  const memoryLabel = memoryHoldLabel(useLeadThreadTask(thread)?.memoryHold);
 
   const theme = useUniwindTheme();
   const sidebarPane = props.pane === "sidebar";
@@ -595,6 +598,18 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           {props.projectTitle ?? props.project?.title ?? ""}
         </Text>
         {props.hasQueuedMessages ? <QueuedMessageIcon selected={selected} /> : null}
+        {memoryLabel !== null ? (
+          <Text
+            className={cn(
+              "text-xs",
+              selected
+                ? selectedThreadRowColors.mutedForegroundClassName
+                : rowAppearance.tertiaryForegroundClassName,
+            )}
+          >
+            {memoryLabel}
+          </Text>
+        ) : null}
         {pinnedRow ? (
           <SymbolView
             name="pin"

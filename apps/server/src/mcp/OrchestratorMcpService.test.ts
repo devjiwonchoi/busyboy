@@ -22,6 +22,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 
 import {
   DispatchModeLimit,
@@ -41,6 +43,7 @@ import { buildUnavailableProviderSnapshot } from "../provider/unavailableProvide
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as CloudLeadSecrets from "../cloudLead/CloudLeadSecrets.ts";
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
@@ -1284,9 +1287,19 @@ describe("OrchestratorMcpService provider resolution", () => {
     }),
   );
 
-  it.effect("runs cloud children on Claude or Codex, sharing a cloud parent's checkout", () =>
+  const claudeInstanceId = ProviderInstanceId.make("claude");
+  /** Runs `body` against a delegate_task service whose parent can turn cloud. */
+  const withDelegations = <A, E>(
+    settings: Parameters<typeof ServerSettings.layerTest>[0],
+    body: (input: {
+      readonly service: OrchestratorMcpService.OrchestratorMcpService["Service"];
+      readonly setParentCloud: () => void;
+      readonly dispatched: Ref.Ref<ReadonlyArray<unknown>>;
+    }) => Effect.Effect<A, E>,
+    /** The Mac's memory as the sampler reads it; defaults to no sampler (always room). */
+    memory?: () => MemoryHeadroom.MemorySnapshot,
+  ) =>
     Effect.gen(function* () {
-      const claudeInstanceId = ProviderInstanceId.make("claude");
       const task = {
         id: taskId,
         threadId: parentThreadId,
@@ -1342,7 +1355,14 @@ describe("OrchestratorMcpService provider resolution", () => {
               } as never),
             ),
         }),
-        ServerSettings.layerTest(),
+        ServerSettings.layerTest(settings),
+        ...(memory === undefined
+          ? []
+          : [
+              MemoryHeadroom.layerFromSource(memory).pipe(
+                Layer.provide(ServerSettings.layerTest(settings)),
+              ),
+            ]),
         providerRegistryLayer([
           providerSnapshot({
             instanceId: codexInstanceId,
@@ -1372,73 +1392,210 @@ describe("OrchestratorMcpService provider resolution", () => {
         ),
       );
 
-      yield* Effect.gen(function* () {
+      return yield* Effect.gen(function* () {
         const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-        // A local parent's cloud child gets its own checkout and sandbox.
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
-          mode: "async",
-          location: "cloud",
-          clientRequestId: "delegate-cloud-codex",
+        return yield* body({
+          service,
+          setParentCloud: () => {
+            parentLocation = "cloud";
+          },
+          dispatched,
         });
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
-          mode: "async",
-          location: "cloud",
-          clientRequestId: "delegate-cloud-claude",
-        });
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
-          mode: "async",
-          clientRequestId: "delegate-local-claude",
-        });
+      }).pipe(Effect.provide(layerWithGit.pipe(Layer.provide(layerDependencies))));
+    });
 
-        // A cloud parent's children inherit the cloud and share its checkout (and
-        // so its sandbox), unless they ask for their own worktree.
-        parentLocation = "cloud";
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
-          mode: "async",
-          clientRequestId: "delegate-cloud-parent-shared",
-        });
-        yield* service.delegateTask(scope, {
-          task: "Build it.",
-          target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
-          mode: "async",
-          isolation: "worktree",
-          clientRequestId: "delegate-cloud-parent-isolated",
-        });
-        const refused = yield* service
-          .delegateTask(scope, {
+  it.effect("runs cloud children on Claude or Codex, sharing a cloud parent's checkout", () =>
+    withDelegations(
+      { taskExecution: { location: "cloud_first" } },
+      ({ service, setParentCloud, dispatched }) =>
+        Effect.gen(function* () {
+          // A local parent's cloud child gets its own checkout and sandbox.
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "delegate-cloud-codex",
+          });
+          yield* service.delegateTask(scope, {
             task: "Build it.",
             target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
             mode: "async",
-            location: "local",
-            clientRequestId: "delegate-cloud-parent-local",
-          })
-          .pipe(Effect.flip);
-        assert.include(refused.message, "would edit the Mac mirror");
+            location: "cloud",
+            clientRequestId: "delegate-cloud-claude",
+          });
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            clientRequestId: "delegate-local-claude",
+          });
 
-        const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
-          location?: string;
-          workspaceStrategy?: { type: string };
-        }>;
-        assert.deepEqual(
-          commands.map((command) => [command.location, command.workspaceStrategy?.type]),
-          [
-            ["cloud", "worktree"],
-            ["cloud", "worktree"],
-            [undefined, undefined],
-            ["cloud", undefined],
-            ["cloud", "worktree"],
-          ],
-        );
-      }).pipe(Effect.provide(layerWithGit.pipe(Layer.provide(layerDependencies))));
-    }),
+          // A cloud parent's children inherit the cloud and share its checkout (and
+          // so its sandbox), unless they ask for their own worktree.
+          setParentCloud();
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+            mode: "async",
+            clientRequestId: "delegate-cloud-parent-shared",
+          });
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            isolation: "worktree",
+            clientRequestId: "delegate-cloud-parent-isolated",
+          });
+          const refused = yield* service
+            .delegateTask(scope, {
+              task: "Build it.",
+              target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+              mode: "async",
+              location: "local",
+              clientRequestId: "delegate-cloud-parent-local",
+            })
+            .pipe(Effect.flip);
+          assert.include(refused.message, "would edit the Mac mirror");
+
+          const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+            location?: string;
+            workspaceStrategy?: { type: string };
+          }>;
+          assert.deepEqual(
+            commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+            [
+              ["cloud", "worktree"],
+              ["cloud", "worktree"],
+              [undefined, undefined],
+              ["cloud", undefined],
+              ["cloud", "worktree"],
+            ],
+          );
+        }),
+    ),
+  );
+
+  const PLENTY: MemoryHeadroom.MemorySnapshot = {
+    availableMemoryBytes: 6 * 1024 ** 3,
+    memoryPressure: "normal",
+  };
+  const TIGHT: MemoryHeadroom.MemorySnapshot = {
+    availableMemoryBytes: 1 * 1024 ** 3,
+    memoryPressure: "normal",
+  };
+  const localChild = (clientRequestId: string, isolation?: "worktree") => ({
+    task: "Build it.",
+    target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+    mode: "async" as const,
+    ...(isolation === undefined ? {} : { isolation }),
+    clientRequestId,
+  });
+
+  it.effect("starts a second local child only once the first one's memory can show", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, dispatched }) =>
+        Effect.gen(function* () {
+          yield* service.delegateTask(scope, localChild("spaced-first"));
+          const second = yield* service
+            .delegateTask(scope, localChild("spaced-second"))
+            .pipe(Effect.forkChild);
+          yield* TestClock.adjust(MemoryHeadroom.START_SPACING_MS - 1_000);
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 1);
+          yield* TestClock.adjust(1_000);
+          yield* Fiber.join(second);
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 2);
+        }),
+      () => PLENTY,
+    ),
+  );
+
+  it.effect(
+    "sends a short Mac's child to the cloud only when it asked for its own checkout",
+    () => {
+      let memory = TIGHT;
+      return withDelegations(
+        { taskExecution: { location: "local_first" } },
+        ({ service, dispatched }) =>
+          Effect.gen(function* () {
+            yield* service.delegateTask(scope, localChild("short-isolated", "worktree"));
+            // Sharing the parent's checkout: it stays here and waits for memory.
+            const shared = yield* service
+              .delegateTask(scope, localChild("short-shared"))
+              .pipe(Effect.forkChild);
+            yield* TestClock.adjust(MemoryHeadroom.MEMORY_SAMPLE_INTERVAL_MS * 2);
+            assert.strictEqual((yield* Ref.get(dispatched)).length, 1);
+            memory = PLENTY;
+            yield* TestClock.adjust(MemoryHeadroom.MEMORY_SAMPLE_INTERVAL_MS);
+            yield* Fiber.join(shared);
+            const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+              location?: string;
+              workspaceStrategy?: { type: string };
+            }>;
+            assert.deepEqual(
+              commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+              [
+                ["cloud", "worktree"],
+                [undefined, undefined],
+              ],
+            );
+          }),
+        () => memory,
+      );
+    },
+  );
+
+  it.effect("refuses a local child the Mac never has room for, saying it was not started", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, dispatched }) =>
+        Effect.gen(function* () {
+          const child = yield* service
+            .delegateTask(scope, localChild("never-room"))
+            .pipe(Effect.flip, Effect.forkChild);
+          yield* TestClock.adjust(MemoryHeadroom.HEADROOM_WAIT_MS);
+          const refused = yield* Fiber.join(child);
+          assert.include(refused.message, "this child was not started. Delegate it again later.");
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 0);
+        }),
+      () => TIGHT,
+    ),
+  );
+
+  it.effect("keeps a local parent's cloud child on the Mac under local only", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, setParentCloud, dispatched }) =>
+        Effect.gen(function* () {
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "local-only-cloud-request",
+          });
+          // A cloud parent's children still share its sandbox.
+          setParentCloud();
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            clientRequestId: "local-only-cloud-parent",
+          });
+          const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+            location?: string;
+            workspaceStrategy?: { type: string };
+          }>;
+          assert.deepEqual(
+            commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+            [
+              [undefined, undefined],
+              ["cloud", undefined],
+            ],
+          );
+        }),
+    ),
   );
 
   it.effect("resolves a driverKind target to a capable Antigravity instance", () =>

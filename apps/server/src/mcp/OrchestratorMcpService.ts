@@ -95,6 +95,7 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import { capWebhookRuntimeMode } from "../scheduledTasks/Schedule.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import {
   clientRuntimeModeCeiling,
   type McpInvocationScope,
@@ -144,6 +145,11 @@ export interface OrchestratorMcpDelegateTaskOptions {
    * branch instead of the parent's local commit, so it never inherits a stale checkout.
    */
   readonly worktreeBase?: "origin-default";
+  /**
+   * "claimed": the caller already claimed this local start from MemoryHeadroom
+   * (task_start does), so the child does not wait for the start gate again.
+   */
+  readonly localStart?: "claimed";
   /**
    * Runs once the child thread exists and before a mode=wait call blocks, so a caller can
    * link the child (for example as a task's review session) before the child acts.
@@ -976,6 +982,25 @@ const make = Effect.gen(function* () {
   const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
+
+  /** The user's execution-location setting; local_only when it cannot be read. */
+  const executionLocation = serverSettings.getSettings.pipe(
+    Effect.map((settings) => settings.taskExecution.location),
+    Effect.orElseSucceed(() => "local_only" as const),
+  );
+
+  /**
+   * A new local child claims the shared start gate, waiting while memory is
+   * short or another session just started; after HEADROOM_WAIT_MS it is refused.
+   */
+  const awaitLocalHeadroom = Effect.gen(function* () {
+    if (yield* MemoryHeadroom.waitToStart(memoryHeadroom)) return;
+    return yield* failure(
+      "orchestration_error",
+      "Mac memory is short, so this child was not started. Delegate it again later. (메모리 여유 부족)",
+    );
+  });
 
   const defaultRuntimeModeFor = (projectId: ProjectId) =>
     serverSettings.getSettings.pipe(
@@ -2102,7 +2127,13 @@ const make = Effect.gen(function* () {
         // A cloud parent's children run in the cloud too; one sharing its
         // checkout shares its sandbox, so the Mac mirror is never edited directly.
         const parentCloud = parent.thread.location === "cloud";
-        const cloud = input.location === "cloud" || (parentCloud && input.location !== "local");
+        const policy = yield* executionLocation;
+        // Under local_only nothing leaves this Mac: a cloud request from a local
+        // parent runs here. A cloud parent's children share its sandbox, as before.
+        const forcedLocal = policy === "local_only" && !parentCloud && input.location === "cloud";
+        let cloud =
+          !forcedLocal &&
+          (input.location === "cloud" || (parentCloud && input.location !== "local"));
         if (parentCloud && !cloud && input.isolation !== "worktree") {
           return yield* failure(
             "invalid_request",
@@ -2118,6 +2149,26 @@ const make = Effect.gen(function* () {
               "invalid_request",
               `Cloud runs only Claude and Codex agents; ${target.modelSelection.instanceId} uses ${driver ?? "an unknown driver"}. Pick a Claude or Codex target, or run it locally.`,
             );
+          }
+        }
+        // A new local child needs room on the Mac; a cloud parent's children run in
+        // its sandbox and are not counted against it. When the Mac is short and the
+        // user allows the cloud, a child with no place of its own goes there instead,
+        // but only one that asked for its own checkout: one sharing its parent's
+        // checkout stays here and waits for memory.
+        if (!cloud && !isRetryOfAcceptedDelegation && options?.localStart !== "claimed") {
+          const driver = providers.find(
+            (provider) => provider.instanceId === target.modelSelection.instanceId,
+          )?.driver;
+          const mayUseCloud =
+            policy !== "local_only" &&
+            input.location === undefined &&
+            input.isolation === "worktree" &&
+            (driver === "claudeAgent" || driver === "codex");
+          if (mayUseCloud && (yield* memoryHeadroom.check).headroom !== "ok") {
+            cloud = true;
+          } else {
+            yield* awaitLocalHeadroom;
           }
         }
         // A cloud child of a local parent needs its own checkout to mirror.
