@@ -21,6 +21,7 @@ import {
   PLAN_APPROVAL_START,
   ProjectId,
   type ProjectAttentionContext,
+  type ProjectTeamAskUserInput,
   type ProjectTaskSpec,
   type ProjectTeamTaskCreateInput,
   ProviderInstanceId,
@@ -57,6 +58,7 @@ import * as ContextCare from "./ContextCare.ts";
 import * as RoleStepReactor from "./RoleStepReactor.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
 import { directorWorkspaceRoot } from "./director.ts";
+import { planDepth, requiredPlanGates } from "./planGates.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import type { PullRequestText } from "./pullRequestFormat.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
@@ -687,12 +689,30 @@ export const readyPlan = (spec: ProjectTaskSpec): ProjectTaskSpec => ({
     },
   ],
   files: [{ path: "hello.sh", change: "new", why: "the script", todos: ["t1"] }],
+  ...readyGates,
 });
 
-/** The lead writes a plan that meets the Definition of Ready. */
+/** Every plan gate filled, so a plan passes the empty-gate check at any task size. */
+export const readyGates = {
+  problem: "Nothing prints hello today; after this, hello.sh prints it.",
+  why: "The user asked for it; without it the demo has no output. Asked whether it needs flags: no.",
+  currentState: "No hello.sh exists in the repository root.",
+  nonGoals: "A Windows script: the demo runs on macOS only.",
+  humanCheckpoints: "None: no sign-in, tokens or payment.",
+  budget: "One hour; drop the color output if it runs over.",
+  risks: "It fails if the shell is not bash: t1 uses POSIX sh only.",
+  alternatives: "A Node script: rejected, it needs a runtime.",
+} satisfies Partial<ProjectTaskSpec>;
+
+/** The lead sets its task's size, which plan approval needs. */
+export const setSize = (lead: ThreadId, size: "small" | "medium" | "large" = "small") =>
+  Effect.flatMap(ProjectTeamService.ProjectTeamService, (team) => team.updateTask(lead, { size }));
+
+/** The lead writes a plan that meets the Definition of Ready, and sizes a task with no size. */
 export const writeReadyPlan = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
+    if ((yield* leadTask(lead)).metrics.size === null) yield* setSize(lead);
     const read = yield* team.readSpec(lead, {});
     return yield* team.writeSpec(lead, {
       baseVersion: read.current.version,
@@ -701,16 +721,90 @@ export const writeReadyPlan = (lead: ThreadId) =>
     });
   });
 
+let checkerCount = 0;
+/**
+ * Starts plan checkers on threads named checker-<n>, on the target model like
+ * delegate_task. Tests that look at the delegation pass harness.delegate instead.
+ */
+export const checkerDelegate: ProjectTeamService.DelegateStep = (input) =>
+  Effect.sync(() => {
+    checkerCount += 1;
+    return {
+      taskId: NodeId.make(`checker-node-${checkerCount}`),
+      childThreadId: ThreadId.make(`checker-${checkerCount}`),
+      providerInstanceId: input.target?.providerInstanceId ?? DEFAULT_PROVIDER_INSTANCE_ID,
+      model: input.target?.model ?? DEFAULT_MODEL,
+    } as OrchestratorMcpDelegateTaskResult;
+  });
+
+/** The lead asks the user to approve its plan; the plan checker starts and no card goes up yet. */
+export const requestApproval = (
+  lead: ThreadId,
+  input: Partial<ProjectTeamAskUserInput> = {},
+  delegate: ProjectTeamService.DelegateStep = checkerDelegate,
+) =>
+  Effect.flatMap(ProjectTeamService.ProjectTeamService, (team) =>
+    team.requestPlanApproval(
+      lead,
+      {
+        context: attentionContext({ action: "Approve the plan?" }),
+        kind: "approval",
+        question: "Approve the plan?",
+        ...input,
+      },
+      delegate,
+    ),
+  );
+
+/** The lead's task, read the way the PM sees it. */
+export const leadTask = (lead: ThreadId) =>
+  Effect.gen(function* () {
+    const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+    const task = yield* repository.findTaskByLeadThreadId(lead);
+    if (Option.isNone(task)) throw new Error(`No task led by ${lead}.`);
+    return task.value;
+  });
+
+/**
+ * The plan checker of the lead's task records its verdicts: every required gate passes
+ * unless `fail` names gates. Returns the approval card it raised, if any.
+ */
+export const passPlanCheck = (lead: ThreadId, fail: ReadonlyArray<string> = []) =>
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService.ProjectTeamService;
+    const task = yield* leadTask(lead);
+    const check = task.planCheck;
+    if (check?.checker == null) throw new Error(`#${task.number} has no plan checker.`);
+    const detail = yield* team.getTaskDetail({ projectId: task.projectId, taskId: task.id });
+    const spec = detail.versions.find((version) => version.version === check.specVersion)!;
+    const verdicts = requiredPlanGates(planDepth(task.metrics.size, spec.spec)).map((gate) => ({
+      gate: gate.id,
+      pass: !fail.includes(gate.id),
+      reason: fail.includes(gate.id) ? `${gate.label} 내용이 부족해요.` : "충분해요.",
+    }));
+    yield* team.setPlanCheck(check.checker.threadId, { specVersion: check.specVersion, verdicts });
+    const after = yield* team.getTaskDetail({ projectId: task.projectId, taskId: task.id });
+    return {
+      item: after.openAttention.find((item) => item.kind === "approval"),
+      task: after.task,
+    };
+  });
+
+/** The lead asks for plan approval and the plan checker passes it: the card is up. */
+export const askPlanApproval = (lead: ThreadId, input: Partial<ProjectTeamAskUserInput> = {}) =>
+  Effect.gen(function* () {
+    yield* requestApproval(lead, input);
+    const { item } = yield* passPlanCheck(lead);
+    if (item === undefined) throw new Error("The plan check raised no approval card.");
+    return { item };
+  });
+
 /** The lead writes a ready plan and the user approves it, so the task is running. */
 export const approvePlan = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
     yield* writeReadyPlan(lead);
-    const { item } = yield* team.askUser(lead, {
-      context: attentionContext({ action: "Approve the plan?" }),
-      kind: "approval",
-      question: "Approve the plan?",
-    });
+    const { item } = yield* askPlanApproval(lead);
     yield* team.answerDecision({
       projectId: item.projectId,
       attentionItemId: item.id,

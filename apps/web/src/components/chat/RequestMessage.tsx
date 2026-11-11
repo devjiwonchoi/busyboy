@@ -17,6 +17,14 @@ import {
   replyWithRequestLink,
   requestParagraphs,
 } from "@t3tools/shared/requestMessage";
+import {
+  isBeforeNonGoals,
+  type PlanCheckSummary,
+  planCheckSummary,
+  type PlanGateSection,
+  planGateSections,
+  planVerdictLabel,
+} from "@t3tools/shared/planGates";
 import { AsyncResult } from "effect/reactivity";
 import { CopyIcon, ReplyIcon } from "lucide-react";
 import { useRef, useState } from "react";
@@ -46,7 +54,7 @@ export function RequestMessage(props: RequestProps) {
   if (props.card.item.kind === "approval" && props.card.item.taskId !== null) {
     return <PlanRequestMessage {...props} taskId={props.card.item.taskId} />;
   }
-  return <MessageBody {...props} todos={[]} nonGoals="" />;
+  return <MessageBody {...props} todos={[]} nonGoals="" gates={[]} check={null} />;
 }
 
 function PlanRequestMessage(
@@ -63,7 +71,24 @@ function PlanRequestMessage(
     ...todo,
     done: live?.todos.find((entry) => entry.id === todo.id)?.done ?? todo.done,
   }));
-  return <MessageBody {...props} todos={todos} nonGoals={asked?.nonGoals ?? ""} />;
+  return (
+    <MessageBody
+      {...props}
+      todos={todos}
+      nonGoals={asked?.nonGoals ?? ""}
+      gates={planGateSections(asked)}
+      check={planCheckSummary(query.data?.task.planCheck, props.card.item.specVersion)}
+    />
+  );
+}
+
+function gateRow(gate: PlanGateSection) {
+  return (
+    <div key={gate.id}>
+      <dt className="text-xs text-muted-foreground">{gate.label}</dt>
+      <dd className="whitespace-pre-wrap wrap-break-word">{gate.text}</dd>
+    </div>
+  );
 }
 
 /** A request stays one message; alternative answers and supporting facts are folded inside it. */
@@ -73,9 +98,14 @@ function MessageBody({
   threadRef,
   todos,
   nonGoals,
+  gates,
+  check,
 }: RequestProps & {
   todos: ReadonlyArray<ProjectApprovalPlanTodo>;
   nonGoals: string;
+  /** The plan's filled gates besides 안 하는 것, in gate order. */
+  gates: ReadonlyArray<PlanGateSection>;
+  check: PlanCheckSummary | null;
 }) {
   const sender = useRequestSender(card, environmentId);
   const { related } = useAttentionTask({ card, environmentId });
@@ -198,13 +228,32 @@ function MessageBody({
                   </dd>
                 </div>
               ) : null}
+              {gates.filter(isBeforeNonGoals).map(gateRow)}
               {planApproval && nonGoals ? (
                 <div>
                   <dt className="text-xs text-muted-foreground">안 하는 것</dt>
                   <dd className="whitespace-pre-wrap">{nonGoals}</dd>
                 </div>
               ) : null}
+              {gates.filter((gate) => !isBeforeNonGoals(gate)).map(gateRow)}
             </dl>
+            {check ? (
+              <div data-plan-check className="space-y-1 text-xs text-muted-foreground">
+                <p>{check.line}</p>
+                <ul className="space-y-1">
+                  {check.rows.map((row) => (
+                    <li key={row.label}>
+                      {row.label} {planVerdictLabel(row.pass)}
+                      {row.pass ? null : (
+                        <span className="block whitespace-pre-wrap wrap-break-word">
+                          {row.reason}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {/* A stalled task's card has one answer, already the main button. */}
             {!planApproval && !isStallBlocker(card.item) && card.item.options.length > 0 ? (
               <div className="space-y-2">

@@ -2,6 +2,7 @@ import {
   OrchestratorMcpDelegateTaskResult,
   OrchestratorMcpFailure,
   ProjectTeamAskUserInput,
+  ProjectTeamAskUserResult,
   ProjectTeamAttentionAnswerInput,
   ProjectTeamAttentionDismissInput,
   ProjectTeamAttentionItemResult,
@@ -33,6 +34,7 @@ import {
   ProjectTeamTaskTodoSetInput,
   ProjectTeamTaskEvidenceSetInput,
   ProjectTeamTaskReviewSetInput,
+  ProjectTeamPlanCheckSetInput,
   ProjectTeamTaskReadyInput,
   ProjectTeamTaskDelegateInput,
   ProjectTeamGoalWriteInput,
@@ -150,6 +152,16 @@ const TaskReviewSetTool = Tool.make("task_review_set", {
   .annotate(Tool.Title, "Record a review")
   .annotate(Tool.Destructive, false);
 
+const TaskPlanCheckSetTool = Tool.make("task_plan_check_set", {
+  ...shared,
+  description:
+    "Plan checker only: the session the server started to judge a task's plan against the plan gates. Pass the taskId, the specVersion you read with task_spec_read (the server treats a version other than your brief's as a stale check), and one verdict for every gate it lists: { gate, pass, reason }, each reason one sentence in the user's language. When every gate passes, the user gets the approval card; otherwise the lead gets the failing gates to fix. Task leads and the PM cannot call it.",
+  parameters: ProjectTeamPlanCheckSetInput,
+  success: ProjectTeamTaskResult,
+})
+  .annotate(Tool.Title, "Record a plan check")
+  .annotate(Tool.Destructive, false);
+
 const TaskReadyTool = Tool.make("task_ready", {
   ...shared,
   description:
@@ -240,10 +252,11 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
+  dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "Task lead, PM, and Director for decisions. PM: kind blocker or decision only, no taskId; raise a blocker whenever you stop on a permission denial, a missing token or a choice only the user can make, because a chat reply alone is easy to miss. The card shows in your chat and the Director's waiting list with your project's name, and the answer comes back to you as a message. Director: kind decision only, with taskId set to the task it is mainly about; bundle everything the user must decide into one card in your chat, and relay the answer to that project's PM yourself. Task lead: pass senderName as a short plain name for your work (at most 24 characters, no task keys). The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. A subtask covered by its parent's approved breakdown never asks for approval. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers \"Approve and start\" or feedback with inline comments. Always supply context with the action, reason, explicit impacts, cost, reversibility and recommendation. Missing context is rejected. Write question as one messenger-style message: ask on line 1, blank line, then 1-3 short plain paragraphs with optional numbered steps; no headings, labels, bullets, task keys, ids, paths or code. Optional details are up to 8 label/text pairs shown only under 자세히 보기. Decisions with multiple options require exactly one marked (Recommended) or (추천). Ask once, then end your turn; the answer arrives as a message.",
+    "Task lead, PM, and Director for decisions. PM: kind blocker or decision only, no taskId; raise a blocker whenever you stop on a permission denial, a missing token or a choice only the user can make, because a chat reply alone is easy to miss. The card shows in your chat and the Director's waiting list with your project's name, and the answer comes back to you as a message. Director: kind decision only, with taskId set to the task it is mainly about; bundle everything the user must decide into one card in your chat, and relay the answer to that project's PM yourself. Task lead: pass senderName as a short plain name for your work (at most 24 characters, no task keys). The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. A subtask covered by its parent's approved breakdown never asks for approval. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers \"Approve and start\" or feedback with inline comments. Always supply context with the action, reason, explicit impacts, cost, reversibility and recommendation. Missing context is rejected. Write question as one messenger-style message: ask on line 1, blank line, then 1-3 short plain paragraphs with optional numbered steps; no headings, labels, bullets, task keys, ids, paths or code. Optional details are up to 8 label/text pairs shown only under 자세히 보기. Decisions with multiple options require exactly one marked (Recommended) or (추천). A plan approval first goes to a separate plan checker session, on a different model when one is set up, which judges every plan gate; the user sees the card only once it passes, and failing gates come back to you as a message. Ask once, then end your turn; the answer arrives as a message.",
   parameters: ProjectTeamAskUserInput,
-  success: ProjectTeamAttentionItemResult,
+  success: ProjectTeamAskUserResult,
 })
   .annotate(Tool.Title, "Ask the user")
   .annotate(Tool.Destructive, false);
@@ -362,6 +375,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TaskTodoSetTool,
   TaskEvidenceSetTool,
   TaskReviewSetTool,
+  TaskPlanCheckSetTool,
   TaskReadyTool,
   TaskDelegateTool,
   TaskNudgeTool,

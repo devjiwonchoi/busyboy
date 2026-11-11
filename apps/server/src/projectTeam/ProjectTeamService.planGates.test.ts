@@ -1,18 +1,34 @@
 import { assert, describe, it } from "@effect/vitest";
-import { PLAN_APPROVAL_START, type ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_PROJECT_TASK_STEP_MODELS,
+  OrchestratorMcpFailure,
+  PLAN_APPROVAL_START,
+  ProviderInstanceId,
+  type ThreadId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 import * as Ref from "effect/Ref";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as TestClock from "effect/testing/TestClock";
 
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
+import { PLAN_CHECK_FAILED_PREFIX } from "./ProjectTeamService.ts";
 import {
+  askPlanApproval,
   attentionContext,
+  checkerDelegate,
+  leadTask,
+  passPlanCheck,
+  requestApproval,
   PROJECT_ID,
   approvePlan,
   readyPlan,
   reviewClean,
+  setSize,
   setUpManager,
+  START,
   startLead,
   userSays,
   withTeam,
@@ -21,14 +37,8 @@ import {
 
 const service = ProjectTeamService.ProjectTeamService;
 
-const askApproval = (lead: ThreadId) =>
-  Effect.flatMap(service, (team) =>
-    team.askUser(lead, {
-      context: attentionContext({ action: "Approve the plan?" }),
-      kind: "approval",
-      question: "Approve the plan?",
-    }),
-  );
+/** The lead asks for approval and the plan checker passes the plan, raising the card. */
+const askApproval = (lead: ThreadId) => askPlanApproval(lead);
 
 describe("ProjectTeamService plan gates", () => {
   it.effect("tells a lead to write what the user reads in the user's language", () =>
@@ -104,6 +114,41 @@ describe("ProjectTeamService plan gates", () => {
           .flatMap((project) => project.decisionCards)
           .find((entry) => entry.item.id === item.id);
         assert.deepStrictEqual(card?.item.context, item.context);
+      }),
+    ),
+  );
+
+  it.effect("sends a plan with an empty gate back to the lead without a card", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        const read = yield* team.readSpec(lead, {});
+        yield* team.writeSpec(lead, {
+          baseVersion: read.current.version,
+          spec: { ...readyPlan(read.current.spec), why: "", risks: "" },
+          note: "Plan",
+        });
+
+        // Without a size, the server cannot tell which gates the plan needs.
+        const noSize = yield* askApproval(lead).pipe(Effect.flip);
+        assert.include(noSize.message, "- size: set the task size with task_update(size)");
+
+        // A small task's light plan needs why but not risks.
+        yield* setSize(lead, "small");
+        const light = yield* askApproval(lead).pipe(Effect.flip);
+        assert.include(light.message, 'gate why "왜" (why)');
+        assert.notInclude(light.message, "gate risks");
+
+        // A medium task's full plan needs risks too.
+        yield* setSize(lead, "medium");
+        const full = yield* askApproval(lead).pipe(Effect.flip);
+        assert.include(full.message, 'gate risks "위험" (risks)');
+
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.task.stage, "planning");
+        assert.deepStrictEqual(detail.openAttention, []);
       }),
     ),
   );
@@ -387,6 +432,441 @@ describe("ProjectTeamService plan gates", () => {
           answer: PLAN_APPROVAL_START,
         });
         assert.strictEqual((yield* detail()).task.stage, "running");
+      }),
+    ),
+  );
+});
+
+const claude = ProviderInstanceId.make("claude");
+const codex = ProviderInstanceId.make("codex");
+
+/** The plan and review run on the same model; implement runs on another. */
+const setRoleModels = Effect.flatMap(service, (team) =>
+  team.updateSettings({
+    projectId: PROJECT_ID,
+    roleModels: {
+      plan: { providerInstanceId: claude, model: "claude-opus-5-5" },
+      review: { providerInstanceId: claude, model: "claude-opus-5-5" },
+      implement: { providerInstanceId: codex, model: "gpt-5.5" },
+    },
+  }),
+);
+
+describe("ProjectTeamService plan checker", () => {
+  it.effect("sends a ready plan to a checker on another model before any card", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        yield* setRoleModels;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+
+        const asked = yield* requestApproval(lead, {}, harness.delegate);
+        assert.include(asked.message, "end your turn");
+        assert.include(asked.planCheck.ask.question, "Approve the plan?");
+        assert.deepStrictEqual(
+          [asked.planCheck.status, asked.planCheck.round, asked.planCheck.specVersion],
+          ["checking", 1, 2],
+        );
+        // The review model is the plan model, so the checker runs on the implement model.
+        const checkerCall = (yield* Ref.get(harness.delegated)).at(-1);
+        assert.deepStrictEqual(checkerCall?.target, {
+          providerInstanceId: codex,
+          model: "gpt-5.5",
+        });
+        assert.include(checkerCall?.task ?? "", "You are the plan checker");
+        assert.include(checkerCall?.task ?? "", "task_plan_check_set");
+        assert.include(checkerCall?.task ?? "", "spec version 2");
+
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.task.stage, "planning");
+        assert.deepStrictEqual(detail.openAttention, []);
+        const checker = detail.task.planCheck?.checker;
+        assert.deepStrictEqual(
+          [checker?.providerInstanceId, checker?.model, checker?.sameModelAsPlan],
+          [codex, "gpt-5.5", false],
+        );
+        assert.isTrue(
+          detail.sessions.some(
+            (session) => session.threadId === checker?.threadId && session.role === "checker",
+          ),
+        );
+        // The checker reads the plan it judges.
+        const read = yield* team.readSpec(checker!.threadId, {});
+        assert.strictEqual(read.current.version, 2);
+      }),
+    ),
+  );
+
+  it.effect("lets only the pending checker record verdicts", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        const first = yield* requestApproval(lead, {}, harness.delegate);
+        const verdicts = [{ gate: "problem", pass: true, reason: "충분해요." }];
+        for (const caller of [lead, pm]) {
+          const refused = yield* team
+            .setPlanCheck(caller, { taskId: task.id, specVersion: 2, verdicts })
+            .pipe(Effect.flip);
+          assert.include(refused.message, "only for the plan checker session");
+        }
+        // Every required gate needs a verdict.
+        const oldChecker = first.planCheck.checker!.threadId;
+        const partial = yield* team
+          .setPlanCheck(oldChecker, { specVersion: 2, verdicts })
+          .pipe(Effect.flip);
+        assert.include(partial.message, "missing a verdict for gate why");
+
+        // Asking again replaces the check in flight; the old checker's verdicts are refused.
+        yield* requestApproval(lead, {}, harness.delegate);
+        const stale = yield* team
+          .setPlanCheck(oldChecker, { specVersion: 2, verdicts })
+          .pipe(Effect.flip);
+        assert.include(stale.message, "no longer pending");
+        const { item } = yield* passPlanCheck(lead);
+        assert.strictEqual(item?.kind, "approval");
+      }),
+    ),
+  );
+
+  it.effect("sends failing gates back to the lead and records the verdicts", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        yield* requestApproval(lead, {}, harness.delegate);
+
+        const failed = yield* passPlanCheck(lead, ["why"]);
+        assert.isUndefined(failed.item);
+        assert.strictEqual(failed.task.stage, "planning");
+        const check = failed.task.planCheck!;
+        assert.deepStrictEqual([check.status, check.round, check.specVersion], ["failed", 1, 2]);
+        // A small task's light plan has 8 gates.
+        assert.strictEqual(check.verdicts.length, 8);
+        assert.deepStrictEqual(
+          check.verdicts.filter((verdict) => !verdict.pass).map((verdict) => verdict.gate),
+          ["why"],
+        );
+        assert.isNotNull(check.checkedAt);
+        // The app's implement step differs from the plan model, so it checks the plan.
+        assert.deepStrictEqual(
+          [check.checker?.providerInstanceId, check.checker?.model],
+          [
+            DEFAULT_PROJECT_TASK_STEP_MODELS.implement.providerInstanceId,
+            DEFAULT_PROJECT_TASK_STEP_MODELS.implement.model,
+          ],
+        );
+        const told = (yield* Ref.get(harness.sent)).findLast((input) => input.threadId === lead);
+        assert.include(told?.text ?? "", PLAN_CHECK_FAILED_PREFIX);
+        assert.include(told?.text ?? "", 'why "왜": 왜 내용이 부족해요.');
+        assert.include(
+          told?.text ?? "",
+          'Fix them with task_spec_write, then ask_user(kind: "approval") again',
+        );
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.deepStrictEqual(detail.openAttention, []);
+      }),
+    ),
+  );
+
+  it.effect("raises the card the lead asked for once every gate passes", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        const context = attentionContext({ action: "Start hello.sh?" });
+        yield* requestApproval(
+          lead,
+          { question: "Start hello.sh?", context, senderName: "인사 스크립트" },
+          harness.delegate,
+        );
+
+        const { item, task: after } = yield* passPlanCheck(lead);
+        assert.strictEqual(item?.question, "Start hello.sh?");
+        assert.deepStrictEqual(item?.context, context);
+        assert.strictEqual(item?.senderName, "인사 스크립트");
+        assert.strictEqual(item?.specVersion, 2);
+        assert.strictEqual(item?.askerThreadId, lead);
+        assert.strictEqual(after.stage, "awaiting_approval");
+        assert.strictEqual(after.planCheck?.status, "passed");
+        const events = (yield* team.readTask(pm, { taskId: task.id })).events.map(
+          (event) => event.body,
+        );
+        assert.isTrue(events.some((body) => body.includes("every gate passed")));
+      }),
+    ),
+  );
+
+  it.effect("keeps AFK from approving a plan while it is checked", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
+        yield* requestApproval(lead, {}, harness.delegate);
+
+        yield* TestClock.adjust("5 minutes");
+        yield* team.afkSweep;
+        const checking = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(checking.task.stage, "planning");
+        assert.strictEqual(checking.task.planCheck?.status, "checking");
+        assert.deepStrictEqual(checking.openAttention, []);
+
+        // Once the check passes, the card waits out the grace period like any other.
+        yield* passPlanCheck(lead);
+        yield* TestClock.adjust("61 seconds");
+        yield* team.afkSweep;
+        const approved = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(approved.task.stage, "running");
+      }),
+    ),
+  );
+
+  it.effect("raises the card after a third failing round so the task does not stall", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        for (const round of [1, 2]) {
+          yield* requestApproval(lead, {}, harness.delegate);
+          const failed = yield* passPlanCheck(lead, ["currentState"]);
+          assert.isUndefined(failed.item);
+          assert.strictEqual(failed.task.planCheck?.round, round);
+        }
+        yield* requestApproval(lead, {}, harness.delegate);
+        const third = yield* passPlanCheck(lead, ["currentState"]);
+        assert.strictEqual(third.item?.kind, "approval");
+        assert.strictEqual(third.task.stage, "awaiting_approval");
+        assert.deepStrictEqual(
+          [third.task.planCheck?.status, third.task.planCheck?.round],
+          ["failed", 3],
+        );
+        const toLead = (yield* Ref.get(harness.sent)).filter((input) => input.threadId === lead);
+        assert.strictEqual(
+          toLead.filter((input) => input.text.startsWith(PLAN_CHECK_FAILED_PREFIX)).length,
+          2,
+        );
+
+        // Changes requested on that card start the rounds over.
+        yield* Effect.flatMap(service, (team) =>
+          team.answerDecision({
+            projectId: PROJECT_ID,
+            attentionItemId: third.item!.id,
+            answer: "Request changes\n\nOverall:\nSmaller.",
+          }),
+        );
+        const again = yield* requestApproval(lead, {}, harness.delegate);
+        assert.strictEqual(again.planCheck.round, 1);
+      }),
+    ),
+  );
+
+  it.effect("runs the checker on the plan's model in its own session when no other is set up", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const same = { providerInstanceId: claude, model: "claude-opus-5-5" };
+        yield* team.updateSettings({
+          projectId: PROJECT_ID,
+          roleModels: { plan: same, review: same, implement: same, fix: same },
+        });
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+
+        const asked = yield* requestApproval(lead, {}, harness.delegate);
+        assert.include(asked.message, "A separate plan checker session");
+        assert.include(asked.message, "the plan's own model");
+        const checker = (yield* leadTask(lead)).planCheck?.checker;
+        assert.deepStrictEqual(
+          [checker?.providerInstanceId, checker?.model, checker?.sameModelAsPlan],
+          [claude, "claude-opus-5-5", true],
+        );
+        const events = (yield* team.readTask(pm, { taskId: task.id })).events.map(
+          (event) => event.body,
+        );
+        assert.isTrue(
+          events.some((body) => body.includes("(same model as the plan, separate session)")),
+        );
+      }),
+    ),
+  );
+
+  it.effect("retries a checker that failed to start on the next model, not the same one", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        yield* setRoleModels;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        const tried: Array<string | undefined> = [];
+        const codexDown: ProjectTeamService.DelegateStep = (input, onChildCreated) => {
+          tried.push(input.target?.providerInstanceId);
+          return input.target?.providerInstanceId === codex
+            ? Effect.fail(
+                new OrchestratorMcpFailure({ code: "invalid_request", message: "codex is down" }),
+              )
+            : checkerDelegate(input, onChildCreated);
+        };
+
+        yield* requestApproval(lead, {}, codexDown);
+        // The implement model failed; the review model (the plan's) runs it instead.
+        assert.deepStrictEqual(tried, [codex, claude]);
+        const checker = (yield* leadTask(lead)).planCheck?.checker;
+        assert.deepStrictEqual(
+          [checker?.providerInstanceId, checker?.sameModelAsPlan],
+          [claude, true],
+        );
+        const events = (yield* team.readTask(pm, { taskId: task.id })).events.map(
+          (event) => event.body,
+        );
+        assert.isTrue(
+          events.some(
+            (body) =>
+              body.includes(
+                "Could not start the plan checker on codex · gpt-5.5 (codex is down)",
+              ) && body.includes("trying claude · claude-opus-5-5"),
+          ),
+        );
+      }),
+    ),
+  );
+
+  it.effect("restarts a check in flight without counting a round", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        const first = yield* requestApproval(lead, {}, harness.delegate);
+        assert.include(first.message, "If you are told the checker's task ended");
+        // The checker ended without a verdict, so the lead asks again.
+        const again = yield* requestApproval(lead, {}, harness.delegate);
+        assert.deepStrictEqual([again.planCheck.status, again.planCheck.round], ["checking", 1]);
+        assert.notStrictEqual(again.planCheck.checker?.threadId, first.planCheck.checker?.threadId);
+      }),
+    ),
+  );
+
+  it.effect("moves a silent checker's next check to another model", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const pm = yield* setUpManager;
+        yield* setRoleModels;
+        const { leadThreadId: lead } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        const first = yield* requestApproval(lead, {}, harness.delegate);
+        assert.strictEqual(first.planCheck.checker?.model, "gpt-5.5");
+        // The checker started but ended without verdicts (say, on a usage limit).
+        const again = yield* requestApproval(lead, {}, harness.delegate);
+        assert.strictEqual(again.planCheck.round, 1);
+        assert.notDeepEqual(
+          [again.planCheck.checker?.providerInstanceId, again.planCheck.checker?.model],
+          [first.planCheck.checker?.providerInstanceId, first.planCheck.checker?.model],
+        );
+      }),
+    ),
+  );
+
+  it.effect("judges the gates fixed when the check started", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        const asked = yield* requestApproval(lead, {}, harness.delegate);
+        // A small task's light plan has 8 gates.
+        assert.strictEqual(asked.planCheck.requiredGates.length, 8);
+        // The size grows while it is checked; the check still wants those 8 gates.
+        yield* setSize(lead, "large");
+        const verdicts = asked.planCheck.requiredGates.map((gate) => ({
+          gate,
+          pass: true,
+          reason: "충분해요.",
+        }));
+        yield* team.setPlanCheck(asked.planCheck.checker!.threadId, { specVersion: 2, verdicts });
+        const after = yield* leadTask(lead);
+        assert.deepStrictEqual(
+          [after.planCheck?.status, after.stage],
+          ["passed", "awaiting_approval"],
+        );
+      }),
+    ),
+  );
+
+  it.effect("marks a check the spec moved past stale, keeping its round", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        yield* requestApproval(lead, {}, harness.delegate);
+        yield* passPlanCheck(lead, ["why"]);
+        const second = yield* requestApproval(lead, {}, harness.delegate);
+        assert.strictEqual(second.planCheck.round, 2);
+
+        // The lead edits the plan while the checker reads it, which reads v3.
+        const read = yield* team.readSpec(lead, {});
+        yield* team.writeSpec(lead, {
+          baseVersion: read.current.version,
+          spec: { ...read.current.spec, why: `${read.current.spec.why} More.` },
+          note: "Edit",
+        });
+        const verdicts = second.planCheck.requiredGates.map((gate) => ({
+          gate,
+          pass: true,
+          reason: "충분해요.",
+        }));
+        yield* team.setPlanCheck(second.planCheck.checker!.threadId, {
+          specVersion: 3,
+          verdicts,
+        });
+        const stale = yield* leadTask(lead);
+        assert.deepStrictEqual(
+          [stale.planCheck?.status, stale.planCheck?.round, stale.stage],
+          ["stale", 2, "planning"],
+        );
+        assert.deepStrictEqual(stale.planCheck?.verdicts, []);
+        const told = (yield* Ref.get(harness.sent)).findLast((input) => input.threadId === lead);
+        assert.include(told?.text ?? "", "the check is stale");
+
+        // A stale check counts no round and resets none.
+        const third = yield* requestApproval(lead, {}, harness.delegate);
+        assert.deepStrictEqual([third.planCheck.round, third.planCheck.specVersion], [2, 3]);
+      }),
+    ),
+  );
+
+  it.effect("records verdicts without a card once the task left planning", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* writeReadyPlan(lead);
+        yield* requestApproval(lead, {}, harness.delegate);
+        yield* repository.updateTask({ id: task.id, stage: "inbox", now: START });
+
+        const { item, task: after } = yield* passPlanCheck(lead);
+        assert.isUndefined(item);
+        assert.deepStrictEqual([after.stage, after.planCheck?.status], ["inbox", "passed"]);
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.deepStrictEqual(detail.openAttention, []);
       }),
     ),
   );

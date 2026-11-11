@@ -10,6 +10,7 @@ import { USER_FACING_TASK_INSTRUCTIONS } from "@t3tools/provider-core/server/orc
 
 import { SPEC_CHANGED_PREFIX } from "./AttentionRouter.ts";
 import { memoryPromptSection } from "./memoryPrompt.ts";
+import { PLAN_CHECKER_ENDED_HINT, planGatesPromptSection } from "./planGates.ts";
 import { type ResolvedRoleModels, roleModelsPromptSection } from "./roleModels.ts";
 import { userLanguageRule } from "./userLanguage.ts";
 
@@ -17,7 +18,7 @@ export function nextStepHint(stage: ProjectTaskStage): string {
   switch (stage) {
     case "inbox":
     case "planning":
-      return "Write the plan into the spec with task_spec_write, then ask for approval with ask_user(kind: approval). A subtask the user approved with its parent's breakdown skips the approval and goes to running.";
+      return "Write the plan into the spec with task_spec_write, filling every required plan gate, set the size with task_update(size), then ask for approval with ask_user(kind: approval). A separate checker session, on a different model when one is set up, reviews the gates first; fix the ones it fails and ask again. A subtask the user approved with its parent's breakdown skips the approval and goes to running.";
     case "awaiting_approval":
       return "Wait for the user's plan approval, or the server's auto-approval if the user turned it on; if they request changes, write the next spec version and ask again.";
     case "running":
@@ -116,19 +117,19 @@ export const PULL_REQUEST_RULES = `   - Commits: one per reviewable outcome, eac
    - Open it as a draft; task_ready marks it ready for review once it passes the Ready gate. When the scope changes, rewrite the title and body around the final solution.`;
 
 function stagesSection(resume: boolean, coveredBy?: CoveredBy): string {
-  const planning = `1. Align (planning, then awaiting_approval): Inspect the code, then write the plan into the spec with task_spec_write. Start from the end state and work back to the steps. The user approves from two parts, the summary and the todos, so write those for the user, short and plain:
-   - summary: 2-4 sentences in your own words: what is wrong today, and what the user sees when it is done.
-   - todos: the steps, like a checklist. Each one has a doneWhen line saying how the user can tell it is done (a check they could see or run, not "implemented"), and dependsOn when it comes after another todo. Each also lists the criteria it builds (criteria: ["c1"]). Every criterion needs a todo that builds it, and every todo serves a criterion. No delivery todos such as "open a PR" or "run the tests": the stages below already are delivery.
-   The rest is the deeper plan behind them:
+  const planning = `1. Align (planning, then awaiting_approval): Inspect the code, then write the plan into the spec with task_spec_write, following BusyBoy's plan gates below in order. Start from the end state and work back to the steps.
+   The user approves from two parts, the summary (gate 1) and the todos (gate 5), so write those for the user, short and plain.
+   Plan gates. Each names its spec fields; the gates marked "full plans only" apply to a full plan:
+${planGatesPromptSection()}
+   Depth: a small task gets a light plan (gates 1-8); a medium or large task, or a plan with 4+ todos, 6+ files or ordered todos, gets a full plan (all 11 gates).
+   The rest of the spec:
    - goal: the end state. What the user will see or be able to do once it is done, not the steps.
-   - criteria: the checks that show the end state is reached. Give each an id (c1, c2, ...), the text, and provenBy: how you will prove it (a named test, a check you run, a screenshot). Leave evidence empty; you record it while you work.
    - files: every file you will add, change or delete, with why and the todos that touch it.
    - flow: a Mermaid diagram of the behavior once it is done. Required when the plan has 4+ todos, 6+ files, or ordered todos.
    - prototype: when the plan changes UI, a small self-contained HTML mockup of the end state. If a mockup would show nothing new, say why in prototypeWaiver instead.
-   - nonGoals: what is out of scope.
    - breakdown, only when the work needs several pull requests: draft one subtask per pull request with task_create(title, request, waitsOn). Write the request so its lead can act on it alone, with a "Goal:" and a "Verification:" line. The server files it under your task in Todo, where it waits. Add a todo for each with subtaskId set to the new task's id, so the card shows the whole breakdown. One approval of your plan approves every subtask: their leads write their own detailed plans and start without asking the user again. After that the breakdown is locked. A subtask you add later, or a material change to one's goal or verification, waits until you ask for approval of your plan once more.
-   Set the task's size with task_update(size): small (a few lines, low risk), medium, or large (many files or risky).
-   Then call ask_user(kind: "approval") with a messenger-style question (the ask on line 1, then a blank line and 1-3 short plain paragraphs) and the required context describing its action, reason, impacts, cost, reversibility, and recommendation. The card shows the user your summary and todos from the latest spec version. The server refuses the request and lists what is missing until the plan has every part above. The task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
+   Before asking, set the task's size with task_update(size): small (a few lines, low risk), medium, or large (many files or risky). The size picks the plan depth.
+   Then call ask_user(kind: "approval") with a messenger-style question (the ask on line 1, then a blank line and 1-3 short plain paragraphs) and the required context describing its action, reason, impacts, cost, reversibility, and recommendation. The server refuses the request and lists what is missing until the plan has every part above and every required gate is filled. Then a separate checker session, on a different model when one is set up, reviews each gate; end your turn. Its verdicts come back to you as a message: fix the failing gates with task_spec_write and ask again. ${PLAN_CHECKER_ENDED_HINT} Once every gate passes, the user gets the card, which shows your summary and todos from the latest spec version, and the task shows "Waiting for approval" until they answer. Approval counts only as the answer to that ask_user call.
    - "${PLAN_APPROVAL_START}": go on to Iterate.
    - "${PLAN_CHANGES_REQUESTED}" or anything else is feedback: an overall comment and inline comments, each quoting the text it is about ("quote" → comment). Address every comment in the spec with task_spec_write (that keeps the old version for diffing), then ask for approval again.
    - "${SPEC_CHANGED_PREFIX}": the user or the PM changed the spec while your card waited, so the card closed. Read the spec, update the plan, and ask again.`;

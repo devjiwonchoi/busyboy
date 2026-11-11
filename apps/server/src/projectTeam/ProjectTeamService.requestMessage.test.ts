@@ -6,10 +6,13 @@ import * as Repository from "../persistence/ProjectTeamRepository.ts";
 import { relayedAnswerText } from "./AttentionRouter.ts";
 import { ProjectTeamService } from "./ProjectTeamService.ts";
 import {
+  requestApproval,
+  askPlanApproval,
   attentionContext,
   setUpManager,
   startLead,
   readyPlan,
+  setSize,
   userSays,
   withTeam,
 } from "./testkit.ts";
@@ -24,6 +27,7 @@ describe("ProjectTeamService request messages", () => {
         const team = yield* ProjectTeamService;
         const pm = yield* setUpManager;
         const { leadThreadId: lead } = yield* startLead(pm, "목표 그래프", harness.delegate);
+        yield* setSize(lead);
         const read = yield* team.readSpec(lead, {});
         const plan = readyPlan(read.current.spec);
         const text = "공용 레이아웃을 시드 고정 force 배치로 바꾸기 (BU-129 이후)";
@@ -32,13 +36,11 @@ describe("ProjectTeamService request messages", () => {
           spec: { ...plan, todos: plan.todos.map((todo) => ({ ...todo, text })) },
           note: "Plan",
         });
-        const error = yield* team
-          .askUser(lead, {
-            kind: "approval",
-            question: graph,
-            context: attentionContext({ action: "Approve" }),
-          })
-          .pipe(Effect.flip);
+        const error = yield* requestApproval(lead, {
+          kind: "approval",
+          question: graph,
+          context: attentionContext({ action: "Approve" }),
+        }).pipe(Effect.flip);
         assert.include(error.message, `Todo t1 '${text}':`);
         assert.include(error.message, "doneWhen/dependsOn");
         const latest = yield* team.readSpec(lead, {});
@@ -53,7 +55,7 @@ describe("ProjectTeamService request messages", () => {
           },
           note: "Short titles",
         });
-        const { item } = yield* team.askUser(lead, {
+        const { item } = yield* askPlanApproval(lead, {
           kind: "approval",
           question: graph,
           senderName: "그래프 배치",

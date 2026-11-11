@@ -524,6 +524,33 @@ describe.each([
     }
   });
 
+  it("shows the filled plan gates around Non-goals in gate order", async () => {
+    const detail = makeDetail();
+    const [first, last] = detail.versions;
+    server.detail = {
+      ...detail,
+      versions: [
+        first!,
+        {
+          ...last!,
+          spec: { ...last!.spec, problem: "Approval is lost on scroll.", risks: "Focus traps." },
+        },
+      ],
+    };
+    await openReview();
+    const order = [...modal().querySelectorAll<HTMLElement>("[data-plan-section]")].map(
+      (element) => element.dataset.planSection,
+    );
+    expect(order.filter((name) => ["문제", "Non-goals", "위험"].includes(name!))).toEqual([
+      "문제",
+      "Non-goals",
+      "위험",
+    ]);
+    expect(section("문제").textContent).toBe("Approval is lost on scroll.");
+    expect(section("위험").textContent).toBe("Focus traps.");
+    expect(modal().querySelector('[data-plan-section="왜"]')).toBeNull();
+  });
+
   it("approves and starts", async () => {
     await openReview();
     expect(() => button("Approve only", modal())).toThrow();

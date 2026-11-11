@@ -2,23 +2,14 @@
  * Definition of Ready for a task's plan, and the evidence check before In Review.
  * The server only checks that each part exists and that the links hold, not what it says.
  */
-import type { ProjectTaskSpec } from "@t3tools/contracts";
+import type { ProjectTaskSize, ProjectTaskSpec } from "@t3tools/contracts";
 
-/** A plan this big needs a flow diagram. */
-const FULL_PLAN_TODOS = 4;
-const FULL_PLAN_FILES = 6;
+import { isFullPlan, planGateGaps } from "./planGates.ts";
+
+export { isFullPlan };
 
 const isBlank = (text: string) => text.trim().length === 0;
 const list = (ids: ReadonlyArray<string>) => ids.join(", ");
-
-/** Larger plans (many steps or files, or ordered steps) need the full form. */
-export function isFullPlan(spec: ProjectTaskSpec): boolean {
-  return (
-    spec.todos.length >= FULL_PLAN_TODOS ||
-    spec.files.length >= FULL_PLAN_FILES ||
-    spec.todos.some((todo) => todo.dependsOn.length > 0)
-  );
-}
 
 /** Web UI files: a plan that touches them shows a prototype of the end state. */
 export function isUiFile(path: string): boolean {
@@ -49,8 +40,14 @@ export function specLinkProblems(spec: ProjectTaskSpec): Array<string> {
   return problems;
 }
 
-/** What the plan still needs before the user can review it; empty when it is ready. */
-export function planReadinessGaps(spec: ProjectTaskSpec): Array<string> {
+/**
+ * What the plan still needs before the user can review it; empty when it is ready.
+ * `size` is the task's size: it picks the plan gates, and a missing size is a gap.
+ */
+export function planReadinessGaps(
+  spec: ProjectTaskSpec,
+  size: ProjectTaskSize | null,
+): Array<string> {
   const gaps: Array<string> = [];
   if (isBlank(spec.summary)) {
     gaps.push(
@@ -104,7 +101,7 @@ export function planReadinessGaps(spec: ProjectTaskSpec): Array<string> {
       "prototype: the plan changes UI, so add an HTML mockup of the end state, or say why not in prototypeWaiver",
     );
   }
-  return [...specLinkProblems(spec), ...gaps];
+  return [...specLinkProblems(spec), ...gaps, ...planGateGaps(spec, size)];
 }
 
 /** Criteria still without evidence; In Review waits until there are none. */

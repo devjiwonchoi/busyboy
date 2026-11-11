@@ -1,3 +1,4 @@
+import { PLAN_GATE_LABELS, type PlanGateTextField } from "@t3tools/shared/planGates";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentId,
@@ -19,7 +20,7 @@ import {
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { GitPullRequestIcon } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
@@ -70,7 +71,7 @@ export interface TaskPlanProps {
   readonly className?: string;
 }
 
-type SpecTextField = "background" | "goal" | "successCriteria" | "nonGoals";
+type SpecTextField = "background" | "goal" | "successCriteria" | PlanGateTextField;
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -224,6 +225,17 @@ function TaskPlanBody(props: {
       )}
     </section>
   );
+
+  // Plan gates around 안 하는 것 in gate order; empty ones show only while editing.
+  const gateSections = (part: "before" | "after") => {
+    const index = PLAN_GATE_LABELS.findIndex((gate) => gate.id === "nonGoals");
+    return PLAN_GATE_LABELS.filter((_, at) => (part === "before" ? at < index : at > index)).map(
+      (gate) =>
+        gate.field !== null && ((editing && isLatest) || spec[gate.field].trim().length > 0) ? (
+          <Fragment key={gate.id}>{section(gate.label, gate.field)}</Fragment>
+        ) : null,
+    );
+  };
 
   return (
     <div className={cn("min-w-0", props.className)} data-testid="task-plan">
@@ -384,7 +396,9 @@ function TaskPlanBody(props: {
       ) : (
         section("Success criteria", "successCriteria")
       )}
+      {gateSections("before")}
       {section("Non-goals", "nonGoals")}
+      {gateSections("after")}
 
       <section className="mt-5">
         <h2 className={SECTION_HEADING}>

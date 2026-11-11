@@ -510,6 +510,91 @@ const ProjectTaskPullRequestUrl = TrimmedNonEmptyString.check(Schema.isMaxLength
 export const ProjectTaskMemoryHold = Schema.Literals(["waiting", "paused"]);
 export type ProjectTaskMemoryHold = typeof ProjectTaskMemoryHold.Type;
 
+/** Explicit decision scope supplied by the requester, never inferred from prose. */
+export const ProjectAttentionContext = Schema.Struct({
+  action: TrimmedNonEmptyString.check(
+    Schema.isMaxLength(240),
+    Schema.makeFilter((action) => !/[\r\n]/u.test(action) || "Action must fit on one line."),
+  ),
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)),
+  impacts: Schema.Array(Schema.Literals(["merge", "deploy", "cost", "publish"])),
+  cost: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(1_000))),
+  reversibility: Schema.Literals(["reversible", "requires_work", "irreversible", "unknown"]),
+  recommendation: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+}).check(
+  Schema.makeFilter((context) =>
+    context.impacts.includes("cost") === (context.cost !== null)
+      ? true
+      : "A cost impact requires an amount or uncertainty explanation; otherwise cost must be null.",
+  ),
+);
+export type ProjectAttentionContext = typeof ProjectAttentionContext.Type;
+
+export const ProjectAttentionDetail = Schema.Struct({
+  label: TrimmedNonEmptyString.check(Schema.isMaxLength(20)),
+  text: TrimmedNonEmptyString.check(Schema.isMaxLength(500)),
+});
+export type ProjectAttentionDetail = typeof ProjectAttentionDetail.Type;
+
+/**
+ * Where a plan check stands: its checker is judging, every gate passed, one failed, or
+ * the spec moved past the version it judged (stale: it counts as no round).
+ */
+export const ProjectTaskPlanCheckStatus = Schema.Literals([
+  "checking",
+  "passed",
+  "failed",
+  "stale",
+]);
+export type ProjectTaskPlanCheckStatus = typeof ProjectTaskPlanCheckStatus.Type;
+
+/** The checker's verdict on one plan gate. */
+export const ProjectTaskPlanGateVerdict = Schema.Struct({
+  gate: TrimmedNonEmptyString.check(Schema.isMaxLength(64)).annotate({
+    description: 'The gate id, such as "problem" or "risks".',
+  }),
+  pass: Schema.Boolean,
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)).annotate({
+    description: "One sentence on why, in the user's language (Korean if the spec is Korean).",
+  }),
+});
+export type ProjectTaskPlanGateVerdict = typeof ProjectTaskPlanGateVerdict.Type;
+
+/**
+ * The latest check of the task's plan against the plan gates, by a separate checker
+ * session, on a model other than the plan's when one is set up. The approval card waits
+ * for it; `ask` is the lead's approval request, raised as the card once the check passes.
+ */
+export const ProjectTaskPlanCheck = Schema.Struct({
+  specVersion: PositiveInt,
+  /** 1 for the first check since the task entered planning; the card goes up after round 3 regardless. */
+  round: PositiveInt,
+  status: ProjectTaskPlanCheckStatus,
+  /** The gate ids the checker must judge, fixed when the check starts. */
+  requiredGates: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  /** One per required gate once the checker answered; empty while checking. */
+  verdicts: Schema.Array(ProjectTaskPlanGateVerdict),
+  /** The model and session that check it; null when the checker could not start. */
+  checker: Schema.NullOr(
+    Schema.Struct({
+      providerInstanceId: Schema.String,
+      model: Schema.NullOr(Schema.String),
+      threadId: ThreadId,
+      /** True when no other model was usable, so it runs on the plan's model in its own session. */
+      sameModelAsPlan: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+    }),
+  ),
+  startedAt: IsoDateTime,
+  checkedAt: Schema.NullOr(IsoDateTime),
+  ask: Schema.Struct({
+    question: Schema.String,
+    context: ProjectAttentionContext,
+    details: Schema.optional(Schema.Array(ProjectAttentionDetail)),
+    senderName: Schema.optional(Schema.String),
+  }),
+});
+export type ProjectTaskPlanCheck = typeof ProjectTaskPlanCheck.Type;
+
 export const ProjectTask = Schema.Struct({
   id: ProjectTaskId,
   projectId: ProjectId,
@@ -545,6 +630,8 @@ export const ProjectTask = Schema.Struct({
   review: Schema.NullOr(ProjectTaskReview).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** Set by task_ready once the pull request passed the Ready gate; the status reads it. */
   ready: Schema.NullOr(ProjectTaskReady).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** The latest plan gate check; null or absent before the first approval request. */
+  planCheck: Schema.optional(Schema.NullOr(ProjectTaskPlanCheck)),
   /** This task's model per role; a role it leaves out uses the project's. */
   roleModels: ProjectTaskRoleModels.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   /** The model that last ran each role. */
@@ -687,6 +774,20 @@ export const ProjectTaskSpec = Schema.Struct({
   files: Schema.Array(ProjectTaskFile)
     .check(Schema.isMaxLength(300))
     .pipe(Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<ProjectTaskFile>))),
+  /** Plan gate "문제": the current state, the desired state, and how the change is measured. */
+  problem: textOrEmpty(8_000),
+  /** Plan gate "왜": who asked, what is lost without it, and a requirement questioned. */
+  why: textOrEmpty(8_000),
+  /** Plan gate "현재 상태": evidence of today's state; for a bug, symptom vs root cause and a baseline. */
+  currentState: textOrEmpty(8_000),
+  /** Plan gate "사람 필요 지점": where a person must act (sign-in, tokens, payment), or "none" and why. */
+  humanCheckpoints: textOrEmpty(8_000),
+  /** Plan gate "예산": the time or token appetite, and the scope cut if it runs over. */
+  budget: textOrEmpty(8_000),
+  /** Plan gate "위험": a pre-mortem and rabbit holes, each mapped to a todo or a non-goal. */
+  risks: textOrEmpty(8_000),
+  /** Plan gate "대안": the options considered and why each was rejected. */
+  alternatives: textOrEmpty(8_000),
 }).check(
   Schema.makeFilter((spec) =>
     new Set(spec.todos.map((todo) => todo.id)).size === spec.todos.length
@@ -715,6 +816,13 @@ export function emptyProjectTaskSpec(background = ""): ProjectTaskSpec {
     prototypeWaiver: "",
     criteria: [],
     files: [],
+    problem: "",
+    why: "",
+    currentState: "",
+    humanCheckpoints: "",
+    budget: "",
+    risks: "",
+    alternatives: "",
   };
 }
 
@@ -745,6 +853,8 @@ export const ProjectTaskSessionRole = Schema.Literals([
   "planner",
   "implementer",
   "reviewer",
+  /** Judges the plan against the plan gates before the approval card goes up. */
+  "checker",
 ]);
 export type ProjectTaskSessionRole = typeof ProjectTaskSessionRole.Type;
 
@@ -788,32 +898,6 @@ export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 /** "afk": the server answered for the user while AFK was on. */
 export const ProjectAttentionAnsweredBy = Schema.Literals(["user", "pm", "afk"]);
 export type ProjectAttentionAnsweredBy = typeof ProjectAttentionAnsweredBy.Type;
-
-/** Explicit decision scope supplied by the requester, never inferred from prose. */
-export const ProjectAttentionContext = Schema.Struct({
-  action: TrimmedNonEmptyString.check(
-    Schema.isMaxLength(240),
-    Schema.makeFilter((action) => !/[\r\n]/u.test(action) || "Action must fit on one line."),
-  ),
-  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)),
-  impacts: Schema.Array(Schema.Literals(["merge", "deploy", "cost", "publish"])),
-  cost: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(1_000))),
-  reversibility: Schema.Literals(["reversible", "requires_work", "irreversible", "unknown"]),
-  recommendation: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
-}).check(
-  Schema.makeFilter((context) =>
-    context.impacts.includes("cost") === (context.cost !== null)
-      ? true
-      : "A cost impact requires an amount or uncertainty explanation; otherwise cost must be null.",
-  ),
-);
-export type ProjectAttentionContext = typeof ProjectAttentionContext.Type;
-
-export const ProjectAttentionDetail = Schema.Struct({
-  label: TrimmedNonEmptyString.check(Schema.isMaxLength(20)),
-  text: TrimmedNonEmptyString.check(Schema.isMaxLength(500)),
-});
-export type ProjectAttentionDetail = typeof ProjectAttentionDetail.Type;
 
 export const ProjectAttentionItem = Schema.Struct({
   id: ProjectAttentionItemId,
@@ -1846,6 +1930,25 @@ export const ProjectTeamTaskReviewSetInput = Schema.Struct({
   head: ReviewHead,
 });
 export type ProjectTeamTaskReviewSetInput = typeof ProjectTeamTaskReviewSetInput.Type;
+
+export const ProjectTeamPlanCheckSetInput = Schema.Struct({
+  taskId: ProjectTeamOwnTaskId,
+  specVersion: PositiveInt.annotate({
+    description: "The spec version you judged, as your brief names it.",
+  }),
+  verdicts: Schema.Array(ProjectTaskPlanGateVerdict)
+    .check(Schema.isMinLength(1), Schema.isMaxLength(20))
+    .annotate({ description: "One verdict for every gate your brief lists." }),
+});
+export type ProjectTeamPlanCheckSetInput = typeof ProjectTeamPlanCheckSetInput.Type;
+
+/** What ask_user returns: the card, or for a plan approval the plan check it started. */
+export const ProjectTeamAskUserResult = Schema.Struct({
+  item: Schema.optional(ProjectAttentionItem),
+  planCheck: Schema.optional(ProjectTaskPlanCheck),
+  message: Schema.optional(Schema.String),
+});
+export type ProjectTeamAskUserResult = typeof ProjectTeamAskUserResult.Type;
 
 export const ProjectTeamTaskReadyInput = Schema.Struct({
   taskId: ProjectTeamOwnTaskId,

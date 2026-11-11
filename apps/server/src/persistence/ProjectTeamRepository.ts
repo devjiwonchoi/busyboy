@@ -34,6 +34,7 @@ import {
   ProjectTaskEventKind,
   ProjectTaskId,
   ProjectTaskOutcome,
+  ProjectTaskPlanCheck,
   ProjectTaskReady,
   ProjectTaskModelRole,
   ProjectTaskMemoryHold,
@@ -276,6 +277,12 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectTaskId;
       readonly review: ProjectTaskReview;
       readonly startsIterateRound: boolean;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Stores the task's latest plan gate check, or clears it with null. */
+    readonly setTaskPlanCheck: (input: {
+      readonly id: ProjectTaskId;
+      readonly planCheck: ProjectTaskPlanCheck | null;
       readonly now: IsoDateTime;
     }) => Result<Option.Option<ProjectTask>>;
     /** Stores the Ready gate's pass, or clears it with null. */
@@ -599,6 +606,7 @@ const TaskRow = Schema.Struct({
   waitsOn: Schema.fromJsonString(Schema.Array(ProjectTaskId)),
   review: Schema.NullOr(Schema.fromJsonString(ProjectTaskReview)),
   ready: Schema.NullOr(Schema.fromJsonString(ProjectTaskReady)),
+  planCheck: Schema.NullOr(Schema.fromJsonString(ProjectTaskPlanCheck)),
   roleModels: Schema.fromJsonString(ProjectTaskRoleModels),
   modelSteps: Schema.fromJsonString(ProjectTaskModelSteps),
   stepUsage: Schema.fromJsonString(ProjectTaskStepUsages),
@@ -610,6 +618,7 @@ const RoleModelsJson = Schema.fromJsonString(ProjectTaskRoleModels);
 const ModelStepJson = Schema.fromJsonString(ProjectTaskModelStep);
 const ReviewJson = Schema.fromJsonString(ProjectTaskReview);
 const ReadyJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskReady));
+const PlanCheckJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskPlanCheck));
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
   supersededAt: Schema.NullOr(IsoDateTime),
@@ -706,6 +715,7 @@ export const make = Effect.gen(function* () {
     ship_round AS "shipRound",
     review_json AS "review",
     ready_json AS "ready",
+    plan_check_json AS "planCheck",
     role_models_json AS "roleModels",
     model_steps_json AS "modelSteps",
     step_usage_json AS "stepUsage",
@@ -1024,6 +1034,17 @@ export const make = Effect.gen(function* () {
     execute: ({ id, ready, now }) => sql`
       UPDATE project_tasks SET
         ready_json = ${ready},
+        updated_at = ${now}
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskPlanCheck = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, planCheck: PlanCheckJson, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, planCheck, now }) => sql`
+      UPDATE project_tasks SET
+        plan_check_json = ${planCheck},
         updated_at = ${now}
       WHERE task_id = ${id}
       RETURNING ${taskColumns}
@@ -2103,6 +2124,8 @@ export const make = Effect.gen(function* () {
       updateTaskReview(input).pipe(Effect.mapError(toRepositoryError("recordTaskReview"))),
     setTaskReady: (input) =>
       updateTaskReady(input).pipe(Effect.mapError(toRepositoryError("setTaskReady"))),
+    setTaskPlanCheck: (input) =>
+      updateTaskPlanCheck(input).pipe(Effect.mapError(toRepositoryError("setTaskPlanCheck"))),
     reopenShipRound: (input) =>
       reopenShipRoundRow(input).pipe(Effect.mapError(toRepositoryError("reopenShipRound"))),
     setTaskMove: (input) =>

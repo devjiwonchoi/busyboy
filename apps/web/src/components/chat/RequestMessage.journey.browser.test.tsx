@@ -1,5 +1,7 @@
 import {
+  emptyProjectTaskSpec,
   EnvironmentId,
+  newProjectTaskTodo,
   TURN_FAILED_OPTIONS,
   ProjectAttentionBatchId,
   ProjectAttentionItemId,
@@ -7,6 +9,7 @@ import {
   ProjectId,
   type ProjectTeamAnswerDecisionInput,
   type ProjectTeamAttentionSummary,
+  type ProjectTeamTaskDetail,
   ProjectTaskId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -58,6 +61,7 @@ const server = vi.hoisted(() => ({
   leadMessages: [] as string[],
   answers: [] as ProjectTeamAnswerDecisionInput[],
   fail: false,
+  detail: undefined as ProjectTeamTaskDetail | undefined,
 }));
 
 function publish(summary: ProjectTeamAttentionSummary) {
@@ -103,6 +107,7 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
   }) as never,
   useAnswerDecision: (() => (_environmentId: unknown, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision(input)) as never,
+  useTaskDetail: (() => ({ data: server.detail, isPending: false, error: null })) as never,
 }));
 
 function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDecisionCard {
@@ -184,6 +189,7 @@ beforeEach(() => {
   server.leadMessages = [];
   server.answers = [];
   server.fail = false;
+  server.detail = undefined;
   container = document.body.appendChild(document.createElement("div"));
   container.style.cssText = "height: 1200px; width: 900px; display: flex; flex-direction: column;";
   root = createRoot(container);
@@ -275,6 +281,105 @@ for (const width of [1000, 390]) {
       expect(element.querySelector("[data-request-details]")?.textContent).toContain("1 다음");
       await userEvent.click(buttonIn(element, "승인"));
       await vi.waitFor(() => expect(server.answers[0]?.answer).toBe("Approve and start"));
+    });
+
+    it("keeps the plan bubble short and shows the plan gates and checker verdicts under 자세히 보기", async () => {
+      const spec = {
+        ...emptyProjectTaskSpec(),
+        nonGoals: "격자 색 변경",
+        todos: [
+          { ...newProjectTaskTodo("t1", "별자리 배치"), doneWhen: "같은 데이터는 같은 모양" },
+        ],
+        problem: "목표 이름이 잘려서 찾기 어려워요.",
+        currentState: "GoalGraph.tsx가 격자로 그려요.",
+        risks: "150개에서 느려질 수 있어요.",
+      };
+      server.detail = {
+        task: {
+          planCheck: {
+            specVersion: 2,
+            round: 2,
+            status: "failed",
+            verdicts: [
+              { gate: "problem", pass: true, reason: "현재와 목표가 분명해요." },
+              { gate: "risks", pass: false, reason: "위험이 할 일과 이어지지 않아요." },
+            ],
+            checker: {
+              providerInstanceId: "claude",
+              model: "claude-opus-4-7",
+              threadId: ThreadId.make("checker"),
+            },
+            startedAt: ASKED_AT,
+            checkedAt: ASKED_AT,
+            ask: { question: PLAN_QUESTION, context: {} },
+          },
+        },
+        versions: [{ version: 2, spec }],
+      } as unknown as ProjectTeamTaskDetail;
+      const element = await open(
+        card({ kind: "approval", question: PLAN_QUESTION, specVersion: 2 }),
+      );
+      const bubble = element.querySelector<HTMLElement>("[data-request-bubble]")!;
+      expect(element.querySelector("h3")?.textContent).toBe("목표 그래프 플랜 승인 부탁드려요.");
+      expect([...bubble.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+        "별자리 배치",
+      ]);
+      expect([...bubble.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+        "승인",
+        "자세히 보기",
+      ]);
+      for (const hidden of ["찾기 어려워요", "150개에서 느려질", "검사 미통과", "2번째 확인"]) {
+        expect(bubble.textContent?.includes(hidden)).toBe(false);
+      }
+
+      await userEvent.click(buttonIn(element, "자세히 보기"));
+      const details = element.querySelector<HTMLElement>("[data-request-details]")!;
+      expect(
+        [...details.querySelectorAll("dl > div")].map((row) => [
+          row.querySelector("dt")?.textContent,
+          row.querySelector("dd")?.textContent,
+        ]),
+      ).toEqual([
+        ["단계", "같은 데이터는 같은 모양"],
+        ["문제", "목표 이름이 잘려서 찾기 어려워요."],
+        ["현재 상태", "GoalGraph.tsx가 격자로 그려요."],
+        ["안 하는 것", "격자 색 변경"],
+        ["위험", "150개에서 느려질 수 있어요."],
+      ]);
+      const check = details.querySelector<HTMLElement>("[data-plan-check]")!;
+      expect(check.querySelector("p")?.textContent).toBe(
+        "검사 미통과 · 2번째 확인 · Claude Opus 4.7",
+      );
+      expect([...check.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+        "문제 통과",
+        "위험 미통과위험이 할 일과 이어지지 않아요.",
+      ]);
+      await page.screenshot({ path: `__screenshots__/request-message-plan-gates-${width}.png` });
+    });
+
+    it("hides checker verdicts for another plan version", async () => {
+      server.detail = {
+        task: {
+          planCheck: {
+            specVersion: 1,
+            round: 1,
+            status: "passed",
+            verdicts: [{ gate: "problem", pass: true, reason: "좋아요." }],
+            checker: null,
+            startedAt: ASKED_AT,
+            checkedAt: ASKED_AT,
+            ask: { question: PLAN_QUESTION, context: {} },
+          },
+        },
+        versions: [{ version: 2, spec: { ...emptyProjectTaskSpec(), problem: "문제 내용" } }],
+      } as unknown as ProjectTeamTaskDetail;
+      const element = await open(
+        card({ kind: "approval", question: PLAN_QUESTION, specVersion: 2 }),
+      );
+      await userEvent.click(buttonIn(element, "자세히 보기"));
+      const details = element.querySelector<HTMLElement>("[data-request-details]")!;
+      expect(details.textContent).toContain("문제 내용");
+      expect(details.querySelector("[data-plan-check]")).toBeNull();
     });
 
     it("approves the recommended release option directly", async () => {

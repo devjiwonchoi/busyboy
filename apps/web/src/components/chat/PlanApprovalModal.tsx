@@ -9,6 +9,7 @@ import {
   type ProjectLeadQuestionQuote,
   type ProjectTaskId,
 } from "@t3tools/contracts";
+import { PLAN_GATE_LABELS, type PlanGateTextField } from "@t3tools/shared/planGates";
 import { XIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -401,7 +402,7 @@ function PlanReview({
 
   const textSection = (
     label: string,
-    field: "background" | "summary" | "goal" | "successCriteria" | "nonGoals",
+    field: "background" | "summary" | "goal" | "successCriteria" | PlanGateTextField,
   ) => {
     const text = spec[field].trim();
     const before = previous?.spec[field].trim() ?? "";
@@ -425,6 +426,19 @@ function PlanReview({
           )}
         </div>
       </section>
+    );
+  };
+
+  // Filled plan gates in gate order; 안 하는 것 keeps its own section, which always shows.
+  const gateSections = (part: "before" | "after") => {
+    const index = PLAN_GATE_LABELS.findIndex((gate) => gate.id === "nonGoals");
+    return PLAN_GATE_LABELS.filter((_, at) => (part === "before" ? at < index : at > index)).map(
+      (gate) =>
+        gate.field !== null &&
+        (spec[gate.field].trim().length > 0 ||
+          (diffing && (previous?.spec[gate.field].trim().length ?? 0) > 0))
+          ? textSection(gate.label, gate.field)
+          : null,
     );
   };
 
@@ -570,7 +584,9 @@ function PlanReview({
                           true,
                         )
                       : textSection("Success criteria", "successCriteria")}
+                    {gateSections("before")}
                     {textSection("Non-goals", "nonGoals")}
+                    {gateSections("after")}
                     {structured ? null : steps}
                     {extraSection(
                       "Breakdown",

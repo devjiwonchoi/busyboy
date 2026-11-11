@@ -18,6 +18,18 @@ const mocks = vi.hoisted(() => ({
   copy: vi.fn(),
   // The asked version and a later one where the lead finished step two.
   taskDetail: {
+    task: {
+      planCheck: {
+        specVersion: 2,
+        round: 3,
+        status: "failed",
+        verdicts: [
+          { gate: "problem", pass: true, reason: "현재와 목표가 분명해요." },
+          { gate: "risks", pass: false, reason: "위험이 할 일과 이어지지 않아요." },
+        ],
+        checker: { providerInstanceId: "claude", model: "claude-opus-4-7", threadId: "checker" },
+      },
+    },
     versions: [
       {
         version: 2,
@@ -27,6 +39,10 @@ const mocks = vi.hoisted(() => ({
           nonGoals: "목표 편집은 하지 않아요",
           criteria: [{ id: "c1", text: "같은 데이터면 같은 모양" }],
           todos: [],
+          problem: "목표 이름이 잘려서 찾기 어려워요.",
+          why: "",
+          currentState: "GoalGraph가 격자로 그려요.",
+          risks: "150개에서 느려질 수 있어요.",
         },
       },
       {
@@ -307,6 +323,38 @@ describe("ProjectTeamCards", () => {
     expect(openLead).toHaveBeenCalledWith(LEAD);
     act(() => button("자세히 보기").click());
     expect(host.querySelector('[data-testid="request-details"]')).toBe(null);
+  });
+  it("keeps the plan bubble short and shows plan gates and checker verdicts under 자세히 보기", () => {
+    render({ ...approval, item: { ...approval.item, specVersion: 2 } }, true);
+    const bubble = host.querySelector('[data-testid="request-bubble"]')!;
+    for (const hidden of ["찾기 어려워요", "150개에서 느려질", "검사 미통과", "3번째 확인"]) {
+      expect(bubble.textContent?.includes(hidden)).toBe(false);
+    }
+    expect(
+      [...host.querySelectorAll('[data-testid="request-actions"] button')].map(
+        (element) => element.textContent,
+      ),
+    ).toEqual(["승인", "자세히 보기"]);
+    act(() => button("자세히 보기").click());
+    const details = host.querySelector('[data-testid="request-details"]')!.textContent!;
+    const order = ["문제", "목표 이름이 잘려서 찾기 어려워요.", "현재 상태", "안 하는 것", "위험"];
+    const positions = order.map((text) => details.indexOf(text));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(details.includes("왜")).toBe(false);
+    const check = [...host.querySelectorAll('[data-testid="request-plan-check"] span')].map(
+      (element) => element.textContent,
+    );
+    expect(check).toEqual([
+      "검사 미통과 · 3번째 확인 · Claude Opus 4.7",
+      "문제 통과",
+      "위험 미통과\n위험이 할 일과 이어지지 않아요.",
+    ]);
+  });
+  it("hides checker verdicts for another plan version", () => {
+    render({ ...approval, item: { ...approval.item, specVersion: 3 } }, true);
+    act(() => button("자세히 보기").click());
+    expect(host.querySelector('[data-testid="request-plan-check"]')).toBe(null);
   });
   it("hides reply and copy behind the action menu and creates a request link", async () => {
     render(approval, true);

@@ -16,6 +16,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import {
+  askPlanApproval,
   attentionContext,
   createAcceptedTask,
   PROJECT_ID,
@@ -335,7 +336,7 @@ describe("ProjectTeamService tasks as specs", () => {
           .updateTask(planner, { stage: "running", planSummary: "Keep scrollTop." })
           .pipe(Effect.flip);
         assert.include(early.message, "no approved plan");
-        const { item: card } = yield* team.askUser(planner, {
+        const { item: card } = yield* askPlanApproval(planner, {
           context: attentionContext({ action: "Approve the plan?" }),
           kind: "approval",
           question: "Approve the plan?",
@@ -422,7 +423,7 @@ describe("ProjectTeamService tasks as specs", () => {
         });
 
         // Asking for approval pins spec v2 and shows the task as Waiting for approval.
-        const first = yield* team.askUser(lead, {
+        const first = yield* askPlanApproval(lead, {
           context: attentionContext({ action: "Plan: keep it." }),
           kind: "approval",
           question: "Plan: keep it.",
@@ -475,12 +476,12 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.include(relayed, "Looks close.");
 
         // The next version asks again; an older open card is replaced, not left waiting.
-        const second = yield* team.askUser(lead, {
+        const second = yield* askPlanApproval(lead, {
           context: attentionContext({ action: "Plan v3." }),
           kind: "approval",
           question: "Plan v3.",
         });
-        const third = yield* team.askUser(lead, {
+        const third = yield* askPlanApproval(lead, {
           context: attentionContext({ action: "Plan v3 again." }),
           kind: "approval",
           question: "Plan v3 again.",
@@ -539,7 +540,7 @@ describe("ProjectTeamService tasks as specs", () => {
         // A card that already waited past the grace period is answered when AFK comes on.
         yield* writeReadyPlan(leadA);
         yield* writeReadyPlan(leadB);
-        const waiting = yield* team.askUser(leadA, {
+        const waiting = yield* askPlanApproval(leadA, {
           context: attentionContext({ action: "Plan A." }),
           kind: "approval",
           question: "Plan A.",
@@ -555,7 +556,7 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.strictEqual(answeredA?.answeredBy ?? null, "afk");
 
         // A new card waits through the grace period, then the sweep approves it.
-        const asked = yield* team.askUser(leadB, {
+        const asked = yield* askPlanApproval(leadB, {
           context: attentionContext({ action: "Plan B." }),
           kind: "approval",
           question: "Plan B.",
