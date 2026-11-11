@@ -1,4 +1,5 @@
 import {
+  isStallBlocker,
   isTurnFailedBlocker,
   isSandboxRotationDecision,
   type EnvironmentId,
@@ -6,12 +7,11 @@ import {
 } from "@t3tools/contracts";
 import {
   approveAnswerFor,
+  primaryActionLabel,
   defaultRequestOption,
   formatRequestAnswer,
   formatRequestLink,
   parseRequestMessage,
-  REQUEST_APPROVE_LABEL,
-  REQUEST_BLOCKER_DONE,
   REQUEST_DETAILS_LABEL,
   REQUEST_CONTEXT_MISSING,
   REQUEST_PLAN_SCOPE_NOTE,
@@ -336,7 +336,8 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
                 ))}
               </View>
             ) : null}
-            {item.kind !== "approval" && item.options.length > 0 ? (
+            {/* A stalled task's card has one answer, already the main button. */}
+            {item.kind !== "approval" && !isStallBlocker(item) && item.options.length > 0 ? (
               <View className="gap-2">
                 {item.options.map((option) => {
                   const parsed = parseRequestOption(option);
@@ -428,7 +429,7 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
         <View className="flex-row gap-2" testID="request-actions">
           <View className="flex-1">
             <RequestActionButton
-              label={item.kind === "blocker" ? REQUEST_BLOCKER_DONE : REQUEST_APPROVE_LABEL}
+              label={primaryActionLabel(item)}
               disabled={disabled}
               onPress={() => void answer(approveAnswerFor(item))}
             />

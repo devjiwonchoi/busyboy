@@ -10,7 +10,7 @@ import {
 import { cn } from "~/lib/utils";
 
 import { useRoleModelLabel } from "./RoleModelPicker";
-import { stepUsageParts, taskUsageTotal } from "./taskUsage.logic";
+import { avoidableStallText, stepUsageParts, taskUsageTotal } from "./taskUsage.logic";
 
 /** Role names beside the phase badge (계획 → 구현·리뷰 → 배포). */
 export const TASK_MODEL_ROLE_LABELS: Record<ProjectTaskModelRole, string> = {
@@ -40,6 +40,7 @@ export function TaskModelSteps(props: {
   if (ran.length === 0) return null;
   const total =
     props.metrics === undefined ? null : taskUsageTotal(props.usage ?? {}, props.metrics);
+  const stalls = props.metrics === undefined ? null : avoidableStallText(props.metrics);
   const chips = (
     <span
       data-task-model-steps=""
@@ -66,6 +67,11 @@ export function TaskModelSteps(props: {
       <p data-task-usage-total="" className="text-[11px] text-muted-foreground leading-4">
         {total}
       </p>
+      {stalls === null ? null : (
+        <p data-task-avoidable-stalls="" className="text-[11px] text-muted-foreground leading-4">
+          {stalls}
+        </p>
+      )}
     </div>
   );
 }

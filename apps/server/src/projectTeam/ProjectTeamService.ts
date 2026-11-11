@@ -16,6 +16,7 @@ import {
   STALL_RESTART,
   type ProjectTaskHold,
   type ProjectAttentionDetail,
+  type ProjectAttentionContext,
   TURN_FAILED_CANCEL,
   TURN_FAILED_OPTIONS,
   TURN_FAILED_RETRY,
@@ -933,6 +934,7 @@ export class ProjectTeamService extends Context.Service<
       readonly startFailureCard?: {
         readonly question: string;
         readonly details: ReadonlyArray<ProjectAttentionDetail>;
+        readonly context: ProjectAttentionContext;
       };
     }) => Effect.Effect<
       { readonly task: ProjectTask; readonly event: ProjectTaskEvent },
@@ -5694,6 +5696,7 @@ const make = Effect.gen(function* () {
             kind: "blocker",
             question: input.startFailureCard.question,
             details: input.startFailureCard.details,
+            context: input.startFailureCard.context,
             options: [STALL_RESTART],
             askerThreadId: task.leadThreadId,
           });

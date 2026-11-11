@@ -145,6 +145,7 @@ const make = Effect.gen(function* () {
         kind: "blocker",
         question: card.question,
         details: card.details,
+        context: card.context,
         options: [STALL_RESTART],
         askerThreadId: toLead ? task.leadThreadId : input.manager.threadId,
         ...(toLead ? {} : { senderRole: "pm" as const, senderName: null }),

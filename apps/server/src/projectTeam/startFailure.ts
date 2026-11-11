@@ -5,6 +5,7 @@
  */
 import type {
   ExecutionLocation,
+  ProjectAttentionContext,
   ProjectAttentionDetail,
   TaskExecutionLocationPolicy,
 } from "@t3tools/contracts";
@@ -128,7 +129,11 @@ export function startFailureCard(input: {
   readonly location: ExecutionLocation;
   readonly pinnedToCloud: boolean;
   readonly error: string;
-}): { readonly question: string; readonly details: ReadonlyArray<ProjectAttentionDetail> } {
+}): {
+  readonly question: string;
+  readonly details: ReadonlyArray<ProjectAttentionDetail>;
+  readonly context: ProjectAttentionContext;
+} {
   const where =
     input.location !== "cloud"
       ? "이 Mac에서 시작하다 실패했어요."
@@ -149,6 +154,16 @@ export function startFailureCard(input: {
   const error = input.error.replace(/\s+/g, " ").trim();
   return {
     question,
+    context: {
+      action: "원인을 해결한 뒤 같은 곳에서 리드를 다시 시작해요.",
+      reason: `리드가 시작하자마자 멈췄어요: ${input.failure.summary}.`,
+      impacts: [],
+      cost: null,
+      reversibility: "reversible",
+      recommendation: input.failure.humanOnly
+        ? "원인을 먼저 해결하고 다시 시작을 눌러 주세요."
+        : "다시 시작을 추천해요.",
+    },
     details: [
       { label: "원인", text: input.failure.summary },
       ...(error.length > 0 ? [{ label: "오류", text: error.slice(0, 500) }] : []),

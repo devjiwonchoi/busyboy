@@ -257,6 +257,15 @@ export const ProjectTaskStallCause = Schema.Literals([
 ]);
 export type ProjectTaskStallCause = typeof ProjectTaskStallCause.Type;
 
+/** What each stall cause reads as on the task and in messages. */
+export const PROJECT_TASK_STALL_CAUSE_LABELS: Record<ProjectTaskStallCause, string> = {
+  no_progress: "진행 없음",
+  answered_idle: "답을 받고도 멈춤",
+  not_started: "시작되지 않음",
+  start_failed: "시작 실패",
+  hold_not_resumed: "조건이 풀렸는데 시작 안 됨",
+};
+
 /** What lets a held task start again. */
 export const ProjectTaskResumeWhen = Schema.Union([
   Schema.Struct({

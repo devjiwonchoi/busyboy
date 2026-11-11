@@ -1,5 +1,7 @@
 import {
   PROJECT_TASK_MODEL_ROLES,
+  PROJECT_TASK_STALL_CAUSE_LABELS,
+  type ProjectTaskStallCause,
   type ProjectTaskMetrics,
   type ProjectTaskSize,
   type ProjectTaskStepUsage,
@@ -67,8 +69,7 @@ export const TASK_SIZE_LABELS: Record<ProjectTaskSize, string> = {
 
 /**
  * The task's total line, such as "합계 27m · 2.1M/68k 토큰 · 약 $4.90 · 리뷰 지적 3 · 수정 1회 ·
- * CI 실패 0 · 메모리로 멈춘 시간 12분", the last part only when memory held it. Null before
- * any step has finished.
+ * CI 실패 0". Memory stalls are in avoidableStallText. Null before any step has finished.
  */
 export function taskUsageTotal(
   usage: ProjectTaskStepUsages,
@@ -99,10 +100,30 @@ export function taskUsageTotal(
     `수정 ${metrics.fixRounds}회`,
     `CI 실패 ${metrics.ciFailures}`,
   );
-  // Under half a second reads "0초": not worth a part.
-  if (Math.round(metrics.memoryStallMs / 1000) > 0) {
-    parts.push(`메모리로 멈춘 시간 ${formatKoreanDuration(metrics.memoryStallMs)}`);
-  }
   if (metrics.size !== null) parts.push(`크기 ${TASK_SIZE_LABELS[metrics.size]}`);
   return parts.join(" · ");
+}
+
+/**
+ * Time the task could have moved but the system or the process stopped it, by
+ * cause: "피할 수 있었던 멈춤 34분 · 진행 없음 20분 · '로컬만' 설정에서 메모리 부족 13분".
+ * Waits on the user and deliberate holds are never in it. Null when there was none.
+ */
+export function avoidableStallText(metrics: ProjectTaskMetrics): string | null {
+  const localOnly = metrics.memoryLocalOnlyStallMs ?? 0;
+  const parts: Array<[string, number]> = [
+    ...(
+      Object.entries(PROJECT_TASK_STALL_CAUSE_LABELS) as Array<[ProjectTaskStallCause, string]>
+    ).map(([cause, label]): [string, number] => [label, metrics.avoidableStallMs?.[cause] ?? 0]),
+    ["메모리 부족", Math.max(0, metrics.memoryStallMs - localOnly)],
+    ["'로컬만' 설정에서 메모리 부족", localOnly],
+  ];
+  // Under half a second reads "0초": not worth a part.
+  const shown = parts.filter(([, ms]) => Math.round(ms / 1000) > 0);
+  if (shown.length === 0) return null;
+  const total = shown.reduce((sum, [, ms]) => sum + ms, 0);
+  return [
+    `피할 수 있었던 멈춤 ${formatKoreanDuration(total)}`,
+    ...shown.map(([label, ms]) => `${label} ${formatKoreanDuration(ms)}`),
+  ].join(" · ");
 }

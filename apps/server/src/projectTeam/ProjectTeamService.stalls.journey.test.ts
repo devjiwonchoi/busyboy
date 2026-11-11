@@ -29,7 +29,7 @@ import * as Option from "effect/Option";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
-import { nowIso } from "./common.ts";
+import { isoFromMillis, nowIso } from "./common.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { StalledTaskSweep } from "./StalledTaskSweep.ts";
 import { CLOUD_PINNED_NOTE } from "./startFailure.ts";
@@ -168,7 +168,7 @@ describe("stall journey", () => {
           request: "Night job.",
           intake: "New work.",
         });
-        const at = new Date((yield* nowMs) + 30 * MINUTE).toISOString();
+        const at = isoFromMillis((yield* nowMs) + 30 * MINUTE);
         yield* team.updateTask(pm, {
           taskId: task.id,
           hold: { resumeWhen: { type: "time", at }, reason: "Run after the release." },

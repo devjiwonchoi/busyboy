@@ -7,6 +7,8 @@
  * STALL_WAKE_AFTER_MS and one message to the user after STALL_NOTIFY_AFTER_MS.
  */
 import {
+  PROJECT_TASK_STALL_CAUSE_LABELS,
+  type ProjectAttentionContext,
   type ProjectAttentionDetail,
   type ProjectTask,
   type ProjectTaskResumeWhen,
@@ -21,13 +23,7 @@ export const STALL_NOTIFY_AFTER_MS = 20 * MINUTE_MS;
 /** A lead that has not started a turn this long after an answer did not get it. */
 export const ANSWER_REDELIVER_AFTER_MS = 2 * MINUTE_MS;
 
-export const STALL_CAUSE_LABELS: Record<ProjectTaskStallCause, string> = {
-  no_progress: "진행 없음",
-  answered_idle: "답을 받고도 멈춤",
-  not_started: "시작되지 않음",
-  start_failed: "시작 실패",
-  hold_not_resumed: "조건이 풀렸는데 시작 안 됨",
-};
+export const STALL_CAUSE_LABELS = PROJECT_TASK_STALL_CAUSE_LABELS;
 
 /** What the hold waits for, in plain words. */
 export function resumeWhenText(
@@ -105,6 +101,22 @@ function shortTitle(title: string): string {
 export interface StallCard {
   readonly question: string;
   readonly details: ReadonlyArray<ProjectAttentionDetail>;
+  readonly context: ProjectAttentionContext;
+}
+
+/** What 다시 시작 does, for the card's folded context. */
+export function restartContext(by: "lead" | "pm"): ProjectAttentionContext {
+  return {
+    action:
+      by === "lead"
+        ? "멈춘 작업을 리드가 멈춘 곳부터 이어서 하도록 다시 시작해요."
+        : "PM이 이 작업을 바로 시작해요.",
+    reason: "진행할 수 있었는데 시스템이나 절차 때문에 멈춰 있어요.",
+    impacts: [],
+    cost: null,
+    reversibility: "reversible",
+    recommendation: "다시 시작을 추천해요. 일부러 멈춘 거라면 다시 시작할 조건을 남겨 주세요.",
+  };
 }
 
 /** The one message the user gets for a stall the server could not clear itself. */
@@ -153,7 +165,12 @@ export function stallCard(input: {
   ];
   if (input.holdText) details.push({ label: "다시 시작 조건", text: input.holdText });
   if (input.lastActivity) details.push({ label: "마지막 활동", text: input.lastActivity });
-  return { question: [headline, why, next].join("\n\n"), details };
+  const byLead = input.cause === "no_progress" || input.cause === "answered_idle";
+  return {
+    question: [headline, why, next].join("\n\n"),
+    details,
+    context: restartContext(byLead ? "lead" : "pm"),
+  };
 }
 
 /** The line that wakes a lead whose task made no progress. */
