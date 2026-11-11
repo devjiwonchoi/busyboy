@@ -106,7 +106,60 @@ export type CodexCheck =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: string; readonly transient: boolean };
 
+export type OfflineJournalEntry = {
+  seq: number;
+  /** When the relay saved it, in epoch ms on the sandbox clock. */
+  at: number;
+  kind: "call" | "child-started" | "child-finished";
+  threadId: string;
+  taskId: string;
+  tool?: string;
+  args?: unknown;
+  child?: {
+    id: string;
+    role: "review" | "implement" | "fix";
+    task?: string;
+    title?: string;
+    model?: string;
+    /** The provider instance of that model, from the kit. */
+    providerInstanceId?: string;
+    claudeSessionId: string;
+    leadThreadId?: string;
+    result?: string;
+    exitCode?: number;
+    transcript?: string;
+  };
+};
+
+export type CloudLeadOfflineHandler = {
+  kit: (input: {
+    worktreeKey: string;
+    threads: Array<{ threadId: string; tokenSha256: string }>;
+  }) => Promise<{
+    threads: Array<{
+      threadId: string;
+      tokenSha256: string;
+      taskId: string;
+      role: "lead" | "reviewer" | "child";
+    }>;
+    specs: Record<string, unknown>;
+    /** Per task, the Claude model for each step; null where the step is not on Claude. */
+    models: Record<
+      string,
+      Partial<
+        Record<
+          "plan" | "review" | "implement" | "fix",
+          { model: string; effort?: string; providerInstanceId: string } | null
+        >
+      >
+    >;
+    tools: Array<{ name: string; description: string; inputSchema: unknown }>;
+  }>;
+  apply: (input: { worktreeKey: string; entry: OfflineJournalEntry }) => Promise<void>;
+};
+
 export interface CloudLeadRuntimeDeps {
+  readonly offline?: CloudLeadOfflineHandler;
   readonly client: () => Promise<SandboxClient>;
   readonly credentials: () => Promise<CloudLeadCredentials>;
   /** The base snapshot to start from; null starts from the plain image (tests). */
@@ -191,6 +244,7 @@ export interface PrepareInput {
   /** The Mac worktree; threads in the same one share a sandbox. */
   readonly worktreePath: string;
   readonly mcpEndpoint: string;
+  readonly mcpAuthorization?: string;
 }
 
 interface CloudSession {
@@ -288,6 +342,10 @@ export class CloudLeadRuntime {
   private readonly syncs = new Map<string, Promise<{ readonly head: string } | null>>();
   /** Sandboxes being mirrored a last time and deleted; a new turn waits for these. */
   private readonly releasing = new Map<string, Promise<void>>();
+  private offlineHandler: CloudLeadOfflineHandler | null = null;
+  private readonly tokenHashes = new Map<string, string>();
+  private readonly replays = new Map<string, Promise<void>>();
+  private readonly appliedSeq = new Map<string, number>();
   private rotationHandler: CloudLeadRotationHandler | null = null;
   private readonly store: CloudSessionStore;
   /** Failed attaches per worktree; past MAX_REATTACH_FAILURES a new sandbox is made. */
@@ -299,11 +357,99 @@ export class CloudLeadRuntime {
 
   constructor(deps: CloudLeadRuntimeDeps) {
     this.deps = deps;
+    this.offlineHandler = deps.offline ?? null;
     this.store = deps.store ?? memoryCloudSessionStore();
   }
 
   setRotationHandler(handler: CloudLeadRotationHandler | null) {
     this.rotationHandler = handler;
+  }
+
+  setOfflineHandler(handler: CloudLeadOfflineHandler | null) {
+    this.offlineHandler = handler;
+    if (handler !== null) {
+      for (const [key, pending] of this.sessions) {
+        void pending
+          .then(async (session) => {
+            await this.syncKey(key);
+            await this.sendOfflineKit(session);
+            await this.replayJournal(session);
+          })
+          .catch((error: unknown) =>
+            this.log("cloud-lead.offline-replay-failed", {
+              worktree: key,
+              error: errorText(error),
+            }),
+          );
+      }
+    }
+  }
+
+  private async sendOfflineKit(session: CloudSession) {
+    if (this.offlineHandler === null) {
+      return;
+    }
+    const threads = [...this.tokenHashes]
+      .filter(([id]) => this.worktrees.get(id) === session.key)
+      .map(([threadId, tokenSha256]) => ({ threadId, tokenSha256 }));
+    // A restored relay keeps its disk kit until a fresh MCP session supplies its token.
+    if (threads.length === 0) {
+      return;
+    }
+    const kit = await this.offlineHandler.kit({ worktreeKey: session.key, threads });
+    session.relay.sendControl({
+      op: "offline-kit",
+      ...kit,
+      processes: [...session.processes.values()].map(({ id, threadId }) => ({ id, threadId })),
+    });
+  }
+
+  private replayJournal(session: CloudSession): Promise<void> {
+    const previous = this.replays.get(session.key) ?? Promise.resolve();
+    const replay = previous.then(async () => {
+      const handler = this.offlineHandler;
+      if (handler === null || session.released) {
+        return;
+      }
+      const answer = await session.relay.requestControl({
+        op: "journal-read",
+        after: this.appliedSeq.get(session.key) ?? 0,
+      });
+      if (answer.op !== "journal" || !Array.isArray(answer.entries)) {
+        throw new Error("Invalid offline journal response.");
+      }
+      let applied = false;
+      try {
+        for (const entry of (answer.entries as OfflineJournalEntry[]).sort(
+          (a, b) => a.seq - b.seq,
+        )) {
+          if (entry.seq <= (this.appliedSeq.get(session.key) ?? 0)) {
+            continue;
+          }
+          if (entry.kind === "child-started") {
+            await this.backupTranscripts(session);
+            await this.exportTranscripts(session.threadId, session.macCwd);
+          }
+          await handler.apply({ worktreeKey: session.key, entry });
+          this.appliedSeq.set(session.key, entry.seq);
+          session.relay.sendControl({ op: "journal-applied", seq: entry.seq });
+          applied = true;
+        }
+      } finally {
+        if (applied) {
+          await this.sendOfflineKit(session);
+        }
+      }
+    });
+    this.replays.set(session.key, replay);
+    const finished = () => {
+      if (this.replays.get(session.key) === replay) {
+        this.replays.delete(session.key);
+      }
+    };
+    // Callers receive the original rejection; cleanup must not create a second one.
+    void replay.then(finished, finished);
+    return replay;
   }
 
   private now() {
@@ -330,6 +476,14 @@ export class CloudLeadRuntime {
   /** Gets the thread's sandbox ready and returns how to run claude or codex in it. */
   async prepare(input: PrepareInput): Promise<CloudLaunch> {
     this.worktrees.set(input.threadId, input.worktreePath);
+    if (input.mcpAuthorization !== undefined) {
+      this.tokenHashes.set(
+        input.threadId,
+        NodeCrypto.createHash("sha256")
+          .update(input.mcpAuthorization.replace(/^Bearer\s+/i, ""))
+          .digest("hex"),
+      );
+    }
     const session = await this.session(input);
     // Released between the lookup and now: wait for that and take a new sandbox.
     if (session.released) return this.prepare(input);
@@ -345,6 +499,7 @@ export class CloudLeadRuntime {
     }
     this.cancelIdleStop(session);
     session.uses += 1;
+    await this.sendOfflineKit(session);
     const mcpPath = new URL(input.mcpEndpoint).pathname;
     const mcpUrl = `http://127.0.0.1:${this.ports.mcp}${mcpPath}`;
     const macOrigin = new URL(input.mcpEndpoint).origin;
@@ -784,11 +939,22 @@ export class CloudLeadRuntime {
         }),
       );
     }
+    await this.sendOfflineKit(session);
+    // Wait until reattach publishes its session before replay calls gates that mirror it.
+    void this.syncKey(session.key)
+      .then(() => this.replayJournal(session))
+      .catch((error: unknown) =>
+        this.log("cloud-lead.offline-replay-failed", {
+          worktree: session.key,
+          error: errorText(error),
+        }),
+      );
     return session;
   }
 
   private async create(input: PrepareInput): Promise<CloudSession> {
     const key = input.worktreePath;
+    this.appliedSeq.delete(key);
     const started = Date.now();
     const createdAt = this.now();
     const [client, credentials] = await Promise.all([this.deps.client(), this.deps.credentials()]);
@@ -1084,11 +1250,31 @@ export class CloudLeadRuntime {
         if (bound === null || bound.released) return;
         this.log("cloud-lead.relay-reconnected", { worktree: key, sandbox: sandbox.name });
         void this.sendCredential(bound);
-        void this.syncKey(key).catch((error: unknown) =>
-          this.log("cloud-lead.reconnect-sync-failed", { worktree: key, error: errorText(error) }),
-        );
+        void this.syncKey(key)
+          .then(async () => {
+            if (bound === null) return;
+            await this.sendOfflineKit(bound);
+            await this.replayJournal(bound);
+          })
+          .catch((error: unknown) =>
+            this.log("cloud-lead.reconnect-sync-failed", {
+              worktree: key,
+              error: errorText(error),
+            }),
+          );
       },
       onControl: (message: RelayMessage) => {
+        if (message.op === "journal-pending" && bound !== null) {
+          const session = bound;
+          void this.syncKey(key)
+            .then(() => this.replayJournal(session))
+            .catch((error: unknown) =>
+              this.log("cloud-lead.offline-replay-failed", {
+                worktree: key,
+                error: errorText(error),
+              }),
+            );
+        }
         if (message.op !== "procs" || !Array.isArray(message.list)) return;
         const list = message.list as ReadonlyArray<Record<string, unknown>>;
         if (bound === null) leftover = list;
@@ -1276,6 +1462,9 @@ export class CloudLeadRuntime {
   private recordProcess(session: CloudSession, threadId: string, args: ReadonlyArray<string>) {
     const id = session.relay.lastProcessId;
     session.processes.set(id, { id, threadId, claudeSessionId: claudeSessionIdOf(args) });
+    void this.sendOfflineKit(session).catch((error: unknown) =>
+      this.log("cloud-lead.offline-kit-failed", { worktree: session.key, error: errorText(error) }),
+    );
     this.persist(session);
     return () => {
       session.processes.delete(id);

@@ -8262,12 +8262,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                     ),
                   )
                 : yield* cloudLead
-                  .prepare({
-                    threadId: turnInput.threadId,
-                    worktreePath: turnInput.runtimePolicy.cwd,
-                    mcpEndpoint: mcpSession.endpoint,
-                  })
-                  .pipe(Effect.mapError((cause) => queryRunnerError(cause, "cloudLead.prepare")));
+                    .prepare({
+                      threadId: turnInput.threadId,
+                      worktreePath: turnInput.runtimePolicy.cwd,
+                      mcpEndpoint: mcpSession.endpoint,
+                      mcpAuthorization: mcpSession.authorizationHeader,
+                    })
+                    .pipe(Effect.mapError((cause) => queryRunnerError(cause, "cloudLead.prepare")));
           const cloudMcpServers =
             cloudLaunch === undefined || mcpOverrides.mcpServers === undefined
               ? mcpOverrides.mcpServers

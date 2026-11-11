@@ -9,17 +9,22 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
+import * as Option from "effect/Option";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFs from "node:fs/promises";
 import * as NodeNet from "node:net";
 import * as NodeOs from "node:os";
 
-import { CloudLeadRuntime } from "../cloudLead/CloudLeadRuntime.ts";
+import { expect, vi } from "vite-plus/test";
+import { makeOfflineJournalReplay, offlineChildThreadId } from "./OfflineJournalReplay.ts";
+import { encodeProjectDir } from "../cloudLead/pathRewrite.ts";
+import { RelayClient } from "../cloudLead/RelayClient.ts";
+import { CloudLeadRuntime, type OfflineJournalEntry } from "../cloudLead/CloudLeadRuntime.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import type { RemoteProcess } from "../cloudLead/RelayClient.ts";
 import { fakeLocalHost, localSandboxClient } from "../cloudLead/testkit.ts";
 import { localMirrorShell } from "../cloudLead/WorkspaceMirror.ts";
-import { ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
+import { ProjectTeamError, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
@@ -32,6 +37,61 @@ import {
 } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
+
+describe("offline replay failure boundaries", () => {
+  const entry: OfflineJournalEntry = {
+    seq: 1,
+    at: 1_000,
+    kind: "call",
+    threadId: "lead",
+    taskId: "task",
+    tool: "task_todo_set",
+    args: { todoId: "todo", done: true },
+  };
+  const fixture = (missing: boolean, mutation: Effect.Effect<void, ProjectTeamError>) => {
+    const sendToThread = vi.fn(() => Effect.void);
+    const setTodo = vi.fn(() => mutation);
+    const replay = makeOfflineJournalReplay({
+      repository: {
+        getTask: () =>
+          Effect.succeed(
+            missing ? Option.none() : Option.some({ projectId: "project", leadThreadId: "lead" }),
+          ),
+      },
+      threads: { getThreadShell: () => Effect.succeed({}), sendToThread },
+      team: { setTodo },
+      models: () => Effect.succeed({}),
+      providers: Effect.succeed([]),
+    } as unknown as Parameters<typeof makeOfflineJournalReplay>[0]);
+    return { replay, sendToThread, setTodo };
+  };
+
+  it("skips missing tasks without messaging or mutating", async () => {
+    const f = fixture(true, Effect.void);
+    await f.replay.apply({ worktreeKey: "tree", entry });
+    assert.strictEqual(f.sendToThread.mock.calls.length, 0);
+    assert.strictEqual(f.setTodo.mock.calls.length, 0);
+  });
+
+  it("messages expected refusals using the service message", async () => {
+    const f = fixture(
+      false,
+      Effect.fail(new ProjectTeamError({ message: "Todo is no longer editable" })),
+    );
+    await f.replay.apply({ worktreeKey: "tree", entry });
+    assert.strictEqual(f.sendToThread.mock.calls.length, 1);
+    assert.include(
+      (f.sendToThread.mock.calls[0] as unknown as [{ text: string }])[0].text,
+      "was refused: Todo is no longer editable.",
+    );
+  });
+
+  it("propagates defects without turning them into refusals", async () => {
+    const f = fixture(false, Effect.die(new Error("replay defect")));
+    await expect(f.replay.apply({ worktreeKey: "tree", entry })).rejects.toThrow("replay defect");
+    assert.strictEqual(f.sendToThread.mock.calls.length, 0);
+  });
+});
 const shell = localMirrorShell();
 const PR_URL = "https://github.com/devjiwonchoi/busyboy/pull/9001";
 const GIT_ENV =
@@ -179,14 +239,18 @@ describe("cloud task journey", () => {
               // sandbox first, so the Mac worktree they read is at the sandbox's commit.
               yield* team.setEvidence(lead, { criterionId: "c1", evidence: "hello.txt exists" });
               // The review shares the lead's checkout, so it runs in the same sandbox.
-              yield* team.delegateStep(
+              const review = yield* team.delegateStep(
                 lead,
                 { role: "review", task: "Review main...HEAD." },
                 harness.delegate,
               );
               assert.strictEqual((yield* Ref.get(harness.delegated)).at(-1)?.isolation, undefined);
 
-              yield* team.setReview(lead, { clean: true, findings: "", head: sandboxHead });
+              yield* team.setReview(review.childThreadId, {
+                clean: true,
+                findings: "",
+                head: sandboxHead,
+              });
               assert.strictEqual(yield* Effect.promise(() => gitHead(mac)), sandboxHead);
               assert.isTrue(
                 (yield* Effect.promise(() => NodeFs.readFile(`${mac}/hello.txt`, "utf8"))) ===
@@ -213,10 +277,255 @@ describe("cloud task journey", () => {
 
               child.stdin.end();
             }),
-          { cloudLead: CloudLeadService.hooksFromRuntime(runtime) },
+          {
+            cloudLead: CloudLeadService.hooksFromRuntime(runtime),
+            settings: { taskExecution: { location: "local_first" } },
+          },
         ),
       ({ cleanup }) => Effect.promise(cleanup),
     ),
+  );
+
+  it.effect(
+    "replays offline work, imports its reviewer, and keeps refused calls and retries safe",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => setUpMachines()),
+        ({ mac, runtime }) =>
+          withTeam(
+            (harness) =>
+              Effect.gen(function* () {
+                const { team, pm, task, lead } = yield* cloudLeadMidTurn(harness, runtime, mac);
+                yield* team.updateSettings({
+                  projectId: PROJECT_ID,
+                  roleModels: { plan: PLAN, review: PLAN },
+                });
+                harness.worktreeHead = (path) =>
+                  NodeChildProcess.execFileSync("git", ["-C", path, "rev-parse", "HEAD"])
+                    .toString()
+                    .trim();
+                const launch = yield* CloudLeadService.hooksFromRuntime(runtime).prepare({
+                  threadId: lead,
+                  worktreePath: mac,
+                  mcpEndpoint: "http://127.0.0.1:1/mcp",
+                  mcpAuthorization: "Bearer offline-lead",
+                });
+                const process = launch.spawn({ command: "claude", args: [], env: {} });
+                const output = outputOf(process);
+                yield* Effect.promise(() => waitFor(() => output().includes("ready")));
+                process.stdin.write("commit offline.txt\n");
+                yield* Effect.promise(() => waitFor(() => output().includes("committed")));
+                const head = output().split("committed ")[1]!.trim();
+                const entries: OfflineJournalEntry[] = [];
+                const call = (tool: string, args: unknown, threadId: string = lead) =>
+                  entries.push({
+                    seq: entries.length + 1,
+                    at: Date.parse("2026-11-12T00:00:00Z"),
+                    kind: "call",
+                    threadId,
+                    taskId: task.id,
+                    tool,
+                    args,
+                  });
+                call("task_todo_set", { todoId: "t1", done: true });
+                call("task_evidence_set", { criterionId: "c1", evidence: "offline.txt exists" });
+                call("task_update", { note: "Offline implementation complete" });
+                entries.push({
+                  seq: entries.length + 1,
+                  at: Date.parse("2026-11-12T00:00:00Z"),
+                  kind: "child-started",
+                  threadId: lead,
+                  taskId: task.id,
+                  child: {
+                    id: "review-1",
+                    role: "review",
+                    task: "Review the offline commit",
+                    model: PLAN.model,
+                    providerInstanceId: PLAN.providerInstanceId,
+                    claudeSessionId: "offline-review-session",
+                    leadThreadId: lead,
+                  },
+                });
+                call(
+                  "task_review_set",
+                  { clean: true, findings: "", head },
+                  "offline-child:review-1",
+                );
+                entries.push({
+                  seq: entries.length + 1,
+                  at: Date.parse("2026-11-12T00:00:00Z"),
+                  kind: "child-finished",
+                  threadId: "offline-child:review-1",
+                  taskId: task.id,
+                  child: {
+                    id: "review-1",
+                    role: "review",
+                    claudeSessionId: "offline-review-session",
+                    result: "Clean review",
+                    exitCode: 0,
+                    transcript: "children/review-1.jsonl",
+                  },
+                });
+                call("task_update", { stage: "in_review", prUrl: PR_URL });
+                call("link_pull_request", { url: PR_URL });
+                call("task_ready", { head, localChecks: "" });
+                // A malformed child entry is refused, not retried forever.
+                entries.push({
+                  seq: entries.length + 1,
+                  at: Date.parse("2026-11-12T00:00:00Z"),
+                  kind: "child-started",
+                  threadId: lead,
+                  taskId: task.id,
+                  child: {
+                    id: "bogus-1",
+                    role: "bogus" as unknown as "review",
+                    task: "Do something",
+                    claudeSessionId: "bogus-session",
+                    leadThreadId: lead,
+                  },
+                });
+                call("ask_user", {
+                  kind: "decision",
+                  question: "Choose the next step\n\nThe offline work is ready for your decision.",
+                  options: ["Continue (Recommended)", "Pause"],
+                  context: {
+                    action: "Choose the next step",
+                    reason: "Offline work is finished",
+                    impacts: [],
+                    cost: null,
+                    reversibility: "reversible",
+                    recommendation: "Continue",
+                  },
+                });
+                const reads = vi
+                  .spyOn(RelayClient.prototype, "requestControl")
+                  .mockImplementation(async (message) => ({
+                    ch: "ctl",
+                    op: "journal",
+                    rid: message.rid,
+                    entries,
+                  }));
+                const controls = vi.spyOn(RelayClient.prototype, "sendControl");
+                try {
+                  const session = yield* Effect.promise(() => runtime["sessions"].get(mac)!);
+                  const transcript = '{"sessionId":"offline-review-session"}\n';
+                  const remoteTranscripts = `${session.remoteHome}/.claude/projects/${encodeProjectDir(session.remoteCwd)}`;
+                  yield* Effect.promise(async () => {
+                    await NodeFs.mkdir(remoteTranscripts, { recursive: true });
+                    await NodeFs.writeFile(
+                      `${remoteTranscripts}/offline-review-session.jsonl`,
+                      transcript,
+                    );
+                  });
+                  // This is the same runtime path used by journal-pending and reconnect.
+                  yield* Effect.promise(() => runtime["replayJournal"](session));
+                  const realMac = yield* Effect.promise(() => NodeFs.realpath(mac));
+                  assert.strictEqual(
+                    yield* Effect.promise(() =>
+                      NodeFs.readFile(
+                        `${mac}/../../.claude/projects/${encodeProjectDir(realMac)}/offline-review-session.jsonl`,
+                        "utf8",
+                      ),
+                    ),
+                    transcript,
+                  );
+                  const before = yield* Ref.get(harness.dispatched);
+                  const spec = yield* team.readSpec(lead, {});
+                  assert.isTrue(spec.current.spec.todos.find((todo) => todo.id === "t1")!.done);
+                  assert.strictEqual(
+                    spec.current.spec.criteria.find((criterion) => criterion.id === "c1")!.evidence,
+                    "offline.txt exists",
+                  );
+                  const { task: after } = yield* team.readTask(pm, { taskId: task.id });
+                  assert.strictEqual(after.review?.by, "reviewer");
+                  assert.strictEqual(after.stage, "in_review");
+                  assert.strictEqual(after.prUrl, PR_URL);
+                  const child = offlineChildThreadId(mac, "review-1");
+                  assert.isTrue(
+                    before.some(
+                      (command) =>
+                        command.type === "thread.create" &&
+                        command.threadId === child &&
+                        command.launchedByThreadId === lead &&
+                        command.importedNativeThread?.ref.nativeId === "offline-review-session",
+                    ),
+                  );
+                  assert.isTrue(
+                    before.some(
+                      (command) =>
+                        command.type === "thread.pull-request.link" &&
+                        command.threadId === lead &&
+                        command.url === PR_URL,
+                    ),
+                  );
+                  assert.isTrue(
+                    (yield* Ref.get(harness.sent)).some(
+                      (message) =>
+                        message.threadId === lead &&
+                        message.text.includes("[Offline replay] task_ready"),
+                    ),
+                  );
+                  assert.isTrue(
+                    (yield* Ref.get(harness.sent)).some(
+                      (message) =>
+                        message.threadId === lead &&
+                        message.text.includes("[Offline replay] child-started") &&
+                        message.text.includes("Unknown offline child role bogus"),
+                    ),
+                  );
+                  const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+                  assert.isTrue(
+                    (yield* repository.listOpenAttentionItems({
+                      projectId: PROJECT_ID,
+                      taskId: task.id,
+                    })).some((item) => item.kind === "decision"),
+                  );
+                  const sentBefore = (yield* Ref.get(harness.sent)).length;
+                  yield* Effect.promise(() =>
+                    Promise.all([
+                      runtime["replayJournal"](session),
+                      runtime["replayJournal"](session),
+                    ]),
+                  );
+                  assert.strictEqual((yield* Ref.get(harness.dispatched)).length, before.length);
+                  assert.strictEqual((yield* Ref.get(harness.sent)).length, sentBefore);
+                  assert.strictEqual(
+                    (yield* team.readSpec(lead, {})).current.version,
+                    spec.current.version,
+                  );
+                  assert.strictEqual(
+                    controls.mock.calls.filter(([message]) => message.op === "journal-applied")
+                      .length,
+                    entries.length,
+                  );
+                  assert.strictEqual(
+                    controls.mock.calls
+                      .filter(([message]) => message.op === "journal-applied")
+                      .at(-1)?.[0].seq,
+                    entries.length,
+                  );
+                  // Even with the applied marker lost (a crash before it was saved), the
+                  // child's finish note is written once.
+                  runtime["appliedSeq"].delete(mac);
+                  yield* Effect.promise(() => runtime["replayJournal"](session));
+                  const finishNotes = (yield* repository.listTaskEvents({
+                    taskId: task.id,
+                    limit: 200,
+                  })).filter((event) => event.body.startsWith("Offline child review-1 finished"));
+                  assert.strictEqual(finishNotes.length, 1);
+                } finally {
+                  reads.mockRestore();
+                  controls.mockRestore();
+                  process.stdin.end();
+                }
+              }),
+            {
+              cloudLead: CloudLeadService.hooksFromRuntime(runtime),
+              settings: { taskExecution: { location: "local_first" } },
+            },
+          ),
+        ({ cleanup }) => Effect.promise(cleanup),
+      ),
   );
 
   const claude = ProviderInstanceId.make("claude-work");
@@ -338,7 +647,10 @@ describe("cloud task journey", () => {
                   CODEX_MODEL,
                 );
               }),
-            { cloudLead: CloudLeadService.hooksFromRuntime(runtime) },
+            {
+              cloudLead: CloudLeadService.hooksFromRuntime(runtime),
+              settings: { taskExecution: { location: "local_first" } },
+            },
           ),
         ({ cleanup }) => Effect.promise(cleanup),
       ),
@@ -367,7 +679,10 @@ describe("cloud task journey", () => {
                 assert.strictEqual(after.modelSteps.implement?.providerInstanceId, codex);
                 assert.strictEqual(after.roleModels.implement, undefined);
               }),
-            { cloudLead: CloudLeadService.hooksFromRuntime(runtime) },
+            {
+              cloudLead: CloudLeadService.hooksFromRuntime(runtime),
+              settings: { taskExecution: { location: "local_first" } },
+            },
           ),
         ({ cleanup }) => Effect.promise(cleanup),
       ),

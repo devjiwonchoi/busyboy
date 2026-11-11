@@ -66,6 +66,21 @@ const exited = (child: RemoteProcess) =>
   );
 
 describe("RelayClient", () => {
+  it("matches concurrent control responses by request id", async () => {
+    const relay = await startRelay();
+    const client = connect(relay);
+    await client.waitUntilConnected(5_000);
+    const [first, second] = await Promise.all([
+      client.requestControl({ op: "journal-read", after: 0 }),
+      client.requestControl({ op: "journal-read", after: 10 }),
+    ]);
+    expect(first.op).toBe("journal");
+    expect(second.op).toBe("journal");
+    expect(first.entries).toEqual([]);
+    expect(second.entries).toEqual([]);
+    expect(first.rid === second.rid).toBe(false);
+  });
+
   it("runs a remote process over stdin and stdout", async () => {
     const relay = await startRelay();
     const client = connect(relay);

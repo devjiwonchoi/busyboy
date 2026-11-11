@@ -214,6 +214,7 @@ import {
   requiredPlanGates,
 } from "./planGates.ts";
 import { planReadinessGaps, specLinkProblems, unprovenCriteria } from "./planReadiness.ts";
+import { makeOfflineJournalReplay } from "./OfflineJournalReplay.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
@@ -6874,7 +6875,7 @@ const make = Effect.gen(function* () {
 
   yield* recoverInterruptedMoves;
 
-  return {
+  const service = {
     ensureManager,
     roleOf,
     createTask,
@@ -6930,6 +6931,21 @@ const make = Effect.gen(function* () {
     modelSessionOf,
     recordRunUsage,
   } satisfies ProjectTeamService["Service"];
+
+  yield* cloudLead.setOfflineHandler(
+    makeOfflineJournalReplay({
+      team: service,
+      repository,
+      threads,
+      providers: providerRegistry.getProviders,
+      models: (task) =>
+        Effect.gen(function* () {
+          const manager = yield* requireManager(task.projectId);
+          return yield* roleModelsFor(task, manager.settings.roleModels);
+        }),
+    }),
+  );
+  return service;
 });
 
 export const layer = Layer.effect(ProjectTeamService, make);

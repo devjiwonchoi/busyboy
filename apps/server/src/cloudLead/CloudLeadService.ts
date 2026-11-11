@@ -24,6 +24,7 @@ import * as CloudLeadSecrets from "./CloudLeadSecrets.ts";
 import {
   CloudLeadRuntime,
   type CloudLaunch,
+  type CloudLeadOfflineHandler,
   type CodexCheck,
   type PrepareInput,
 } from "./CloudLeadRuntime.ts";
@@ -66,6 +67,8 @@ export interface CloudLeadHooksShape {
     readonly sessionId: string;
     readonly location: ExecutionLocation;
   }) => Effect.Effect<boolean, CloudLeadError>;
+  /** Supplies the offline tool snapshot and replays the sandbox journal through service gates. */
+  readonly setOfflineHandler: (handler: CloudLeadOfflineHandler) => Effect.Effect<void>;
   /** How a sandbox replaced near its lifetime limit stops and resumes the lead's turn. */
   readonly setRotationHandler: (handler: RotationHandler) => Effect.Effect<void>;
 }
@@ -102,6 +105,7 @@ export const unavailableHooks: CloudLeadHooksShape = {
   exportTranscripts: () => Effect.void,
   hasTranscript: () => Effect.succeed(false),
   setRotationHandler: () => Effect.void,
+  setOfflineHandler: () => Effect.void,
 };
 
 export class CloudLeadHooks extends Context.Reference<CloudLeadHooksShape>(
@@ -159,6 +163,7 @@ export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape
             detail: `Could not look for the transcript: ${errorDetail(cause)}`,
           }),
       }),
+    setOfflineHandler: (handler) => Effect.sync(() => runtime.setOfflineHandler(handler)),
     setRotationHandler: (handler) =>
       Effect.sync(() =>
         runtime.setRotationHandler({
