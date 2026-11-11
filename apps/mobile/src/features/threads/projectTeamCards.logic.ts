@@ -4,7 +4,11 @@ import type {
   ProjectTeamAttentionSummary,
   ThreadId,
 } from "@t3tools/contracts";
-import { requestSenderLabel, shortWorkName } from "@t3tools/shared/requestMessage";
+import {
+  parseRequestOption,
+  requestSenderLabel,
+  shortWorkName,
+} from "@t3tools/shared/requestMessage";
 
 /** An open card shown in a PM or Director thread, with the project it belongs to. */
 export interface ThreadTeamCard {
@@ -86,14 +90,9 @@ export function splitCardQuestion(question: string): { title: string; detail: st
 
 /** "Label: tradeoff (Recommended)" shows as "Label"; the answer keeps the full text. */
 export function cardOptionLabel(option: string): string {
-  const clean = option.replace(/\((?:recommended|추천)\)/gi, "").trim();
-  const separator = / [—–] |:\s+/.exec(clean);
-  return separator !== null && separator.index <= 80
-    ? clean.slice(0, separator.index).trim()
-    : clean;
+  return parseRequestOption(option).label;
 }
 
-/** Keep completion criteria and dependency ids out of the visible numbered plan. */
 /** The plan pinned to the card wins; without one, the asked spec version's todos, like web. */
 export function requestTodoRows(
   card: ProjectDecisionCard,

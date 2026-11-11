@@ -305,6 +305,9 @@ describe("ProjectTeamCards", () => {
     const options = host.querySelectorAll('[role="radio"]');
     expect(options[0]?.getAttribute("aria-checked")).toBe("true");
     expect(options[0]?.textContent).toContain("추천");
+    // Label and tradeoff split like web; the raw "(Recommended)" never shows.
+    expect(options[0]?.textContent).toBe("●지금출시추천");
+    expect(options[1]?.textContent).toBe("○나중에검토");
     act(() => (options[1] as HTMLButtonElement).click());
     await act(async () => button("보내기").click());
     expect(mocks.answer).toHaveBeenCalledWith("env", {

@@ -39,14 +39,4 @@ export function decisionQuestionPresentation({
 }
 
 /** The display may be cleaned up, but answers retain the lead's exact option text. */
-export function parseDecisionOption(raw: string) {
-  const clean = raw.replace(/\((?:recommended|추천)\)/gi, "").trim();
-  const separator = / [\u2014\u2013] |:\s+/.exec(clean);
-  const hasShortLabel = separator !== null && separator.index <= 80;
-  return {
-    value: raw,
-    label: hasShortLabel ? clean.slice(0, separator.index).trim() : clean,
-    tradeoff: hasShortLabel ? clean.slice(separator.index + separator[0].length).trim() : null,
-    recommended: /\((?:recommended|추천)\)/i.test(raw),
-  };
-}
+export { parseRequestOption as parseDecisionOption } from "@t3tools/shared/requestMessage";

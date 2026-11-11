@@ -20,6 +20,19 @@ export const REQUEST_CONTEXT_MISSING =
 export const REQUEST_PLAN_SCOPE_NOTE =
   "계획 승인입니다. 머지·배포·비용·외부 게시 실행은 해당 작업의 승인을 따로 확인해야 합니다.";
 
+/** Splits "Label: one-line tradeoff (Recommended)" into its parts, the same on web and phone. */
+export function parseRequestOption(raw: string) {
+  const clean = raw.replace(/\((?:recommended|추천)\)/gi, "").trim();
+  const separator = / [\u2014\u2013] |:\s+/.exec(clean);
+  const hasShortLabel = separator !== null && separator.index <= 80;
+  return {
+    value: raw,
+    label: hasShortLabel ? clean.slice(0, separator.index).trim() : clean,
+    tradeoff: hasShortLabel ? clean.slice(separator.index + separator[0].length).trim() : null,
+    recommended: /\((?:recommended|추천)\)/i.test(raw),
+  };
+}
+
 /** Paragraphs under the headline; an older one-line plan approval falls back to its plan summary. */
 export function requestParagraphs(card: ProjectDecisionCard): string[] {
   const { paragraphs } = parseRequestMessage(card.item.question);

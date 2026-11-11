@@ -16,6 +16,7 @@ import {
   REQUEST_CONTEXT_MISSING,
   REQUEST_PLAN_SCOPE_NOTE,
   requestImpactLabels,
+  parseRequestOption,
   requestParagraphs,
 } from "@t3tools/shared/requestMessage";
 import * as Clipboard from "expo-clipboard";
@@ -337,24 +338,32 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
             ) : null}
             {item.kind !== "approval" && item.options.length > 0 ? (
               <View className="gap-2">
-                {item.options.map((option) => (
-                  <Pressable
-                    key={option}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected === option, disabled }}
-                    disabled={disabled}
-                    onPress={() => setSelected(option)}
-                    className="flex-row gap-2 rounded-xl border border-border p-3"
-                  >
-                    <Text className="text-foreground">{selected === option ? "●" : "○"}</Text>
-                    <Text className="flex-1 font-sans text-sm text-foreground">
-                      {option.replace(/\((?:Recommended|추천)\)/gi, "").trim()}
-                    </Text>
-                    {/\((?:Recommended|추천)\)/i.test(option) ? (
-                      <Text className="text-xs text-foreground-muted">추천</Text>
-                    ) : null}
-                  </Pressable>
-                ))}
+                {item.options.map((option) => {
+                  const parsed = parseRequestOption(option);
+                  return (
+                    <Pressable
+                      key={option}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected === option, disabled }}
+                      disabled={disabled}
+                      onPress={() => setSelected(option)}
+                      className="flex-row gap-2 rounded-xl border border-border p-3"
+                    >
+                      <Text className="text-foreground">{selected === option ? "●" : "○"}</Text>
+                      <View className="flex-1 gap-0.5">
+                        <Text className="font-sans text-sm text-foreground">{parsed.label}</Text>
+                        {parsed.tradeoff ? (
+                          <Text className="font-sans text-xs text-foreground-muted">
+                            {parsed.tradeoff}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {parsed.recommended ? (
+                        <Text className="text-xs text-foreground-muted">추천</Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
                 <TextInput
                   accessibilityLabel="추가 의견"
                   placeholder="추가 의견 (선택)"
