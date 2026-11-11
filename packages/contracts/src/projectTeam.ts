@@ -858,8 +858,38 @@ export const ProjectAttentionItem = Schema.Struct({
   details: Schema.NullOr(Schema.Array(ProjectAttentionDetail).check(Schema.isMaxLength(8))).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /**
+   * Set while the user has set the open item aside ("보류"). It stays open but leaves the
+   * waiting list and count, and AFK and the stall watch leave its task alone.
+   */
+  snoozedAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
+  /** Why the user snoozed it; required to snooze. */
+  snoozeReason: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
+
+/** A card the user snoozed, as the PM and Director see it: mention only as a count. */
+export const ProjectSnoozedAttention = Schema.Struct({
+  id: ProjectAttentionItemId,
+  taskId: Schema.NullOr(ProjectTaskId),
+  kind: ProjectAttentionKind,
+  /** The card's first line. */
+  title: Schema.String,
+  reason: Schema.String,
+  snoozedAt: IsoDateTime,
+});
+export type ProjectSnoozedAttention = typeof ProjectSnoozedAttention.Type;
+
+/** True for an open item the user set aside. */
+export function isSnoozedAttention(item: {
+  readonly answeredAt: string | null;
+  readonly supersededAt: string | null;
+  readonly snoozedAt?: string | null | undefined;
+}): boolean {
+  return (
+    item.answeredAt === null && item.supersededAt === null && (item.snoozedAt ?? null) !== null
+  );
+}
 
 // Exact options distinguish actionable turn failures from existing free-form blockers.
 export const TURN_FAILED_RETRY = "다시 시도";
@@ -1239,7 +1269,12 @@ export const ProjectTeamWorkspaceProject = Schema.Struct({
   statusCounts: Schema.Record(ProjectTaskStatus, NonNegativeInt),
   /** Tasks not done or cancelled. */
   openTasks: Schema.Array(ProjectTaskBrief),
+  /** Open cards still waiting on the user; snoozed ones are in snoozedAttention. */
   openAttention: Schema.Array(ProjectAttentionItem),
+  /** Cards the user set aside on purpose. Mention only as "보류 N건"; never chase them. */
+  snoozedAttention: Schema.Array(ProjectSnoozedAttention).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   /** The PM's "summary" memory topic, or null when it has none yet. */
   summary: Schema.NullOr(Schema.String),
 });
@@ -1364,7 +1399,12 @@ export const ProjectTeamStatus = Schema.Struct({
   /** How many tasks have each user-facing status. */
   statusCounts: Schema.optional(Schema.Record(ProjectTaskStatus, NonNegativeInt)),
   stalled: Schema.Array(ProjectTaskBrief),
+  /** Open cards still waiting on the user; snoozed ones are in snoozedAttention. */
   openAttention: Schema.Array(ProjectAttentionItem),
+  /** Cards the user set aside on purpose. Mention only as "보류 N건"; never chase them. */
+  snoozedAttention: Schema.Array(ProjectSnoozedAttention).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   settings: ProjectTeamSettings,
   changes: Schema.Struct({
     /** Defaults to the later of the last sitrep and the last user message. */
@@ -2300,6 +2340,23 @@ export const ProjectTeamAnswerDecisionInput = Schema.Struct({
   answer: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
 });
 export type ProjectTeamAnswerDecisionInput = typeof ProjectTeamAnswerDecisionInput.Type;
+
+export const PROJECT_ATTENTION_SNOOZE_REASON_MAX = 500;
+
+/** Sets an open card aside with a reason; it stays open until answered or brought back. */
+export const ProjectTeamSnoozeDecisionInput = Schema.Struct({
+  projectId: ProjectId,
+  attentionItemId: ProjectAttentionItemId,
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_ATTENTION_SNOOZE_REASON_MAX)),
+});
+export type ProjectTeamSnoozeDecisionInput = typeof ProjectTeamSnoozeDecisionInput.Type;
+
+/** Brings a snoozed card back to the waiting list. */
+export const ProjectTeamUnsnoozeDecisionInput = Schema.Struct({
+  projectId: ProjectId,
+  attentionItemId: ProjectAttentionItemId,
+});
+export type ProjectTeamUnsnoozeDecisionInput = typeof ProjectTeamUnsnoozeDecisionInput.Type;
 
 /** A plan passage the user quoted in a card's side chat. */
 export const ProjectLeadQuestionQuote = Schema.Struct({

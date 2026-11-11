@@ -6,6 +6,8 @@ import {
   type ProjectDecisionCard,
   ProjectId,
   type ProjectTeamAnswerDecisionInput,
+  type ProjectTeamSnoozeDecisionInput,
+  type ProjectTeamUnsnoozeDecisionInput,
   type ProjectTeamAttentionSummary,
   ProjectTaskId,
   type ProjectWaitingThread,
@@ -16,7 +18,7 @@ import { AsyncResult } from "effect/reactivity";
 import { act, createRef, type ComponentProps, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
@@ -41,6 +43,7 @@ const server = vi.hoisted(() => ({
   summary: null as ProjectTeamAttentionSummary | null,
   listeners: new Set<() => void>(),
   answers: [] as ProjectTeamAnswerDecisionInput[],
+  snoozes: [] as ProjectTeamSnoozeDecisionInput[],
   opened: [] as ThreadId[],
 }));
 
@@ -76,6 +79,25 @@ async function answerDecision(input: ProjectTeamAnswerDecisionInput) {
   return AsyncResult.success({ item: card.item });
 }
 
+/** Mirrors ProjectTeamService.snoozeDecision: the card stays open, marked snoozed. */
+function setSnooze(attentionItemId: string, reason: string | null) {
+  const current = server.summary!;
+  const card = current.decisionCards.find((entry) => entry.item.id === attentionItemId)!;
+  const item = {
+    ...card.item,
+    snoozedAt: reason === null ? null : ASKED_AT,
+    snoozeReason: reason,
+  };
+  publish({
+    ...current,
+    openCount: current.openCount + (reason === null ? 1 : -1),
+    decisionCards: current.decisionCards.map((entry) =>
+      entry === card ? { ...entry, item } : entry,
+    ),
+  });
+  return AsyncResult.success({ item });
+}
+
 vi.mock(import("../../state/projectTeam"), async (original) => ({
   ...(await original()),
   useProjectManagerForThread: ((ref: { threadId: string } | null) => {
@@ -84,6 +106,14 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
   }) as never,
   useAnswerDecision: (() => (_environmentId: unknown, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision(input)) as never,
+  useSnoozeDecision: (() =>
+    async (_environmentId: unknown, input: ProjectTeamSnoozeDecisionInput) => {
+      server.snoozes.push(input);
+      return setSnooze(input.attentionItemId, input.reason);
+    }) as never,
+  useUnsnoozeDecision: (() =>
+    async (_environmentId: unknown, input: ProjectTeamUnsnoozeDecisionInput) =>
+      setSnooze(input.attentionItemId, null)) as never,
 }));
 
 function card(
@@ -246,6 +276,7 @@ beforeEach(() => {
     taskKeyPrefix: "BB",
   });
   server.answers = [];
+  server.snoozes = [];
   server.opened = [];
   container = document.body.appendChild(document.createElement("div"));
   container.style.cssText = "height: 100dvh; width: 100%; display: flex; flex-direction: column;";
@@ -437,4 +468,63 @@ it("shows a task lead's own questions in its thread, and every question in the P
   expect(ids(ThreadId.make("lead-9"))).toEqual(["attention-cache"]);
   expect(ids(PM_THREAD_ID)).toEqual(["attention-login", "attention-drag", "attention-cache"]);
   expect(ids(ThreadId.make("other"))).toEqual([]);
+});
+
+it("snoozes a card only with a reason and brings it back", async () => {
+  await page.viewport(1100, 800);
+  await openPmChat(ALL_WAITING);
+  const dialog = await vi.waitFor(() => openPendingActions(), { timeout: 3000 });
+  const row = () =>
+    dialog.querySelector<HTMLElement>(`[data-pending-actions-card="${dragPlan.item.id}"]`);
+
+  await act(async () =>
+    userEvent.click(row()!.querySelector<HTMLElement>("[data-snooze-button]")!),
+  );
+  const input = await vi.waitFor(() => {
+    const element = row()!.querySelector<HTMLInputElement>("[data-snooze-reason-input]");
+    expect(element).not.toBeNull();
+    expect(document.activeElement).toBe(element);
+    return element!;
+  });
+  const submit = row()!.querySelector<HTMLButtonElement>("[data-snooze-submit]")!;
+  // No reason, no snooze: the button stays off even for spaces.
+  expect(submit.disabled).toBe(true);
+  await act(async () => userEvent.type(input, "   "));
+  expect(submit.disabled).toBe(true);
+  expect(server.snoozes).toEqual([]);
+
+  await act(async () => userEvent.type(input, "다음 주에 볼게"));
+  await vi.waitFor(() => expect(input.value).toBe("   다음 주에 볼게"));
+  expect(submit.disabled).toBe(false);
+  await act(async () => userEvent.click(submit));
+
+  expect(server.snoozes).toEqual([
+    { projectId: PROJECT_ID, attentionItemId: dragPlan.item.id, reason: "다음 주에 볼게" },
+  ]);
+  // The card leaves the waiting list and count, and waits under "보류 1" with its reason.
+  await vi.waitFor(() => {
+    expect(dialogCards()).toEqual([loginBlocker.item.id, cachePlan.item.id]);
+    expect(pendingButton()?.textContent).toBe("기다리는 일 3개");
+    const section = dialog.querySelector<HTMLElement>("[data-snoozed-section]");
+    expect(section?.querySelector("summary")?.textContent).toBe("보류 1");
+    const snoozed = section?.querySelector<HTMLElement>(
+      `[data-snoozed-card="${dragPlan.item.id}"]`,
+    );
+    expect(snoozed?.textContent).toContain("결정 필요: Fix drag scroll");
+    expect(snoozed?.textContent).toContain("이유: 다음 주에 볼게");
+  });
+
+  const section = dialog.querySelector<HTMLDetailsElement>("[data-snoozed-section]")!;
+  await act(async () => userEvent.click(section.querySelector("summary")!));
+  await vi.waitFor(() => expect(section.open).toBe(true));
+  await act(async () =>
+    userEvent.click(section.querySelector<HTMLElement>("[data-unsnooze-button]")!),
+  );
+
+  // Back in its place, and the snoozed section is gone.
+  await vi.waitFor(() => {
+    expect(dialogCards()).toEqual([loginBlocker.item.id, dragPlan.item.id, cachePlan.item.id]);
+    expect(pendingButton()?.textContent).toBe("기다리는 일 4개");
+    expect(dialog.querySelector("[data-snoozed-section]")).toBeNull();
+  });
 });

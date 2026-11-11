@@ -46,7 +46,7 @@ vi.mock(import("../../state/session"), async (original) => ({
 
 vi.mock(import("../../state/director"), async (original) => ({
   ...(await original()),
-  useDirectorInbox: () => ({ groups: [], total: 0 }),
+  useDirectorInbox: () => ({ groups: [], total: 0, snoozedTotal: 0 }),
   useDirectorThreadRef: () => null,
 }));
 

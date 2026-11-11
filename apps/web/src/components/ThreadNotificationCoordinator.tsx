@@ -6,6 +6,7 @@ import { pendingSubagentRequestsByThread } from "@t3tools/client-runtime/state/t
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ProjectTeamAttentionIndex } from "@t3tools/client-runtime/state/project-team";
+import { isSnoozedAttention } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   OrchestrationV2ThreadShell,
@@ -328,7 +329,10 @@ const NOTIFICATION_QUESTION_MAX_CHARS = 140;
 /** "<task name>: <question>" for the newest open card, so the alert says what is waiting. */
 function newestOpenCardText(summary: ProjectTeamAttentionSummary): string | null {
   const card = summary.decisionCards.findLast(
-    (candidate) => candidate.item.answeredAt === null && candidate.item.supersededAt === null,
+    (candidate) =>
+      candidate.item.answeredAt === null &&
+      candidate.item.supersededAt === null &&
+      !isSnoozedAttention(candidate.item),
   );
   if (!card) return null;
   const question = card.item.question.replace(/\s+/g, " ").trim();

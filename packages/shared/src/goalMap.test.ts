@@ -164,6 +164,20 @@ describe("buildGoalMap", () => {
     expect(map.goals[0]!.tasks.find((item) => item.key === "BU-6")!.status).toBe("running");
   });
 
+  it("does not count a snoozed card as the user's turn", () => {
+    const snoozed = {
+      item: {
+        taskId: "1",
+        kind: "decision",
+        answeredAt: null,
+        supersededAt: null,
+        snoozedAt: "2026-11-11T00:00:00.000Z",
+      },
+    } as unknown as ProjectTeamAttentionSummary["decisionCards"][number];
+    const map = build([task("1")], { decisionCards: [snoozed] });
+    expect(map.goals[0]!.tasks[0]!.userTurn).toBeNull();
+  });
+
   it("draws waitsOn edges only to unfinished visible tasks, across goals", () => {
     const map = buildGoalMap({
       entries: [

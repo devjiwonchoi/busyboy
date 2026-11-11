@@ -30,6 +30,7 @@ import Migration0025 from "./Migrations/025_ProjectTaskMemoryHold.ts";
 import Migration0026 from "./Migrations/026_ProjectTaskMemoryStallSince.ts";
 import Migration0027 from "./Migrations/027_ProjectTaskStalls.ts";
 import Migration0028 from "./Migrations/028_ProjectCorrections.ts";
+import Migration0029 from "./Migrations/029_ProjectAttentionSnooze.ts";
 
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
@@ -60,6 +61,7 @@ export const migrationEntries = [
   [26, "ProjectTaskMemoryStallSince", Migration0026],
   [27, "ProjectTaskStalls", Migration0027],
   [28, "ProjectCorrections", Migration0028],
+  [29, "ProjectAttentionSnooze", Migration0029],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

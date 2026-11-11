@@ -124,6 +124,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.projectTeamRequestSitrep]: AuthOrchestrationOperateScope,
   // Sends the answer to a task lead.
   [WS_METHODS.projectTeamAnswerDecision]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamSnoozeDecision]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamUnsnoozeDecision]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamUpdateSettings]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamGetTask]: AuthOrchestrationReadScope,
   // Write task specs.

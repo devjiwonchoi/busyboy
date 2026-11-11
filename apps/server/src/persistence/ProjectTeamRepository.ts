@@ -446,6 +446,15 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectAttentionItemId;
       readonly supersededAt: IsoDateTime;
     }) => Result<Option.Option<ProjectAttentionItem>>;
+    /**
+     * Sets an open item aside with the user's reason, or brings it back when reason is null.
+     * The item stays open. None when it does not exist or is already closed.
+     */
+    readonly snoozeAttentionItem: (input: {
+      readonly id: ProjectAttentionItemId;
+      readonly snoozedAt: IsoDateTime | null;
+      readonly reason: string | null;
+    }) => Result<Option.Option<ProjectAttentionItem>>;
     /** Closes the task's open items (of one kind, or all) without an answer; returns the closed items. */
     readonly supersedeOpenAttentionItems: (input: {
       readonly taskId: ProjectTaskId;
@@ -613,6 +622,8 @@ const AttentionRow = Schema.Struct({
   senderRole: ProjectAttentionItem.fields.senderRole,
   senderName: ProjectAttentionItem.fields.senderName,
   details: Schema.NullOr(Schema.fromJsonString(Schema.Array(ProjectAttentionDetail))),
+  snoozedAt: Schema.NullOr(IsoDateTime),
+  snoozeReason: Schema.NullOr(Schema.String),
 });
 const SpecVersionRow = Schema.Struct({
   ...ProjectTaskSpecVersion.fields,
@@ -732,7 +743,9 @@ export const make = Effect.gen(function* () {
     context_json AS "context",
     details_json AS "details",
     sender_role AS "senderRole",
-    sender_name AS "senderName"
+    sender_name AS "senderName",
+    snoozed_at AS "snoozedAt",
+    snooze_reason AS "snoozeReason"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -1664,6 +1677,20 @@ export const make = Effect.gen(function* () {
       RETURNING ${attentionColumns}
     `,
   });
+  const snoozeAttentionRow = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectAttentionItemId,
+      snoozedAt: Schema.NullOr(IsoDateTime),
+      reason: Schema.NullOr(Schema.String),
+    }),
+    Result: AttentionRow,
+    execute: ({ id, snoozedAt, reason }) => sql`
+      UPDATE project_attention_items
+      SET snoozed_at = ${snoozedAt}, snooze_reason = ${reason}
+      WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
+      RETURNING ${attentionColumns}
+    `,
+  });
   const supersedeAttentionRows = SqlSchema.findAll({
     Request: Schema.Struct({
       taskId: ProjectTaskId,
@@ -2215,6 +2242,8 @@ export const make = Effect.gen(function* () {
       supersedeAttentionRow(input).pipe(
         Effect.mapError(toRepositoryError("supersedeAttentionItem")),
       ),
+    snoozeAttentionItem: (input) =>
+      snoozeAttentionRow(input).pipe(Effect.mapError(toRepositoryError("snoozeAttentionItem"))),
     supersedeOpenAttentionItems: (input) =>
       supersedeAttentionRows(input).pipe(
         Effect.mapError(toRepositoryError("supersedeOpenAttentionItems")),

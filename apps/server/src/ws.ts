@@ -2089,6 +2089,14 @@ const layerWsRpc = (
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.answerDecision(input)),
           ),
+        [WS_METHODS.projectTeamSnoozeDecision]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.snoozeDecision(input)),
+          ),
+        [WS_METHODS.projectTeamUnsnoozeDecision]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.unsnoozeDecision(input)),
+          ),
         [WS_METHODS.projectTeamAskLead]: (input) =>
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.askLead(input)),

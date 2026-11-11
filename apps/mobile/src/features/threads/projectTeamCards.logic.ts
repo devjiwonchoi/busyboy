@@ -4,6 +4,7 @@ import type {
   ProjectTeamAttentionSummary,
   ThreadId,
 } from "@t3tools/contracts";
+import { isSnoozedAttention } from "@t3tools/contracts";
 import {
   parseRequestOption,
   requestSenderLabel,
@@ -31,19 +32,42 @@ const KIND_LABEL: Record<ProjectDecisionCard["item"]["kind"], string> = {
 const isOpenAnswerableCard = (card: ProjectDecisionCard) =>
   card.item.answeredAt === null && card.item.supersededAt === null;
 
+/** Open requests the user did not set aside: the ones that wait above the composer. */
+const isWaitingCard = (card: ProjectDecisionCard) =>
+  isOpenAnswerableCard(card) && !isSnoozedAttention(card.item);
+
 /**
  * Open requests for a thread: a PM chat shows its project's cards, the
  * Director's chat shows every project's, oldest first. Other threads show none.
  */
 export function openTeamCardsForThread(
-  summaries: ReadonlyArray<
-    Pick<
-      ProjectTeamAttentionSummary,
-      "projectId" | "pmThreadId" | "kind" | "decisionCards" | "tasks"
-    >
-  >,
+  summaries: TeamCardSummaries,
   threadId: ThreadId,
   projectTitleOf: (projectId: ProjectDecisionCard["item"]["projectId"]) => string,
+): ReadonlyArray<ThreadTeamCard> {
+  return teamCardsForThread(summaries, threadId, projectTitleOf, isWaitingCard);
+}
+
+/** Requests the user snoozed ("보류"), shown folded under the open ones. */
+export function snoozedTeamCardsForThread(
+  summaries: TeamCardSummaries,
+  threadId: ThreadId,
+  projectTitleOf: (projectId: ProjectDecisionCard["item"]["projectId"]) => string,
+): ReadonlyArray<ThreadTeamCard> {
+  return teamCardsForThread(summaries, threadId, projectTitleOf, (card) =>
+    isSnoozedAttention(card.item),
+  );
+}
+
+type TeamCardSummaries = ReadonlyArray<
+  Pick<ProjectTeamAttentionSummary, "projectId" | "pmThreadId" | "kind" | "decisionCards" | "tasks">
+>;
+
+function teamCardsForThread(
+  summaries: TeamCardSummaries,
+  threadId: ThreadId,
+  projectTitleOf: (projectId: ProjectDecisionCard["item"]["projectId"]) => string,
+  include: (card: ProjectDecisionCard) => boolean,
 ): ReadonlyArray<ThreadTeamCard> {
   const own = summaries.find((summary) => summary.pmThreadId === threadId);
   if (own === undefined) {
@@ -58,7 +82,7 @@ export function openTeamCardsForThread(
     (card.item.taskId === null ? undefined : taskProjects.get(card.item.taskId)) ??
     card.item.projectId;
   return shown
-    .flatMap((summary) => summary.decisionCards.filter(isOpenAnswerableCard))
+    .flatMap((summary) => summary.decisionCards.filter(include))
     .toSorted((a, b) => Date.parse(a.item.createdAt) - Date.parse(b.item.createdAt))
     .map((card) => {
       const task = summaries

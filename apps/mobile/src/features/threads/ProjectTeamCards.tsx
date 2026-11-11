@@ -35,10 +35,12 @@ import { useEnvironmentQuery } from "../../state/query";
 import {
   cardOptionLabel,
   openTeamCardsForThread,
+  snoozedTeamCardsForThread,
   splitCardQuestion,
   requestTodoRows,
   type ThreadTeamCard,
 } from "./projectTeamCards.logic";
+import { SnoozeAction, SnoozedTeamCards } from "./CardSnooze";
 import { RequestActionButton } from "./RequestActionButton";
 
 /**
@@ -54,32 +56,44 @@ export function ProjectTeamCards(props: {
 }) {
   const attention = useEnvironmentProjectTeamAttention(props.environmentId);
   const projects = useProjects();
-  const cards = useMemo(
-    () =>
-      openTeamCardsForThread([...attention.byProjectId.values()], props.threadId, (projectId) => {
-        const project = projects.find(
-          (candidate) =>
-            candidate.environmentId === props.environmentId && candidate.id === projectId,
-        );
-        return project?.title ?? "프로젝트";
-      }),
-    [attention, projects, props.environmentId, props.threadId],
-  );
-  if (cards.length === 0) {
+  const { cards, snoozed } = useMemo(() => {
+    const summaries = [...attention.byProjectId.values()];
+    const titleOf = (projectId: string) =>
+      projects.find(
+        (candidate) =>
+          candidate.environmentId === props.environmentId && candidate.id === projectId,
+      )?.title ?? "프로젝트";
+    return {
+      cards: openTeamCardsForThread(summaries, props.threadId, titleOf),
+      snoozed: snoozedTeamCardsForThread(summaries, props.threadId, titleOf),
+    };
+  }, [attention, projects, props.environmentId, props.threadId]);
+  if (cards.length === 0 && snoozed.length === 0) {
     return null;
   }
   return (
     <View className="shrink-0 gap-3 px-4 pb-3" testID="project-team-cards">
       {cards.map((entry) => (
-        <ProjectTeamCard
-          key={entry.card.item.id}
-          entry={entry}
-          environmentId={props.environmentId}
-          canOperateThread={props.canOperateThread}
-          onReply={props.onReply}
-          onOpenLead={props.onOpenLead}
-        />
+        <View key={entry.card.item.id} className="gap-1.5">
+          <ProjectTeamCard
+            entry={entry}
+            environmentId={props.environmentId}
+            canOperateThread={props.canOperateThread}
+            onReply={props.onReply}
+            onOpenLead={props.onOpenLead}
+          />
+          <SnoozeAction
+            entry={entry}
+            environmentId={props.environmentId}
+            disabled={!props.canOperateThread}
+          />
+        </View>
       ))}
+      <SnoozedTeamCards
+        entries={snoozed}
+        environmentId={props.environmentId}
+        disabled={!props.canOperateThread}
+      />
     </View>
   );
 }

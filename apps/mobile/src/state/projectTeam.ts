@@ -9,6 +9,8 @@ import type {
   ProjectId,
   ProjectTaskReference,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamSnoozeDecisionInput,
+  ProjectTeamUnsnoozeDecisionInput,
   ProjectTeamMoveTaskInput,
   ThreadId,
 } from "@t3tools/contracts";
@@ -70,6 +72,20 @@ export function useAnswerDecision() {
   const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
   return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision({ environmentId, input });
+}
+
+/** Sets a card aside with the user's reason; it leaves the waiting list until brought back. */
+export function useSnoozeDecision() {
+  const snoozeDecision = useAtomCommand(projectTeamEnvironment.snoozeDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamSnoozeDecisionInput) =>
+    snoozeDecision({ environmentId, input });
+}
+
+/** Brings a snoozed card back to the waiting list. */
+export function useUnsnoozeDecision() {
+  const unsnoozeDecision = useAtomCommand(projectTeamEnvironment.unsnoozeDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamUnsnoozeDecisionInput) =>
+    unsnoozeDecision({ environmentId, input });
 }
 
 const NO_ATTENTION_ATOM = Atom.make(EMPTY_PROJECT_TEAM_ATTENTION_INDEX);

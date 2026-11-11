@@ -104,6 +104,25 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
       },
     }),
+    // Sets a card aside with the user's reason; the attention stream then shows it snoozed.
+    snoozeDecision: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:snooze-decision",
+      tag: WS_METHODS.projectTeamSnoozeDecision,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
+      },
+    }),
+    unsnoozeDecision: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:unsnooze-decision",
+      tag: WS_METHODS.projectTeamUnsnoozeDecision,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
+      },
+    }),
     // A side chat question for the card's lead; the card itself stays as it is.
     askLead: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:ask-lead",

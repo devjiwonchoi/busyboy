@@ -11,6 +11,7 @@ import {
   isSandboxRotationDecision,
   SANDBOX_ROTATION_MOVE_LOCAL,
   SANDBOX_ROTATION_OPTIONS,
+  isSnoozedAttention,
   isTurnFailedBlocker,
   isStallBlocker,
   STALL_RESTART,
@@ -39,6 +40,7 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
+  type ProjectSnoozedAttention,
   ProjectAttentionItemId,
   PLAN_APPROVAL_START,
   planApprovalOutcome,
@@ -86,6 +88,8 @@ import {
   type ProjectTeamMemoryWriteInput,
   type ProjectTeamMemoryWriteResult,
   type ProjectTeamAnswerDecisionInput,
+  type ProjectTeamSnoozeDecisionInput,
+  type ProjectTeamUnsnoozeDecisionInput,
   type ProjectTeamAskLeadInput,
   type ProjectTeamAskLeadResult,
   type ProjectTeamRequestSitrepInput,
@@ -565,7 +569,10 @@ function toAlignableTask(
   task: ProjectTask,
   openAttention: ReadonlyArray<ProjectAttentionItem>,
 ): AlignableTask {
-  const cards = openAttention.filter((item) => item.taskId === task.id);
+  // A snoozed card is the user's own pause, not a question waiting on them.
+  const cards = openAttention.filter(
+    (item) => item.taskId === task.id && !isSnoozedAttention(item),
+  );
   return {
     id: task.id,
     projectId: task.projectId,
@@ -651,6 +658,30 @@ export function describeManagerAction(
     case "model_step":
       return `ran a step of ${task}`;
   }
+}
+
+/** Splits open cards into those still waiting and those the user snoozed. */
+export function splitSnoozedAttention(open: ReadonlyArray<ProjectAttentionItem>): {
+  readonly waiting: ReadonlyArray<ProjectAttentionItem>;
+  readonly snoozed: ReadonlyArray<ProjectSnoozedAttention>;
+} {
+  const waiting: Array<ProjectAttentionItem> = [];
+  const snoozed: Array<ProjectSnoozedAttention> = [];
+  for (const item of open) {
+    if (!isSnoozedAttention(item)) {
+      waiting.push(item);
+      continue;
+    }
+    snoozed.push({
+      id: item.id,
+      taskId: item.taskId,
+      kind: item.kind,
+      title: item.question.split("\n")[0] ?? "",
+      reason: item.snoozeReason ?? "",
+      snoozedAt: item.snoozedAt!,
+    });
+  }
+  return { waiting, snoozed };
 }
 
 /** Journal text for turning AFK on or off. */
@@ -891,6 +922,19 @@ export class ProjectTeamService extends Context.Service<
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
 
     /**
+     * projectTeam.snoozeDecision RPC: the user set an open card aside with a reason. The card
+     * stays open, the lead is not told, and AFK and the stall watch leave it alone.
+     */
+    readonly snoozeDecision: (
+      input: ProjectTeamSnoozeDecisionInput,
+    ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+
+    /** projectTeam.unsnoozeDecision RPC: the user brought a snoozed card back. */
+    readonly unsnoozeDecision: (
+      input: ProjectTeamUnsnoozeDecisionInput,
+    ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+
+    /**
      * projectTeam.askLead RPC: the user's question from a card's side chat, sent to the lead
      * that raised the card. Leaves the card, the task and its plan as they are.
      */
@@ -1021,12 +1065,14 @@ const make = Effect.gen(function* () {
   /** Live status signals per task: open questions and the lead thread's state. */
   const liveTaskSignals = (
     tasks: ReadonlyArray<ProjectTask>,
-    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId" | "kind">>,
+    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId" | "kind" | "snoozedAt">>,
   ) =>
     Effect.gen(function* () {
-      const asking = new Set(openAttention.map((item) => item.taskId));
+      // Snoozed cards don't make their task wait on the user.
+      const waiting = openAttention.filter((item) => (item.snoozedAt ?? null) === null);
+      const asking = new Set(waiting.map((item) => item.taskId));
       const blocked = new Set(
-        openAttention.filter((item) => item.kind === "blocker").map((item) => item.taskId),
+        waiting.filter((item) => item.kind === "blocker").map((item) => item.taskId),
       );
       const entries = yield* Effect.forEach(
         tasks,
@@ -1435,15 +1481,17 @@ const make = Effect.gen(function* () {
         projectId,
         stages: ["awaiting_approval"],
       });
+      const open = yield* repository.listOpenAttentionItems({ projectId });
+      // A snoozed card is the user's own pause: AFK never answers it or approves its plan.
+      const snoozedTasks = new Set(open.filter(isSnoozedAttention).map((item) => item.taskId));
       for (const task of waitingPlans) {
-        if (!due(task.stageChangedAt)) continue;
+        if (!due(task.stageChangedAt) || snoozedTasks.has(task.id)) continue;
         yield* autoApprovePlan(task);
         changed = true;
       }
-      const open = yield* repository.listOpenAttentionItems({ projectId });
       // Plan cards were answered with their tasks above; blockers wait for the user.
       for (const item of open) {
-        if (item.kind !== "decision" || !due(item.createdAt)) continue;
+        if (item.kind !== "decision" || isSnoozedAttention(item) || !due(item.createdAt)) continue;
         const answer = afkPickOption(item.options) ?? AFK_FREE_FORM_ANSWER;
         yield* router.answer({
           item,
@@ -3514,7 +3562,8 @@ const make = Effect.gen(function* () {
           projectId: role.projectId,
           taskId: task.id,
         });
-        const existing = open.find((item) => item.kind === "blocker");
+        // A blocker the user snoozed would hide the escalation, so raise a new one.
+        const existing = open.find((item) => item.kind === "blocker" && !isSnoozedAttention(item));
         if (existing !== undefined) {
           return { status: "escalated", task, attentionItem: existing } as const;
         }
@@ -3622,10 +3671,13 @@ const make = Effect.gen(function* () {
       const briefs = (stage: ProjectTaskStage) =>
         tasks.filter((task) => task.stage === stage).map(brief);
       const changedSince = (task: ProjectTask) => isoMillis(task.stageChangedAt) > sinceMs;
-      const newAttention: ReadonlyArray<ProjectAttentionItem> =
+      const { waiting, snoozed } = splitSnoozedAttention(openAttention);
+      // Snoozed cards are the user's own pause, not new work waiting on them.
+      const newAttention: ReadonlyArray<ProjectAttentionItem> = (
         since === null
           ? openAttention
-          : yield* repository.listAttentionItemsSince({ projectId, since });
+          : yield* repository.listAttentionItemsSince({ projectId, since })
+      ).filter((item) => !isSnoozedAttention(item));
       const journal = buildJournal({
         tasks,
         endings: yield* repository.listRecentTaskEndings({ projectId, limit: JOURNAL_LIMIT }),
@@ -3661,7 +3713,8 @@ const make = Effect.gen(function* () {
         stalled: tasks
           .filter((task) => task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage))
           .map(brief),
-        openAttention,
+        openAttention: waiting,
+        snoozedAttention: snoozed,
         settings: manager.settings,
         changes: {
           since,
@@ -3712,6 +3765,7 @@ const make = Effect.gen(function* () {
           projectId: manager.projectId,
         });
         const brief = yield* liveTaskSignals(tasks, openAttention);
+        const { waiting, snoozed } = splitSnoozedAttention(openAttention);
         const briefs = tasks.map(brief);
         for (const item of briefs) briefById.set(item.id, item);
         alignable.push(...tasks.map((task) => toAlignableTask(task, openAttention)));
@@ -3727,7 +3781,8 @@ const make = Effect.gen(function* () {
           taskKeyPrefix: prefix,
           statusCounts: countTaskStatuses(briefs),
           openTasks: briefs.filter((item) => item.stage !== "done" && item.stage !== "cancelled"),
-          openAttention,
+          openAttention: waiting,
+          snoozedAttention: snoozed,
           summary: summary?.content ?? null,
         });
       }
@@ -4346,7 +4401,12 @@ const make = Effect.gen(function* () {
         const reference = matchRequestReference(referenceText, openItems);
         if (reference.kind !== "link" && reference.kind !== "words") {
           return yield* teamError(
-            `Which open request is this reply for? Ask the user to choose:\n${openItems.map((item) => formatRequestLink(item.id, parseRequestMessage(item.question).headline)).join("\n")}`,
+            `Which open request is this reply for? Ask the user to choose:\n${openItems
+              .filter((item) => !isSnoozedAttention(item))
+              .map((item) =>
+                formatRequestLink(item.id, parseRequestMessage(item.question).headline),
+              )
+              .join("\n")}`,
             role.projectId,
           );
         }
@@ -4871,6 +4931,74 @@ const make = Effect.gen(function* () {
       yield* afterPlanApprovalAnswer(answered, null);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
+
+  /** Sets an open card aside (reason) or brings it back (null); the lead hears nothing. */
+  const setSnooze = (
+    input: { readonly projectId: ProjectId; readonly attentionItemId: ProjectAttentionItemId },
+    reason: string | null,
+  ) =>
+    Effect.gen(function* () {
+      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      if (Option.isNone(item) || item.value.projectId !== input.projectId) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} was not found in this project.`,
+          input.projectId,
+        );
+      }
+      if (reason !== null && reason.trim().length === 0) {
+        return yield* teamError("A snooze needs a reason.", input.projectId);
+      }
+      // Only an open card can be set aside, and only a snoozed one can come back.
+      if (item.value.answeredAt !== null || item.value.supersededAt !== null) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is already closed.`,
+          input.projectId,
+        );
+      }
+      const snoozed = isSnoozedAttention(item.value);
+      if (reason !== null && snoozed) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is already snoozed.`,
+          input.projectId,
+        );
+      }
+      if (reason === null && !snoozed) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is not snoozed.`,
+          input.projectId,
+        );
+      }
+      const updated = yield* repository.snoozeAttentionItem({
+        id: item.value.id,
+        snoozedAt: reason === null ? null : yield* nowIso,
+        reason: reason === null ? null : reason.trim(),
+      });
+      if (Option.isNone(updated)) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is already closed.`,
+          input.projectId,
+        );
+      }
+      if (updated.value.taskId !== null) {
+        const task = yield* requireAnyTask(updated.value.taskId, updated.value.projectId);
+        yield* appendEvent(
+          task,
+          "note",
+          reason === null
+            ? "사용자가 보류한 카드를 다시 꺼냈어요."
+            : `사용자가 카드를 보류했어요: ${clip(reason.trim(), 200)}`,
+          null,
+        );
+      }
+      yield* router.publish(updated.value.projectId);
+      return { item: updated.value };
+    });
+
+  const snoozeDecision: ProjectTeamService["Service"]["snoozeDecision"] = (input) =>
+    setSnooze(input, input.reason).pipe(orTeamError("Could not snooze the card.", input.projectId));
+
+  const unsnoozeDecision: ProjectTeamService["Service"]["unsnoozeDecision"] = (input) =>
+    setSnooze(input, null).pipe(orTeamError("Could not bring the card back.", input.projectId));
 
   const askLead: ProjectTeamService["Service"]["askLead"] = (input) =>
     Effect.gen(function* () {
@@ -5688,7 +5816,9 @@ const make = Effect.gen(function* () {
       const isStalled = (task: ProjectTask) =>
         task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage);
       const live = tasks.filter((task) => LIVE_TASK_STAGES.has(task.stage));
-      const askingTaskIds = new Set(openAttention.map((item) => item.taskId));
+      const askingTaskIds = new Set(
+        openAttention.filter((item) => !isSnoozedAttention(item)).map((item) => item.taskId),
+      );
       // Running means a lead is working: not in review, not stalled, not waiting on the user.
       const running = tasks.filter(
         (task) =>
@@ -5710,7 +5840,8 @@ const make = Effect.gen(function* () {
       return {
         running: running.length,
         // Same unit as the summary's openCount: open questions, not tasks.
-        waitingOnUser: openAttention.length + otherThreadsWaiting,
+        waitingOnUser:
+          openAttention.filter((item) => !isSnoozedAttention(item)).length + otherThreadsWaiting,
         stalled: live.filter(isStalled).length,
         inbox: tasks.filter((task) => task.stage === "inbox").length,
         nextSitrepAt,
@@ -5951,7 +6082,9 @@ const make = Effect.gen(function* () {
             ...(manager.kind === "director"
               ? { kind: "director" as const, briefing: briefingLine }
               : {}),
-            openCount: open.length + otherThreadsWaiting,
+            // A snoozed card stays on decisionCards (marked) but no longer counts as waiting.
+            openCount:
+              open.filter((item) => !isSnoozedAttention(item)).length + otherThreadsWaiting,
             latestBatchId: Option.isSome(latestItem) ? latestItem.value.batchId : null,
             latestSitrepId: Option.isSome(latestPosted) ? latestPosted.value.id : null,
             unreadSitrepCount: yield* repository.countUnreadSitreps(projectId),
@@ -5985,8 +6118,13 @@ const make = Effect.gen(function* () {
                   : (task.memoryHold ?? null),
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
-              openQuestion: open.some((item) => item.taskId === task.id),
-              openBlocker: open.some((item) => item.taskId === task.id && item.kind === "blocker"),
+              openQuestion: open.some(
+                (item) => item.taskId === task.id && !isSnoozedAttention(item),
+              ),
+              openBlocker: open.some(
+                (item) =>
+                  item.taskId === task.id && item.kind === "blocker" && !isSnoozedAttention(item),
+              ),
               ready: task.ready !== null,
               updatedAt: task.updatedAt,
               iterateRound: task.iterateRound,
@@ -6125,7 +6263,8 @@ const make = Effect.gen(function* () {
           projectId: current.projectId,
           taskId: current.id,
         });
-        if (open.length > 0) return Option.none();
+        // A snoozed card must not hide a new denial from the user.
+        if (open.some((item) => !isSnoozedAttention(item))) return Option.none();
         const card = permissionBlockerCard({
           who: `${yield* keyOf(current)} ${current.title}`,
           denial: input.denial,
@@ -6149,7 +6288,9 @@ const make = Effect.gen(function* () {
       }
       const projectId = manager.value.projectId;
       const open = yield* repository.listOpenAttentionItems({ projectId });
-      if (open.some((item) => item.askerThreadId === input.threadId)) return Option.none();
+      if (open.some((item) => item.askerThreadId === input.threadId && !isSnoozedAttention(item))) {
+        return Option.none();
+      }
       const card = permissionBlockerCard({
         who: resolvePersona(projectId, manager.value.settings).name,
         denial: input.denial,
@@ -6235,6 +6376,8 @@ const make = Effect.gen(function* () {
     moveTask,
     delegateStep,
     answerDecision,
+    snoozeDecision,
+    unsnoozeDecision,
     askLead,
     answerAttention,
     dismissAttention,
