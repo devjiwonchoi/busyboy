@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 const PM = ThreadId.make("pm");
+const DIRECTOR = ThreadId.make("director");
 const LEAD = ThreadId.make("lead");
 const PLAN =
   "목표 그래프 플랜 승인 부탁드려요.\n\n격자를 별자리 모양으로 바꾸고, 목표별 정보는 옆 패널로 옮길게요. 지금은 이름이 잘리고 폰에선 점만 보여서요.\n\n같은 데이터면 늘 같은 모양으로 뜨고, 태스크 150개에서도 안 버벅이고, 웹이랑 모바일 둘 다 되면 끝이에요. 비용은 $6~9 정도고 되돌리기 쉬워요.";
@@ -104,6 +105,13 @@ const summaries = [
     pmThreadId: PM,
     tasks: [{ id: "task", leadThreadId: LEAD }],
     decisionCards: [approval, decision],
+  },
+  {
+    projectId: "director-project" as never,
+    pmThreadId: DIRECTOR,
+    kind: "director" as const,
+    tasks: [],
+    decisionCards: [],
   },
 ];
 
@@ -171,7 +179,9 @@ vi.mock("../../state/entities", () => ({
 }));
 vi.mock("../../state/projectTeam", () => ({
   projectTeamEnvironment: { taskDetail: () => "task-detail" },
-  useEnvironmentProjectTeamAttention: () => ({ byProjectId: new Map([["a", summaries[0]]]) }),
+  useEnvironmentProjectTeamAttention: () => ({
+    byProjectId: new Map(summaries.map((summary) => [summary.projectId, summary])),
+  }),
   useAnswerDecision: () => mocks.answer,
 }));
 vi.mock("../../state/query", () => ({
@@ -183,7 +193,11 @@ let root: Root | null = null;
 let host: HTMLDivElement;
 const reply = vi.fn();
 const openLead = vi.fn();
-function render(card: ProjectDecisionCard | null, canOperateThread: boolean) {
+function render(
+  card: ProjectDecisionCard | null,
+  canOperateThread: boolean,
+  threadId: ThreadId = PM,
+) {
   host = document.createElement("div");
   root = createRoot(host);
   const props = {
@@ -195,7 +209,7 @@ function render(card: ProjectDecisionCard | null, canOperateThread: boolean) {
   act(() =>
     root!.render(
       card === null ? (
-        <ProjectTeamCards {...props} threadId={PM} />
+        <ProjectTeamCards {...props} threadId={threadId} />
       ) : (
         <ProjectTeamCard
           {...props}
@@ -243,6 +257,20 @@ describe("ProjectTeamCards", () => {
     expect(host.querySelector(".line-through")?.textContent).toBe("1. 배치 바꾸기");
     expect(host.textContent).toContain("4. 릴리스 노트 게시");
     expect(host.querySelectorAll('[role="radio"]')).toHaveLength(0);
+  });
+  it("shows another project's plan approval in the Director chat and approves it there", async () => {
+    render(null, true, DIRECTOR);
+    const bubble = [...host.querySelectorAll('[data-testid="request-bubble"]')].find((element) =>
+      element.textContent?.includes("목표 그래프 플랜 승인 부탁드려요."),
+    );
+    expect(bubble).toBeDefined();
+    expect(host.textContent).toContain("busyboy · 목표 그래프 리드");
+    await act(async () => button("승인").click());
+    expect(mocks.answer).toHaveBeenCalledWith("env", {
+      projectId: "a",
+      attentionItemId: "approval",
+      answer: "Approve and start",
+    });
   });
   it("approves a plan with Approve and start", async () => {
     render(approval, true);
