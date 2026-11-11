@@ -13,6 +13,7 @@ import type {
 import {
   approvalPlanOf,
   effectiveRoleModel,
+  isSnoozedAttention,
   newProjectTaskTodo,
   PROJECT_TASK_MODEL_ROLES,
 } from "@t3tools/contracts";
@@ -152,10 +153,12 @@ function TaskPlanBody(props: {
   const isLatest = shown.version === latest.version;
   const previous = versions.find((version) => version.version === shown.version - 1) ?? null;
   const spec = shown.spec;
+  // A snoozed card is the user's own pause, so it doesn't make the task wait on them.
+  const waitingAttention = detail.openAttention.filter((item) => !isSnoozedAttention(item));
   const status = useLiveTaskStatus(environmentId, {
     ...task,
-    openQuestion: detail.openAttention.length > 0,
-    openBlocker: detail.openAttention.some((item) => item.kind === "blocker"),
+    openQuestion: waitingAttention.length > 0,
+    openBlocker: waitingAttention.some((item) => item.kind === "blocker"),
     ready: task.ready !== null,
   });
   const archived = task.stage === "done" || task.stage === "cancelled";
@@ -334,18 +337,24 @@ function TaskPlanBody(props: {
       {props.pmThreadId !== null && detail.openAttention.length > 0 ? (
         <section className="mt-5 flex flex-col gap-3" aria-label="Waiting on you">
           {detail.openAttention.map((item) => (
-            <DecisionCard
-              key={item.id}
-              card={{
-                item,
-                taskNumber: task.number,
-                taskTitle: task.title,
-                plan: planFor(item),
-              }}
-              environmentId={environmentId}
-              threadRef={scopeThreadRef(environmentId, props.pmThreadId!)}
-              cwd={undefined}
-            />
+            <div key={item.id} className="min-w-0">
+              {isSnoozedAttention(item) ? (
+                <p data-task-snoozed-card={item.id} className="mb-1 text-muted-foreground text-xs">
+                  보류 중 · 이유: {item.snoozeReason ?? ""}
+                </p>
+              ) : null}
+              <DecisionCard
+                card={{
+                  item,
+                  taskNumber: task.number,
+                  taskTitle: task.title,
+                  plan: planFor(item),
+                }}
+                environmentId={environmentId}
+                threadRef={scopeThreadRef(environmentId, props.pmThreadId!)}
+                cwd={undefined}
+              />
+            </div>
           ))}
         </section>
       ) : null}

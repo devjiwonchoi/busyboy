@@ -1,5 +1,6 @@
 import {
   formatTaskKey,
+  isSnoozedAttention,
   type EnvironmentId,
   type ProjectId,
   type ProjectAttentionKind,
@@ -178,12 +179,20 @@ export function taskForLeadThread(
 export const isOpenDecisionCard = (card: ProjectDecisionCard): boolean =>
   card.item.answeredAt === null && card.item.supersededAt === null;
 
+/** An open card the user set aside: it stays answerable but leaves the waiting list. */
+export const isSnoozedDecisionCard = (card: ProjectDecisionCard): boolean =>
+  isSnoozedAttention(card.item);
+
+/** Open and not snoozed: what the waiting list and its count show. */
+export const isWaitingDecisionCard = (card: ProjectDecisionCard): boolean =>
+  isOpenDecisionCard(card) && !isSnoozedDecisionCard(card);
+
 /** Something waiting on the user, as the pending bar above the composer lists it. */
 export type PendingActionItem =
   | { readonly kind: "card"; readonly id: string; readonly label: string }
   | { readonly kind: "thread"; readonly threadId: ThreadId; readonly label: string };
 
-const CARD_LABEL: Record<ProjectAttentionKind, string> = {
+export const CARD_LABEL: Record<ProjectAttentionKind, string> = {
   approval: "승인 대기",
   decision: "결정 필요",
   blocker: "블로커",
@@ -201,7 +210,7 @@ export function pendingActionItems(input: {
   readonly waitingThreads: ReadonlyArray<ProjectWaitingThread>;
 }): ReadonlyArray<PendingActionItem> {
   return [
-    ...input.cards.filter(isOpenDecisionCard).map((card): PendingActionItem => ({
+    ...input.cards.filter(isWaitingDecisionCard).map((card): PendingActionItem => ({
       kind: "card",
       id: card.item.id,
       label: `${CARD_LABEL[card.item.kind]}: ${card.taskTitle}`,

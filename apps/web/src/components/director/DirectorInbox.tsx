@@ -6,10 +6,11 @@ import { useEffect, useRef } from "react";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { useDirectorInbox } from "~/state/director";
 import { useProjects } from "~/state/entities";
-import { pendingActionItems } from "~/state/projectTeam.logic";
+import { CARD_LABEL, pendingActionItems } from "~/state/projectTeam.logic";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { taskRouteParams } from "~/taskRoutes";
 import { useAttentionTask } from "../chat/AttentionContext";
+import { SnoozableCard, SnoozedCards } from "../chat/CardSnooze";
 import { DecisionCard } from "../chat/DecisionCard";
 import type { DirectorInboxGroup } from "./directorInbox.logic";
 
@@ -81,7 +82,7 @@ export function DirectorInbox(props: {
   /** In the Director's chat: jump to one of the Director's own cards in its timeline. */
   onRevealDirectorCard?: (cardId: string) => void;
 }) {
-  const { groups, total } = useDirectorInbox();
+  const { groups, total, snoozedTotal } = useDirectorInbox();
   const titleOf = useDirectorInboxTitles();
   const navigate = useNavigate();
   const now = Date.parse(`${useNowMinute()}:00.000Z`);
@@ -110,7 +111,7 @@ export function DirectorInbox(props: {
     };
   }, [props.highlightCardId]);
 
-  if (total === 0) {
+  if (total === 0 && snoozedTotal === 0) {
     return props.showEmpty ? (
       <p className="text-muted-foreground text-sm">기다리는 일이 없어요</p>
     ) : null;
@@ -121,7 +122,11 @@ export function DirectorInbox(props: {
       {props.showHeading === false ? null : (
         <h2 className="font-semibold text-base">나를 기다리는 일 {total}</h2>
       )}
+      {total === 0 && props.showEmpty ? (
+        <p className="text-muted-foreground text-sm">기다리는 일이 없어요</p>
+      ) : null}
       {groups.map((group) => {
+        if (group.total === 0) return null;
         // Korean elapsed labels avoid the shared formatter's English suffixes.
         const minutes =
           group.oldestAt === null
@@ -149,26 +154,29 @@ export function DirectorInbox(props: {
             </h3>
             {group.cards.map((card) => (
               <div key={card.item.id} className="min-w-0">
-                <div className="mb-1 flex items-center gap-2 text-muted-foreground text-xs">
-                  <p className="min-w-0 flex-1 break-words">
-                    <InboxTaskLink card={card} group={group} onNavigate={props.onNavigate} />
-                  </p>
-                  {group.isDirector && props.onRevealDirectorCard ? (
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-md px-2 py-1 text-foreground hover:bg-muted"
-                      onClick={() => props.onRevealDirectorCard?.(card.item.id)}
-                    >
-                      채팅에서 보기
-                    </button>
-                  ) : null}
-                </div>
-                <DecisionCard
+                <SnoozableCard
                   card={card}
                   environmentId={group.environmentId}
-                  threadRef={scopeThreadRef(group.environmentId, group.pmThreadId)}
-                  cwd={undefined}
-                />
+                  label={<InboxTaskLink card={card} group={group} onNavigate={props.onNavigate} />}
+                  actions={
+                    group.isDirector && props.onRevealDirectorCard ? (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-md px-2 py-1 text-foreground hover:bg-muted"
+                        onClick={() => props.onRevealDirectorCard?.(card.item.id)}
+                      >
+                        채팅에서 보기
+                      </button>
+                    ) : null
+                  }
+                >
+                  <DecisionCard
+                    card={card}
+                    environmentId={group.environmentId}
+                    threadRef={scopeThreadRef(group.environmentId, group.pmThreadId)}
+                    cwd={undefined}
+                  />
+                </SnoozableCard>
               </div>
             ))}
             {group.waitingThreads.map((thread) => (
@@ -199,6 +207,15 @@ export function DirectorInbox(props: {
           </div>
         );
       })}
+      <SnoozedCards
+        entries={groups.flatMap((group) =>
+          group.snoozed.map((card) => ({
+            card,
+            environmentId: group.environmentId,
+            label: `${titleOf(group)} · ${CARD_LABEL[card.item.kind]}: ${card.taskTitle}`,
+          })),
+        )}
+      />
     </section>
   );
 }

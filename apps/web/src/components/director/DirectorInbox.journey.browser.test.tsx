@@ -5,6 +5,8 @@ import {
   PLAN_APPROVAL_START,
   type ProjectDecisionCard,
   type ProjectTeamAnswerDecisionInput,
+  type ProjectTeamSnoozeDecisionInput,
+  type ProjectTeamUnsnoozeDecisionInput,
 } from "@t3tools/contracts";
 import {
   createMemoryHistory,
@@ -39,8 +41,29 @@ const state = vi.hoisted(() => ({
   managers: [] as ProjectManagerEntry[],
   listeners: new Set<() => void>(),
   answers: [] as ProjectTeamAnswerDecisionInput[],
+  snoozes: [] as ProjectTeamSnoozeDecisionInput[],
   revealed: [] as string[],
 }));
+
+/** Mirrors ProjectTeamService.snoozeDecision: the card stays open, marked snoozed. */
+function publishSnooze(id: string, reason: string | null) {
+  state.managers = state.managers.map((entry) => ({
+    ...entry,
+    summary: {
+      ...entry.summary,
+      decisionCards: entry.summary.decisionCards.map((card) =>
+        card.item.id === id
+          ? {
+              ...card,
+              item: { ...card.item, snoozedAt: reason === null ? null : AT, snoozeReason: reason },
+            }
+          : card,
+      ),
+    },
+  }));
+  for (const listener of state.listeners) listener();
+  return AsyncResult.success({});
+}
 
 vi.mock(import("~/state/projectTeam"), async (original) => ({
   ...(await original()),
@@ -59,6 +82,14 @@ vi.mock(import("~/state/projectTeam"), async (original) => ({
       state.answers.push(input);
       return AsyncResult.success({});
     }) as never,
+  useSnoozeDecision: (() =>
+    async (_environmentId: unknown, input: ProjectTeamSnoozeDecisionInput) => {
+      state.snoozes.push(input);
+      return publishSnooze(input.attentionItemId, input.reason);
+    }) as never,
+  useUnsnoozeDecision: (() =>
+    async (_environmentId: unknown, input: ProjectTeamUnsnoozeDecisionInput) =>
+      publishSnooze(input.attentionItemId, null)) as never,
 }));
 vi.mock(import("~/state/environments"), async (original) => ({
   ...(await original()),
@@ -203,6 +234,7 @@ let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.answers = [];
+  state.snoozes = [];
   state.revealed = [];
   state.managers = [
     {
@@ -569,4 +601,61 @@ it("does not present the Director's chat project as an unresolved task's owner",
   );
   expect(container.querySelector("[data-director-inbox-task-link]")).toBeNull();
   expect(container.querySelector("[data-attention-task-link]")).toBeNull();
+});
+
+describe("director waiting list snooze", () => {
+  it("snoozes a card with a reason into 보류 and brings it back", async () => {
+    await page.viewport(1280, 844);
+    await renderChat("pm-director");
+    await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 6개"));
+    const dialog = await openPendingActions();
+    const row = () => cardIn(dialog, "결정").parentElement!;
+
+    await act(async () =>
+      userEvent.click(row().querySelector<HTMLElement>("[data-snooze-button]")!),
+    );
+    const input = await vi.waitFor(() => {
+      const element = row().querySelector<HTMLInputElement>("[data-snooze-reason-input]");
+      expect(element).not.toBeNull();
+      expect(document.activeElement).toBe(element);
+      return element!;
+    });
+    expect(row().querySelector<HTMLButtonElement>("[data-snooze-submit]")!.disabled).toBe(true);
+    await act(async () => userEvent.type(input, "디자인 정리하고 볼게"));
+    await vi.waitFor(() => expect(input.value).toBe("디자인 정리하고 볼게"));
+    await page.screenshot({ path: "__screenshots__/director-snooze-reason-1280.png" });
+    await act(async () =>
+      userEvent.click(row().querySelector<HTMLButtonElement>("[data-snooze-submit]")!),
+    );
+    expect(state.snoozes).toEqual([
+      { projectId: "a", attentionItemId: "결정", reason: "디자인 정리하고 볼게" },
+    ]);
+
+    const section = await vi.waitFor(() => {
+      expect(pendingButton()?.textContent).toBe("기다리는 일 5개");
+      expect(
+        dialog.querySelectorAll("[data-director-inbox-project] [data-decision-card]"),
+      ).toHaveLength(3);
+      const element = dialog.querySelector<HTMLDetailsElement>("[data-snoozed-section]");
+      expect(element?.querySelector("summary")?.textContent).toBe("보류 1");
+      return element!;
+    });
+    await act(async () => userEvent.click(section.querySelector("summary")!));
+    await vi.waitFor(() => {
+      expect(section.open).toBe(true);
+      expect(section.textContent).toContain("프로젝트 A · 결정 필요: 결정 작업");
+      expect(section.textContent).toContain("이유: 디자인 정리하고 볼게");
+    });
+    section.scrollIntoView({ block: "end" });
+    await page.screenshot({ path: "__screenshots__/director-snoozed-list-1280.png" });
+
+    await act(async () =>
+      userEvent.click(section.querySelector<HTMLElement>("[data-unsnooze-button]")!),
+    );
+    await vi.waitFor(() => {
+      expect(pendingButton()?.textContent).toBe("기다리는 일 6개");
+      expect(dialog.querySelector("[data-snoozed-section]")).toBeNull();
+      expect(cardIn(dialog, "결정")).not.toBeNull();
+    });
+  });
 });

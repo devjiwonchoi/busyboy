@@ -11,10 +11,11 @@ import { BellDotIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useDirectorInbox } from "~/state/director";
-import { pendingActionItems } from "~/state/projectTeam.logic";
+import { isSnoozedDecisionCard, pendingActionItems } from "~/state/projectTeam.logic";
 import { DirectorInbox } from "../director/DirectorInbox";
 import { Button } from "../ui/button";
 import { Dialog, DialogClose, DialogPopup, DialogTitle } from "../ui/dialog";
+import { SnoozableCard, SnoozedCards } from "./CardSnooze";
 import { DecisionCard } from "./DecisionCard";
 
 const HIGHLIGHT_MS = 1800;
@@ -63,30 +64,44 @@ export function revealDecisionCard(list: LegendListRef | null, cardId: string): 
 /** A pill beside "Scroll to end" that opens every waiting item in a dialog. */
 export function PendingActionsPill(props: {
   count: number;
+  /** Cards the user snoozed; with nothing else waiting the pill offers only "보류 N". */
+  snoozedCount?: number;
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const pulse = useWaitingPulse(props.count);
-  if (props.count === 0) {
+  const snoozed = props.snoozedCount ?? 0;
+  if (props.count === 0 && snoozed === 0) {
     // The last item was answered: close, so the next item doesn't reopen the dialog.
     if (open) setOpen(false);
     return null;
   }
   const close = () => setOpen(false);
+  const waiting = props.count > 0;
   return (
     <>
       <Button
-        aria-label={`기다리는 일 ${props.count}개 보기`}
+        aria-label={waiting ? `기다리는 일 ${props.count}개 보기` : `보류 ${snoozed}개 보기`}
         data-pending-actions-button={props.count}
         data-waiting-pulse={pulse}
         onPointerDown={(event) => event.preventDefault()}
         onClick={() => setOpen(true)}
-        className="pointer-events-auto border-warning/40 bg-warning/15 text-warning-foreground"
+        className={
+          waiting
+            ? "pointer-events-auto border-warning/40 bg-warning/15 text-warning-foreground"
+            : "pointer-events-auto text-muted-foreground"
+        }
         size="xs"
         variant="glass"
       >
-        <BellDotIcon className="size-3.5 text-warning-foreground" />
-        기다리는 일 {props.count}개
+        {waiting ? (
+          <>
+            <BellDotIcon className="size-3.5 text-warning-foreground" />
+            기다리는 일 {props.count}개
+          </>
+        ) : (
+          <>보류 {snoozed}</>
+        )}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogPopup
@@ -117,8 +132,9 @@ export function ThreadPendingActions(props: {
 }) {
   const items = pendingActionItems({ cards: props.cards, waitingThreads: props.waitingThreads });
   const cardsById = new Map(props.cards.map((card) => [card.item.id as string, card]));
+  const snoozed = props.cards.filter(isSnoozedDecisionCard);
   return (
-    <PendingActionsPill count={items.length}>
+    <PendingActionsPill count={items.length} snoozedCount={snoozed.length}>
       {(close) => (
         <div className="flex min-w-0 flex-col gap-4">
           {items.map((item) => {
@@ -126,23 +142,26 @@ export function ThreadPendingActions(props: {
               const card = cardsById.get(item.id);
               return card === undefined ? null : (
                 <div key={item.id} data-pending-actions-card={item.id} className="min-w-0">
-                  <div className="mb-1 flex items-center gap-2 text-xs">
-                    <span className="min-w-0 flex-1 break-words text-muted-foreground">
-                      {item.label}
-                    </span>
-                    <RevealInChatButton
-                      onClick={() => {
-                        close();
-                        props.onRevealCard(item.id);
-                      }}
-                    />
-                  </div>
-                  <DecisionCard
+                  <SnoozableCard
                     card={card}
                     environmentId={props.environmentId}
-                    threadRef={props.threadRef}
-                    cwd={props.cwd}
-                  />
+                    label={item.label}
+                    actions={
+                      <RevealInChatButton
+                        onClick={() => {
+                          close();
+                          props.onRevealCard(item.id);
+                        }}
+                      />
+                    }
+                  >
+                    <DecisionCard
+                      card={card}
+                      environmentId={props.environmentId}
+                      threadRef={props.threadRef}
+                      cwd={props.cwd}
+                    />
+                  </SnoozableCard>
                 </div>
               );
             }
@@ -166,6 +185,9 @@ export function ThreadPendingActions(props: {
               </div>
             );
           })}
+          <SnoozedCards
+            entries={snoozed.map((card) => ({ card, environmentId: props.environmentId }))}
+          />
         </div>
       )}
     </PendingActionsPill>
@@ -187,9 +209,9 @@ function RevealInChatButton(props: { onClick: () => void }) {
 
 /** The Director chat: everything waiting across every project. */
 export function DirectorPendingActions(props: { onRevealCard: (cardId: string) => void }) {
-  const { total } = useDirectorInbox();
+  const { total, snoozedTotal } = useDirectorInbox();
   return (
-    <PendingActionsPill count={total}>
+    <PendingActionsPill count={total} snoozedCount={snoozedTotal}>
       {(close) => (
         <DirectorInbox
           highlightCardId={null}

@@ -17,6 +17,8 @@ import type {
   ProjectDecisionCard,
   ProjectId,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamSnoozeDecisionInput,
+  ProjectTeamUnsnoozeDecisionInput,
   ProjectTeamAskLeadInput,
   ProjectTeamMoveTaskInput,
   ProjectTeamRestoreTaskSpecInput,
@@ -272,6 +274,20 @@ export function useAnswerDecision() {
   const answerDecision = useAtomCommand(projectTeamEnvironment.answerDecision);
   return (environmentId: EnvironmentId, input: ProjectTeamAnswerDecisionInput) =>
     answerDecision({ environmentId, input });
+}
+
+/** Sets a card aside with the user's reason; it leaves the waiting list until brought back. */
+export function useSnoozeDecision() {
+  const snoozeDecision = useAtomCommand(projectTeamEnvironment.snoozeDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamSnoozeDecisionInput) =>
+    snoozeDecision({ environmentId, input });
+}
+
+/** Brings a snoozed card back to the waiting list. */
+export function useUnsnoozeDecision() {
+  const unsnoozeDecision = useAtomCommand(projectTeamEnvironment.unsnoozeDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamUnsnoozeDecisionInput) =>
+    unsnoozeDecision({ environmentId, input });
 }
 
 /** Asks the lead that raised a card a question from the card's side chat. */
