@@ -96,3 +96,16 @@ it("counts only open cards and stable environment-scoped waiting threads", () =>
     "thread:remote:thread",
   ]);
 });
+
+it("leaves snoozed cards out of the waiting count and alerts", () => {
+  const item = (id: string, snoozedAt: string | null) => ({
+    item: { id, answeredAt: null, supersededAt: null, snoozedAt },
+  });
+  const summary = {
+    decisionCards: [item("open", null), item("later", "2026-11-11T00:00:00.000Z")],
+    waitingThreads: [],
+  } as unknown as ProjectTeamAttentionSummary;
+  const { keys, total } = waitingItemKeys([{ environmentId: "local", summary }]);
+  expect(total).toBe(1);
+  expect([...keys]).toEqual(["card:local:open"]);
+});

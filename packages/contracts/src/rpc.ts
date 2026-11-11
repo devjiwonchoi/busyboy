@@ -341,6 +341,8 @@ import {
   ProjectTeamAttentionSnapshot,
   ProjectTeamError,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamSnoozeDecisionInput,
+  ProjectTeamUnsnoozeDecisionInput,
   ProjectTeamAskLeadInput,
   ProjectTeamAskLeadResult,
   ProjectTeamAttentionItemResult,
@@ -525,6 +527,8 @@ export const WS_METHODS = {
   projectTeamSubscribeAttention: "projectTeam.subscribeAttention",
   projectTeamRequestSitrep: "projectTeam.requestSitrep",
   projectTeamAnswerDecision: "projectTeam.answerDecision",
+  projectTeamSnoozeDecision: "projectTeam.snoozeDecision",
+  projectTeamUnsnoozeDecision: "projectTeam.unsnoozeDecision",
   projectTeamAskLead: "projectTeam.askLead",
   projectTeamUpdateSettings: "projectTeam.updateSettings",
   projectTeamGetTask: "projectTeam.getTask",
@@ -1842,6 +1846,18 @@ const WsProjectTeamAnswerDecisionRpc = Rpc.make(WS_METHODS.projectTeamAnswerDeci
   error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
 });
 
+const WsProjectTeamSnoozeDecisionRpc = Rpc.make(WS_METHODS.projectTeamSnoozeDecision, {
+  payload: ProjectTeamSnoozeDecisionInput,
+  success: ProjectTeamAttentionItemResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamUnsnoozeDecisionRpc = Rpc.make(WS_METHODS.projectTeamUnsnoozeDecision, {
+  payload: ProjectTeamUnsnoozeDecisionInput,
+  success: ProjectTeamAttentionItemResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
 const WsProjectTeamAskLeadRpc = Rpc.make(WS_METHODS.projectTeamAskLead, {
   payload: ProjectTeamAskLeadInput,
   success: ProjectTeamAskLeadResult,
@@ -1987,6 +2003,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectTeamSubscribeAttentionRpc,
   WsProjectTeamRequestSitrepRpc,
   WsProjectTeamAnswerDecisionRpc,
+  WsProjectTeamSnoozeDecisionRpc,
+  WsProjectTeamUnsnoozeDecisionRpc,
   WsProjectTeamAskLeadRpc,
   WsProjectTeamUpdateSettingsRpc,
   WsProjectTeamGetTaskRpc,

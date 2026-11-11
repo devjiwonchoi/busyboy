@@ -6,6 +6,7 @@
 
 import {
   formatTaskKey,
+  isSnoozedAttention,
   resolveProjectTaskStatus,
   type EnvironmentId,
   type ProjectDecisionCard,
@@ -158,8 +159,11 @@ const NONE_GOAL = "goal:none";
 const finished = (stage: string) => stage === "done" || stage === "cancelled";
 const scopedKey = (environmentId: string, id: string) => `${environmentId}/${id}`;
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+// A snoozed card is the user's own pause, so its task is not waiting on them.
 const openCard = (card: ProjectDecisionCard) =>
-  card.item.answeredAt === null && card.item.supersededAt === null;
+  card.item.answeredAt === null &&
+  card.item.supersededAt === null &&
+  !isSnoozedAttention(card.item);
 
 function shorten(title: string): string {
   const chars = [...title];

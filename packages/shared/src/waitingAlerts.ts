@@ -1,4 +1,4 @@
-import type { ProjectTeamAttentionSummary } from "@t3tools/contracts";
+import { isSnoozedAttention, type ProjectTeamAttentionSummary } from "@t3tools/contracts";
 
 /** Stable identities keep count changes and attention alerts on the same source. */
 export function waitingItemKeys(
@@ -10,7 +10,8 @@ export function waitingItemKeys(
     const environmentKeys = byEnvironment.get(environmentId) ?? new Set<string>();
     byEnvironment.set(environmentId, environmentKeys);
     for (const { item } of summary.decisionCards) {
-      if (item.answeredAt === null && item.supersededAt === null) {
+      // A snoozed card was set aside by the user: it neither counts nor alerts.
+      if (item.answeredAt === null && item.supersededAt === null && !isSnoozedAttention(item)) {
         keys.add(`card:${environmentId}:${item.id}`);
         environmentKeys.add(`card:${environmentId}:${item.id}`);
       }
