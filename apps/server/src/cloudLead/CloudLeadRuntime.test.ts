@@ -1,18 +1,20 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalFetch:off - cloud lead modules are promise-based like the @vercel/sandbox SDK and run outside the Effect runtime.
+import { createHash } from "node:crypto";
 import * as NodeFs from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
 import * as NodeOs from "node:os";
 
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   CloudLeadRuntime,
   type CloudLeadRotationHandler,
   type CloudLeadRuntimeDeps,
+  type CloudLeadOfflineHandler,
 } from "./CloudLeadRuntime.ts";
 import { encodeProjectDir } from "./pathRewrite.ts";
-import type { RemoteProcess } from "./RelayClient.ts";
+import { RelayClient, type RemoteProcess } from "./RelayClient.ts";
 import { memoryCloudSessionStore } from "./CloudSessionStore.ts";
 import { fakeLocalHost, localSandboxClient } from "./testkit.ts";
 import { localMirrorShell } from "./WorkspaceMirror.ts";
@@ -218,6 +220,101 @@ const waitFor = async (check: () => boolean | Promise<boolean>, timeoutMs = 10_0
 };
 
 describe("CloudLeadRuntime after a server restart", () => {
+  it("retries failed replay without acknowledging it and refreshes the kit after applying", async () => {
+    const { mac, runtime, mcpEndpoint } = await setup();
+    await runtime.prepare({
+      threadId: "lead",
+      worktreePath: mac,
+      mcpEndpoint,
+      mcpAuthorization: "Bearer secret",
+    });
+    const session = await runtime["sessions"].get(mac)!;
+    const entry = {
+      seq: 1,
+      at: 1_000,
+      kind: "call" as const,
+      threadId: "lead",
+      taskId: "task",
+      tool: "task_todo_set",
+      args: { todoId: "todo", done: true },
+    };
+    const apply = vi
+      .fn<CloudLeadOfflineHandler["apply"]>()
+      .mockRejectedValueOnce(new Error("replay defect"))
+      .mockResolvedValue(undefined);
+    const kit = vi.fn<CloudLeadOfflineHandler["kit"]>(async () => ({
+      threads: [],
+      specs: {},
+      models: {},
+      tools: [],
+    }));
+    // Set directly: setOfflineHandler would also start a replay of its own.
+    runtime["offlineHandler"] = { kit, apply };
+    const requests = vi
+      .spyOn(session.relay, "requestControl")
+      .mockResolvedValue({ ch: "ctl", op: "journal", entries: [entry] });
+    const controls = vi.spyOn(session.relay, "sendControl");
+    try {
+      await expect(runtime["replayJournal"](session)).rejects.toThrow("replay defect");
+      expect(controls.mock.calls).toEqual([]);
+      expect(kit).toHaveBeenCalledTimes(0);
+      await runtime["replayJournal"](session);
+      expect(apply).toHaveBeenCalledTimes(2);
+      expect(controls.mock.calls.map(([message]) => message.op)).toEqual([
+        "journal-applied",
+        "offline-kit",
+      ]);
+      expect(kit).toHaveBeenCalledTimes(1);
+    } finally {
+      requests.mockRestore();
+      controls.mockRestore();
+    }
+  });
+
+  it("sends the offline kit with the token hash after prepare", async () => {
+    const { mac, runtime, mcpEndpoint } = await setup();
+    const controls = vi.spyOn(RelayClient.prototype, "sendControl");
+    try {
+      const kit = vi.fn<CloudLeadOfflineHandler["kit"]>(async ({ threads }) => ({
+        threads: threads.map((thread) => ({ ...thread, taskId: "task", role: "lead" as const })),
+        specs: {},
+        models: {},
+        tools: [],
+      }));
+      runtime.setOfflineHandler({ kit, apply: async () => undefined });
+      await runtime.prepare({
+        threadId: "lead",
+        worktreePath: mac,
+        mcpEndpoint,
+        mcpAuthorization: "Bearer secret",
+      });
+      expect(kit).toHaveBeenCalledWith({
+        worktreeKey: mac,
+        threads: [
+          { threadId: "lead", tokenSha256: createHash("sha256").update("secret").digest("hex") },
+        ],
+      });
+      expect(
+        controls.mock.calls
+          .map(([message]) => message)
+          .find((message) => message.op === "offline-kit"),
+      ).toMatchObject({
+        op: "offline-kit",
+        processes: [],
+        threads: [
+          {
+            threadId: "lead",
+            taskId: "task",
+            role: "lead",
+            tokenSha256: createHash("sha256").update("secret").digest("hex"),
+          },
+        ],
+      });
+    } finally {
+      controls.mockRestore();
+    }
+  });
+
   it("attaches to the same sandbox, lets the old claude finish its turn, and mirrors its work", async () => {
     const store = memoryCloudSessionStore();
     const { mac, client, makeRuntime, mcpEndpoint } = await setup({ runtime: { store } });

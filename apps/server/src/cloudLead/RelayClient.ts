@@ -139,6 +139,14 @@ export class RelayClient {
   /** Processes that ended here; adopting one again gives it already ended. */
   private readonly exited = new Set<string>();
   private readonly httpAborts = new Map<string, AbortController>();
+  private readonly controlRequests = new Map<
+    string,
+    {
+      resolve: (message: RelayMessage) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   private socket: RelaySocket | null = null;
   private link: RelayLink | null = null;
   private closed = false;
@@ -230,6 +238,18 @@ export class RelayClient {
     this.session.send({ ...message, ch: "ctl" });
   }
 
+  requestControl(message: Omit<RelayMessage, "ch">): Promise<RelayMessage> {
+    const rid = NodeCrypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.controlRequests.delete(rid);
+        reject(new Error(`Relay control request ${String(message.op)} timed out.`));
+      }, 30_000);
+      this.controlRequests.set(rid, { resolve, reject, timer });
+      this.sendControl({ ...message, rid });
+    });
+  }
+
   private track(id: string): RemoteProcess {
     const child = new RemoteProcess((message) => this.session.send({ ch: "proc", id, ...message }));
     this.processes.set(id, child);
@@ -248,6 +268,11 @@ export class RelayClient {
   close(): void {
     this.closed = true;
     clearInterval(this.ackTimer);
+    for (const request of this.controlRequests.values()) {
+      clearTimeout(request.timer);
+      request.reject(new Error("The cloud relay closed."));
+    }
+    this.controlRequests.clear();
     this.socket?.close();
     for (const child of this.processes.values()) {
       if (child.exitCode === null) child.handle({ ch: "proc", op: "exit", code: 1, signal: null });
@@ -345,6 +370,12 @@ export class RelayClient {
 
   private handle(message: RelayMessage): void {
     if (message.ch === "ctl") {
+      const request = this.controlRequests.get(String(message.rid));
+      if (request !== undefined) {
+        this.controlRequests.delete(String(message.rid));
+        clearTimeout(request.timer);
+        request.resolve(message);
+      }
       // Take over leftover processes right away, so their output and exit,
       // which follow this list, are kept until someone listens.
       if (message.op === "procs" && Array.isArray(message.list)) {
