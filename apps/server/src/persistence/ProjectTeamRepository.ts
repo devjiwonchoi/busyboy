@@ -822,6 +822,8 @@ export const make = Effect.gen(function* () {
       const stage = input.stage ?? null;
       const stageChanged = sql`(${stage} IS NOT NULL AND ${stage} <> stage)`;
       const setParent = input.parentTaskId === undefined ? 0 : 1;
+      // Finishing ends a memory stall and a wait to start. A paused lead stays paused,
+      // so a reopened task picks up its held messages once the Mac has room.
       return sql`
         UPDATE project_tasks SET
           stage = COALESCE(${stage}, stage),
@@ -850,7 +852,8 @@ export const make = Effect.gen(function* () {
             ELSE memory_stall_since
           END,
           memory_hold = CASE
-            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') THEN NULL
+            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') AND memory_hold = 'waiting'
+              THEN NULL
             ELSE memory_hold
           END,
           title = COALESCE(${input.title ?? null}, title),

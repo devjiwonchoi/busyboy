@@ -1001,7 +1001,7 @@ describe("memory stall time", () => {
     );
   });
 
-  it.effect("a paused lead whose task is cancelled is let go without a resume notice", () => {
+  it.effect("a paused lead whose task is cancelled and reopened resumes when memory recovers", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(
       (harness) =>
@@ -1016,17 +1016,27 @@ describe("memory stall time", () => {
           yield* governor.tick;
           assert.deepStrictEqual(yield* governor.paused, [lead]);
 
-          // Cancelled while memory is still short: the governor lets the lead go.
+          // Cancelled while paused: it stays paused, and its stall stops counting.
           yield* team.updateTask(pm, { taskId: task.id, stage: "cancelled" });
           yield* governor.tick;
-          assert.deepStrictEqual(yield* governor.paused, []);
-          const sent = (yield* commandsTo(harness, lead)).map((command) => command.type);
-          assert.include(sent, "queue.resume");
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+          assert.strictEqual((yield* readTask(task.id)).memoryHold, "paused");
+
+          // Reopened: still held, still labelled, until memory recovers.
+          yield* team.updateTask(pm, { taskId: task.id, stage: "running" });
+          yield* governor.tick;
+          assert.strictEqual((yield* readTask(task.id)).memoryHold, "paused");
           assert.notInclude(
-            (yield* commandsTo(harness, lead)).map((command) =>
-              "text" in command ? String(command.text) : "",
-            ),
-            MemoryGovernor.RESUME_NOTICE,
+            (yield* commandsTo(harness, lead)).map((command) => command.type),
+            "queue.resume",
+          );
+
+          fake.mac.memory = PLENTY;
+          yield* resumeTicks(governor);
+          assert.deepStrictEqual(yield* governor.paused, []);
+          assert.include(
+            (yield* commandsTo(harness, lead)).map((command) => command.type),
+            "queue.resume",
           );
           assert.isNull((yield* readTask(task.id)).memoryHold ?? null);
         }),
