@@ -711,6 +711,86 @@ describe("MessagesTimeline messages", () => {
   });
 });
 
+describe("MessagesTimeline messenger bubbles", () => {
+  function bubbles() {
+    return [...container.querySelectorAll<HTMLElement>("[data-assistant-bubble]")];
+  }
+
+  it("shows a reply as left bubbles, one per paragraph, under a sender line and over the time", async () => {
+    const wideLine = `const value = "${"x".repeat(400)}";`;
+    await renderTimeline([
+      message("로그인 버그 고쳐졌어?", {}, "user-1"),
+      message(
+        [
+          "네, 고쳤어요.",
+          "원인은 돌아갈 주소였어요.",
+          "확인하려면:",
+          "```ts",
+          wideLine,
+          "```",
+          "| a | b |\n| - | - |\n| 1 | 2 |",
+        ].join("\n\n"),
+        { role: "assistant", runId: RunId.make("run-1") },
+        "assistant-1",
+      ),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(bubbles().map((bubble) => bubble.textContent?.slice(0, 12))).toHaveLength(4);
+    });
+    const [first, second, code, table] = bubbles();
+    expect(first?.textContent).toContain("네, 고쳤어요.");
+    expect(second?.textContent).toContain("원인은 돌아갈 주소였어요.");
+    expect(code?.textContent).toContain("확인하려면:");
+
+    const user = container.querySelector<HTMLElement>('[data-message-role="user"]');
+    const userBubble = user?.querySelector<HTMLElement>(".rounded-2xl");
+    await vi.waitFor(() => {
+      const userRect = userBubble!.getBoundingClientRect();
+      const firstRect = first!.getBoundingClientRect();
+      expect(firstRect.left).toBeLessThan(userRect.left);
+      expect(userRect.right).toBeGreaterThan(firstRect.right);
+      // Wide blocks stay inside the column instead of stretching the bubble.
+      const column = container.getBoundingClientRect();
+      for (const wide of [code!, table!]) {
+        const rect = wide.getBoundingClientRect();
+        expect(rect.right).toBeLessThanOrEqual(column.right + 1);
+        expect(rect.left).toBeGreaterThanOrEqual(column.left - 1);
+      }
+    });
+
+    const sender = container.querySelector<HTMLElement>("[data-assistant-sender]");
+    expect(sender?.textContent).toBe("BusyBoy");
+    expect(getComputedStyle(sender!).opacity).toBe("1");
+    const time = [...container.querySelectorAll<HTMLElement>("p")].find((node) =>
+      /\d{1,2}:\d{2}/.test(node.textContent ?? ""),
+    );
+    expect(time).toBeDefined();
+    expect(getComputedStyle(time!.parentElement!).opacity).toBe("1");
+  });
+
+  it("adds a bubble when a streaming reply starts a new paragraph", async () => {
+    const props = baseProps();
+    const streaming = (text: string) =>
+      message(text, { role: "assistant", streaming: true }, "assistant-stream");
+    await renderElement(
+      <MessagesTimeline {...props} timelineEntries={[streaming("네, 있어요.")]} />,
+    );
+    await vi.waitFor(() => expect(bubbles()).toHaveLength(1));
+
+    await act(async () =>
+      roots[0]!.render(
+        <MessagesTimeline
+          {...props}
+          timelineEntries={[streaming("네, 있어요.\n\n그룹 채팅방도")]}
+        />,
+      ),
+    );
+    await vi.waitFor(() => expect(bubbles()).toHaveLength(2));
+    expect(bubbles()[1]?.textContent).toContain("그룹 채팅방도");
+  });
+});
+
 describe("MessagesTimeline turn folds", () => {
   it("keeps the answer visible when a Stop hook continues the turn with a short reply", async () => {
     const runId = RunId.make("run-1");
