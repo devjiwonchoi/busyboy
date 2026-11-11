@@ -180,6 +180,15 @@ const make = Effect.gen(function* () {
         threadId: lead.id,
         restoreWorktree: true,
       });
+      // Messages held while the lead was paused for memory run now that it is back.
+      const { runs } = yield* threads.getThreadRecords(lead.id, ["runs"]);
+      if (runs.some((run) => run.status === "queued" && run.queueHeld === true)) {
+        yield* threads.dispatch({
+          type: "queue.resume",
+          commandId: yield* commandId("resume", lead.id),
+          threadId: lead.id,
+        });
+      }
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("project team could not revive a reopened task's lead", {

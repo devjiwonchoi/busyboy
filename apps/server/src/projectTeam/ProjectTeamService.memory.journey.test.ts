@@ -1001,7 +1001,7 @@ describe("memory stall time", () => {
     );
   });
 
-  it.effect("a paused lead whose task is cancelled and reopened resumes when memory recovers", () => {
+  it.effect("a paused lead whose task is cancelled is let go, and reopening runs its held messages", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(
       (harness) =>
@@ -1009,36 +1009,40 @@ describe("memory stall time", () => {
           const team = yield* ProjectTeamService.ProjectTeamService;
           const governor = yield* MemoryGovernor.MemoryGovernor;
           const pm = yield* setUpManager;
-          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead", {
-            running: { startedMsAgo: MINUTE },
-          });
+          const { task, lead, thread } = yield* startWithSession(
+            harness,
+            fake.mac,
+            pm,
+            "Paused lead",
+            { running: { startedMsAgo: MINUTE } },
+          );
           fake.mac.memory = CRITICAL;
           yield* governor.tick;
           assert.deepStrictEqual(yield* governor.paused, [lead]);
+          // A message arrives while the lead is paused and waits in its held queue.
+          thread.runs = [{ status: "queued", queueHeld: true, requestedAt: yield* DateTime.now }];
 
-          // Cancelled while paused: it stays paused, and its stall stops counting.
+          // Cancelled while memory is still short: the hold and the governor's entry go.
           yield* team.updateTask(pm, { taskId: task.id, stage: "cancelled" });
           yield* governor.tick;
-          assert.deepStrictEqual(yield* governor.paused, [lead]);
-          assert.strictEqual((yield* readTask(task.id)).memoryHold, "paused");
+          assert.deepStrictEqual(yield* governor.paused, []);
+          assert.isNull((yield* readTask(task.id)).memoryHold ?? null);
+          const stall = yield* stallOf(task.id);
 
-          // Reopened: still held, still labelled, until memory recovers.
-          yield* team.updateTask(pm, { taskId: task.id, stage: "running" });
-          yield* governor.tick;
-          assert.strictEqual((yield* readTask(task.id)).memoryHold, "paused");
-          assert.notInclude(
-            (yield* commandsTo(harness, lead)).map((command) => command.type),
-            "queue.resume",
-          );
-
+          // Memory recovers before anyone reopens it; nothing more is counted.
           fake.mac.memory = PLENTY;
           yield* resumeTicks(governor);
-          assert.deepStrictEqual(yield* governor.paused, []);
-          assert.include(
-            (yield* commandsTo(harness, lead)).map((command) => command.type),
-            "queue.resume",
-          );
-          assert.isNull((yield* readTask(task.id)).memoryHold ?? null);
+          assert.strictEqual(yield* stallOf(task.id), stall);
+
+          // Reopened: the lead comes back and its held message runs.
+          const resumesBefore = (yield* commandsTo(harness, lead)).filter(
+            (command) => command.type === "queue.resume",
+          ).length;
+          yield* team.updateTask(pm, { taskId: task.id, stage: "running" });
+          const resumesAfter = (yield* commandsTo(harness, lead)).filter(
+            (command) => command.type === "queue.resume",
+          ).length;
+          assert.isAbove(resumesAfter, resumesBefore);
         }),
       { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
     );
