@@ -4,6 +4,7 @@
  * checker session, on a different model when one is set up, then judges each gate.
  */
 import type { ProjectTaskSize, ProjectTaskSpec } from "@t3tools/contracts";
+import { planGateLabel, type PlanGateTextField } from "@t3tools/shared/planGates";
 
 /** A plan this big needs the full form, and a flow diagram. */
 const FULL_PLAN_TODOS = 4;
@@ -21,20 +22,9 @@ export function isFullPlan(spec: ProjectTaskSpec): boolean {
 /** Light plans (small tasks) need the `all` gates; full plans need every gate. */
 export type PlanDepth = "light" | "full";
 
-/** Spec text fields a gate needs filled. */
-export type PlanGateTextField =
-  | "problem"
-  | "why"
-  | "currentState"
-  | "nonGoals"
-  | "humanCheckpoints"
-  | "budget"
-  | "risks"
-  | "alternatives";
-
 export interface PlanGate {
   readonly id: string;
-  /** Short Korean label the user sees. */
+  /** Short Korean label the user sees, from the shared list the apps use. */
   readonly label: string;
   /** The spec fields the gate reads. */
   readonly fields: ReadonlyArray<string>;
@@ -52,7 +42,7 @@ export interface PlanGate {
 export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   {
     id: "problem",
-    label: "문제",
+    label: planGateLabel("problem"),
     fields: ["problem", "summary"],
     requiredText: "problem",
     depth: "all",
@@ -65,7 +55,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "why",
-    label: "왜",
+    label: planGateLabel("why"),
     fields: ["why"],
     requiredText: "why",
     depth: "all",
@@ -77,7 +67,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "currentState",
-    label: "현재 상태",
+    label: planGateLabel("currentState"),
     fields: ["currentState"],
     requiredText: "currentState",
     depth: "all",
@@ -89,7 +79,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "nonGoals",
-    label: "안 하는 것",
+    label: planGateLabel("nonGoals"),
     fields: ["nonGoals"],
     requiredText: "nonGoals",
     depth: "all",
@@ -102,7 +92,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "todos",
-    label: "할 일",
+    label: planGateLabel("todos"),
     fields: ["todos"],
     requiredText: null,
     depth: "all",
@@ -114,7 +104,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "criteria",
-    label: "검증",
+    label: planGateLabel("criteria"),
     fields: ["criteria"],
     requiredText: null,
     depth: "all",
@@ -126,7 +116,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "traceability",
-    label: "양방향 점검",
+    label: planGateLabel("traceability"),
     fields: ["todos.criteria", "files.todos"],
     requiredText: null,
     depth: "all",
@@ -138,7 +128,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "humanCheckpoints",
-    label: "사람 필요 지점",
+    label: planGateLabel("humanCheckpoints"),
     fields: ["humanCheckpoints"],
     requiredText: "humanCheckpoints",
     depth: "all",
@@ -150,7 +140,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "budget",
-    label: "예산",
+    label: planGateLabel("budget"),
     fields: ["budget"],
     requiredText: "budget",
     depth: "full",
@@ -162,7 +152,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "risks",
-    label: "위험",
+    label: planGateLabel("risks"),
     fields: ["risks"],
     requiredText: "risks",
     depth: "full",
@@ -175,7 +165,7 @@ export const PLAN_GATES: ReadonlyArray<PlanGate> = [
   },
   {
     id: "alternatives",
-    label: "대안",
+    label: planGateLabel("alternatives"),
     fields: ["alternatives"],
     requiredText: "alternatives",
     depth: "full",

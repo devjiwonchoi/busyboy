@@ -7,6 +7,10 @@
       "types": "./src/requestMessage.ts",
       "import": "./src/requestMessage.ts"
     },
+    "./planGates": {
+      "types": "./src/planGates.ts",
+      "import": "./src/planGates.ts"
+    },
     "./workspaceGoals": {
       "types": "./src/workspaceGoals.ts",
       "import": "./src/workspaceGoals.ts"
