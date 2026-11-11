@@ -4,6 +4,8 @@ import type {
   ProjectDecisionCard,
 } from "@t3tools/contracts";
 import {
+  REQUEST_CONTEXT_MISSING,
+  REQUEST_PLAN_SCOPE_NOTE,
   requestImpactLabels,
   requestSenderLabel,
   shortWorkName,
@@ -92,7 +94,7 @@ export function AttentionContext({
   if (context == null) {
     return (
       <p data-attention-context="unknown" className="text-warning-foreground text-xs">
-        영향 확인 필요: 이 요청에는 구조화된 이유·영향·추천안 정보가 없습니다.
+        {REQUEST_CONTEXT_MISSING}
       </p>
     );
   }
@@ -134,7 +136,7 @@ export function AttentionContext({
       </div>
       {planApproval ? (
         <p data-attention-approval-scope className="text-muted-foreground text-xs">
-          계획 승인입니다. 머지·배포·비용·외부 게시 실행은 해당 작업의 승인을 따로 확인해야 합니다.
+          {REQUEST_PLAN_SCOPE_NOTE}
         </p>
       ) : null}
     </section>

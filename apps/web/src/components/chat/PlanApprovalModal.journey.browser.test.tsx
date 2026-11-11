@@ -468,7 +468,9 @@ describe.each([
     // The tap clears the selection before it lands; the button stays and takes it.
     await tap(comment);
     await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("new"));
-    await userEvent.type(pill()!.querySelector("textarea")!, "Which cursor?");
+    const input = pill()!.querySelector("textarea")!;
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    await userEvent.type(input, "Which cursor?");
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() => expect(chipLabel()).toBe("1 comment"));
 

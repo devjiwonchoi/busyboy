@@ -13,7 +13,10 @@ import {
   REQUEST_APPROVE_LABEL,
   REQUEST_BLOCKER_DONE,
   REQUEST_DETAILS_LABEL,
+  REQUEST_CONTEXT_MISSING,
+  REQUEST_PLAN_SCOPE_NOTE,
   requestImpactLabels,
+  requestParagraphs,
 } from "@t3tools/shared/requestMessage";
 import * as Clipboard from "expo-clipboard";
 import { AsyncResult } from "effect/reactivity";
@@ -270,7 +273,7 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
         testID="request-bubble"
       >
         <Text className="font-t3-bold text-base text-foreground">{message.headline}</Text>
-        {message.paragraphs.map((paragraph, index) => (
+        {requestParagraphs(card).map((paragraph, index) => (
           <Text key={index} className="font-sans text-sm leading-normal text-foreground-secondary">
             {paragraph}
           </Text>
@@ -304,8 +307,19 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
                 <Text className="font-sans text-sm text-foreground-secondary">
                   추천안: {item.context.recommendation}
                 </Text>
+                {item.kind === "approval" ? (
+                  <Text className="font-sans text-xs text-foreground-muted">
+                    {REQUEST_PLAN_SCOPE_NOTE}
+                  </Text>
+                ) : null}
               </View>
-            ) : null}
+            ) : (
+              <View testID="request-context">
+                <Text className="font-sans text-xs text-warning-foreground">
+                  {REQUEST_CONTEXT_MISSING}
+                </Text>
+              </View>
+            )}
             {(item.details ?? []).map((detail, index) => (
               <Text key={index} className="font-sans text-sm text-foreground-secondary">
                 {detail.label}: {detail.text}
@@ -321,7 +335,7 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
                 ))}
               </View>
             ) : null}
-            {item.kind === "decision" && item.options.length > 0 ? (
+            {item.kind !== "approval" && item.options.length > 0 ? (
               <View className="gap-2">
                 {item.options.map((option) => (
                   <Pressable

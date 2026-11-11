@@ -1784,6 +1784,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const userBubbleColor = theme["--color-user-bubble"];
   const onMarkdownLinkPress = useCallback(
     (href: string, imageEmbed = false) => {
+      // A reply's request link quotes a request whose card already sits above the composer.
+      if (href.startsWith("t3-request:")) {
+        return;
+      }
       const linkedThreadId = parseThreadLinkHref(href);
       if (linkedThreadId) {
         navigation.navigate("Thread", {

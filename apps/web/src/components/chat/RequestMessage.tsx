@@ -15,6 +15,7 @@ import {
   REQUEST_BLOCKER_DONE,
   REQUEST_DETAILS_LABEL,
   replyWithRequestLink,
+  requestParagraphs,
 } from "@t3tools/shared/requestMessage";
 import { AsyncResult } from "effect/reactivity";
 import { CopyIcon, ReplyIcon } from "lucide-react";
@@ -104,10 +105,7 @@ function MessageBody({
   });
   const message = parseRequestMessage(card.item.question);
   const planApproval = card.item.kind === "approval";
-  const paragraphs =
-    message.paragraphs.length === 0 && planApproval && card.item.details == null
-      ? [card.plan?.summary ?? card.item.summary ?? ""].filter(Boolean)
-      : message.paragraphs;
+  const paragraphs = requestParagraphs(card);
   const link = formatRequestLink(card.item.id, message.headline);
   const chatThreadId = card.item.askerThreadId ?? manager?.pmThreadId ?? null;
   const lead =
@@ -170,9 +168,7 @@ function MessageBody({
         ) : null}
         {expanded ? (
           <section data-request-details className="space-y-3">
-            {card.item.context ? (
-              <AttentionContext context={card.item.context} planApproval={planApproval} />
-            ) : null}
+            <AttentionContext context={card.item.context} planApproval={planApproval} />
             <dl className="space-y-2">
               {card.item.details?.map((detail, index) => (
                 <div key={index}>

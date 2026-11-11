@@ -15,6 +15,7 @@ import {
   requestLinkIds,
   requestMessageProblems,
   replyWithRequestLink,
+  requestParagraphs,
   REQUEST_APPROVE_LABEL,
   REQUEST_DETAILS_LABEL,
   REQUEST_BLOCKER_DONE,
@@ -218,6 +219,43 @@ describe("request message edge cases", () => {
     expect(requestMessageProblems("배포해도 될까요?\n\nGoal: 배포")).toContain(
       "Remove label lines such as Goal: or **Goal:**.",
     );
+  });
+
+  it("lets links, sentences with a colon and product names through", () => {
+    expect(
+      requestMessageProblems(
+        "안내 페이지를 바꿔도 될까요?\n\nhttps://example.com/docs/setup.html 를 새 주소로 옮겨요. 광고 추적이 붙은 https://example.com/page?utm_source=x 도 정리해요.",
+      ),
+    ).toEqual([]);
+    expect(
+      requestMessageProblems("언제 할까요?\n\n선택지는 두 가지예요: 지금 하거나 미루기."),
+    ).toEqual([]);
+    expect(plainTextProblems(["iMessage, iMac, iPod, iTunes 알림 확인"])).toEqual([]);
+    expect(requestMessageProblems("배포해도 될까요?\n\n끝나는 기준: 테스트 통과")).toContain(
+      "Remove label lines such as Goal: or **Goal:**.",
+    );
+    expect(requestMessageProblems("배포해도 될까요?\n\n**Goal:** 배포")).toContain(
+      "Remove label lines such as Goal: or **Goal:**.",
+    );
+    // Code paths outside a link are still caught.
+    expect(plainTextProblems(["apps/web/src/main.tsx 를 고쳐요"])).toContain(
+      "Remove file paths; describe the affected behavior.",
+    );
+  });
+
+  it("falls back to the plan summary for an older one-line plan approval", () => {
+    const item = {
+      kind: "approval",
+      question: "목표 그래프 플랜 승인 부탁드려요.",
+      details: null,
+      summary: "요약",
+    };
+    const card = (overrides: object, plan: { summary: string } | null) =>
+      ({ plan, item: { ...item, ...overrides } }) as never;
+    expect(requestParagraphs(card({}, { summary: "플랜 요약" }))).toEqual(["플랜 요약"]);
+    expect(requestParagraphs(card({}, null))).toEqual(["요약"]);
+    expect(requestParagraphs(card({ kind: "decision" }, null))).toEqual([]);
+    expect(requestParagraphs(card({ question: "승인할까요?\n\n본문" }, null))).toEqual(["본문"]);
   });
 
   it("keeps one request link when replying again", () => {

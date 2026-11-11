@@ -353,6 +353,53 @@ describe("ProjectTeamCards", () => {
     expect(context.textContent).toContain("되돌리려면 별도 작업 필요");
     expect(context.textContent).toContain("추천안: 지금 내는 안을 추천해요");
   });
+  it("notes the plan approval's scope and warns when a request has no context", () => {
+    render(
+      {
+        ...approval,
+        item: {
+          ...approval.item,
+          context: {
+            action: "목표 그래프 플랜을 승인합니다",
+            reason: "이름이 잘려요",
+            impacts: [],
+            cost: null,
+            reversibility: "reversible",
+            recommendation: "승인을 추천해요",
+          },
+        },
+      },
+      true,
+    );
+    act(() => button("자세히 보기").click());
+    expect(host.querySelector('[data-testid="request-context"]')?.textContent).toContain(
+      "계획 승인입니다.",
+    );
+    render(decision, true);
+    act(() => button("자세히 보기").click());
+    expect(host.querySelector('[data-testid="request-context"]')?.textContent).toContain(
+      "영향 확인 필요",
+    );
+  });
+  it("shows a one-line plan approval's summary and a blocker's choices like web", () => {
+    render(
+      {
+        ...approval,
+        item: { ...approval.item, question: "목표 그래프 플랜 승인 부탁드려요.", details: null },
+      },
+      true,
+    );
+    expect(host.querySelector('[data-testid="request-bubble"]')?.textContent).toContain("계획");
+    render(
+      {
+        ...decision,
+        item: { ...decision.item, kind: "blocker", options: ["처리했어요", "나중에"] },
+      },
+      true,
+    );
+    act(() => button("자세히 보기").click());
+    expect(host.querySelectorAll('[role="radio"]')).toHaveLength(2);
+  });
   it("sends the recommended answer from the primary decision action", async () => {
     render(decision, true);
     await act(async () => button("승인").click());

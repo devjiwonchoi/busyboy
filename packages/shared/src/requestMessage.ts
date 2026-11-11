@@ -1,4 +1,8 @@
-import { PLAN_APPROVAL_START, type ProjectAttentionContext } from "@t3tools/contracts";
+import {
+  PLAN_APPROVAL_START,
+  type ProjectAttentionContext,
+  type ProjectDecisionCard,
+} from "@t3tools/contracts";
 
 export const REQUEST_APPROVE_LABEL = "승인";
 export const REQUEST_DETAILS_LABEL = "자세히 보기";
@@ -10,6 +14,20 @@ const REVERSIBILITY_LABEL: Record<ProjectAttentionContext["reversibility"], stri
   irreversible: "되돌릴 수 없음",
   unknown: "되돌리기 가능 여부 확인 필요",
 };
+
+export const REQUEST_CONTEXT_MISSING =
+  "영향 확인 필요: 이 요청에는 구조화된 이유·영향·추천안 정보가 없습니다.";
+export const REQUEST_PLAN_SCOPE_NOTE =
+  "계획 승인입니다. 머지·배포·비용·외부 게시 실행은 해당 작업의 승인을 따로 확인해야 합니다.";
+
+/** Paragraphs under the headline; an older one-line plan approval falls back to its plan summary. */
+export function requestParagraphs(card: ProjectDecisionCard): string[] {
+  const { paragraphs } = parseRequestMessage(card.item.question);
+  if (paragraphs.length > 0 || card.item.kind !== "approval" || card.item.details != null) {
+    return paragraphs;
+  }
+  return [card.plan?.summary ?? card.item.summary ?? ""].filter(Boolean);
+}
 
 /** One label per impact, naming the absent ones too, so web and phone say the same thing. */
 export function requestImpactLabels(context: ProjectAttentionContext): string[] {
@@ -73,8 +91,13 @@ export function requestMessageProblems(
   if (/^\s*#/m.test(question)) {
     problems.push("Remove markdown headings.");
   }
-  // A colon before "//" or a digit is a link or a time ("https://…", "오후 3:30"), not a label.
-  if (/^\s*(?:\*\*)?[\p{L}][\p{L}\p{N} _-]{0,30}:(?![/\d])\s*(?:\*\*)?/mu.test(question)) {
+  // A label is one or two words before a colon ("Goal:", "끝나는 기준:") or a bold "**X:**".
+  // A colon before "//" or a digit is a link or a time ("https://…", "오후 3:30"), and a
+  // longer lead-in is a sentence ("선택지는 두 가지예요: …").
+  if (
+    /^\s*\*\*[^*\n]{1,30}:\s*\*\*/mu.test(question) ||
+    /^\s*\p{L}[\p{L}\p{N}_-]*(?: [\p{L}\p{N}_-]+)?\s*:(?![/\d])/mu.test(question)
+  ) {
     problems.push("Remove label lines such as Goal: or **Goal:**.");
   }
   if (/^\s*[-*]\s/m.test(question)) {
@@ -106,7 +129,10 @@ export function requestMessageProblems(
 const TASK_KEY = /\b[A-Z]{2,6}-\d+\b/g;
 // Everyday names that look like task keys or camelCase identifiers.
 const KEY_LIKE_WORDS = /^(?:UTF|SHA|GPT|ISO|ES|COVID|MD|RFC)-/;
-const PRODUCT_WORDS = /\b(?:iOS|iPadOS|macOS|watchOS|tvOS|visionOS|iPhone|iPad|iCloud|eSIM)\b/g;
+const PRODUCT_WORDS =
+  /\b(?:iOS|iPadOS|macOS|watchOS|tvOS|visionOS|iPhone|iPad|iPod|iMac|iMessage|iTunes|iCloud|eSIM)\b/g;
+// Links name a page, not a code path or identifier, so their paths and query strings pass.
+const URLS = /\bhttps?:\/\/[^\s<>()\[\]]+/g;
 
 export function stripTaskKeys(text: string): string {
   return text.replace(TASK_KEY, (word) => (KEY_LIKE_WORDS.test(word) ? word : ""));
@@ -114,7 +140,7 @@ export function stripTaskKeys(text: string): string {
 
 // Reuse the same technical-language checks for messages, step titles and sender names.
 export function plainTextProblems(input: ReadonlyArray<string>): string[] {
-  const texts = input.map((text) => text.replace(PRODUCT_WORDS, " "));
+  const texts = input.map((text) => text.replace(URLS, " ").replace(PRODUCT_WORDS, " "));
   const problems: string[] = [];
   if (texts.some((text) => stripTaskKeys(text) !== text)) {
     problems.push("Remove task keys; use the work's name.");
