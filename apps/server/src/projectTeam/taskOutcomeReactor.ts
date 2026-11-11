@@ -326,13 +326,19 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       // Only a cloud start is retried elsewhere; a local failure keeps the usual card.
       const location = task.location ?? "local";
-      // The lead never got going: still planning, with no turn that ended any other way
-      // (a retry after 다시 시작 or a restart fails again the same way).
-      const neverStarted =
-        task.stage === "planning" && (task.lastOutcome === null || task.lastOutcome === "failed");
-      if (!neverStarted || location !== "cloud") {
-        return false;
-      }
+      if (task.stage !== "planning" || location !== "cloud") return false;
+      // The lead never got going: since this lead's session began, no turn of it
+      // ended any way but failed (a retry or a restart that fails the same way counts).
+      const sessions = yield* repository.listTaskSessions(task.id);
+      const since = sessions.findLast((session) => session.threadId === run.threadId)?.createdAt;
+      const outcomes = yield* repository.listTaskEvents({ taskId: task.id, limit: 200 });
+      const finishedTurn = outcomes.some(
+        (event) =>
+          event.kind === "outcome" &&
+          !event.body.startsWith("failed") &&
+          (since === undefined || event.createdAt >= since),
+      );
+      if (finishedTurn) return false;
       const failure = classifyStartFailure(error ?? "", location);
       const failedAt =
         run.completedAt === null ? yield* nowIso : DateTime.formatIso(run.completedAt);

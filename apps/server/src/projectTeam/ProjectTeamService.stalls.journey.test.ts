@@ -188,6 +188,36 @@ describe("stall journey", () => {
     ),
   );
 
+  it.effect("a met condition the PM ignores reaches the user once, even after a dismissal", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const { task } = yield* createAcceptedTask(pm, {
+          title: "After lunch",
+          request: "After lunch.",
+          intake: "New work.",
+        });
+        yield* team.updateTask(pm, {
+          taskId: task.id,
+          hold: {
+            resumeWhen: { type: "time", at: isoFromMillis((yield* nowMs) + 5 * MINUTE) },
+            reason: "Run after lunch.",
+          },
+        });
+        yield* minutes(16);
+        const cards = yield* openCards(task);
+        assert.strictEqual(cards.length, 1);
+        assert.include(cards[0]!.question.split("\n")[0], "다시 시작 조건이 풀렸는데");
+        yield* repository.supersedeAttentionItem({ id: cards[0]!.id, supersededAt: yield* nowIso });
+
+        yield* minutes(40);
+        assert.deepStrictEqual(yield* openCards(task), []);
+      }),
+    ),
+  );
+
   it.effect("a Todo task that could start reaches the PM at 10 minutes and the user at 20", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
@@ -231,6 +261,37 @@ describe("stall journey", () => {
           assert.notStrictEqual(moved.stage, "blocked");
           assert.isTrue((yield* harness.messagesTo(lead)).some((text) => text.includes("[옮김]")));
           assert.deepStrictEqual(yield* openCards(task), []);
+        }),
+      { settings: { taskExecution: { location: "local_first" } } },
+    ),
+  );
+
+  it.effect("a cloud lead that already finished a turn is not treated as a failed start", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+          const reactor = yield* TaskOutcomeReactor.TaskOutcomeReactor;
+          const pm = yield* setUpManager;
+          const started = yield* startLead(pm, "Worked a while", harness.delegate);
+          const lead = started.task.leadThreadId!;
+          yield* repository.setTaskMove({
+            id: started.task.id,
+            moveTarget: null,
+            location: "cloud",
+            now: yield* nowIso,
+          });
+          // It planned for a while and ended a turn, then a later turn hit a network blip.
+          yield* team.recordOutcome({ task: yield* readTask(started.task), outcome: "stalled" });
+          harness.addThread(lead).shell = { location: "cloud", lastError: "socket hang up" };
+          yield* reactor.handle(failedRun(lead, yield* DateTime.now));
+
+          const task = yield* readTask(started.task);
+          assert.strictEqual(task.location, "cloud");
+          const cards = yield* openCards(task);
+          assert.strictEqual(cards.length, 1);
+          assert.isFalse(isStallBlocker(cards[0]!));
         }),
       { settings: { taskExecution: { location: "local_first" } } },
     ),

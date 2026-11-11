@@ -177,14 +177,18 @@ const make = Effect.gen(function* () {
    * that began at or after `sinceMs` ended with a message. Nothing has moved since,
    * so telling them again would only repeat the message.
    */
-  const alreadyTold = (task: ProjectTask, cause: ProjectTaskStallCause, sinceMs: number) =>
+  const alreadyTold = (
+    task: ProjectTask,
+    causes: ReadonlyArray<ProjectTaskStallCause>,
+    sinceMs: number,
+  ) =>
     repository
       .listTaskStalls({ taskId: task.id })
       .pipe(
         Effect.map((stalls) =>
           stalls.some(
             (stall) =>
-              stall.cause === cause &&
+              causes.includes(stall.cause) &&
               stall.endedAt !== null &&
               stall.notifiedAt !== null &&
               isoMillis(stall.startedAt) >= sinceMs,
@@ -268,7 +272,7 @@ const make = Effect.gen(function* () {
         );
       }
       if (idleMs < STALL_WAKE_AFTER_MS) return;
-      if (yield* alreadyTold(task, stalled.cause, stalled.sinceMs)) return;
+      if (yield* alreadyTold(task, [stalled.cause], stalled.sinceMs)) return;
       const stall = yield* openStall(task, stalled.cause, stalled.sinceMs);
       if (stall.wokeAt === null) {
         yield* send(
@@ -394,7 +398,16 @@ const make = Effect.gen(function* () {
           continue;
         }
         // Told once since it last moved: the user decides, so no more messages.
-        if (yield* alreadyTold(task, "not_started", isoMillis(task.stageChangedAt))) continue;
+        // A message about its met resume condition counts too: it is the same Todo task.
+        if (
+          yield* alreadyTold(
+            task,
+            ["not_started", "hold_not_resumed"],
+            isoMillis(task.stageChangedAt),
+          )
+        ) {
+          continue;
+        }
         const stall = yield* openStall(task, "not_started", nowMs);
         const waitedMs = nowMs - isoMillis(stall.startedAt);
         if (waitedMs >= STALL_WAKE_AFTER_MS && stall.wokeAt === null) {
