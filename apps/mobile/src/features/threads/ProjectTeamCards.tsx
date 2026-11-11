@@ -19,6 +19,13 @@ import {
   parseRequestOption,
   requestParagraphs,
 } from "@t3tools/shared/requestMessage";
+import {
+  isBeforeNonGoals,
+  planCheckSummary,
+  type PlanGateSection,
+  planGateSections,
+  planVerdictLabel,
+} from "@t3tools/shared/planGates";
 import * as Clipboard from "expo-clipboard";
 import { AsyncResult } from "effect/reactivity";
 import { useMemo, useState } from "react";
@@ -190,6 +197,15 @@ export function ProjectTeamCard(props: ProjectTeamCardProps) {
   return <RequestMessageCard {...props} />;
 }
 
+function gateRow(gate: PlanGateSection) {
+  return (
+    <View key={gate.id} className="gap-1">
+      <Text className="font-t3-bold text-sm text-foreground">{gate.label}</Text>
+      <Text className="font-sans text-sm text-foreground-secondary">{gate.text}</Text>
+    </View>
+  );
+}
+
 function RequestMessageCard(props: ProjectTeamCardProps) {
   const { card, sender, leadThreadId } = props.entry;
   const { item } = card;
@@ -206,6 +222,8 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
   const versions = detail.data?.versions ?? [];
   const asked = versions.find((entry) => entry.version === item.specVersion)?.spec ?? null;
   const live = versions.at(-1)?.spec ?? null;
+  const gates = planGateSections(asked);
+  const check = planCheckSummary(detail.data?.task.planCheck, item.specVersion);
   const todos = requestTodoRows(card, asked?.todos).map((row) => ({
     ...row,
     done: live?.todos.find((todo) => todo.id === row.id)?.done ?? row.done,
@@ -399,12 +417,25 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
                 />
               </View>
             ) : null}
+            {gates.filter(isBeforeNonGoals).map(gateRow)}
             {asked?.nonGoals ? (
               <View className="gap-1">
                 <Text className="font-t3-bold text-sm text-foreground">안 하는 것</Text>
                 <Text className="font-sans text-sm text-foreground-secondary">
                   {asked.nonGoals}
                 </Text>
+              </View>
+            ) : null}
+            {gates.filter((gate) => !isBeforeNonGoals(gate)).map(gateRow)}
+            {check ? (
+              <View className="gap-1" testID="request-plan-check">
+                <Text className="font-sans text-xs text-foreground-muted">{check.line}</Text>
+                {check.rows.map((row) => (
+                  <Text key={row.label} className="font-sans text-xs text-foreground-muted">
+                    {row.label} {planVerdictLabel(row.pass)}
+                    {row.pass ? "" : `\n${row.reason}`}
+                  </Text>
+                ))}
               </View>
             ) : null}
             {asked !== null ? (
