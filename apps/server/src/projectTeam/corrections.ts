@@ -55,7 +55,9 @@ export function isPlainApproval(answer: string): boolean {
     .split(/\s+/)
     .filter((word) => word.length > 0);
   if (words.length === 0 || words.length > 6) return false;
-  return words.every((word) => APPROVAL_WORD.test(word)) && words.some((word) => GO_WORD.test(word));
+  return (
+    words.every((word) => APPROVAL_WORD.test(word)) && words.some((word) => GO_WORD.test(word))
+  );
 }
 
 // An approval or go word with an optional polite ending, such as 승인해줘 or 진행해주세요.
@@ -65,7 +67,7 @@ const ENDING =
 const GO_WORD = new RegExp(`^(?:${GO_STEM})${ENDING}$`);
 const APPROVAL_WORD = new RegExp(
   `^(?:(?:${GO_STEM})${ENDING}|다|모두|전부|그대로|이대로|and|그럼|네|응|ㅇㅇ)$`,
-)
+);
 
 /**
  * True when a PM scope note reads as the user turning the work around ("그게 아니라",

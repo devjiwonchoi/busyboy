@@ -40,6 +40,10 @@ import {
   ProjectTeamGoalResult,
   ProjectTeamPmNudgeInput,
   ProjectTeamPmNudgeResult,
+  ProjectTeamCorrectionRecordInput,
+  ProjectTeamCorrectionRecordResult,
+  ProjectTeamCorrectionsReport,
+  ProjectTeamCorrectionsReportInput,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -326,6 +330,29 @@ const PmNudgeTool = Tool.make("pm_nudge", {
   .annotate(Tool.Title, "Nudge a project PM")
   .annotate(Tool.Destructive, false);
 
+const CorrectionRecordTool = Tool.make("correction_record", {
+  ...shared,
+  description:
+    "PM and Director only. Record that the user corrected a task's work: they reversed or redirected running work (direction_change), asked for changes on its pull request (pr_change_request), or asked to undo merged work (revert). Pass their exact words from this chat (the server checks them) and one line on what differed. Plan card answers are recorded automatically; new scope that doesn't contradict earlier direction is not a correction.",
+  parameters: ProjectTeamCorrectionRecordInput,
+  success: ProjectTeamCorrectionRecordResult,
+})
+  .annotate(Tool.Title, "Record a correction")
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+const CorrectionsReportTool = Tool.make("corrections_report", {
+  ...shared,
+  description:
+    "Director only. How often the user corrects agent work: rates per project and kind of work (ui, server, release, docs, other) at each stage (plan, running, pr, merged) plus per task, the newest corrections, repeated groups (suggestRule when there are 3 or more), and how many were found in history (backfilled). Defaults to the last 90 days.",
+  parameters: ProjectTeamCorrectionsReportInput,
+  success: ProjectTeamCorrectionsReport,
+})
+  .annotate(Tool.Title, "Read correction rates")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
 export const ProjectTeamToolkit = Toolkit.make(
   TaskCreateTool,
   TaskStartTool,
@@ -352,4 +379,6 @@ export const ProjectTeamToolkit = Toolkit.make(
   GoalWriteTool,
   GoalLinkTool,
   PmNudgeTool,
+  CorrectionRecordTool,
+  CorrectionsReportTool,
 );

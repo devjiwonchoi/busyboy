@@ -154,6 +154,13 @@ import {
   type ProjectTeamGoalWriteInput,
   type ProjectTeamPmNudgeInput,
   type ProjectTeamPmNudgeResult,
+  correctionStageOf,
+  type ProjectCorrection,
+  type ProjectCorrectionKind,
+  type ProjectTeamCorrectionRecordInput,
+  type ProjectTeamCorrectionRecordResult,
+  type ProjectTeamCorrectionsReport,
+  type ProjectTeamCorrectionsReportInput,
   type WorkspaceGoal,
   type WorkspaceGoalAlignment,
   type WorkspaceGoalLink,
@@ -217,6 +224,18 @@ import { pullRequestFormatProblems } from "./pullRequestFormat.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
+import * as RevertLogReader from "./RevertLogReader.ts";
+import {
+  type CorrectionReportTask,
+  classifyWorkKind,
+  correctionReport,
+  isDirectionChangeNote,
+  isPlainApproval,
+  oneLine,
+  parseRevertCommits,
+  planFeedbackLine,
+  shortHash,
+} from "./corrections.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
@@ -514,6 +533,14 @@ export type DelegateStep = (
 
 /** Starts the task log note pm_nudge leaves; the daily limit reads it back. */
 export const PM_NUDGE_NOTE_PREFIX = "Director nudged the PM: ";
+/** Starts the task log note the PM's added scope leaves; the scope follows the first ": ". */
+export const SCOPE_NOTE_PREFIX = "Scope added by the PM";
+/** Starts the task log note correction_record leaves. */
+export const CORRECTION_NOTE_PREFIX = "사용자 교정을 기록했어요: ";
+const CORRECTION_REPORT_DAYS = 90;
+const CORRECTION_RECENT_LIMIT = 20;
+export const CORRECTION_NOT_USER_WORDS =
+  "correction_record needs the user's own words: quote exactly what the user wrote in this chat.";
 /** pm_nudge sends one message per task within this window. */
 export const PM_NUDGE_INTERVAL_MS = 24 * 60 * MINUTE_MS;
 /** Recent closed Director cards read to tell whether a nudge relays a new answer. */
@@ -897,6 +924,29 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamPmNudgeInput,
     ) => Effect.Effect<ProjectTeamPmNudgeResult, ProjectTeamError>;
+    /** correction_record: the PM or Director records that the user corrected a task's work. */
+    readonly recordCorrection: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamCorrectionRecordInput,
+    ) => Effect.Effect<ProjectTeamCorrectionRecordResult, ProjectTeamError>;
+    /** corrections_report: Director only. Correction rates, recent and repeated corrections. */
+    readonly correctionsReport: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamCorrectionsReportInput,
+    ) => Effect.Effect<ProjectTeamCorrectionsReport, ProjectTeamError>;
+    /**
+     * The user requested changes on, or reverted, a pull request in the app: record it on
+     * the task that opened it. Does nothing for a pull request no task opened. Never fails.
+     */
+    readonly recordPullRequestCorrection: (input: {
+      readonly projectId: ProjectId;
+      readonly repository: string;
+      readonly number: number;
+      readonly kind: "pr_change_request" | "revert";
+      readonly userText: string;
+    }) => Effect.Effect<void>;
+    /** Records corrections found in past cards, task logs and git history; safe to rerun. */
+    readonly backfillCorrections: Effect.Effect<void>;
     /** The workspace's goal alignment, or none when there is no Director. */
     readonly goalAlignmentReport: Effect.Effect<
       Option.Option<GoalAlignmentReport>,
@@ -1014,6 +1064,7 @@ const make = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
+  const revertLogs = yield* RevertLogReader.RevertLogReader;
   const cloudLead = yield* CloudLeadService.CloudLeadHooks;
   const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
   const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
@@ -3417,7 +3468,7 @@ const make = Effect.gen(function* () {
       yield* appendEvent(
         current,
         "note",
-        `Scope added by the PM${open.length > 0 ? "; the open approval card closed" : ""}: ${note}`,
+        `${SCOPE_NOTE_PREFIX}${open.length > 0 ? "; the open approval card closed" : ""}: ${note}`,
         callerThreadId,
       );
       yield* router.publish(task.projectId);
@@ -4034,8 +4085,22 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       if (item.kind !== "approval" || item.answer === null || item.taskId === null) return;
       const task = yield* requireTask(item.taskId, item.projectId);
-      if (task.stage !== "awaiting_approval") return;
       const outcome = planApprovalOutcome(item.answer);
+      // Feedback from the user (or the PM with their words) corrects the plan; AFK never does.
+      if (outcome === "changes" && item.answeredBy !== "afk" && !isPlainApproval(item.answer)) {
+        yield* storeCorrection({
+          task,
+          kind: "plan_changes",
+          userText: item.answer,
+          whatDiffered: planFeedbackLine(item.answer),
+          sourceKey: `attention:${item.id}`,
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("could not record a plan correction", { itemId: item.id, cause }),
+          ),
+        );
+      }
+      if (task.stage !== "awaiting_approval") return;
       yield* moveTaskStage(
         task,
         outcome === "start" ? "running" : outcome === "approve_only" ? "inbox" : "planning",
@@ -5229,6 +5294,312 @@ const make = Effect.gen(function* () {
       return { status: "sent", nextAllowedAt: null } satisfies ProjectTeamPmNudgeResult;
     }).pipe(orTeamError("Could not nudge the PM."));
 
+  // Corrections: moments the user corrected agent work.
+
+  const workKindOf = (task: ProjectTask) =>
+    repository.getLatestSpecVersion(task.id).pipe(
+      Effect.map((version) =>
+        classifyWorkKind({
+          title: task.title,
+          request: task.request,
+          files: Option.isSome(version) ? version.value.spec.files.map((file) => file.path) : [],
+        }),
+      ),
+    );
+
+  /** Stores one correction; a second call with the same source key keeps the first. */
+  const storeCorrection = (input: {
+    readonly task: ProjectTask;
+    readonly kind: ProjectCorrectionKind;
+    readonly userText: string;
+    readonly whatDiffered: string;
+    readonly sourceKey: string;
+    readonly backfilled?: boolean;
+    readonly createdAt?: IsoDateTime;
+  }) =>
+    Effect.gen(function* () {
+      const correction: ProjectCorrection = {
+        id: yield* newId("correction"),
+        projectId: input.task.projectId,
+        taskId: input.task.id,
+        kind: input.kind,
+        stage: correctionStageOf(input.kind),
+        workKind: yield* workKindOf(input.task),
+        userText: input.userText,
+        whatDiffered: oneLine(input.whatDiffered),
+        sourceKey: input.sourceKey,
+        backfilled: input.backfilled ?? false,
+        createdAt: input.createdAt ?? (yield* nowIso),
+      };
+      return yield* repository.insertCorrection(correction);
+    });
+
+  /** The project's tasks whose pull request has this number (and repository, when given). */
+  const tasksWithPullRequest = (projectId: ProjectId, number: number, repository_: string | null) =>
+    Effect.map(repository.listTasks({ projectId }), (tasks) =>
+      tasks.flatMap((task) => {
+        const parsed = task.prUrl === null ? null : parseChangeRequestUrl(task.prUrl);
+        return parsed !== null &&
+          parsed.number === number &&
+          (repository_ === null || parsed.repository === repository_.toLowerCase())
+          ? [{ task, repository: parsed.repository }]
+          : [];
+      }),
+    );
+
+  const recordCorrection: ProjectTeamService["Service"]["recordCorrection"] = (
+    callerThreadId,
+    input,
+  ) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["pm", "director"], "correction_record");
+      const task =
+        role.type === "director"
+          ? yield* requireAnyTask(input.taskId, role.projectId)
+          : yield* requireTask(input.taskId, role.projectId);
+      const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
+        messageRoles: ["user"],
+      });
+      const matched = messages
+        .filter((message) => isUserChatAnswer(input.userText, [message], 0))
+        .toSorted(
+          (a, b) => DateTime.toEpochMillis(b.createdAt) - DateTime.toEpochMillis(a.createdAt),
+        )[0];
+      if (matched === undefined) return yield* teamError(CORRECTION_NOT_USER_WORDS, role.projectId);
+      const stored = yield* storeCorrection({
+        task,
+        kind: input.kind,
+        userText: input.userText,
+        whatDiffered: input.whatDiffered,
+        sourceKey: `chat:${matched.id}:${task.id}:${input.kind}`,
+      });
+      if (stored.inserted) {
+        yield* appendEvent(
+          task,
+          "note",
+          `${CORRECTION_NOTE_PREFIX}${stored.correction.whatDiffered}`,
+          callerThreadId,
+        );
+      }
+      return { correction: stored.correction, recorded: stored.inserted };
+    }).pipe(orTeamError("Could not record the correction."));
+
+  const recordPullRequestCorrection: ProjectTeamService["Service"]["recordPullRequestCorrection"] =
+    (input) =>
+      Effect.gen(function* () {
+        const manager = yield* repository.getManager(input.projectId);
+        if (Option.isNone(manager) || manager.value.kind !== "pm") return;
+        const matches = yield* tasksWithPullRequest(
+          input.projectId,
+          input.number,
+          input.repository,
+        );
+        for (const { task, repository: repo } of matches) {
+          const text = input.userText.trim();
+          yield* input.kind === "revert"
+            ? storeCorrection({
+                task,
+                kind: "revert",
+                userText: "Reverted in the app",
+                whatDiffered: `머지 뒤 되돌림: ${task.title}`,
+                sourceKey: `revert:${repo}#${input.number}`,
+              })
+            : storeCorrection({
+                task,
+                kind: "pr_change_request",
+                userText: text,
+                whatDiffered:
+                  text.split("\n").find((line) => line.trim().length > 0) ?? "변경 요청",
+                sourceKey: `review:${repo}#${input.number}:${shortHash(text)}`,
+              });
+        }
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("could not record a pull request correction", {
+            projectId: input.projectId,
+            number: input.number,
+            cause,
+          }),
+        ),
+      );
+
+  /** Records reverts on the default branch; returns how many were new. */
+  const syncReverts = (projectId: ProjectId, startedAt: IsoDateTime) =>
+    Effect.gen(function* () {
+      const project = yield* projects.get(projectId);
+      if (Option.isNone(project) || project.value.deletedAt !== null) return 0;
+      const log = yield* revertLogs.read(project.value.workspaceRoot);
+      if (Option.isNone(log)) return 0;
+      let added = 0;
+      for (const revert of parseRevertCommits(log.value)) {
+        for (const { task, repository: repo } of yield* tasksWithPullRequest(
+          projectId,
+          revert.prNumber,
+          null,
+        )) {
+          const stored = yield* storeCorrection({
+            task,
+            kind: "revert",
+            userText: revert.subject,
+            whatDiffered: `머지 뒤 되돌림: ${task.title}`,
+            // The same key as a revert made in the app, so one revert is one row.
+            sourceKey: `revert:${repo}#${revert.prNumber}`,
+            // Only reverts from before live recording started count as filled in.
+            backfilled: revert.committedAt === null || revert.committedAt < startedAt,
+            ...(revert.committedAt === null ? {} : { createdAt: revert.committedAt }),
+          });
+          if (stored.inserted) added += 1;
+        }
+      }
+      return added;
+    });
+
+  const backfillCorrections: ProjectTeamService["Service"]["backfillCorrections"] = Effect.gen(
+    function* () {
+      const added: Record<ProjectCorrectionKind, number> = {
+        plan_changes: 0,
+        direction_change: 0,
+        pr_change_request: 0,
+        revert: 0,
+      };
+      const startedAt = yield* repository.getCorrectionsStartedAt();
+      const managers = (yield* repository.listManagers()).filter(
+        (manager) => manager.kind === "pm",
+      );
+      for (const manager of managers) {
+        const tasks = yield* repository.listTasks({ projectId: manager.projectId });
+        const taskById = new Map(tasks.map((task) => [task.id as string, task]));
+        const approvals = yield* repository.listAnsweredAttentionItems({
+          projectId: manager.projectId,
+          kind: "approval",
+        });
+        for (const item of approvals) {
+          const task = item.taskId === null ? undefined : taskById.get(item.taskId);
+          if (
+            task === undefined ||
+            item.answer === null ||
+            (item.answeredBy !== "user" && item.answeredBy !== "pm") ||
+            planApprovalOutcome(item.answer) !== "changes" ||
+            isPlainApproval(item.answer)
+          ) {
+            continue;
+          }
+          const stored = yield* storeCorrection({
+            task,
+            kind: "plan_changes",
+            userText: item.answer,
+            whatDiffered: planFeedbackLine(item.answer),
+            sourceKey: `attention:${item.id}`,
+            backfilled: true,
+            ...(item.answeredAt === null ? {} : { createdAt: item.answeredAt }),
+          });
+          if (stored.inserted) added.plan_changes += 1;
+        }
+        // Scope the PM added to running work changed its direction; to work in review, the PR.
+        for (const task of tasks) {
+          const events = yield* repository.listTaskEvents({
+            taskId: task.id,
+            limit: Number.MAX_SAFE_INTEGER,
+          });
+          let stage: ProjectTaskStage = "inbox";
+          for (const event of events) {
+            if (event.kind === "stage_changed") {
+              const next = event.body.split(" → ")[1]?.trim();
+              if (Schema.is(ProjectTaskStage)(next)) stage = next;
+              continue;
+            }
+            if (event.kind !== "note" || !event.body.startsWith(SCOPE_NOTE_PREFIX)) continue;
+            if (stage !== "running" && stage !== "in_review") continue;
+            // Since live recording started, the PM records these moments itself.
+            if (event.createdAt >= startedAt) continue;
+            const scope = event.body.slice(event.body.indexOf(": ") + 2).trim();
+            // Only a note that turns the work around counts; added scope is not a correction.
+            if (!isDirectionChangeNote(scope)) continue;
+            const kind = stage === "in_review" ? "pr_change_request" : "direction_change";
+            const stored = yield* storeCorrection({
+              task,
+              kind,
+              userText: scope,
+              whatDiffered: scope,
+              sourceKey: `event:${event.id}`,
+              backfilled: true,
+              createdAt: event.createdAt,
+            });
+            if (stored.inserted) added[kind] += 1;
+          }
+        }
+        added.revert += yield* syncReverts(manager.projectId, startedAt).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("could not sync revert commits", {
+              projectId: manager.projectId,
+              cause,
+            }).pipe(Effect.as(0)),
+          ),
+        );
+      }
+      yield* Effect.logInfo("backfilled corrections", added);
+    },
+  ).pipe(
+    Effect.catchCause((cause) => Effect.logWarning("could not backfill corrections", { cause })),
+  );
+
+  const correctionsReport: ProjectTeamService["Service"]["correctionsReport"] = (
+    callerThreadId,
+    input,
+  ) =>
+    Effect.gen(function* () {
+      yield* requireRole(callerThreadId, ["director"], "corrections_report");
+      const now = yield* nowIso;
+      const since = isoFromMillis(
+        isoMillis(now) - (input.sinceDays ?? CORRECTION_REPORT_DAYS) * 24 * 60 * MINUTE_MS,
+      );
+      const managers = (yield* repository.listManagers()).filter(
+        (manager) =>
+          manager.kind === "pm" &&
+          (input.projectId === undefined || manager.projectId === input.projectId),
+      );
+      const scope: Array<{ projectId: ProjectId; name: string }> = [];
+      const tasks: Array<CorrectionReportTask> = [];
+      const corrections: Array<ProjectCorrection> = [];
+      for (const manager of managers) {
+        const project = yield* projects.get(manager.projectId);
+        if (Option.isNone(project) || project.value.deletedAt !== null) continue;
+        scope.push({ projectId: manager.projectId, name: project.value.title });
+        const prefix = yield* taskKeyPrefixFor(manager.projectId, manager.settings);
+        const planAnswered = new Set(
+          (yield* repository.listAnsweredAttentionItems({
+            projectId: manager.projectId,
+            kind: "approval",
+          }))
+            .filter((item) => item.answeredBy === "user" || item.answeredBy === "pm")
+            .map((item) => item.taskId),
+        );
+        for (const task of yield* repository.listTasks({ projectId: manager.projectId })) {
+          tasks.push({
+            id: task.id,
+            projectId: task.projectId,
+            projectName: project.value.title,
+            key: formatTaskKey(prefix, task.number),
+            title: task.title,
+            stage: task.stage,
+            prUrl: task.prUrl,
+            workKind: yield* workKindOf(task),
+            planAnswered: planAnswered.has(task.id),
+            updatedAt: task.updatedAt,
+          });
+        }
+        corrections.push(...(yield* repository.listCorrections({ projectId: manager.projectId })));
+      }
+      return correctionReport({
+        projects: scope,
+        tasks,
+        corrections,
+        since,
+        workKind: input.workKind,
+        recentLimit: input.recentLimit ?? CORRECTION_RECENT_LIMIT,
+      });
+    }).pipe(orTeamError("Could not read corrections."));
+
   const goalAlignmentReport: ProjectTeamService["Service"]["goalAlignmentReport"] = Effect.gen(
     function* () {
       const managers = yield* repository.listManagers();
@@ -5858,6 +6229,10 @@ const make = Effect.gen(function* () {
     goalWrite,
     goalLink,
     pmNudge,
+    recordCorrection,
+    correctionsReport,
+    recordPullRequestCorrection,
+    backfillCorrections,
     goalAlignmentReport,
     requestSitrep,
     attentionSnapshot,
@@ -5878,6 +6253,14 @@ export const layerWithDependencies = layer.pipe(
   Layer.provideMerge(FinishedTaskCleanup.layer),
   Layer.provideMerge(SitrepScheduler.layer),
   Layer.provideMerge(AttentionRouter.layer),
+);
+
+/** Records corrections found in history once at startup, without holding startup up. */
+export const layerCorrectionBackfill = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService;
+    yield* Effect.forkScoped(team.backfillCorrections);
+  }),
 );
 
 /** Answers questions for an AFK user a little after their grace period ends. */
