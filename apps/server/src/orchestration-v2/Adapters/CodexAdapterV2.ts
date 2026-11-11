@@ -1126,6 +1126,23 @@ function codexErrorInfoCode(value: unknown): string | null {
   return Object.keys(value)[0] ?? null;
 }
 
+// ChatGPT subscription sharing reports its usage limit with code "other" and only says so in
+// the message. Match the message too so the thread gets usage-limit recovery and can be resumed
+// on another provider.
+function isCodexUsageLimitFailure({
+  code,
+  message,
+}: {
+  code: string | null | undefined;
+  message: string | undefined;
+}) {
+  if (code === "usageLimitExceeded" || code === "rateLimitExceeded") {
+    return true;
+  }
+
+  return message !== undefined && /\busage limit\b/iu.test(message);
+}
+
 interface ActiveCodexTurnContext {
   latestProviderFailure?: {
     readonly nativeMessage: string;
@@ -4643,11 +4660,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 failure: makeProviderFailure({
                   message: payload.error.additionalDetails?.trim() || payload.error.message,
                   code: notificationCode,
-                  class:
-                    notificationCode === "usageLimitExceeded" ||
-                    notificationCode === "rateLimitExceeded"
-                      ? "usage_limit"
-                      : "provider_error",
+                  class: isCodexUsageLimitFailure({
+                    code: notificationCode,
+                    message: payload.error.message,
+                  })
+                    ? "usage_limit"
+                    : "provider_error",
                 }),
               };
               return;
@@ -4668,12 +4686,11 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   ? payload.error.message
                   : additionalDetails,
               code,
-              class:
-                code === "usageLimitExceeded" || code === "rateLimitExceeded"
-                  ? "usage_limit"
-                  : code?.startsWith("http") === true || code?.startsWith("responseStream") === true
-                    ? "transport_error"
-                    : "provider_error",
+              class: isCodexUsageLimitFailure({ code, message: payload.error.message })
+                ? "usage_limit"
+                : code?.startsWith("http") === true || code?.startsWith("responseStream") === true
+                  ? "transport_error"
+                  : "provider_error",
               retryable: true,
             });
             const itemOrdinal =
@@ -5674,11 +5691,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   : makeProviderFailure({
                       message: input.failureMessage,
                       code: input.failureCode,
-                      class:
-                        input.failureCode === "usageLimitExceeded" ||
-                        input.failureCode === "rateLimitExceeded"
-                          ? "usage_limit"
-                          : "provider_error",
+                      class: isCodexUsageLimitFailure({
+                        code: input.failureCode,
+                        message: input.failureMessage,
+                      })
+                        ? "usage_limit"
+                        : "provider_error",
                     });
               return {
                 type: "turn.terminal",

@@ -680,6 +680,12 @@ export const ProjectAttentionContext = Schema.Struct({
 );
 export type ProjectAttentionContext = typeof ProjectAttentionContext.Type;
 
+export const ProjectAttentionDetail = Schema.Struct({
+  label: TrimmedNonEmptyString.check(Schema.isMaxLength(20)),
+  text: TrimmedNonEmptyString.check(Schema.isMaxLength(500)),
+});
+export type ProjectAttentionDetail = typeof ProjectAttentionDetail.Type;
+
 export const ProjectAttentionItem = Schema.Struct({
   id: ProjectAttentionItemId,
   projectId: ProjectId,
@@ -716,6 +722,13 @@ export const ProjectAttentionItem = Schema.Struct({
   /** For a plan approval: the card's Verification section (markdown). Null for other kinds and older cards. */
   verification: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   context: Schema.optionalKey(Schema.NullOr(ProjectAttentionContext)),
+  senderRole: Schema.NullOr(Schema.Literals(["lead", "pm", "director"])).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  senderName: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  details: Schema.NullOr(Schema.Array(ProjectAttentionDetail).check(Schema.isMaxLength(8))).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
 
@@ -1487,9 +1500,13 @@ export const ProjectTeamAskUserInput = Schema.Struct({
     description:
       "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card with the spec's summary and todos. blocker: something only a person can unblock. A PM may ask only decision or blocker.",
   }),
+  senderName: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(24))).annotate({
+    description:
+      "Task lead only: a short plain name for your work, such as 목표 그래프. Shown as '<project> · <name> 리드'. No task keys.",
+  }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description:
-      "Self-contained question. For approval, one line saying what the task is. For a decision or blocker, the first line is the question itself, naming the task; the card shows it as the title. Additional evidence goes below it. Essential reasons and risks belong in context.",
+      "Whole messenger-style message: first line is the ask (at most 80 characters), then a blank line and 1-3 short plain paragraphs describing what, why, done-when, cost and reversibility. Optionally use numbered steps. No headings, labels, bullets, task keys, internal ids, code, paths or identifiers.",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -1497,7 +1514,13 @@ export const ProjectTeamAskUserInput = Schema.Struct({
     ),
   ).annotate({
     description:
-      'Suggested answers, if any, shown as choices. Write each as "Label: one-line tradeoff" and mark the one you recommend with "(Recommended)".',
+      'Suggested answers, if any, shown as choices. Write each as "Label: one-line tradeoff" and, when there are multiple options, mark exactly one with "(Recommended)" or "(추천)".',
+  }),
+  details: Schema.optional(
+    Schema.Array(ProjectAttentionDetail).check(Schema.isMaxLength(8)),
+  ).annotate({
+    description:
+      "Optional folded details shown only under 자세히 보기. At most 8 label/text pairs; labels at most 20 characters, text at most 500. Use plain language without internal keys, ids, code or paths.",
   }),
   context: ProjectAttentionContext.annotate({
     description:
@@ -1672,7 +1695,10 @@ export const ProjectTeamAttentionItemResult = Schema.Struct({
 export type ProjectTeamAttentionItemResult = typeof ProjectTeamAttentionItemResult.Type;
 
 export const ProjectTeamAttentionAnswerInput = Schema.Struct({
-  attentionItemId: ProjectAttentionItemId,
+  attentionItemId: Schema.optional(ProjectAttentionItemId).annotate({
+    description:
+      "Request being answered. Omit to resolve from the user’s request link or words. A conflicting request link is rejected.",
+  }),
   answer: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description: "What the user actually said. Never an answer of your own.",
   }),

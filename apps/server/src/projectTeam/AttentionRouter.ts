@@ -1,3 +1,4 @@
+import { shortWorkName, parseRequestMessage } from "@t3tools/shared/requestMessage";
 import {
   CommandId,
   isTurnFailedBlocker,
@@ -5,6 +6,7 @@ import {
   MessageId,
   type ProjectAttentionAnsweredBy,
   type ProjectAttentionContext,
+  type ProjectAttentionDetail,
   ProjectAttentionBatchId,
   type ProjectAttentionItem,
   ProjectAttentionItemId,
@@ -64,7 +66,7 @@ export function relayedAnswerText(
   answer: string,
   answeredBy: ProjectAttentionAnsweredBy,
 ): string {
-  const trimmed = trimQuestion(question);
+  const trimmed = trimQuestion(parseRequestMessage(question).headline);
   const prefix =
     answeredBy === "user"
       ? USER_ANSWER_PREFIX
@@ -101,6 +103,9 @@ export class AttentionRouter extends Context.Service<
         /** For a plan approval: the card's Verification section. */
         readonly verification?: string;
         readonly context?: ProjectAttentionContext;
+        readonly senderRole?: ProjectAttentionItem["senderRole"] | undefined;
+        readonly senderName?: string | null | undefined;
+        readonly details?: ReadonlyArray<ProjectAttentionDetail> | null | undefined;
       },
     ) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /** Saves the answer and relays it to the thread that asked. */
@@ -165,6 +170,15 @@ const make = Effect.gen(function* () {
         summary: input.summary ?? null,
         verification: input.verification ?? null,
         context: input.context ?? null,
+        details: input.details ?? null,
+        senderRole:
+          input.senderRole === undefined ? (input.task === null ? "pm" : "lead") : input.senderRole,
+        senderName:
+          input.senderName === undefined
+            ? input.task === null
+              ? null
+              : shortWorkName(input.task.title)
+            : input.senderName,
       });
       yield* publish(projectId);
       return item;

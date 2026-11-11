@@ -83,14 +83,24 @@ describe("runMigrations", () => {
         [20, "ProjectAttentionOptionalTask"],
         [21, "ProjectTaskLocation"],
         [22, "ProjectTaskMoveTarget"],
-        [23, "ProjectTaskMemoryHold"],
-        [24, "ProjectTaskMemoryStallSince"],
+        [23, "ProjectAttentionDetails"],
+        [24, "ProjectAttentionSender"],
+        [25, "ProjectTaskMemoryHold"],
+        [26, "ProjectTaskMemoryStallSince"],
       ]);
       const rows = yield* sql`
-        SELECT question, options_json, context_json FROM project_attention_items
+        SELECT question, options_json, context_json, sender_role, sender_name FROM project_attention_items
         WHERE item_id = 'attention:legacy'
       `;
-      assert.deepStrictEqual(rows, [{ question, options_json: options, context_json: null }]);
+      assert.deepStrictEqual(rows, [
+        {
+          question,
+          options_json: options,
+          context_json: null,
+          sender_role: null,
+          sender_name: null,
+        },
+      ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 
@@ -135,8 +145,10 @@ describe("runMigrations", () => {
         [20, "ProjectAttentionOptionalTask"],
         [21, "ProjectTaskLocation"],
         [22, "ProjectTaskMoveTarget"],
-        [23, "ProjectTaskMemoryHold"],
-        [24, "ProjectTaskMemoryStallSince"],
+        [23, "ProjectAttentionDetails"],
+        [24, "ProjectAttentionSender"],
+        [25, "ProjectTaskMemoryHold"],
+        [26, "ProjectTaskMemoryStallSince"],
       ]);
       const tasks = yield* sql`SELECT task_id, stage FROM project_tasks ORDER BY number`;
       assert.deepStrictEqual(tasks, [
@@ -183,8 +195,10 @@ describe("runMigrations", () => {
         [20, "ProjectAttentionOptionalTask"],
         [21, "ProjectTaskLocation"],
         [22, "ProjectTaskMoveTarget"],
-        [23, "ProjectTaskMemoryHold"],
-        [24, "ProjectTaskMemoryStallSince"],
+        [23, "ProjectAttentionDetails"],
+        [24, "ProjectAttentionSender"],
+        [25, "ProjectTaskMemoryHold"],
+        [26, "ProjectTaskMemoryStallSince"],
       ]);
       yield* sql`
         INSERT INTO project_attention_items (

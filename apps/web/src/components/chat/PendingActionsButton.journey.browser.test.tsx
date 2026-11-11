@@ -115,6 +115,9 @@ function card(
       specVersion: null,
       summary: null,
       verification: null,
+      details: null,
+      senderRole: null,
+      senderName: null,
     },
   };
 }
@@ -349,8 +352,9 @@ for (const viewport of [
     await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
     const dialog = await openPendingActions();
     const drag = dialog.querySelector<HTMLElement>('[data-pending-actions-card="attention-drag"]')!;
-    await act(async () => buttonIn(drag, "Approve").click());
-    await act(async () => buttonIn(drag, "Submit").click());
+    // The waiting window shows the same one-bubble message as the chat.
+    expect(drag.querySelector("[data-request-bubble]")).not.toBeNull();
+    await act(async () => buttonIn(drag, "승인").click());
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
     expect(server.answers[0]?.attentionItemId).toBe("attention-drag");
 
@@ -405,8 +409,7 @@ it("answering the last card closes the dialog and hides the button", async () =>
   await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 1개"));
   const dialog = await openPendingActions();
   const drag = dialog.querySelector<HTMLElement>('[data-pending-actions-card="attention-drag"]')!;
-  await act(async () => buttonIn(drag, "Approve").click());
-  await act(async () => buttonIn(drag, "Submit").click());
+  await act(async () => buttonIn(drag, "승인").click());
   await vi.waitFor(() => expect(server.answers).toHaveLength(1));
   await vi.waitFor(() => {
     expect(pendingButton()).toBeNull();

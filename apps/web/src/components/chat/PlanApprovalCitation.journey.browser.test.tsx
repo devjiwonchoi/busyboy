@@ -76,6 +76,9 @@ const card: ProjectDecisionCard = {
     specVersion: 1,
     summary,
     verification: null,
+    details: null,
+    senderRole: null,
+    senderName: null,
   },
 };
 const listRef = createRef<LegendListRef | null>();
@@ -235,7 +238,8 @@ describe.each([
   it("keeps View details and Approve usable without selection actions", async () => {
     await page.viewport(width, height);
     await act(() => root.render(<ChatPage cards={[card]} />));
-    await userEvent.click(page.getByRole("button", { name: "View details" }));
+    await userEvent.click(page.getByRole("button", { name: "자세히 보기" }));
+    await userEvent.click(page.getByRole("button", { name: "전체 플랜" }));
     await vi.waitFor(() =>
       expect(document.querySelector("[data-plan-review]")?.getAttribute("data-plan-review")).toBe(
         card.item.id,
@@ -244,7 +248,7 @@ describe.each([
     expect(document.querySelector('[aria-label="Selection actions"]')).toBeNull();
     await userEvent.keyboard("{Escape}");
     await vi.waitFor(() => expect(document.querySelector("[data-plan-review]")).toBeNull());
-    await userEvent.click(page.getByRole("button", { name: "Approve", exact: true }));
+    await userEvent.click(page.getByRole("button", { name: "승인", exact: true }));
     await vi.waitFor(() =>
       expect(mocks.answer).toHaveBeenCalledWith(environmentId, {
         projectId: card.item.projectId,
@@ -335,13 +339,14 @@ describe.each([
   it("lets the user pick, write a note, and submit without selection actions", async () => {
     await page.viewport(width, height);
     await act(() => root.render(<ChatPage cards={[decision]} />));
+    await userEvent.click(page.getByRole("button", { name: "자세히 보기" }));
     await userEvent.click(page.getByRole("radio", { name: /Guard first/ }));
     expect(mocks.answer.mock.calls).toEqual([]);
     await userEvent.type(
       page.getByRole("textbox", { name: "Note for your answer" }),
       "Keep the flag",
     );
-    await userEvent.click(page.getByRole("button", { name: "Submit", exact: true }));
+    await userEvent.click(page.getByRole("button", { name: "보내기", exact: true }));
     await vi.waitFor(() =>
       expect(mocks.answer).toHaveBeenCalledWith(environmentId, {
         projectId: decision.item.projectId,

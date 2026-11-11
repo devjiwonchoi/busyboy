@@ -15,6 +15,7 @@ import {
   ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
   ProjectAttentionContext,
+  ProjectAttentionDetail,
   ProjectAttentionItem,
   ProjectAttentionItemId,
   ProjectAttentionKind,
@@ -153,6 +154,9 @@ export interface CreateProjectAttentionItemInput {
   /** For a plan approval: the card's Verification section. */
   readonly verification?: string | null;
   readonly context?: ProjectAttentionContext | null;
+  readonly details?: ReadonlyArray<ProjectAttentionDetail> | null;
+  readonly senderRole?: ProjectAttentionItem["senderRole"] | undefined;
+  readonly senderName?: string | null | undefined;
 }
 
 export interface CreateProjectSitrepInput {
@@ -531,6 +535,9 @@ const AttentionRow = Schema.Struct({
   verification: Schema.NullOr(Schema.String),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
   context: Schema.NullOr(Schema.fromJsonString(ProjectAttentionContext)),
+  senderRole: ProjectAttentionItem.fields.senderRole,
+  senderName: ProjectAttentionItem.fields.senderName,
+  details: Schema.NullOr(Schema.fromJsonString(Schema.Array(ProjectAttentionDetail))),
 });
 const SpecVersionRow = Schema.Struct({
   ...ProjectTaskSpecVersion.fields,
@@ -629,7 +636,10 @@ export const make = Effect.gen(function* () {
     spec_version AS "specVersion",
     summary AS "summary",
     verification AS "verification",
-    context_json AS "context"
+    context_json AS "context",
+    details_json AS "details",
+    sender_role AS "senderRole",
+    sender_name AS "senderName"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -1402,17 +1412,20 @@ export const make = Effect.gen(function* () {
       summary: Schema.NullOr(Schema.String),
       verification: Schema.NullOr(Schema.String),
       context: Schema.NullOr(Schema.fromJsonString(ProjectAttentionContext)),
+      senderRole: ProjectAttentionItem.fields.senderRole,
+      senderName: ProjectAttentionItem.fields.senderName,
+      details: Schema.NullOr(Schema.fromJsonString(Schema.Array(ProjectAttentionDetail))),
     }),
     Result: AttentionRow,
     execute: (item) => sql`
       INSERT INTO project_attention_items (
         item_id, project_id, task_id, kind, question, options_json,
-        asker_thread_id, batch_id, created_at, spec_version, summary, verification, context_json
+        asker_thread_id, batch_id, created_at, spec_version, summary, verification, context_json, details_json, sender_role, sender_name
       )
       VALUES (
         ${item.id}, ${item.projectId}, ${item.taskId}, ${item.kind}, ${item.question},
         ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt},
-        ${item.specVersion}, ${item.summary}, ${item.verification}, ${item.context}
+        ${item.specVersion}, ${item.summary}, ${item.verification}, ${item.context}, ${item.details}, ${item.senderRole}, ${item.senderName}
       )
       RETURNING ${attentionColumns}
     `,
@@ -1882,6 +1895,9 @@ export const make = Effect.gen(function* () {
         summary: input.summary ?? null,
         verification: input.verification ?? null,
         context: input.context ?? null,
+        details: input.details ?? null,
+        senderRole: input.senderRole ?? null,
+        senderName: input.senderName ?? null,
       }).pipe(Effect.mapError(toRepositoryError("createAttentionItem"))),
     getAttentionItem: (id) =>
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),

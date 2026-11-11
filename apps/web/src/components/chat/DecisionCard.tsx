@@ -1,5 +1,6 @@
 import {
   isTurnFailedBlocker,
+  isSandboxRotationDecision,
   TURN_FAILED_RETRY,
   TURN_FAILED_CANCEL,
   type EnvironmentId,
@@ -21,8 +22,9 @@ import ChatMarkdown from "../ChatMarkdown";
 import { Button } from "../ui/button";
 import { decisionQuestionPresentation, parseDecisionOption } from "./DecisionCard.logic";
 import { AFK_ANSWERED_LABEL } from "./Afk";
+import { RequestMessage } from "./RequestMessage";
 import { PlanApprovalCard } from "./PlanApprovalCard";
-import { AttentionContext, AttentionTaskLink, useAttentionTask } from "./AttentionContext";
+import { AttentionContext, AttentionTaskLink, useRequestSender } from "./AttentionContext";
 import { CardDetailWithSideChat, type CardDetailTab, CardSideChat } from "./CardSideChat";
 
 const QUESTION_ID = "answer";
@@ -39,26 +41,14 @@ function cardOptions(card: ProjectDecisionCard): ReadonlyArray<string> {
   return ["Give feedback"];
 }
 
-/** "Decision · Fix login", or "Decision · BB-7 Fix login" where the task isn't obvious. */
-export function decisionCardHeader(
-  card: ProjectDecisionCard,
-  taskKey?: string,
-  projectTitle?: string,
-): string {
-  const task = [card.taskTitle, projectTitle].filter((part) => part !== undefined).join(" · ");
-  const key = taskKey === undefined ? "" : ` (${taskKey})`;
-  return `${KIND_LABEL[card.item.kind]} · ${task}${key}`;
-}
-
-/** The card's question in the shape the shared question card renders. */
+/** The card's question in the shape the shared question card renders, under its sender line. */
 export function decisionCardQuestion(
   card: ProjectDecisionCard,
-  taskKey?: string,
-  projectTitle?: string,
+  header: string,
 ): OrchestrationV2UserInputQuestion {
   return {
     id: QUESTION_ID,
-    header: decisionCardHeader(card, taskKey, projectTitle),
+    header,
     question: card.item.question,
     options: cardOptions(card).map((label) => ({ label, description: label })),
     multiSelect: false,
@@ -92,11 +82,11 @@ export function DecisionCard({
   threadRef: ScopedThreadRef;
   cwd: string | undefined;
 }) {
-  const { related, projectTitle } = useAttentionTask({ card, environmentId });
+  const sender = useRequestSender(card, environmentId);
   if (card.item.kind === "approval") {
-    return <PlanApprovalCard card={card} environmentId={environmentId} />;
+    return <PlanApprovalCard card={card} environmentId={environmentId} threadRef={threadRef} />;
   }
-  const question = decisionCardQuestion(card, related?.key, projectTitle);
+  const question = decisionCardQuestion(card, sender);
   if (card.item.answeredAt !== null) {
     return (
       <div data-decision-card={card.item.id} data-decision-card-state="answered">
@@ -124,6 +114,9 @@ export function DecisionCard({
         <p className="mt-1 line-clamp-3 whitespace-pre-wrap">{card.item.question}</p>
       </div>
     );
+  }
+  if (!isTurnFailedBlocker(card.item) && !isSandboxRotationDecision(card.item)) {
+    return <RequestMessage card={card} environmentId={environmentId} threadRef={threadRef} />;
   }
   return (
     <OpenDecisionCard

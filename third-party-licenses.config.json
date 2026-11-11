@@ -183,6 +183,16 @@
       }
     },
     {
+      "license": "MIT",
+      "name": "jsonlines",
+      "version": "0.1.1",
+      "sourceUrl": "https://github.com/LinusU/node-jsonlines",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) Linus Unnebäck <linus@folkdatorn.se>"]
+      }
+    },
+    {
       "name": "lazy-val",
       "generatedNotice": {
         "licenseId": "MIT",

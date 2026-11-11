@@ -1,4 +1,13 @@
 import {
+  formatRequestLink,
+  matchRequestReference,
+  parseRequestMessage,
+  requestLinkIds,
+  requestMessageProblems,
+  todoTitleProblems,
+  plainTextProblems,
+} from "@t3tools/shared/requestMessage";
+import {
   isSandboxRotationDecision,
   SANDBOX_ROTATION_MOVE_LOCAL,
   SANDBOX_ROTATION_OPTIONS,
@@ -25,6 +34,7 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
+  ProjectAttentionItemId,
   PLAN_APPROVAL_START,
   planApprovalOutcome,
   type ProjectDecisionCard,
@@ -3668,6 +3678,15 @@ const make = Effect.gen(function* () {
         );
       }
       const spec = yield* latestSpec(task);
+      const titleProblems = spec.spec.todos.flatMap((todo) =>
+        todoTitleProblems(todo.text).map((problem) => `Todo ${todo.id} '${todo.text}': ${problem}`),
+      );
+      if (titleProblems.length > 0) {
+        return yield* teamError(
+          `${titleProblems.join("\n")}\nKeep each step one short plain line; move done-when and order into the spec's doneWhen/dependsOn, which the card shows only under details.`,
+          task.projectId,
+        );
+      }
       const unlinked = (yield* openDrafts(task)).filter(
         (draft) => !spec.spec.todos.some((todo) => todo.subtaskId === draft.id),
       );
@@ -3695,6 +3714,8 @@ const make = Effect.gen(function* () {
         kind: "approval",
         question: input.question,
         context: input.context,
+        details: input.details,
+        senderName: input.senderName,
         // One way to approve: approving always starts the work.
         options: [PLAN_APPROVAL_START],
         askerThreadId: callerThreadId,
@@ -3758,6 +3779,30 @@ const make = Effect.gen(function* () {
   const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["lead", "director", "pm"], "ask_user");
+      // Validate only agent-authored asks; server-raised blockers bypass this entry point.
+      const problems = requestMessageProblems(input.question, input.details);
+      if (role.type === "lead" && input.senderName !== undefined) {
+        problems.push(...plainTextProblems([input.senderName]));
+        // The input schema already bounds its length; it does not forbid line breaks.
+        if (/[\r\n]/.test(input.senderName)) {
+          problems.push("Keep senderName on one line.");
+        }
+      }
+      if (
+        input.kind === "decision" &&
+        (input.options?.length ?? 0) >= 2 &&
+        input.options!.filter((option) => /\((?:Recommended|추천)\)/i.test(option)).length !== 1
+      ) {
+        problems.push(
+          "A decision with multiple options needs exactly one marked (Recommended) or (추천).",
+        );
+      }
+      if (problems.length > 0) {
+        return yield* teamError(
+          `Invalid request message:\n${problems.join("\n")}\nUse an ask on line 1, a blank line, then 1-3 short plain paragraphs and optional numbered steps. Put extra explanation in details.`,
+          role.projectId,
+        );
+      }
       if (role.type === "director") return yield* askAsDirector(callerThreadId, role, input);
       if (role.type === "pm") return yield* askAsManager(callerThreadId, role, input);
       const task = yield* requireTask(role.taskId, role.projectId);
@@ -3767,6 +3812,8 @@ const make = Effect.gen(function* () {
         kind: input.kind,
         question: input.question,
         context: input.context,
+        details: input.details,
+        senderName: input.senderName,
         options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
@@ -3803,6 +3850,9 @@ const make = Effect.gen(function* () {
         kind: input.kind,
         question: input.question,
         context: input.context,
+        details: input.details,
+        senderRole: "pm",
+        senderName: null,
         options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
@@ -3838,6 +3888,9 @@ const make = Effect.gen(function* () {
         kind: "decision",
         question: input.question,
         context: input.context,
+        details: input.details,
+        senderRole: "director",
+        senderName: null,
         options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
@@ -3921,10 +3974,52 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm"], "attention_answer");
-      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
+        messageRoles: ["user"],
+      });
+      // Use only a user-written message that actually contains the quoted answer.
+      const matchedMessage = messages
+        .filter((message) => isUserChatAnswer(input.answer, [message], 0))
+        .sort(
+          (a, b) => DateTime.toEpochMillis(b.createdAt) - DateTime.toEpochMillis(a.createdAt),
+        )[0];
+      const referenceText = `${input.answer}\n${matchedMessage?.text ?? ""}`;
+      const openItems = yield* repository.listOpenAttentionItems({ projectId: role.projectId });
+      let attentionItemId = input.attentionItemId;
+      if (attentionItemId === undefined) {
+        const reference = matchRequestReference(referenceText, openItems);
+        if (reference.kind !== "link" && reference.kind !== "words") {
+          return yield* teamError(
+            `Which open request is this reply for? Ask the user to choose:\n${openItems.map((item) => formatRequestLink(item.id, parseRequestMessage(item.question).headline)).join("\n")}`,
+            role.projectId,
+          );
+        }
+        attentionItemId = ProjectAttentionItemId.make(reference.id);
+        if (!openItems.some((item) => item.id === attentionItemId)) {
+          return yield* teamError(
+            `Request ${reference.id} is not open in this project.`,
+            role.projectId,
+          );
+        }
+      }
+      const item = yield* repository.getAttentionItem(attentionItemId);
       if (Option.isNone(item) || item.value.projectId !== role.projectId) {
         return yield* teamError(
-          `Attention item ${input.attentionItemId} was not found in this project.`,
+          `Attention item ${attentionItemId} was not found in this project.`,
+          role.projectId,
+        );
+      }
+      const conflictingId = requestLinkIds(referenceText).find((id) => id !== attentionItemId);
+      if (conflictingId !== undefined) {
+        const other = yield* repository.getAttentionItem(
+          ProjectAttentionItemId.make(conflictingId),
+        );
+        const headline =
+          Option.isSome(other) && other.value.projectId === role.projectId
+            ? parseRequestMessage(other.value.question).headline
+            : conflictingId;
+        return yield* teamError(
+          `This reply points at another request: ${headline}`,
           role.projectId,
         );
       }
@@ -3933,9 +4028,6 @@ const make = Effect.gen(function* () {
       // A closed card skips the check so the router reports why it cannot be answered.
       const open = item.value.answeredAt === null && item.value.supersededAt === null;
       if (open && item.value.kind !== "blocker") {
-        const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
-          messageRoles: ["user"],
-        });
         if (!isUserChatAnswer(input.answer, messages, isoMillis(item.value.createdAt))) {
           return yield* teamError(PM_RELAY_NOT_USER_WORDS, role.projectId);
         }

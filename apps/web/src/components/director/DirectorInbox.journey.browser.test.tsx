@@ -114,6 +114,9 @@ function card(
       specVersion: null,
       summary: "진행할 계획",
       verification: "화면 확인",
+      details: null,
+      senderRole: null,
+      senderName: null,
       context: {
         action: `${id} 변경을 로컬에서 구현합니다.`,
         reason: "사용자가 겪는 오류를 고칩니다.",
@@ -325,9 +328,15 @@ for (const width of [1280, 390]) {
       await vi.waitFor(() => expect(pendingButton()).not.toBeNull());
       const dialog = await openPendingActions();
       const decision = cardIn(dialog, "결정");
-      await userEvent.click(decision.querySelector<HTMLButtonElement>('[role="radio"]')!);
       await userEvent.click(
-        decision.querySelector<HTMLButtonElement>("[data-decision-card-submit]")!,
+        [...decision.querySelectorAll<HTMLButtonElement>("button")].find(
+          (button) => button.textContent === "자세히 보기",
+        )!,
+      );
+      await userEvent.click(
+        [...decision.querySelectorAll<HTMLButtonElement>("button")].find(
+          (button) => button.textContent === "보내기",
+        )!,
       );
       await vi.waitFor(() => expect(state.answers).toHaveLength(1));
       expect(state.answers[0]).toMatchObject({
@@ -523,9 +532,7 @@ it("shows a PM's own blocker with the project name and opens that PM's chat", as
   expect(link.textContent).toBe("Jota · 프로젝트 A");
   await page.viewport(1280, 844);
   await page.screenshot({ path: "__screenshots__/director-inbox-pm-blocker-1280.png" });
-  expect(container.querySelector("[data-decision-card-meta]")?.textContent).toBe(
-    "Blocker · Jota · 프로젝트 A",
-  );
+  expect(container.querySelector("[data-decision-card-meta]")?.textContent).toBe("프로젝트 A · PM");
   await userEvent.click(link);
   await vi.waitFor(() => expect(router.state.location.pathname).toBe("/env/pm-a"));
   expect(container.textContent).toContain("PM 채팅");
