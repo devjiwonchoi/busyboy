@@ -199,7 +199,6 @@ interface CloudSession {
   /** Running remote processes per thread, so a replacement can stop each one's turn. */
   readonly runningThreads: Map<string, number>;
   readonly sandbox: SandboxHandle;
-  readonly client: SandboxClient;
   readonly relay: RelayClient;
   readonly relayTokenRef: string;
   /** Remote processes by relay id, recorded so a restarted Mac finds them. */
@@ -728,13 +727,12 @@ export class CloudLeadRuntime {
       }
       await this.startRelayProcess(sandbox, record.remoteHome, token);
     }
-    const connection = this.connectRelay(record.worktreeKey, client, sandbox, token!, mcpEndpoint);
+    const connection = this.connectRelay(record.worktreeKey, sandbox, token!, mcpEndpoint);
     await this.waitForRelay(connection.relay);
     const session = this.newSession({
       key: record.worktreeKey,
       threadId: record.threadId,
       sandbox,
-      client,
       relay: connection.relay,
       relayTokenRef: record.relayTokenRef,
       macCwd: record.worktreeKey,
@@ -795,7 +793,7 @@ export class CloudLeadRuntime {
       const token = NodeCrypto.randomBytes(32).toString("base64url");
       const relayTokenRef = relayTokenRefFor(key);
       await this.startRelayProcess(sandbox, remoteHome, token);
-      const connection = this.connectRelay(key, client, sandbox, token, input.mcpEndpoint);
+      const connection = this.connectRelay(key, sandbox, token, input.mcpEndpoint);
       await this.waitForRelay(connection.relay);
       this.log("cloud-lead.sandbox-ready", {
         threadId: input.threadId,
@@ -807,7 +805,6 @@ export class CloudLeadRuntime {
         key,
         threadId: input.threadId,
         sandbox,
-        client,
         relay: connection.relay,
         relayTokenRef,
         macCwd: input.worktreePath,
@@ -832,7 +829,6 @@ export class CloudLeadRuntime {
     readonly key: string;
     readonly threadId: string;
     readonly sandbox: SandboxHandle;
-    readonly client: SandboxClient;
     readonly relay: RelayClient;
     readonly relayTokenRef: string;
     readonly macCwd: string;
@@ -899,7 +895,8 @@ export class CloudLeadRuntime {
   /** Hands the relay a token that reaches only the sandbox project. False when there is none. */
   private async sendCredential(session: CloudSession): Promise<boolean> {
     try {
-      const credential = await session.client.relayCredential();
+      // A fresh client: the Mac's Vercel login renews itself over a long session.
+      const credential = await (await this.deps.client()).relayCredential();
       session.relay.sendControl({
         op: "credential",
         token: credential.token,
@@ -1024,7 +1021,6 @@ export class CloudLeadRuntime {
    */
   private connectRelay(
     key: string,
-    client: SandboxClient,
     sandbox: SandboxHandle,
     token: string,
     mcpEndpoint: string,
@@ -1042,9 +1038,13 @@ export class CloudLeadRuntime {
       ...(this.deps.relayGiveUpAfterMs === undefined
         ? {}
         : { giveUpAfterMs: this.deps.relayGiveUpAfterMs }),
-      isAlive: async () =>
-        (await client.status(sandbox.name)) === "running" &&
-        (await client.get(sandbox.name)).sessionId === relaySession,
+      isAlive: async () => {
+        const fresh = await this.deps.client();
+        return (
+          (await fresh.status(sandbox.name)) === "running" &&
+          (await fresh.get(sandbox.name)).sessionId === relaySession
+        );
+      },
       onGiveUp: () => {
         this.log("cloud-lead.relay-unreachable", { worktree: key, sandbox: sandbox.name });
         if (bound !== null) this.letGo(bound);

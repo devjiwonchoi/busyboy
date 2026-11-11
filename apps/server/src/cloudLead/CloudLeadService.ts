@@ -30,6 +30,7 @@ import {
 import type { CloudSessionRecord, CloudSessionStore } from "./CloudSessionStore.ts";
 import { joinPath, nodeLocalHost } from "./LocalHost.ts";
 import { makeSandboxClient } from "./SandboxClient.ts";
+import { readVercelCliLogin, VERCEL_CLI_AUTH } from "./vercelCliLogin.ts";
 import { resolveVercelTarget } from "./vercelTeamGuard.ts";
 
 export class CloudLeadError extends Schema.TaggedError<CloudLeadError>()("CloudLeadError", {
@@ -170,22 +171,39 @@ export const hooksFromRuntime = (runtime: CloudLeadRuntime): CloudLeadHooksShape
       ),
   });
 
-/**
- * The Vercel CLI keeps its login token here on macOS; used when none was saved.
- * That token can reach every team the user belongs to, so makeSandboxClient
- * checks the team against ALLOWED_VERCEL_TEAM_SLUGS before any sandbox call.
- */
-const VERCEL_CLI_AUTH = "Library/Application Support/com.vercel.cli/auth.json";
-
-const readVercelCliToken = async (home: string): Promise<string | null> => {
-  try {
-    const raw = await NodeFs.readFile(joinPath(home, VERCEL_CLI_AUTH), "utf8");
-    const token = (JSON.parse(raw) as { token?: unknown }).token;
-    return typeof token === "string" && token.length > 0 ? token : null;
-  } catch {
-    return null;
-  }
+/** Runs the Vercel CLI once so it renews its expired login; one run at a time. */
+let renewingVercelLogin: Promise<void> | null = null;
+const renewVercelCliLogin = (home: string): Promise<void> => {
+  renewingVercelLogin ??= new Promise<void>((resolve) => {
+    NodeChildProcess.execFile(
+      "npx",
+      ["-y", "vercel", "whoami"],
+      {
+        timeout: 120_000,
+        // A Mac app starts with a short PATH; npx is usually in one of these.
+        env: {
+          ...process.env,
+          PATH: `${process.env.PATH ?? ""}:/opt/homebrew/bin:/usr/local/bin:${home}/.volta/bin`,
+        },
+      },
+      () => resolve(),
+    );
+  }).finally(() => {
+    renewingVercelLogin = null;
+  });
+  return renewingVercelLogin;
 };
+
+/**
+ * The Vercel CLI login on this Mac, used when no token was saved. That token
+ * can reach every team the user belongs to, so makeSandboxClient checks the
+ * team against ALLOWED_VERCEL_TEAM_SLUGS before any sandbox call.
+ */
+const readVercelCliToken = (home: string): Promise<string | null> =>
+  readVercelCliLogin({
+    readAuthFile: () => NodeFs.readFile(joinPath(home, VERCEL_CLI_AUTH), "utf8"),
+    renew: () => renewVercelCliLogin(home),
+  });
 
 const ghAuthToken = () =>
   new Promise<string | null>((resolve) => {
