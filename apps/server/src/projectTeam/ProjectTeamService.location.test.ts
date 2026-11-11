@@ -17,46 +17,50 @@ import {
 } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
+/** The default, local only, keeps every lead on the Mac; these tests start cloud leads. */
+const CLOUD_ALLOWED = { settings: { taskExecution: { location: "local_first" as const } } };
 
 describe("ProjectTeamService location", () => {
   it.effect(
     "starts a cloud lead in the cloud, keeps the task cloud, and runs its steps on its checkout",
     () =>
-      withTeam((harness) =>
-        Effect.gen(function* () {
-          const team = yield* service;
-          const pm = yield* setUpManager;
-          const { task: created } = yield* createAcceptedTask(pm, {
-            title: "Add hello.sh",
-            request: "Add hello.sh.",
-            intake: "New work.",
-          });
+      withTeam(
+        (harness) =>
+          Effect.gen(function* () {
+            const team = yield* service;
+            const pm = yield* setUpManager;
+            const { task: created } = yield* createAcceptedTask(pm, {
+              title: "Add hello.sh",
+              request: "Add hello.sh.",
+              intake: "New work.",
+            });
 
-          const { task, leadThreadId } = yield* team.startTask(
-            pm,
-            { taskId: created.id, location: "cloud" },
-            harness.delegate,
-          );
-          const leadCall = (yield* Ref.get(harness.delegated)).at(-1);
-          assert.strictEqual(leadCall?.location, "cloud");
-          assert.include(leadCall?.task ?? "", "## Cloud");
-          assert.strictEqual(task.location, "cloud");
-          assert.strictEqual(
-            (yield* team.readTask(pm, { taskId: task.id })).task.location,
-            "cloud",
-          );
-          const reference = (yield* team.attentionSnapshot).projects
-            .find((project) => project.projectId === PROJECT_ID)
-            ?.tasks.find((entry) => entry.id === task.id);
-          assert.strictEqual(reference?.location, "cloud");
+            const { task, leadThreadId } = yield* team.startTask(
+              pm,
+              { taskId: created.id, location: "cloud" },
+              harness.delegate,
+            );
+            const leadCall = (yield* Ref.get(harness.delegated)).at(-1);
+            assert.strictEqual(leadCall?.location, "cloud");
+            assert.include(leadCall?.task ?? "", "## Cloud");
+            assert.strictEqual(task.location, "cloud");
+            assert.strictEqual(
+              (yield* team.readTask(pm, { taskId: task.id })).task.location,
+              "cloud",
+            );
+            const reference = (yield* team.attentionSnapshot).projects
+              .find((project) => project.projectId === PROJECT_ID)
+              ?.tasks.find((entry) => entry.id === task.id);
+            assert.strictEqual(reference?.location, "cloud");
 
-          // Steps share the lead's checkout, so delegate_task runs them in its sandbox.
-          for (const role of ["review", "implement"] as const) {
-            yield* team.delegateStep(leadThreadId, { role, task: "Do it." }, harness.delegate);
-            const call = (yield* Ref.get(harness.delegated)).at(-1);
-            assert.strictEqual(call?.isolation, undefined);
-          }
-        }),
+            // Steps share the lead's checkout, so delegate_task runs them in its sandbox.
+            for (const role of ["review", "implement"] as const) {
+              yield* team.delegateStep(leadThreadId, { role, task: "Do it." }, harness.delegate);
+              const call = (yield* Ref.get(harness.delegated)).at(-1);
+              assert.strictEqual(call?.isolation, undefined);
+            }
+          }),
+        CLOUD_ALLOWED,
       ),
   );
 
@@ -66,7 +70,7 @@ describe("ProjectTeamService location", () => {
         const pm = yield* setUpManager;
         const { task, leadThreadId } = yield* startLead(pm, "Add hello.sh", harness.delegate);
         const leadCall = (yield* Ref.get(harness.delegated)).at(-1);
-        assert.strictEqual(leadCall?.location, undefined);
+        assert.strictEqual(leadCall?.location, "local");
         assert.notInclude(leadCall?.task ?? "", "## Cloud");
         assert.strictEqual(task.location, "local");
 
@@ -104,6 +108,7 @@ describe("ProjectTeamService location", () => {
           assert.deepEqual(released, [leadThreadId]);
         }),
       {
+        ...CLOUD_ALLOWED,
         cloudLead: {
           ...CloudLeadService.unavailableHooks,
           prepare: () => Effect.die("not used"),
@@ -158,6 +163,7 @@ describe("ProjectTeamService location", () => {
           return { targets, roleModels: after.roleModels };
         }),
       {
+        ...CLOUD_ALLOWED,
         cloudLead: {
           ...CloudLeadService.unavailableHooks,
           prepare: () => Effect.die("not used"),

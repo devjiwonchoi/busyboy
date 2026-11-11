@@ -404,6 +404,45 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "task-execution",
+    title: "작업 실행",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: [
+      "task execution local cloud memory swap pressure sessions concurrent 로컬 클라우드 메모리 스왑 세션 대기",
+    ],
+  },
+  {
+    id: "task-execution-location",
+    title: "실행 위치",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: [
+      "task location local only local first cloud first 로컬만 로컬 우선 클라우드 우선",
+    ],
+  },
+  {
+    id: "task-execution-start-memory",
+    title: "새 세션 시작 최소 여유 메모리",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["free memory start session wait threshold GB 여유 메모리 시작 대기"],
+  },
+  {
+    id: "task-execution-pause-memory",
+    title: "세션을 멈추는 여유 메모리",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["free memory pause session threshold GB 여유 메모리 멈춤"],
+  },
+  {
+    id: "task-execution-max-sessions",
+    title: "최대 동시 세션",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["max concurrent sessions task leads limit safety cap 최대 동시 세션"],
+  },
+  {
     id: "new-threads",
     title: "New threads",
     to: "/settings/general",

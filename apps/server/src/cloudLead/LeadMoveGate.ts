@@ -2,16 +2,21 @@
  * What a task lead move tells the orchestrator while it runs. One per server:
  * the move, the message dispatch and the turn start read the same instance.
  *
- * - held: new turns on the thread queue as held until every hold ends. A move
- *   and a sandbox rotation hold separately, so one never ends the other's.
+ * - held: new turns on the thread queue as held until every hold ends. A move,
+ *   a sandbox rotation and a memory pause hold separately, so one never ends
+ *   another's.
  * - fresh session: the transcript did not reach the new place, so the next
  *   turn starts a new provider session with a summary of the thread.
  */
 import type { ThreadId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 
-/** replaced: a restart gave the task a new lead, so the old one stays quiet. */
-export type LeadHoldReason = "move" | "rotation" | "replaced";
+export const LEAD_HOLD_REASONS = ["move", "rotation", "memory", "replaced"] as const;
+/**
+ * A move, a sandbox rotation, a pause while the Mac is short on memory, or a lead
+ * a restart replaced, which stays quiet.
+ */
+export type LeadHoldReason = (typeof LEAD_HOLD_REASONS)[number];
 
 export interface LeadMoveGateShape {
   readonly hold: (threadId: ThreadId, reason: LeadHoldReason) => void;
@@ -31,10 +36,7 @@ export const makeLeadMoveGate = (): LeadMoveGateShape => {
   return {
     hold: (threadId, reason) => void held.add(key(threadId, reason)),
     release: (threadId, reason) => void held.delete(key(threadId, reason)),
-    isHeld: (threadId) =>
-      held.has(key(threadId, "move")) ||
-      held.has(key(threadId, "rotation")) ||
-      held.has(key(threadId, "replaced")),
+    isHeld: (threadId) => LEAD_HOLD_REASONS.some((reason) => held.has(key(threadId, reason))),
     isHeldFor: (threadId, reason) => held.has(key(threadId, reason)),
     requestFreshSession: (threadId) => void fresh.add(threadId),
     takeFreshSession: (threadId) => fresh.delete(threadId),

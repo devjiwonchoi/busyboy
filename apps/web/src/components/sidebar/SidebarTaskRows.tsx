@@ -4,6 +4,7 @@ import {
   type ProjectTaskId,
   type ProjectTaskReference,
 } from "@t3tools/contracts";
+import { memoryHoldLabel } from "@t3tools/shared/taskExecutionSettings";
 
 import { ChevronRightIcon } from "lucide-react";
 
@@ -62,10 +63,31 @@ export function SidebarTaskRow(props: {
             </span>
           }
           status={status}
-          indicators={task.location === "cloud" ? <CloudBadge variant="icon" /> : undefined}
+          indicators={
+            task.location === "cloud" || task.memoryHold != null ? (
+              <>
+                <MemoryHoldLabel task={task} />
+                {task.location === "cloud" ? <CloudBadge variant="icon" /> : null}
+              </>
+            ) : undefined
+          }
         />
       </button>
     </li>
+  );
+}
+
+/** A task held for memory, waiting to start or paused: a small muted "메모리 대기". */
+export function MemoryHoldLabel(props: { task: Pick<ProjectTaskReference, "memoryHold"> }) {
+  const label = memoryHoldLabel(props.task.memoryHold);
+  if (label === null) return null;
+  return (
+    <span
+      data-memory-hold={props.task.memoryHold}
+      className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground"
+    >
+      {label}
+    </span>
   );
 }
 

@@ -40,6 +40,8 @@ const delegateTaskLead =
       completionWake: "never",
       // A lead starts from the latest upstream, not the PM checkout's local HEAD.
       worktreeBase: "origin-default",
+      // task_start claimed any local start from the memory gate before calling this.
+      localStart: "claimed",
     });
 
 const handlers = {

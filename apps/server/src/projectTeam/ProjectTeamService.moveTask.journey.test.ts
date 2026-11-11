@@ -566,32 +566,33 @@ describe("moving a task lead", () => {
   );
 
   it.effect("keeps a stopped task and its card as they were when a restart is refused", () =>
-    withTeam((harness) =>
-      Effect.gen(function* () {
-        const team = yield* service;
-        const { pm, task } = yield* startImplementingTask(harness, "/tmp/lead");
-        yield* team.recordOutcome({
-          task: (yield* team.readTask(pm, { taskId: task.id })).task,
-          outcome: "failed",
-          detail: "Claude stopped",
-        });
-        // Another lead takes the only slot.
-        const { task: other } = yield* createAcceptedTask(pm, {
-          title: "Other",
-          request: "Other.",
-          intake: "New work.",
-        });
-        yield* team.startTask(pm, { taskId: other.id }, harness.delegate);
-        yield* team.updateSettingsAsManager(pm, { maxConcurrentTasks: 1 });
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task } = yield* startImplementingTask(harness, "/tmp/lead");
+          yield* team.recordOutcome({
+            task: (yield* team.readTask(pm, { taskId: task.id })).task,
+            outcome: "failed",
+            detail: "Claude stopped",
+          });
+          // Another lead takes the only slot.
+          const { task: other } = yield* createAcceptedTask(pm, {
+            title: "Other",
+            request: "Other.",
+            intake: "New work.",
+          });
+          yield* team.startTask(pm, { taskId: other.id }, harness.delegate);
 
-        const refused = yield* team
-          .startTask(pm, { taskId: task.id }, harness.delegate)
-          .pipe(Effect.flip);
-        assert.include(refused.message, "cannot start again yet");
-        const after = yield* team.readTask(pm, { taskId: task.id });
-        assert.strictEqual(after.task.stage, "blocked");
-        assert.isTrue(after.openAttention.some(isTurnFailedBlocker));
-      }),
+          const refused = yield* team
+            .startTask(pm, { taskId: task.id }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(refused.message, "cannot start again yet");
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          assert.strictEqual(after.task.stage, "blocked");
+          assert.isTrue(after.openAttention.some(isTurnFailedBlocker));
+        }),
+      { settings: { taskExecution: { maxConcurrentSessions: 1 } } },
     ),
   );
 
@@ -655,33 +656,38 @@ describe("moving a task lead", () => {
     );
   });
 
-  it.effect("does not move a blocked task into a full set of slots", () =>
+  it.effect("does not move a blocked cloud lead back to a Mac with no free slot", () =>
     withTeam(
       (harness) =>
         Effect.gen(function* () {
           const team = yield* service;
           const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+          yield* team.moveTask({ projectId: PROJECT_ID, taskId: task.id, to: "cloud" });
           yield* team.recordOutcome({
             task: (yield* team.readTask(pm, { taskId: task.id })).task,
             outcome: "failed",
             detail: "Claude stopped",
           });
+          // Another lead takes the only local slot.
           const { task: other } = yield* createAcceptedTask(pm, {
             title: "Other",
             request: "Other.",
             intake: "New work.",
           });
           yield* team.startTask(pm, { taskId: other.id }, harness.delegate);
-          yield* team.updateSettingsAsManager(pm, { maxConcurrentTasks: 1 });
           const refused = yield* team
-            .startTask(pm, { taskId: task.id, location: "cloud" }, harness.delegate)
+            .startTask(pm, { taskId: task.id, location: "local" }, harness.delegate)
             .pipe(Effect.flip);
           assert.include(refused.message, "cannot start again yet");
           const after = yield* team.readTask(pm, { taskId: task.id });
-          assert.strictEqual(after.task.location, "local");
+          assert.strictEqual(after.task.location, "cloud");
           assert.strictEqual(after.task.leadThreadId, lead);
+          assert.isTrue(after.openAttention.some(isTurnFailedBlocker));
         }),
-      { cloudLead: fakeHooks({}) },
+      {
+        cloudLead: fakeHooks({}),
+        settings: { taskExecution: { maxConcurrentSessions: 1 } },
+      },
     ),
   );
 
@@ -708,7 +714,7 @@ describe("moving a task lead", () => {
           );
           (yield* LeadMoveGate.LeadMoveGate).release(lead, "replaced");
         }),
-      { cloudLead: fakeHooks({}) },
+      { cloudLead: fakeHooks({}), settings: { taskExecution: { location: "local_first" } } },
     ),
   );
 

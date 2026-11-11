@@ -57,7 +57,7 @@ describe("ProjectTeamSettings", () => {
         intervalPinnedAt: "2026-11-05T00:00:00.000Z",
       }),
     ).toEqual({
-      maxConcurrentTasks: 6,
+      maxConcurrentTasks: 10,
       sitrepIntervalMinutes: 30,
       sitrepNotify: true,
       quietHours: { start: "22:00", end: "07:30" },
@@ -178,7 +178,7 @@ describe("ProjectTask", () => {
       roleModels: {},
       modelSteps: {},
       stepUsage: {},
-      metrics: { size: null, reviewFindings: 0, fixRounds: 0, ciFailures: 0 },
+      metrics: { size: null, reviewFindings: 0, fixRounds: 0, ciFailures: 0, memoryStallMs: 0 },
     });
     // A review stored before review sessions existed was the lead's own.
     expect(

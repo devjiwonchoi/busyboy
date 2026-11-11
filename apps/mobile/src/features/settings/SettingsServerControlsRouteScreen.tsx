@@ -30,6 +30,7 @@ import { DatabaseStorageNotice } from "./components/DatabaseStorageNotice";
 import { SettingsChoiceRow } from "./components/SettingsChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
+import { TaskExecutionSettings } from "./components/TaskExecutionSettings";
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import {
@@ -40,13 +41,19 @@ import {
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
 
-type SettingsPage = "new-threads" | "source-control" | "agent-behavior" | "maintenance";
+type SettingsPage =
+  | "new-threads"
+  | "source-control"
+  | "agent-behavior"
+  | "maintenance"
+  | "task-execution";
 
 const PAGE_TITLES: Record<SettingsPage, string> = {
   "new-threads": "New threads",
   "source-control": "Source control",
   "agent-behavior": "Agent behavior",
   maintenance: "Maintenance",
+  "task-execution": "작업 실행",
 };
 
 const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettingKey[]> = {
@@ -61,6 +68,8 @@ const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettin
   ],
   "agent-behavior": ["responseStreamingMode", "enableAgentBrowserAccess"],
   maintenance: ["continueThreadsAfterServerUpdate"],
+  // Environment-wide: a project selection shows it read-only.
+  "task-execution": [],
 };
 
 const SUBMODULE_CHOICES: ReadonlyArray<{
@@ -135,6 +144,10 @@ export function SettingsEnvironmentAgentBehaviorRouteScreen() {
 
 export function SettingsEnvironmentMaintenanceRouteScreen() {
   return <ServerSettingsDetail page="maintenance" />;
+}
+
+export function SettingsEnvironmentTaskExecutionRouteScreen() {
+  return <ServerSettingsDetail page="task-execution" />;
 }
 
 function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
@@ -423,6 +436,17 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     />
                   </SettingsSection>
                 </>
+              ) : null}
+
+              {props.page === "task-execution" ? (
+                <TaskExecutionSettings
+                  value={reference.settings.taskExecution}
+                  statusEnvironmentId={
+                    targets.length === 1 ? reference.environment.environmentId : null
+                  }
+                  disabled={disabledFor("taskExecution")}
+                  onChange={write}
+                />
               ) : null}
 
               {props.page === "maintenance" ? (

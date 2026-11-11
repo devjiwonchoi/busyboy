@@ -14,6 +14,7 @@ import * as ManagerLastMessage from "./projectTeam/managerLastMessage.ts";
 import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
 import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
 import * as StalledTaskSweep from "./projectTeam/StalledTaskSweep.ts";
+import * as MemoryGovernor from "./projectTeam/MemoryGovernor.ts";
 import * as GoalAlignmentReactor from "./projectTeam/GoalAlignmentReactor.ts";
 import * as TaskOutcomeReactor from "./projectTeam/taskOutcomeReactor.ts";
 import * as RoleStepReactor from "./projectTeam/RoleStepReactor.ts";
@@ -140,6 +141,7 @@ import * as DesktopAppUpdate from "./desktopUpdate/DesktopAppUpdate.ts";
 import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as HostResources from "./resourceTelemetry/HostResources.ts";
+import * as MemoryHeadroom from "./resourceTelemetry/MemoryHeadroom.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as DesktopTelemetryReceiver from "./resourceTelemetry/DesktopTelemetryReceiver.ts";
@@ -244,6 +246,9 @@ const layerUsage = UsageService.layer.pipe(Layer.provide(layerServerSettings));
 
 const layerResourceDiagnostics = Layer.mergeAll(
   HostResources.layer,
+  // Task admission, the memory governor, delegated children, setup scripts and
+  // the server browser all read this one sampler.
+  MemoryHeadroom.layer.pipe(Layer.provide(HostResources.layer), Layer.provide(layerServerSettings)),
   layerResourceTelemetry,
   ProcessDiagnostics.layer.pipe(Layer.provide(layerResourceTelemetry)),
   ProcessResourceMonitor.layer.pipe(Layer.provide(layerResourceTelemetry)),
@@ -470,6 +475,7 @@ const layerProjectTeam = Layer.mergeAll(
   RoleStepReactor.layerWorker,
   ShipWakeReactor.layerWorker,
   StalledTaskSweep.layerWorker,
+  MemoryGovernor.layerWorker,
   GoalAlignmentReactor.layerWorker,
   ProjectTeamService.layerAfkWorker,
   // Needs the team's AttentionRouter, so it starts here rather than beside DelegatedTaskQuestionReactor.

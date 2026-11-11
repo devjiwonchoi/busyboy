@@ -323,7 +323,8 @@ export const leadControl = (deps: LeadControlDeps, lead: ThreadId, reason: LeadH
         commandId: CommandId.make(key),
         threadId: lead,
         runId,
-        reason: "Moving the task lead",
+        reason:
+          reason === "memory" ? "Pausing while the Mac is short on memory" : "Moving the task lead",
         holdQueue: true,
       }),
       "interrupt",

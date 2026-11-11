@@ -3,12 +3,14 @@ import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as NodePath from "node:path";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import type * as Crypto from "effect/Crypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   MessageId,
   NodeId,
   type OrchestrationV2ConversationMessage,
   type OrchestrationV2ProviderThread,
+  type OrchestrationV2Run,
   type OrchestrationV2ProviderTurn,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2Subagent,
@@ -44,6 +46,11 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ProviderSessionManager from "../orchestration-v2/ProviderSessionManager.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
+import type { DeepPartial } from "@t3tools/shared/Struct";
+import type { ServerSettings as ServerSettingsValue } from "@t3tools/contracts";
 import * as UsageService from "../usage/UsageService.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import * as ContextCare from "./ContextCare.ts";
@@ -59,6 +66,7 @@ import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ShipWakeReactor from "./ShipWakeReactor.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
+import * as MemoryGovernor from "./MemoryGovernor.ts";
 import * as GoalAlignmentReactor from "./GoalAlignmentReactor.ts";
 import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 
@@ -99,7 +107,12 @@ export interface FakeThread {
       Partial<Pick<OrchestrationV2ProviderTurn, "runAttemptId" | "turnTokenUsage">>
   >;
   /** Provider threads; `id`, `driver` and `nativeThreadRef` matter to a lead move. */
-  providerThreads?: Array<Pick<OrchestrationV2ProviderThread, "id" | "driver" | "nativeThreadRef">>;
+  providerThreads?: Array<
+    Pick<OrchestrationV2ProviderThread, "id" | "driver" | "nativeThreadRef"> &
+      Partial<Pick<OrchestrationV2ProviderThread, "providerSessionId">>
+  >;
+  /** Runs; only `status`, `queueHeld` and `requestedAt` matter, to see held messages. */
+  runs?: Array<Pick<OrchestrationV2Run, "status" | "queueHeld" | "requestedAt">>;
   /** Run attempts; only `id` and `runId` matter, to tie provider turns to their run. */
   attempts?: Array<{ readonly id: string; readonly runId: string }>;
   worktreePath?: string | null;
@@ -162,13 +175,17 @@ export type TeamServices =
   | TaskOutcomeReactor.TaskOutcomeReactor
   | ShipWakeReactor.ShipWakeReactor
   | StalledTaskSweep.StalledTaskSweep
+  | MemoryGovernor.MemoryGovernor
   | GoalAlignmentReactor.GoalAlignmentReactor
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
   | RoleStepReactor.RoleStepReactor
   | FinishedTaskCleanup.FinishedTaskCleanup
   | SqlClient.SqlClient
-  | ServerConfig.ServerConfig;
+  | ServerConfig.ServerConfig
+  | Crypto.Crypto
+  | ServerSettings.ServerSettingsService
+  | ThreadManagement.ThreadManagementService;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -280,6 +297,11 @@ export const withTeam = <A, E>(
   options: {
     /** The cloud lead runtime the team reads; defaults to none (cloud refused, sync a no-op). */
     readonly cloudLead?: CloudLeadService.CloudLeadHooksShape;
+    /** The Mac's memory as the sampler reads it; defaults to always plenty. */
+    readonly memory?: () => MemoryHeadroom.MemorySnapshot;
+    /** Provider sessions the memory governor reads and releases; defaults to none. */
+    readonly sessions?: Partial<ProviderSessionManager.ProviderSessionManagerV2Shape>;
+    readonly settings?: DeepPartial<ServerSettingsValue>;
   } = {},
 ): Effect.Effect<A, E> =>
   Effect.gen(function* () {
@@ -395,6 +417,7 @@ export const withTeam = <A, E>(
             subagents: thread?.subagents ?? [],
             providerTurns: thread?.providerTurns ?? [],
             providerThreads: thread?.providerThreads ?? [],
+            runs: thread?.runs ?? [],
             attempts: thread?.attempts ?? [],
             turnItems: (thread?.turnItems ?? []).filter(
               (item) =>
@@ -429,6 +452,7 @@ export const withTeam = <A, E>(
       namedProjectsRoot: "/data/projects",
     });
 
+    const settingsLayer = ServerSettings.layerTest(options.settings);
     const layer = Layer.mergeAll(
       TaskOutcomeReactor.layer,
       ShipWakeReactor.layer,
@@ -437,17 +461,21 @@ export const withTeam = <A, E>(
       DefaultManagerReactor.layer,
       ContextCare.layer,
       RoleStepReactor.layer,
+      MemoryGovernor.layer,
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
       Layer.provideMerge(SqlitePersistence.layerMemory),
-      Layer.provide(
+      // Each test gets its own gate: holds must not leak between tests.
+      Layer.provideMerge(Layer.sync(LeadMoveGate.LeadMoveGate, LeadMoveGate.makeLeadMoveGate)),
+      // Merged, so a test can build another service over the same fakes (e.g. a restart).
+      Layer.provideMerge(
         Layer.mergeAll(
           threadManagement,
           gitWorkflow,
           projectStore,
           providerRegistry,
-          ServerSettings.layerTest(),
+          settingsLayer,
           Layer.mock(UsageService.UsageService)({
             estimateCostUsd: (input) =>
               Effect.sync(() =>
@@ -464,6 +492,12 @@ export const withTeam = <A, E>(
           ...(options.cloudLead === undefined
             ? []
             : [Layer.succeed(CloudLeadService.CloudLeadHooks, options.cloudLead)]),
+          ...(options.memory === undefined
+            ? []
+            : [MemoryHeadroom.layerFromSource(options.memory).pipe(Layer.provide(settingsLayer))]),
+          ...(options.sessions === undefined
+            ? []
+            : [Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)(options.sessions)]),
           managedProjectFolders,
           Path.layer,
           PullRequestTextReader.layerTest((url) => Option.fromNullishOr(pullRequests.get(url))),
