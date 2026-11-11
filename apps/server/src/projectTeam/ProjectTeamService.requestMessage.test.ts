@@ -10,6 +10,7 @@ import {
   setUpManager,
   startLead,
   readyPlan,
+  setSize,
   userSays,
   withTeam,
 } from "./testkit.ts";
@@ -24,6 +25,7 @@ describe("ProjectTeamService request messages", () => {
         const team = yield* ProjectTeamService;
         const pm = yield* setUpManager;
         const { leadThreadId: lead } = yield* startLead(pm, "목표 그래프", harness.delegate);
+        yield* setSize(lead);
         const read = yield* team.readSpec(lead, {});
         const plan = readyPlan(read.current.spec);
         const text = "공용 레이아웃을 시드 고정 force 배치로 바꾸기 (BU-129 이후)";

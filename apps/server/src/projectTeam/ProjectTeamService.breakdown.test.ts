@@ -10,6 +10,7 @@ import {
   approvePlan,
   PROJECT_ID,
   readyPlan,
+  setSize,
   reviewClean,
   setUpManager,
   startLead,
@@ -266,6 +267,7 @@ describe("ProjectTeamService intake and breakdown", () => {
         const team = yield* service;
         const pm = yield* setUpManager;
         const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        yield* setSize(lead);
         yield* team.writeSpec(lead, {
           baseVersion: (yield* team.readSpec(lead, {})).current.version,
           spec: readyPlan((yield* team.readSpec(lead, {})).current.spec),

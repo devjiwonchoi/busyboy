@@ -687,6 +687,20 @@ export const ProjectTaskSpec = Schema.Struct({
   files: Schema.Array(ProjectTaskFile)
     .check(Schema.isMaxLength(300))
     .pipe(Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<ProjectTaskFile>))),
+  /** Plan gate "문제": the current state, the desired state, and how the change is measured. */
+  problem: textOrEmpty(8_000),
+  /** Plan gate "왜": who asked, what is lost without it, and a requirement questioned. */
+  why: textOrEmpty(8_000),
+  /** Plan gate "현재 상태": evidence of today's state; for a bug, symptom vs root cause and a baseline. */
+  currentState: textOrEmpty(8_000),
+  /** Plan gate "사람 필요 지점": where a person must act (sign-in, tokens, payment), or "none" and why. */
+  humanCheckpoints: textOrEmpty(8_000),
+  /** Plan gate "예산": the time or token appetite, and the scope cut if it runs over. */
+  budget: textOrEmpty(8_000),
+  /** Plan gate "위험": a pre-mortem and rabbit holes, each mapped to a todo or a non-goal. */
+  risks: textOrEmpty(8_000),
+  /** Plan gate "대안": the options considered and why each was rejected. */
+  alternatives: textOrEmpty(8_000),
 }).check(
   Schema.makeFilter((spec) =>
     new Set(spec.todos.map((todo) => todo.id)).size === spec.todos.length
@@ -715,6 +729,13 @@ export function emptyProjectTaskSpec(background = ""): ProjectTaskSpec {
     prototypeWaiver: "",
     criteria: [],
     files: [],
+    problem: "",
+    why: "",
+    currentState: "",
+    humanCheckpoints: "",
+    budget: "",
+    risks: "",
+    alternatives: "",
   };
 }
 

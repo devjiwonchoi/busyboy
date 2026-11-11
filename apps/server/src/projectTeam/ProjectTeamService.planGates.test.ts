@@ -12,6 +12,7 @@ import {
   approvePlan,
   readyPlan,
   reviewClean,
+  setSize,
   setUpManager,
   startLead,
   userSays,
@@ -104,6 +105,41 @@ describe("ProjectTeamService plan gates", () => {
           .flatMap((project) => project.decisionCards)
           .find((entry) => entry.item.id === item.id);
         assert.deepStrictEqual(card?.item.context, item.context);
+      }),
+    ),
+  );
+
+  it.effect("sends a plan with an empty gate back to the lead without a card", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const pm = yield* setUpManager;
+        const { leadThreadId: lead, task } = yield* startLead(pm, "Hello", harness.delegate);
+        const read = yield* team.readSpec(lead, {});
+        yield* team.writeSpec(lead, {
+          baseVersion: read.current.version,
+          spec: { ...readyPlan(read.current.spec), why: "", risks: "" },
+          note: "Plan",
+        });
+
+        // Without a size, the server cannot tell which gates the plan needs.
+        const noSize = yield* askApproval(lead).pipe(Effect.flip);
+        assert.include(noSize.message, "- size: set the task size with task_update(size)");
+
+        // A small task's light plan needs why but not risks.
+        yield* setSize(lead, "small");
+        const light = yield* askApproval(lead).pipe(Effect.flip);
+        assert.include(light.message, 'gate why "왜" (why)');
+        assert.notInclude(light.message, "gate risks");
+
+        // A medium task's full plan needs risks too.
+        yield* setSize(lead, "medium");
+        const full = yield* askApproval(lead).pipe(Effect.flip);
+        assert.include(full.message, 'gate risks "위험" (risks)');
+
+        const detail = yield* team.getTaskDetail({ projectId: PROJECT_ID, taskId: task.id });
+        assert.strictEqual(detail.task.stage, "planning");
+        assert.deepStrictEqual(detail.openAttention, []);
       }),
     ),
   );

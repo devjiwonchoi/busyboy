@@ -687,12 +687,30 @@ export const readyPlan = (spec: ProjectTaskSpec): ProjectTaskSpec => ({
     },
   ],
   files: [{ path: "hello.sh", change: "new", why: "the script", todos: ["t1"] }],
+  ...readyGates,
 });
 
-/** The lead writes a plan that meets the Definition of Ready. */
+/** Every plan gate filled, so a plan passes the empty-gate check at any task size. */
+export const readyGates = {
+  problem: "Nothing prints hello today; after this, hello.sh prints it.",
+  why: "The user asked for it; without it the demo has no output. Asked whether it needs flags: no.",
+  currentState: "No hello.sh exists in the repository root.",
+  nonGoals: "A Windows script: the demo runs on macOS only.",
+  humanCheckpoints: "None: no sign-in, tokens or payment.",
+  budget: "One hour; drop the color output if it runs over.",
+  risks: "It fails if the shell is not bash: t1 uses POSIX sh only.",
+  alternatives: "A Node script: rejected, it needs a runtime.",
+} satisfies Partial<ProjectTaskSpec>;
+
+/** The lead sets its task's size, which plan approval needs. */
+export const setSize = (lead: ThreadId, size: "small" | "medium" | "large" = "small") =>
+  Effect.flatMap(ProjectTeamService.ProjectTeamService, (team) => team.updateTask(lead, { size }));
+
+/** The lead writes a plan that meets the Definition of Ready, and sets the task's size. */
 export const writeReadyPlan = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
+    yield* setSize(lead);
     const read = yield* team.readSpec(lead, {});
     return yield* team.writeSpec(lead, {
       baseVersion: read.current.version,

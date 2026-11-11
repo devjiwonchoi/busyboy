@@ -4085,7 +4085,7 @@ const make = Effect.gen(function* () {
         (draft) => !spec.spec.todos.some((todo) => todo.subtaskId === draft.id),
       );
       const gaps = [
-        ...planReadinessGaps(spec.spec),
+        ...planReadinessGaps(spec.spec, task.metrics.size),
         ...unlinked.map(
           (draft) =>
             `Subtask #${draft.number} "${draft.title}" has no todo: add one with subtaskId "${draft.id}" so the card shows it in the breakdown.`,
