@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./chatBubbles": {
+      "types": "./src/chatBubbles.ts",
+      "import": "./src/chatBubbles.ts"
+    },
     "./requestMessage": {
       "types": "./src/requestMessage.ts",
       "import": "./src/requestMessage.ts"
