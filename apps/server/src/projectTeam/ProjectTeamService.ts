@@ -2049,30 +2049,6 @@ const make = Effect.gen(function* () {
         // The cap is app-wide: leads running on this Mac in every project count.
         const running = (yield* activeLocalLeads(repository)) - (holdsSlot ? 1 : 0);
         let unmovable: string | null = null;
-        const to = input.location ?? "local";
-        // A lead somewhere else moves there with its worktree and session.
-        if (restart && replacedLead !== null && (task.location ?? "local") !== to) {
-          const inspected = yield* inspectMovableLead(
-            { threads, providers: providerRegistry.getProviders },
-            replacedLead,
-          ).pipe(Effect.mapError((error) => teamError(error.detail, role.projectId)));
-          // A lead moving to the Mac takes a local slot.
-          const needsSlot = to === "local" && !holdsSlot;
-          if (inspected.movable && !(needsSlot && running >= limit)) {
-            const open = yield* repository.listOpenAttentionItems({
-              projectId: task.projectId,
-              taskId: task.id,
-            });
-            return {
-              kind: "move" as const,
-              lead: replacedLead,
-              to,
-              failedCards: open.filter(isTurnFailedBlocker).map((item) => item.id),
-              failuresBefore: yield* countFailedOutcomes(task),
-            };
-          }
-          if (!inspected.movable) unmovable = inspected.reason;
-        }
         if (running >= limit) {
           return yield* teamError(
             restart
@@ -2150,7 +2126,14 @@ const make = Effect.gen(function* () {
                 .pipe(orTeamError("Could not record the memory stall.", task.projectId));
             }
           });
+        // Only inbox tasks wait for memory: the governor starts those by itself.
         if (admission.type === "wait") {
+          if (restart) {
+            return yield* teamError(
+              `#${task.number} cannot start again yet: ${admission.reason} Try again once the Mac has room.`,
+              role.projectId,
+            );
+          }
           if (admission.memory) yield* waitForMemory(headroom !== "ok");
           return yield* teamError(
             `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
@@ -2166,6 +2149,12 @@ const make = Effect.gen(function* () {
           Effect.gen(function* () {
             const claim = yield* memoryHeadroom.claimStart(MemoryHeadroom.START_SPACING_MS);
             if (claim.type === "started") return;
+            if (restart) {
+              return yield* teamError(
+                `#${task.number} cannot start again yet: ${why(claim)} Try again once the Mac has room.`,
+                role.projectId,
+              );
+            }
             yield* waitForMemory(claim.type === "short");
             return yield* teamError(
               `#${task.number} stays in the inbox: ${why(claim)} It starts by itself once the Mac has room; do not retry it.`,
@@ -2176,6 +2165,29 @@ const make = Effect.gen(function* () {
           claim.type === "spaced"
             ? `another session started on this Mac moments ago, and its memory has not shown yet (${MEMORY_WAIT_REASON}).`
             : `${MEMORY_WAIT_REASON}.`;
+        // The setting picks the place for a restart too: a lead elsewhere moves
+        // there with its worktree and session.
+        if (restart && replacedLead !== null && (task.location ?? "local") !== admission.location) {
+          const inspected = yield* inspectMovableLead(
+            { threads, providers: providerRegistry.getProviders },
+            replacedLead,
+          ).pipe(Effect.mapError((error) => teamError(error.detail, role.projectId)));
+          if (inspected.movable) {
+            if (admission.location === "local") yield* claimLocalStart(notNow);
+            const open = yield* repository.listOpenAttentionItems({
+              projectId: task.projectId,
+              taskId: task.id,
+            });
+            return {
+              kind: "move" as const,
+              lead: replacedLead,
+              to: admission.location,
+              failedCards: open.filter(isTurnFailedBlocker).map((item) => item.id),
+              failuresBefore: yield* countFailedOutcomes(task),
+            };
+          }
+          unmovable = inspected.reason;
+        }
         if (admission.location === "local") yield* claimLocalStart(notNow);
         const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
           Effect.gen(function* () {

@@ -516,7 +516,7 @@ describe("moving a task lead", () => {
           assert.isFalse(after.openAttention.some(isTurnFailedBlocker));
           assert.include(yield* harness.messagesTo(lead), "[옮김] 로컬→클라우드");
         }),
-      { cloudLead: fakeHooks({}) },
+      { cloudLead: fakeHooks({}), settings: { taskExecution: { location: "local_first" } } },
     ),
   );
 
@@ -623,6 +623,7 @@ describe("moving a task lead", () => {
           importTranscripts: () =>
             Effect.fail(new CloudLeadService.CloudLeadError({ detail: "디스크가 가득 찼어요" })),
         }),
+        settings: { taskExecution: { location: "local_first" } },
       },
     ),
   );
@@ -652,7 +653,10 @@ describe("moving a task lead", () => {
           assert.strictEqual(after.task.stage, "blocked");
           assert.isTrue(after.openAttention.some(isTurnFailedBlocker));
         }),
-      { cloudLead: fakeHooks({ importTranscripts: () => Effect.suspend(() => failAgain) }) },
+      {
+        cloudLead: fakeHooks({ importTranscripts: () => Effect.suspend(() => failAgain) }),
+        settings: { taskExecution: { location: "local_first" } },
+      },
     );
   });
 
@@ -733,6 +737,53 @@ describe("moving a task lead", () => {
       assert.include(failure.message, "database is locked");
     }),
   );
+
+  it.effect("keeps a stopped lead on the Mac when the setting keeps work local", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+          // The default setting keeps work on this Mac, whatever the PM asks for.
+          const started = yield* team.startTask(
+            pm,
+            { taskId: task.id, location: "cloud" },
+            harness.delegate,
+          );
+          assert.strictEqual(started.task.location, "local");
+          assert.notStrictEqual(started.leadThreadId, lead);
+          assert.strictEqual(started.task.moveTarget ?? null, null);
+          (yield* LeadMoveGate.LeadMoveGate).release(lead, "replaced");
+        }),
+      { cloudLead: fakeHooks({}) },
+    ),
+  );
+
+  it.effect("asks to try a restart again later while the Mac is short on memory", () => {
+    const GIB = 1024 ** 3;
+    let available = 6 * GIB;
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+          available = 0.5 * GIB;
+          const refused = yield* team
+            .startTask(pm, { taskId: task.id }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(refused.message, "cannot start again yet");
+          assert.include(refused.message, "Try again once the Mac has room");
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          // Only inbox tasks wait for memory; a started one is not parked there.
+          assert.strictEqual(after.task.stage, "running");
+          assert.strictEqual(after.task.leadThreadId, lead);
+          assert.isNull(after.task.memoryHold ?? null);
+        }),
+      {
+        memory: () => ({ availableMemoryBytes: available, memoryPressure: "normal" }),
+      },
+    );
+  });
 
   it.effect("refuses a restart while the lead waits on the user's answer", () =>
     withTeam(
