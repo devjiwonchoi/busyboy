@@ -400,6 +400,42 @@ describe("TaskOutcomeReactor", () => {
     ),
   );
 
+  it.effect("shows the failed turn's own error on the blocker, not just its status", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const reactor = yield* TaskOutcomeReactor;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const lead = yield* startLead(pm, "Cloudy", harness.delegate);
+        const thread =
+          harness.threads.get(lead.leadThreadId) ?? harness.addThread(lead.leadThreadId);
+        const detail =
+          "Could not start the cloud sandbox: Cloud leads need a Claude setup-token. Run `claude setup-token`, then save it with request_secret and cloud_secret_save (kind claude_oauth_token).";
+        thread.turnItems = [
+          {
+            ...toolCall({ thread: lead.leadThreadId, ordinal: 1, command: "noop" }),
+            type: "error",
+            failure: { class: "provider_error", message: detail, code: null, retryable: null },
+          } as unknown as OrchestrationV2TurnItem,
+        ];
+        yield* reactor.handle(
+          leadTurnEnded({
+            lead: lead.leadThreadId,
+            status: "failed",
+            completedAt: "2026-11-04T00:05:00.000Z",
+          }),
+        );
+        const [blocker] = yield* repository.listOpenAttentionItems({ projectId: PROJECT_ID });
+        assert.strictEqual(
+          blocker?.question.split("\n")[0],
+          "#1 Cloudy: 리드 작업이 실패했어요 (Claude 토큰이 없어요)",
+        );
+        assert.include(blocker?.question, `오류: ${detail}`);
+        assert.notInclude(blocker?.question, "오류: failed");
+      }),
+    ),
+  );
+
   it.effect("reclassifies the lead's follow-up turn after the user answers", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

@@ -284,6 +284,17 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  /** What the failed turn said went wrong, so the card shows the cause rather than "failed". */
+  const failureDetail = (run: OrchestrationV2Run) =>
+    Effect.gen(function* () {
+      const { turnItems } = yield* threads.getThreadRecords(run.threadId, ["turnItems"], {
+        turnItemRunIds: [run.id],
+      });
+      const error = turnItems.findLast((item) => item.runId === run.id && item.type === "error");
+      const message = error?.type === "error" ? error.failure.message.trim() : "";
+      return message === "" ? run.status : message;
+    }).pipe(Effect.orElseSucceed(() => run.status));
+
   const handle: TaskOutcomeReactor["Service"]["handle"] = (event) =>
     Effect.gen(function* () {
       // Every lead run counts, not just the first: once the PM has the delegated
@@ -334,7 +345,7 @@ const make = Effect.gen(function* () {
       const recorded = yield* team.recordOutcome({
         task: task.value,
         outcome,
-        ...(outcome === "failed" ? { detail: run.status } : {}),
+        ...(outcome === "failed" ? { detail: yield* failureDetail(run) } : {}),
       });
       yield* wakeManager({
         task: recorded.task,

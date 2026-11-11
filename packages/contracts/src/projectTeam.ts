@@ -767,6 +767,10 @@ export function turnFailedReason(detail: string | undefined): string | null {
   if (detail === undefined) {
     return null;
   }
+  // A cloud lead without a saved Claude setup-token fails before claude starts.
+  if (/setup-token|claude_oauth_token|CLAUDE_CODE_OAUTH_TOKEN/i.test(detail)) {
+    return "Claude 토큰이 없어요";
+  }
   if (/\b401\b|unauthorized|token[_ ]expired|authentication/i.test(detail)) {
     return "로그인 만료 401";
   }

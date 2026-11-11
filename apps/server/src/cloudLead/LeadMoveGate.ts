@@ -11,8 +11,11 @@
 import type { ThreadId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 
-export const LEAD_HOLD_REASONS = ["move", "rotation", "memory"] as const;
-/** A move, a sandbox rotation, or a pause while the Mac is short on memory. */
+export const LEAD_HOLD_REASONS = ["move", "rotation", "memory", "replaced"] as const;
+/**
+ * A move, a sandbox rotation, a pause while the Mac is short on memory, or a lead
+ * a restart replaced, which stays quiet.
+ */
 export type LeadHoldReason = (typeof LEAD_HOLD_REASONS)[number];
 
 export interface LeadMoveGateShape {

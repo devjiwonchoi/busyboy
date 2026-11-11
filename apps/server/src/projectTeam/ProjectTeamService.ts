@@ -221,7 +221,7 @@ import {
   CLOUD_FALLBACK_NOTE,
   MEMORY_WAIT_REASON,
 } from "./memoryPolicy.ts";
-import { leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
+import { inspectMovableLead, leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
@@ -313,6 +313,13 @@ export function isUserChatAnswer(
       (message.text.trim() === trimmed || containsWords(normalizeWords(message.text), normalized)),
   );
 }
+
+/** Started stages task_start may start again once the task's lead stopped. */
+const RESTARTABLE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
+  "planning",
+  "running",
+  "blocked",
+]);
 
 /** Stages whose task lead has work to show; stalled tasks come from these. */
 const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
@@ -1988,219 +1995,363 @@ const make = Effect.gen(function* () {
       return { target, source: "task" as const };
     });
 
+  /**
+   * Starts an inbox task's lead, or a started task's lead again once it stopped. A
+   * restart elsewhere comes back as a move, which runs outside the start lock.
+   */
+  const startTaskLocked = (
+    callerThreadId: ThreadId,
+    projectId: ProjectId,
+    input: Parameters<ProjectTeamService["Service"]["startTask"]>[1],
+    delegate: Parameters<ProjectTeamService["Service"]["startTask"]>[2],
+  ) => {
+    const role = { projectId };
+    return taskStartLocks.withLock(
+      projectId,
+      Effect.gen(function* () {
+        const task = yield* requireTask(input.taskId, role.projectId);
+        // A started task whose lead stopped can start again; one whose lead works cannot.
+        const restart = RESTARTABLE_TASK_STAGES.has(task.stage);
+        if (task.stage !== "inbox" && !restart) {
+          return yield* teamError(`#${task.number} is already ${task.stage}.`, role.projectId);
+        }
+        const replacedLead = restart ? task.leadThreadId : null;
+        if (restart) {
+          if (
+            task.moveTarget != null ||
+            (replacedLead !== null && (yield* isLeadBusy(threads, replacedLead)))
+          ) {
+            return yield* teamError(
+              `#${task.number}'s lead is still working. Wait for its turn to end or stop it, then start it again.`,
+              role.projectId,
+            );
+          }
+          const open = yield* repository.listOpenAttentionItems({
+            projectId: task.projectId,
+            taskId: task.id,
+          });
+          // A question the lead is waiting on needs the user's answer, not a restart.
+          if (open.some((item) => !isTurnFailedBlocker(item))) {
+            return yield* teamError(
+              `#${task.number} waits on the user's answer to an open question. Answer or close it before starting the task again.`,
+              role.projectId,
+            );
+          }
+        }
+        const manager = yield* requireManager(role.projectId);
+        const active = (yield* activeTasks(role.projectId)).filter((other) => other.id !== task.id);
+        const execution = yield* taskExecutionSettings;
+        const limit = execution.maxConcurrentSessions;
+        // A started local task already holds a slot, which its restart reuses.
+        const holdsSlot =
+          (SitrepScheduler.ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage) &&
+          (task.location ?? "local") === "local";
+        // The cap is app-wide: leads running on this Mac in every project count.
+        const running = (yield* activeLocalLeads(repository)) - (holdsSlot ? 1 : 0);
+        let unmovable: string | null = null;
+        if (running >= limit) {
+          return yield* teamError(
+            restart
+              ? `#${task.number} cannot start again yet: ${running} of ${limit} task leads are already running.`
+              : `#${task.number} stays in the inbox: ${running} of ${limit} task leads are already running.`,
+            role.projectId,
+          );
+        }
+        for (const dependencyId of task.waitsOn) {
+          const dependency = yield* requireAnyTask(dependencyId, role.projectId);
+          if (!isDependencyCleared(dependency.stage)) {
+            return yield* teamError(
+              `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`,
+              role.projectId,
+            );
+          }
+        }
+        const coveredBy = yield* breakdownCoverage(task);
+        if (coveredBy === null && task.parentTaskId !== null && (yield* isLeadDraft(task))) {
+          return yield* teamError(
+            `#${task.number} is a drafted subtask. It starts once the user approves its parent's plan, which covers the whole breakdown.`,
+            role.projectId,
+          );
+        }
+        const memory = yield* repository.listMemory(role.projectId);
+        const key = formatTaskKey(
+          yield* taskKeyPrefixFor(role.projectId, manager.settings),
+          task.number,
+        );
+        const spec = yield* latestSpec(task);
+        // A task whose plan was already approved resumes straight into the work.
+        const resume = task.planSummary !== null;
+        const userLanguage = resolveUserLanguage(
+          task.request,
+          yield* recentUserWords(manager.threadId),
+        );
+        // A restart must not reuse the first lead's request id, or it gets that lead back.
+        const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
+        const roleModels = resolveRoleModels(task.roleModels, manager.settings.roleModels);
+        // A plan model the user picked wins over the PM's choice.
+        const leadTarget =
+          roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
+        // The user's execution-location setting and the Mac's free memory pick the place.
+        const headroom = (yield* memoryHeadroom.checkFresh).headroom;
+        const admission = admitTaskLead({
+          active: running,
+          cap: limit,
+          policy: execution.location,
+          headroom,
+          requested: input.location,
+        });
+        const waitInTodo = Effect.gen(function* () {
+          if (task.memoryHold !== "waiting") {
+            yield* setMemoryHold(task, "waiting");
+            yield* appendEvent(
+              task,
+              "note",
+              `${MEMORY_WAIT_REASON}: 메모리 여유가 생기면 시작해요.`,
+              null,
+            );
+            yield* router.publish(role.projectId);
+          }
+        });
+        /**
+         * Holds the task in Todo. Only a wait while memory is short stalls it:
+         * a wait for start spacing is deliberate pacing.
+         */
+        const waitForMemory = (memoryShort: boolean) =>
+          Effect.gen(function* () {
+            yield* waitInTodo;
+            if (memoryShort) {
+              const at = yield* nowIso;
+              yield* repository
+                .setTaskMemoryStall({ id: task.id, stalling: true, at })
+                .pipe(orTeamError("Could not record the memory stall.", task.projectId));
+            }
+          });
+        // Only inbox tasks wait for memory: the governor starts those by itself.
+        if (admission.type === "wait") {
+          if (restart) {
+            return yield* teamError(
+              `#${task.number} cannot start again yet: ${admission.reason} Try again once the Mac has room.`,
+              role.projectId,
+            );
+          }
+          if (admission.memory) yield* waitForMemory(headroom !== "ok");
+          return yield* teamError(
+            `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
+            role.projectId,
+          );
+        }
+        /**
+         * Every local start claims the shared start gate: a fresh ok reading and
+         * time since the last local start for its memory to show. When it cannot,
+         * the task waits for memory and the governor has the PM start it later.
+         */
+        const claimLocalStart = (why: (claim: MemoryHeadroom.StartClaim) => string) =>
+          Effect.gen(function* () {
+            const claim = yield* memoryHeadroom.claimStart(MemoryHeadroom.START_SPACING_MS);
+            if (claim.type === "started") return;
+            if (restart) {
+              return yield* teamError(
+                `#${task.number} cannot start again yet: ${why(claim)} Try again once the Mac has room.`,
+                role.projectId,
+              );
+            }
+            yield* waitForMemory(claim.type === "short");
+            return yield* teamError(
+              `#${task.number} stays in the inbox: ${why(claim)} It starts by itself once the Mac has room; do not retry it.`,
+              role.projectId,
+            );
+          });
+        const notNow = (claim: MemoryHeadroom.StartClaim) =>
+          claim.type === "spaced"
+            ? `another session started on this Mac moments ago, and its memory has not shown yet (${MEMORY_WAIT_REASON}).`
+            : `${MEMORY_WAIT_REASON}.`;
+        // The setting picks the place for a restart too: a lead elsewhere moves
+        // there with its worktree and session.
+        if (restart && replacedLead !== null && (task.location ?? "local") !== admission.location) {
+          const inspected = yield* inspectMovableLead(
+            { threads, providers: providerRegistry.getProviders },
+            replacedLead,
+          ).pipe(Effect.mapError((error) => teamError(error.detail, role.projectId)));
+          if (inspected.movable) {
+            if (admission.location === "local") yield* claimLocalStart(notNow);
+            const open = yield* repository.listOpenAttentionItems({
+              projectId: task.projectId,
+              taskId: task.id,
+            });
+            return {
+              kind: "move" as const,
+              lead: replacedLead,
+              to: admission.location,
+              failedCards: open.filter(isTurnFailedBlocker).map((item) => item.id),
+              failuresBefore: yield* countFailedOutcomes(task),
+            };
+          }
+          unmovable = inspected.reason;
+        }
+        if (admission.location === "local") yield* claimLocalStart(notNow);
+        const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
+          Effect.gen(function* () {
+            return yield* delegate({
+              task: buildTaskLeadPrompt({
+                task: { ...task, location },
+                key,
+                spec,
+                resume,
+                memory,
+                otherTasks: active,
+                ...((yield* activeAfk(manager.settings)) === null
+                  ? {}
+                  : { afkRule: AFK_AGENT_RULE }),
+                ...(userLanguage === null ? {} : { userLanguage }),
+                ...(coveredBy === null
+                  ? {}
+                  : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
+                roleModels,
+              }),
+              title: `${key} ${task.title}`,
+              role: "implementation",
+              isolation: "worktree",
+              mode: "async",
+              clientRequestId:
+                earlierSessions === 0
+                  ? `task-start:${task.id}${requestSuffix}`
+                  : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
+              ...(leadTarget === undefined ? {} : { target: leadTarget }),
+              // Always explicit, so delegate_task never re-places a lead the
+              // admission already placed (it may move an unplaced child to the cloud).
+              location,
+            }).pipe(
+              Effect.mapError((failure) =>
+                teamError(
+                  `Could not start a task lead for #${task.number}: ${failure.message}`,
+                  role.projectId,
+                ),
+              ),
+            );
+          });
+        // The setting, not the PM, sent it to the cloud: when the cloud cannot
+        // take it, start here if the Mac has room, else wait for memory.
+        const { lead, location, note } = yield* delegateLead(admission.location, "").pipe(
+          Effect.map((lead) => ({ lead, location: admission.location, note: admission.note })),
+          Effect.catch((failure) =>
+            Effect.gen(function* () {
+              if (admission.location !== "cloud" || input.location === "cloud") {
+                return yield* Effect.fail(failure);
+              }
+              yield* claimLocalStart(
+                (claim) => `the cloud could not start it (${failure.message}) and ${notNow(claim)}`,
+              );
+              const lead = yield* delegateLead("local", ":local");
+              return { lead, location: "local" as const, note: CLOUD_FALLBACK_NOTE };
+            }),
+          ),
+        );
+        const started = yield* setTask({
+          id: task.id,
+          stage: "planning",
+          leadThreadId: lead.childThreadId,
+          location,
+          // The parent's approved breakdown is this subtask's approved plan.
+          ...(coveredBy === null || task.planSummary !== null
+            ? {}
+            : { planSummary: yield* coveredPlanSummary(task, coveredBy) }),
+        });
+        yield* repository.addTaskSession({
+          taskId: started.id,
+          threadId: lead.childThreadId,
+          role: resume ? "implementer" : "lead",
+          createdAt: started.stageChangedAt,
+        });
+        yield* appendEvent(started, "stage_changed", `${task.stage} → planning`, callerThreadId);
+        if (note !== null) {
+          yield* appendEvent(started, "note", note, null);
+        }
+        if (task.memoryHold != null) yield* setMemoryHold(started, null);
+        // Logged as the lead's, so the PM's latest action still reads "started".
+        const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
+        yield* repository
+          .startModelRun({
+            taskId: started.id,
+            threadId: lead.childThreadId,
+            role: "plan",
+            providerInstanceId: lead.providerInstanceId,
+            model: lead.model,
+            startedAt: started.stageChangedAt,
+          })
+          .pipe(orTeamError("Could not record the plan step.", role.projectId));
+        if (replacedLead !== null) {
+          yield* retireReplacedLead(withStep, replacedLead, unmovable);
+        }
+        yield* router.publish(role.projectId);
+        return {
+          kind: "started" as const,
+          result: { task: withStep, leadThreadId: lead.childThreadId },
+        };
+      }).pipe(leadStartLock.withPermits(1)),
+    );
+  };
+
+  const countFailedOutcomes = (task: ProjectTask) =>
+    repository
+      .listTaskEvents({ taskId: task.id, limit: Number.MAX_SAFE_INTEGER })
+      .pipe(
+        Effect.map(
+          (events) =>
+            events.filter(
+              (event) =>
+                event.kind === "outcome" &&
+                (event.body === "failed" || event.body.startsWith("failed:")),
+            ).length,
+        ),
+      );
+
+  /**
+   * The replaced lead goes quiet: its cards close, since answers would reach a lead
+   * that left, and its later messages stay queued.
+   */
+  const retireReplacedLead = (task: ProjectTask, replaced: ThreadId, unmovable: string | null) =>
+    Effect.gen(function* () {
+      leadMoveGate.hold(replaced, "replaced");
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      for (const item of open) {
+        if (item.askerThreadId === replaced || isTurnFailedBlocker(item)) {
+          yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: yield* nowIso });
+        }
+      }
+      yield* appendEvent(
+        task,
+        "note",
+        unmovable === null
+          ? "멈춘 리드 대신 새 리드로 다시 시작했어요."
+          : `리드를 옮길 수 없어 새 리드로 다시 시작했어요. 이유: ${unmovable}`,
+        null,
+      );
+    });
+
   const startTask: ProjectTeamService["Service"]["startTask"] = (callerThreadId, input, delegate) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm"], "task_start");
-      return yield* taskStartLocks.withLock(
-        role.projectId,
-        Effect.gen(function* () {
-          const task = yield* requireTask(input.taskId, role.projectId);
-          if (task.stage !== "inbox") {
-            return yield* teamError(`#${task.number} is already ${task.stage}.`, role.projectId);
-          }
-          const manager = yield* requireManager(role.projectId);
-          const active = yield* activeTasks(role.projectId);
-          const execution = yield* taskExecutionSettings;
-          const limit = execution.maxConcurrentSessions;
-          // The cap is app-wide: leads running on this Mac in every project count.
-          const running = yield* activeLocalLeads(repository);
-          if (running >= limit) {
-            return yield* teamError(
-              `#${task.number} stays in the inbox: ${running} of ${limit} task leads are already running.`,
-              role.projectId,
-            );
-          }
-          for (const dependencyId of task.waitsOn) {
-            const dependency = yield* requireAnyTask(dependencyId, role.projectId);
-            if (!isDependencyCleared(dependency.stage)) {
-              return yield* teamError(
-                `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`,
-                role.projectId,
-              );
-            }
-          }
-          const coveredBy = yield* breakdownCoverage(task);
-          if (coveredBy === null && task.parentTaskId !== null && (yield* isLeadDraft(task))) {
-            return yield* teamError(
-              `#${task.number} is a drafted subtask. It starts once the user approves its parent's plan, which covers the whole breakdown.`,
-              role.projectId,
-            );
-          }
-          const memory = yield* repository.listMemory(role.projectId);
-          const key = formatTaskKey(
-            yield* taskKeyPrefixFor(role.projectId, manager.settings),
-            task.number,
-          );
-          const spec = yield* latestSpec(task);
-          // A task whose plan was already approved resumes straight into the work.
-          const resume = task.planSummary !== null;
-          const userLanguage = resolveUserLanguage(
-            task.request,
-            yield* recentUserWords(manager.threadId),
-          );
-          // A restart must not reuse the first lead's request id, or it gets that lead back.
-          const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
-          const roleModels = resolveRoleModels(task.roleModels, manager.settings.roleModels);
-          // A plan model the user picked wins over the PM's choice.
-          const leadTarget =
-            roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
-          // The user's execution-location setting and the Mac's free memory pick the place.
-          const headroom = (yield* memoryHeadroom.checkFresh).headroom;
-          const admission = admitTaskLead({
-            active: running,
-            cap: limit,
-            policy: execution.location,
-            headroom,
-            requested: input.location,
-          });
-          const waitInTodo = Effect.gen(function* () {
-            if (task.memoryHold !== "waiting") {
-              yield* setMemoryHold(task, "waiting");
-              yield* appendEvent(
-                task,
-                "note",
-                `${MEMORY_WAIT_REASON}: 메모리 여유가 생기면 시작해요.`,
-                null,
-              );
-              yield* router.publish(role.projectId);
-            }
-          });
-          /**
-           * Holds the task in Todo. Only a wait while memory is short stalls it:
-           * a wait for start spacing is deliberate pacing.
-           */
-          const waitForMemory = (memoryShort: boolean) =>
-            Effect.gen(function* () {
-              yield* waitInTodo;
-              if (memoryShort) {
-                const at = yield* nowIso;
-                yield* repository
-                  .setTaskMemoryStall({ id: task.id, stalling: true, at })
-                  .pipe(orTeamError("Could not record the memory stall.", task.projectId));
-              }
-            });
-          if (admission.type === "wait") {
-            if (admission.memory) yield* waitForMemory(headroom !== "ok");
-            return yield* teamError(
-              `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
-              role.projectId,
-            );
-          }
-          /**
-           * Every local start claims the shared start gate: a fresh ok reading and
-           * time since the last local start for its memory to show. When it cannot,
-           * the task waits for memory and the governor has the PM start it later.
-           */
-          const claimLocalStart = (why: (claim: MemoryHeadroom.StartClaim) => string) =>
-            Effect.gen(function* () {
-              const claim = yield* memoryHeadroom.claimStart(MemoryHeadroom.START_SPACING_MS);
-              if (claim.type === "started") return;
-              yield* waitForMemory(claim.type === "short");
-              return yield* teamError(
-                `#${task.number} stays in the inbox: ${why(claim)} It starts by itself once the Mac has room; do not retry it.`,
-                role.projectId,
-              );
-            });
-          const notNow = (claim: MemoryHeadroom.StartClaim) =>
-            claim.type === "spaced"
-              ? `another session started on this Mac moments ago, and its memory has not shown yet (${MEMORY_WAIT_REASON}).`
-              : `${MEMORY_WAIT_REASON}.`;
-          if (admission.location === "local") yield* claimLocalStart(notNow);
-          const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
-            Effect.gen(function* () {
-              return yield* delegate({
-                task: buildTaskLeadPrompt({
-                  task: { ...task, location },
-                  key,
-                  spec,
-                  resume,
-                  memory,
-                  otherTasks: active,
-                  ...((yield* activeAfk(manager.settings)) === null
-                    ? {}
-                    : { afkRule: AFK_AGENT_RULE }),
-                  ...(userLanguage === null ? {} : { userLanguage }),
-                  ...(coveredBy === null
-                    ? {}
-                    : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
-                  roleModels,
-                }),
-                title: `${key} ${task.title}`,
-                role: "implementation",
-                isolation: "worktree",
-                mode: "async",
-                clientRequestId:
-                  earlierSessions === 0
-                    ? `task-start:${task.id}${requestSuffix}`
-                    : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
-                ...(leadTarget === undefined ? {} : { target: leadTarget }),
-                // Always explicit, so delegate_task never re-places a lead the
-                // admission already placed (it may move an unplaced child to the cloud).
-                location,
-              }).pipe(
-                Effect.mapError((failure) =>
-                  teamError(
-                    `Could not start a task lead for #${task.number}: ${failure.message}`,
-                    role.projectId,
-                  ),
-                ),
-              );
-            });
-          // The setting, not the PM, sent it to the cloud: when the cloud cannot
-          // take it, start here if the Mac has room, else wait for memory.
-          const { lead, location, note } = yield* delegateLead(admission.location, "").pipe(
-            Effect.map((lead) => ({ lead, location: admission.location, note: admission.note })),
-            Effect.catch((failure) =>
-              Effect.gen(function* () {
-                if (admission.location !== "cloud" || input.location === "cloud") {
-                  return yield* Effect.fail(failure);
-                }
-                yield* claimLocalStart(
-                  (claim) =>
-                    `the cloud could not start it (${failure.message}) and ${notNow(claim)}`,
-                );
-                const lead = yield* delegateLead("local", ":local");
-                return { lead, location: "local" as const, note: CLOUD_FALLBACK_NOTE };
-              }),
-            ),
-          );
-          const started = yield* setTask({
-            id: task.id,
-            stage: "planning",
-            leadThreadId: lead.childThreadId,
-            location,
-            // The parent's approved breakdown is this subtask's approved plan.
-            ...(coveredBy === null || task.planSummary !== null
-              ? {}
-              : { planSummary: yield* coveredPlanSummary(task, coveredBy) }),
-          });
-          yield* repository.addTaskSession({
-            taskId: started.id,
-            threadId: lead.childThreadId,
-            role: resume ? "implementer" : "lead",
-            createdAt: started.stageChangedAt,
-          });
-          yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
-          if (note !== null) {
-            yield* appendEvent(started, "note", note, null);
-          }
-          if (task.memoryHold != null) yield* setMemoryHold(started, null);
-          // Logged as the lead's, so the PM's latest action still reads "started".
-          const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
-          yield* repository
-            .startModelRun({
-              taskId: started.id,
-              threadId: lead.childThreadId,
-              role: "plan",
-              providerInstanceId: lead.providerInstanceId,
-              model: lead.model,
-              startedAt: started.stageChangedAt,
-            })
-            .pipe(orTeamError("Could not record the plan step.", role.projectId));
-          yield* router.publish(role.projectId);
-          return { task: withStep, leadThreadId: lead.childThreadId };
-        }).pipe(leadStartLock.withPermits(1)),
-      );
+      const start = yield* startTaskLocked(callerThreadId, role.projectId, input, delegate);
+      if (start.kind === "started") return start.result;
+      // Outside the start lock: a move can take minutes. A failed move leaves the task as it was.
+      yield* moveTask({ projectId: role.projectId, taskId: input.taskId, to: start.to });
+      const moved = yield* requireTask(input.taskId, role.projectId);
+      // The moved lead may already have failed again; that newer failure keeps its card.
+      if ((yield* countFailedOutcomes(moved)) === start.failuresBefore) {
+        const open = yield* repository.listOpenAttentionItems({
+          projectId: moved.projectId,
+          taskId: moved.id,
+        });
+        for (const item of open.filter((item) => start.failedCards.includes(item.id))) {
+          yield* restoreFailedTurnStage(item, TURN_FAILED_RETRY);
+          yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: yield* nowIso });
+        }
+      }
+      yield* router.publish(role.projectId);
+      return { task: yield* requireTask(moved.id, role.projectId), leadThreadId: start.lead };
     }).pipe(orTeamError("Could not start the task."));
 
   /**

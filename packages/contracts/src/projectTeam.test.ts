@@ -653,6 +653,10 @@ describe("failed-turn blockers", () => {
     ["unexpected status 401 Unauthorized: token_expired", "로그인 만료 401"],
     ["authentication failed", "로그인 만료 401"],
     ["TOKEN EXPIRED", "로그인 만료 401"],
+    [
+      "Cloud leads need a Claude setup-token. Run `claude setup-token`, then save it with request_secret and cloud_secret_save (kind claude_oauth_token).",
+      "Claude 토큰이 없어요",
+    ],
     ["429", "사용량 한도 429"],
     ["rate-limit", "사용량 한도 429"],
     ["usage limit", "사용량 한도 429"],
