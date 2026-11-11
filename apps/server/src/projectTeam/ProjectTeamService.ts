@@ -3209,7 +3209,16 @@ const make = Effect.gen(function* () {
         // The pull request follows the user's PR rules; one that can't be read is let through.
         const url = prUrl ?? task.prUrl;
         const text = url === null ? Option.none() : yield* pullRequestText.read(url);
-        const problems = Option.isSome(text) ? pullRequestFormatProblems(text.value) : [];
+        const branchPrefix = yield* serverSettings.getSettings.pipe(
+          Effect.map(
+            (settings) =>
+              resolveProjectSettings(settings, task.projectId).settings.branchNamePrefix,
+          ),
+          Effect.orElseSucceed(() => null),
+        );
+        const problems = Option.isSome(text)
+          ? pullRequestFormatProblems(text.value, { branchPrefix })
+          : [];
         if (problems.length > 0) {
           return yield* teamError(
             `The pull request does not follow the PR rules yet. Fix it with gh pr edit, then move to In Review again:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,

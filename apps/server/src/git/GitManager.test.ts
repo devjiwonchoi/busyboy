@@ -4112,6 +4112,62 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     }),
   );
 
+  it.effect("renames a temporary worktree branch before pushing it", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "busyboy/1a2b3c4d"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "search.txt"), "search\n");
+      yield* runGit(repoDir, ["add", "search.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Add search"]);
+
+      const { manager } = yield* makeManager();
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "push",
+      });
+
+      expect(result.branch).toEqual({ status: "created", name: "busyboy/add-search" });
+      expect(result.push.status).toBe("pushed");
+      const remoteBranches = yield* runGit(repoDir, ["ls-remote", "--heads", "origin"]).pipe(
+        Effect.map((output) => output.stdout.replaceAll(/^\S+\trefs\/heads\//gm, "").split("\n")),
+      );
+      expect(remoteBranches).toContain("busyboy/add-search");
+      expect(remoteBranches).not.toContain("busyboy/1a2b3c4d");
+    }),
+  );
+
+  it.effect("moves an already pushed temporary branch to its real name for a pull request", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "t3/1a2b3c4d"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "search.txt"), "search\n");
+      yield* runGit(repoDir, ["add", "search.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Add search"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "t3/1a2b3c4d"]);
+
+      const { manager } = yield* makeManager();
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "push",
+      });
+
+      expect(result.branch).toEqual({ status: "created", name: "busyboy/add-search" });
+      expect(result.push.status).toBe("pushed");
+      expect(
+        yield* runGit(repoDir, ["rev-parse", "--abbrev-ref", "@{upstream}"]).pipe(
+          Effect.map((output) => output.stdout.trim()),
+        ),
+      ).toBe("origin/busyboy/add-search");
+    }),
+  );
+
   it.effect("pushes existing commits without committing dirty worktree changes", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");

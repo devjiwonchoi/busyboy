@@ -20,6 +20,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import {
+  type BranchNamingMode,
   GitActionProgressEvent,
   GitActionProgressPhase,
   GitCommandError,
@@ -49,6 +50,8 @@ import {
 } from "@t3tools/shared/projectSettings";
 import {
   detectSourceControlProviderFromGitRemoteUrl,
+  formatGeneratedBranchName,
+  isTemporaryWorktreeBranch,
   mergeGitStatusParts,
   normalizeGitRemoteUrl,
   resolveAutoFeatureBranchName,
@@ -2914,6 +2917,66 @@ export const make = Effect.gen(function* () {
     };
   });
 
+  /** The branch naming settings when `branch` still has its temporary worktree name. */
+  const temporaryBranchNaming = Effect.fn("temporaryBranchNaming")(function* (
+    input: { readonly cwd: string; readonly threadId?: ThreadId | undefined },
+    branch: string,
+  ) {
+    const naming = yield* projectSettingsFor(input).pipe(
+      Effect.map(({ settings, projectId }) => resolveProjectSettings(settings, projectId).settings),
+      Effect.mapError(
+        (cause) =>
+          new GitManagerError({
+            operation: "runStackedAction",
+            cwd: input.cwd,
+            detail: "Failed to get server settings.",
+            cause,
+          }),
+      ),
+    );
+    return isTemporaryWorktreeBranch(branch, naming.branchNamePrefix) ? naming : null;
+  });
+
+  /**
+   * A worktree starts on a temporary branch (`busyboy/1a2b3c4d`). Pushing it as is
+   * leaves that name on the remote, so give it a real name from the commit first.
+   */
+  const renameTemporaryBranch = Effect.fn("renameTemporaryBranch")(function* (
+    cwd: string,
+    branch: string,
+    naming: { readonly branchNamingMode: BranchNamingMode; readonly branchNamePrefix: string },
+    hadUpstream: boolean,
+    commitSubject: string | undefined,
+  ) {
+    const subject =
+      commitSubject ??
+      (yield* gitCore.execute({
+        operation: "GitManager.renameTemporaryBranch.subject",
+        cwd,
+        args: ["log", "-1", "--format=%s"],
+        timeoutMs: 5_000,
+      })).stdout.trim();
+    const renamed = yield* gitCore.renameBranch({
+      cwd,
+      oldBranch: branch,
+      newBranch: formatGeneratedBranchName(subject, {
+        mode: naming.branchNamingMode === "custom" ? "static" : naming.branchNamingMode,
+        prefix: naming.branchNamePrefix,
+        instructions: "",
+      }),
+    });
+    // A rename keeps tracking the temporary remote branch; push the new name on its own.
+    if (hadUpstream) {
+      yield* gitCore.execute({
+        operation: "GitManager.renameTemporaryBranch.unsetUpstream",
+        cwd,
+        args: ["branch", "--unset-upstream", renamed.branch],
+        timeoutMs: 5_000,
+      });
+    }
+    return renamed.branch;
+  });
+
   const runStackedAction: GitManager["Service"]["runStackedAction"] = Effect.fn("runStackedAction")(
     function* (input, options) {
       const progress = yield* createProgressEmitter(input, options);
@@ -2925,12 +2988,18 @@ export const make = Effect.gen(function* () {
       > {
         const initialStatus = yield* gitCore.statusDetails(input.cwd);
         const wantsCommit = isCommitAction(input.action);
+        const temporaryNaming =
+          initialStatus.branch && !input.featureBranch && input.action !== "commit"
+            ? yield* temporaryBranchNaming(input, initialStatus.branch)
+            : null;
         const wantsPush =
           input.action === "push" ||
           input.action === "commit_push" ||
           input.action === "commit_push_pr" ||
           (input.action === "create_pr" &&
-            (!initialStatus.hasUpstream || initialStatus.aheadCount > 0));
+            (!initialStatus.hasUpstream ||
+              initialStatus.aheadCount > 0 ||
+              temporaryNaming !== null));
         const wantsPr = input.action === "create_pr" || input.action === "commit_push_pr";
 
         if (input.featureBranch && !wantsCommit) {
@@ -3021,7 +3090,7 @@ export const make = Effect.gen(function* () {
           branchStep = { status: "skipped_not_requested" as const };
         }
 
-        const currentBranch = branchStep.name ?? initialStatus.branch;
+        let currentBranch = branchStep.name ?? initialStatus.branch;
         const commitAction = isCommitAction(input.action) ? input.action : null;
         const changeRequestTerms = wantsPr
           ? yield* sourceControlProvider(input.cwd).pipe(
@@ -3049,6 +3118,17 @@ export const make = Effect.gen(function* () {
               ),
             )
           : { status: "skipped_not_requested" as const };
+
+        if (wantsPush && currentBranch && temporaryNaming !== null) {
+          currentBranch = yield* renameTemporaryBranch(
+            input.cwd,
+            currentBranch,
+            temporaryNaming,
+            initialStatus.hasUpstream,
+            commit.status === "created" ? commit.subject : undefined,
+          );
+          branchStep = { status: "created", name: currentBranch };
+        }
 
         const push = wantsPush
           ? yield* progress

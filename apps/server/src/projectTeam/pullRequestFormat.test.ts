@@ -23,6 +23,28 @@ describe("pullRequestFormatProblems", () => {
     expect(pullRequestFormatProblems(good)).toEqual([]);
   });
 
+  it("rejects a pull request opened from a temporary worktree branch", () => {
+    for (const headBranch of [
+      "busyboy/1a2b3c4d",
+      "jiwon/1a2b3c4d",
+      "jiwon-1a2b3c4d",
+      "t3/1a2b3c4d",
+    ]) {
+      const problems = pullRequestFormatProblems(
+        { ...good, headBranch },
+        { branchPrefix: "jiwon" },
+      );
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain("temporary worktree name");
+    }
+    for (const headBranch of ["jiwon/add-search", "release/20261111", "fix/deadbeef"]) {
+      expect(pullRequestFormatProblems({ ...good, headBranch }, { branchPrefix: "jiwon" })).toEqual(
+        [],
+      );
+    }
+    expect(pullRequestFormatProblems({ ...good, headBranch: "jiwon/1a2b3c4d" })).toEqual([]);
+  });
+
   it("passes a conforming body with a stack line and CRLF line endings", () => {
     const stacked = `Stacked on #133.\n\n${body}`.replace(/\n/g, "\r\n");
     expect(problemsFor({ body: stacked })).toEqual([]);
