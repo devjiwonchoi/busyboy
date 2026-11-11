@@ -88,6 +88,7 @@ describe("runMigrations", () => {
         [25, "ProjectTaskMemoryHold"],
         [26, "ProjectTaskMemoryStallSince"],
         [27, "ProjectTaskStalls"],
+        [28, "ProjectCorrections"],
       ]);
       const rows = yield* sql`
         SELECT question, options_json, context_json, sender_role, sender_name FROM project_attention_items
@@ -151,6 +152,7 @@ describe("runMigrations", () => {
         [25, "ProjectTaskMemoryHold"],
         [26, "ProjectTaskMemoryStallSince"],
         [27, "ProjectTaskStalls"],
+        [28, "ProjectCorrections"],
       ]);
       const tasks = yield* sql`SELECT task_id, stage FROM project_tasks ORDER BY number`;
       assert.deepStrictEqual(tasks, [
@@ -202,6 +204,7 @@ describe("runMigrations", () => {
         [25, "ProjectTaskMemoryHold"],
         [26, "ProjectTaskMemoryStallSince"],
         [27, "ProjectTaskStalls"],
+        [28, "ProjectCorrections"],
       ]);
       yield* sql`
         INSERT INTO project_attention_items (
