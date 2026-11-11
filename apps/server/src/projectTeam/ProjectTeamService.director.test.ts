@@ -1,17 +1,22 @@
 import { assert, describe, it } from "@effect/vitest";
-import { ProjectId } from "@t3tools/contracts";
+import { PLAN_APPROVAL_START, ProjectId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
 
 import { epicStage } from "./director.ts";
 import { personaInstructions } from "./persona.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
+  attentionContext,
   createAcceptedTask,
   DIRECTOR_PROJECT_ID as DIRECTOR,
   PROJECT_ID,
   SECOND_PROJECT_ID as SECOND,
   setUpWorkspace,
+  startLead,
+  userSays,
   withTeam,
+  writeReadyPlan,
 } from "./testkit.ts";
 
 const service = ProjectTeamService.ProjectTeamService;
@@ -182,6 +187,66 @@ describe("ProjectTeamService Director", () => {
           team.writeMemory(firstPm, { topic: "summary", content: "1\n2\n3\n4\n5\n6" }),
         );
         assert.include(longSummary.message, "at most 5 lines");
+      }),
+    ),
+  );
+});
+
+describe("ProjectTeamService Director plan approvals", () => {
+  it.effect("lets only the user's click approve a lead's plan, never the Director agent", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const { firstPm, director } = yield* setUpWorkspace(harness);
+        const lead = yield* startLead(firstPm, "Goal graph", harness.delegate);
+        yield* writeReadyPlan(lead.leadThreadId);
+        const { item } = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Approve the plan?" }),
+          kind: "approval",
+          question: "Approve the plan?",
+          senderName: "Goal graph",
+        });
+
+        // Even quoting the user's own words, the Director agent cannot answer the card.
+        userSays(harness, director.threadId, PLAN_APPROVAL_START);
+        const refused = yield* Effect.flip(
+          team.answerAttention(director.threadId, {
+            attentionItemId: item.id,
+            answer: PLAN_APPROVAL_START,
+          }),
+        );
+        assert.include(refused.message, "attention_answer");
+        const waiting = yield* team.readTask(firstPm, { taskId: lead.task.id });
+        assert.strictEqual(waiting.task.stage, "awaiting_approval");
+        const answersToLead = Effect.map(Ref.get(harness.sent), (sent) =>
+          sent.filter(
+            (message) =>
+              message.threadId === lead.leadThreadId &&
+              message.text.startsWith("[User answer via BusyBoy]"),
+          ),
+        );
+        assert.lengthOf(yield* answersToLead, 0);
+
+        // The user's click, from either chat, answers the one card and the lead starts.
+        const answered = yield* team.answerDecision({
+          projectId: item.projectId,
+          attentionItemId: item.id,
+          answer: PLAN_APPROVAL_START,
+        });
+        assert.strictEqual(answered.item.answeredBy, "user");
+        const running = yield* team.readTask(firstPm, { taskId: lead.task.id });
+        assert.strictEqual(running.task.stage, "running");
+        assert.lengthOf(yield* answersToLead, 1);
+
+        // A second answer to the same card is refused, so nothing is approved twice.
+        const again = yield* Effect.flip(
+          team.answerDecision({
+            projectId: item.projectId,
+            attentionItemId: item.id,
+            answer: PLAN_APPROVAL_START,
+          }),
+        );
+        assert.isString(again.message);
       }),
     ),
   );
