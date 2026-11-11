@@ -1903,6 +1903,167 @@ export const ProjectTeamPmNudgeResult = Schema.Struct({
 });
 export type ProjectTeamPmNudgeResult = typeof ProjectTeamPmNudgeResult.Type;
 
+/** How the user corrected agent work. */
+export const ProjectCorrectionKind = Schema.Literals([
+  /** The user answered a plan approval card with feedback. */
+  "plan_changes",
+  /** Mid-run, the user changed direction. */
+  "direction_change",
+  /** The user asked for changes to a pull request. */
+  "pr_change_request",
+  /** A merged task pull request was reverted. */
+  "revert",
+]);
+export type ProjectCorrectionKind = typeof ProjectCorrectionKind.Type;
+
+/** Where the work was when the user corrected it. */
+export const ProjectCorrectionStage = Schema.Literals(["plan", "running", "pr", "merged"]);
+export type ProjectCorrectionStage = typeof ProjectCorrectionStage.Type;
+
+export const PROJECT_CORRECTION_STAGES: ReadonlyArray<ProjectCorrectionStage> = [
+  "plan",
+  "running",
+  "pr",
+  "merged",
+];
+
+export function correctionStageOf(kind: ProjectCorrectionKind): ProjectCorrectionStage {
+  switch (kind) {
+    case "plan_changes":
+      return "plan";
+    case "direction_change":
+      return "running";
+    case "pr_change_request":
+      return "pr";
+    case "revert":
+      return "merged";
+  }
+}
+
+/** What a task changes, guessed from its title, request and planned files. */
+export const ProjectWorkKind = Schema.Literals(["ui", "server", "release", "docs", "other"]);
+export type ProjectWorkKind = typeof ProjectWorkKind.Type;
+
+export const ProjectCorrection = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  kind: ProjectCorrectionKind,
+  stage: ProjectCorrectionStage,
+  workKind: ProjectWorkKind,
+  /** The user's own words. */
+  userText: Schema.String,
+  /** One line on what differed from what the agent did. */
+  whatDiffered: Schema.String,
+  /** Unique per moment, so recording it twice keeps one row. */
+  sourceKey: TrimmedNonEmptyString,
+  /** Found in history after the fact rather than recorded when it happened. */
+  backfilled: Schema.Boolean,
+  createdAt: IsoDateTime,
+});
+export type ProjectCorrection = typeof ProjectCorrection.Type;
+
+export const ProjectTeamCorrectionRecordInput = Schema.Struct({
+  taskId: ProjectTaskId.annotate({ description: "The task the user corrected." }),
+  kind: Schema.Literals(["direction_change", "pr_change_request", "revert"]).annotate({
+    description:
+      "direction_change: the user redirected or reversed running work. pr_change_request: they asked for changes to the task's pull request. revert: they asked to undo merged work.",
+  }),
+  userText: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)).annotate({
+    description: "The user's exact words from this chat. The server checks them.",
+  }),
+  whatDiffered: TrimmedNonEmptyString.check(Schema.isMaxLength(300)).annotate({
+    description: "One line on what the user wanted instead, in the user's language.",
+  }),
+});
+export type ProjectTeamCorrectionRecordInput = typeof ProjectTeamCorrectionRecordInput.Type;
+
+export const ProjectTeamCorrectionRecordResult = Schema.Struct({
+  correction: ProjectCorrection,
+  /** False when this moment was already recorded. */
+  recorded: Schema.Boolean,
+});
+export type ProjectTeamCorrectionRecordResult = typeof ProjectTeamCorrectionRecordResult.Type;
+
+export const ProjectTeamCorrectionsReportInput = Schema.Struct({
+  projectId: Schema.optional(ProjectId).annotate({ description: "Only this project." }),
+  workKind: Schema.optional(ProjectWorkKind).annotate({ description: "Only this kind of work." }),
+  sinceDays: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 365 })),
+  ).annotate({
+    description: "Look back this many days. Default 90.",
+  }),
+  recentLimit: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+  ).annotate({
+    description: "How many recent corrections to list. Default 20.",
+  }),
+});
+export type ProjectTeamCorrectionsReportInput = typeof ProjectTeamCorrectionsReportInput.Type;
+
+export const ProjectCorrectionRate = Schema.Struct({
+  /** "task" counts whole tasks: corrected at any stage. */
+  stage: Schema.Union([ProjectCorrectionStage, Schema.Literal("task")]),
+  eligible: NonNegativeInt,
+  corrected: NonNegativeInt,
+  passed: NonNegativeInt,
+  /** corrected / eligible; 0 when nothing was eligible. */
+  rate: Schema.Number,
+});
+export type ProjectCorrectionRate = typeof ProjectCorrectionRate.Type;
+
+export const ProjectCorrectionRates = Schema.Struct({
+  projectId: ProjectId,
+  projectName: Schema.String,
+  /** Null for the project's total over every kind of work. */
+  workKind: Schema.NullOr(ProjectWorkKind),
+  stages: Schema.Array(ProjectCorrectionRate),
+});
+export type ProjectCorrectionRates = typeof ProjectCorrectionRates.Type;
+
+export const ProjectCorrectionReportEntry = Schema.Struct({
+  projectId: ProjectId,
+  projectName: Schema.String,
+  taskId: ProjectTaskId,
+  taskKey: Schema.String,
+  title: Schema.String,
+  kind: ProjectCorrectionKind,
+  stage: ProjectCorrectionStage,
+  workKind: ProjectWorkKind,
+  userText: Schema.String,
+  whatDiffered: Schema.String,
+  createdAt: IsoDateTime,
+  backfilled: Schema.Boolean,
+});
+export type ProjectCorrectionReportEntry = typeof ProjectCorrectionReportEntry.Type;
+
+export const ProjectCorrectionRepeat = Schema.Struct({
+  projectId: ProjectId,
+  projectName: Schema.String,
+  workKind: ProjectWorkKind,
+  stage: ProjectCorrectionStage,
+  count: NonNegativeInt,
+  examples: Schema.Array(Schema.String),
+  /** Three or more: worth proposing to the user as a saved preference. */
+  suggestRule: Schema.Boolean,
+});
+export type ProjectCorrectionRepeat = typeof ProjectCorrectionRepeat.Type;
+
+export const ProjectTeamCorrectionsReport = Schema.Struct({
+  since: IsoDateTime,
+  rates: Schema.Array(ProjectCorrectionRates),
+  recent: Schema.Array(ProjectCorrectionReportEntry),
+  repeated: Schema.Array(ProjectCorrectionRepeat),
+  /** Corrections found in history rather than recorded live, by kind, over all time. */
+  backfilled: Schema.Struct({
+    plan_changes: NonNegativeInt,
+    direction_change: NonNegativeInt,
+    pr_change_request: NonNegativeInt,
+    revert: NonNegativeInt,
+  }),
+});
+export type ProjectTeamCorrectionsReport = typeof ProjectTeamCorrectionsReport.Type;
+
 // Client RPCs.
 
 export const ProjectManagerLastAction = Schema.Struct({

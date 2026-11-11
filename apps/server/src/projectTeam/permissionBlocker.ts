@@ -32,6 +32,8 @@ const BOOKKEEPING_TOOLS: ReadonlySet<string> = new Set([
   "memory_list",
   "memory_write",
   "memory_delete",
+  "correction_record",
+  "corrections_report",
   "t3_thread_list",
   "t3_thread_read",
 ]);

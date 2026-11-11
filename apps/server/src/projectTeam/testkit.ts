@@ -62,6 +62,7 @@ import type { PullRequestText } from "./pullRequestFormat.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
+import * as RevertLogReader from "./RevertLogReader.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ShipWakeReactor from "./ShipWakeReactor.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
@@ -140,6 +141,8 @@ export interface TeamHarness {
   checkedOutBranch: (worktreePath: string) => string | null;
   /** The commit checked out in a worktree, read by the review gate; null when unknown. */
   worktreeHead: (worktreePath: string) => string | null;
+  /** The default branch's revert log in a project folder; null when it can't be read. */
+  revertLog: (workspaceRoot: string) => string | null;
   /** Runs after a thread is archived, like the server's worktree cleanup effect. */
   onArchive: (threadId: ThreadId) => Effect.Effect<void>;
   /** Runs when a run is interrupted; by default the run stops at once. */
@@ -504,6 +507,9 @@ export const withTeam = <A, E>(
           WorktreeHeadReader.layerTest((worktreePath) =>
             Option.fromNullishOr(harness.worktreeHead(worktreePath)),
           ),
+          RevertLogReader.layerTest((workspaceRoot) =>
+            Option.fromNullishOr(harness.revertLog(workspaceRoot)),
+          ),
           PullRequestShipGate.layerTest({
             read: (url) => Option.fromNullishOr(shipStates.get(url)),
             markReady: (url) => {
@@ -539,6 +545,7 @@ export const withTeam = <A, E>(
       costPerToken: null,
       checkedOutBranch: () => null,
       worktreeHead: () => null,
+      revertLog: () => null,
       onArchive: () => Effect.void,
       onRestore: () => Effect.void,
       onInterrupt: (threadId) =>

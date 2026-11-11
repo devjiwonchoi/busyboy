@@ -84,6 +84,7 @@ import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as PullRequestTextReader from "./projectTeam/PullRequestTextReader.ts";
 import * as WorktreeHeadReader from "./projectTeam/WorktreeHeadReader.ts";
+import * as RevertLogReader from "./projectTeam/RevertLogReader.ts";
 import * as PullRequestShipGate from "./projectTeam/PullRequestShipGate.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
@@ -478,6 +479,7 @@ const layerProjectTeam = Layer.mergeAll(
   MemoryGovernor.layerWorker,
   GoalAlignmentReactor.layerWorker,
   ProjectTeamService.layerAfkWorker,
+  ProjectTeamService.layerCorrectionBackfill,
   // Needs the team's AttentionRouter, so it starts here rather than beside DelegatedTaskQuestionReactor.
   AfkReactor.layerWorker,
   DefaultManagerReactor.layerWorker,
@@ -488,9 +490,11 @@ const layerProjectTeam = Layer.mergeAll(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(ProjectTeamService.layerWithDependencies),
   Layer.provide(
-    Layer.merge(PullRequestTextReader.layer, WorktreeHeadReader.layer).pipe(
-      Layer.provide(ProcessRunner.layer),
-    ),
+    Layer.mergeAll(
+      PullRequestTextReader.layer,
+      WorktreeHeadReader.layer,
+      RevertLogReader.layer,
+    ).pipe(Layer.provide(ProcessRunner.layer)),
   ),
   Layer.provide(PullRequestShipGate.layer.pipe(Layer.provide(layerPullRequestService))),
   Layer.provide(layerGitWorkflow),

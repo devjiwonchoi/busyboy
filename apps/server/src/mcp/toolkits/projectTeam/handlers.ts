@@ -142,6 +142,12 @@ const handlers = {
   pm_nudge: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.pmNudge(caller, input)),
   ),
+  correction_record: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.recordCorrection(caller, input)),
+  ),
+  corrections_report: McpToolAccess.readsAsCaller((input) =>
+    withTeam((team, caller) => team.correctionsReport(caller, input)),
+  ),
 } satisfies McpToolAccess.Handlers<typeof ProjectTeamToolkit.tools>;
 
 export const layer = McpToolAccess.toLayer(ProjectTeamToolkit, handlers);

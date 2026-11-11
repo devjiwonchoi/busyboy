@@ -366,6 +366,8 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   goal_write: tool(["Save", "Saving", "Saved", "a goal"], "team-task-update"),
   goal_link: tool(["Link", "Linking", "Linked", "work to a goal"], "team-task-update"),
   pm_nudge: tool(["Nudge", "Nudging", "Nudged", "a project PM"], "team-task-nudge"),
+  correction_record: tool(["Record", "Recording", "Recorded", "a correction"], "team-task-update"),
+  corrections_report: tool(["Read", "Reading", "Read", "correction rates"], "team-status"),
 };
 
 export const T3_MCP_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(T3_MCP_TOOLS));

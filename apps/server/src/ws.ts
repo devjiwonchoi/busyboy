@@ -2561,6 +2561,18 @@ const layerWsRpc = (
                 ),
               ),
             ),
+            // A revert of a task's pull request is a correction; recording it never fails.
+            Effect.tap(() =>
+              input.action === "revert"
+                ? projectTeam.recordPullRequestCorrection({
+                    projectId: input.projectId,
+                    repository: input.repository,
+                    number: input.number,
+                    kind: "revert",
+                    userText: "",
+                  })
+                : Effect.void,
+            ),
           ),
         [WS_METHODS.pullRequestsUpdate]: (input) =>
           withPullRequestViewer(input, pullRequests.update(input)),
@@ -2569,7 +2581,23 @@ const layerWsRpc = (
         [WS_METHODS.pullRequestsUpdateComment]: (input) =>
           withPullRequestViewer(input, pullRequests.updateComment(input)),
         [WS_METHODS.pullRequestsSubmitReview]: (input) =>
-          withPullRequestViewer(input, pullRequests.submitReview(input)),
+          withPullRequestViewer(input, pullRequests.submitReview(input)).pipe(
+            // Requesting changes on a task's pull request is a correction; a plain comment is not.
+            Effect.tap(() =>
+              input.verdict !== "request-changes"
+                ? Effect.void
+                : projectTeam.recordPullRequestCorrection({
+                    projectId: input.projectId,
+                    repository: input.repository,
+                    number: input.number,
+                    kind: "pr_change_request",
+                    userText: [input.body, ...input.comments.map((comment) => comment.body)]
+                      .map((text) => text.trim())
+                      .filter((text) => text.length > 0)
+                      .join("\n\n"),
+                  }),
+            ),
+          ),
         [WS_METHODS.pullRequestsReplyToThread]: (input) =>
           withPullRequestViewer(input, pullRequests.replyToThread(input)),
         [WS_METHODS.pullRequestsSetThreadResolution]: (input) =>

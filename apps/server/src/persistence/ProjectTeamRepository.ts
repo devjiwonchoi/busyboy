@@ -19,6 +19,9 @@ import {
   ProjectAttentionItem,
   ProjectAttentionItemId,
   ProjectAttentionKind,
+  ProjectCorrection,
+  ProjectCorrectionKind,
+  ProjectCorrectionStage,
   ProjectId,
   ProjectMemoryEntry,
   ProjectMemoryEntryId,
@@ -51,6 +54,7 @@ import {
   ProjectTaskStage,
   ProjectTeamSettings,
   ProjectManagerKind,
+  ProjectWorkKind,
   ThreadId,
   WorkspaceGoal,
   WorkspaceGoalId,
@@ -160,6 +164,8 @@ export interface CreateProjectAttentionItemInput {
   readonly senderRole?: ProjectAttentionItem["senderRole"] | undefined;
   readonly senderName?: string | null | undefined;
 }
+
+export type InsertProjectCorrectionInput = ProjectCorrection;
 
 export interface CreateProjectSitrepInput {
   readonly id: ProjectSitrepId;
@@ -469,10 +475,30 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly limit: number;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
+    /** A project's answered items of one kind, oldest answer first. */
+    readonly listAnsweredAttentionItems: (input: {
+      readonly projectId: ProjectId;
+      readonly kind: ProjectAttentionKind;
+    }) => Result<ReadonlyArray<ProjectAttentionItem>>;
     /** The newest item, answered or not, for batching. */
     readonly getLatestAttentionItem: (
       projectId: ProjectId,
     ) => Result<Option.Option<ProjectAttentionItem>>;
+
+    /**
+     * Stores a correction unless one with its source key exists. Returns the stored row and
+     * whether this call added it.
+     */
+    readonly insertCorrection: (
+      input: InsertProjectCorrectionInput,
+    ) => Result<{ readonly inserted: boolean; readonly correction: ProjectCorrection }>;
+    /** When live correction recording started; older moments are filled by the backfill. */
+    readonly getCorrectionsStartedAt: () => Result<IsoDateTime>;
+    /** Corrections, oldest first; all projects when projectId is absent. */
+    readonly listCorrections: (input: {
+      readonly projectId?: ProjectId | undefined;
+      readonly since?: IsoDateTime | undefined;
+    }) => Result<ReadonlyArray<ProjectCorrection>>;
 
     readonly listMemory: (projectId: ProjectId) => Result<ReadonlyArray<ProjectMemoryEntry>>;
     /** Replaces the content for a topic; a new topic takes the given id. */
@@ -591,6 +617,23 @@ const AttentionRow = Schema.Struct({
 const SpecVersionRow = Schema.Struct({
   ...ProjectTaskSpecVersion.fields,
   spec: Schema.fromJsonString(ProjectTaskSpec),
+});
+const CorrectionRow = Schema.Struct({
+  id: Schema.String,
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  kind: ProjectCorrectionKind,
+  stage: ProjectCorrectionStage,
+  workKind: ProjectWorkKind,
+  userText: Schema.String,
+  whatDiffered: Schema.String,
+  sourceKey: Schema.String,
+  backfilled: Schema.Number,
+  createdAt: IsoDateTime,
+});
+const toCorrection = (row: typeof CorrectionRow.Type): ProjectCorrection => ({
+  ...row,
+  backfilled: row.backfilled !== 0,
 });
 const CountRow = Schema.Struct({ count: NonNegativeInt });
 const IdRow = Schema.Struct({ id: Schema.String });
@@ -1710,6 +1753,76 @@ export const make = Effect.gen(function* () {
     `,
   });
 
+  const findAnsweredProjectAttention = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId, kind: ProjectAttentionKind }),
+    Result: AttentionRow,
+    execute: ({ projectId, kind }) => sql`
+      SELECT ${attentionColumns}
+      FROM project_attention_items
+      WHERE project_id = ${projectId} AND kind = ${kind} AND answered_at IS NOT NULL
+      ORDER BY answered_at ASC, rowid ASC
+    `,
+  });
+
+  // Corrections
+
+  const correctionColumns = sql.literal(`
+    correction_id AS "id",
+    project_id AS "projectId",
+    task_id AS "taskId",
+    kind AS "kind",
+    stage AS "stage",
+    work_kind AS "workKind",
+    user_text AS "userText",
+    what_differed AS "whatDiffered",
+    source_key AS "sourceKey",
+    backfilled AS "backfilled",
+    created_at AS "createdAt"
+  `);
+  const insertCorrectionRow = SqlSchema.findAll({
+    Request: ProjectCorrection,
+    Result: CorrectionRow,
+    execute: (row) => sql`
+      INSERT INTO project_corrections (
+        correction_id, project_id, task_id, kind, stage, work_kind, user_text,
+        what_differed, source_key, backfilled, created_at
+      ) VALUES (
+        ${row.id}, ${row.projectId}, ${row.taskId}, ${row.kind}, ${row.stage}, ${row.workKind},
+        ${row.userText}, ${row.whatDiffered}, ${row.sourceKey}, ${row.backfilled ? 1 : 0},
+        ${row.createdAt}
+      )
+      ON CONFLICT (source_key) DO NOTHING
+      RETURNING ${correctionColumns}
+    `,
+  });
+  const findCorrectionBySource = SqlSchema.findOne({
+    Request: Schema.Struct({ sourceKey: Schema.String }),
+    Result: CorrectionRow,
+    execute: ({ sourceKey }) => sql`
+      SELECT ${correctionColumns} FROM project_corrections WHERE source_key = ${sourceKey}
+    `,
+  });
+  const findCorrectionsStartedAt = SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ value: IsoDateTime }),
+    execute: () => sql`
+      SELECT value FROM project_correction_state WHERE key = 'recording_started_at'
+    `,
+  });
+  const findCorrections = SqlSchema.findAll({
+    Request: Schema.Struct({
+      projectId: Schema.NullOr(ProjectId),
+      since: Schema.NullOr(IsoDateTime),
+    }),
+    Result: CorrectionRow,
+    execute: ({ projectId, since }) => sql`
+      SELECT ${correctionColumns} FROM project_corrections
+      WHERE (${projectId} IS NULL OR project_id = ${projectId})
+        AND (${since} IS NULL OR created_at >= ${since})
+      ORDER BY created_at ASC, rowid ASC
+    `,
+  });
+
   // Memory
 
   const findMemory = SqlSchema.findAll({
@@ -2122,9 +2235,31 @@ export const make = Effect.gen(function* () {
       findRecentlyAnswered(input).pipe(
         Effect.mapError(toRepositoryError("listRecentlyAnsweredAttentionItems")),
       ),
+    listAnsweredAttentionItems: (input) =>
+      findAnsweredProjectAttention(input).pipe(
+        Effect.mapError(toRepositoryError("listAnsweredAttentionItems")),
+      ),
     getLatestAttentionItem: (projectId) =>
       findLatestAttention({ projectId }).pipe(
         Effect.mapError(toRepositoryError("getLatestAttentionItem")),
+      ),
+
+    insertCorrection: (input) =>
+      Effect.gen(function* () {
+        const [inserted] = yield* insertCorrectionRow(input);
+        if (inserted !== undefined) return { inserted: true, correction: toCorrection(inserted) };
+        const existing = yield* findCorrectionBySource({ sourceKey: input.sourceKey });
+        return { inserted: false, correction: toCorrection(existing) };
+      }).pipe(Effect.mapError(toRepositoryError("insertCorrection"))),
+    getCorrectionsStartedAt: () =>
+      findCorrectionsStartedAt(undefined).pipe(
+        Effect.map((row) => row.value),
+        Effect.mapError(toRepositoryError("getCorrectionsStartedAt")),
+      ),
+    listCorrections: (input) =>
+      findCorrections({ projectId: input.projectId ?? null, since: input.since ?? null }).pipe(
+        Effect.map((rows) => rows.map(toCorrection)),
+        Effect.mapError(toRepositoryError("listCorrections")),
       ),
 
     listMemory: (projectId) =>
