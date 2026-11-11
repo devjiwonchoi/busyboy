@@ -5,6 +5,7 @@
  * - remote claude processes (spawnRemote), and
  * - the sandbox's MCP requests, answered by fetching the Mac's own endpoint.
  */
+import * as NodeCrypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 
@@ -37,16 +38,31 @@ export interface RelayClientOptions {
   readonly fetch?: typeof globalThis.fetch;
   readonly reconnectDelayMs?: (attempt: number) => number;
   /**
-   * How long the relay may stay unreachable before the client gives up: its
-   * remote processes then exit, so a dead sandbox fails the turn instead of
-   * hanging it.
+   * How long the relay may stay unreachable before the client looks at the
+   * sandbox (isAlive) or, without isAlive, gives up: its remote processes then
+   * exit, so a dead sandbox fails the turn instead of hanging it.
    */
   readonly giveUpAfterMs?: number;
+  /**
+   * Whether the sandbox still exists and runs. A sleeping Mac is unreachable
+   * for as long as it sleeps, so the client keeps retrying while this says
+   * yes and gives up only on a no.
+   */
+  readonly isAlive?: () => Promise<boolean>;
   /** Called once when the client gives up on an unreachable relay. */
   readonly onGiveUp?: () => void;
+  /** Called after each connection that follows the first, once buffered output was replayed. */
+  readonly onReconnect?: () => void;
+  /** Messages on channel "ctl" from the relay, such as the processes a restarted Mac left. */
+  readonly onControl?: (message: RelayMessage) => void;
+  /** The clock unreachable time is measured on; tests pass a fake one. */
+  readonly now?: () => number;
 }
 
 const DEFAULT_GIVE_UP_AFTER_MS = 2 * 60 * 1000;
+/** isAlive is asked at most this often while the relay stays unreachable. */
+const ALIVE_CHECK_EVERY_MS = 30 * 1000;
+const MAX_RECONNECT_DELAY_MS = 30 * 1000;
 
 export interface RemoteSpawnInput {
   readonly command: string;
@@ -117,16 +133,23 @@ const HOP_BY_HOP = new Set([
 
 export class RelayClient {
   private readonly options: RelayClientOptions;
+  private mcpEndpoint: string;
   private readonly session: RelaySession;
   private readonly processes = new Map<string, RemoteProcess>();
+  /** Processes that ended here; adopting one again gives it already ended. */
+  private readonly exited = new Set<string>();
   private readonly httpAborts = new Map<string, AbortController>();
   private socket: RelaySocket | null = null;
   private link: RelayLink | null = null;
   private closed = false;
   private attempt = 0;
   private nextProcess = 0;
+  /** Names this client's session; process ids carry it so a later client never reuses one. */
+  readonly sid = NodeCrypto.randomBytes(9).toString("base64url");
   /** When the relay last stopped being reachable; null while connected. */
-  private unreachableSince: number | null = Date.now();
+  private unreachableSince: number | null;
+  private lastAliveCheck = Number.NEGATIVE_INFINITY;
+  private checkingAlive = false;
   private readonly ackTimer: ReturnType<typeof setInterval>;
   private readonly connectionWaiters: Array<() => void> = [];
   /** How many times a connection was established, for tests and logs. */
@@ -134,6 +157,8 @@ export class RelayClient {
 
   constructor(options: RelayClientOptions) {
     this.options = options;
+    this.mcpEndpoint = options.mcpEndpoint;
+    this.unreachableSince = this.now();
     this.session = new RelaySession({ onMessage: (message) => this.handle(message) });
     this.ackTimer = setInterval(() => this.session.ack(), 1_000);
     this.ackTimer.unref?.();
@@ -159,11 +184,13 @@ export class RelayClient {
     });
   }
 
+  private now() {
+    return (this.options.now ?? Date.now)();
+  }
+
   spawnRemote(input: RemoteSpawnInput): RemoteProcess {
-    const id = `p${++this.nextProcess}`;
-    const child = new RemoteProcess((message) => this.session.send({ ch: "proc", id, ...message }));
-    this.processes.set(id, child);
-    child.once("exit", () => this.processes.delete(id));
+    const id = `${this.sid}:p${++this.nextProcess}`;
+    const child = this.track(id);
     this.session.send({
       ch: "proc",
       op: "spawn",
@@ -172,6 +199,43 @@ export class RelayClient {
       args: [...input.args],
       cwd: input.cwd,
       env: { ...input.env },
+    });
+    return child;
+  }
+
+  /** The id spawnRemote gave the last process; it is how a restarted Mac finds it again. */
+  get lastProcessId(): string {
+    return `${this.sid}:p${this.nextProcess}`;
+  }
+
+  /**
+   * Takes over a process an earlier client (a Mac server before a restart)
+   * started: its stdin, kill and exit work like a process spawned here.
+   */
+  adopt(id: string): RemoteProcess {
+    const known = this.processes.get(id);
+    if (known !== undefined) return known;
+    const child = this.track(id);
+    if (this.exited.has(id)) child.handle({ ch: "proc", op: "exit", code: null, signal: null });
+    return child;
+  }
+
+  /** Points sandbox MCP requests at a new Mac endpoint, such as after a server restart. */
+  setMcpEndpoint(url: string): void {
+    this.mcpEndpoint = url;
+  }
+
+  /** Sends a message on channel "ctl", such as the relay's Vercel credential. */
+  sendControl(message: Omit<RelayMessage, "ch">): void {
+    this.session.send({ ...message, ch: "ctl" });
+  }
+
+  private track(id: string): RemoteProcess {
+    const child = new RemoteProcess((message) => this.session.send({ ch: "proc", id, ...message }));
+    this.processes.set(id, child);
+    child.once("exit", () => {
+      this.processes.delete(id);
+      this.exited.add(id);
     });
     return child;
   }
@@ -206,20 +270,29 @@ export class RelayClient {
       this.session.detach(link);
       if (this.socket === socket) this.socket = null;
       if (this.closed) return;
-      this.unreachableSince ??= Date.now();
-      if (Date.now() - this.unreachableSince > (this.options.giveUpAfterMs ?? DEFAULT_GIVE_UP_AFTER_MS)) {
-        this.close();
-        this.options.onGiveUp?.();
-        return;
+      this.unreachableSince ??= this.now();
+      if (
+        this.now() - this.unreachableSince >
+        (this.options.giveUpAfterMs ?? DEFAULT_GIVE_UP_AFTER_MS)
+      ) {
+        if (this.options.isAlive === undefined) {
+          this.giveUp();
+          return;
+        }
+        this.checkAlive(this.options.isAlive);
       }
       const delay =
-        this.options.reconnectDelayMs?.(this.attempt) ?? Math.min(250 * 2 ** this.attempt, 5_000);
+        this.options.reconnectDelayMs?.(this.attempt) ??
+        Math.min(
+          250 * 2 ** this.attempt,
+          this.options.isAlive === undefined ? 5_000 : MAX_RECONNECT_DELAY_MS,
+        );
       this.attempt += 1;
       setTimeout(() => this.connect(), delay);
     };
     socket.onopen = () => {
       this.link = link;
-      this.session.attach(link, this.options.token);
+      this.session.attach(link, this.options.token, this.sid);
     };
     socket.onmessage = (event) => {
       const line = typeof event.data === "string" ? event.data : String(event.data);
@@ -235,6 +308,7 @@ export class RelayClient {
         this.unreachableSince = null;
         this.connections += 1;
         for (const waiter of this.connectionWaiters.splice(0)) waiter();
+        if (this.connections > 1) this.options.onReconnect?.();
       }
     };
     socket.onclose = onLost;
@@ -246,7 +320,42 @@ export class RelayClient {
     };
   }
 
+  private giveUp(): void {
+    if (this.closed) return;
+    this.close();
+    this.options.onGiveUp?.();
+  }
+
+  /** Asks whether the sandbox lives, at most every ALIVE_CHECK_EVERY_MS; a no gives up. */
+  private checkAlive(isAlive: () => Promise<boolean>): void {
+    if (this.checkingAlive || this.now() - this.lastAliveCheck < ALIVE_CHECK_EVERY_MS) return;
+    this.checkingAlive = true;
+    this.lastAliveCheck = this.now();
+    isAlive().then(
+      (alive) => {
+        this.checkingAlive = false;
+        if (!alive && !this.connected) this.giveUp();
+      },
+      // Not knowing (the Mac just woke, no network yet) is not a no.
+      () => {
+        this.checkingAlive = false;
+      },
+    );
+  }
+
   private handle(message: RelayMessage): void {
+    if (message.ch === "ctl") {
+      // Take over leftover processes right away, so their output and exit,
+      // which follow this list, are kept until someone listens.
+      if (message.op === "procs" && Array.isArray(message.list)) {
+        for (const entry of message.list as ReadonlyArray<{ readonly id?: unknown }>) {
+          const id = String(entry.id);
+          if (!id.startsWith(`${this.sid}:`)) this.adopt(id);
+        }
+      }
+      this.options.onControl?.(message);
+      return;
+    }
     if (message.ch === "proc") {
       this.processes.get(String(message.id))?.handle(message);
       return;
@@ -273,11 +382,12 @@ export class RelayClient {
     }
     const method = String(message.method);
     const body = Buffer.from(String(message.body ?? ""), "base64");
-    const endpoint = new URL(this.options.mcpEndpoint);
+    const endpoint = new URL(this.mcpEndpoint);
     const target = new URL(String(message.path), endpoint.origin);
     if (
       target.origin !== endpoint.origin ||
-      (target.pathname !== endpoint.pathname && !target.pathname.startsWith(`${endpoint.pathname}/`))
+      (target.pathname !== endpoint.pathname &&
+        !target.pathname.startsWith(`${endpoint.pathname}/`))
     ) {
       this.httpAborts.delete(id);
       this.session.send({ ch: "http", op: "head", id, status: 403, headers: {} });
@@ -285,15 +395,12 @@ export class RelayClient {
       return;
     }
     try {
-      const response = await (this.options.fetch ?? globalThis.fetch)(
-        target.toString(),
-        {
-          method,
-          headers,
-          ...(method === "GET" || method === "HEAD" || body.length === 0 ? {} : { body }),
-          signal: controller.signal,
-        },
-      );
+      const response = await (this.options.fetch ?? globalThis.fetch)(target.toString(), {
+        method,
+        headers,
+        ...(method === "GET" || method === "HEAD" || body.length === 0 ? {} : { body }),
+        signal: controller.signal,
+      });
       const responseHeaders: Record<string, string> = {};
       response.headers.forEach((value, key) => {
         if (!HOP_BY_HOP.has(key)) responseHeaders[key] = value;

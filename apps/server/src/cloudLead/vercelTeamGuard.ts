@@ -70,3 +70,51 @@ export const assertAllowedVercelTeam = async (
     throw new VercelTeamNotAllowedError("the saved project is not in that team");
   }
 };
+
+/** The project cloud sandboxes run in when none is saved; Vercel makes it for Sandbox. */
+export const DEFAULT_SANDBOX_PROJECT = "vercel-sandbox-default-project";
+
+/**
+ * Fills in the team and project ids when they are not saved: the allowed team
+ * by its slug, and the default sandbox project in it. Reads only, and only the
+ * allowed team. Errors say what to do.
+ */
+export const resolveVercelTarget = async (
+  token: string,
+  saved: { readonly teamId: string | null; readonly projectId: string | null },
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ readonly teamId: string; readonly projectId: string }> => {
+  const get = async (path: string, what: string) => {
+    const response = await fetchImpl(`https://api.vercel.com${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `The Vercel login on this Mac has expired or cannot see ${what} (Vercel answered ${response.status}). Run \`npx vercel login\` and try again (Mac의 Vercel 로그인을 다시 해 주세요).`,
+      );
+    }
+    if (response.status === 404) {
+      throw new Error(
+        `Vercel cannot find ${what}. Create it in the jiwonchoi team, or save vercel_team_id and vercel_project_id (Vercel에서 찾을 수 없어요).`,
+      );
+    }
+    if (!response.ok) throw new Error(`Vercel API answered ${response.status} for ${what}.`);
+    return (await response.json()) as { readonly id?: unknown };
+  };
+  const slug = ALLOWED_VERCEL_TEAM_SLUGS[0]!;
+  const teamId =
+    saved.teamId ??
+    String((await get(`/v2/teams/${encodeURIComponent(slug)}`, `the ${slug} team`)).id);
+  const projectId =
+    saved.projectId ??
+    String(
+      (
+        await get(
+          `/v9/projects/${DEFAULT_SANDBOX_PROJECT}?teamId=${encodeURIComponent(teamId)}`,
+          `the ${DEFAULT_SANDBOX_PROJECT} project`,
+        )
+      ).id,
+    );
+  return { teamId, projectId };
+};
