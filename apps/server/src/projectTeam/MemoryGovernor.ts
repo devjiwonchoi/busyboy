@@ -469,15 +469,16 @@ const make = Effect.gen(function* () {
   /** When the earliest message held in a paused unit's queues was sent, if any. */
   const heldWorkSince = (unit: PausedUnit) =>
     Effect.gen(function* () {
-      let earliest: number | null = null;
+      let earliest: DateTime.Utc | null = null;
       for (const member of unit.members) {
         const { runs } = yield* threads
           .getThreadRecords(member.threadId, ["runs"])
           .pipe(Effect.orElseSucceed(() => ({ runs: [] as ReadonlyArray<never> })));
         for (const run of runs) {
           if (run.status !== "queued" || run.queueHeld !== true) continue;
-          const at = DateTime.toEpochMillis(run.requestedAt);
-          if (earliest === null || at < earliest) earliest = at;
+          if (earliest === null || DateTime.isLessThan(run.requestedAt, earliest)) {
+            earliest = run.requestedAt;
+          }
         }
       }
       return earliest;
@@ -489,7 +490,7 @@ const make = Effect.gen(function* () {
       if (unit.stalling) continue;
       const since = yield* heldWorkSince(unit);
       if (since === null) continue;
-      yield* setStall(unit.taskId, true, new Date(since).toISOString());
+      yield* setStall(unit.taskId, true, DateTime.formatIso(since));
       yield* Ref.update(pausedRef, (all) =>
         all.map((entry) =>
           entry.leadThreadId === unit.leadThreadId ? { ...entry, stalling: true } : entry,
