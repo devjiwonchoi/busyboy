@@ -436,6 +436,8 @@ const make = Effect.gen(function* () {
     for (const task of yield* repository.listMemoryHeldTasks()) {
       if (task.memoryHold !== "paused") continue;
       const leadThreadId = task.leadThreadId;
+      // A finished task keeps its mark for reopening; it is not paused again here.
+      if (task.stage === "done" || task.stage === "cancelled") continue;
       if (leadThreadId === null || !LIVE_STAGES.includes(task.stage)) {
         yield* setHold(task, null);
         continue;
@@ -510,15 +512,18 @@ const make = Effect.gen(function* () {
         Effect.orElseSucceed(() => null),
       );
       // A unit stays paused only while its task runs on this Mac. A task moved to the
-      // cloud lets its held messages through; a finished one is let go (its lead is
-      // archived, and reopening the task resumes the held messages).
+      // cloud lets its held messages through. A finished one is let go but its queue
+      // stays held: its "paused" mark stays, and reopening the task resumes it.
       const finished = task !== null && (task.stage === "done" || task.stage === "cancelled");
       if (task !== null && (task.location ?? "local") === "local" && !finished) continue;
-      for (const member of unit.members) yield* control(member.threadId).resumeQueue;
+      for (const member of unit.members) {
+        if (finished) gate.release(member.threadId, "memory");
+        else yield* control(member.threadId).resumeQueue;
+      }
       yield* Ref.update(pausedRef, (all) =>
         all.filter((entry) => entry.leadThreadId !== unit.leadThreadId),
       );
-      if (task !== null && task.memoryHold != null) yield* setHold(task, null);
+      if (!finished && task !== null && task.memoryHold != null) yield* setHold(task, null);
     }
   });
 

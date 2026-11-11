@@ -5224,7 +5224,11 @@ const make = Effect.gen(function* () {
               leadThreadId: task.leadThreadId,
               location: task.location,
               moveTarget: task.moveTarget ?? null,
-              memoryHold: task.memoryHold ?? null,
+              // A finished task keeps its pause only as a marker for reopening.
+              memoryHold:
+                task.stage === "done" || task.stage === "cancelled"
+                  ? null
+                  : (task.memoryHold ?? null),
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
               openQuestion: open.some((item) => item.taskId === task.id),
