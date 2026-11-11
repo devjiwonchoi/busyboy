@@ -214,20 +214,35 @@ export function pendingActionItems(input: {
   ];
 }
 
+/** A plan approval the Director chat also shows: open, or answered. Moot ones stay out. */
+const isDirectorApprovalCard = (card: ProjectDecisionCard): boolean =>
+  card.item.kind === "approval" &&
+  (card.item.answeredAt !== null || card.item.supersededAt === null);
+
 /**
  * The question cards a thread shows in its timeline, open or closed, oldest first: every
  * card in the project for its PM thread, and the cards a task lead asked for that lead's
- * own thread.
+ * own thread. The Director's thread also shows every project's plan approvals.
  */
 export function decisionCardsForThread(
-  summaries: Iterable<Pick<ProjectTeamAttentionSummary, "pmThreadId" | "decisionCards">>,
+  summaries: Iterable<Pick<ProjectTeamAttentionSummary, "pmThreadId" | "kind" | "decisionCards">>,
   threadId: ThreadId,
 ): ReadonlyArray<ProjectDecisionCard> {
+  const list = [...summaries];
+  const isDirectorThread = list.some(
+    (summary) => isDirectorSummary(summary) && summary.pmThreadId === threadId,
+  );
   const cards: ProjectDecisionCard[] = [];
-  for (const summary of summaries) {
+  for (const summary of list) {
     const isPmThread = summary.pmThreadId === threadId;
     for (const card of summary.decisionCards) {
-      if (isPmThread || card.item.askerThreadId === threadId) cards.push(card);
+      if (
+        isPmThread ||
+        card.item.askerThreadId === threadId ||
+        (isDirectorThread && isDirectorApprovalCard(card))
+      ) {
+        cards.push(card);
+      }
     }
   }
   return cards.toSorted((a, b) => Date.parse(a.item.createdAt) - Date.parse(b.item.createdAt));

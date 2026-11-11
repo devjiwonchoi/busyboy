@@ -2,6 +2,7 @@ import { ThreadId, type ProjectManagerPresence } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  decisionCardsForThread,
   formatProjectManagerPresence,
   resolveProjectManagerStatus,
   taskReferencesForThread,
@@ -121,5 +122,56 @@ describe("taskReferencesForThread", () => {
   it("resolves nothing for other threads or projects without a PM", () => {
     expect(taskReferencesForThread(summary, ThreadId.make("other"))).toBeNull();
     expect(taskReferencesForThread(null, ThreadId.make("pm"))).toBeNull();
+  });
+});
+
+describe("decisionCardsForThread", () => {
+  const PM = ThreadId.make("pm-busyboy");
+  const DIRECTOR = ThreadId.make("director");
+  const LEAD = ThreadId.make("lead-goal-graph");
+  const card = (
+    id: string,
+    kind: "approval" | "decision" | "blocker",
+    minute: number,
+    state: { answeredAt?: string; supersededAt?: string } = {},
+  ) =>
+    ({
+      item: {
+        id,
+        kind,
+        askerThreadId: LEAD,
+        createdAt: `2026-11-11T08:${String(minute).padStart(2, "0")}:00.000Z`,
+        answeredAt: state.answeredAt ?? null,
+        supersededAt: state.supersededAt ?? null,
+      },
+    }) as never;
+  const openPlan = card("plan-open", "approval", 3);
+  const answeredPlan = card("plan-answered", "approval", 1, {
+    answeredAt: "2026-11-11T08:02:00.000Z",
+  });
+  const movedOnPlan = card("plan-superseded", "approval", 2, {
+    supersededAt: "2026-11-11T08:04:00.000Z",
+  });
+  const blocker = card("blocker", "blocker", 4);
+  const directorDecision = card("director-decision", "decision", 5);
+  const summaries = [
+    {
+      kind: "pm" as const,
+      pmThreadId: PM,
+      decisionCards: [openPlan, answeredPlan, movedOnPlan, blocker],
+    },
+    { kind: "director" as const, pmThreadId: DIRECTOR, decisionCards: [directorDecision] },
+  ];
+  const ids = (threadId: ThreadId) =>
+    decisionCardsForThread(summaries as never, threadId).map(
+      (entry: { item: { id: string } }) => entry.item.id,
+    );
+
+  it("shows every project's open and answered plan approvals in the Director chat", () => {
+    expect(ids(DIRECTOR)).toEqual(["plan-answered", "plan-open", "director-decision"]);
+  });
+
+  it("keeps the PM chat showing all of its project's cards", () => {
+    expect(ids(PM)).toEqual(["plan-answered", "plan-superseded", "plan-open", "blocker"]);
   });
 });
