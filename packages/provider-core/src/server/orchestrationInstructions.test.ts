@@ -239,6 +239,31 @@ describe("T3 orchestration provider instructions", () => {
     assert.notInclude(text, "태스크로 추가");
   });
 
+  it("has the PM and Director record the user's corrections in their own words", () => {
+    for (const text of [
+      projectManagerInstructions({ name: "Mina", voice: "Calm." }),
+      directorInstructions({ name: "Nova", voice: "Calm." }),
+    ]) {
+      assert.include(text, "call `correction_record` with their exact words");
+      assert.include(
+        text,
+        "New scope that doesn't contradict earlier direction is not a correction",
+      );
+      assert.include(text, "Plan card answers are recorded automatically");
+    }
+    const pm = projectManagerInstructions({ name: "Mina", voice: "Calm." });
+    assert.include(pm, '"그게 아니라", "말고"');
+    assert.notInclude(pm, "corrections_report");
+  });
+
+  it("has the Director read correction rates and propose rules only with the user's yes", () => {
+    const text = directorInstructions({ name: "Nova", voice: "Calm." });
+    assert.include(text, "### Corrections");
+    assert.include(text, "`corrections_report` gives correction rates by project and work kind");
+    assert.include(text, "When a group has `suggestRule`, propose saving it as a preference");
+    assert.include(text, "never save it without the user's yes");
+  });
+
   it("has the Director keep its one-line briefing current on goal checks and digests", () => {
     const text = directorInstructions({ name: "Nova", voice: "Calm." });
     assert.include(text, "### Briefing");
