@@ -329,6 +329,10 @@ export class ProjectTeamRepository extends Context.Service<
       readonly cause: ProjectTaskStallCause;
       readonly startedAt: IsoDateTime;
     }) => Result<ProjectTaskStallRecord>;
+    /** Every stall of a task, open or ended, oldest first. */
+    readonly listTaskStalls: (input: {
+      readonly taskId: ProjectTaskId;
+    }) => Result<ReadonlyArray<ProjectTaskStallRecord>>;
     /** Open stalls, of one task or of every task. */
     readonly listOpenTaskStalls: (input: {
       readonly taskId?: ProjectTaskId;
@@ -1097,6 +1101,16 @@ export const make = Effect.gen(function* () {
       SELECT ${stallColumns}
       FROM project_task_stalls
       WHERE ended_at IS NULL AND (${taskId} IS NULL OR task_id = ${taskId})
+      ORDER BY started_at ASC
+    `,
+  });
+  const findTaskStalls = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: ProjectTaskStallRecord,
+    execute: ({ taskId }) => sql`
+      SELECT ${stallColumns}
+      FROM project_task_stalls
+      WHERE task_id = ${taskId}
       ORDER BY started_at ASC
     `,
   });
@@ -1981,6 +1995,8 @@ export const make = Effect.gen(function* () {
         const open = yield* findOpenTaskStalls({ taskId: input.taskId });
         return open.find((stall) => stall.cause === input.cause)!;
       }).pipe(Effect.mapError(toRepositoryError("openTaskStall"))),
+    listTaskStalls: (input) =>
+      findTaskStalls(input).pipe(Effect.mapError(toRepositoryError("listTaskStalls"))),
     listOpenTaskStalls: (input) =>
       findOpenTaskStalls({ taskId: input.taskId ?? null }).pipe(
         Effect.mapError(toRepositoryError("listOpenTaskStalls")),

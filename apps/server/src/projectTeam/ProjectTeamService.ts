@@ -1239,37 +1239,51 @@ const make = Effect.gen(function* () {
         input.parentTaskId !== undefined
           ? yield* repository.getTask(input.id)
           : Option.none<ProjectTask>();
-      const updated = yield* repository.updateTask({ ...input, now });
-      if (Option.isNone(updated)) return yield* teamError(`Task ${input.id} was not found.`);
+      const written = yield* repository.updateTask({ ...input, now });
+      if (Option.isNone(written)) return yield* teamError(`Task ${input.id} was not found.`);
+      let current = written.value;
+      if (input.stage !== undefined && current.stageChangedAt === now) {
+        // A stage change is progress: any stall the task was in ends here.
+        yield* repository
+          .closeTaskStalls({ taskId: current.id, endedAt: now })
+          .pipe(orTeamError("Could not close the task's stalls.", current.projectId));
+        // A hold belongs to a stopped task; one that moves on is no longer held.
+        if (current.stage !== "inbox" && current.hold != null) {
+          const cleared = yield* repository
+            .setTaskHold({ id: current.id, hold: null, now })
+            .pipe(orTeamError("Could not clear the hold.", current.projectId));
+          if (Option.isSome(cleared)) current = cleared.value;
+        }
+      }
       if (
         Option.isSome(before) &&
         !isDependencyCleared(before.value.stage) &&
-        isDependencyCleared(updated.value.stage)
+        isDependencyCleared(current.stage)
       ) {
-        yield* wakeUnblockedProjects(updated.value);
+        yield* wakeUnblockedProjects(current);
       }
       // A finished cloud task's sandbox is mirrored once more and deleted, in the background.
       if (
-        FinishedTaskCleanup.isFinishedStage(updated.value.stage) &&
-        updated.value.location === "cloud" &&
-        updated.value.leadThreadId !== null
+        FinishedTaskCleanup.isFinishedStage(current.stage) &&
+        current.location === "cloud" &&
+        current.leadThreadId !== null
       ) {
         yield* cloudLead
-          .release(updated.value.leadThreadId)
+          .release(current.leadThreadId)
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
       }
       // A finished task's questions can no longer be answered, so close them.
-      if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
+      if (FinishedTaskCleanup.isFinishedStage(current.stage)) {
         if (answeringItem === undefined) {
           yield* repository.supersedeOpenAttentionItems({
-            taskId: updated.value.id,
+            taskId: current.id,
             supersededAt: now,
           });
         } else {
           // Keep the cancellation card open until the stage update succeeds and its answer is saved.
           const open = yield* repository.listOpenAttentionItems({
-            projectId: updated.value.projectId,
-            taskId: updated.value.id,
+            projectId: current.projectId,
+            taskId: current.id,
           });
           for (const item of open) {
             if (item.id !== answeringItem.id) {
@@ -1282,13 +1296,13 @@ const make = Effect.gen(function* () {
       const previous = Option.isSome(before) ? before.value : undefined;
       if (input.stage !== undefined || input.parentTaskId !== undefined) {
         const parents = new Set<ProjectTaskId>();
-        if (updated.value.parentTaskId !== null) parents.add(updated.value.parentTaskId);
+        if (current.parentTaskId !== null) parents.add(current.parentTaskId);
         if (input.parentTaskId !== undefined && previous?.parentTaskId) {
           parents.add(previous.parentTaskId);
         }
         for (const parentId of parents) yield* syncEpic(parentId);
       }
-      return updated.value;
+      return current;
     });
 
   /**

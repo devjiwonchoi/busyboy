@@ -159,6 +159,64 @@ describe("StalledTaskSweep", () => {
     ),
   );
 
+  it.effect("does not message again after the user closed the card while nothing moved", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const started = yield* startLead(pm, "Closed card", harness.delegate);
+        harness.addThread(started.task.leadThreadId!);
+        yield* minutes(20);
+        const [card] = yield* openCards(started.task);
+        yield* repository.supersedeAttentionItem({ id: card!.id, supersededAt: yield* nowIso });
+
+        yield* minutes(30);
+        assert.deepStrictEqual(yield* openCards(started.task), []);
+        assert.strictEqual(
+          (yield* harness.messagesTo(started.task.leadThreadId!)).filter(isWake).length,
+          1,
+        );
+      }),
+    ),
+  );
+
+  it.effect("ends a stall when the task changes stage, and a moved-on task loses its hold", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const pm = yield* setUpManager;
+        const started = yield* startLead(pm, "Moves on", harness.delegate);
+        const lead = started.task.leadThreadId!;
+        harness.addThread(lead);
+        yield* minutes(12);
+        assert.strictEqual(
+          (yield* repository.listOpenTaskStalls({ taskId: started.task.id })).length,
+          1,
+        );
+
+        yield* team.updateTask(lead, { stage: "blocked" });
+        assert.deepStrictEqual(
+          yield* repository.listOpenTaskStalls({ taskId: started.task.id }),
+          [],
+        );
+        assert.strictEqual(
+          (yield* readTask(started.task)).metrics.avoidableStallMs?.no_progress,
+          12 * 60_000,
+        );
+
+        yield* team.updateTask(pm, {
+          taskId: started.task.id,
+          stage: "inbox",
+          hold: { resumeWhen: { type: "user", note: "고객 확인" }, reason: "Wait for the user." },
+        });
+        assert.isNotNull((yield* readTask(started.task)).hold ?? null);
+        yield* team.updateTask(pm, { taskId: started.task.id, stage: "blocked" });
+        assert.isNull((yield* readTask(started.task)).hold ?? null);
+      }),
+    ),
+  );
+
   it.effect("stays quiet while the PM is turned off", () =>
     withTeam((harness) =>
       Effect.gen(function* () {

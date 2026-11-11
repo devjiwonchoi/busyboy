@@ -140,6 +140,9 @@ const make = Effect.gen(function* () {
       });
       // Lead stalls go back to the lead; a task nobody started goes to the PM.
       const toLead = stall.cause === "no_progress" || stall.cause === "answered_idle";
+      // Marked first: a failure after this loses one card rather than sending two.
+      const now = yield* nowIso;
+      yield* repository.markTaskStall({ stallId: stall.stallId, notifiedAt: now });
       yield* router.ask({
         task,
         kind: "blocker",
@@ -150,8 +153,6 @@ const make = Effect.gen(function* () {
         askerThreadId: toLead ? task.leadThreadId : input.manager.threadId,
         ...(toLead ? {} : { senderRole: "pm" as const, senderName: null }),
       });
-      const now = yield* nowIso;
-      yield* repository.markTaskStall({ stallId: stall.stallId, notifiedAt: now });
       // From here the task waits on the user, which is not a stall.
       yield* repository.closeTaskStalls({ taskId: task.id, endedAt: now });
       yield* send(
@@ -170,6 +171,26 @@ const make = Effect.gen(function* () {
         startedAt: isoFromMillis(startedAtMs),
       });
     });
+
+  /**
+   * True when the user was already told about this same stall: one of this cause
+   * that began at or after `sinceMs` ended with a message. Nothing has moved since,
+   * so telling them again would only repeat the message.
+   */
+  const alreadyTold = (task: ProjectTask, cause: ProjectTaskStallCause, sinceMs: number) =>
+    repository
+      .listTaskStalls({ taskId: task.id })
+      .pipe(
+        Effect.map((stalls) =>
+          stalls.some(
+            (stall) =>
+              stall.cause === cause &&
+              stall.endedAt !== null &&
+              stall.notifiedAt !== null &&
+              isoMillis(stall.startedAt) >= sinceMs,
+          ),
+        ),
+      );
 
   const closeStalls = (task: ProjectTask, open: ReadonlyArray<unknown>) =>
     open.length === 0
@@ -237,7 +258,8 @@ const make = Effect.gen(function* () {
         idleMs >= ANSWER_REDELIVER_AFTER_MS &&
         !(yield* Ref.get(redelivered)).has(answer.id)
       ) {
-        // The relay may have been lost: send the answer again, once.
+        // The relay may have been lost: send the answer again, once. The command id
+        // is stable, so a restart that forgets this set cannot send it twice.
         yield* Ref.update(redelivered, (set) => new Set(set).add(answer.id));
         yield* send(
           lead,
@@ -246,6 +268,7 @@ const make = Effect.gen(function* () {
         );
       }
       if (idleMs < STALL_WAKE_AFTER_MS) return;
+      if (yield* alreadyTold(task, stalled.cause, stalled.sinceMs)) return;
       const stall = yield* openStall(task, stalled.cause, stalled.sinceMs);
       if (stall.wokeAt === null) {
         yield* send(
@@ -352,6 +375,11 @@ const make = Effect.gen(function* () {
         }
         const notResumed = open.find((stall) => stall.cause === "hold_not_resumed");
         if (notResumed !== undefined) {
+          // With no free slot nothing could start it, so it is not a stall.
+          if (!slotFree) {
+            yield* closeStalls(task, open);
+            continue;
+          }
           // The PM was told when the condition came; a start ends this stall.
           if (
             nowMs - isoMillis(notResumed.startedAt) >= STALL_WAKE_AFTER_MS &&
@@ -365,6 +393,8 @@ const make = Effect.gen(function* () {
           yield* closeStalls(task, open);
           continue;
         }
+        // Told once since it last moved: the user decides, so no more messages.
+        if (yield* alreadyTold(task, "not_started", isoMillis(task.stageChangedAt))) continue;
         const stall = yield* openStall(task, "not_started", nowMs);
         const waitedMs = nowMs - isoMillis(stall.startedAt);
         if (waitedMs >= STALL_WAKE_AFTER_MS && stall.wokeAt === null) {

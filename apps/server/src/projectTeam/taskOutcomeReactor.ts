@@ -326,7 +326,11 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       // Only a cloud start is retried elsewhere; a local failure keeps the usual card.
       const location = task.location ?? "local";
-      if (task.lastOutcome !== null || task.stage !== "planning" || location !== "cloud") {
+      // The lead never got going: still planning, with no turn that ended any other way
+      // (a retry after 다시 시작 or a restart fails again the same way).
+      const neverStarted =
+        task.stage === "planning" && (task.lastOutcome === null || task.lastOutcome === "failed");
+      if (!neverStarted || location !== "cloud") {
         return false;
       }
       const failure = classifyStartFailure(error ?? "", location);
