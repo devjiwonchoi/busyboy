@@ -155,6 +155,10 @@
       "types": "./src/taskExecutionSettings.ts",
       "import": "./src/taskExecutionSettings.ts"
     },
+    "./taskStepModels": {
+      "types": "./src/taskStepModels.ts",
+      "import": "./src/taskStepModels.ts"
+    },
     "./String": {
       "types": "./src/String.ts",
       "import": "./src/String.ts"

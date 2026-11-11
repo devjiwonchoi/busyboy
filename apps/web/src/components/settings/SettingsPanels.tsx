@@ -85,6 +85,7 @@ import {
 import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { StepModelsSettingsSection } from "./StepModelsSettings";
 import { TaskExecutionSettingsSection } from "./TaskExecutionSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useRestoreRemovedProject } from "../../hooks/useRestoreRemovedProject";
@@ -2656,6 +2657,8 @@ export function GeneralSettingsPanel() {
       </SettingsSection>
 
       <TaskExecutionSettingsSection />
+
+      <StepModelsSettingsSection />
 
       <SettingsSection id="projects-and-threads" title="Projects & threads">
         <SettingsRow

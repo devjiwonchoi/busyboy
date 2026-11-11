@@ -257,7 +257,7 @@ export function ProjectManagerSettingsSection(props: {
           />
           <SettingsRow
             title="Models per role"
-            description="A task can change these on its page. An unset role runs on the task lead's model."
+            description="A task can change these on its page. An unset role uses the app's step models in Settings."
           >
             <ul className="flex flex-col pb-2" aria-label="Models per role">
               {PROJECT_TASK_MODEL_ROLES.map((role) => (
@@ -276,9 +276,9 @@ export function ProjectManagerSettingsSection(props: {
                     environmentId={projectRef.environmentId}
                     projectId={projectRef.projectId}
                     value={summary.settings.roleModels?.[role] ?? null}
-                    unsetLabel="Lead's model"
+                    unsetLabel="App default"
                     ariaLabel={`${ROLE_MODEL_ROWS[role].title} model`}
-                    clearLabel={`Use the lead's model for ${ROLE_MODEL_ROWS[role].title.toLowerCase()}`}
+                    clearLabel={`Use the app default for ${ROLE_MODEL_ROWS[role].title.toLowerCase()}`}
                     disabled={!canOperate}
                     onChange={(target) =>
                       void updateSettings(projectRef, { roleModels: { [role]: target } })
