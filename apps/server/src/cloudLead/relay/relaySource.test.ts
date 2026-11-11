@@ -5,7 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { RELAY_FILES } from "./relaySource.generated.ts";
 
-const SOURCES = ["session.ts", "wsServer.ts", "server.ts"] as const;
+const SOURCES = ["session.ts", "wsServer.ts", "server.ts", "offline.ts"] as const;
 
 const render = (files: Record<string, string>) =>
   [

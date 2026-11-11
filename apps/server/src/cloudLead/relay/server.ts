@@ -18,7 +18,10 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 
+import { OfflineRelay, type OfflineKit, type OfflineThread } from "./offline.ts";
 import { RelaySession, type RelayLink, type RelayMessage } from "./session.ts";
 import { acceptWebSocket } from "./wsServer.ts";
 
@@ -40,6 +43,12 @@ export interface RelayServerOptions {
   readonly log?: (line: string) => void;
   /** Where the relay keeps its children's process ids. */
   readonly pidsFile?: string;
+  readonly linkStaleMs?: number;
+  readonly offlineGraceMs?: number;
+  readonly askIdleStopMs?: number;
+  readonly journalDir?: string;
+  readonly claudeCommand?: string;
+  readonly childTimeoutMs?: number;
 }
 
 export interface RelayServer {
@@ -87,11 +96,34 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
       readonly child: NodeChildProcess.ChildProcess;
       readonly cmd: string;
       readonly startedAt: number;
+      readonly cwd: string;
+      busy: boolean;
+      /** Started by the relay itself while the Mac was away; never handed to a Mac. */
+      readonly offline?: boolean;
     }
   >();
   const pendingHttp = new Map<string, NodeHttp.ServerResponse>();
   let currentLink: (RelayLink & { readonly drop: () => void }) | null = null;
   const now = options.now ?? Date.now;
+  const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
+  const offline = new OfflineRelay(
+    options.journalDir ?? NodeFs.mkdtempSync(NodePath.join(NodeOs.tmpdir(), "busyboy-relay-")),
+    now,
+    log,
+  );
+  let lastHeardAt = now();
+  let downSince: number | null = now();
+  let recentEnv: NodeJS.ProcessEnv = {};
+  const heldHttp = new Map<string, RelayMessage>();
+  const linkDown = () => {
+    const down = currentLink === null || now() - lastHeardAt >= (options.linkStaleMs ?? 15_000);
+    if (down && downSince === null) {
+      downSince = currentLink === null ? now() : lastHeardAt + (options.linkStaleMs ?? 15_000);
+    } else if (!down) {
+      downSince = null;
+    }
+    return down;
+  };
   /**
    * Process groups of running children, so a Mac that finds this relay dead
    * can end exactly them (they outlive the relay) before resuming their work.
@@ -106,12 +138,22 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
       NodeFs.writeFileSync(pidsFile, JSON.stringify(pids));
     } catch {}
   };
-  const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
 
   // One session per Mac process: a reconnect keeps it (and replays), a hello
   // with a new sid means the Mac restarted, so the relay starts a new one.
   const newSession = () => new RelaySession({ onMessage: (message) => handle(message) });
   let session: RelaySession = newSession();
+  // An offline child can finish after the Mac is back: tell it there is work to apply.
+  offline.onAppend = () => {
+    if (!linkDown()) {
+      session.send({
+        ch: "ctl",
+        op: "journal-pending",
+        lastSeq: offline.lastSeq,
+        appliedSeq: offline.appliedSeq,
+      });
+    }
+  };
   let peerSid: string | undefined;
 
   let credential: RelayCredential | null = null;
@@ -139,12 +181,36 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
       });
-      children.set(id, { child, cmd: String(message.cmd), startedAt: now() });
+      recentEnv = message.env as NodeJS.ProcessEnv;
+      const entry = {
+        child,
+        cmd: String(message.cmd),
+        startedAt: now(),
+        cwd: String(message.cwd),
+        busy: true,
+      };
+      children.set(id, entry);
       savePids();
       lastActivity = now();
-      child.stdout?.on("data", (chunk: Buffer) =>
-        session.send({ ch: "proc", op: "stdout", id, data: chunk.toString("base64") }),
-      );
+      let stdout = "";
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+        const lines = stdout.split("\n");
+        stdout = lines.pop()!;
+        for (const line of lines) {
+          let value;
+          try {
+            value = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (value.type === "result") {
+            entry.busy = false;
+            lastActivity = now();
+          }
+        }
+        session.send({ ch: "proc", op: "stdout", id, data: chunk.toString("base64") });
+      });
       child.stderr?.on("data", (chunk: Buffer) =>
         session.send({ ch: "proc", op: "stderr", id, data: chunk.toString("base64") }),
       );
@@ -170,8 +236,24 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
     }
     const child = children.get(id)?.child;
     if (child === undefined) return;
-    if (message.op === "stdin") child.stdin?.write(Buffer.from(String(message.data), "base64"));
-    else if (message.op === "end") child.stdin?.end();
+    if (message.op === "stdin") {
+      const chunk = Buffer.from(String(message.data), "base64");
+      if (
+        chunk
+          .toString()
+          .split("\n")
+          .some((line) => {
+            try {
+              return JSON.parse(line).type === "user";
+            } catch {
+              return false;
+            }
+          })
+      ) {
+        children.get(id)!.busy = true;
+      }
+      child.stdin?.write(chunk);
+    } else if (message.op === "end") child.stdin?.end();
     else if (message.op === "kill")
       killGroup(child, (message.signal as NodeJS.Signals) ?? "SIGTERM");
   };
@@ -192,6 +274,25 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
   };
 
   const handleCtl = (message: RelayMessage) => {
+    if (message.op === "offline-kit") {
+      offline.setKit(message as unknown as OfflineKit);
+      return;
+    }
+    if (message.op === "journal-read") {
+      session.send({
+        ch: "ctl",
+        op: "journal",
+        rid: message.rid,
+        entries: offline.entries.filter(
+          (entry) => entry.seq > Math.max(Number(message.after) || 0, offline.appliedSeq),
+        ),
+      });
+      return;
+    }
+    if (message.op === "journal-applied") {
+      offline.applied(Number(message.seq));
+      return;
+    }
     if (message.op !== "credential") return;
     const next = message as unknown as RelayCredential & { readonly ch: string };
     if (typeof next.token !== "string" || typeof next.sessionId !== "string") return;
@@ -216,6 +317,221 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
     else if (message.ch === "ctl") handleCtl(message);
   };
 
+  // Offline children use the same process groups and idle accounting as Mac spawns.
+  const delegate = (thread: OfflineThread, args: Record<string, unknown>) => {
+    if (args.role !== "review" && args.role !== "implement" && args.role !== "fix") {
+      return "task_delegate needs role review, implement or fix.";
+    }
+    if (typeof args.task !== "string" || args.task.trim() === "") {
+      return "task_delegate needs a task brief.";
+    }
+    const models = offline.kit.models[thread.taskId];
+    // A step not on Claude falls back to the plan model, as cloud tasks do on the Mac.
+    const model = models?.[args.role] ?? models?.plan;
+    if (model == null) {
+      return "No Claude model is set for this task, so task_delegate can't run while the Mac is offline. Continue without it.";
+    }
+    const id = NodeCrypto.randomUUID();
+    const claudeSessionId = NodeCrypto.randomUUID();
+    const bearer = NodeCrypto.randomBytes(32).toString("hex");
+    const childThreadId = `offline-child:${id}`;
+    offline.kit.threads.push({
+      tokenSha256: NodeCrypto.createHash("sha256").update(bearer).digest("hex"),
+      threadId: childThreadId,
+      taskId: thread.taskId,
+      role: args.role === "review" ? "reviewer" : "child",
+    });
+    offline.setKit(offline.kit);
+    const directory = NodePath.join(offline.directory, "children");
+    NodeFs.mkdirSync(directory, { recursive: true });
+    const config = NodePath.join(directory, `${id}.mcp.json`);
+    NodeFs.writeFileSync(
+      config,
+      JSON.stringify({
+        mcpServers: {
+          "t3-code": {
+            type: "http",
+            url: `http://127.0.0.1:${mcpPort}/mcp`,
+            headers: { Authorization: `Bearer ${bearer}` },
+          },
+        },
+      }),
+    );
+    const leadThreadId =
+      thread.role === "lead"
+        ? thread.threadId
+        : (offline.kit.threads.find((item) => item.taskId === thread.taskId && item.role === "lead")
+            ?.threadId ?? thread.threadId);
+    const lead = [...offline.kit.processes]
+      .reverse()
+      .map((proc) => (proc.threadId === leadThreadId ? children.get(proc.id) : undefined))
+      .find((proc) => proc !== undefined);
+    const command = options.claudeCommand ?? "claude";
+    const child = NodeChildProcess.spawn(
+      command,
+      [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--model",
+        model.model,
+        "--session-id",
+        claudeSessionId,
+        "--mcp-config",
+        config,
+        "--permission-mode",
+        "bypassPermissions",
+      ],
+      {
+        cwd: lead?.cwd ?? process.cwd(),
+        env: { ...process.env, ...recentEnv },
+        detached: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    children.set(id, {
+      child,
+      cmd: command,
+      startedAt: now(),
+      cwd: lead?.cwd ?? process.cwd(),
+      busy: true,
+      offline: true,
+    });
+    savePids();
+    const seq = offline.append({
+      kind: "child-started",
+      threadId: thread.threadId,
+      taskId: thread.taskId,
+      child: {
+        id,
+        role: args.role,
+        task: args.task,
+        title: args.title,
+        model: model.model,
+        providerInstanceId: model.providerInstanceId,
+        claudeSessionId,
+        leadThreadId,
+      },
+    });
+    let result = "";
+    let timedOut = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = setTimeout(
+      () => {
+        timedOut = true;
+        killGroup(child, "SIGTERM");
+        killTimer = setTimeout(() => killGroup(child, "SIGKILL"), 10_000);
+        killTimer.unref();
+      },
+      options.childTimeoutMs ?? 2 * 60 * 60 * 1000,
+    );
+    timeout.unref();
+    let buffer = "";
+    child.stdout!.on("data", (chunk: Buffer) => {
+      NodeFs.appendFileSync(NodePath.join(directory, `${id}.jsonl`), chunk);
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!;
+      for (const line of lines) {
+        let value;
+        try {
+          value = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (value.type === "result") {
+          result = String(value.result ?? "");
+        }
+      }
+    });
+    child.stderr!.on("data", (chunk: Buffer) => log(`offline child ${id}: ${chunk.toString()}`));
+    child.stdin!.on("error", (error) => log(`offline child ${id} stdin: ${error.message}`));
+    child.on("error", (error) => {
+      result = error.message;
+      log(`offline child ${id}: ${error.message}`);
+    });
+    child.on("close", (exitCode) => {
+      clearTimeout(timeout);
+      clearTimeout(killTimer);
+      if (timedOut) {
+        result = "timed out";
+      }
+      children.delete(id);
+      offline.removeChild(childThreadId);
+      savePids();
+      lastActivity = now();
+      offline.append({
+        kind: "child-finished",
+        threadId: childThreadId,
+        taskId: thread.taskId,
+        child: {
+          id,
+          role: args.role,
+          claudeSessionId,
+          result,
+          exitCode,
+          transcript: `children/${id}.jsonl`,
+        },
+      });
+      const live = [...offline.kit.processes]
+        .reverse()
+        .map((proc) => (proc.threadId === leadThreadId ? children.get(proc.id) : undefined))
+        .find((proc) => proc !== undefined);
+      if (live) {
+        live.busy = true;
+        live.child.stdin?.write(
+          userLine(
+            `Delegated task ${childThreadId} (${args.role}) finished while the Mac was offline. Its result:\n\n${result}`,
+          ),
+        );
+      }
+      killGroup(child, "SIGKILL");
+    });
+    child.stdin!.end(
+      userLine(
+        `Act as the ${args.role === "review" ? "review" : "implementation"} sub-agent for this task.\n\n${args.task}`,
+      ),
+    );
+    return {
+      offline: true,
+      childThreadId,
+      journalSeq: seq,
+      note: "Started in the sandbox while the Mac is offline. Its result arrives as a message when it finishes.",
+    };
+  };
+  const userLine = (content: string) =>
+    `${JSON.stringify({ type: "user", message: { role: "user", content }, parent_tool_use_id: null, uuid: NodeCrypto.randomUUID() })}\n`;
+
+  const flushHeld = () => {
+    const down = linkDown();
+    for (const [id, message] of heldHttp) {
+      const response = pendingHttp.get(id);
+      if (!response) {
+        heldHttp.delete(id);
+        continue;
+      }
+      if (!down) {
+        heldHttp.delete(id);
+        session.send(message);
+      } else if (now() - downSince! >= (options.offlineGraceMs ?? 60_000)) {
+        if (
+          offline.serve(
+            message as unknown as Parameters<OfflineRelay["serve"]>[0],
+            response,
+            delegate,
+          )
+        ) {
+          heldHttp.delete(id);
+          pendingHttp.delete(id);
+          lastActivity = now();
+        }
+      }
+    }
+  };
+
   /** Calls the sandbox API for this session with the project-scoped credential. */
   const callSandbox = async (action: "extend-timeout" | "stop", body?: unknown) => {
     const current = credential!;
@@ -238,12 +554,20 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
 
   let ticking = false;
   const tick = async () => {
+    flushHeld();
     if (ticking || stopped || credential === null) return;
     ticking = true;
     try {
       const at = now();
-      if (children.size > 0 || pendingHttp.size > 0) lastActivity = at;
-      const idleStopMs = options.idleStopMs ?? DEFAULT_IDLE_STOP_MS;
+      if (
+        [...children.values()].some((entry) => entry.busy) ||
+        (!linkDown() && pendingHttp.size > 0)
+      )
+        lastActivity = at;
+      const idleStopMs =
+        offline.pendingAsk && linkDown()
+          ? (options.askIdleStopMs ?? 120_000)
+          : (options.idleStopMs ?? DEFAULT_IDLE_STOP_MS);
       if (at - lastActivity >= idleStopMs) {
         log(`relay idle for ${Math.round((at - lastActivity) / 1000)}s; stopping the sandbox`);
         await callSandbox("stop");
@@ -276,6 +600,8 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
   const lifecycleTimer = setInterval(() => void tick(), options.tickMs ?? DEFAULT_TICK_MS);
   lifecycleTimer.unref();
 
+  const routeTimer = setInterval(flushHeld, 100);
+  routeTimer.unref();
   const ackTimer = setInterval(() => session.ack(), 1_000);
   ackTimer.unref();
 
@@ -306,6 +632,8 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
         authed = true;
         clearTimeout(authTimer);
         currentLink = link;
+        lastHeardAt = now();
+        downSince = null;
         const sid = typeof frame.sid === "string" ? frame.sid : undefined;
         const restarted = sid !== peerSid;
         if (restarted) {
@@ -324,24 +652,41 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
           session.send({
             ch: "ctl",
             op: "procs",
-            list: [...children].map(([id, entry]) => ({
-              id,
-              cmd: entry.cmd,
-              startedAt: entry.startedAt,
-            })),
+            list: [...children]
+              .filter(([, entry]) => entry.offline !== true)
+              .map(([id, entry]) => ({
+                id,
+                cmd: entry.cmd,
+                startedAt: entry.startedAt,
+              })),
           });
         }
+        if (offline.lastSeq > offline.appliedSeq) {
+          session.send({
+            ch: "ctl",
+            op: "journal-pending",
+            lastSeq: offline.lastSeq,
+            appliedSeq: offline.appliedSeq,
+          });
+        }
+        flushHeld();
         return;
       }
+      lastHeardAt = now();
+      downSince = null;
       try {
         session.receive(link, line);
+        flushHeld();
       } catch {
         ws.close();
       }
     };
     ws.onClose = () => {
       clearTimeout(authTimer);
-      if (currentLink === link) currentLink = null;
+      if (currentLink === link) {
+        currentLink = null;
+        downSince ??= now();
+      }
       session.detach(link);
     };
   });
@@ -353,7 +698,7 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
     request.on("end", () => {
       const id = `r${++nextRequest}`;
       pendingHttp.set(id, response);
-      session.send({
+      const message = {
         ch: "http",
         op: "request",
         id,
@@ -361,9 +706,24 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
         path: request.url ?? "/",
         headers: request.headers,
         body: Buffer.concat(chunks).toString("base64"),
-      });
+      };
+      if (offline.isOfflineChild(request.headers.authorization)) {
+        if (offline.serve(message, response, delegate)) {
+          pendingHttp.delete(id);
+        } else {
+          response.writeHead(400).end();
+          pendingHttp.delete(id);
+        }
+      } else if (linkDown()) {
+        heldHttp.set(id, message);
+        flushHeld();
+      } else {
+        // Already-forwarded requests stay with the Mac and finish after replay.
+        session.send(message);
+      }
       response.on("close", () => {
-        if (pendingHttp.delete(id)) session.send({ ch: "http", op: "abort", id });
+        const held = heldHttp.delete(id);
+        if (pendingHttp.delete(id) && !held) session.send({ ch: "http", op: "abort", id });
       });
     });
   });
@@ -387,6 +747,10 @@ export const startRelayServer = async (options: RelayServerOptions): Promise<Rel
     tick,
     close: async () => {
       clearInterval(ackTimer);
+      clearInterval(routeTimer);
+      for (const response of pendingHttp.values()) {
+        response.destroy();
+      }
       clearInterval(lifecycleTimer);
       for (const { child } of children.values()) killGroup(child, "SIGKILL");
       currentLink?.close();
@@ -413,6 +777,8 @@ if (isEntry) {
     port: Number(process.env.BUSYBOY_RELAY_PORT ?? "8787"),
     mcpPort: Number(process.env.BUSYBOY_RELAY_MCP_PORT ?? "8788"),
     pidsFile: new URL("./children.json", import.meta.url).pathname,
+    journalDir: new URL("./journal/", import.meta.url).pathname,
+    claudeCommand: process.env.BUSYBOY_RELAY_CLAUDE ?? "claude",
     ...(process.env.BUSYBOY_RELAY_IDLE_STOP_MS === undefined
       ? {}
       : { idleStopMs: Number(process.env.BUSYBOY_RELAY_IDLE_STOP_MS) }),
