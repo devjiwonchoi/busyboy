@@ -1001,6 +1001,39 @@ describe("memory stall time", () => {
     );
   });
 
+  it.effect("a paused lead whose task is cancelled is let go without a resume notice", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          const { task, lead } = yield* startWithSession(harness, fake.mac, pm, "Paused lead", {
+            running: { startedMsAgo: MINUTE },
+          });
+          fake.mac.memory = CRITICAL;
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, [lead]);
+
+          // Cancelled while memory is still short: the governor lets the lead go.
+          yield* team.updateTask(pm, { taskId: task.id, stage: "cancelled" });
+          yield* governor.tick;
+          assert.deepStrictEqual(yield* governor.paused, []);
+          const sent = (yield* commandsTo(harness, lead)).map((command) => command.type);
+          assert.include(sent, "queue.resume");
+          assert.notInclude(
+            (yield* commandsTo(harness, lead)).map((command) =>
+              "text" in command ? String(command.text) : "",
+            ),
+            MemoryGovernor.RESUME_NOTICE,
+          );
+          assert.isNull((yield* readTask(task.id)).memoryHold ?? null);
+        }),
+      { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+
   it.effect("a task cancelled while it waits for memory stops stalling", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(

@@ -503,13 +503,16 @@ const make = Effect.gen(function* () {
    * A paused lead the user moved off this Mac no longer waits for its memory:
    * its held messages run there, and its hold ends.
    */
-  const releaseMoved = Effect.gen(function* () {
+  const releaseMovedOrFinished = Effect.gen(function* () {
     for (const unit of yield* Ref.get(pausedRef)) {
       const task = yield* repository.getTask(unit.taskId).pipe(
         Effect.map(Option.getOrNull),
         Effect.orElseSucceed(() => null),
       );
-      if (task !== null && (task.location ?? "local") === "local") continue;
+      // A unit stays paused only while its task runs on this Mac. A task moved to the
+      // cloud, or finished, lets its held messages through without a resume notice.
+      const finished = task !== null && (task.stage === "done" || task.stage === "cancelled");
+      if (task !== null && (task.location ?? "local") === "local" && !finished) continue;
       for (const member of unit.members) yield* control(member.threadId).resumeQueue;
       yield* Ref.update(pausedRef, (all) =>
         all.filter((entry) => entry.leadThreadId !== unit.leadThreadId),
@@ -528,7 +531,7 @@ const make = Effect.gen(function* () {
 
   const tick: MemoryGovernor["Service"]["tick"] = Effect.gen(function* () {
     yield* restorePauses;
-    yield* releaseMoved;
+    yield* releaseMovedOrFinished;
     yield* markHeldWork;
     const execution = yield* settings;
     // Uncached: the last pass's pause must show in this reading.
