@@ -177,6 +177,16 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "After a context compaction, call `team_status`");
   });
 
+  it("has the PM and the Director stop work only with a resume condition", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "never just say so in chat: call `task_update`");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "`hold: {resumeWhen, reason}`");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "A stop without a condition is refused.");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N … its resume condition is met …"');
+    assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "N tasks look stalled");
+    const director = directorInstructions({ name: "Director", voice: "calm" });
+    assert.include(director, "name the condition that ends the pause");
+  });
+
   it("gives the PM its name and voice", () => {
     const text = projectManagerInstructions({ name: "Remy", voice: "Terse and dry." });
     assert.include(text, PROJECT_MANAGER_INSTRUCTIONS);
