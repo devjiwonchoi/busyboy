@@ -267,6 +267,9 @@ const planCard: ProjectDecisionCard = {
     specVersion: 1,
     summary: null,
     verification: null,
+    details: null,
+    senderRole: null,
+    senderName: null,
   },
 };
 

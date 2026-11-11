@@ -1,3 +1,5 @@
+import { parseRequestMessage, requestLinkIds } from "@t3tools/shared/requestMessage";
+import { useEnvironmentProjectTeamAttention } from "~/state/projectTeam";
 import { MarkdownFindContext, findRevealRef } from "./chat/markdownFindContext";
 import {
   buildFileLinkParentSuffixByPath,
@@ -2423,6 +2425,7 @@ function useChatMarkdownState({
     return buildFileLinkParentSuffixByPath(filePaths);
   })();
   const markdownUrlTransform = (href: string) => {
+    if (href.startsWith("t3-request:")) return href;
     if (parseAssistantCitationHref(href)) return href;
     if (parseComposerContextHref(href)) return href;
     if (parseThreadLinkHref(href)) return href;
@@ -2818,6 +2821,16 @@ const CHAT_MARKDOWN_COMPONENTS = {
       taskLinkContext,
     } = use(ChatMarkdownRendererContext);
     const text = use(ChatMarkdownTextContext);
+    if (href?.startsWith("t3-request:")) {
+      const id = requestLinkIds(href)[0];
+      return (
+        <RequestQuoteChip
+          id={id ?? ""}
+          label={nodeToPlainText(children)}
+          environmentId={environmentId}
+        />
+      );
+    }
     const citation = href ? parseAssistantCitationHref(href) : null;
     if (citation) return <AssistantCitationChip citation={citation} />;
     const taskReference = href ? parseTaskReferenceHref(href) : null;
@@ -3408,3 +3421,59 @@ function ChatMarkdown({
 }
 
 export default memo(ChatMarkdown);
+
+/** Request references stay readable even before the attention stream has loaded. */
+function RequestQuoteChip({
+  id,
+  label,
+  environmentId,
+}: {
+  id: string;
+  label: string;
+  environmentId: EnvironmentId | null;
+}) {
+  if (environmentId === null) {
+    return <RequestQuoteButton id={id} headline={label.replace(/^↩\s*/, "")} />;
+  }
+  return <ResolvedRequestQuoteChip id={id} label={label} environmentId={environmentId} />;
+}
+
+function ResolvedRequestQuoteChip({
+  id,
+  label,
+  environmentId,
+}: {
+  id: string;
+  label: string;
+  environmentId: EnvironmentId;
+}) {
+  const attention = useEnvironmentProjectTeamAttention(environmentId);
+  const card = [...attention.byProjectId.values()]
+    .flatMap((summary) => summary.decisionCards)
+    .find((entry) => entry.item.id === id);
+  return (
+    <RequestQuoteButton
+      id={id}
+      headline={
+        card ? parseRequestMessage(card.item.question).headline : label.replace(/^↩\s*/, "")
+      }
+    />
+  );
+}
+
+function RequestQuoteButton({ id, headline }: { id: string; headline: string }) {
+  return (
+    <button
+      type="button"
+      data-request-quote={id}
+      className="inline-flex max-w-full items-center truncate rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+      onClick={() => {
+        document
+          .querySelector<HTMLElement>(`[data-decision-card="${CSS.escape(id)}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }}
+    >
+      ↩ {headline}
+    </button>
+  );
+}

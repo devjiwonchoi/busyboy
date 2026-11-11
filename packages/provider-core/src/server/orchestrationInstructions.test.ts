@@ -12,6 +12,14 @@ import {
 } from "./orchestrationInstructions.ts";
 
 describe("T3 orchestration provider instructions", () => {
+  it("requires messenger requests and resolves user request references", () => {
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "one messenger-style message");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "No headings, labels, bullets, task keys");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "Optional details has up to 8 label/text pairs");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "omit attentionItemId");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "t3-request:<id>");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "Required context still applies");
+  });
   it("distinguishes delegated subagents from ordinary top-level threads", () => {
     assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "Use `delegate_task`");
     assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "ordinary top-level T3 conversations");

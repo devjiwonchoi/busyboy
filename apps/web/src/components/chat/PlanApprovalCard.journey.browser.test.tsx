@@ -187,6 +187,9 @@ function planCard(
       specVersion: 2,
       summary: sections.goal,
       verification: sections.verification,
+      details: null,
+      senderRole: "lead",
+      senderName: title,
     },
   } satisfies ProjectDecisionCard;
 }
@@ -360,7 +363,7 @@ for (const viewport of [
     await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 2개"));
     const login = await jumpTo("attention-login");
     expect(login.dataset.decisionCardState).toBe("open");
-    expect(buttonIn(login, "Approve")).toBeTruthy();
+    expect(buttonIn(login, "승인")).toBeTruthy();
     const cards = [...container.querySelectorAll<HTMLElement>("[data-decision-card]")];
     expect(cards.every((card) => !card.textContent?.includes("Dark mode toggle"))).toBe(true);
     const labels = [...container.querySelectorAll("button")].map((button) =>
@@ -380,73 +383,21 @@ for (const viewport of [
 
     const login = await jumpTo("attention-login");
     expect(login.dataset.decisionCardState).toBe("open");
-    // Reads like a doc: the task title as the big heading over a small meta line, then
-    // Goal and Verification as headed sections, the bullets as real lists.
-    const title = login.querySelector<HTMLElement>("[data-plan-title]")!;
-    expect(title.textContent).toBe("Login redirect");
-    expect(login.querySelector("[data-plan-meta]")?.textContent).toMatch(
-      /^Plan approval · BusyBoy · v\d+ · \(BB-3\)$/,
+    expect(login.querySelector("[data-decision-card-headline]")?.textContent).toBe(
+      "This task fixes login redirect.",
     );
-    expect(parseFloat(getComputedStyle(title).fontSize)).toBeGreaterThanOrEqual(18);
-    const sections = [...login.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
-    expect(sections.map((section) => section.querySelector("h3")?.textContent)).toEqual([
-      "Goal",
-      "Verification",
-    ]);
+    expect(login.querySelector("[data-decision-card-meta]")?.textContent).toBe(
+      "BusyBoy · Login redirect 리드",
+    );
+    expect(login.textContent?.includes("BB-3")).toBe(false);
+    expect(login.querySelector("[data-request-bubble]")?.textContent).toContain(LOGIN_GOAL);
     expect(
-      title.compareDocumentPosition(sections[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    const [goal, verification] = sections;
-    expect([...goal!.querySelectorAll("ul > li")].map((item) => item.textContent)).toEqual([
-      "The login redirect moves into the auth guard",
-      "Signing in always lands on the page you asked for",
-      "The old /next query param is dropped",
-    ]);
-    expect(goal!.querySelector("strong")?.textContent).toBe("auth guard");
-    expect(goal!.querySelector("code")?.textContent).toBe("/next");
-    expect(goal!.textContent).not.toContain("- ");
-    expect(verification!.querySelectorAll("ul > li")).toHaveLength(2);
-    // Verification is a read-only checklist.
-    const checks = [...verification!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-    expect(checks).toHaveLength(2);
-    expect(checks.every((check) => !check.checked)).toBe(true);
-    expect(checks.every((check) => check.disabled || check.readOnly)).toBe(true);
-    // Each bullet sits on its own line.
-    const items = goal!.querySelectorAll("li");
-    expect(items[1]!.getBoundingClientRect().top).toBeGreaterThan(
-      items[0]!.getBoundingClientRect().bottom - 1,
-    );
-    expect(login.textContent).not.toContain("This task fixes");
+      [...login.querySelectorAll("[data-request-bubble] button")].map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["승인", "자세히 보기"]);
 
-    // Where the task sits, Linear-style, in one quiet line under the title.
-    const structure = login.querySelector<HTMLElement>("[data-task-structure-line]")!;
-    expect(structure.textContent!.replace(/\s*·\s*/g, " · ")).toBe(
-      "상위 태스크: Auth overhaul · BusyBoy · 시작 전 완료: Session store · BusyBoy · 하위 태스크 1/2",
-    );
-    expect(
-      title.compareDocumentPosition(structure) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      structure.compareDocumentPosition(sections[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect([...structure.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
-      "#task-1",
-      "#task-2",
-    ]);
-    expect(structure.getBoundingClientRect().right).toBeLessThanOrEqual(
-      login.getBoundingClientRect().right,
-    );
-
-    // One way to approve; the buttons fit inside the card at this width.
-    expect(login.textContent).not.toContain("Approve only");
-    const cardRect = login.getBoundingClientRect();
-    for (const name of ["Approve", "Review plan"]) {
-      const rect = buttonIn(login, name).getBoundingClientRect();
-      expect(rect.left).toBeGreaterThanOrEqual(cardRect.left);
-      expect(rect.right).toBeLessThanOrEqual(cardRect.right);
-    }
-
-    await userEvent.click(buttonIn(login, "Approve"));
+    await userEvent.click(buttonIn(login, "승인"));
 
     // Same answer the review modal sends, and the modal never opened.
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
@@ -470,10 +421,10 @@ for (const viewport of [
     const cache = await jumpTo("attention-cache");
     // A task with no parent, blockers or subtasks has no structure line.
     expect(cache.querySelector("[data-task-structure-line]")).toBeNull();
-    const oldSections = [...cache.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
-    expect(oldSections.map((section) => section.dataset.planSummarySection)).toEqual(["Goal"]);
-    expect(oldSections[0]!.textContent).toContain("keep the last 5 task pages in memory");
-    await userEvent.click(buttonIn(cache, "Approve"));
+    expect(cache.querySelector("[data-request-bubble]")?.textContent).toContain(
+      "keep the last 5 task pages in memory",
+    );
+    await userEvent.click(buttonIn(cache, "승인"));
     await vi.waitFor(() => expect(server.answers).toHaveLength(2));
     expect(server.answers[1]!.answer).toBe(PLAN_APPROVAL_START);
     expect(taskStatus("task-9")).toBe("In Progress");
@@ -483,42 +434,6 @@ for (const viewport of [
     });
   });
 }
-
-it("makes the exact plan approval scope and recommendation visible at 360px", async () => {
-  await page.viewport(360, 1000);
-  const card: ProjectDecisionCard = {
-    ...loginPlan,
-    item: {
-      ...loginPlan.item,
-      context: {
-        action: "로그인 리다이렉트 수정안을 로컬에서 구현합니다.",
-        reason: "로그인 후 원래 요청한 페이지로 돌아가게 합니다.",
-        impacts: [],
-        cost: null,
-        reversibility: "reversible",
-        recommendation: "로컬 구현과 검증을 먼저 진행합니다.",
-      },
-    },
-  };
-  await act(async () =>
-    root.render(<PlanApprovalCard card={card} environmentId={ENVIRONMENT_ID} />),
-  );
-  const explanation = container.querySelector<HTMLElement>('[data-attention-context="known"]')!;
-  expect(explanation.querySelector("details")).toBeNull();
-  expect(explanation.querySelector("[data-attention-action]")?.textContent).toBe(
-    "로그인 리다이렉트 수정안을 로컬에서 구현합니다.",
-  );
-  expect(explanation.textContent).toContain("머지 없음");
-  expect(explanation.textContent).toContain("배포 없음");
-  expect(explanation.textContent).toContain("추가 비용 없음");
-  expect(explanation.textContent).toContain("외부 게시 없음");
-  expect(explanation.textContent).toContain("되돌리기 가능");
-  expect(explanation.querySelector("[data-attention-approval-scope]")?.textContent).toContain(
-    "머지·배포·비용·외부 게시 실행은 해당 작업의 승인을 따로 확인해야 합니다",
-  );
-  expect(explanation.scrollWidth).toBeLessThanOrEqual(explanation.clientWidth);
-  await page.screenshot({ path: "__screenshots__/readable-plan-360.png" });
-});
 
 it("still shows an older card answered with Approve only as Approved", async () => {
   const legacy = planCard(

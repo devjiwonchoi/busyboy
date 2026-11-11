@@ -25,6 +25,10 @@ import Migration0020 from "./Migrations/020_ProjectAttentionOptionalTask.ts";
 import Migration0021 from "./Migrations/021_ProjectTaskLocation.ts";
 import Migration0022 from "./Migrations/022_ProjectTaskMoveTarget.ts";
 
+import Migration0023 from "./Migrations/023_ProjectAttentionDetails.ts";
+
+import Migration0024 from "./Migrations/024_ProjectAttentionSender.ts";
+
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
   [2, "RewriteThreadSettlementEvents", Migration0002],
@@ -48,6 +52,8 @@ export const migrationEntries = [
   [20, "ProjectAttentionOptionalTask", Migration0020],
   [21, "ProjectTaskLocation", Migration0021],
   [22, "ProjectTaskMoveTarget", Migration0022],
+  [23, "ProjectAttentionDetails", Migration0023],
+  [24, "ProjectAttentionSender", Migration0024],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

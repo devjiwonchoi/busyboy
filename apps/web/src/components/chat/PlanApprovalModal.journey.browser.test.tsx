@@ -240,6 +240,9 @@ function makeCard(): ProjectDecisionCard {
       specVersion: 2,
       summary: "- A card in the PM chat\n- It opens a review modal",
       verification: "- A journey test approves from the modal",
+      details: null,
+      senderRole: null,
+      senderName: null,
     },
   };
 }
@@ -286,15 +289,12 @@ function section(name: string): HTMLElement {
 
 async function openReview() {
   await act(async () => root.render(<LiveCard />));
-  const card = container.querySelector('[data-decision-card-state="open"]')!;
-  // Reads like a doc: "# title", then Goal and Verification.
-  // The task key remains secondary to the human-readable plan information.
-  expect(card.querySelector("[data-plan-meta]")?.textContent).toMatch(
-    /^Plan approval · .+ · v2( · \(BU-32\))?$/,
-  );
-  expect(card.querySelector("[data-plan-title]")?.textContent).toBe("Plan approval modal");
-  expect(card.textContent).toContain("A card in the PM chat");
-  await userEvent.click(button("Review plan"));
+  const card = container.querySelector<HTMLElement>('[data-decision-card-state="open"]')!;
+  // An open approval is one message; the full plan opens from its details.
+  expect(card.querySelector("[data-request-bubble]")).not.toBeNull();
+  expect(card.textContent).not.toContain("BU-32");
+  await userEvent.click(button("자세히 보기"));
+  await userEvent.click(button("전체 플랜"));
   await vi.waitFor(() => expect(section("End result")).toBeTruthy());
 }
 
@@ -435,10 +435,11 @@ describe.each([
     await userEvent.click(button("Save", pill()!));
     await vi.waitFor(() => expect(pill()).toBeNull());
 
-    await userEvent.type(
-      review.querySelector<HTMLTextAreaElement>('textarea[aria-label="Overall comment"]')!,
-      "Looks close.",
-    );
+    const overall = review.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Overall comment"]',
+    )!;
+    await userEvent.type(overall, "Looks close.");
+    await vi.waitFor(() => expect(overall.value).toBe("Looks close."));
     await userEvent.click(button("Request changes"));
 
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
@@ -467,7 +468,9 @@ describe.each([
     // The tap clears the selection before it lands; the button stays and takes it.
     await tap(comment);
     await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("new"));
-    await userEvent.type(pill()!.querySelector("textarea")!, "Which cursor?");
+    const input = pill()!.querySelector("textarea")!;
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    await userEvent.type(input, "Which cursor?");
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() => expect(chipLabel()).toBe("1 comment"));
 
@@ -550,7 +553,9 @@ describe.each([
     expect(list.textContent).toContain("Keep the cursor position");
     await userEvent.click(list.querySelector("button")!);
     await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("edit"));
-    await userEvent.type(pill()!.querySelector("textarea")!, "Phones too.");
+    const note = pill()!.querySelector("textarea")!;
+    await vi.waitFor(() => expect(document.activeElement).toBe(note));
+    await userEvent.type(note, "Phones too.");
     await userEvent.keyboard("{Enter}");
     await userEvent.click(button("Approve", modal()));
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
