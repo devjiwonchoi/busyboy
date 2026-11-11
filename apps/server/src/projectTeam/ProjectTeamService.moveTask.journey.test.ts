@@ -8,6 +8,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
   isSandboxRotationDecision,
+  isTurnFailedBlocker,
   type OrchestrationV2ServerCommand,
   SANDBOX_ROTATION_MOVE_LOCAL,
   ProviderDriverKind,
@@ -25,11 +26,13 @@ import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import { encodeProjectDir } from "../cloudLead/pathRewrite.ts";
 import type { RemoteProcess } from "../cloudLead/RelayClient.ts";
+import { inspectMovableLead } from "../cloudLead/TaskMover.ts";
 import { fakeLocalHost, localSandboxClient } from "../cloudLead/testkit.ts";
 import { localMirrorShell } from "../cloudLead/WorkspaceMirror.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
   approvePlan,
+  attentionContext,
   createAcceptedTask,
   PROJECT_ID,
   setUpManager,
@@ -485,6 +488,267 @@ describe("moving a task lead", () => {
         },
       );
     },
+  );
+
+  it.effect("starts a stopped local lead again in the cloud, moving it with its session", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+          // The lead's turn failed, so the task is blocked with a failed-turn card.
+          yield* team.recordOutcome({
+            task: (yield* team.readTask(pm, { taskId: task.id })).task,
+            outcome: "failed",
+            detail: "Claude stopped",
+          });
+          assert.strictEqual((yield* team.readTask(pm, { taskId: task.id })).task.stage, "blocked");
+
+          const started = yield* team.startTask(
+            pm,
+            { taskId: task.id, location: "cloud" },
+            harness.delegate,
+          );
+          assert.strictEqual(started.leadThreadId, lead);
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          assert.strictEqual(after.task.location, "cloud");
+          assert.strictEqual(after.task.stage, "running");
+          assert.isFalse(after.openAttention.some(isTurnFailedBlocker));
+          assert.include(yield* harness.messagesTo(lead), "[옮김] 로컬→클라우드");
+        }),
+      { cloudLead: fakeHooks({}) },
+    ),
+  );
+
+  it.effect("refuses to start a task again while its lead is still working", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, thread } = yield* startImplementingTask(harness, "/tmp/lead");
+          thread.activeRunId = "run:mac";
+          const refused = yield* team
+            .startTask(pm, { taskId: task.id, location: "cloud" }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(refused.message, "lead is still working");
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          assert.strictEqual(after.task.location, "local");
+          assert.strictEqual(after.task.leadThreadId, thread.id);
+        }),
+      { cloudLead: fakeHooks({}) },
+    ),
+  );
+
+  it.effect("starts a fresh lead when a stopped lead is started again in the same place", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+        yield* team.recordOutcome({
+          task: (yield* team.readTask(pm, { taskId: task.id })).task,
+          outcome: "failed",
+          detail: "Claude stopped",
+        });
+        const started = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
+        assert.notStrictEqual(started.leadThreadId, lead);
+        assert.strictEqual(started.task.stage, "planning");
+        assert.strictEqual(started.task.leadThreadId, started.leadThreadId);
+        const after = yield* team.readTask(pm, { taskId: task.id });
+        assert.isTrue(after.events.some((event) => event.body === "blocked → planning"));
+        // The replaced lead's failed-turn card goes with it, and it stays quiet.
+        assert.deepEqual(after.openAttention, []);
+        const gate = yield* LeadMoveGate.LeadMoveGate;
+        assert.isTrue(gate.isHeldFor(lead, "replaced"));
+        // The gate outlives this test; other tests reuse the lead's id.
+        gate.release(lead, "replaced");
+      }),
+    ),
+  );
+
+  it.effect("keeps a stopped task and its card as they were when a restart is refused", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const { pm, task } = yield* startImplementingTask(harness, "/tmp/lead");
+        yield* team.recordOutcome({
+          task: (yield* team.readTask(pm, { taskId: task.id })).task,
+          outcome: "failed",
+          detail: "Claude stopped",
+        });
+        // Another lead takes the only slot.
+        const { task: other } = yield* createAcceptedTask(pm, {
+          title: "Other",
+          request: "Other.",
+          intake: "New work.",
+        });
+        yield* team.startTask(pm, { taskId: other.id }, harness.delegate);
+        yield* team.updateSettingsAsManager(pm, { maxConcurrentTasks: 1 });
+
+        const refused = yield* team
+          .startTask(pm, { taskId: task.id }, harness.delegate)
+          .pipe(Effect.flip);
+        assert.include(refused.message, "cannot start again yet");
+        const after = yield* team.readTask(pm, { taskId: task.id });
+        assert.strictEqual(after.task.stage, "blocked");
+        assert.isTrue(after.openAttention.some(isTurnFailedBlocker));
+      }),
+    ),
+  );
+
+  it.effect("leaves the task as it was when the restart's move fails", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+          yield* team.recordOutcome({
+            task: (yield* team.readTask(pm, { taskId: task.id })).task,
+            outcome: "failed",
+            detail: "Claude stopped",
+          });
+          const failure = yield* team
+            .startTask(pm, { taskId: task.id, location: "cloud" }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(failure.message, "디스크가 가득 찼어요");
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          // No fresh lead replaces the session over a passing failure.
+          assert.strictEqual(after.task.leadThreadId, lead);
+          assert.strictEqual(after.task.location, "local");
+          assert.strictEqual(after.task.stage, "blocked");
+          assert.isTrue(after.openAttention.some(isTurnFailedBlocker));
+        }),
+      {
+        cloudLead: fakeHooks({
+          importTranscripts: () =>
+            Effect.fail(new CloudLeadService.CloudLeadError({ detail: "디스크가 가득 찼어요" })),
+        }),
+      },
+    ),
+  );
+
+  it.effect("keeps the card of a lead that fails again while it moves", () => {
+    let failAgain: Effect.Effect<void> = Effect.void;
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task } = yield* startImplementingTask(harness, "/tmp/lead");
+          yield* team.recordOutcome({
+            task: (yield* team.readTask(pm, { taskId: task.id })).task,
+            outcome: "failed",
+            detail: "Claude stopped",
+          });
+          failAgain = Effect.gen(function* () {
+            yield* team.recordOutcome({
+              task: (yield* team.readTask(pm, { taskId: task.id })).task,
+              outcome: "failed",
+              detail: "Cloud leads need a Claude setup-token.",
+            });
+          }).pipe(Effect.orDie);
+          yield* team.startTask(pm, { taskId: task.id, location: "cloud" }, harness.delegate);
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          assert.strictEqual(after.task.location, "cloud");
+          assert.strictEqual(after.task.stage, "blocked");
+          assert.isTrue(after.openAttention.some(isTurnFailedBlocker));
+        }),
+      { cloudLead: fakeHooks({ importTranscripts: () => Effect.suspend(() => failAgain) }) },
+    );
+  });
+
+  it.effect("does not move a blocked task into a full set of slots", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+          yield* team.recordOutcome({
+            task: (yield* team.readTask(pm, { taskId: task.id })).task,
+            outcome: "failed",
+            detail: "Claude stopped",
+          });
+          const { task: other } = yield* createAcceptedTask(pm, {
+            title: "Other",
+            request: "Other.",
+            intake: "New work.",
+          });
+          yield* team.startTask(pm, { taskId: other.id }, harness.delegate);
+          yield* team.updateSettingsAsManager(pm, { maxConcurrentTasks: 1 });
+          const refused = yield* team
+            .startTask(pm, { taskId: task.id, location: "cloud" }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(refused.message, "cannot start again yet");
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          assert.strictEqual(after.task.location, "local");
+          assert.strictEqual(after.task.leadThreadId, lead);
+        }),
+      { cloudLead: fakeHooks({}) },
+    ),
+  );
+
+  it.effect("starts a fresh lead in the cloud when the lead cannot move", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, lead, thread } = yield* startImplementingTask(harness, "/tmp/lead");
+          const codex = ProviderDriverKind.make("codex");
+          thread.providerThreads = [{ ...thread.providerThreads![0]!, driver: codex }];
+          const started = yield* team.startTask(
+            pm,
+            { taskId: task.id, location: "cloud" },
+            harness.delegate,
+          );
+          assert.notStrictEqual(started.leadThreadId, lead);
+          assert.strictEqual(started.task.location, "cloud");
+          const { events } = yield* team.readTask(pm, { taskId: task.id });
+          assert.isTrue(
+            events.some((event) =>
+              event.body.startsWith("리드를 옮길 수 없어 새 리드로 다시 시작했어요"),
+            ),
+          );
+          (yield* LeadMoveGate.LeadMoveGate).release(lead, "replaced");
+        }),
+      { cloudLead: fakeHooks({}) },
+    ),
+  );
+
+  it.effect("fails rather than calls a lead unmovable when its thread cannot be read", () =>
+    Effect.gen(function* () {
+      const failure = yield* inspectMovableLead(
+        {
+          threads: {
+            getThreadShell: () =>
+              Effect.fail(new CloudLeadService.CloudLeadError({ detail: "database is locked" })),
+          } as never,
+          providers: Effect.succeed([]),
+        },
+        ThreadId.make("thread:lead"),
+      ).pipe(Effect.flip);
+      assert.include(failure.message, "database is locked");
+    }),
+  );
+
+  it.effect("refuses a restart while the lead waits on the user's answer", () =>
+    withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const { pm, task, lead } = yield* startImplementingTask(harness, "/tmp/lead");
+          yield* team.askUser(lead, {
+            context: attentionContext({ action: "Keep the old API?" }),
+            kind: "decision",
+            question: "Keep the old API?",
+          });
+          const refused = yield* team
+            .startTask(pm, { taskId: task.id, location: "cloud" }, harness.delegate)
+            .pipe(Effect.flip);
+          assert.include(refused.message, "waits on the user's answer");
+          const after = yield* team.readTask(pm, { taskId: task.id });
+          assert.strictEqual(after.task.location, "local");
+          assert.strictEqual(after.openAttention.length, 1);
+        }),
+      { cloudLead: fakeHooks({}) },
+    ),
   );
 
   it.effect("refuses a lead that is not a Claude thread", () =>

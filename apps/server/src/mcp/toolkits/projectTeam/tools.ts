@@ -74,7 +74,7 @@ const TaskStartTool = Tool.make("task_start", {
   ...shared,
   dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "PM only. Start an inbox task: a task lead runs it in its own worktree as your async child, and each of its turn ends wakes you. Refused while maxConcurrentTasks leads run or a waitsOn task is unfinished; leave the task in the inbox then.",
+    "PM only. Start an inbox task: a task lead runs it in its own worktree as your async child, and each of its turn ends wakes you. Refused while maxConcurrentTasks leads run or a waitsOn task is unfinished; leave the task in the inbox then. A planning, running or blocked task whose lead is not working can be started again: a different location moves the same lead there with its worktree and session (a lead that cannot move, such as a Codex lead, is replaced by a fresh lead there), the same location starts a fresh lead. It is refused while the lead is still working or waits on the user's answer to an open question.",
   parameters: ProjectTeamTaskStartInput,
   success: ProjectTeamTaskStartResult,
 })

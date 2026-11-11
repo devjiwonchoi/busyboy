@@ -209,7 +209,7 @@ import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
 import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
-import { leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
+import { inspectMovableLead, leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
 import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
@@ -301,6 +301,13 @@ export function isUserChatAnswer(
       (message.text.trim() === trimmed || containsWords(normalizeWords(message.text), normalized)),
   );
 }
+
+/** Started stages task_start may start again once the task's lead stopped. */
+const RESTARTABLE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
+  "planning",
+  "running",
+  "blocked",
+]);
 
 /** Stages whose task lead has work to show; stalled tasks come from these. */
 const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
@@ -1959,127 +1966,257 @@ const make = Effect.gen(function* () {
       return { target, source: "task" as const };
     });
 
+  /**
+   * Starts an inbox task's lead, or a started task's lead again once it stopped. A
+   * restart elsewhere comes back as a move, which runs outside the start lock.
+   */
+  const startTaskLocked = (
+    callerThreadId: ThreadId,
+    projectId: ProjectId,
+    input: Parameters<ProjectTeamService["Service"]["startTask"]>[1],
+    delegate: Parameters<ProjectTeamService["Service"]["startTask"]>[2],
+  ) =>
+    taskStartLocks.withLock(
+      projectId,
+      Effect.gen(function* () {
+        const role = { projectId };
+        const task = yield* requireTask(input.taskId, role.projectId);
+        // A started task whose lead stopped can start again; one whose lead works cannot.
+        const restart = RESTARTABLE_TASK_STAGES.has(task.stage);
+        if (task.stage !== "inbox" && !restart) {
+          return yield* teamError(`#${task.number} is already ${task.stage}.`, role.projectId);
+        }
+        const replacedLead = restart ? task.leadThreadId : null;
+        if (restart) {
+          if (
+            task.moveTarget != null ||
+            (replacedLead !== null && (yield* isLeadBusy(threads, replacedLead)))
+          ) {
+            return yield* teamError(
+              `#${task.number}'s lead is still working. Wait for its turn to end or stop it, then start it again.`,
+              role.projectId,
+            );
+          }
+          const open = yield* repository.listOpenAttentionItems({
+            projectId: task.projectId,
+            taskId: task.id,
+          });
+          // A question the lead is waiting on needs the user's answer, not a restart.
+          if (open.some((item) => !isTurnFailedBlocker(item))) {
+            return yield* teamError(
+              `#${task.number} waits on the user's answer to an open question. Answer or close it before starting the task again.`,
+              role.projectId,
+            );
+          }
+        }
+        const manager = yield* requireManager(role.projectId);
+        const active = (yield* activeTasks(role.projectId)).filter((other) => other.id !== task.id);
+        const limit = manager.settings.maxConcurrentTasks;
+        // A blocked task holds no slot, so going on again takes one.
+        const needsSlot = !(SitrepScheduler.ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(
+          task.stage,
+        );
+        const to = input.location ?? "local";
+        let unmovable: string | null = null;
+        // A lead somewhere else moves there with its worktree and session.
+        if (restart && replacedLead !== null && (task.location ?? "local") !== to) {
+          const inspected = yield* inspectMovableLead(
+            { threads, providers: providerRegistry.getProviders },
+            replacedLead,
+          ).pipe(Effect.mapError((error) => teamError(error.detail, role.projectId)));
+          if (inspected.movable && !(needsSlot && active.length >= limit)) {
+            const open = yield* repository.listOpenAttentionItems({
+              projectId: task.projectId,
+              taskId: task.id,
+            });
+            return {
+              kind: "move" as const,
+              lead: replacedLead,
+              to,
+              failedCards: open.filter(isTurnFailedBlocker).map((item) => item.id),
+              failuresBefore: yield* countFailedOutcomes(task),
+            };
+          }
+          if (!inspected.movable) unmovable = inspected.reason;
+        }
+        if (active.length >= limit) {
+          return yield* teamError(
+            restart
+              ? `#${task.number} cannot start again yet: ${active.length} of ${limit} task leads are already running.`
+              : `#${task.number} stays in the inbox: ${active.length} of ${limit} task leads are already running.`,
+            role.projectId,
+          );
+        }
+        for (const dependencyId of task.waitsOn) {
+          const dependency = yield* requireAnyTask(dependencyId, role.projectId);
+          if (!isDependencyCleared(dependency.stage)) {
+            return yield* teamError(
+              `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`,
+              role.projectId,
+            );
+          }
+        }
+        const coveredBy = yield* breakdownCoverage(task);
+        if (coveredBy === null && task.parentTaskId !== null && (yield* isLeadDraft(task))) {
+          return yield* teamError(
+            `#${task.number} is a drafted subtask. It starts once the user approves its parent's plan, which covers the whole breakdown.`,
+            role.projectId,
+          );
+        }
+        const memory = yield* repository.listMemory(role.projectId);
+        const key = formatTaskKey(
+          yield* taskKeyPrefixFor(role.projectId, manager.settings),
+          task.number,
+        );
+        const spec = yield* latestSpec(task);
+        // A task whose plan was already approved resumes straight into the work.
+        const resume = task.planSummary !== null;
+        const userLanguage = resolveUserLanguage(
+          task.request,
+          yield* recentUserWords(manager.threadId),
+        );
+        // A restart must not reuse the first lead's request id, or it gets that lead back.
+        const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
+        const roleModels = resolveRoleModels(task.roleModels, manager.settings.roleModels);
+        // A plan model the user picked wins over the PM's choice.
+        const leadTarget =
+          roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
+        // Each start picks its own place; a restart without one runs locally.
+        const location = input.location ?? "local";
+        const lead = yield* delegate({
+          task: buildTaskLeadPrompt({
+            task: { ...task, location },
+            key,
+            spec,
+            resume,
+            memory,
+            otherTasks: active,
+            ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
+            ...(userLanguage === null ? {} : { userLanguage }),
+            ...(coveredBy === null
+              ? {}
+              : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
+            roleModels,
+          }),
+          title: `${key} ${task.title}`,
+          role: "implementation",
+          isolation: "worktree",
+          mode: "async",
+          clientRequestId:
+            earlierSessions === 0
+              ? `task-start:${task.id}`
+              : `task-start:${task.id}:${earlierSessions + 1}`,
+          ...(leadTarget === undefined ? {} : { target: leadTarget }),
+          ...(location === "local" ? {} : { location }),
+        }).pipe(
+          Effect.mapError((failure) =>
+            teamError(
+              `Could not start a task lead for #${task.number}: ${failure.message}`,
+              role.projectId,
+            ),
+          ),
+        );
+        const started = yield* setTask({
+          id: task.id,
+          stage: "planning",
+          leadThreadId: lead.childThreadId,
+          location,
+          // The parent's approved breakdown is this subtask's approved plan.
+          ...(coveredBy === null || task.planSummary !== null
+            ? {}
+            : { planSummary: yield* coveredPlanSummary(task, coveredBy) }),
+        });
+        yield* repository.addTaskSession({
+          taskId: started.id,
+          threadId: lead.childThreadId,
+          role: resume ? "implementer" : "lead",
+          createdAt: started.stageChangedAt,
+        });
+        yield* appendEvent(started, "stage_changed", `${task.stage} → planning`, callerThreadId);
+        // Logged as the lead's, so the PM's latest action still reads "started".
+        const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
+        yield* repository
+          .startModelRun({
+            taskId: started.id,
+            threadId: lead.childThreadId,
+            role: "plan",
+            providerInstanceId: lead.providerInstanceId,
+            model: lead.model,
+            startedAt: started.stageChangedAt,
+          })
+          .pipe(orTeamError("Could not record the plan step.", role.projectId));
+        if (replacedLead !== null) {
+          yield* retireReplacedLead(withStep, replacedLead, unmovable);
+        }
+        yield* router.publish(role.projectId);
+        return {
+          kind: "started" as const,
+          result: { task: withStep, leadThreadId: lead.childThreadId },
+        };
+      }),
+    );
+
+  const countFailedOutcomes = (task: ProjectTask) =>
+    repository
+      .listTaskEvents({ taskId: task.id, limit: Number.MAX_SAFE_INTEGER })
+      .pipe(
+        Effect.map(
+          (events) =>
+            events.filter(
+              (event) =>
+                event.kind === "outcome" &&
+                (event.body === "failed" || event.body.startsWith("failed:")),
+            ).length,
+        ),
+      );
+
+  /**
+   * The replaced lead goes quiet: its cards close, since answers would reach a lead
+   * that left, and its later messages stay queued.
+   */
+  const retireReplacedLead = (task: ProjectTask, replaced: ThreadId, unmovable: string | null) =>
+    Effect.gen(function* () {
+      leadMoveGate.hold(replaced, "replaced");
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      for (const item of open) {
+        if (item.askerThreadId === replaced || isTurnFailedBlocker(item)) {
+          yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: yield* nowIso });
+        }
+      }
+      yield* appendEvent(
+        task,
+        "note",
+        unmovable === null
+          ? "멈춘 리드 대신 새 리드로 다시 시작했어요."
+          : `리드를 옮길 수 없어 새 리드로 다시 시작했어요. 이유: ${unmovable}`,
+        null,
+      );
+    });
+
   const startTask: ProjectTeamService["Service"]["startTask"] = (callerThreadId, input, delegate) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm"], "task_start");
-      return yield* taskStartLocks.withLock(
-        role.projectId,
-        Effect.gen(function* () {
-          const task = yield* requireTask(input.taskId, role.projectId);
-          if (task.stage !== "inbox") {
-            return yield* teamError(`#${task.number} is already ${task.stage}.`, role.projectId);
-          }
-          const manager = yield* requireManager(role.projectId);
-          const active = yield* activeTasks(role.projectId);
-          const limit = manager.settings.maxConcurrentTasks;
-          if (active.length >= limit) {
-            return yield* teamError(
-              `#${task.number} stays in the inbox: ${active.length} of ${limit} task leads are already running.`,
-              role.projectId,
-            );
-          }
-          for (const dependencyId of task.waitsOn) {
-            const dependency = yield* requireAnyTask(dependencyId, role.projectId);
-            if (!isDependencyCleared(dependency.stage)) {
-              return yield* teamError(
-                `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`,
-                role.projectId,
-              );
-            }
-          }
-          const coveredBy = yield* breakdownCoverage(task);
-          if (coveredBy === null && task.parentTaskId !== null && (yield* isLeadDraft(task))) {
-            return yield* teamError(
-              `#${task.number} is a drafted subtask. It starts once the user approves its parent's plan, which covers the whole breakdown.`,
-              role.projectId,
-            );
-          }
-          const memory = yield* repository.listMemory(role.projectId);
-          const key = formatTaskKey(
-            yield* taskKeyPrefixFor(role.projectId, manager.settings),
-            task.number,
-          );
-          const spec = yield* latestSpec(task);
-          // A task whose plan was already approved resumes straight into the work.
-          const resume = task.planSummary !== null;
-          const userLanguage = resolveUserLanguage(
-            task.request,
-            yield* recentUserWords(manager.threadId),
-          );
-          // A restart must not reuse the first lead's request id, or it gets that lead back.
-          const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
-          const roleModels = resolveRoleModels(task.roleModels, manager.settings.roleModels);
-          // A plan model the user picked wins over the PM's choice.
-          const leadTarget =
-            roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
-          // Each start picks its own place; a restart without one runs locally.
-          const location = input.location ?? "local";
-          const lead = yield* delegate({
-            task: buildTaskLeadPrompt({
-              task: { ...task, location },
-              key,
-              spec,
-              resume,
-              memory,
-              otherTasks: active,
-              ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
-              ...(userLanguage === null ? {} : { userLanguage }),
-              ...(coveredBy === null
-                ? {}
-                : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
-              roleModels,
-            }),
-            title: `${key} ${task.title}`,
-            role: "implementation",
-            isolation: "worktree",
-            mode: "async",
-            clientRequestId:
-              earlierSessions === 0
-                ? `task-start:${task.id}`
-                : `task-start:${task.id}:${earlierSessions + 1}`,
-            ...(leadTarget === undefined ? {} : { target: leadTarget }),
-            ...(location === "local" ? {} : { location }),
-          }).pipe(
-            Effect.mapError((failure) =>
-              teamError(
-                `Could not start a task lead for #${task.number}: ${failure.message}`,
-                role.projectId,
-              ),
-            ),
-          );
-          const started = yield* setTask({
-            id: task.id,
-            stage: "planning",
-            leadThreadId: lead.childThreadId,
-            location,
-            // The parent's approved breakdown is this subtask's approved plan.
-            ...(coveredBy === null || task.planSummary !== null
-              ? {}
-              : { planSummary: yield* coveredPlanSummary(task, coveredBy) }),
-          });
-          yield* repository.addTaskSession({
-            taskId: started.id,
-            threadId: lead.childThreadId,
-            role: resume ? "implementer" : "lead",
-            createdAt: started.stageChangedAt,
-          });
-          yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
-          // Logged as the lead's, so the PM's latest action still reads "started".
-          const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
-          yield* repository
-            .startModelRun({
-              taskId: started.id,
-              threadId: lead.childThreadId,
-              role: "plan",
-              providerInstanceId: lead.providerInstanceId,
-              model: lead.model,
-              startedAt: started.stageChangedAt,
-            })
-            .pipe(orTeamError("Could not record the plan step.", role.projectId));
-          yield* router.publish(role.projectId);
-          return { task: withStep, leadThreadId: lead.childThreadId };
-        }),
-      );
+      const start = yield* startTaskLocked(callerThreadId, role.projectId, input, delegate);
+      if (start.kind === "started") return start.result;
+      // Outside the start lock: a move can take minutes. A failed move leaves the task as it was.
+      yield* moveTask({ projectId: role.projectId, taskId: input.taskId, to: start.to });
+      const moved = yield* requireTask(input.taskId, role.projectId);
+      // The moved lead may already have failed again; that newer failure keeps its card.
+      if ((yield* countFailedOutcomes(moved)) === start.failuresBefore) {
+        const open = yield* repository.listOpenAttentionItems({
+          projectId: moved.projectId,
+          taskId: moved.id,
+        });
+        for (const item of open.filter((item) => start.failedCards.includes(item.id))) {
+          yield* restoreFailedTurnStage(item, TURN_FAILED_RETRY);
+          yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: yield* nowIso });
+        }
+      }
+      yield* router.publish(role.projectId);
+      return { task: yield* requireTask(moved.id, role.projectId), leadThreadId: start.lead };
     }).pipe(orTeamError("Could not start the task."));
 
   /**

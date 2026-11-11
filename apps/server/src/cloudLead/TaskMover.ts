@@ -85,21 +85,22 @@ const detailOf = (cause: unknown): string =>
     ? String((cause as { message: unknown }).message)
     : String(cause);
 
-/** Moves `task`'s lead to `to`; returns the task as it stands after the move. */
-export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: ExecutionLocation) =>
+/**
+ * Whether a lead can move at all: it needs its own worktree and a Claude session.
+ * Returns why not, or what the move carries.
+ */
+export const inspectMovableLead = (
+  deps: Pick<TaskMoverDeps, "threads" | "providers">,
+  lead: ThreadId,
+) =>
   Effect.gen(function* () {
-    const from = task.location ?? "local";
-    const lead = task.leadThreadId;
-    if (deps.isFinished(task))
-      return yield* fail(`#${task.number}은 끝난 태스크라 옮길 수 없어요.`);
-    if (lead === null) return yield* fail("리드가 아직 시작하지 않아 옮길 수 없어요.");
-    if (task.moveTarget != null) return yield* fail("이미 옮기는 중이에요.");
-    if (from === to) return yield* fail(`이미 ${PLACE[to]}에서 실행 중이에요.`);
-    const shell = yield* deps.threads.getThreadShell(lead).pipe(Effect.orElseSucceed(() => null));
+    // A failed read is not a lead that cannot move; it fails the caller instead.
+    const shell = yield* deps.threads
+      .getThreadShell(lead)
+      .pipe(Effect.mapError((cause) => new TaskMoveError({ detail: detailOf(cause) })));
     if (shell === null || shell.worktreePath === null) {
-      return yield* fail("리드에 자기 워크트리가 없어 옮길 수 없어요.");
+      return { movable: false as const, reason: "리드에 자기 워크트리가 없어 옮길 수 없어요." };
     }
-    const worktreePath = shell.worktreePath;
     const { providerThreads } = yield* deps.threads
       .getThreadRecords(lead, ["providerThreads"])
       .pipe(Effect.orElseSucceed(() => ({ providerThreads: [] })));
@@ -111,9 +112,31 @@ export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: Executi
       (yield* deps.providers).find((provider) => provider.instanceId === shell.providerInstanceId)
         ?.driver;
     if (driver !== "claudeAgent") {
-      return yield* fail("Claude 리드만 로컬과 클라우드 사이를 옮길 수 있어요.");
+      return {
+        movable: false as const,
+        reason: "Claude 리드만 로컬과 클라우드 사이를 옮길 수 있어요.",
+      };
     }
-    const sessionId = providerThread?.nativeThreadRef?.nativeId ?? null;
+    return {
+      movable: true as const,
+      worktreePath: shell.worktreePath,
+      sessionId: providerThread?.nativeThreadRef?.nativeId ?? null,
+    };
+  });
+
+/** Moves `task`'s lead to `to`; returns the task as it stands after the move. */
+export const moveTaskLead = (deps: TaskMoverDeps, task: ProjectTask, to: ExecutionLocation) =>
+  Effect.gen(function* () {
+    const from = task.location ?? "local";
+    const lead = task.leadThreadId;
+    if (deps.isFinished(task))
+      return yield* fail(`#${task.number}은 끝난 태스크라 옮길 수 없어요.`);
+    if (lead === null) return yield* fail("리드가 아직 시작하지 않아 옮길 수 없어요.");
+    if (task.moveTarget != null) return yield* fail("이미 옮기는 중이에요.");
+    if (from === to) return yield* fail(`이미 ${PLACE[to]}에서 실행 중이에요.`);
+    const inspected = yield* inspectMovableLead(deps, lead);
+    if (!inspected.movable) return yield* fail(inspected.reason);
+    const { worktreePath, sessionId } = inspected;
 
     const claimed = yield* deps
       .setMove({ task, moveTarget: to, expectedMoveTarget: null })
