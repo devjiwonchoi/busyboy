@@ -6931,12 +6931,26 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       expectedClass: "usage_limit",
     },
     { name: "retry", code: "usageLimitExceeded", notification: true, expectedClass: "usage_limit" },
+    {
+      name: "subscription-sharing",
+      code: "other",
+      notification: false,
+      expectedClass: "usage_limit",
+    },
+    {
+      name: "subscription-sharing-retry",
+      code: "other",
+      notification: true,
+      expectedClass: "usage_limit",
+    },
   ] as const)("classifies Codex terminal failures from $name evidence", (scenario) =>
     Effect.scoped(
       Effect.gen(function* () {
         const nativeThreadId = `native-limit-${scenario.name}`;
         const nativeTurnId = `turn-limit-${scenario.name}`;
-        const message = "Provider stopped this request.";
+        const message = scenario.name.startsWith("subscription-sharing")
+          ? "stream disconnected before completion: The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead."
+          : "Provider stopped this request.";
         const resetAt = "2033-05-19T07:20:00.000Z";
         const snapshot = {
           type: "emit_inbound" as const,
@@ -7004,7 +7018,9 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                       params: {
                         threadId: nativeThreadId,
                         turnId: nativeTurnId,
-                        willRetry: scenario.name === "retry",
+                        willRetry:
+                          scenario.name === "retry" ||
+                          scenario.name === "subscription-sharing-retry",
                         error: {
                           message,
                           codexErrorInfo: scenario.code,
