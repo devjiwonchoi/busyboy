@@ -14,6 +14,7 @@ import {
   requestLinkHref,
   requestLinkIds,
   requestMessageProblems,
+  replyWithRequestLink,
   REQUEST_APPROVE_LABEL,
   REQUEST_DETAILS_LABEL,
   REQUEST_BLOCKER_DONE,
@@ -154,7 +155,9 @@ describe("request messages", () => {
       ]),
     ).toEqual({ kind: "ambiguous", ids: ["a", "b"] });
     // A vague reply shares no distinctive word with any open request.
-    expect(matchRequestReference("지금 진행해 주세요", items.slice(0, 2))).toEqual({ kind: "none" });
+    expect(matchRequestReference("지금 진행해 주세요", items.slice(0, 2))).toEqual({
+      kind: "none",
+    });
   });
 
   it("ignores mangled request links instead of throwing", () => {
@@ -171,10 +174,17 @@ describe("request messages", () => {
   });
 
   it("allows everyday product names and still rejects task keys", () => {
-    for (const text of ["iOS 빌드 확인하기", "UTF-8로 저장하기", "GPT-5 모델로 바꾸기", "macOS 알림 고치기"]) {
+    for (const text of [
+      "iOS 빌드 확인하기",
+      "UTF-8로 저장하기",
+      "GPT-5 모델로 바꾸기",
+      "macOS 알림 고치기",
+    ]) {
       expect(plainTextProblems([text]), text).toEqual([]);
     }
-    expect(plainTextProblems(["BU-129 이후 진행"])).toEqual(["Remove task keys; use the work's name."]);
+    expect(plainTextProblems(["BU-129 이후 진행"])).toEqual([
+      "Remove task keys; use the work's name.",
+    ]);
   });
 
   it("shares labels and chooses the correct approve answer", () => {
@@ -197,6 +207,27 @@ describe("request messages", () => {
         `지금 (${marker})`,
       );
     }
+  });
+});
+
+describe("request message edge cases", () => {
+  it("does not read a link or a time at the start of a line as a label", () => {
+    const question =
+      "점검 시간 정해도 될까요?\n\nhttps://example.com/status 에서 상태를 볼 수 있어요.\n\n오후 3:30에 시작하면 저녁 전에 끝나요.";
+    expect(requestMessageProblems(question)).toEqual([]);
+    expect(requestMessageProblems("배포해도 될까요?\n\nGoal: 배포")).toContain(
+      "Remove label lines such as Goal: or **Goal:**.",
+    );
+  });
+
+  it("keeps one request link when replying again", () => {
+    const first = formatRequestLink("attention:a", "목표 그래프 [플랜] 승인 부탁드려요.");
+    const second = formatRequestLink("attention:b", "v0.0.20 릴리스 해도 될까요?");
+    const once = replyWithRequestLink("내일 하자", first);
+    expect(once).toBe(`${first} 내일 하자`);
+    const twice = replyWithRequestLink(once, second);
+    expect(twice).toBe(`${second} 내일 하자`);
+    expect(requestLinkIds(twice)).toEqual(["attention:b"]);
   });
 });
 

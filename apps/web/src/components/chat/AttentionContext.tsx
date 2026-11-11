@@ -3,7 +3,11 @@ import type {
   ProjectAttentionContext,
   ProjectDecisionCard,
 } from "@t3tools/contracts";
-import { requestSenderLabel, shortWorkName } from "@t3tools/shared/requestMessage";
+import {
+  requestImpactLabels,
+  requestSenderLabel,
+  shortWorkName,
+} from "@t3tools/shared/requestMessage";
 import { Link, useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -11,13 +15,6 @@ import { useProjects } from "~/state/entities";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
 import { useRelatedTask } from "../task/TaskRelations";
-
-const REVERSIBILITY_LABEL: Record<ProjectAttentionContext["reversibility"], string> = {
-  reversible: "되돌리기 가능",
-  requires_work: "되돌리려면 별도 작업 필요",
-  irreversible: "되돌릴 수 없음",
-  unknown: "되돌리기 가능 여부 확인 필요",
-};
 
 /** Resolve the task's own project, which can differ from the Director card's project. */
 export function useAttentionTask({
@@ -47,11 +44,13 @@ export function useAttentionTask({
 /** Sender identity is shared by requests and waiting lists, including legacy cards. */
 export function useRequestSender(card: ProjectDecisionCard, environmentId: EnvironmentId) {
   const { related, projectTitle } = useAttentionTask({ card, environmentId });
-  return requestSenderLabel({
-    role: card.item.senderRole ?? (related?.task.leadThreadId ? "lead" : "pm"),
-    name: card.item.senderName ?? shortWorkName(card.taskTitle),
-    projectTitle,
-  }) ?? projectTitle;
+  return (
+    requestSenderLabel({
+      role: card.item.senderRole ?? (related?.task.leadThreadId ? "lead" : "pm"),
+      name: card.item.senderName ?? shortWorkName(card.taskTitle),
+      projectTitle,
+    }) ?? projectTitle
+  );
 }
 
 /** Task names in cards use the same stable task page even before a lead thread exists. */
@@ -98,15 +97,7 @@ export function AttentionContext({
     );
   }
 
-  const impacts = [
-    context.impacts.includes("merge") ? "머지" : "머지 없음",
-    context.impacts.includes("deploy") ? "배포" : "배포 없음",
-    context.impacts.includes("cost")
-      ? `비용: ${context.cost ?? "금액 확인 필요"}`
-      : "추가 비용 없음",
-    context.impacts.includes("publish") ? "외부 게시" : "외부 게시 없음",
-    REVERSIBILITY_LABEL[context.reversibility],
-  ];
+  const impacts = requestImpactLabels(context);
 
   return (
     <section

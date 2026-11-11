@@ -92,6 +92,7 @@ import { useWorkspaceContentWidth } from "../layout/workspace-content-width";
 import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { replyWithRequestLink } from "@t3tools/shared/requestMessage";
 import { collectProviderUsageLimits } from "@t3tools/shared/usageLimits";
 import type { ComposerEditorHandle } from "../../components/ComposerEditor";
 import type { StatusTone } from "../../components/StatusPill";
@@ -1239,7 +1240,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                     environmentId={props.environmentId}
                     threadId={props.selectedThread.id}
                     canOperateThread={props.canOperateThread}
-                    onReply={(text) => props.onChangeDraftMessage(`${text}${props.draftMessage}`)}
+                    onReply={(link) =>
+                      props.onChangeDraftMessage(replyWithRequestLink(props.draftMessage, link))
+                    }
                     onOpenLead={(threadId) => {
                       navigation.navigate("Thread", {
                         environmentId: props.environmentId,

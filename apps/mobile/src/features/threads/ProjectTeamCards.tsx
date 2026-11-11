@@ -13,6 +13,7 @@ import {
   REQUEST_APPROVE_LABEL,
   REQUEST_BLOCKER_DONE,
   REQUEST_DETAILS_LABEL,
+  requestImpactLabels,
 } from "@t3tools/shared/requestMessage";
 import * as Clipboard from "expo-clipboard";
 import { AsyncResult } from "effect/reactivity";
@@ -187,20 +188,17 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
   const versions = detail.data?.versions ?? [];
   const asked = versions.find((entry) => entry.version === item.specVersion)?.spec ?? null;
   const live = versions.at(-1)?.spec ?? null;
-  const todos = requestTodoRows(card).map((row) => ({
+  const todos = requestTodoRows(card, asked?.todos).map((row) => ({
     ...row,
     done: live?.todos.find((todo) => todo.id === row.id)?.done ?? row.done,
   }));
   const [planOpen, setPlanOpen] = useState(false);
-  const lead =
-    item.senderRole === "lead" || (item.senderRole == null && leadThreadId !== null);
+  const lead = item.senderRole === "lead" || (item.senderRole == null && leadThreadId !== null);
   const chatThreadId = lead && leadThreadId !== null ? leadThreadId : item.askerThreadId;
   const answerDecision = useAnswerDecision();
   const [expanded, setExpanded] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [selected, setSelected] = useState<string | null>(() =>
-    defaultRequestOption(item.options),
-  );
+  const [selected, setSelected] = useState<string | null>(() => defaultRequestOption(item.options));
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -239,42 +237,39 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
 
   return (
     <View className="gap-1.5" testID={`project-team-card-${item.kind}`}>
-      <Text className="font-sans text-xs text-foreground-muted">{sender}</Text>
+      {/* Reply and copy link sit outside the bubble, which holds only its two buttons. */}
+      <View className="flex-row items-center gap-2">
+        <Text className="flex-1 font-sans text-xs text-foreground-muted">{sender}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="요청 동작"
+          hitSlop={8}
+          onPress={() => setActionsOpen(!actionsOpen)}
+        >
+          <Text className="text-foreground-muted">⋯</Text>
+        </Pressable>
+      </View>
+      {actionsOpen ? (
+        <View className="flex-row gap-2" testID="request-message-actions">
+          {props.entry.replyable ? (
+            <RequestActionButton
+              label="답장"
+              tone="secondary"
+              disabled={!props.canOperateThread}
+              onPress={() => {
+                props.onReply(link);
+                setActionsOpen(false);
+              }}
+            />
+          ) : null}
+          <RequestActionButton label="링크 복사" tone="secondary" onPress={() => void copyLink()} />
+        </View>
+      ) : null}
       <View
         className="gap-3 rounded-[20px] border border-border bg-card-alt p-4"
         testID="request-bubble"
       >
-        <View className="flex-row items-start gap-2">
-          <Text className="flex-1 font-t3-bold text-base text-foreground">{message.headline}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="요청 동작"
-            hitSlop={8}
-            onPress={() => setActionsOpen(!actionsOpen)}
-          >
-            <Text className="text-foreground-muted">⋯</Text>
-          </Pressable>
-        </View>
-        {actionsOpen ? (
-          <View className="flex-row gap-2">
-            {props.entry.replyable ? (
-              <RequestActionButton
-                label="답장"
-                tone="secondary"
-                disabled={!props.canOperateThread}
-                onPress={() => {
-                  props.onReply(`${link} `);
-                  setActionsOpen(false);
-                }}
-              />
-            ) : null}
-            <RequestActionButton
-              label="링크 복사"
-              tone="secondary"
-              onPress={() => void copyLink()}
-            />
-          </View>
-        ) : null}
+        <Text className="font-t3-bold text-base text-foreground">{message.headline}</Text>
         {message.paragraphs.map((paragraph, index) => (
           <Text key={index} className="font-sans text-sm leading-normal text-foreground-secondary">
             {paragraph}
@@ -297,6 +292,20 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
         ))}
         {expanded ? (
           <View className="gap-3" testID="request-details">
+            {item.context ? (
+              <View className="gap-2" testID="request-context">
+                <Text className="font-sans text-sm text-foreground">{item.context.action}</Text>
+                <Text className="font-sans text-sm text-foreground-secondary">
+                  {item.context.reason}
+                </Text>
+                <Text className="font-sans text-xs text-foreground-muted">
+                  {requestImpactLabels(item.context).join(" · ")}
+                </Text>
+                <Text className="font-sans text-sm text-foreground-secondary">
+                  추천안: {item.context.recommendation}
+                </Text>
+              </View>
+            ) : null}
             {(item.details ?? []).map((detail, index) => (
               <Text key={index} className="font-sans text-sm text-foreground-secondary">
                 {detail.label}: {detail.text}
@@ -355,7 +364,9 @@ function RequestMessageCard(props: ProjectTeamCardProps) {
             {asked?.nonGoals ? (
               <View className="gap-1">
                 <Text className="font-t3-bold text-sm text-foreground">안 하는 것</Text>
-                <Text className="font-sans text-sm text-foreground-secondary">{asked.nonGoals}</Text>
+                <Text className="font-sans text-sm text-foreground-secondary">
+                  {asked.nonGoals}
+                </Text>
               </View>
             ) : null}
             {asked !== null ? (

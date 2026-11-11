@@ -1,4 +1,5 @@
 import type {
+  ProjectApprovalPlanTodo,
   ProjectDecisionCard,
   ProjectTeamAttentionSummary,
   ThreadId,
@@ -93,8 +94,12 @@ export function cardOptionLabel(option: string): string {
 }
 
 /** Keep completion criteria and dependency ids out of the visible numbered plan. */
-export function requestTodoRows(card: ProjectDecisionCard) {
-  const todos = card.plan?.todos ?? [];
+/** The plan pinned to the card wins; without one, the asked spec version's todos, like web. */
+export function requestTodoRows(
+  card: ProjectDecisionCard,
+  askedTodos: ReadonlyArray<ProjectApprovalPlanTodo> = [],
+) {
+  const todos = card.plan?.todos ?? askedTodos;
   return todos.map((todo, index) => ({
     id: todo.id,
     text: todo.text,

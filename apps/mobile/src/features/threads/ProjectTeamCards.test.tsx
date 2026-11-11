@@ -279,10 +279,19 @@ describe("ProjectTeamCards", () => {
   it("hides reply and copy behind the action menu and creates a request link", async () => {
     render(approval, true);
     expect(host.textContent?.includes("답장")).toBe(false);
+    // The action menu sits outside the bubble, which holds only its two buttons.
+    expect(host.querySelector('[data-testid="request-bubble"]')?.textContent?.includes("⋯")).toBe(
+      false,
+    );
     act(() => button("요청 동작").click());
+    expect(
+      host
+        .querySelector('[data-testid="request-message-actions"]')
+        ?.closest('[data-testid="request-bubble"]'),
+    ).toBe(null);
     act(() => button("답장").click());
     expect(reply).toHaveBeenCalledWith(
-      `${formatRequestLink("approval", "목표 그래프 플랜 승인 부탁드려요.")} `,
+      formatRequestLink("approval", "목표 그래프 플랜 승인 부탁드려요."),
     );
     act(() => button("요청 동작").click());
     await act(async () => button("링크 복사").click());
@@ -316,6 +325,33 @@ describe("ProjectTeamCards", () => {
     expect(mocks.answer.mock.calls[0]?.[1].answer).toBe(
       "지금: 출시 (Recommended)\nNote: 내일 오전에 진행해 주세요",
     );
+  });
+  it("shows the reason, impacts and recommendation under details", () => {
+    render(
+      {
+        ...decision,
+        item: {
+          ...decision.item,
+          context: {
+            action: "v0.0.20 릴리스를 냅니다",
+            reason: "머지된 변경 네 개를 묶어서 냅니다",
+            impacts: ["publish"],
+            cost: null,
+            reversibility: "requires_work",
+            recommendation: "지금 내는 안을 추천해요",
+          },
+        },
+      },
+      true,
+    );
+    expect(host.textContent?.includes("머지된 변경 네 개를 묶어서 냅니다")).toBe(false);
+    act(() => button("자세히 보기").click());
+    const context = host.querySelector('[data-testid="request-context"]')!;
+    expect(context.closest('[data-testid="request-details"]')).not.toBe(null);
+    expect(context.textContent).toContain("머지된 변경 네 개를 묶어서 냅니다");
+    expect(context.textContent).toContain("외부 게시");
+    expect(context.textContent).toContain("되돌리려면 별도 작업 필요");
+    expect(context.textContent).toContain("추천안: 지금 내는 안을 추천해요");
   });
   it("sends the recommended answer from the primary decision action", async () => {
     render(decision, true);

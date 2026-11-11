@@ -1,8 +1,28 @@
-import { PLAN_APPROVAL_START } from "@t3tools/contracts";
+import { PLAN_APPROVAL_START, type ProjectAttentionContext } from "@t3tools/contracts";
 
 export const REQUEST_APPROVE_LABEL = "승인";
 export const REQUEST_DETAILS_LABEL = "자세히 보기";
 export const REQUEST_BLOCKER_DONE = "처리했어요";
+
+const REVERSIBILITY_LABEL: Record<ProjectAttentionContext["reversibility"], string> = {
+  reversible: "되돌리기 가능",
+  requires_work: "되돌리려면 별도 작업 필요",
+  irreversible: "되돌릴 수 없음",
+  unknown: "되돌리기 가능 여부 확인 필요",
+};
+
+/** One label per impact, naming the absent ones too, so web and phone say the same thing. */
+export function requestImpactLabels(context: ProjectAttentionContext): string[] {
+  return [
+    context.impacts.includes("merge") ? "머지" : "머지 없음",
+    context.impacts.includes("deploy") ? "배포" : "배포 없음",
+    context.impacts.includes("cost")
+      ? `비용: ${context.cost ?? "금액 확인 필요"}`
+      : "추가 비용 없음",
+    context.impacts.includes("publish") ? "외부 게시" : "외부 게시 없음",
+    REVERSIBILITY_LABEL[context.reversibility],
+  ];
+}
 
 export function parseRequestMessage(question: string): {
   headline: string;
@@ -53,7 +73,8 @@ export function requestMessageProblems(
   if (/^\s*#/m.test(question)) {
     problems.push("Remove markdown headings.");
   }
-  if (/^\s*(?:\*\*)?[\p{L}][\p{L}\p{N} _-]{0,30}:\s*(?:\*\*)?/mu.test(question)) {
+  // A colon before "//" or a digit is a link or a time ("https://…", "오후 3:30"), not a label.
+  if (/^\s*(?:\*\*)?[\p{L}][\p{L}\p{N} _-]{0,30}:(?![/\d])\s*(?:\*\*)?/mu.test(question)) {
     problems.push("Remove label lines such as Goal: or **Goal:**.");
   }
   if (/^\s*[-*]\s/m.test(question)) {
@@ -133,9 +154,7 @@ export function todoTitleProblems(text: string): string[] {
 
 // Old task titles can include keys and planning context that do not belong in a sender label.
 export function shortWorkName(title: string): string {
-  const cleaned = title
-    .replace(/\([^()]*\)|（[^（）]*）/g, "")
-    .replace(/\s+/g, " ");
+  const cleaned = title.replace(/\([^()]*\)|（[^（）]*）/g, "").replace(/\s+/g, " ");
   const name = stripTaskKeys(cleaned)
     .split(/·|,| - /)[0]!
     .replace(/\s+/g, " ")
@@ -177,6 +196,12 @@ export function requestLinkHref(id: string): string {
 
 export function formatRequestLink(id: string, headline: string): string {
   return `[↩ ${headline.replace(/[\[\]\\]/g, "\\$&")}](${requestLinkHref(id)})`;
+}
+
+/** Puts the request link first, replacing a link already there so a reply names one request. */
+export function replyWithRequestLink(prompt: string, link: string): string {
+  const rest = prompt.replace(/^\s*\[(?:\\.|[^\]\\])*\]\(t3-request:[^)\s]+\)\s*/, "");
+  return `${link} ${rest}`;
 }
 
 export function requestLinkIds(text: string): string[] {

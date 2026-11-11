@@ -309,6 +309,32 @@ for (const width of [1000, 390]) {
       );
     });
 
+    it("shows the reason, cost and recommendation under details", async () => {
+      const element = await open(
+        card({
+          question: RELEASE,
+          context: {
+            action: "v0.0.20 릴리스를 냅니다",
+            reason: "머지된 변경 네 개를 묶어서 냅니다",
+            impacts: ["publish"],
+            cost: null,
+            reversibility: "requires_work",
+            recommendation: "지금 내는 안을 추천해요",
+          },
+        }),
+      );
+      expect(element.textContent).not.toContain("머지된 변경 네 개를 묶어서 냅니다");
+      await userEvent.click(buttonIn(element, "자세히 보기"));
+      const context = element.querySelector<HTMLElement>(
+        '[data-request-details] [data-attention-context="known"]',
+      )!;
+      expect(context.querySelector("[data-attention-reason]")?.textContent).toBe(
+        "머지된 변경 네 개를 묶어서 냅니다",
+      );
+      expect(context.textContent).toContain("지금 내는 안을 추천해요");
+      expect(context.textContent).toContain("외부 게시");
+    });
+
     it("opens the existing lead side chat", async () => {
       const element = await open(card());
       await userEvent.click(buttonIn(element, "자세히 보기"));
@@ -327,6 +353,21 @@ for (const width of [1000, 390]) {
       await userEvent.click(buttonIn(element, "답장"));
       expect(useComposerDraftStore.getState().getComposerDraft(ref)?.prompt).toBe(
         `${formatRequestLink("attention-plan", "v0.0.20 릴리스 해도 될까요?")} 내 의견`,
+      );
+    });
+
+    it("replaces the request link when replying to another request", async () => {
+      useComposerDraftStore.getState().setPrompt(ref, "내 의견");
+      const plan = await open(card());
+      await userEvent.hover(plan);
+      await userEvent.click(buttonIn(plan, "답장"));
+      const release = await open(
+        card({ id: ProjectAttentionItemId.make("attention-release"), question: RELEASE }),
+      );
+      await userEvent.hover(release);
+      await userEvent.click(buttonIn(release, "답장"));
+      expect(useComposerDraftStore.getState().getComposerDraft(ref)?.prompt).toBe(
+        `${formatRequestLink("attention-release", "v0.0.20 릴리스 해도 될까요?")} 내 의견`,
       );
     });
 

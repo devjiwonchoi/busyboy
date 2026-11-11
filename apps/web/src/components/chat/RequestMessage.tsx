@@ -14,6 +14,7 @@ import {
   REQUEST_APPROVE_LABEL,
   REQUEST_BLOCKER_DONE,
   REQUEST_DETAILS_LABEL,
+  replyWithRequestLink,
 } from "@t3tools/shared/requestMessage";
 import { AsyncResult } from "effect/reactivity";
 import { CopyIcon, ReplyIcon } from "lucide-react";
@@ -28,7 +29,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { showAnchoredCopyErrorToast, showAnchoredCopySuccessToast } from "../ui/anchoredCopyToast";
-import { useAttentionTask, useRequestSender } from "./AttentionContext";
+import { AttentionContext, useAttentionTask, useRequestSender } from "./AttentionContext";
 import { CardSideChat } from "./CardSideChat";
 import { parseDecisionOption } from "./DecisionCard.logic";
 import { PlanApprovalModal } from "./PlanApprovalModal";
@@ -169,6 +170,9 @@ function MessageBody({
         ) : null}
         {expanded ? (
           <section data-request-details className="space-y-3">
+            {card.item.context ? (
+              <AttentionContext context={card.item.context} planApproval={planApproval} />
+            ) : null}
             <dl className="space-y-2">
               {card.item.details?.map((detail, index) => (
                 <div key={index}>
@@ -316,7 +320,7 @@ function MessageBody({
               const store = useComposerDraftStore.getState();
               store.setPrompt(
                 composerRef,
-                `${link} ${store.getComposerDraft(composerRef)?.prompt ?? ""}`,
+                replyWithRequestLink(store.getComposerDraft(composerRef)?.prompt ?? "", link),
               );
               if (replyElsewhere) {
                 void navigate({

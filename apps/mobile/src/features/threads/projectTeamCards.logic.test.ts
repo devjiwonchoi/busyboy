@@ -106,6 +106,11 @@ describe("projectTeamCards logic", () => {
       { id: "two", text: "모바일 확인", done: false, detail: "폰에서 보여요 · 1 다음", number: 2 },
     ]);
     expect(requestTodoRows(card("empty", {}))).toEqual([]);
+    // Without a pinned plan, the asked spec version's todos fill in, like web.
+    expect(requestTodoRows(card("unpinned", {}), plan.plan!.todos).map((row) => row.text)).toEqual([
+      "배치 바꾸기",
+      "모바일 확인",
+    ]);
   });
   it("shortens legacy action labels while preserving ordinary labels", () => {
     expect(cardOptionLabel("진행: 시도 (Recommended)")).toBe("진행");
