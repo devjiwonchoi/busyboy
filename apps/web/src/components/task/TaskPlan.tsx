@@ -20,6 +20,7 @@ import { Link } from "@tanstack/react-router";
 import { GitPullRequestIcon } from "lucide-react";
 import { useState } from "react";
 
+import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import {
   useProjectManager,
@@ -537,6 +538,10 @@ function TaskModels(props: {
   const { task } = props.detail;
   const setTaskRoleModels = useSetTaskRoleModels();
   const label = useRoleModelLabel(props.environmentId);
+  const appStepModels = useEnvironmentSettings(
+    props.environmentId,
+    (settings) => settings.taskStepModels,
+  );
   return (
     <section className="mt-5" aria-label="모델" data-task-models="">
       <h2 className={SECTION_HEADING}>모델</h2>
@@ -550,7 +555,7 @@ function TaskModels(props: {
       </div>
       <ul className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
         {PROJECT_TASK_MODEL_ROLES.map((role) => {
-          const inherited = effectiveRoleModel(role, {}, props.projectRoleModels);
+          const inherited = effectiveRoleModel(role, {}, props.projectRoleModels, appStepModels);
           return (
             <li key={role} data-role-model={role} className="contents">
               <span className="text-muted-foreground text-xs">{TASK_MODEL_ROLE_LABELS[role]}</span>
@@ -560,7 +565,9 @@ function TaskModels(props: {
                   projectId={task.projectId}
                   value={task.roleModels[role] ?? null}
                   unsetLabel={
-                    inherited === null ? "리드 모델" : `${label(inherited.target)} · 프로젝트`
+                    inherited === null
+                      ? "리드 모델"
+                      : `${label(inherited.target)} · ${inherited.source === "project" ? "프로젝트" : "앱"}`
                   }
                   ariaLabel={`${TASK_MODEL_ROLE_LABELS[role]} 모델`}
                   clearLabel={`${TASK_MODEL_ROLE_LABELS[role]} 모델 지우기`}

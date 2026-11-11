@@ -44,6 +44,7 @@ import {
   ProviderDriverKind,
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+import { ProjectTaskStepModels, ProjectTaskStepModelsPatch } from "./projectTeam.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -1112,6 +1113,8 @@ export const ServerSettings = Schema.Struct({
   autoResumeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   backgroundActivity: BackgroundActivitySettings,
   taskExecution: TaskExecutionSettings,
+  /** The model and thinking level for each task step (plan, implement, review) in every project. */
+  taskStepModels: ProjectTaskStepModels.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 
   automaticGitFetchInterval: Schema.DurationFromMillis.pipe(
     Schema.withDecodingDefault(
@@ -1403,6 +1406,7 @@ export const ServerSettingsPatch = Schema.Struct({
       overrides: Schema.optionalKey(BackgroundActivityOverrides),
     }),
   ),
+  taskStepModels: Schema.optionalKey(ProjectTaskStepModelsPatch),
   taskExecution: Schema.optionalKey(
     Schema.Struct({
       location: Schema.optionalKey(TaskExecutionLocationPolicy),

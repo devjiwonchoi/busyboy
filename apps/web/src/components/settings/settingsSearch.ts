@@ -443,6 +443,36 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["max concurrent sessions task leads limit safety cap 최대 동시 세션"],
   },
   {
+    id: "task-step-models",
+    title: "단계별 모델",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: [
+      "step models plan implement fix review thinking effort reasoning 단계별 모델 플랜 구현 수정 리뷰 생각 수준",
+    ],
+  },
+  {
+    id: "task-step-model-plan",
+    title: "플랜",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["plan model lead thinking effort 플랜 모델 리드 생각 수준"],
+  },
+  {
+    id: "task-step-model-implement",
+    title: "구현",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["implement fix model thinking effort 구현 수정 모델 생각 수준"],
+  },
+  {
+    id: "task-step-model-review",
+    title: "리뷰",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["review model thinking effort 리뷰 모델 생각 수준"],
+  },
+  {
     id: "new-threads",
     title: "New threads",
     to: "/settings/general",

@@ -129,14 +129,13 @@ describe("ProjectTeamService review gate", () => {
     ),
   );
 
-  it.effect("keeps the lead's self-review as the gate when no review model is set", () =>
+  it.effect("needs the review session even without a project review model", () =>
     withTeam((harness) =>
       Effect.gen(function* () {
+        // The app's review step is always set, so the lead's own review never ships.
         const { lead } = yield* builtTask(harness, false);
-        const reviewed = yield* reviewClean(lead, HEAD);
-        assert.strictEqual(reviewed.task.review?.by, "lead");
-        const shipped = yield* shipIt(lead);
-        assert.strictEqual(shipped.task.stage, "in_review");
+        assert.include(yield* failure(reviewClean(lead, HEAD)), "must come from it");
+        assert.include(yield* failure(shipIt(lead)), "no self-review yet");
       }),
     ),
   );

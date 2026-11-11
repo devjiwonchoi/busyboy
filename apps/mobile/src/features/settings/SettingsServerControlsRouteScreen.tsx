@@ -30,7 +30,10 @@ import { DatabaseStorageNotice } from "./components/DatabaseStorageNotice";
 import { SettingsChoiceRow } from "./components/SettingsChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
+import { StepModelsSettings } from "./components/StepModelsSettings";
 import { TaskExecutionSettings } from "./components/TaskExecutionSettings";
+import { buildModelOptions } from "../../lib/modelOptions";
+import { useEnvironmentServerConfig } from "../../state/entities";
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import {
@@ -172,6 +175,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const displayTargets = pendingWrites > 0 && pendingTargets !== null ? pendingTargets : targets;
   const hasConnectedSelection = targets.length > 0;
   const reference = displayTargets[0] ?? null;
+  const referenceConfig = useEnvironmentServerConfig(reference?.environment.environmentId ?? null);
   const uniform = <K extends keyof ServerSettings>(key: K) =>
     uniformMobileSetting(displayTargets, key);
   // `uniform` folds a real null into "mixed"; nullable keys need the distinction.
@@ -439,14 +443,22 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
               ) : null}
 
               {props.page === "task-execution" ? (
-                <TaskExecutionSettings
-                  value={reference.settings.taskExecution}
-                  statusEnvironmentId={
-                    targets.length === 1 ? reference.environment.environmentId : null
-                  }
-                  disabled={disabledFor("taskExecution")}
-                  onChange={write}
-                />
+                <>
+                  <TaskExecutionSettings
+                    value={reference.settings.taskExecution}
+                    statusEnvironmentId={
+                      targets.length === 1 ? reference.environment.environmentId : null
+                    }
+                    disabled={disabledFor("taskExecution")}
+                    onChange={write}
+                  />
+                  <StepModelsSettings
+                    value={reference.settings.taskStepModels}
+                    models={buildModelOptions(referenceConfig, null, undefined, null)}
+                    disabled={disabledFor("taskStepModels")}
+                    onChange={write}
+                  />
+                </>
               ) : null}
 
               {props.page === "maintenance" ? (

@@ -11,6 +11,7 @@ import {
   TrimmedString,
 } from "./baseSchemas.ts";
 import { ExecutionLocation } from "./executionLocation.ts";
+import { ProviderOptionSelection } from "./model.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
 import { ProjectIconOverride } from "./project.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
@@ -145,10 +146,14 @@ export const PROJECT_TASK_MODEL_ROLES: ReadonlyArray<ProjectTaskModelRole> = [
   "fix",
 ];
 
-/** A provider instance and one of its models, as orchestrator_capabilities lists them. */
+/**
+ * A provider instance, one of its models and its option selections (such as the Claude
+ * `effort` or Codex `reasoningEffort` thinking level), as orchestrator_capabilities lists them.
+ */
 export const ProjectTaskModelTarget = Schema.Struct({
   providerInstanceId: ProviderInstanceId,
   model: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+  options: Schema.optionalKey(Schema.Array(ProviderOptionSelection).check(Schema.isMaxLength(16))),
 });
 export type ProjectTaskModelTarget = typeof ProjectTaskModelTarget.Type;
 
@@ -169,7 +174,7 @@ export const ProjectTaskRoleModelsPatch = Schema.Struct({
   fix: Schema.optionalKey(Schema.NullOr(ProjectTaskModelTarget)),
 }).annotate({
   description:
-    "Provider and model per role (plan, implement, review, fix) from orchestrator_capabilities. null clears a role so it runs on the lead's own model.",
+    "Provider, model and options (such as the thinking level: effort or reasoningEffort) per role (plan, implement, review, fix) from orchestrator_capabilities. null clears a role so it falls back to the app's step model.",
 });
 export type ProjectTaskRoleModelsPatch = typeof ProjectTaskRoleModelsPatch.Type;
 
@@ -188,16 +193,76 @@ export function applyRoleModelsPatch(
   return next;
 }
 
-/** The model a role runs on: the task's override, else the project default, else none. */
+/** The three steps the app sets models for. Fix follows implement. */
+export const ProjectTaskStepRole = Schema.Literals(["plan", "implement", "review"]);
+export type ProjectTaskStepRole = typeof ProjectTaskStepRole.Type;
+export const PROJECT_TASK_STEP_ROLES: ReadonlyArray<ProjectTaskStepRole> = [
+  "plan",
+  "implement",
+  "review",
+];
+
+/** The app-wide model and thinking level per step; every project starts from these. */
+export const DEFAULT_PROJECT_TASK_STEP_MODELS: {
+  readonly [K in ProjectTaskStepRole]: ProjectTaskModelTarget;
+} = {
+  plan: {
+    providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+    model: "claude-opus-5-5",
+    options: [{ id: "effort", value: "xhigh" }],
+  },
+  implement: {
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    model: "gpt-6.1-sol",
+    options: [{ id: "reasoningEffort", value: "medium" }],
+  },
+  review: {
+    providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+    model: "claude-opus-5-5",
+    options: [{ id: "effort", value: "high" }],
+  },
+};
+
+export const ProjectTaskStepModels = Schema.Struct({
+  plan: ProjectTaskModelTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TASK_STEP_MODELS.plan)),
+  ),
+  implement: ProjectTaskModelTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TASK_STEP_MODELS.implement)),
+  ),
+  review: ProjectTaskModelTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TASK_STEP_MODELS.review)),
+  ),
+});
+export type ProjectTaskStepModels = typeof ProjectTaskStepModels.Type;
+
+export const ProjectTaskStepModelsPatch = Schema.Struct({
+  plan: Schema.optionalKey(ProjectTaskModelTarget),
+  implement: Schema.optionalKey(ProjectTaskModelTarget),
+  review: Schema.optionalKey(ProjectTaskModelTarget),
+});
+export type ProjectTaskStepModelsPatch = typeof ProjectTaskStepModelsPatch.Type;
+
+export type ProjectTaskModelSource = "task" | "project" | "app";
+
+/**
+ * The model a role runs on: the task's override, else the project's, else the app's step
+ * model. Fix has no app step of its own: without a fix override it follows implement.
+ * Null only when no app step models are given and nothing else is set.
+ */
 export function effectiveRoleModel(
   role: ProjectTaskModelRole,
   task: ProjectTaskRoleModels,
   project: ProjectTaskRoleModels | undefined,
-): { readonly target: ProjectTaskModelTarget; readonly source: "task" | "project" } | null {
+  app?: ProjectTaskStepModels | undefined,
+): { readonly target: ProjectTaskModelTarget; readonly source: ProjectTaskModelSource } | null {
   const own = task[role];
   if (own !== undefined) return { target: own, source: "task" };
   const fallback = project?.[role];
-  return fallback === undefined ? null : { target: fallback, source: "project" };
+  if (fallback !== undefined) return { target: fallback, source: "project" };
+  if (role === "fix") return effectiveRoleModel("implement", task, project, app);
+  const step = app?.[role];
+  return step === undefined ? null : { target: step, source: "app" };
 }
 
 /** The model that last ran a role on a task, as delegate_task reported it. */

@@ -37,6 +37,8 @@ import {
   projectTaskPhase,
   applyRoleModelsPatch,
   effectiveRoleModel,
+  DEFAULT_PROJECT_TASK_STEP_MODELS,
+  ProjectTaskStepModels,
   ProjectTaskReference,
 } from "./projectTeam.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
@@ -630,6 +632,41 @@ describe("role models", () => {
       source: "project",
     });
     expect(effectiveRoleModel("fix", {}, undefined)).toBeNull();
+  });
+
+  it("falls back to the app's step models, with fix following implement", () => {
+    const app = DEFAULT_PROJECT_TASK_STEP_MODELS;
+    expect(effectiveRoleModel("review", {}, undefined, app)).toEqual({
+      target: app.review,
+      source: "app",
+    });
+    expect(effectiveRoleModel("fix", {}, undefined, app)).toEqual({
+      target: app.implement,
+      source: "app",
+    });
+    expect(effectiveRoleModel("fix", {}, { implement: claude }, app)).toEqual({
+      target: claude,
+      source: "project",
+    });
+    expect(effectiveRoleModel("fix", { fix: codex }, { implement: claude }, app)).toEqual({
+      target: codex,
+      source: "task",
+    });
+  });
+
+  it("keeps a role's thinking level through the settings update and the app defaults", () => {
+    const withEffort = { ...codex, options: [{ id: "reasoningEffort", value: "medium" }] };
+    expect(
+      Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput)({
+        roleModels: { implement: withEffort },
+      }).roleModels,
+    ).toEqual({ implement: withEffort });
+    expect(Schema.decodeUnknownSync(ProjectTaskStepModels)({})).toEqual(
+      DEFAULT_PROJECT_TASK_STEP_MODELS,
+    );
+    expect(
+      Schema.decodeUnknownSync(ProjectTaskStepModels)({ implement: withEffort }).implement,
+    ).toEqual(withEffort);
   });
 
   it("reads tasks and references from older servers with no models", () => {
