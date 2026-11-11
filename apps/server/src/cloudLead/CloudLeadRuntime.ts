@@ -141,6 +141,8 @@ export interface CloudLeadRuntimeDeps {
   readonly relayIdleStopMs?: number;
   /** How long an unreachable relay goes before the Mac asks whether its sandbox lives. */
   readonly relayGiveUpAfterMs?: number;
+  /** How often the relay gets a renewed credential. */
+  readonly relayCredentialEveryMs?: number;
 }
 
 /**
@@ -210,6 +212,8 @@ interface CloudSession {
   persisted: Promise<void>;
   credentialTimer: ReturnType<typeof setInterval> | null;
   readonly macCwd: string;
+  /** The Mac worktree's state when it last matched the sandbox (see CloudSessionRecord). */
+  macState: string | null;
   readonly remoteHome: string;
   readonly remoteCwd: string;
   readonly credentials: CloudLeadCredentials;
@@ -231,6 +235,11 @@ interface CloudSession {
   rotationCheck: ReturnType<typeof setInterval> | null;
   /** A failed replacement is not tried again on the same sandbox. */
   rotation: "idle" | "rotating" | "failed";
+}
+
+/** mirror false: the caller mirrors right after attaching, so reattach does not. */
+interface ReattachOptions {
+  readonly mirror?: boolean;
 }
 
 /** SDK env keys that configure claude itself and mean the same in the sandbox. */
@@ -432,7 +441,7 @@ export class CloudLeadRuntime {
     // hold work the Mac has not seen: attach again, which mirrors it.
     // A failed attach throws: a caller about to rely on the mirror must not go on.
     if (pending === undefined) {
-      return this.attachRecorded(key).then((attached) =>
+      return this.attachRecorded(key, { mirror: false }).then((attached) =>
         attached === "attached" ? this.syncKey(key) : null,
       );
     }
@@ -469,6 +478,8 @@ export class CloudLeadRuntime {
       /^[0-9a-f]{40}$/.test(macHead) ? macHead : null,
     );
     await applyWorkspace(mac, session.macCwd, state);
+    session.macState = await this.macFingerprint(session.macCwd);
+    this.persist(session);
     session.idleSyncFailures = 0;
     await this.backupTranscripts(session).catch((error: unknown) =>
       this.log("cloud-lead.transcript-backup-failed", { threadId, error: String(error) }),
@@ -492,7 +503,7 @@ export class CloudLeadRuntime {
       if (releasing !== undefined) return releasing;
       // A recorded sandbox nothing is attached to: attach (mirroring its work), then
       // release it. One that cannot be attached keeps its record for a later try.
-      return this.attachRecorded(threadId).then(
+      return this.attachRecorded(threadId, { mirror: false }).then(
         (attached) => (attached === "attached" ? this.releaseKey(threadId, options) : undefined),
         () => undefined,
       );
@@ -556,6 +567,8 @@ export class CloudLeadRuntime {
         if (session === null) return;
         this.cancelIdleStop(session);
         this.stopTimers(session);
+        // A mirror in flight records the Mac state it leaves; wait for it.
+        await this.syncs.get(session.key)?.catch(() => null);
         // Saves still queued go through first; after this, exits are not recorded,
         // so the record keeps the processes the next server lets finish.
         await session.persisted;
@@ -584,20 +597,26 @@ export class CloudLeadRuntime {
    * Attaches to the recorded sandbox of a worktree. "none" when nothing is
    * recorded or the sandbox is gone; throws when the attach fails.
    */
-  private async attachRecorded(key: string): Promise<"attached" | "none"> {
+  private async attachRecorded(
+    key: string,
+    options: ReattachOptions = {},
+  ): Promise<"attached" | "none"> {
     if (!this.sessions.has(key)) {
       const record = (await this.store.list()).find((candidate) => candidate.worktreeKey === key);
       if (record === undefined) return "none";
-      if (!this.sessions.has(key)) return this.attachRecord(record);
+      if (!this.sessions.has(key)) return this.attachRecord(record, options);
     }
     await this.sessions.get(key)!;
     return "attached";
   }
 
   /** Maps the worktree to an attach of its recorded sandbox; rejects when that fails. */
-  private attachRecord(record: CloudSessionRecord): Promise<"attached" | "none"> {
+  private attachRecord(
+    record: CloudSessionRecord,
+    options: ReattachOptions = {},
+  ): Promise<"attached" | "none"> {
     this.worktrees.set(record.threadId, record.worktreeKey);
-    const attached = this.reattach(record, record.mcpEndpoint).then((session) => {
+    const attached = this.reattach(record, record.mcpEndpoint, options).then((session) => {
       if (session === null) throw new Error("The recorded sandbox is gone.");
       return session;
     });
@@ -656,9 +675,10 @@ export class CloudLeadRuntime {
         const failures = (this.reattachFailures.get(record.worktreeKey) ?? 0) + 1;
         this.reattachFailures.set(record.worktreeKey, failures);
         if (failures < MAX_REATTACH_FAILURES) throw error;
-        // Stop retrying a sandbox that will not take us back. It is not deleted:
-        // it may hold work, and its relay stops it once idle.
+        // Stop retrying a sandbox that will not take us back. It is stopped, not
+        // deleted: it may hold work, and nothing is billed while it is stopped.
         this.reattachFailures.delete(record.worktreeKey);
+        await this.stopRecorded(record);
         await this.forget(record.worktreeKey, record.relayTokenRef);
         this.log("cloud-lead.recorded-sandbox-abandoned", {
           worktree: record.worktreeKey,
@@ -678,6 +698,7 @@ export class CloudLeadRuntime {
   private async reattach(
     record: CloudSessionRecord,
     mcpEndpoint: string,
+    options: ReattachOptions = {},
   ): Promise<CloudSession | null> {
     const started = Date.now();
     const [client, credentials] = await Promise.all([this.deps.client(), this.deps.credentials()]);
@@ -692,8 +713,10 @@ export class CloudLeadRuntime {
     }
     const sandbox = await client.get(record.sandboxName, { resume: true });
     // The Mac worktree moved on without this sandbox (the task came back to the Mac
-    // and got new commits): mirroring would overwrite that work, so leave it.
-    if (!(await this.macWithinSandbox(sandbox, record))) {
+    // and got commits or edits): mirroring would overwrite that work, so leave it.
+    // Stopped, not deleted: its files stay, but it no longer bills.
+    if (await this.macMovedOn(sandbox, record)) {
+      await sandbox.stop().catch(() => undefined);
       await this.forget(record.worktreeKey, record.relayTokenRef);
       this.log("cloud-lead.recorded-sandbox-stale", {
         worktree: record.worktreeKey,
@@ -736,6 +759,7 @@ export class CloudLeadRuntime {
       relay: connection.relay,
       relayTokenRef: record.relayTokenRef,
       macCwd: record.worktreeKey,
+      macState: record.macState,
       remoteHome: record.remoteHome,
       remoteCwd: record.remoteCwd,
       credentials,
@@ -752,12 +776,14 @@ export class CloudLeadRuntime {
       ms: Date.now() - started,
     });
     // The Mac mirror may be older than the sandbox: catch it up before gates read it.
-    await this.syncLocked(record.worktreeKey, Promise.resolve(session)).catch((error: unknown) =>
-      this.log("cloud-lead.reattach-sync-failed", {
-        worktree: record.worktreeKey,
-        error: errorText(error),
-      }),
-    );
+    if (options.mirror !== false) {
+      await this.syncLocked(record.worktreeKey, Promise.resolve(session)).catch((error: unknown) =>
+        this.log("cloud-lead.reattach-sync-failed", {
+          worktree: record.worktreeKey,
+          error: errorText(error),
+        }),
+      );
+    }
     return session;
   }
 
@@ -789,6 +815,8 @@ export class CloudLeadRuntime {
       });
       await syncEnvironment(sandbox, bundle, remoteHome);
       await this.mirrorIn(sandbox, input.worktreePath, remoteCwd);
+      // The sandbox now holds exactly this Mac state.
+      const macState = await this.macFingerprint(input.worktreePath);
       await this.restoreTranscripts([key, input.threadId], sandbox, remoteHome, remoteCwd);
       const token = NodeCrypto.randomBytes(32).toString("base64url");
       const relayTokenRef = relayTokenRefFor(key);
@@ -808,6 +836,7 @@ export class CloudLeadRuntime {
         relay: connection.relay,
         relayTokenRef,
         macCwd: input.worktreePath,
+        macState,
         remoteHome,
         remoteCwd,
         credentials,
@@ -832,6 +861,7 @@ export class CloudLeadRuntime {
     readonly relay: RelayClient;
     readonly relayTokenRef: string;
     readonly macCwd: string;
+    readonly macState: string | null;
     readonly remoteHome: string;
     readonly remoteCwd: string;
     readonly credentials: CloudLeadCredentials;
@@ -886,7 +916,7 @@ export class CloudLeadRuntime {
     }
     session.credentialTimer = setInterval(
       () => void this.sendCredential(session),
-      RELAY_CREDENTIAL_EVERY_MS,
+      this.deps.relayCredentialEveryMs ?? RELAY_CREDENTIAL_EVERY_MS,
     );
     session.credentialTimer.unref?.();
     this.persist(session);
@@ -941,6 +971,7 @@ export class CloudLeadRuntime {
           remoteCwd: session.remoteCwd,
           mcpEndpoint: session.mcpEndpoint,
           processes: [...session.processes.values()],
+          macState: session.macState,
           createdAt: session.createdAt,
         });
       })
@@ -1075,19 +1106,74 @@ export class CloudLeadRuntime {
     };
   }
 
-  /** Whether the Mac worktree's HEAD is in the sandbox's history, so a mirror loses nothing. */
-  private async macWithinSandbox(sandbox: SandboxHandle, record: CloudSessionRecord) {
+  /**
+   * A worktree's state: its HEAD and a tree of its files as they are on disk,
+   * edits and untracked files included but not ignored ones — exactly what a
+   * mirror (git clean -fd) would overwrite. Written through a scratch index, so
+   * the worktree's own index is untouched. Null when git cannot read it.
+   */
+  private async fingerprint(
+    run: (script: string) => Promise<string>,
+    cwd: string,
+  ): Promise<string | null> {
+    const git = `git -C ${shellQuote(cwd)}`;
+    const script = [
+      `head=$(${git} rev-parse HEAD) || exit 1`,
+      `index=$(mktemp -u) || exit 1`,
+      `trap 'rm -f "$index"' EXIT`,
+      // The real index first, so unchanged files are not hashed again.
+      `cp "$(${git} rev-parse --absolute-git-dir)/index" "$index" 2>/dev/null || GIT_INDEX_FILE="$index" ${git} read-tree HEAD || exit 1`,
+      `GIT_INDEX_FILE="$index" ${git} add -A || exit 1`,
+      `tree=$(GIT_INDEX_FILE="$index" ${git} write-tree) || exit 1`,
+      `printf '%s:%s' "$head" "$tree"`,
+    ].join("\n");
+    const state = (await run(script).catch(() => "")).trim();
+    return /^[0-9a-f]{40}:[0-9a-f]{40}$/.test(state) ? state : null;
+  }
+
+  private macFingerprint(cwd: string) {
+    return this.fingerprint((script) => this.mac().run(script), cwd);
+  }
+
+  /**
+   * Whether the Mac worktree changed since it last matched the sandbox, so a
+   * mirror would overwrite Mac work. A Mac that already holds what the sandbox
+   * holds loses nothing. Without a recorded or readable state, whether the Mac
+   * HEAD is missing from the sandbox's history.
+   */
+  private async macMovedOn(sandbox: SandboxHandle, record: CloudSessionRecord): Promise<boolean> {
+    const macNow = record.macState === null ? null : await this.macFingerprint(record.worktreeKey);
+    if (macNow !== null) {
+      if (macNow === record.macState) return false;
+      const sandboxNow = await this.fingerprint((script) => sandbox.sh(script), record.remoteCwd);
+      return macNow !== sandboxNow;
+    }
     const macHead = (
       await this.mac()
         .run(`git -C ${shellQuote(record.worktreeKey)} rev-parse HEAD`)
         .catch(() => "")
     ).trim();
-    if (!/^[0-9a-f]{40}$/.test(macHead)) return true;
+    if (!/^[0-9a-f]{40}$/.test(macHead)) return false;
     const result = await sandbox.runCommand({
       cmd: "git",
       args: ["-C", record.remoteCwd, "merge-base", "--is-ancestor", macHead, "HEAD"],
     });
-    return result.exitCode === 0;
+    return result.exitCode !== 0;
+  }
+
+  /** Stops a recorded sandbox nothing will attach to; files kept, nothing billed. */
+  private async stopRecorded(record: CloudSessionRecord) {
+    try {
+      const client = await this.deps.client();
+      if ((await client.status(record.sandboxName)) !== "running") return;
+      await (await client.get(record.sandboxName)).stop();
+    } catch (error) {
+      this.log("cloud-lead.recorded-sandbox-stop-failed", {
+        worktree: record.worktreeKey,
+        sandbox: record.sandboxName,
+        error: errorText(error),
+      });
+    }
   }
 
   /** Ends the processes a dead relay left running; it kept their process groups in a file. */

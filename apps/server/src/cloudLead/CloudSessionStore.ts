@@ -28,6 +28,12 @@ export interface CloudSessionRecord {
   /** The Mac's t3-code MCP endpoint the relay forwards to. */
   readonly mcpEndpoint: string;
   readonly processes: ReadonlyArray<CloudProcessRecord>;
+  /**
+   * The Mac worktree's state (HEAD and a tree of its files, ignored ones left
+   * out) when it last matched the sandbox; a different state means the Mac
+   * moved on without it.
+   */
+  readonly macState: string | null;
   /** When the sandbox was created, on the runtime's clock (epoch ms). */
   readonly createdAt: number;
 }

@@ -6,8 +6,11 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 import type { ServerSecretStore } from "../auth/ServerSecretStore.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
-import { sqlCloudSessionStore } from "./CloudLeadService.ts";
+import { CloudLeadRuntime } from "./CloudLeadRuntime.ts";
+import { hooksFromRuntime, sqlCloudSessionStore } from "./CloudLeadService.ts";
 import type { CloudSessionRecord } from "./CloudSessionStore.ts";
+import { fakeLocalHost } from "./testkit.ts";
+import { resolveVercelTarget } from "./vercelTeamGuard.ts";
 
 const memorySecrets = () => {
   const values = new Map<string, Uint8Array>();
@@ -29,6 +32,7 @@ const record: CloudSessionRecord = {
   remoteCwd: "/home/vercel-sandbox/busyboy",
   mcpEndpoint: "http://127.0.0.1:3773/mcp",
   processes: [{ id: "sid:p1", threadId: "lead", claudeSessionId: "claude-1" }],
+  macState: `${"a".repeat(40)}:${"b".repeat(40)}`,
   createdAt: 1_762_000_000_000,
 };
 
@@ -68,5 +72,37 @@ describe("sqlCloudSessionStore", () => {
           null,
         );
       }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+});
+
+describe("cloud lead start", () => {
+  it.effect("fails with the cause when Vercel refuses the Mac's login", () =>
+    Effect.gen(function* () {
+      // Vercel answers 403 to an expired CLI login, as on 2026-11-11.
+      const expired = (async () => new Response("{}", { status: 403 })) as unknown as typeof fetch;
+      const hooks = hooksFromRuntime(
+        new CloudLeadRuntime({
+          client: async () => {
+            await resolveVercelTarget("expired-token", { teamId: null, projectId: null }, expired);
+            throw new Error("unreachable");
+          },
+          credentials: async () => ({ claudeOauthToken: "claude", githubToken: null }),
+          baseSnapshotId: async () => null,
+          host: fakeLocalHost({ files: {} }),
+          stateDir: "/tmp/unused-cloud-lead-state",
+        }),
+      );
+      const error = yield* Effect.flip(
+        hooks.prepare({
+          threadId: "lead",
+          worktreePath: "/mac/worktrees/task",
+          mcpEndpoint: "http://127.0.0.1:3773/mcp",
+        }),
+      );
+      assert.strictEqual(error._tag, "CloudLeadError");
+      assert.include(error.detail, "Could not start the cloud sandbox");
+      assert.include(error.detail, "Vercel login on this Mac has expired");
+      assert.include(error.detail, "npx vercel login");
+    }),
   );
 });

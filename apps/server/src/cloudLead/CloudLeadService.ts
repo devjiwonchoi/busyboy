@@ -224,6 +224,7 @@ interface CloudSessionRow {
   readonly remote_cwd: string;
   readonly mcp_endpoint: string;
   readonly processes_json: string;
+  readonly mac_state: string | null;
   readonly created_at: number;
 }
 
@@ -236,7 +237,7 @@ export const sqlCloudSessionStore = (
     Effect.runPromise(
       sql<CloudSessionRow>`
         SELECT worktree_key, thread_id, sandbox_name, sandbox_session_id, relay_token_ref,
-          remote_home, remote_cwd, mcp_endpoint, processes_json, created_at
+          remote_home, remote_cwd, mcp_endpoint, processes_json, mac_state, created_at
         FROM cloud_lead_sessions
       `,
     ).then((rows) =>
@@ -250,6 +251,7 @@ export const sqlCloudSessionStore = (
         remoteCwd: row.remote_cwd,
         mcpEndpoint: row.mcp_endpoint,
         processes: JSON.parse(row.processes_json) as CloudSessionRecord["processes"],
+        macState: row.mac_state,
         createdAt: Number(row.created_at),
       })),
     ),
@@ -258,12 +260,12 @@ export const sqlCloudSessionStore = (
       sql`
         INSERT INTO cloud_lead_sessions (
           worktree_key, thread_id, sandbox_name, sandbox_session_id, relay_token_ref,
-          remote_home, remote_cwd, mcp_endpoint, processes_json, created_at, updated_at
+          remote_home, remote_cwd, mcp_endpoint, processes_json, mac_state, created_at, updated_at
         ) VALUES (
           ${record.worktreeKey}, ${record.threadId}, ${record.sandboxName},
           ${record.sandboxSessionId}, ${record.relayTokenRef}, ${record.remoteHome},
           ${record.remoteCwd}, ${record.mcpEndpoint}, ${JSON.stringify(record.processes)},
-          ${record.createdAt}, ${new Date().toISOString()}
+          ${record.macState}, ${record.createdAt}, ${new Date().toISOString()}
         )
         ON CONFLICT (worktree_key) DO UPDATE SET
           thread_id = excluded.thread_id,
@@ -274,6 +276,7 @@ export const sqlCloudSessionStore = (
           remote_cwd = excluded.remote_cwd,
           mcp_endpoint = excluded.mcp_endpoint,
           processes_json = excluded.processes_json,
+          mac_state = excluded.mac_state,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at
       `,
@@ -311,6 +314,11 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  let vercelTarget: {
+    readonly savedIds: string;
+    readonly ids: Promise<{ readonly teamId: string; readonly projectId: string }>;
+  } | null = null;
+
   const runtime = new CloudLeadRuntime({
     host: nodeLocalHost,
     stateDir: config.stateDir,
@@ -326,11 +334,18 @@ const make = Effect.gen(function* () {
           "Cloud leads need a Vercel login: run `npx vercel login` on this Mac, or save vercel_token with request_secret and cloud_secret_save (Mac에 Vercel 로그인이 없어요).",
         );
       }
-      // Unsaved ids are looked up in the allowed team; the team guard checks them again.
-      const { teamId, projectId } = await resolveVercelTarget(token, {
-        teamId: savedTeamId,
-        projectId: savedProjectId,
-      });
+      // Unsaved ids are looked up in the allowed team once per server (they do not
+      // change); a failed lookup is tried again. The team guard checks them again.
+      const savedIds = `${savedTeamId ?? ""}|${savedProjectId ?? ""}`;
+      if (vercelTarget?.savedIds !== savedIds) {
+        const ids = resolveVercelTarget(token, { teamId: savedTeamId, projectId: savedProjectId });
+        const entry = { savedIds, ids };
+        vercelTarget = entry;
+        ids.catch(() => {
+          if (vercelTarget === entry) vercelTarget = null;
+        });
+      }
+      const { teamId, projectId } = await vercelTarget.ids;
       return makeSandboxClient({ token: Redacted.make(token), teamId, projectId });
     },
     credentials: async () => {

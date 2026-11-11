@@ -395,6 +395,97 @@ describe("CloudLeadRuntime after a server restart", () => {
     await client.created[0]!.delete();
   });
 
+  it("leaves a recorded sandbox stopped when the Mac has uncommitted edits it does not have", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    await before.detachAll();
+    // Back on the Mac, the user edits a file without committing; HEAD stays the same.
+    await shell.run(`cd '${mac}' && echo 'Mac edit' >> base.txt && echo new > untracked.txt`);
+
+    const after = makeRuntime({ store });
+    await after.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    expect(await NodeFs.readFile(`${mac}/base.txt`, "utf8")).toContain("Mac edit");
+    expect(await NodeFs.readFile(`${mac}/untracked.txt`, "utf8")).toBe("new\n");
+    // A new sandbox from the Mac; the old one is stopped (files kept), not left billing.
+    expect(client.created).toHaveLength(2);
+    expect(client.created[0]!.stopped()).toBe(true);
+    expect(client.created[0]!.deleted()).toBe(false);
+    expect((await store.list()).map((record) => record.sandboxName)).toEqual(["local-1"]);
+    await client.created[0]!.delete();
+  });
+
+  it("keeps a new untracked Mac file and leaves the recorded sandbox stopped", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    await before.detachAll();
+    // Back on the Mac, the user starts a new file without adding it to git.
+    await shell.run(`echo draft > '${mac}/new.ts'`);
+
+    const after = makeRuntime({ store });
+    await after.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    expect(await NodeFs.readFile(`${mac}/new.ts`, "utf8")).toBe("draft\n");
+    expect(client.created).toHaveLength(2);
+    expect(client.created[0]!.stopped()).toBe(true);
+    await client.created[0]!.delete();
+  });
+
+  it("keeps the recorded sandbox when the Mac only gained ignored build output after a mirror", async () => {
+    const store = memoryCloudSessionStore();
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    const before = makeRuntime({ store });
+    const launch = await before.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    const child = launch.spawn({ command: "claude", args: [], env: {} });
+    const output = lines(child);
+    child.stdin.write("commit cloud.txt\n");
+    await waitFor(() => output.some((line) => line.file === "cloud.txt"));
+    child.stdin.end();
+    await new Promise((resolve) => child.once("exit", resolve));
+    await before.syncToMac(mac);
+    // A gate ran tests on the Mac and left ignored output behind; then the server stopped.
+    await shell.run(
+      `mkdir -p '${mac}/coverage' && echo report > '${mac}/coverage/index.html' && echo coverage/ >> '${mac}/.git/info/exclude'`,
+    );
+    await before.detachAll();
+
+    const after = makeRuntime({ store });
+    await after.restore();
+    expect(client.created).toHaveLength(1);
+    expect(client.created[0]!.stopped()).toBe(false);
+    expect((await store.list()).map((record) => record.sandboxName)).toEqual(["local-0"]);
+    expect((await shell.run(`git -C '${mac}' log --format=%s -1`)).trim()).toBe("Add cloud.txt");
+  });
+
+  it("asks a fresh Vercel client for the relay's credential and whether the sandbox lives", async () => {
+    const { mac, client, makeRuntime, mcpEndpoint } = await setup();
+    let current: typeof client = client;
+    const runtime = makeRuntime({
+      client: async () => current,
+      relayGiveUpAfterMs: 50,
+      relayCredentialEveryMs: 50,
+    });
+    await runtime.prepare({ threadId: "lead", worktreePath: mac, mcpEndpoint });
+    // The Mac's Vercel login renewed: later calls must use the new client.
+    const calls: string[] = [];
+    current = {
+      ...client,
+      status: async (name) => {
+        calls.push("status");
+        return client.status(name);
+      },
+      relayCredential: async () => {
+        calls.push("credential");
+        throw new Error("no relay credential in tests");
+      },
+    };
+    await waitFor(() => calls.includes("credential"));
+    await client.created[0]!.stop();
+    await waitFor(() => calls.includes("status"), 20_000);
+  });
+
   it("starts a new sandbox when the recorded one is gone", async () => {
     const store = memoryCloudSessionStore();
     const { mac, client, makeRuntime, mcpEndpoint } = await setup();

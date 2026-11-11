@@ -16,6 +16,7 @@ export default Effect.gen(function* () {
       remote_cwd TEXT NOT NULL,
       mcp_endpoint TEXT NOT NULL,
       processes_json TEXT NOT NULL DEFAULT '[]',
+      mac_state TEXT,
       created_at INTEGER NOT NULL,
       updated_at TEXT NOT NULL
     )
