@@ -1001,6 +1001,40 @@ describe("memory stall time", () => {
     );
   });
 
+  it.effect("a task cancelled while it waits for memory stops stalling", () => {
+    const fake = fakeMac(PLENTY);
+    return withTeam(
+      (harness) =>
+        Effect.gen(function* () {
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          const governor = yield* MemoryGovernor.MemoryGovernor;
+          const pm = yield* setUpManager;
+          yield* startWithSession(harness, fake.mac, pm, "First");
+          fake.mac.memory = TIGHT;
+          const { task } = yield* createAcceptedTask(pm, {
+            title: "Second",
+            request: "Second.",
+            intake: "New work.",
+          });
+          yield* team.startTask(pm, { taskId: task.id }, harness.delegate).pipe(Effect.flip);
+          yield* TestClock.adjust(5 * MINUTE);
+
+          yield* team.updateTask(pm, { taskId: task.id, stage: "cancelled" });
+          const cancelled = yield* readTask(task.id);
+          assert.isNull(cancelled.memoryHold ?? null);
+          assert.strictEqual(cancelled.metrics.memoryStallMs, 5 * MINUTE);
+
+          // Memory stays short, then recovers: the cancelled task adds nothing.
+          yield* governor.tick;
+          yield* TestClock.adjust(30 * MINUTE);
+          fake.mac.memory = PLENTY;
+          yield* resumeTicks(governor);
+          assert.strictEqual(yield* stallOf(task.id), 5 * MINUTE);
+        }),
+      { memory: fake.read, sessions: fake.sessions, settings: LOCAL_ONLY },
+    );
+  });
+
   it.effect("moving a paused lead ends its hold and its stall", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(

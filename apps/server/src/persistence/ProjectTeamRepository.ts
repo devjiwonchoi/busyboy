@@ -849,6 +849,10 @@ export const make = Effect.gen(function* () {
             WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') THEN NULL
             ELSE memory_stall_since
           END,
+          memory_hold = CASE
+            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') THEN NULL
+            ELSE memory_hold
+          END,
           title = COALESCE(${input.title ?? null}, title),
           waits_on_json = COALESCE(${input.waitsOn ?? null}, waits_on_json),
           parent_task_id = CASE
@@ -955,11 +959,13 @@ export const make = Effect.gen(function* () {
   const startTaskMemoryStall = SqlSchema.findOneOption({
     Request: Schema.Struct({ id: ProjectTaskId, since: IsoDateTime }),
     Result: TaskRow,
-    // A stall already running keeps its start; a task not held cannot stall.
+    // A stall already running keeps its start; a task not held, or finished, cannot stall.
     execute: ({ id, since }) => sql`
       UPDATE project_tasks SET
         memory_stall_since = COALESCE(memory_stall_since, ${since})
-      WHERE task_id = ${id} AND memory_hold IS NOT NULL
+      WHERE task_id = ${id}
+        AND memory_hold IS NOT NULL
+        AND stage NOT IN ('done', 'cancelled')
       RETURNING ${taskColumns}
     `,
   });
