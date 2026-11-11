@@ -4,6 +4,7 @@ import {
   type ProjectTaskId,
   type ProjectTaskReference,
 } from "@t3tools/contracts";
+import { memoryHoldLabel } from "@t3tools/shared/taskExecutionSettings";
 
 import { ChevronRightIcon } from "lucide-react";
 
@@ -78,13 +79,14 @@ export function SidebarTaskRow(props: {
 
 /** A task held for memory, waiting to start or paused: a small muted "메모리 대기". */
 export function MemoryHoldLabel(props: { task: Pick<ProjectTaskReference, "memoryHold"> }) {
-  if (props.task.memoryHold == null) return null;
+  const label = memoryHoldLabel(props.task.memoryHold);
+  if (label === null) return null;
   return (
     <span
       data-memory-hold={props.task.memoryHold}
       className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground"
     >
-      메모리 대기
+      {label}
     </span>
   );
 }

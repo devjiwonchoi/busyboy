@@ -1,6 +1,7 @@
 import type {
   HostMemoryPressure,
   HostResourcesSnapshot,
+  ProjectTaskMemoryHold,
   TaskExecutionLocationPolicy,
   TaskExecutionSettings,
 } from "@t3tools/contracts";
@@ -114,4 +115,12 @@ export function planTaskExecutionMemoryPatch(
       },
     },
   };
+}
+
+/**
+ * The sidebar label for a task held for memory, waiting to start or paused, or
+ * null when it is not held. Web and mobile show the same quiet text.
+ */
+export function memoryHoldLabel(hold: ProjectTaskMemoryHold | null | undefined): string | null {
+  return hold == null ? null : "메모리 대기";
 }

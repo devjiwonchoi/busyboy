@@ -4,6 +4,7 @@ import {
   bytesToGb,
   formatTaskExecutionMemoryStatus,
   gbToBytes,
+  memoryHoldLabel,
   planTaskExecutionMemoryPatch,
 } from "./taskExecutionSettings.ts";
 
@@ -67,5 +68,14 @@ describe("GB conversion", () => {
   it("round-trips the default thresholds", () => {
     expect(bytesToGb(1.5 * GIB)).toBe(1.5);
     expect(gbToBytes(bytesToGb(0.75 * GIB))).toBe(0.75 * GIB);
+  });
+});
+
+describe("memoryHoldLabel", () => {
+  it("labels a task waiting to start or paused for memory, and nothing else", () => {
+    expect(memoryHoldLabel("waiting")).toBe("메모리 대기");
+    expect(memoryHoldLabel("paused")).toBe("메모리 대기");
+    expect(memoryHoldLabel(null)).toBeNull();
+    expect(memoryHoldLabel(undefined)).toBeNull();
   });
 });

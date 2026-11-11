@@ -17,6 +17,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { AuthOrchestrationOperateScope, type EnvironmentMachineKind } from "@t3tools/contracts";
+import { memoryHoldLabel } from "@t3tools/shared/taskExecutionSettings";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useMemo, type ComponentProps } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
@@ -446,7 +447,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
 
   const providerInstance = props.providerInstance;
   const pr = useThreadPr(thread);
-  const memoryHeld = useLeadThreadTask(thread)?.memoryHold != null;
+  const memoryLabel = memoryHoldLabel(useLeadThreadTask(thread)?.memoryHold);
 
   const theme = useUniwindTheme();
   const sidebarPane = props.pane === "sidebar";
@@ -597,7 +598,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           {props.projectTitle ?? props.project?.title ?? ""}
         </Text>
         {props.hasQueuedMessages ? <QueuedMessageIcon selected={selected} /> : null}
-        {memoryHeld ? (
+        {memoryLabel !== null ? (
           <Text
             className={cn(
               "text-xs",
@@ -606,7 +607,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                 : rowAppearance.tertiaryForegroundClassName,
             )}
           >
-            메모리 대기
+            {memoryLabel}
           </Text>
         ) : null}
         {pinnedRow ? (
