@@ -435,10 +435,11 @@ describe.each([
     await userEvent.click(button("Save", pill()!));
     await vi.waitFor(() => expect(pill()).toBeNull());
 
-    await userEvent.type(
-      review.querySelector<HTMLTextAreaElement>('textarea[aria-label="Overall comment"]')!,
-      "Looks close.",
-    );
+    const overall = review.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Overall comment"]',
+    )!;
+    await userEvent.type(overall, "Looks close.");
+    await vi.waitFor(() => expect(overall.value).toBe("Looks close."));
     await userEvent.click(button("Request changes"));
 
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
@@ -550,7 +551,9 @@ describe.each([
     expect(list.textContent).toContain("Keep the cursor position");
     await userEvent.click(list.querySelector("button")!);
     await vi.waitFor(() => expect(pill()?.dataset.annotationPill).toBe("edit"));
-    await userEvent.type(pill()!.querySelector("textarea")!, "Phones too.");
+    const note = pill()!.querySelector("textarea")!;
+    await vi.waitFor(() => expect(document.activeElement).toBe(note));
+    await userEvent.type(note, "Phones too.");
     await userEvent.keyboard("{Enter}");
     await userEvent.click(button("Approve", modal()));
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));

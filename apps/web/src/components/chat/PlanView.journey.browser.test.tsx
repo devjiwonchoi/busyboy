@@ -472,6 +472,7 @@ describe.each([
         expect(element).not.toBeNull();
         return element!;
       });
+      await vi.waitFor(() => expect(document.activeElement).toBe(input));
       await userEvent.type(input, `${text}{Enter}`);
       await vi.waitFor(() => expect(review.querySelector("[data-annotation-pill]")).toBeNull());
     }
