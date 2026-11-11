@@ -1,4 +1,9 @@
-import { OrchestratorMcpFailure, type ProjectTeamError, type ThreadId } from "@t3tools/contracts";
+import {
+  OrchestratorMcpFailure,
+  type ProjectTeamAskUserResult,
+  type ProjectTeamError,
+  type ThreadId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import * as ProjectTeamService from "../../../projectTeam/ProjectTeamService.ts";
@@ -44,6 +49,19 @@ const delegateTaskLead =
       localStart: "claimed",
     });
 
+/** Starts a lead's step, such as task_delegate's or the plan checker, as its child. */
+const delegateStep =
+  (
+    orchestrator: OrchestratorMcpService.OrchestratorMcpService["Service"],
+    scope: McpInvocationContext.McpInvocationScope,
+  ): ProjectTeamService.DelegateStep =>
+  (delegateInput, onChildCreated) =>
+    orchestrator.delegateTask(
+      scope,
+      delegateInput,
+      onChildCreated === undefined ? undefined : { onChildCreated },
+    );
+
 const handlers = {
   // A PM's new task starts its lead right away, the same way task_start does.
   task_create: McpToolAccess.actsAsCaller((input) =>
@@ -87,13 +105,7 @@ const handlers = {
     Effect.gen(function* () {
       const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* withTeam((team, caller, scope) =>
-        team.delegateStep(caller, input, (delegateInput, onChildCreated) =>
-          orchestrator.delegateTask(
-            scope,
-            delegateInput,
-            onChildCreated === undefined ? undefined : { onChildCreated },
-          ),
-        ),
+        team.delegateStep(caller, input, delegateStep(orchestrator, scope)),
       );
     }),
   ),
@@ -115,8 +127,23 @@ const handlers = {
   team_settings_update: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.updateSettingsAsManager(caller, input)),
   ),
+  task_plan_check_set: McpToolAccess.actsAsCaller((input) =>
+    withTeam((team, caller) => team.setPlanCheck(caller, input)),
+  ),
+  // A plan approval starts the plan checker the same way task_delegate starts a step.
   ask_user: McpToolAccess.actsAsCaller((input) =>
-    withTeam((team, caller) => team.askUser(caller, input)),
+    Effect.gen(function* () {
+      const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;
+      return yield* withTeam((team, caller, scope) =>
+        input.kind === "approval"
+          ? team
+              .requestPlanApproval(caller, input, delegateStep(orchestrator, scope))
+              .pipe(Effect.map((result): ProjectTeamAskUserResult => result))
+          : team
+              .askUser(caller, input)
+              .pipe(Effect.map((result): ProjectTeamAskUserResult => result)),
+      );
+    }),
   ),
   attention_answer: McpToolAccess.actsAsCaller((input) =>
     withTeam((team, caller) => team.answerAttention(caller, input)),

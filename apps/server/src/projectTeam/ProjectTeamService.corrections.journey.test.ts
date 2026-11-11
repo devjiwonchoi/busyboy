@@ -14,6 +14,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
+  askPlanApproval,
   approvePlan,
   attentionContext,
   PROJECT_ID,
@@ -39,7 +40,7 @@ const askApproval = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* service;
     yield* writeReadyPlan(lead);
-    return yield* team.askUser(lead, {
+    return yield* askPlanApproval(lead, {
       context: attentionContext({ action: "Approve the plan?" }),
       kind: "approval",
       question: "Approve the plan?",

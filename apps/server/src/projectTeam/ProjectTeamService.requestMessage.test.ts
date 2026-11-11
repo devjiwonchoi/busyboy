@@ -6,6 +6,8 @@ import * as Repository from "../persistence/ProjectTeamRepository.ts";
 import { relayedAnswerText } from "./AttentionRouter.ts";
 import { ProjectTeamService } from "./ProjectTeamService.ts";
 import {
+  requestApproval,
+  askPlanApproval,
   attentionContext,
   setUpManager,
   startLead,
@@ -34,13 +36,11 @@ describe("ProjectTeamService request messages", () => {
           spec: { ...plan, todos: plan.todos.map((todo) => ({ ...todo, text })) },
           note: "Plan",
         });
-        const error = yield* team
-          .askUser(lead, {
-            kind: "approval",
-            question: graph,
-            context: attentionContext({ action: "Approve" }),
-          })
-          .pipe(Effect.flip);
+        const error = yield* requestApproval(lead, {
+          kind: "approval",
+          question: graph,
+          context: attentionContext({ action: "Approve" }),
+        }).pipe(Effect.flip);
         assert.include(error.message, `Todo t1 '${text}':`);
         assert.include(error.message, "doneWhen/dependsOn");
         const latest = yield* team.readSpec(lead, {});
@@ -55,7 +55,7 @@ describe("ProjectTeamService request messages", () => {
           },
           note: "Short titles",
         });
-        const { item } = yield* team.askUser(lead, {
+        const { item } = yield* askPlanApproval(lead, {
           kind: "approval",
           question: graph,
           senderName: "그래프 배치",

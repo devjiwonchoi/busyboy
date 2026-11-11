@@ -15,8 +15,10 @@ import {
   setUpManager,
   userSays,
   withTeam,
+  writeReadyPlan,
   type TeamHarness,
 } from "../../../projectTeam/testkit.ts";
+import { requiredPlanGates } from "../../../projectTeam/planGates.ts";
 import * as ProjectTeamHandlers from "./handlers.ts";
 import { ProjectTeamToolkit } from "./tools.ts";
 
@@ -295,6 +297,54 @@ describe("projectTeam MCP toolkit", () => {
       }).pipe(
         Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
       ),
+    ),
+  );
+
+  it.effect("sends a lead's plan approval to the plan checker, which alone records verdicts", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const delegateCalls = yield* Ref.make<ReadonlyArray<DelegateCall>>([]);
+        return yield* Effect.gen(function* () {
+          const pm = yield* setUpManager;
+          const created = yield* call(pm, "task_create", {
+            intake: "New work.",
+            goal: "Deliver the requested result.",
+            verification: "Check the result.",
+            title: "Add hello.sh",
+            request: "Add hello.sh with a test.",
+          });
+          const lead = content(created).task.leadThreadId as ThreadId;
+          yield* writeReadyPlan(lead);
+
+          const asked = yield* call(lead, "ask_user", {
+            context: attentionContext({ action: "Approve the plan?" }),
+            kind: "approval",
+            question: "Approve the plan?",
+          });
+          assert.isFalse(asked.isError);
+          assert.strictEqual(content(asked).planCheck.status, "checking");
+          assert.include(content(asked).message, "end your turn");
+          // The checker is the lead's own child, like a task_delegate step.
+          assert.strictEqual((yield* Ref.get(delegateCalls)).at(-1)?.scope, lead);
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          assert.deepStrictEqual((yield* team.attentionSnapshot).projects[0]!.decisionCards, []);
+
+          const verdicts = [{ gate: "problem", pass: true, reason: "충분해요." }];
+          const byLead = yield* call(lead, "task_plan_check_set", { specVersion: 2, verdicts });
+          assert.isTrue(byLead.isError);
+          const checker = content(asked).planCheck.checker.threadId as ThreadId;
+          const byChecker = yield* call(checker, "task_plan_check_set", {
+            specVersion: 2,
+            verdicts: requiredPlanGates("light").map((gate) => ({
+              gate: gate.id,
+              pass: true,
+              reason: "충분해요.",
+            })),
+          });
+          assert.isFalse(byChecker.isError);
+          assert.strictEqual(content(byChecker).task.stage, "awaiting_approval");
+        }).pipe(Effect.provide(registration(harness, delegateCalls)));
+      }),
     ),
   );
 });

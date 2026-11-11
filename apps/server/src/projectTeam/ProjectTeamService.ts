@@ -78,6 +78,8 @@ import {
   type ProjectTeamAttentionAnswerInput,
   type ProjectTeamAttentionDismissInput,
   type ProjectTeamAttentionItemResult,
+  type ProjectTeamPlanCheckSetInput,
+  type ProjectTaskPlanCheck,
   type ProjectTeamAttentionSnapshot,
   type ProjectTeamAttentionSummary,
   type ProjectTeamError,
@@ -203,6 +205,14 @@ import {
   splitReadySubtasks,
 } from "./breakdown.ts";
 import { directorWorkspaceRoot, epicStage } from "./director.ts";
+import {
+  MAX_PLAN_CHECK_ROUNDS,
+  PLAN_CHECKER_ENDED_HINT,
+  PLAN_GATES,
+  planCheckerBrief,
+  planDepth,
+  requiredPlanGates,
+} from "./planGates.ts";
 import { planReadinessGaps, specLinkProblems, unprovenCriteria } from "./planReadiness.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
@@ -536,6 +546,16 @@ export type DelegateStep = (
   input: OrchestratorMcpDelegateTaskInput,
   onChildCreated?: (child: DelegatedChild) => Effect.Effect<void>,
 ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
+
+/** A plan approval request the server sent to the plan checker instead of the user. */
+export interface PlanApprovalRequested {
+  readonly planCheck: ProjectTaskPlanCheck;
+  /** What the lead does next. */
+  readonly message: string;
+}
+
+/** Starts the message that brings the plan checker's failing verdicts to the lead. */
+export const PLAN_CHECK_FAILED_PREFIX = "[Plan check]";
 
 /** Starts the task log note pm_nudge leaves; the daily limit reads it back. */
 export const PM_NUDGE_NOTE_PREFIX = "Director nudged the PM: ";
@@ -873,10 +893,27 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamUpdateSettingsInput,
     ) => Effect.Effect<ProjectTeamSettingsResult, ProjectTeamError>;
 
+    /** ask_user for decisions and blockers; a lead's plan approval goes through requestPlanApproval. */
     readonly askUser: (
       callerThreadId: ThreadId,
       input: ProjectTeamAskUserInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+    /**
+     * ask_user(kind: "approval"): a lead asks the user to approve its plan. Once the plan
+     * passes the structural checks, a separate checker session (on a different model when
+     * one is set up) judges the plan gates; the approval card goes up only when it passes
+     * (see setPlanCheck).
+     */
+    readonly requestPlanApproval: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamAskUserInput,
+      delegate: DelegateStep,
+    ) => Effect.Effect<PlanApprovalRequested, ProjectTeamError>;
+    /** task_plan_check_set: the plan checker records its verdict on every required gate. */
+    readonly setPlanCheck: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamPlanCheckSetInput,
+    ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
     readonly answerAttention: (
       callerThreadId: ThreadId,
       input: ProjectTeamAttentionAnswerInput,
@@ -2646,8 +2683,27 @@ const make = Effect.gen(function* () {
         ),
       );
 
+  /** The task a plan checker session judges, or null when the caller is not one. */
+  const checkerTaskOf = (callerThreadId: ThreadId) =>
+    Effect.gen(function* () {
+      if ((yield* roleOf(callerThreadId)).type !== "none") return null;
+      const session = yield* repository
+        .findTaskSessionByThreadId(callerThreadId)
+        .pipe(orTeamError("Could not read the session."));
+      if (Option.isNone(session) || session.value.role !== "checker") return null;
+      const task = yield* repository
+        .getTask(session.value.taskId)
+        .pipe(orTeamError("Could not read the task."));
+      return Option.getOrNull(task);
+    });
+
   const readSpec: ProjectTeamService["Service"]["readSpec"] = (callerThreadId, input) =>
     Effect.gen(function* () {
+      // The plan checker reads the plan it judges.
+      const checked = yield* checkerTaskOf(callerThreadId);
+      if (checked !== null && (input.taskId === undefined || input.taskId === checked.id)) {
+        return yield* specResult(checked, yield* latestSpec(checked));
+      }
       const { task } = yield* specTaskFor(callerThreadId, input.taskId, "task_spec_read", "read");
       return yield* specResult(task, yield* latestSpec(task));
     }).pipe(orTeamError("Could not read the spec."));
@@ -4051,13 +4107,16 @@ const make = Effect.gen(function* () {
     });
 
   /**
-   * A plan approval reviews the latest spec version. It replaces the task's older open
-   * approval card and shows the task as Waiting for approval until the user answers.
+   * A plan approval reviews the latest spec version. Once the plan passes the server's
+   * structural checks, a separate checker session (on a different model when one is set
+   * up) judges the plan gates; the task stays in planning (so AFK cannot approve it) and
+   * the card waits for the checker.
    */
   const askPlanApproval = (
     callerThreadId: ThreadId,
     task: ProjectTask,
     input: ProjectTeamAskUserInput,
+    delegate: DelegateStep,
   ) =>
     Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
@@ -4097,6 +4156,277 @@ const make = Effect.gen(function* () {
           task.projectId,
         );
       }
+      return yield* startPlanCheck(callerThreadId, task, spec, input, delegate);
+    });
+
+  const sameModel = (a: ProjectTaskModelTarget | null, b: ProjectTaskModelTarget | null) =>
+    a !== null &&
+    b !== null &&
+    a.providerInstanceId === b.providerInstanceId &&
+    a.model === b.model;
+
+  /**
+   * The models a plan check may run on, in order: the review, implement and fix models
+   * that differ from the plan model, then the review model, then the lead's own model
+   * (null). A cloud task's checker runs in the lead's sandbox, so a Codex model it cannot
+   * use there is skipped. It never changes the task's role models.
+   */
+  const planCheckerCandidates = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      const manager = yield* requireManager(task.projectId);
+      const resolved = yield* roleModelsFor(task, manager.settings.roleModels);
+      const shell =
+        task.leadThreadId === null
+          ? null
+          : yield* threads.getThreadShell(task.leadThreadId).pipe(Effect.orElseSucceed(() => null));
+      const leadModel: ProjectTaskModelTarget | null =
+        shell?.modelSelection == null
+          ? null
+          : {
+              providerInstanceId: shell.modelSelection.instanceId,
+              model: shell.modelSelection.model,
+            };
+      const planModel = resolved.plan?.target ?? leadModel;
+      const ordered: Array<ProjectTaskModelTarget> = [];
+      const add = (target: ProjectTaskModelTarget | undefined) => {
+        if (target !== undefined && !ordered.some((entry) => sameModel(entry, target))) {
+          ordered.push(target);
+        }
+      };
+      for (const entry of [resolved.review, resolved.implement, resolved.fix]) {
+        if (entry !== null && !sameModel(entry.target, planModel)) add(entry.target);
+      }
+      add(resolved.review?.target);
+      const providers = task.location === "cloud" ? yield* providerRegistry.getProviders : [];
+      let codexInCloud: boolean | null = null;
+      const usable = (target: ProjectTaskModelTarget) =>
+        Effect.gen(function* () {
+          if (task.location !== "cloud") return true;
+          const driver = providers.find(
+            (provider) => provider.instanceId === target.providerInstanceId,
+          )?.driver;
+          if (driver !== "codex") return true;
+          if (codexInCloud === null) {
+            codexInCloud =
+              shell?.worktreePath == null
+                ? false
+                : (yield* cloudLead.checkCodex(shell.worktreePath)).ok;
+          }
+          return codexInCloud;
+        });
+      const candidates: Array<ProjectTaskModelTarget | null> = yield* Effect.filter(
+        ordered,
+        usable,
+      );
+      // The lead's own model, unless a candidate above already is it.
+      if (leadModel === null || !candidates.some((entry) => sameModel(entry, leadModel))) {
+        candidates.push(null);
+      }
+      const isPlanModel = (target: ProjectTaskModelTarget | null) =>
+        target === null
+          ? planModel === null || leadModel === null || sameModel(leadModel, planModel)
+          : sameModel(target, planModel);
+      return { candidates, isPlanModel };
+    });
+
+  /** Stores a plan check and starts its checker session; the card waits for its verdicts. */
+  const startPlanCheck = (
+    callerThreadId: ThreadId,
+    task: ProjectTask,
+    spec: ProjectTaskSpecVersion,
+    input: ProjectTeamAskUserInput,
+    delegate: DelegateStep,
+  ) =>
+    Effect.gen(function* () {
+      // A new request replaces an open card for an older plan, and any check in flight.
+      const now = yield* nowIso;
+      yield* repository.supersedeOpenAttentionItems({
+        taskId: task.id,
+        kind: "approval",
+        supersededAt: now,
+      });
+      const planning = yield* moveTaskStage(task, "planning", callerThreadId);
+      // Rounds count the checks that sent this plan back. A card the user saw (after a
+      // pass, or after the last round) starts over; a request replacing a check in
+      // flight, or one the spec made stale, keeps its round.
+      const previous = planning.planCheck ?? null;
+      const round =
+        previous === null || previous.status === "passed"
+          ? 1
+          : previous.status === "checking" || previous.status === "stale"
+            ? previous.round
+            : previous.round < MAX_PLAN_CHECK_ROUNDS
+              ? previous.round + 1
+              : 1;
+      const key = yield* keyOf(planning);
+      const depth = planDepth(planning.metrics.size, spec.spec);
+      const pending: ProjectTaskPlanCheck = {
+        specVersion: spec.version,
+        round,
+        status: "checking",
+        requiredGates: requiredPlanGates(depth).map((gate) => gate.id),
+        verdicts: [],
+        checker: null,
+        startedAt: now,
+        checkedAt: null,
+        ask: {
+          question: input.question,
+          context: input.context,
+          ...(input.details === undefined ? {} : { details: input.details }),
+          ...(input.senderName === undefined ? {} : { senderName: input.senderName }),
+        },
+      };
+      yield* storePlanCheck(planning, pending);
+      // Links the checker before it acts, so its task_plan_check_set is accepted.
+      const linkChecker = (child: DelegatedChild, sameModelAsPlan: boolean) =>
+        Effect.gen(function* () {
+          const startedAt = yield* nowIso;
+          yield* repository.startModelRun({
+            taskId: planning.id,
+            threadId: child.childThreadId,
+            // Its time and tokens count toward planning.
+            role: "plan",
+            providerInstanceId: child.providerInstanceId,
+            model: child.model,
+            startedAt,
+          });
+          yield* repository.addTaskSession({
+            taskId: planning.id,
+            threadId: child.childThreadId,
+            role: "checker",
+            createdAt: startedAt,
+          });
+          const current = yield* requireTask(planning.id, planning.projectId);
+          if (current.planCheck?.startedAt !== pending.startedAt) return;
+          yield* storePlanCheck(current, {
+            ...current.planCheck,
+            checker: {
+              providerInstanceId: child.providerInstanceId,
+              model: child.model,
+              threadId: child.childThreadId,
+              sameModelAsPlan,
+            },
+          });
+        }).pipe(orTeamError("Could not record the plan checker.", planning.projectId));
+      const brief = planCheckerBrief({
+        taskId: planning.id,
+        key,
+        title: planning.title,
+        specVersion: spec.version,
+        round,
+        depth,
+      });
+      const { candidates, isPlanModel } = yield* planCheckerCandidates(planning);
+      const describe = (target: ProjectTaskModelTarget | null) =>
+        target === null ? "the lead's own model" : `${target.providerInstanceId} · ${target.model}`;
+      // Starts the checker on the first candidate that starts, never retrying one that failed.
+      const startFrom = (
+        index: number,
+      ): Effect.Effect<
+        { readonly child: OrchestratorMcpDelegateTaskResult; readonly sameModelAsPlan: boolean },
+        OrchestratorMcpFailure
+      > => {
+        const target = candidates[index] ?? null;
+        const sameModelAsPlan = isPlanModel(target);
+        return delegate(
+          {
+            task: brief,
+            title: `${key} plan check`,
+            role: DELEGATE_ROLE.review,
+            mode: "async",
+            ...(target === null ? {} : { target: toDelegateTarget(target) }),
+          },
+          (child) =>
+            linkChecker(child, sameModelAsPlan).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("could not link the plan checker before it ran", { cause }),
+              ),
+            ),
+        ).pipe(
+          Effect.map((child) => ({ child, sameModelAsPlan })),
+          Effect.catch((failure) =>
+            index + 1 >= candidates.length
+              ? Effect.fail(failure)
+              : appendEvent(
+                  planning,
+                  "note",
+                  `Could not start the plan checker on ${describe(target)} (${failure.message}); trying ${describe(candidates[index + 1] ?? null)}.`,
+                  null,
+                ).pipe(
+                  Effect.orElseSucceed(() => undefined),
+                  Effect.andThen(startFrom(index + 1)),
+                ),
+          ),
+        );
+      };
+      // A request while a check is still pending means its checker ended without verdicts
+      // (for example on a usage limit), so start on the next candidate instead.
+      const silent = previous?.status === "checking" ? previous.checker : null;
+      const silentIndex =
+        silent === null || silent === undefined
+          ? -1
+          : candidates.findIndex((target) =>
+              target === null
+                ? isPlanModel(null) && silent.sameModelAsPlan
+                : target.providerInstanceId === silent.providerInstanceId &&
+                  target.model === silent.model,
+            );
+      const firstIndex =
+        silentIndex >= 0 && silentIndex + 1 < candidates.length ? silentIndex + 1 : 0;
+      if (firstIndex > 0) {
+        yield* appendEvent(
+          planning,
+          "note",
+          `The plan checker on ${describe(candidates[silentIndex] ?? null)} ended without verdicts; trying ${describe(candidates[firstIndex] ?? null)}.`,
+          null,
+        ).pipe(Effect.orElseSucceed(() => undefined));
+      }
+      const { child: started, sameModelAsPlan } = yield* startFrom(firstIndex).pipe(
+        Effect.catch((failure) =>
+          Effect.gen(function* () {
+            // Nothing checks the plan, so the lead may ask again.
+            yield* storePlanCheck(planning, previous);
+            return yield* teamError(
+              `Could not start the plan checker for #${planning.number}: ${failure.message}. Ask for approval again.`,
+              planning.projectId,
+            );
+          }),
+        ),
+      );
+      yield* linkChecker(started, sameModelAsPlan);
+      const checked = yield* requireTask(planning.id, planning.projectId);
+      const planCheck = checked.planCheck ?? pending;
+      const on = `${started.providerInstanceId} · ${started.model ?? "default model"}`;
+      yield* appendEvent(
+        planning,
+        "note",
+        `Sent the plan (spec v${spec.version}) to the plan checker on ${on}${sameModelAsPlan ? " (same model as the plan, separate session)" : ""}, round ${round}.`,
+        callerThreadId,
+      );
+      yield* router.publish(planning.projectId);
+      return {
+        planCheck,
+        message: `The plan in spec v${spec.version} passed the server's checks. A separate plan checker session on ${on}${sameModelAsPlan ? " (the plan's own model: no other model is set up)" : ""} now reviews each plan gate (round ${round} of ${MAX_PLAN_CHECK_ROUNDS}); the user sees no card yet. Its verdicts arrive as a message: end your turn now. ${PLAN_CHECKER_ENDED_HINT}`,
+      };
+    });
+
+  const storePlanCheck = (task: ProjectTask, planCheck: ProjectTaskPlanCheck | null) =>
+    Effect.gen(function* () {
+      const updated = yield* repository
+        .setTaskPlanCheck({ id: task.id, planCheck, now: yield* nowIso })
+        .pipe(orTeamError("Could not store the plan check.", task.projectId));
+      return Option.getOrElse(updated, () => task);
+    });
+
+  /** Raises the plan approval card the lead asked for, once its plan check is decided. */
+  const raisePlanApprovalCard = (
+    task: ProjectTask,
+    spec: ProjectTaskSpecVersion,
+    ask: ProjectTaskPlanCheck["ask"],
+  ) =>
+    Effect.gen(function* () {
+      const asker = task.leadThreadId;
+      if (asker === null) return yield* teamError(`#${task.number} has no lead.`, task.projectId);
       const now = yield* nowIso;
       yield* repository.supersedeOpenAttentionItems({
         taskId: task.id,
@@ -4106,27 +4436,184 @@ const make = Effect.gen(function* () {
       const item = yield* router.ask({
         task,
         kind: "approval",
-        question: input.question,
-        context: input.context,
-        details: input.details,
-        senderName: input.senderName,
+        question: ask.question,
+        context: ask.context,
+        details: ask.details,
+        senderName: ask.senderName,
         // One way to approve: approving always starts the work.
         options: [PLAN_APPROVAL_START],
-        askerThreadId: callerThreadId,
+        askerThreadId: asker,
         specVersion: spec.version,
         // The card opens with the plan's summary; its todos come from the pinned version.
         summary: spec.spec.summary,
       });
-      yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
+      yield* moveTaskStage(task, "awaiting_approval", asker);
       yield* appendEvent(
         task,
         "note",
         `Asked the user to approve the plan (spec v${spec.version}).`,
-        callerThreadId,
+        asker,
       );
       // While the user is AFK, the AFK sweep approves it after the grace period.
-      return { item };
+      return item;
     });
+
+  /** Sends the lead a server message, such as the plan checker's verdicts. */
+  const tellLead = (task: ProjectTask, keyPrefix: string, text: string) =>
+    Effect.gen(function* () {
+      if (task.leadThreadId === null) return;
+      const key = `${keyPrefix}:${yield* newId(task.id)}`;
+      yield* threads.sendToThread({
+        projectId: task.projectId,
+        commandId: CommandId.make(key),
+        threadId: task.leadThreadId,
+        messageId: MessageId.make(key),
+        text,
+        attachments: [],
+        mode: "auto",
+        createdBy: "agent",
+        creationSource: "server",
+      });
+    });
+
+  const setPlanCheck: ProjectTeamService["Service"]["setPlanCheck"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const session = yield* repository
+        .findTaskSessionByThreadId(callerThreadId)
+        .pipe(orTeamError("Could not read the plan checker session."));
+      if (Option.isNone(session) || session.value.role !== "checker") {
+        return yield* teamError(
+          "task_plan_check_set is only for the plan checker session the server started for a task. A lead fixes its plan and asks for approval again; it does not judge its own plan.",
+        );
+      }
+      const found = yield* repository
+        .getTask(session.value.taskId)
+        .pipe(orTeamError("Could not read the task."));
+      if (Option.isNone(found)) {
+        return yield* teamError(`Task ${session.value.taskId} was not found.`);
+      }
+      const task = found.value;
+      if (input.taskId !== undefined && input.taskId !== task.id) {
+        return yield* teamError(
+          "task_plan_check_set records the check of the task you were started for only.",
+          task.projectId,
+        );
+      }
+      const check = task.planCheck ?? null;
+      if (
+        check === null ||
+        check.status !== "checking" ||
+        check.checker?.threadId !== callerThreadId ||
+        FinishedTaskCleanup.isFinishedStage(task.stage)
+      ) {
+        return yield* teamError(
+          `This plan check of #${task.number} is no longer pending: the lead asked again, or it was already decided. Record nothing and end your turn.`,
+          task.projectId,
+        );
+      }
+      // The checker records the version it read; a spec that moved past the check makes it stale.
+      const latest = yield* latestSpec(task);
+      const stale = input.specVersion !== check.specVersion || latest.version !== check.specVersion;
+      // The gates fixed when the check started; a check stored before that uses today's.
+      const required =
+        check.requiredGates.length > 0
+          ? check.requiredGates
+          : requiredPlanGates(planDepth(task.metrics.size, latest.spec)).map((gate) => gate.id);
+      const given = new Map(input.verdicts.map((verdict) => [verdict.gate, verdict]));
+      const problems = stale
+        ? []
+        : [
+            ...required
+              .filter((gate) => !given.has(gate))
+              .map((gate) => `missing a verdict for gate ${gate}`),
+            ...input.verdicts
+              .filter((verdict) => !required.includes(verdict.gate))
+              .map((verdict) => `gate ${verdict.gate} is not one of this plan's required gates`),
+            ...(given.size < input.verdicts.length ? ["give one verdict per gate"] : []),
+          ];
+      if (problems.length > 0) {
+        return yield* teamError(
+          `Give one verdict for each of these gates: ${required.join(", ")}.\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+          task.projectId,
+        );
+      }
+      const verdicts = stale ? [] : required.map((gate) => given.get(gate)!);
+      const failing = verdicts.filter((verdict) => !verdict.pass);
+      const decided: ProjectTaskPlanCheck = {
+        ...check,
+        status: stale ? "stale" : failing.length === 0 ? "passed" : "failed",
+        verdicts,
+        checkedAt: yield* nowIso,
+      };
+      // A newer request may have replaced this check while it was judged.
+      const current = yield* requireTask(task.id, task.projectId);
+      const still = current.planCheck ?? null;
+      if (
+        still === null ||
+        still.status !== "checking" ||
+        still.checker?.threadId !== callerThreadId ||
+        still.startedAt !== check.startedAt ||
+        still.specVersion !== check.specVersion
+      ) {
+        return yield* teamError(
+          `This plan check of #${task.number} is no longer pending: the lead asked again. Record nothing and end your turn.`,
+          task.projectId,
+        );
+      }
+      const stored = yield* storePlanCheck(current, decided);
+      const labelOf = (id: string) => PLAN_GATES.find((gate) => gate.id === id)?.label ?? id;
+      const by = `${check.checker.providerInstanceId} · ${check.checker.model ?? "default model"}${check.checker.sameModelAsPlan ? " (same model as the plan, separate session)" : ""}`;
+      yield* appendEvent(
+        stored,
+        "note",
+        stale
+          ? `Plan check round ${check.round} (spec v${check.specVersion}) by ${by} is stale: the checker read spec v${input.specVersion} and the latest is v${latest.version}. It counts as no round.`
+          : `Plan check round ${check.round} (spec v${check.specVersion}) by ${by}: ${failing.length === 0 ? "every gate passed" : `${failing.length} of ${verdicts.length} gates failed`}.\n${verdicts
+              .map(
+                (verdict) =>
+                  `${verdict.pass ? "✓" : "✗"} ${verdict.gate} (${labelOf(verdict.gate)}): ${verdict.reason}`,
+              )
+              .join("\n")}`,
+        callerThreadId,
+      );
+      if (stored.stage !== "planning") {
+        // The task moved on while it was checked; the verdicts are kept, but no card goes up.
+        yield* appendEvent(
+          stored,
+          "note",
+          `#${stored.number} is no longer in planning (${stored.stage}), so the plan check raised no card.`,
+          null,
+        );
+      } else if (stale) {
+        // The plan changed while it was checked; a card for the old version would be stale.
+        yield* tellLead(
+          stored,
+          "project-team:plan-check",
+          `${PLAN_CHECK_FAILED_PREFIX} The plan checker was asked to judge spec v${check.specVersion}, but the spec is now v${latest.version}, so the check is stale, no card went up and it counts as no round. Ask for approval again with ask_user(kind: "approval").`,
+        );
+      } else if (failing.length === 0) {
+        yield* raisePlanApprovalCard(stored, latest, check.ask);
+      } else if (check.round < MAX_PLAN_CHECK_ROUNDS) {
+        yield* tellLead(
+          stored,
+          "project-team:plan-check",
+          `${PLAN_CHECK_FAILED_PREFIX} The plan checker failed ${failing.length} of ${verdicts.length} gates of your plan (spec v${check.specVersion}, round ${check.round} of ${MAX_PLAN_CHECK_ROUNDS}), so the user has no card yet:\n${failing
+            .map((verdict) => `- ${verdict.gate} "${labelOf(verdict.gate)}": ${verdict.reason}`)
+            .join("\n")}\nFix them with task_spec_write, then ask_user(kind: "approval") again.`,
+        );
+      } else {
+        // The task must not stall on the checker: the user decides with the verdicts in view.
+        yield* raisePlanApprovalCard(stored, latest, check.ask);
+        yield* appendEvent(
+          stored,
+          "note",
+          `The plan still failed ${failing.length} gate(s) after ${check.round} check rounds, so the approval card went up anyway.`,
+          null,
+        );
+      }
+      yield* router.publish(stored.projectId);
+      return { task: yield* requireTask(stored.id, stored.projectId) };
+    }).pipe(orTeamError("Could not record the plan check."));
 
   /** Moves a task to a new stage and logs it; no-op when it is already there. */
   const moveTaskStage = (
@@ -4184,7 +4671,8 @@ const make = Effect.gen(function* () {
       }
     });
 
-  const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
+  /** The caller's role once its ask_user message passes the request-message rules. */
+  const checkedAsker = (callerThreadId: ThreadId, input: ProjectTeamAskUserInput) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["lead", "director", "pm"], "ask_user");
       // Validate only agent-authored asks; server-raised blockers bypass this entry point.
@@ -4211,10 +4699,39 @@ const make = Effect.gen(function* () {
           role.projectId,
         );
       }
+      return role;
+    });
+
+  const requestPlanApproval: ProjectTeamService["Service"]["requestPlanApproval"] = (
+    callerThreadId,
+    input,
+    delegate,
+  ) =>
+    Effect.gen(function* () {
+      const request = { ...input, kind: "approval" as const };
+      const role = yield* checkedAsker(callerThreadId, request);
+      if (role.type !== "lead") {
+        return yield* teamError(
+          "Plan approvals come from task leads: a PM asks the user only for blockers and decisions, the Director only for decisions.",
+          role.projectId,
+        );
+      }
+      const task = yield* requireTask(role.taskId, role.projectId);
+      return yield* askPlanApproval(callerThreadId, task, request, delegate);
+    }).pipe(orTeamError("Could not ask the user."));
+
+  const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const role = yield* checkedAsker(callerThreadId, input);
       if (role.type === "director") return yield* askAsDirector(callerThreadId, role, input);
       if (role.type === "pm") return yield* askAsManager(callerThreadId, role, input);
       const task = yield* requireTask(role.taskId, role.projectId);
-      if (input.kind === "approval") return yield* askPlanApproval(callerThreadId, task, input);
+      if (input.kind === "approval") {
+        return yield* teamError(
+          "A plan approval goes through the plan check first: use requestPlanApproval.",
+          role.projectId,
+        );
+      }
       const item = yield* router.ask({
         task,
         kind: input.kind,
@@ -6368,6 +6885,8 @@ const make = Effect.gen(function* () {
     updateSettingsAsManager,
     updateSettings,
     askUser,
+    requestPlanApproval,
+    setPlanCheck,
     getTaskDetail,
     updateTaskSpec,
     restoreTaskSpec,

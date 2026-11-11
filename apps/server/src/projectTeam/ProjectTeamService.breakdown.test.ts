@@ -6,6 +6,8 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
+  requestApproval,
+  askPlanApproval,
   attentionContext,
   approvePlan,
   PROJECT_ID,
@@ -62,7 +64,7 @@ const draftBreakdown = (lead: ThreadId, titles: ReadonlyArray<string>) =>
 const approve = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* service;
-    const { item } = yield* team.askUser(lead, {
+    const { item } = yield* askPlanApproval(lead, {
       context: attentionContext({ action: "Approve?" }),
       kind: "approval",
       question: "Approve?",
@@ -150,13 +152,11 @@ describe("ProjectTeamService intake and breakdown", () => {
         );
 
         const sub = started.leadThreadId;
-        const refused = yield* team
-          .askUser(sub, {
-            context: attentionContext({ action: "Approve my plan?" }),
-            kind: "approval",
-            question: "Approve my plan?",
-          })
-          .pipe(Effect.flip);
+        const refused = yield* requestApproval(sub, {
+          context: attentionContext({ action: "Approve my plan?" }),
+          kind: "approval",
+          question: "Approve my plan?",
+        }).pipe(Effect.flip);
         assert.include(refused.message, "#2 needs no approval card");
         assert.include(refused.message, "Breakdown change");
 
@@ -197,7 +197,7 @@ describe("ProjectTeamService intake and breakdown", () => {
         const pm = yield* setUpManager;
         const { leadThreadId: lead } = yield* startLead(pm, "Workflow", harness.delegate);
         const [draft] = yield* draftBreakdown(lead, ["Server gates"]);
-        const { item } = yield* team.askUser(lead, {
+        const { item } = yield* askPlanApproval(lead, {
           context: attentionContext({ action: "Approve?" }),
           kind: "approval",
           question: "Approve?",
@@ -273,7 +273,7 @@ describe("ProjectTeamService intake and breakdown", () => {
           spec: readyPlan((yield* team.readSpec(lead, {})).current.spec),
           note: "Plan",
         });
-        yield* team.askUser(lead, {
+        yield* askPlanApproval(lead, {
           context: attentionContext({ action: "Approve?" }),
           kind: "approval",
           question: "Approve?",

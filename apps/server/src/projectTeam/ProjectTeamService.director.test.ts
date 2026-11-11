@@ -7,7 +7,7 @@ import { epicStage } from "./director.ts";
 import { personaInstructions } from "./persona.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import {
-  attentionContext,
+  askPlanApproval,
   createAcceptedTask,
   DIRECTOR_PROJECT_ID as DIRECTOR,
   PROJECT_ID,
@@ -200,12 +200,7 @@ describe("ProjectTeamService Director plan approvals", () => {
         const { firstPm, director } = yield* setUpWorkspace(harness);
         const lead = yield* startLead(firstPm, "Goal graph", harness.delegate);
         yield* writeReadyPlan(lead.leadThreadId);
-        const { item } = yield* team.askUser(lead.leadThreadId, {
-          context: attentionContext({ action: "Approve the plan?" }),
-          kind: "approval",
-          question: "Approve the plan?",
-          senderName: "Goal graph",
-        });
+        const { item } = yield* askPlanApproval(lead.leadThreadId, { senderName: "Goal graph" });
 
         // Even quoting the user's own words, the Director agent cannot answer the card.
         userSays(harness, director.threadId, PLAN_APPROVAL_START);
