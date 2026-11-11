@@ -13,6 +13,8 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   answer: vi.fn(),
+  snooze: vi.fn(),
+  unsnooze: vi.fn(),
   copy: vi.fn(),
   // The asked version and a later one where the lead finished step two.
   taskDetail: {
@@ -183,6 +185,8 @@ vi.mock("../../state/projectTeam", () => ({
     byProjectId: new Map(summaries.map((summary) => [summary.projectId, summary])),
   }),
   useAnswerDecision: () => mocks.answer,
+  useSnoozeDecision: () => mocks.snooze,
+  useUnsnoozeDecision: () => mocks.unsnooze,
 }));
 vi.mock("../../state/query", () => ({
   useEnvironmentQuery: (atom: unknown) => ({ data: atom === null ? null : mocks.taskDetail }),
@@ -481,5 +485,84 @@ describe("ProjectTeamCards", () => {
     expect(host.textContent).toContain("답을 보내지 못했어요");
     expect(button("승인").disabled).toBe(false);
     log.mockRestore();
+  });
+});
+
+describe("snoozing a request", () => {
+  const setSnoozed = (id: string, reason: string | null) => {
+    const project = summaries[0]!;
+    project.decisionCards = project.decisionCards.map((card) =>
+      card.item.id === id
+        ? {
+            ...card,
+            item: {
+              ...card.item,
+              snoozedAt: reason === null ? null : "2026-11-11T00:00:00.000Z",
+              snoozeReason: reason,
+            },
+          }
+        : card,
+    );
+  };
+  afterEach(() => setSnoozed("decision", null));
+
+  it("needs a reason, then sends it with the request", async () => {
+    mocks.snooze.mockResolvedValue({ _tag: "Success" });
+    render(null, true);
+    const bubbles = () => host.querySelectorAll('[data-testid="request-bubble"]');
+    expect(bubbles()).toHaveLength(2);
+    act(() =>
+      [...host.querySelectorAll<HTMLButtonElement>('[aria-label="요청 보류"]')][1]!.click(),
+    );
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="보류 이유"]')!;
+    const submit = button("이유와 함께 보류");
+    expect(submit.disabled).toBe(true);
+    act(() => {
+      input.value = "   ";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(button("이유와 함께 보류").disabled).toBe(true);
+    act(() => {
+      input.value = "다음 주에 볼게";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(button("이유와 함께 보류").disabled).toBe(false);
+    await act(async () => button("이유와 함께 보류").click());
+    expect(mocks.snooze).toHaveBeenCalledWith(EnvironmentId.make("env"), {
+      projectId: "a",
+      attentionItemId: "decision",
+      reason: "다음 주에 볼게",
+    });
+  });
+
+  it("folds snoozed requests under 보류 N with the reason and brings them back", async () => {
+    mocks.unsnooze.mockResolvedValue({ _tag: "Success" });
+    setSnoozed("decision", "다음 주에 볼게");
+    render(null, true);
+    // Only the open request waits above the composer.
+    expect(host.querySelectorAll('[data-testid="request-bubble"]')).toHaveLength(1);
+    const section = host.querySelector('[data-testid="snoozed-cards"]')!;
+    expect(section.textContent).toContain("보류 1");
+    expect(section.textContent?.includes("이유:")).toBe(false);
+    act(() => section.querySelector("button")!.click());
+    const row = host.querySelector('[data-testid="snoozed-card-decision"]')!;
+    expect(row.textContent).toContain("v0.0.20 릴리스 해도 될까요?");
+    expect(row.textContent).toContain("이유: 다음 주에 볼게");
+    await act(async () => button("다시 꺼내기").click());
+    expect(mocks.unsnooze).toHaveBeenCalledWith(EnvironmentId.make("env"), {
+      projectId: "a",
+      attentionItemId: "decision",
+    });
+  });
+
+  it("says so when bringing a request back fails", async () => {
+    mocks.unsnooze.mockResolvedValue({ _tag: "Failure" });
+    setSnoozed("decision", "다음 주에 볼게");
+    render(null, true);
+    act(() =>
+      host.querySelector<HTMLButtonElement>('[data-testid="snoozed-cards"] button')!.click(),
+    );
+    await act(async () => button("다시 꺼내기").click());
+    expect(host.textContent).toContain("다시 꺼내지 못했어요");
   });
 });

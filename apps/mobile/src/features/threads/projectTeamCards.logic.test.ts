@@ -4,7 +4,12 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { cardOptionLabel, openTeamCardsForThread, requestTodoRows } from "./projectTeamCards.logic";
+import {
+  cardOptionLabel,
+  openTeamCardsForThread,
+  requestTodoRows,
+  snoozedTeamCardsForThread,
+} from "./projectTeamCards.logic";
 
 const PM = ThreadId.make("pm");
 const DIRECTOR = ThreadId.make("director");
@@ -50,6 +55,22 @@ const summary = {
 } as unknown as ProjectTeamAttentionSummary;
 
 describe("projectTeamCards logic", () => {
+  it("moves snoozed requests out of the open list into their own", () => {
+    const snoozed = {
+      ...summary,
+      decisionCards: [
+        ...summary.decisionCards,
+        card("later", { snoozedAt: "2026-11-11T00:00:00.000Z", snoozeReason: "다음 주" }),
+        card("closed-snoozed", { answeredAt: "now", snoozedAt: "2026-11-11T00:00:00.000Z" }),
+      ],
+    } as unknown as ProjectTeamAttentionSummary;
+    expect(
+      openTeamCardsForThread([snoozed], PM, () => "busyboy").map((entry) => entry.card.item.id),
+    ).toEqual(["decision", "plan"]);
+    expect(
+      snoozedTeamCardsForThread([snoozed], PM, () => "busyboy").map((entry) => entry.card.item.id),
+    ).toEqual(["later"]);
+  });
   it("includes open plan approvals in chronological order and excludes closed requests", () => {
     expect(
       openTeamCardsForThread([summary], PM, () => "busyboy").map((entry) => entry.card.item.id),
