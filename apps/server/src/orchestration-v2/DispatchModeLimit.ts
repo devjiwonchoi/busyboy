@@ -19,7 +19,36 @@ export interface DispatchModeRefusal extends DispatchModes {
  */
 export interface DispatchModeLimitValue extends DispatchModes {
   readonly refused?: Ref.Ref<DispatchModeRefusal | undefined>;
+  /** Exact targets approved by the user for this tool call only. */
+  readonly approvedTargets?: ReadonlyArray<DispatchModes & { readonly threadId: ThreadId }>;
 }
+
+export const isApprovedDispatchTarget = (
+  limit: DispatchModeLimitValue | undefined,
+  threadId: ThreadId,
+  modes: DispatchModes,
+) =>
+  limit?.approvedTargets?.some(
+    (target) =>
+      target.threadId === threadId &&
+      target.runtimeMode === modes.runtimeMode &&
+      target.interactionMode === modes.interactionMode,
+  ) === true;
+
+export const approvedDispatchTargetModeMismatch = (
+  limit: DispatchModeLimitValue | undefined,
+  threadId: ThreadId,
+  modes: DispatchModes,
+): "runtime" | "interaction" | undefined => {
+  const approved = limit?.approvedTargets?.find((target) => target.threadId === threadId);
+  if (approved === undefined) {
+    return undefined;
+  }
+  if (approved.runtimeMode !== modes.runtimeMode) {
+    return "runtime";
+  }
+  return approved.interactionMode !== modes.interactionMode ? "interaction" : undefined;
+};
 
 export const DispatchModeLimit = Context.Reference<DispatchModeLimitValue | undefined>(
   "t3/orchestration-v2/DispatchModeLimit",

@@ -3,9 +3,21 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./requestMessage": {
+      "types": "./src/requestMessage.ts",
+      "import": "./src/requestMessage.ts"
+    },
+    "./planGates": {
+      "types": "./src/planGates.ts",
+      "import": "./src/planGates.ts"
+    },
     "./workspaceGoals": {
       "types": "./src/workspaceGoals.ts",
       "import": "./src/workspaceGoals.ts"
+    },
+    "./goalMap": {
+      "types": "./src/goalMap.ts",
+      "import": "./src/goalMap.ts"
     },
     "./githubMarkdownLinks": {
       "types": "./src/githubMarkdownLinks.ts",
@@ -142,6 +154,14 @@
     "./backgroundActivitySettings": {
       "types": "./src/backgroundActivitySettings.ts",
       "import": "./src/backgroundActivitySettings.ts"
+    },
+    "./taskExecutionSettings": {
+      "types": "./src/taskExecutionSettings.ts",
+      "import": "./src/taskExecutionSettings.ts"
+    },
+    "./taskStepModels": {
+      "types": "./src/taskStepModels.ts",
+      "import": "./src/taskStepModels.ts"
     },
     "./String": {
       "types": "./src/String.ts",
@@ -470,6 +490,10 @@
     "./PtyAdapter": {
       "types": "./src/PtyAdapter.ts",
       "import": "./src/PtyAdapter.ts"
+    },
+    "./waitingAlerts": {
+      "types": "./src/waitingAlerts.ts",
+      "import": "./src/waitingAlerts.ts"
     }
   },
   "scripts": {

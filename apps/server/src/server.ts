@@ -14,6 +14,7 @@ import * as ManagerLastMessage from "./projectTeam/managerLastMessage.ts";
 import * as ProjectTeamService from "./projectTeam/ProjectTeamService.ts";
 import * as SitrepScheduler from "./projectTeam/SitrepScheduler.ts";
 import * as StalledTaskSweep from "./projectTeam/StalledTaskSweep.ts";
+import * as MemoryGovernor from "./projectTeam/MemoryGovernor.ts";
 import * as GoalAlignmentReactor from "./projectTeam/GoalAlignmentReactor.ts";
 import * as TaskOutcomeReactor from "./projectTeam/taskOutcomeReactor.ts";
 import * as RoleStepReactor from "./projectTeam/RoleStepReactor.ts";
@@ -69,6 +70,7 @@ import * as ProjectSettingsOverrideSweep from "./provider/ProjectSettingsOverrid
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
+import * as CloudLeadService from "./cloudLead/CloudLeadService.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
@@ -82,6 +84,7 @@ import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as PullRequestTextReader from "./projectTeam/PullRequestTextReader.ts";
 import * as WorktreeHeadReader from "./projectTeam/WorktreeHeadReader.ts";
+import * as RevertLogReader from "./projectTeam/RevertLogReader.ts";
 import * as PullRequestShipGate from "./projectTeam/PullRequestShipGate.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
@@ -139,6 +142,7 @@ import * as DesktopAppUpdate from "./desktopUpdate/DesktopAppUpdate.ts";
 import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as HostResources from "./resourceTelemetry/HostResources.ts";
+import * as MemoryHeadroom from "./resourceTelemetry/MemoryHeadroom.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as DesktopTelemetryReceiver from "./resourceTelemetry/DesktopTelemetryReceiver.ts";
@@ -243,6 +247,9 @@ const layerUsage = UsageService.layer.pipe(Layer.provide(layerServerSettings));
 
 const layerResourceDiagnostics = Layer.mergeAll(
   HostResources.layer,
+  // Task admission, the memory governor, delegated children, setup scripts and
+  // the server browser all read this one sampler.
+  MemoryHeadroom.layer.pipe(Layer.provide(HostResources.layer), Layer.provide(layerServerSettings)),
   layerResourceTelemetry,
   ProcessDiagnostics.layer.pipe(Layer.provide(layerResourceTelemetry)),
   ProcessResourceMonitor.layer.pipe(Layer.provide(layerResourceTelemetry)),
@@ -411,6 +418,7 @@ const layerAuth = EnvironmentAuth.layer.pipe(
 );
 
 const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
+  Layer.provide(CloudLeadService.layer),
   Layer.provide(ProviderEventIngestor.layerAnalytics),
   Layer.provide(layerCheckpointStore),
   Layer.provide(layerGitWorkflow),
@@ -468,8 +476,10 @@ const layerProjectTeam = Layer.mergeAll(
   RoleStepReactor.layerWorker,
   ShipWakeReactor.layerWorker,
   StalledTaskSweep.layerWorker,
+  MemoryGovernor.layerWorker,
   GoalAlignmentReactor.layerWorker,
   ProjectTeamService.layerAfkWorker,
+  ProjectTeamService.layerCorrectionBackfill,
   // Needs the team's AttentionRouter, so it starts here rather than beside DelegatedTaskQuestionReactor.
   AfkReactor.layerWorker,
   DefaultManagerReactor.layerWorker,
@@ -480,9 +490,11 @@ const layerProjectTeam = Layer.mergeAll(
   Layer.provide(Scheduler.layer),
   Layer.provideMerge(ProjectTeamService.layerWithDependencies),
   Layer.provide(
-    Layer.merge(PullRequestTextReader.layer, WorktreeHeadReader.layer).pipe(
-      Layer.provide(ProcessRunner.layer),
-    ),
+    Layer.mergeAll(
+      PullRequestTextReader.layer,
+      WorktreeHeadReader.layer,
+      RevertLogReader.layer,
+    ).pipe(Layer.provide(ProcessRunner.layer)),
   ),
   Layer.provide(PullRequestShipGate.layer.pipe(Layer.provide(layerPullRequestService))),
   Layer.provide(layerGitWorkflow),
@@ -557,6 +569,8 @@ const layerRuntimeCoreDependencies = layerRuntimeCoreDependenciesBase.pipe(
       ResetCreditCoordinator.layer,
       ProviderLatestVersions.layer,
       McpProviderSessions.layer,
+      // One instance, also provided to the orchestration runtime below (layers are memoized).
+      CloudLeadService.layer,
     ),
   ),
   Layer.provideMerge(layerWorkspace),

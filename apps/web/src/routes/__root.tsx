@@ -1,3 +1,4 @@
+import { WaitingAlerts, WaitingTitle } from "../components/WaitingAlerts";
 import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
@@ -81,6 +82,7 @@ import {
 import { getDesktopSnapShotBridge } from "../lib/desktopSnapShot";
 import { installDesktopPasteAsText } from "../lib/desktopPasteAsText";
 import { shouldResumeSnapShotSetupOnStartup } from "../lib/snapShotSetupResume";
+import { reloadOnceForNewerServer } from "../lib/staleBundleReload";
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
@@ -232,6 +234,7 @@ function RootRouteView() {
           <SshPasswordPromptDialog />
           <SnapShotCoordinator />
           <ThreadNotificationCoordinator />
+          <WaitingAlerts />
           <ReopenClosedViewShortcut />
           <ConfirmDialogHost />
           <SlowRpcRequestToastCoordinator />
@@ -352,11 +355,7 @@ function DocumentTitleSync() {
     primaryServerVersion,
   });
 
-  useEffect(() => {
-    document.title = title;
-  }, [title]);
-
-  return null;
+  return <WaitingTitle title={title} />;
 }
 
 function HostedStaticEnvironmentBootstrap() {
@@ -509,6 +508,14 @@ function EventRouter({
   const [keybindingsToastController] = useState<KeybindingsUpdateToastController>(() =>
     createKeybindingsUpdateToastController({}),
   );
+
+  useEffect(() => {
+    reloadOnceForNewerServer({
+      serverVersion: serverConfig?.environment.serverVersion,
+      isElectron,
+      isHostedStatic: isHostedStaticApp(),
+    });
+  }, [serverConfig?.environment.serverVersion]);
 
   const handleWelcome = useEffectEvent((payload: ServerLifecycleWelcomePayload | null) => {
     if (!payload) return;

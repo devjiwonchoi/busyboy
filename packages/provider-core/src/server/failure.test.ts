@@ -101,6 +101,23 @@ it("preserves actionable handoff errors wrapped by turn startup", () => {
   );
 });
 
+it("preserves cloud lead setup errors wrapped by turn startup", () => {
+  const detail =
+    "Could not start the cloud sandbox: Cloud leads need a Claude setup-token. Run `claude setup-token`, then save it with request_secret and cloud_secret_save (kind claude_oauth_token).";
+  const cause = new ProviderAdapter.ProviderAdapterTurnStartError({
+    driver: ProviderDriverKind.make("claudeAgent"),
+    threadId: ThreadId.make("thread:cloud-error"),
+    providerThreadId: ProviderThreadId.make("provider-thread:cloud-error"),
+    runId: RunId.make("run:cloud-error"),
+    cause: {
+      _tag: "ClaudeAgentSdkQueryRunnerError",
+      method: "cloudLead.prepare",
+      cause: { _tag: "CloudLeadError", detail, message: detail },
+    },
+  });
+  assert.equal(makeProviderFailure({ cause: Cause.fail(cause) }).message, detail);
+});
+
 it("does not expose defect text nested inside a known error category", () => {
   const failure = makeProviderFailure({
     cause: {

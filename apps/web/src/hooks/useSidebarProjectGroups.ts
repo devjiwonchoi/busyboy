@@ -7,19 +7,14 @@ import {
   usePrimaryEnvironmentId,
 } from "../state/environments";
 import { useProjects } from "../state/entities";
-import { useDirectorProjectKeys } from "../state/director";
+import { useDirector } from "../state/director";
 import { useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
 
-/**
- * Project groups in the user's manual order, with "No project" last. The
- * Director's hidden system project is left out: it has its own rail entry.
- */
+/** Project groups follow manual order, with a new Director first and scratch last. */
 export function useSidebarProjectGroups() {
-  const directorKeys = useDirectorProjectKeys(useEnvironmentIds());
-  const projects = useProjects().filter(
-    (project) => !directorKeys.has(`${project.environmentId}:${project.id}`),
-  );
+  const director = useDirector(useEnvironmentIds());
+  const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const groupingSettings = useClientSettings(selectProjectGroupingSettings);
   const environments = useEnvironmentIdentities();
@@ -27,9 +22,26 @@ export function useSidebarProjectGroups() {
   const labels = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
   );
+  const directorProject = projects.find(
+    (project) =>
+      project.environmentId === director?.environmentId &&
+      project.id === director.summary.projectId,
+  );
+  const directorOrderKey = directorProject ? getProjectOrderKey(directorProject) : null;
+  // The Director's folder can sit inside a checkout (a dev baseDir); it must stay its own
+  // group, never a member of that repository's project.
+  const groupedProjects = !directorProject?.repositoryIdentity
+    ? projects
+    : projects.map((project) =>
+        project === directorProject ? { ...project, repositoryIdentity: null } : project,
+      );
+  const order =
+    directorOrderKey !== null && !projectOrder.includes(directorOrderKey)
+      ? [directorOrderKey, ...projectOrder]
+      : projectOrder;
   return pinScratchProjectGroupLast(
     buildSidebarProjectSnapshots({
-      projects: orderProjectsForSidebar(projects, projectOrder, getProjectOrderKey),
+      projects: orderProjectsForSidebar(groupedProjects, order, getProjectOrderKey),
       groupScratchProjects: true,
       settings: groupingSettings,
       primaryEnvironmentId,

@@ -19,6 +19,21 @@ import Migration0015 from "./Migrations/015_ProjectTaskRoleModels.ts";
 import Migration0016 from "./Migrations/016_ProjectTaskModelRuns.ts";
 import Migration0017 from "./Migrations/017_WorkspaceGoals.ts";
 
+import Migration0018 from "./Migrations/018_ProjectAttentionContext.ts";
+import Migration0019 from "./Migrations/019_RemoveTaskProposals.ts";
+import Migration0020 from "./Migrations/020_ProjectAttentionOptionalTask.ts";
+import Migration0021 from "./Migrations/021_ProjectTaskLocation.ts";
+import Migration0022 from "./Migrations/022_ProjectTaskMoveTarget.ts";
+import Migration0023 from "./Migrations/023_ProjectAttentionDetails.ts";
+import Migration0024 from "./Migrations/024_ProjectAttentionSender.ts";
+import Migration0025 from "./Migrations/025_ProjectTaskMemoryHold.ts";
+import Migration0026 from "./Migrations/026_ProjectTaskMemoryStallSince.ts";
+import Migration0027 from "./Migrations/027_ProjectTaskStalls.ts";
+import Migration0028 from "./Migrations/028_ProjectCorrections.ts";
+import Migration0029 from "./Migrations/029_ProjectAttentionSnooze.ts";
+import Migration0030 from "./Migrations/030_ProjectTaskPlanCheck.ts";
+import Migration0031 from "./Migrations/031_CloudLeadSessions.ts";
+
 export const migrationEntries = [
   [1, "Baseline", Migration0001],
   [2, "RewriteThreadSettlementEvents", Migration0002],
@@ -37,6 +52,20 @@ export const migrationEntries = [
   [15, "ProjectTaskRoleModels", Migration0015],
   [16, "ProjectTaskModelRuns", Migration0016],
   [17, "WorkspaceGoals", Migration0017],
+  [18, "ProjectAttentionContext", Migration0018],
+  [19, "RemoveTaskProposals", Migration0019],
+  [20, "ProjectAttentionOptionalTask", Migration0020],
+  [21, "ProjectTaskLocation", Migration0021],
+  [22, "ProjectTaskMoveTarget", Migration0022],
+  [23, "ProjectAttentionDetails", Migration0023],
+  [24, "ProjectAttentionSender", Migration0024],
+  [25, "ProjectTaskMemoryHold", Migration0025],
+  [26, "ProjectTaskMemoryStallSince", Migration0026],
+  [27, "ProjectTaskStalls", Migration0027],
+  [28, "ProjectCorrections", Migration0028],
+  [29, "ProjectAttentionSnooze", Migration0029],
+  [30, "ProjectTaskPlanCheck", Migration0030],
+  [31, "CloudLeadSessions", Migration0031],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

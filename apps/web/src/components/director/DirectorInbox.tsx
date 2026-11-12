@@ -1,19 +1,21 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { formatTaskKey } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import type { ProjectDecisionCard } from "@t3tools/contracts";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { useDirectorInbox } from "~/state/director";
 import { useProjects } from "~/state/entities";
-import { pendingActionItems } from "~/state/projectTeam.logic";
+import { CARD_LABEL, pendingActionItems } from "~/state/projectTeam.logic";
 import { buildThreadRouteParams } from "~/threadRoutes";
+import { taskRouteParams } from "~/taskRoutes";
+import { useAttentionTask } from "../chat/AttentionContext";
+import { SnoozableCard, SnoozedCards } from "../chat/CardSnooze";
 import { DecisionCard } from "../chat/DecisionCard";
-import { Dialog, DialogClose, DialogPopup, DialogTitle } from "../ui/dialog";
 import type { DirectorInboxGroup } from "./directorInbox.logic";
 
 /** Resolve names by both environment and project: IDs can repeat across servers. */
-export function useDirectorInboxTitles() {
+function useDirectorInboxTitles() {
   const projects = useProjects();
   return (group: DirectorInboxGroup) =>
     group.isDirector
@@ -24,8 +26,63 @@ export function useDirectorInboxTitles() {
         )?.title ?? "프로젝트");
 }
 
-export function DirectorInbox(props: { highlightCardId: string | null; showEmpty: boolean }) {
-  const { groups, total } = useDirectorInbox();
+function InboxTaskLink({
+  card,
+  group,
+  onNavigate,
+}: {
+  card: ProjectDecisionCard;
+  group: DirectorInboxGroup;
+  /** Called when the link is followed, e.g. to close the dialog it sits in. */
+  onNavigate?: (() => void) | undefined;
+}) {
+  const { related, projectId, projectTitle } = useAttentionTask({
+    card,
+    environmentId: group.environmentId,
+  });
+  const label = `${card.taskTitle} · ${projectTitle}`;
+  const taskId = card.item.taskId;
+  // A card without a task is the PM's own: it leads to the PM chat.
+  if (taskId === null) {
+    return (
+      <Link
+        to="/$environmentId/$threadId"
+        params={buildThreadRouteParams(scopeThreadRef(group.environmentId, group.pmThreadId))}
+        data-director-inbox-task-link
+        onClick={onNavigate}
+        className="text-foreground underline decoration-border underline-offset-2 hover:decoration-current"
+      >
+        {label}
+      </Link>
+    );
+  }
+  if (group.isDirector && related === null) {
+    return <span>{label}</span>;
+  }
+
+  return (
+    <Link
+      {...taskRouteParams(group.environmentId, projectId, taskId)}
+      data-director-inbox-task-link
+      onClick={onNavigate}
+      className="text-foreground underline decoration-border underline-offset-2 hover:decoration-current"
+    >
+      {label}
+    </Link>
+  );
+}
+
+export function DirectorInbox(props: {
+  highlightCardId: string | null;
+  showEmpty: boolean;
+  /** Called before leaving for a task or thread, e.g. to close the dialog. */
+  onNavigate?: () => void;
+  /** False when the surrounding dialog already titles the list with its count. */
+  showHeading?: boolean;
+  /** In the Director's chat: jump to one of the Director's own cards in its timeline. */
+  onRevealDirectorCard?: (cardId: string) => void;
+}) {
+  const { groups, total, snoozedTotal } = useDirectorInbox();
   const titleOf = useDirectorInboxTitles();
   const navigate = useNavigate();
   const now = Date.parse(`${useNowMinute()}:00.000Z`);
@@ -54,7 +111,7 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
     };
   }, [props.highlightCardId]);
 
-  if (total === 0) {
+  if (total === 0 && snoozedTotal === 0) {
     return props.showEmpty ? (
       <p className="text-muted-foreground text-sm">기다리는 일이 없어요</p>
     ) : null;
@@ -62,8 +119,14 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
 
   return (
     <section ref={section} data-director-inbox className="flex min-w-0 flex-col gap-4">
-      <h2 className="font-semibold text-base">나를 기다리는 일 {total}</h2>
+      {props.showHeading === false ? null : (
+        <h2 className="font-semibold text-base">나를 기다리는 일 {total}</h2>
+      )}
+      {total === 0 && props.showEmpty ? (
+        <p className="text-muted-foreground text-sm">기다리는 일이 없어요</p>
+      ) : null}
       {groups.map((group) => {
+        if (group.total === 0) return null;
         // Korean elapsed labels avoid the shared formatter's English suffixes.
         const minutes =
           group.oldestAt === null
@@ -91,16 +154,29 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
             </h3>
             {group.cards.map((card) => (
               <div key={card.item.id} className="min-w-0">
-                <p className="mb-1 break-words text-muted-foreground text-xs">
-                  {card.taskNumber > 0 ? formatTaskKey(group.taskKeyPrefix, card.taskNumber) : ""}{" "}
-                  {card.taskTitle}
-                </p>
-                <DecisionCard
+                <SnoozableCard
                   card={card}
                   environmentId={group.environmentId}
-                  threadRef={scopeThreadRef(group.environmentId, group.pmThreadId)}
-                  cwd={undefined}
-                />
+                  label={<InboxTaskLink card={card} group={group} onNavigate={props.onNavigate} />}
+                  actions={
+                    group.isDirector && props.onRevealDirectorCard ? (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-md px-2 py-1 text-foreground hover:bg-muted"
+                        onClick={() => props.onRevealDirectorCard?.(card.item.id)}
+                      >
+                        채팅에서 보기
+                      </button>
+                    ) : null
+                  }
+                >
+                  <DecisionCard
+                    card={card}
+                    environmentId={group.environmentId}
+                    threadRef={scopeThreadRef(group.environmentId, group.pmThreadId)}
+                    cwd={undefined}
+                  />
+                </SnoozableCard>
               </div>
             ))}
             {group.waitingThreads.map((thread) => (
@@ -114,14 +190,15 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
                 <button
                   type="button"
                   className="shrink-0 rounded-md px-3 py-2 hover:bg-muted"
-                  onClick={() =>
+                  onClick={() => {
+                    props.onNavigate?.();
                     void navigate({
                       to: "/$environmentId/$threadId",
                       params: buildThreadRouteParams(
                         scopeThreadRef(group.environmentId, thread.threadId),
                       ),
-                    })
-                  }
+                    });
+                  }}
                 >
                   열기
                 </button>
@@ -130,30 +207,15 @@ export function DirectorInbox(props: { highlightCardId: string | null; showEmpty
           </div>
         );
       })}
+      <SnoozedCards
+        entries={groups.flatMap((group) =>
+          group.snoozed.map((card) => ({
+            card,
+            environmentId: group.environmentId,
+            label: `${titleOf(group)} · ${CARD_LABEL[card.item.kind]}: ${card.taskTitle}`,
+          })),
+        )}
+      />
     </section>
-  );
-}
-
-export function DirectorInboxDialog(props: { cardId: string | null; onClose: () => void }) {
-  return (
-    <Dialog
-      open={props.cardId !== null}
-      onOpenChange={(open) => {
-        if (!open) {
-          props.onClose();
-        }
-      }}
-    >
-      <DialogPopup
-        showCloseButton={false}
-        className="flex max-h-[85dvh] w-full min-w-0 flex-col overflow-y-auto p-4 sm:max-w-3xl"
-      >
-        <div className="mb-4 flex items-center gap-2">
-          <DialogTitle className="flex-1">나를 기다리는 일</DialogTitle>
-          <DialogClose className="rounded-md px-3 py-2 text-sm hover:bg-muted">닫기</DialogClose>
-        </div>
-        <DirectorInbox highlightCardId={props.cardId} showEmpty />
-      </DialogPopup>
-    </Dialog>
   );
 }

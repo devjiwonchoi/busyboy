@@ -11,12 +11,14 @@ import { liveThreadsLayer } from "../../McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ProjectTeamService from "../../../projectTeam/ProjectTeamService.ts";
 import {
-  PROJECT_ID,
+  attentionContext,
   setUpManager,
   userSays,
   withTeam,
+  writeReadyPlan,
   type TeamHarness,
 } from "../../../projectTeam/testkit.ts";
+import { requiredPlanGates } from "../../../projectTeam/planGates.ts";
 import * as ProjectTeamHandlers from "./handlers.ts";
 import { ProjectTeamToolkit } from "./tools.ts";
 
@@ -100,18 +102,7 @@ describe("projectTeam MCP toolkit", () => {
             request: "Do A.",
           });
           assert.isFalse(created.isError);
-          const team = yield* ProjectTeamService.ProjectTeamService;
-          const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
-            (entry) => entry.item.taskId === content(created).task.id,
-          )!;
-          yield* team.answerDecision({
-            projectId: PROJECT_ID,
-            attentionItemId: card.item.id,
-            answer: "태스크로 추가",
-          });
-          const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
-          assert.isFalse(started.isError);
-          const lead = content(started).leadThreadId as ThreadId;
+          const lead = content(created).task.leadThreadId as ThreadId;
 
           const leadStart = yield* call(lead, "task_start", { taskId: content(created).task.id });
           assert.isTrue(leadStart.isError);
@@ -122,7 +113,11 @@ describe("projectTeam MCP toolkit", () => {
           assert.isFalse(leadCreate.isError);
           assert.strictEqual(content(leadCreate).task.parentTaskId, content(created).task.id);
 
-          const pmAsk = yield* call(pm, "ask_user", { kind: "decision", question: "Which?" });
+          const pmAsk = yield* call(pm, "ask_user", {
+            context: attentionContext({ action: "Which?" }),
+            kind: "decision",
+            question: "Which?",
+          });
           assert.isTrue(pmAsk.isError);
           assert.include(JSON.stringify(pmAsk.content), "not available to a PM");
         }).pipe(
@@ -160,21 +155,12 @@ describe("projectTeam MCP toolkit", () => {
             title: "Add hello.sh",
             request: "Add hello.sh with a test.",
           });
-          assert.strictEqual(content(created).task.stage, "proposed");
-
+          // task_create starts the lead at once: no proposal card, no separate task_start.
+          assert.isFalse(created.isError);
+          assert.strictEqual(content(created).task.stage, "planning");
           const team = yield* ProjectTeamService.ProjectTeamService;
-          const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
-            (entry) => entry.item.taskId === content(created).task.id,
-          )!;
-          yield* team.answerDecision({
-            projectId: PROJECT_ID,
-            attentionItemId: card.item.id,
-            answer: "태스크로 추가",
-          });
-          const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
-          assert.isFalse(started.isError);
-          assert.strictEqual(content(started).task.stage, "planning");
-          const lead = content(started).leadThreadId as ThreadId;
+          assert.deepStrictEqual((yield* team.attentionSnapshot).projects[0]!.decisionCards, []);
+          const lead = content(created).task.leadThreadId as ThreadId;
           // The task lead is delegated from the PM's own MCP scope, its end does
           // not wake the PM (the outcome reactor decides that), and its worktree
           // starts from origin's default branch rather than the PM's local HEAD.
@@ -182,13 +168,25 @@ describe("projectTeam MCP toolkit", () => {
             { scope: pm, completionWake: "never", worktreeBase: "origin-default" },
           ]);
 
+          const missingContext = yield* call(lead, "ask_user", {
+            kind: "decision",
+            question: "Add hello.sh in bash or sh?",
+          }).pipe(Effect.flip);
+          assert.strictEqual(missingContext._tag, "InvalidParams");
+          assert.include(missingContext.message, 'at ["context"]');
+
           const asked = yield* call(lead, "ask_user", {
+            context: attentionContext({ action: "Add hello.sh in bash or sh?" }),
             kind: "decision",
             question: "Add hello.sh in bash or sh?",
           });
           assert.isFalse(asked.isError);
           const item = content(asked).item;
           assert.strictEqual(item.askerThreadId, lead);
+          assert.deepStrictEqual(
+            item.context,
+            attentionContext({ action: "Add hello.sh in bash or sh?" }),
+          );
 
           const status = yield* call(pm, "team_status", {});
           assert.isFalse(status.isError);
@@ -227,25 +225,16 @@ describe("projectTeam MCP toolkit", () => {
               title,
               request: `${title}.`,
             });
-            const team = yield* ProjectTeamService.ProjectTeamService;
-            const card = (yield* team.attentionSnapshot).projects[0]!.decisionCards.find(
-              (entry) => entry.item.taskId === content(created).task.id,
-            )!;
-            yield* team.answerDecision({
-              projectId: PROJECT_ID,
-              attentionItemId: card.item.id,
-              answer: "태스크로 추가",
-            });
-            const started = yield* call(pm, "task_start", { taskId: content(created).task.id });
             return {
               taskId: content(created).task.id as string,
-              lead: content(started).leadThreadId as ThreadId,
+              lead: content(created).task.leadThreadId as ThreadId,
             };
           });
         const first = yield* startTask("First");
         const second = yield* startTask("Second");
 
         const asked = yield* call(first.lead, "ask_user", {
+          context: attentionContext({ action: "Bash or sh?" }),
           kind: "decision",
           question: "Bash or sh?",
         });
@@ -308,6 +297,54 @@ describe("projectTeam MCP toolkit", () => {
       }).pipe(
         Effect.provide(registration(harness, Ref.makeUnsafe<ReadonlyArray<DelegateCall>>([]))),
       ),
+    ),
+  );
+
+  it.effect("sends a lead's plan approval to the plan checker, which alone records verdicts", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const delegateCalls = yield* Ref.make<ReadonlyArray<DelegateCall>>([]);
+        return yield* Effect.gen(function* () {
+          const pm = yield* setUpManager;
+          const created = yield* call(pm, "task_create", {
+            intake: "New work.",
+            goal: "Deliver the requested result.",
+            verification: "Check the result.",
+            title: "Add hello.sh",
+            request: "Add hello.sh with a test.",
+          });
+          const lead = content(created).task.leadThreadId as ThreadId;
+          yield* writeReadyPlan(lead);
+
+          const asked = yield* call(lead, "ask_user", {
+            context: attentionContext({ action: "Approve the plan?" }),
+            kind: "approval",
+            question: "Approve the plan?",
+          });
+          assert.isFalse(asked.isError);
+          assert.strictEqual(content(asked).planCheck.status, "checking");
+          assert.include(content(asked).message, "end your turn");
+          // The checker is the lead's own child, like a task_delegate step.
+          assert.strictEqual((yield* Ref.get(delegateCalls)).at(-1)?.scope, lead);
+          const team = yield* ProjectTeamService.ProjectTeamService;
+          assert.deepStrictEqual((yield* team.attentionSnapshot).projects[0]!.decisionCards, []);
+
+          const verdicts = [{ gate: "problem", pass: true, reason: "충분해요." }];
+          const byLead = yield* call(lead, "task_plan_check_set", { specVersion: 2, verdicts });
+          assert.isTrue(byLead.isError);
+          const checker = content(asked).planCheck.checker.threadId as ThreadId;
+          const byChecker = yield* call(checker, "task_plan_check_set", {
+            specVersion: 2,
+            verdicts: requiredPlanGates("light").map((gate) => ({
+              gate: gate.id,
+              pass: true,
+              reason: "충분해요.",
+            })),
+          });
+          assert.isFalse(byChecker.isError);
+          assert.strictEqual(content(byChecker).task.stage, "awaiting_approval");
+        }).pipe(Effect.provide(registration(harness, delegateCalls)));
+      }),
     ),
   );
 });

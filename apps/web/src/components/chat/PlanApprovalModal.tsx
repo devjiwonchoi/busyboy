@@ -6,7 +6,10 @@ import {
   planApprovalOutcome,
   type PlanReviewComment,
   type ProjectDecisionCard,
+  type ProjectLeadQuestionQuote,
+  type ProjectTaskId,
 } from "@t3tools/contracts";
+import { PLAN_GATE_LABELS, type PlanGateTextField } from "@t3tools/shared/planGates";
 import { XIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -26,12 +29,7 @@ import { DIALOG_POPUP_CLASS } from "../ui/dialog-styles";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { diffWords } from "./planDiff";
-import {
-  TaskParentBreadcrumb,
-  TaskStructure,
-  useRelatedTask,
-  useTaskRelations,
-} from "../task/TaskRelations";
+import { TaskParentBreadcrumb, TaskStructure, useTaskRelations } from "../task/TaskRelations";
 import {
   PlanBreakdown,
   PlanCriteria,
@@ -42,6 +40,8 @@ import {
 } from "../plan/PlanDocument";
 import { PlanTodoList } from "../plan/PlanTodoList";
 import { PlanApprovalSections, PlanMarkdown, PlanSummary } from "./PlanMarkdown";
+import { AttentionContext, useAttentionTask } from "./AttentionContext";
+import { CardDetailWithSideChat, type CardDetailTab, CardSideChat } from "./CardSideChat";
 
 /** A text selection in the plan, waiting for the Comment button. */
 interface PendingSelection {
@@ -66,9 +66,13 @@ interface PlanAnnotation extends PlanReviewComment {
   readonly start: number;
 }
 
+/** Solid even on hover: the outline style is see-through in dark mode, and these sit on text. */
+const SELECTION_BUTTON_CLASS =
+  "bg-popover shadow-lg dark:bg-popover [:hover,[data-pressed]]:bg-popover dark:[:hover,[data-pressed]]:bg-popover";
+
 /** Height of the floating Comment button plus its gap to the selection. */
 const COMMENT_BUTTON_OFFSET = 34;
-const COMMENT_BUTTON_WIDTH = 96;
+const COMMENT_BUTTON_WIDTH = 200;
 
 const OUTCOME_STATUS = {
   start: "Approved and started",
@@ -208,7 +212,7 @@ export function PlanApprovalModal(props: {
           <DialogPrimitive.Popup
             className={cn(
               DIALOG_POPUP_CLASS,
-              "row-start-2 h-[90dvh] w-[min(96vw,72rem)] overflow-hidden text-popover-foreground",
+              "row-start-2 h-[90dvh] w-[min(96vw,90rem)] overflow-hidden text-popover-foreground",
               "max-md:h-dvh max-md:w-screen max-md:rounded-none max-md:border-0",
             )}
             data-plan-review={props.card.item.id}
@@ -233,10 +237,12 @@ function PlanReview({
   readOnly: boolean;
 }) {
   const relations = useTaskRelations(environmentId, card.item.taskId);
-  const running = useRelatedTask(environmentId, card.item.taskId)?.task.stage === "running";
+  const { related, projectId, projectTitle } = useAttentionTask({ card, environmentId });
+  const running = related?.task.stage === "running";
   const query = useTaskDetail(environmentId, {
-    projectId: card.item.projectId,
-    taskId: card.item.taskId,
+    projectId,
+    // Plan approvals always belong to a task.
+    taskId: card.item.taskId as ProjectTaskId,
   });
   const answerDecision = useAnswerDecision();
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -248,6 +254,9 @@ function PlanReview({
   const [overall, setOverall] = useState("");
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const [sending, setSending] = useState(false);
+  // The side chat's quotes, and which half a phone shows.
+  const [quotes, setQuotes] = useState<ReadonlyArray<ProjectLeadQuestionQuote>>([]);
+  const [tab, setTab] = useState<CardDetailTab>("card");
 
   // How the last press was made, and whether it was on the Comment button: a phone can clear
   // the selection before the tap lands, which must not take the button away.
@@ -319,7 +328,7 @@ function PlanReview({
 
   const captureSelection = () => {
     const body = bodyRef.current;
-    if (body === null || !canComment || pressRef.current.onComment) return;
+    if (body === null || pressRef.current.onComment) return;
     setPending(readPlanSelection(body, pressRef.current.touch));
   };
 
@@ -334,6 +343,15 @@ function PlanReview({
     setPending(null);
     pressRef.current.onComment = false;
     window.getSelection()?.removeAllRanges();
+  };
+
+  const quoteInSideChat = () => {
+    if (pending === null) return;
+    setQuotes([...quotes, { section: pending.section, quote: pending.quote }]);
+    setPending(null);
+    pressRef.current.onComment = false;
+    window.getSelection()?.removeAllRanges();
+    setTab("chat");
   };
 
   const resolveRange = (id: string, host?: ParentNode) => {
@@ -382,7 +400,7 @@ function PlanReview({
 
   const textSection = (
     label: string,
-    field: "background" | "summary" | "goal" | "successCriteria" | "nonGoals",
+    field: "background" | "summary" | "goal" | "successCriteria" | PlanGateTextField,
   ) => {
     const text = spec[field].trim();
     const before = previous?.spec[field].trim() ?? "";
@@ -409,6 +427,19 @@ function PlanReview({
     );
   };
 
+  // Filled plan gates in gate order; 안 하는 것 keeps its own section, which always shows.
+  const gateSections = (part: "before" | "after") => {
+    const index = PLAN_GATE_LABELS.findIndex((gate) => gate.id === "nonGoals");
+    return PLAN_GATE_LABELS.filter((_, at) => (part === "before" ? at < index : at > index)).map(
+      (gate) =>
+        gate.field !== null &&
+        (spec[gate.field].trim().length > 0 ||
+          (diffing && (previous?.spec[gate.field].trim().length ?? 0) > 0))
+          ? textSection(gate.label, gate.field)
+          : null,
+    );
+  };
+
   const steps = (
     <section className="mt-6">
       {sectionHeading("Steps")}
@@ -432,7 +463,7 @@ function PlanReview({
       <header className="flex shrink-0 flex-col gap-1.5 border-b px-5 pt-4 pb-3 md:px-7">
         <div className="flex flex-wrap items-center gap-2 pe-8">
           <span data-plan-meta className="font-mono text-muted-foreground text-xs">
-            {detail.key}
+            {projectTitle} ({detail.key})
           </span>
           <span
             data-plan-status
@@ -499,132 +530,184 @@ function PlanReview({
         </DialogPrimitive.Close>
       </header>
 
-      <div ref={setOverlayHost} className="relative flex min-h-0 flex-1 flex-col">
-        <div data-plan-scroll className="min-h-0 flex-1 overflow-y-auto">
-          <div
-            ref={bodyRef}
-            className="relative mx-auto w-full max-w-4xl min-w-0 px-5 pt-8 pb-5 md:px-7"
-            data-plan-body
-            data-plan-version={shown.version}
-            onMouseUp={captureSelection}
-            onTouchEnd={captureSelection}
-          >
-            {structured ? (
-              diffing ? (
-                textSection("Summary", "summary")
-              ) : (
-                <PlanSummary text={spec.summary} />
-              )
-            ) : (
-              <PlanApprovalSections item={card.item} className="gap-6" />
-            )}
-            <div className="mt-6">
-              {structured ? steps : null}
-              {textSection("End result", "goal")}
-              {diffing ? null : (
-                <PlanPrototype html={spec.prototype} waiver={spec.prototypeWaiver} />
-              )}
-              {extraSection("Flow", <PlanFlow source={spec.flow} />, spec.flow.trim().length > 0)}
-              {spec.criteria.length > 0 && !diffing
-                ? extraSection("Success criteria", <PlanCriteria criteria={spec.criteria} />, true)
-                : textSection("Success criteria", "successCriteria")}
-              {textSection("Non-goals", "nonGoals")}
-              {structured ? null : steps}
-              {extraSection(
-                "Breakdown",
-                <PlanBreakdown todos={spec.todos} running={running} />,
-                spec.todos.some((todo) => todo.dependsOn.length > 0),
-              )}
-              {extraSection(
-                "Files",
-                <PlanFileTree files={spec.files} todos={spec.todos} />,
-                spec.files.length > 0,
-              )}
-            </div>
-            <TaskStructure relations={relations} className="mt-6" />
-            {spec.background.trim().length > 0 ? (
-              <details className="mt-6 text-sm">
-                <summary className="cursor-pointer select-none font-semibold text-sm">
-                  Background
-                </summary>
-                <PlanMarkdown text={spec.background} className="mt-1.5 text-muted-foreground" />
-              </details>
-            ) : null}
-            {canComment && pending !== null && editing === null ? (
-              <div
-                data-plan-comment-button
-                className="absolute z-20"
-                style={commentButtonPosition(pending)}
-              >
-                <Button
-                  size="xs"
-                  variant="outline"
-                  // Solid even on hover: the outline style is see-through in dark mode, and this sits on text.
-                  className="bg-popover shadow-lg dark:bg-popover [:hover,[data-pressed]]:bg-popover dark:[:hover,[data-pressed]]:bg-popover"
-                  // Keep the selection when the button takes the press.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={addComment}
+      <CardDetailWithSideChat
+        tab={tab}
+        onTabChange={setTab}
+        sideChat={
+          <CardSideChat
+            card={card}
+            environmentId={environmentId}
+            quotes={quotes}
+            onRemoveQuote={(quote) => setQuotes(quotes.filter((entry) => entry !== quote))}
+            onSent={() => setQuotes([])}
+          />
+        }
+        detail={
+          <>
+            <div ref={setOverlayHost} className="relative flex min-h-0 flex-1 flex-col">
+              <div data-plan-scroll className="min-h-0 flex-1 overflow-y-auto">
+                <div
+                  ref={bodyRef}
+                  className="relative mx-auto w-full max-w-4xl min-w-0 px-5 pt-8 pb-5 md:px-7"
+                  data-plan-body
+                  data-plan-version={shown.version}
+                  onMouseUp={captureSelection}
+                  onTouchEnd={captureSelection}
                 >
-                  Comment
-                </Button>
+                  <AttentionContext context={card.item.context} planApproval />
+                  {structured ? (
+                    diffing ? (
+                      textSection("Summary", "summary")
+                    ) : (
+                      <PlanSummary text={spec.summary} />
+                    )
+                  ) : (
+                    <PlanApprovalSections item={card.item} className="gap-6" />
+                  )}
+                  <div className="mt-6">
+                    {structured ? steps : null}
+                    {textSection("End result", "goal")}
+                    {diffing ? null : (
+                      <PlanPrototype html={spec.prototype} waiver={spec.prototypeWaiver} />
+                    )}
+                    {extraSection(
+                      "Flow",
+                      <PlanFlow source={spec.flow} />,
+                      spec.flow.trim().length > 0,
+                    )}
+                    {spec.criteria.length > 0 && !diffing
+                      ? extraSection(
+                          "Success criteria",
+                          <PlanCriteria criteria={spec.criteria} />,
+                          true,
+                        )
+                      : textSection("Success criteria", "successCriteria")}
+                    {gateSections("before")}
+                    {textSection("Non-goals", "nonGoals")}
+                    {gateSections("after")}
+                    {structured ? null : steps}
+                    {extraSection(
+                      "Breakdown",
+                      <PlanBreakdown todos={spec.todos} running={running} />,
+                      spec.todos.some((todo) => todo.dependsOn.length > 0),
+                    )}
+                    {extraSection(
+                      "Files",
+                      <PlanFileTree files={spec.files} todos={spec.todos} />,
+                      spec.files.length > 0,
+                    )}
+                  </div>
+                  <TaskStructure relations={relations} className="mt-6" />
+                  {spec.background.trim().length > 0 ? (
+                    <details className="mt-6 text-sm">
+                      <summary className="cursor-pointer select-none font-semibold text-sm">
+                        Background
+                      </summary>
+                      <PlanMarkdown
+                        text={spec.background}
+                        className="mt-1.5 text-muted-foreground"
+                      />
+                    </details>
+                  ) : null}
+                  {/* The compare view mixes versions, so its text is not quoted. */}
+                  {pending !== null && editing === null && !diffing ? (
+                    <div
+                      data-plan-comment-button
+                      className="absolute z-20 flex gap-1"
+                      style={commentButtonPosition(pending)}
+                    >
+                      {canComment ? (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          className={SELECTION_BUTTON_CLASS}
+                          // Keep the selection when the button takes the press.
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={addComment}
+                        >
+                          Comment
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        data-plan-quote-button
+                        className={SELECTION_BUTTON_CLASS}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={quoteInSideChat}
+                      >
+                        질문에 인용
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            ) : null}
-          </div>
-        </div>
-        {canComment ? (
-          <AnnotationOverlay
-            host={overlayHost}
-            annotations={comments}
-            resolveRange={resolveRange}
-            editing={editing}
-            onEdit={(id) => setEditing({ id, isNew: false })}
-            onSave={(id, comment) => {
-              setComments(
-                comments.map((entry) => (entry.id === id ? { ...entry, comment } : entry)),
-              );
-              setEditing(null);
-            }}
-            onCancel={(id, isNew) => (isNew ? removeComment(id) : setEditing(null))}
-            onDelete={removeComment}
-          />
-        ) : null}
-      </div>
-
-      {canAnswer ? (
-        <footer className="flex shrink-0 flex-col gap-2 border-t bg-muted/40 px-5 py-3 md:px-7">
-          <Textarea
-            aria-label="Overall comment"
-            placeholder="Overall comment (optional)"
-            size="sm"
-            className="[&_textarea]:min-h-10 max-md:[&_textarea]:min-h-10"
-            value={overall}
-            onChange={(event) => setOverall(event.target.value)}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <AnnotationsChip
-              annotations={savedComments}
-              noun="comment"
-              onOpen={openComment}
-              onRemove={removeComment}
-            />
-            <div className="ms-auto flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!hasFeedback || sending}
-                onClick={() =>
-                  send(formatPlanReviewFeedback({ specVersion: reviewVersion.version, ...notes }))
-                }
-              >
-                Request changes
-              </Button>
-              <Button size="sm" disabled={sending} onClick={() => send(formatPlanApproval(notes))}>
-                Approve
-              </Button>
+              {canComment ? (
+                <AnnotationOverlay
+                  host={overlayHost}
+                  annotations={comments}
+                  resolveRange={resolveRange}
+                  editing={editing}
+                  onEdit={(id) => setEditing({ id, isNew: false })}
+                  onSave={(id, comment) => {
+                    setComments(
+                      comments.map((entry) => (entry.id === id ? { ...entry, comment } : entry)),
+                    );
+                    setEditing(null);
+                  }}
+                  onCancel={(id, isNew) => (isNew ? removeComment(id) : setEditing(null))}
+                  onDelete={removeComment}
+                />
+              ) : null}
             </div>
-          </div>
-        </footer>
-      ) : null}
+
+            {canAnswer ? (
+              <footer className="flex shrink-0 flex-col gap-2 border-t bg-muted/40 px-5 py-3 md:px-7">
+                <Textarea
+                  aria-label="Overall comment"
+                  placeholder="Overall comment (optional)"
+                  size="sm"
+                  className="[&_textarea]:min-h-10 max-md:[&_textarea]:min-h-10"
+                  value={overall}
+                  onChange={(event) => setOverall(event.target.value)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <AnnotationsChip
+                    annotations={savedComments}
+                    noun="comment"
+                    onOpen={openComment}
+                    onRemove={removeComment}
+                  />
+                  <div className="ms-auto flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!hasFeedback || sending}
+                      onClick={() =>
+                        send(
+                          formatPlanReviewFeedback({
+                            specVersion: reviewVersion.version,
+                            ...notes,
+                          }),
+                        )
+                      }
+                    >
+                      Request changes
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={sending}
+                      onClick={() => send(formatPlanApproval(notes))}
+                    >
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              </footer>
+            ) : null}
+          </>
+        }
+      />
     </div>
   );
 }

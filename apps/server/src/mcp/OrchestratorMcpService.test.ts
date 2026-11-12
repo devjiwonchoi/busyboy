@@ -22,9 +22,12 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 
 import {
   DispatchModeLimit,
+  type DispatchModeLimitValue,
   type DispatchModeRefusal,
 } from "../orchestration-v2/DispatchModeLimit.ts";
 import {
@@ -40,7 +43,9 @@ import { buildUnavailableProviderSnapshot } from "../provider/unavailableProvide
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as CloudLeadSecrets from "../cloudLead/CloudLeadSecrets.ts";
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
 import { idleThreadProjection, liveThreadShell } from "./McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
@@ -147,6 +152,7 @@ describe("OrchestratorMcpService", () => {
         }),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
       const scope: McpInvocationScope = {
@@ -247,6 +253,7 @@ describe("OrchestratorMcpService", () => {
         }),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
       const scope: McpInvocationScope = {
@@ -331,6 +338,7 @@ describe("OrchestratorMcpService", () => {
         }),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
       const scope: McpInvocationScope = {
@@ -408,6 +416,7 @@ describe("OrchestratorMcpService", () => {
         }),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
       const scope: McpInvocationScope = {
@@ -493,6 +502,7 @@ describe("OrchestratorMcpService", () => {
         }),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
       const scope: McpInvocationScope = {
@@ -579,6 +589,7 @@ describe("OrchestratorMcpService", () => {
         }),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
       const scope: McpInvocationScope = {
@@ -712,6 +723,7 @@ describe("OrchestratorMcpService", () => {
         }),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
       const scope: McpInvocationScope = {
@@ -945,6 +957,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           ]),
           Layer.mock(ProjectService.ProjectService)({}),
           Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
           Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
         );
 
@@ -1049,6 +1062,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         adapterRegistryLayer([codexInstanceId]),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
 
@@ -1137,6 +1151,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           adapterRegistryLayer([codexInstanceId, antigravityInstanceId]),
           Layer.mock(ProjectService.ProjectService)({}),
           Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
           Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
         );
 
@@ -1235,6 +1250,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         adapterRegistryLayer([codexInstanceId, antigravityInstanceId]),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
 
@@ -1269,6 +1285,317 @@ describe("OrchestratorMcpService provider resolution", () => {
         );
       }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(layerDependencies))));
     }),
+  );
+
+  const claudeInstanceId = ProviderInstanceId.make("claude");
+  /** Runs `body` against a delegate_task service whose parent can turn cloud. */
+  const withDelegations = <A, E>(
+    settings: Parameters<typeof ServerSettings.layerTest>[0],
+    body: (input: {
+      readonly service: OrchestratorMcpService.OrchestratorMcpService["Service"];
+      readonly setParentCloud: () => void;
+      readonly dispatched: Ref.Ref<ReadonlyArray<unknown>>;
+    }) => Effect.Effect<A, E>,
+    /** The Mac's memory as the sampler reads it; defaults to no sampler (always room). */
+    memory?: () => MemoryHeadroom.MemorySnapshot,
+  ) =>
+    Effect.gen(function* () {
+      const task = {
+        id: taskId,
+        threadId: parentThreadId,
+        runId: parentRunId,
+        parentNodeId,
+        origin: "app_owned",
+        createdBy: "agent",
+        driver: ProviderDriverKind.make("claudeAgent"),
+        providerInstanceId: claudeInstanceId,
+        providerThreadId: null,
+        childThreadId,
+        nativeTaskRef: null,
+        prompt: "Build it.",
+        title: null,
+        model: "claude-opus-5-5",
+        status: "running",
+        result: null,
+        startedAt: null,
+        completedAt: null,
+      };
+      const dispatched = yield* Ref.make<ReadonlyArray<unknown>>([]);
+      let parentLocation: "cloud" | undefined;
+      const layerDependencies = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.mock(ThreadManagementService.ThreadManagementService)({
+          hasReceipt: () => Effect.succeed(false),
+          assertProviderInstanceEnabled: () => Effect.void,
+          isProviderInstanceEnabledForProject: () => Effect.succeed(true),
+          getThreadRecords: (threadId) =>
+            Ref.get(dispatched).pipe(
+              Effect.map((commands) => {
+                if (threadId !== parentThreadId) return childProjection;
+                const parent = parentProjection(commands.length === 0 ? [] : [task]);
+                return parentLocation === undefined
+                  ? parent
+                  : ({
+                      ...parent,
+                      thread: { ...parent.thread, location: parentLocation },
+                    } as OrchestrationV2ThreadProjection);
+              }),
+            ),
+          dispatch: (command) =>
+            Ref.update(dispatched, (commands) => [...commands, command]).pipe(
+              Effect.as({
+                sequence: 1,
+                storedEvents: [
+                  {
+                    sequence: 1,
+                    commandId: null,
+                    event: { type: "subagent.updated", payload: task },
+                  },
+                ],
+              } as never),
+            ),
+        }),
+        ServerSettings.layerTest(settings),
+        ...(memory === undefined
+          ? []
+          : [
+              MemoryHeadroom.layerFromSource(memory).pipe(
+                Layer.provide(ServerSettings.layerTest(settings)),
+              ),
+            ]),
+        providerRegistryLayer([
+          providerSnapshot({
+            instanceId: codexInstanceId,
+            driver: ProviderDriverKind.make("codex"),
+            model: "gpt-5.4",
+          }),
+          providerSnapshot({
+            instanceId: claudeInstanceId,
+            driver: ProviderDriverKind.make("claudeAgent"),
+            model: "claude-opus-5-5",
+          }),
+        ]),
+        adapterRegistryLayer([codexInstanceId, claudeInstanceId]),
+        Layer.mock(ProjectService.ProjectService)({
+          getById: () => Effect.succeed(Option.some({ workspaceRoot: "/repo" } as never)),
+        }),
+        Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
+        Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+      );
+      const layerWithGit = OrchestratorMcpService.layer.pipe(
+        Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),
+        Layer.provide(
+          Layer.mock(GitVcsDriver.GitVcsDriver)({
+            resolveCommit: () => Effect.succeed({ commitSha: "abc1234" } as never),
+          }),
+        ),
+      );
+
+      return yield* Effect.gen(function* () {
+        const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+        return yield* body({
+          service,
+          setParentCloud: () => {
+            parentLocation = "cloud";
+          },
+          dispatched,
+        });
+      }).pipe(Effect.provide(layerWithGit.pipe(Layer.provide(layerDependencies))));
+    });
+
+  it.effect("runs cloud children on Claude or Codex, sharing a cloud parent's checkout", () =>
+    withDelegations(
+      { taskExecution: { location: "cloud_first" } },
+      ({ service, setParentCloud, dispatched }) =>
+        Effect.gen(function* () {
+          // A local parent's cloud child gets its own checkout and sandbox.
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "delegate-cloud-codex",
+          });
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "delegate-cloud-claude",
+          });
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            clientRequestId: "delegate-local-claude",
+          });
+
+          // A cloud parent's children inherit the cloud and share its checkout (and
+          // so its sandbox), unless they ask for their own worktree.
+          setParentCloud();
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: codexInstanceId, model: "gpt-5.4" },
+            mode: "async",
+            clientRequestId: "delegate-cloud-parent-shared",
+          });
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            isolation: "worktree",
+            clientRequestId: "delegate-cloud-parent-isolated",
+          });
+          const refused = yield* service
+            .delegateTask(scope, {
+              task: "Build it.",
+              target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+              mode: "async",
+              location: "local",
+              clientRequestId: "delegate-cloud-parent-local",
+            })
+            .pipe(Effect.flip);
+          assert.include(refused.message, "would edit the Mac mirror");
+
+          const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+            location?: string;
+            workspaceStrategy?: { type: string };
+          }>;
+          assert.deepEqual(
+            commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+            [
+              ["cloud", "worktree"],
+              ["cloud", "worktree"],
+              [undefined, undefined],
+              ["cloud", undefined],
+              ["cloud", "worktree"],
+            ],
+          );
+        }),
+    ),
+  );
+
+  const PLENTY: MemoryHeadroom.MemorySnapshot = {
+    availableMemoryBytes: 6 * 1024 ** 3,
+    memoryPressure: "normal",
+  };
+  const TIGHT: MemoryHeadroom.MemorySnapshot = {
+    availableMemoryBytes: 1 * 1024 ** 3,
+    memoryPressure: "normal",
+  };
+  const localChild = (clientRequestId: string, isolation?: "worktree") => ({
+    task: "Build it.",
+    target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+    mode: "async" as const,
+    ...(isolation === undefined ? {} : { isolation }),
+    clientRequestId,
+  });
+
+  it.effect("starts a second local child only once the first one's memory can show", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, dispatched }) =>
+        Effect.gen(function* () {
+          yield* service.delegateTask(scope, localChild("spaced-first"));
+          const second = yield* service
+            .delegateTask(scope, localChild("spaced-second"))
+            .pipe(Effect.forkChild);
+          yield* TestClock.adjust(MemoryHeadroom.START_SPACING_MS - 1_000);
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 1);
+          yield* TestClock.adjust(1_000);
+          yield* Fiber.join(second);
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 2);
+        }),
+      () => PLENTY,
+    ),
+  );
+
+  it.effect(
+    "sends a short Mac's child to the cloud only when it asked for its own checkout",
+    () => {
+      let memory = TIGHT;
+      return withDelegations(
+        { taskExecution: { location: "local_first" } },
+        ({ service, dispatched }) =>
+          Effect.gen(function* () {
+            yield* service.delegateTask(scope, localChild("short-isolated", "worktree"));
+            // Sharing the parent's checkout: it stays here and waits for memory.
+            const shared = yield* service
+              .delegateTask(scope, localChild("short-shared"))
+              .pipe(Effect.forkChild);
+            yield* TestClock.adjust(MemoryHeadroom.MEMORY_SAMPLE_INTERVAL_MS * 2);
+            assert.strictEqual((yield* Ref.get(dispatched)).length, 1);
+            memory = PLENTY;
+            yield* TestClock.adjust(MemoryHeadroom.MEMORY_SAMPLE_INTERVAL_MS);
+            yield* Fiber.join(shared);
+            const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+              location?: string;
+              workspaceStrategy?: { type: string };
+            }>;
+            assert.deepEqual(
+              commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+              [
+                ["cloud", "worktree"],
+                [undefined, undefined],
+              ],
+            );
+          }),
+        () => memory,
+      );
+    },
+  );
+
+  it.effect("refuses a local child the Mac never has room for, saying it was not started", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, dispatched }) =>
+        Effect.gen(function* () {
+          const child = yield* service
+            .delegateTask(scope, localChild("never-room"))
+            .pipe(Effect.flip, Effect.forkChild);
+          yield* TestClock.adjust(MemoryHeadroom.HEADROOM_WAIT_MS);
+          const refused = yield* Fiber.join(child);
+          assert.include(refused.message, "this child was not started. Delegate it again later.");
+          assert.strictEqual((yield* Ref.get(dispatched)).length, 0);
+        }),
+      () => TIGHT,
+    ),
+  );
+
+  it.effect("keeps a local parent's cloud child on the Mac under local only", () =>
+    withDelegations(
+      { taskExecution: { location: "local_only" } },
+      ({ service, setParentCloud, dispatched }) =>
+        Effect.gen(function* () {
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            location: "cloud",
+            clientRequestId: "local-only-cloud-request",
+          });
+          // A cloud parent's children still share its sandbox.
+          setParentCloud();
+          yield* service.delegateTask(scope, {
+            task: "Build it.",
+            target: { providerInstanceId: claudeInstanceId, model: "claude-opus-5-5" },
+            mode: "async",
+            clientRequestId: "local-only-cloud-parent",
+          });
+          const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+            location?: string;
+            workspaceStrategy?: { type: string };
+          }>;
+          assert.deepEqual(
+            commands.map((command) => [command.location, command.workspaceStrategy?.type]),
+            [
+              [undefined, undefined],
+              ["cloud", undefined],
+            ],
+          );
+        }),
+    ),
   );
 
   it.effect("resolves a driverKind target to a capable Antigravity instance", () =>
@@ -1344,6 +1671,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         adapterRegistryLayer([codexInstanceId, antigravityInstanceId]),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
 
@@ -1394,6 +1722,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         adapterRegistryLayer([codexInstanceId]),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       );
 
@@ -1451,6 +1780,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         adapterRegistryLayer([codexInstanceId]),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
         ServerSettings.layerTest(),
       );
@@ -1550,6 +1880,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         adapterRegistryLayer([codexInstanceId, altInstanceId]),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
         ServerSettings.layerTest(),
       );
@@ -1658,6 +1989,7 @@ describe("OrchestratorMcpService provider resolution", () => {
           adapterRegistryLayer([codexInstanceId, altInstanceId]),
           Layer.mock(ProjectService.ProjectService)({}),
           Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
           Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
           ServerSettings.layerTest(),
         );
@@ -1770,6 +2102,7 @@ describe("OrchestratorMcpService provider resolution", () => {
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
       );
 
       yield* Effect.gen(function* () {
@@ -1931,6 +2264,7 @@ describe("OrchestratorMcpService provider resolution", () => {
             adapterRegistryLayer([codexInstanceId, codexAltInstanceId]),
             Layer.mock(ProjectService.ProjectService)({}),
             Layer.mock(SecretRequests.SecretRequests)({}),
+            Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
             Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
           );
 
@@ -2070,6 +2404,7 @@ describe("OrchestratorMcpService provider resolution", () => {
             }),
             Layer.mock(ProjectService.ProjectService)({}),
             Layer.mock(SecretRequests.SecretRequests)({}),
+            Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
             Layer.mock(ScheduledTaskService.ScheduledTaskService)({
               list: () => Effect.succeed({ tasks }),
               upsert: () =>
@@ -2140,6 +2475,7 @@ describe("OrchestratorMcpService provider resolution", () => {
                   }),
                   Layer.mock(ProjectService.ProjectService)({}),
                   Layer.mock(SecretRequests.SecretRequests)({}),
+                  Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
                   Layer.mock(ScheduledTaskService.ScheduledTaskService)({
                     list: () => Effect.succeed({ tasks: [task({})] }),
                   }),
@@ -2228,6 +2564,7 @@ describe("OrchestratorMcpService provider resolution", () => {
                   }),
                   Layer.mock(ProjectService.ProjectService)({}),
                   Layer.mock(SecretRequests.SecretRequests)({}),
+                  Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
                   Layer.mock(ScheduledTaskService.ScheduledTaskService)({
                     list: () => Effect.succeed({ tasks: [bound] }),
                     upsert: () =>
@@ -2295,6 +2632,7 @@ describe("OrchestratorMcpService provider resolution", () => {
                       Effect.succeed(Option.some({ id, defaultModelSelection: null } as never)),
                   }),
                   Layer.mock(SecretRequests.SecretRequests)({}),
+                  Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
                   Layer.mock(ScheduledTaskService.ScheduledTaskService)({
                     upsert: (upsertInput) =>
                       Ref.update(saved, (inputs) => [...inputs, upsertInput]).pipe(
@@ -2481,6 +2819,125 @@ describe("originDefaultWorktreeStrategy", () => {
           "/repo",
         ),
       );
+    }),
+  );
+});
+
+describe("approved cross-mode messages", () => {
+  it.effect.each([
+    "missing",
+    "exact",
+    "other-target",
+    "changed-mode",
+    "runtime-downgrade",
+    "interaction-downgrade",
+  ] as const)("%s grant only sends to the exact approved target modes", (grant) =>
+    Effect.gen(function* () {
+      const parentId = ThreadId.make("thread:auto-message-parent");
+      const targetId = ThreadId.make("thread:full-access-message-target");
+      const parent = liveThreadShell(parentId, { runtimeMode: "auto" });
+      const target = liveThreadShell(targetId, {
+        ...(grant === "runtime-downgrade" || grant === "interaction-downgrade"
+          ? { runtimeMode: "auto" }
+          : {}),
+        ...(grant === "interaction-downgrade" ? { interactionMode: "plan" } : {}),
+      });
+      const sent: Array<{ readonly text: string; readonly threadId: ThreadId }> = [];
+      const interrupted: ThreadId[] = [];
+      const scope: McpInvocationScope = {
+        environmentId: EnvironmentId.make("environment:approved-send"),
+        requestNamespace: "approved-send",
+        thread: {
+          threadId: parentId,
+          providerInstanceId: parent.providerInstanceId,
+          providerSessionId: "session:approved-send",
+        },
+        client: undefined,
+        capabilities: new Set(["orchestration"]),
+        issuedAt: 1,
+      };
+      const dependencies = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: (id) => Effect.succeed(id === parentId ? parent : target),
+          getThreadRecords: () => Effect.succeed(idleThreadProjection(parent)),
+          getProjectThreadRecords: () => Effect.succeed(idleThreadProjection(target)),
+          sendToThread: (input) =>
+            Effect.sync(() => {
+              sent.push({ text: input.text, threadId: input.threadId });
+              return {
+                run: { id: RunId.make("run:approved-send"), status: "running" },
+                delivery: "started",
+              } as never;
+            }),
+          interruptThread: (input) =>
+            Effect.sync(() => {
+              interrupted.push(input.threadId);
+              return { type: "no_active_run" } as const;
+            }),
+        }),
+        ServerSettings.layerTest(),
+        Layer.mock(ProviderRegistry.ProviderRegistry)({ getProviders: Effect.succeed([]) }),
+        Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({
+          list: () => Effect.succeed([]),
+        }),
+        Layer.mock(ProjectService.ProjectService)({}),
+        Layer.mock(SecretRequests.SecretRequests)({}),
+        Layer.mock(CloudLeadSecrets.CloudLeadSecrets)({}),
+        Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+      );
+      const service = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+        Effect.provide(layerOrchestratorService.pipe(Layer.provide(dependencies))),
+      );
+      const dispatchLimit = {
+        runtimeMode: "auto",
+        interactionMode: "default",
+        approvedTargets:
+          grant === "missing"
+            ? []
+            : [
+                {
+                  threadId: grant === "other-target" ? parentId : targetId,
+                  runtimeMode:
+                    grant === "changed-mode" || grant === "interaction-downgrade"
+                      ? "auto"
+                      : "full-access",
+                  interactionMode: "default",
+                },
+              ],
+      } satisfies DispatchModeLimitValue;
+      const send = service
+        .sendToThread(scope, {
+          threadId: targetId,
+          message: "Summarize the project status.",
+          clientRequestId: `approved-send:${grant}`,
+        })
+        .pipe(Effect.provideService(DispatchModeLimit, dispatchLimit));
+      const interrupt = service
+        .interruptThread(scope, {
+          threadId: targetId,
+          clientRequestId: `approved-interrupt:${grant}`,
+        })
+        .pipe(Effect.provideService(DispatchModeLimit, dispatchLimit));
+      if (grant === "exact") {
+        const result = yield* send;
+        assert.equal(result.threadId, targetId);
+        assert.deepEqual(sent, [{ text: "Summarize the project status.", threadId: targetId }]);
+        yield* interrupt;
+        assert.deepEqual(interrupted, [targetId]);
+      } else {
+        const error = yield* send.pipe(Effect.flip);
+        const expectedCode =
+          grant === "interaction-downgrade"
+            ? "interaction_mode_escalation_denied"
+            : "runtime_mode_escalation_denied";
+        assert.equal(error.code, expectedCode);
+        const interruptError = yield* interrupt.pipe(Effect.flip);
+        assert.equal(interruptError.code, expectedCode);
+        assert.deepEqual(sent, []);
+        assert.deepEqual(interrupted, []);
+      }
+      assert.equal(parent.runtimeMode, "auto");
     }),
   );
 });

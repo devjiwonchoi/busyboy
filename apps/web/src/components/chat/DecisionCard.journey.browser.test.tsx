@@ -22,6 +22,14 @@ import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { useProjectManagerEntries } from "../../state/projectTeam";
 import { DecisionCard } from "./DecisionCard";
 
+vi.mock(import("../../state/entities"), async (original) => ({
+  ...(await original()),
+  useProjects: (() => [
+    { id: "project-1", environmentId: "environment-local", title: "BusyBoy" },
+    { id: "project-benchmarks", environmentId: "environment-local", title: "next-benchmarks" },
+  ]) as never,
+}));
+
 const PROJECT_ID = ProjectId.make("project-1");
 const PM_THREAD_ID = ThreadId.make("pm-thread");
 const LEAD_THREAD_ID = ThreadId.make("lead-thread");
@@ -91,7 +99,6 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
   return {
     taskNumber: 3,
     taskTitle: "Fix the login redirect",
-    proposal: null,
     plan: null,
     item: {
       id: ProjectAttentionItemId.make("attention-plan"),
@@ -110,6 +117,9 @@ function card(overrides: Partial<ProjectDecisionCard["item"]> = {}): ProjectDeci
       specVersion: null,
       summary: null,
       verification: null,
+      details: null,
+      senderRole: null,
+      senderName: null,
       ...overrides,
     },
   };
@@ -203,9 +213,6 @@ describe.each([
 
   const noteIn = (element: HTMLElement) =>
     element.querySelector<HTMLTextAreaElement>("[data-decision-card-note]")!;
-  const radiosIn = (element: HTMLElement) => [
-    ...element.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
-  ];
 
   const failedQuestion =
     "#3 Fix the login redirect: 리드 작업이 실패했어요 (로그인 만료 401)\n\n오류: unexpected status 401 Unauthorized: token_expired\n\n다시 시도하면 리드가 멈춘 곳부터 이어서 해요. 리드에게 전할 말이 있으면 함께 적어 주세요.";
@@ -268,198 +275,39 @@ describe.each([
     await vi.waitFor(() => expect(server.answers[0]?.answer).toBe("다시 시도\nNote: 테스트부터"));
   });
 
-  it("shows a clear question, then relays the explicit pick and note to the lead", async () => {
+  it("retains a failed alternative answer and relays its note on retry", async () => {
     const open = await openCard(undefined);
-    const header = open.querySelector("[data-decision-card-meta]")?.textContent;
-    expect(header).toBe("Decision · BB-3 Fix the login redirect");
-    await new Promise(requestAnimationFrame);
-    expect(open.querySelector("[data-decision-card-context-toggle]")).toBeNull();
-    expect(open.querySelector("[data-decision-card-headline]")?.textContent).toBe(
-      QUESTION.split("\n")[0],
-    );
-    expect(open.querySelector("[data-decision-card-context]")?.textContent).toContain("가드에서");
-    expect(open.querySelector('[role="radiogroup"]')?.getAttribute("aria-label")).toBe(
-      QUESTION.split("\n")[0],
-    );
-    const radios = radiosIn(open);
-    expect(radios).toHaveLength(2);
-    expect(radios[0]!.querySelector("[data-decision-option-recommended]")?.textContent).toBe(
-      "Recommended",
-    );
-    expect(radios[1]!.querySelector("[data-decision-option-recommended]")).toBeNull();
-    expect(radios[0]!.querySelector("[data-decision-option-tradeoff]")?.textContent).toBe(
-      "오늘 배포, 라우터는 다음 태스크",
-    );
-    expect(open.textContent?.includes("(Recommended)")).toBe(false);
-    expect(noteIn(open).getAttribute("aria-label")).toBe("Note for your answer");
-    expect((buttonIn(open, "Submit") as HTMLButtonElement).disabled).toBe(true);
-    const bounds = open.getBoundingClientRect();
-    for (const element of [...radios, noteIn(open), buttonIn(open, "Submit")]) {
-      expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
-      expect(element.getBoundingClientRect().left).toBeGreaterThanOrEqual(bounds.left);
-    }
-    expect(open.scrollWidth).toBeLessThanOrEqual(open.clientWidth);
-    await userEvent.click(radios[0]!);
-    expect(server.answers).toHaveLength(0);
-    await userEvent.type(noteIn(open), "플래그를 유지해 주세요");
-    await userEvent.click(buttonIn(open, "Submit"));
-    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
-    expect(server.answers[0]?.answer).toBe(`${OPTIONS[0]}\nNote: 플래그를 유지해 주세요`);
-    expect(server.leadMessages).toEqual([
-      `[User answer via BusyBoy] ${QUESTION} → ${OPTIONS[0]}\nNote: 플래그를 유지해 주세요`,
-    ]);
-    const answered = cardElement("answered")!;
-    expect(answered.querySelector("[data-answered-question-id] .font-medium")?.textContent).toBe(
-      header,
-    );
-    expect(answered.querySelector("[data-selected=true]")?.textContent).toContain(OPTIONS[0]);
-    expect(answered.querySelector("[data-answered-question-note]")?.textContent).toBe(
-      "Note: 플래그를 유지해 주세요",
-    );
-  });
-
-  it("uses a single tab stop and moves both selection and focus with radio keys", async () => {
-    const open = await openCard(undefined);
-    const radios = radiosIn(open);
-    await act(() =>
-      (open.querySelector("[data-decision-card-expand]") as HTMLButtonElement).focus(),
-    );
-    await userEvent.tab();
-    expect(document.activeElement).toBe(radios[0]);
-    await userEvent.keyboard("{ArrowDown}");
-    expect(document.activeElement).toBe(radios[1]);
-    expect(radios[1]!.getAttribute("aria-checked")).toBe("true");
-    expect(radios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
-    await userEvent.keyboard("{ArrowRight}");
-    expect(document.activeElement).toBe(radios[0]);
-    await userEvent.keyboard("{End}");
-    expect(document.activeElement).toBe(radios[1]);
-    await userEvent.keyboard("{Home}{ArrowUp}");
-    expect(document.activeElement).toBe(radios[1]);
-    expect(server.answers).toHaveLength(0);
-  });
-
-  it("submits a pick and note with Enter", async () => {
-    const open = await openCard(undefined);
-    await userEvent.click(radiosIn(open)[1]!);
-    await userEvent.type(noteIn(open), "다음 주까지{Enter}");
-    await vi.waitFor(() =>
-      expect(server.answers[0]?.answer).toBe(`${OPTIONS[1]}\nNote: 다음 주까지`),
-    );
-  });
-
-  it("preserves the draft and re-enables controls when sending fails", async () => {
-    server.fail = true;
-    const open = await openCard(undefined);
-    await userEvent.click(radiosIn(open)[0]!);
+    await userEvent.click(buttonIn(open, "자세히 보기"));
+    const radios = open.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    await userEvent.click(radios[1]!);
     await userEvent.type(noteIn(open), "다시 시도");
-    await userEvent.click(buttonIn(open, "Submit"));
+    server.fail = true;
+    await userEvent.click(buttonIn(open, "보내기"));
     await vi.waitFor(() =>
-      expect((buttonIn(open, "Submit") as HTMLButtonElement).disabled).toBe(false),
+      expect(open.querySelector('[role="alert"]')?.textContent).toContain("보내지 못했어요"),
     );
-    expect(cardElement("open")).toBe(open);
-    expect(radiosIn(open)[0]!.getAttribute("aria-checked")).toBe("true");
-    expect(radiosIn(open)[0]!.disabled).toBe(false);
-    expect(noteIn(open).disabled).toBe(false);
+    expect(radios[1]?.checked).toBe(true);
     expect(noteIn(open).value).toBe("다시 시도");
     server.fail = false;
-    await userEvent.click(buttonIn(open, "Submit"));
+    await userEvent.click(buttonIn(open, "보내기"));
     await vi.waitFor(() =>
-      expect(server.answers[0]?.answer).toBe(`${OPTIONS[0]}\nNote: 다시 시도`),
+      expect(server.answers[0]?.answer).toBe(`${OPTIONS[1]}\nNote: 다시 시도`),
     );
   });
 
-  it("sends a pick alone unchanged and leaves superseded cards inert", async () => {
-    const open = await openCard(undefined);
-    await userEvent.click(radiosIn(open)[0]!);
-    await userEvent.click(buttonIn(open, "Submit"));
-    await vi.waitFor(() => expect(server.answers[0]?.answer).toBe(OPTIONS[0]));
-    await act(() =>
-      publish({ ...server.summary!, decisionCards: [card({ supersededAt: ASKED_AT })] }),
-    );
-    expect(cardElement("resolved")?.textContent).toContain("No longer needed");
+  it("uses the PM sender for a legacy blocker without a lead and sends the done answer", async () => {
+    const open = await openCard({ taskId: null, kind: "blocker", options: [] });
+    expect(open.querySelector("[data-decision-card-meta]")?.textContent).toBe("BusyBoy · PM");
+    expect(open.textContent?.includes("BB-3")).toBe(false);
+    await userEvent.click(buttonIn(open, "처리했어요"));
+    await vi.waitFor(() => expect(server.answers[0]?.answer).toBe("처리했어요"));
+    expect(cardElement("answered")?.textContent).toContain("BusyBoy · PM");
+  });
+
+  it("keeps superseded cards inert and prefixes their compact line with the sender", async () => {
+    await openCard({ supersededAt: ASKED_AT });
+    expect(cardElement("resolved")?.textContent).toContain("BusyBoy · Fix the login 리드");
+    expect(cardElement("resolved")?.textContent?.includes("BB-3")).toBe(false);
     expect(cardElement("resolved")?.querySelector("button")).toBeNull();
-  });
-
-  it("relays a typed answer without a pick to the lead as written", async () => {
-    const open = await openCard(undefined);
-    expect(noteIn(open).placeholder).toBe("Write your own answer, or add a note to your pick");
-    await userEvent.type(noteIn(open), "   ");
-    expect((buttonIn(open, "Submit") as HTMLButtonElement).disabled).toBe(true);
-    await userEvent.clear(noteIn(open));
-    await userEvent.type(noteIn(open), "우선 원인부터 찾아보자");
-    expect(radiosIn(open).some((radio) => radio.getAttribute("aria-checked") === "true")).toBe(
-      false,
-    );
-    await userEvent.click(buttonIn(open, "Submit"));
-    await vi.waitFor(() => expect(server.answers).toHaveLength(1));
-    expect(server.answers[0]?.answer).toBe("우선 원인부터 찾아보자");
-    expect(server.leadMessages).toEqual([
-      `[User answer via BusyBoy] ${QUESTION} → 우선 원인부터 찾아보자`,
-    ]);
-    const answered = cardElement("answered")!;
-    expect(answered.querySelector("[data-selected=true]")).toBeNull();
-    expect(answered.querySelector("[data-answered-question-text]")?.textContent).toBe(
-      "Answer: 우선 원인부터 찾아보자",
-    );
-  });
-
-  it("sends a typed answer without a pick with Enter", async () => {
-    const open = await openCard(undefined);
-    await userEvent.type(noteIn(open), "둘 다 아니고 먼저 로그를 봐 주세요{Enter}");
-    await vi.waitFor(() =>
-      expect(server.answers[0]?.answer).toBe("둘 다 아니고 먼저 로그를 봐 주세요"),
-    );
-  });
-
-  it("uses the implicit feedback answer for a blocker without options", async () => {
-    const open = await openCard({ kind: "blocker", options: [] });
-    expect(open.querySelector("[data-decision-card-meta]")?.textContent).toBe(
-      "Blocker · BB-3 Fix the login redirect",
-    );
-    expect(open.querySelector('[role="radiogroup"]')).toBeNull();
-    expect(noteIn(open).placeholder).toBe("Write your answer");
-    expect((buttonIn(open, "Submit") as HTMLButtonElement).disabled).toBe(true);
-    await userEvent.type(noteIn(open), "접근 권한을 열었어요");
-    await userEvent.click(buttonIn(open, "Submit"));
-    await vi.waitFor(() =>
-      expect(server.answers[0]?.answer).toBe("Give feedback\nNote: 접근 권한을 열었어요"),
-    );
-  });
-
-  it("folds long context and carries the draft into full screen until answered", async () => {
-    const context = Array.from({ length: 40 }, (_, index) => `- Context line ${index + 1}`).join(
-      "\n",
-    );
-    const open = await openCard({ question: `로그인 리다이렉트 범위?\n\n${context}` });
-    const box = open.querySelector<HTMLElement>("[data-decision-card-context]")!;
-    const foldedHeight = box.getBoundingClientRect().height;
-    expect(foldedHeight).toBeLessThan(200);
-    await userEvent.click(await vi.waitFor(() => buttonIn(open, "Show more")));
-    expect(box.getBoundingClientRect().height).toBeGreaterThanOrEqual(foldedHeight * 3);
-    await userEvent.click(buttonIn(open, "Show less"));
-    expect(box.getBoundingClientRect().height).toBe(foldedHeight);
-    await userEvent.click(radiosIn(open)[1]!);
-    await userEvent.type(noteIn(open), "단계를 나눠 주세요");
-    await userEvent.click(
-      open.querySelector<HTMLButtonElement>('[data-decision-card-expand="inline"]')!,
-    );
-    const expanded = await vi.waitFor(() => {
-      const element = document.querySelector<HTMLElement>("[data-decision-card-expanded]");
-      expect(element).toBeTruthy();
-      return element!;
-    });
-    expect(expanded.textContent).toContain("Context line 40");
-    expect(expanded.querySelector("[data-decision-card-context-toggle]")).toBeNull();
-    expect(radiosIn(expanded)[1]!.getAttribute("aria-checked")).toBe("true");
-    expect(noteIn(expanded).value).toBe("단계를 나눠 주세요");
-    await userEvent.click(buttonIn(expanded, "Submit"));
-    await vi.waitFor(() =>
-      expect(server.answers[0]?.answer).toBe(`${OPTIONS[1]}\nNote: 단계를 나눠 주세요`),
-    );
-    await vi.waitFor(() => expect(cardElement("answered")).toBeTruthy());
-    await vi.waitFor(() =>
-      expect(document.querySelector("[data-decision-card-expanded]")).toBeNull(),
-    );
   });
 });

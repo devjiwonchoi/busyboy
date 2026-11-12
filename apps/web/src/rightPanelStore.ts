@@ -77,7 +77,7 @@ export type RightPanelSurface =
   | { id: `side-chat:${string}`; kind: "side-chat"; threadId: string };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 14;
+const RIGHT_PANEL_STORAGE_VERSION = 15;
 
 export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
   EnvironmentId.make("pull-requests-panel"),
@@ -422,8 +422,16 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
               const surfaces = Array.isArray(validThreadState?.surfaces)
                 ? validThreadState.surfaces.flatMap<RightPanelSurface>((surface) => {
                     const kind = (surface as { kind?: string }).kind;
-                    // "device" panels were removed with simulator support.
-                    if (kind === "plan" || kind === "agents" || kind === "device") return [];
+                    // "device" panels were removed with simulator support, and the Director
+                    // workspace when All projects became its own page.
+                    if (
+                      kind === "plan" ||
+                      kind === "agents" ||
+                      kind === "device" ||
+                      kind === "director-workspace"
+                    ) {
+                      return [];
+                    }
                     if (
                       (surface.kind === "file" || surface.kind === "files") &&
                       "folderTrail" in surface &&
@@ -569,8 +577,10 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           ) {
             return state;
           }
-          // A task's plan was put in front on purpose; nothing replaces it on its own.
-          if (selectActiveRightPanel(state.byThreadKey, ref) === "task-plan") return state;
+          // Keep the chosen plan in front of proactive updates.
+          if (selectActiveRightPanel(state.byThreadKey, ref) === "task-plan") {
+            return state;
+          }
           if (
             surface.kind === "diff" &&
             (selectActiveRightPanel(state.byThreadKey, ref) === "pull-request" ||

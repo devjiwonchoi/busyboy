@@ -75,6 +75,7 @@ import * as ServerConfig from "../../config.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as CloudLeadService from "../../cloudLead/CloudLeadService.ts";
 import { PreviewControlsToolkit } from "../../mcp/toolkits/previewControls/tools.ts";
 import { HtmlToolkit } from "../../mcp/toolkits/html/tools.ts";
 import { EnvironmentToolkit } from "../../mcp/toolkits/environment/tools.ts";
@@ -14748,5 +14749,154 @@ describe("ClaudeAdapterV2 query message stream", () => {
       yield* Scope.close(scope, Exit.void);
       assert.isTrue(closed);
     }),
+  );
+});
+
+describe("ClaudeAdapterV2 cloud threads", () => {
+  const openCloudTurn = (location: "local" | "cloud") =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+      const attachmentsDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-claude-cloud-",
+      });
+      const prepared: Array<{ threadId: string; worktreePath: string; mcpEndpoint: string }> = [];
+      const remoteSpawn = () => {
+        throw new Error("spawned remotely");
+      };
+      let openedOptions: ClaudeAdapterV2.ClaudeAgentSdkQueryOptions | undefined;
+      const adapter = yield* ClaudeAdapterV2.makeClaudeAdapterV2({
+        instanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
+        settings: DEFAULT_CLAUDE_SETTINGS,
+        environment: {},
+        attachmentsDir,
+        fileSystem,
+        path: yield* Path.Path,
+        crypto: yield* Crypto.Crypto,
+        idAllocator,
+        queryRunner: {
+          allocateSessionId: Effect.succeed(`native-thread-claude-${location}`),
+          open: (input) =>
+            Effect.sync(() => {
+              openedOptions = input.options;
+              return {
+                messages: Stream.never,
+                offer: () => Effect.void,
+                setModel: () => Effect.void,
+                applyFlagSettings: () => Effect.void,
+                setPermissionMode: () => Effect.void,
+                backgroundTasks: () => Effect.succeed(false),
+                reconnectMcpServer: () => Effect.void,
+                stopTask: () => Effect.void,
+                interrupt: Effect.void,
+                close: Effect.void,
+              };
+            }),
+          forkSession: () => Effect.die("unused"),
+          subagentLaunchToolUseId: () => Effect.succeed(null),
+          assertComplete: Effect.void,
+        },
+      }).pipe(
+        Effect.provideService(CloudLeadService.CloudLeadHooks, {
+          ...CloudLeadService.unavailableHooks,
+          prepare: (input) =>
+            Effect.sync(() => {
+              prepared.push(input);
+              return {
+                spawn: remoteSpawn as never,
+                spawnCodex: () => Promise.reject(new Error("not used")),
+                mcpUrl: "http://127.0.0.1:8788/mcp",
+                paths: { toRemote: (text: string) => text, toMac: (text: string) => text },
+              };
+            }),
+          checkCodex: () => Effect.die("not used"),
+          syncToMac: () => Effect.void,
+          release: () => Effect.void,
+        }),
+      );
+      const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        cwd: "/Users/me/worktrees/task",
+      });
+      const threadId = ThreadId.make(`thread-claude-${location}`);
+      yield* mcpSessions.set({
+        environmentId: EnvironmentId.make("environment-claude-cloud"),
+        threadId,
+        providerSessionId: `mcp-claude-${location}`,
+        providerInstanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
+        endpoint: "http://127.0.0.1:43123/mcp",
+        authorizationHeader: "Bearer thread-token",
+        browserToolsAvailable: false,
+        capabilities: new Set(["orchestration"]),
+      });
+      const runtime = yield* adapter.openSession({
+        threadId,
+        providerSessionId: ProviderSessionId.make(`provider-session-claude-${location}`),
+        modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+        runtimePolicy,
+      });
+      const providerThread = yield* runtime.ensureThread({
+        threadId,
+        modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+        runtimePolicy,
+      });
+      const now = yield* DateTime.now;
+      const turnInput = makeClaudeTestTurnInput({
+        threadId,
+        providerThread,
+        now,
+        attemptId: RunAttemptId.make(`attempt-claude-${location}`),
+        text: "Hello",
+        attachments: [],
+        runtimePolicy,
+      });
+      yield* runtime.startTurn({
+        ...turnInput,
+        appThread: { ...turnInput.appThread, location },
+      });
+      return { prepared, openedOptions, remoteSpawn };
+    });
+
+  it.effect("runs a cloud thread's claude through the sandbox and its MCP through the relay", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { prepared, openedOptions, remoteSpawn } = yield* openCloudTurn("cloud");
+        assert.deepEqual(prepared, [
+          {
+            threadId: "thread-claude-cloud",
+            worktreePath: "/Users/me/worktrees/task",
+            mcpEndpoint: "http://127.0.0.1:43123/mcp",
+          },
+        ]);
+        assert.strictEqual(openedOptions?.spawnClaudeCodeProcess, remoteSpawn);
+        const t3 = openedOptions?.mcpServers?.["t3-code"] as
+          | { url: string; headers: Record<string, string> }
+          | undefined;
+        assert.equal(t3?.url, "http://127.0.0.1:8788/mcp");
+        assert.equal(t3?.headers.Authorization, "Bearer thread-token");
+      }),
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("leaves a local thread's spawn and MCP endpoint alone", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { prepared, openedOptions } = yield* openCloudTurn("local");
+        assert.deepEqual(prepared, []);
+        assert.isUndefined(openedOptions?.spawnClaudeCodeProcess);
+        const t3 = openedOptions?.mcpServers?.["t3-code"] as { url: string } | undefined;
+        assert.equal(t3?.url, "http://127.0.0.1:43123/mcp");
+      }),
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
   );
 });

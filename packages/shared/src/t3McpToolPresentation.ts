@@ -40,6 +40,7 @@ export type T3McpToolSummaryAction =
   | "question-read"
   | "question-respond"
   | "secret-request"
+  | "secret-save"
   | "worktree-handoff"
   | "worktree-list"
   | "worktree-status"
@@ -155,6 +156,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "schedule-delete",
   ),
   request_secret: tool(["Ask for", "Asking for", "Asked for", "a secret"], "secret-request"),
+  cloud_secret_save: tool(["Save", "Saving", "Saved", "a cloud lead secret"], "secret-save"),
   create_threads: tool(["Create", "Creating", "Created", "T3 threads"], "thread-create"),
   t3_thread_start: tool(["Start", "Starting", "Started", "a T3 thread"], "thread-create"),
   t3_thread_list: tool(["List", "Listing", "Listed", "T3 threads"], "thread-list"),
@@ -347,6 +349,10 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "team-task-update",
   ),
   task_review_set: tool(["Record", "Recording", "Recorded", "a review"], "team-task-update"),
+  task_plan_check_set: tool(
+    ["Record", "Recording", "Recorded", "a plan check"],
+    "team-task-update",
+  ),
   task_ready: tool(["Mark", "Marking", "Marked", "a team task ready"], "team-task-update"),
   task_delegate: tool(["Delegate", "Delegating", "Delegated", "a task step"], "team-task-start"),
   task_nudge: tool(["Nudge", "Nudging", "Nudged", "a team task"], "team-task-nudge"),
@@ -364,6 +370,8 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   goal_write: tool(["Save", "Saving", "Saved", "a goal"], "team-task-update"),
   goal_link: tool(["Link", "Linking", "Linked", "work to a goal"], "team-task-update"),
   pm_nudge: tool(["Nudge", "Nudging", "Nudged", "a project PM"], "team-task-nudge"),
+  correction_record: tool(["Record", "Recording", "Recorded", "a correction"], "team-task-update"),
+  corrections_report: tool(["Read", "Reading", "Read", "correction rates"], "team-status"),
 };
 
 export const T3_MCP_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(T3_MCP_TOOLS));

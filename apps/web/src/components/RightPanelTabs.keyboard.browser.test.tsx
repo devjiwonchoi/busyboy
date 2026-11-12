@@ -82,6 +82,8 @@ async function renderPanel(overrides: Partial<ComponentProps<typeof RightPanelTa
         onAddPullRequest={noop}
         onAddPullRequests={noop}
         onAddSideChat={noop}
+        onAddTaskPlan={noop}
+        taskPlanAvailable={false}
         browserAvailable={false}
         terminalAvailable={false}
         diffAvailable={false}
@@ -204,9 +206,8 @@ describe("right panel new-tab shortcut", () => {
     };
     await renderPanel(panel);
     await press("t", { metaKey: true });
-    await press("ArrowDown");
-    await press("ArrowDown");
-    await press("ArrowDown");
+    // Plan, Browser and Terminal come before Files.
+    for (let step = 0; step < 4; step += 1) await press("ArrowDown");
     expect(document.activeElement?.textContent).toContain("Files");
     await press("Enter");
     expect(addFiles).toHaveBeenCalledOnce();

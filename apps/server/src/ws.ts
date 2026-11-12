@@ -118,12 +118,14 @@ import * as CommandOutputHub from "./orchestration-v2/CommandOutputHub.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
+import { clientCommandRefusal } from "./orchestration-v2/clientCommandGuard.ts";
 import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as ProjectTeam from "./projectTeam/ProjectTeamService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as BrowserRequests from "./browserRequests/BrowserRequests.ts";
+import * as OperationPermissions from "./permissions/OperationPermissions.ts";
 import {
   archivedShellStreamItemFromThreadShell,
   buildActiveShellSnapshot,
@@ -1196,6 +1198,7 @@ const layerWsRpc = (
       const projectTeam = yield* ProjectTeam.ProjectTeamService;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const browserRequests = yield* BrowserRequests.BrowserRequests;
+      const operationPermissions = yield* OperationPermissions.OperationPermissions;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
@@ -1807,7 +1810,15 @@ const layerWsRpc = (
 
       const handlers = ServerWsRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
-          Effect.annotateCurrentSpan({
+          clientCommandRefusal(command) !== null
+            ? Effect.fail(
+                new OrchestrationV2DispatchCommandError({
+                  commandId: command.commandId,
+                  commandType: command.type,
+                  message: clientCommandRefusal(command)!,
+                }),
+              )
+            : Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
             "orchestration_v2.command_type": command.type,
             "orchestration_v2.thread_id":
@@ -2078,6 +2089,18 @@ const layerWsRpc = (
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.answerDecision(input)),
           ),
+        [WS_METHODS.projectTeamSnoozeDecision]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.snoozeDecision(input)),
+          ),
+        [WS_METHODS.projectTeamUnsnoozeDecision]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.unsnoozeDecision(input)),
+          ),
+        [WS_METHODS.projectTeamAskLead]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.askLead(input)),
+          ),
         [WS_METHODS.projectTeamUpdateSettings]: (input) =>
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.updateSettings(input)),
@@ -2098,6 +2121,10 @@ const layerWsRpc = (
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.splitTaskTodo(input)),
           ),
+        [WS_METHODS.projectTeamMoveTask]: (input) =>
+          Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
+            Effect.andThen(projectTeam.moveTask(input)),
+          ),
         [WS_METHODS.projectTeamSetTaskRoleModels]: (input) =>
           Effect.annotateCurrentSpan({ "project.id": input.projectId }).pipe(
             Effect.andThen(projectTeam.setTaskRoleModels(input)),
@@ -2109,6 +2136,10 @@ const layerWsRpc = (
         [WS_METHODS.browserRequestsAnswer]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(browserRequests.answer(input)),
+          ),
+        [WS_METHODS.operationPermissionsAnswer]: (input) =>
+          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
+            Effect.andThen(operationPermissions.answer(input)),
           ),
         [WS_METHODS.scheduledTasksListWebhookDeliveries]: (input) =>
           Effect.annotateCurrentSpan({ "scheduled_task.id": input.id }).pipe(
@@ -2538,6 +2569,18 @@ const layerWsRpc = (
                 ),
               ),
             ),
+            // A revert of a task's pull request is a correction; recording it never fails.
+            Effect.tap(() =>
+              input.action === "revert"
+                ? projectTeam.recordPullRequestCorrection({
+                    projectId: input.projectId,
+                    repository: input.repository,
+                    number: input.number,
+                    kind: "revert",
+                    userText: "",
+                  })
+                : Effect.void,
+            ),
           ),
         [WS_METHODS.pullRequestsUpdate]: (input) =>
           withPullRequestViewer(input, pullRequests.update(input)),
@@ -2546,7 +2589,23 @@ const layerWsRpc = (
         [WS_METHODS.pullRequestsUpdateComment]: (input) =>
           withPullRequestViewer(input, pullRequests.updateComment(input)),
         [WS_METHODS.pullRequestsSubmitReview]: (input) =>
-          withPullRequestViewer(input, pullRequests.submitReview(input)),
+          withPullRequestViewer(input, pullRequests.submitReview(input)).pipe(
+            // Requesting changes on a task's pull request is a correction; a plain comment is not.
+            Effect.tap(() =>
+              input.verdict !== "request-changes"
+                ? Effect.void
+                : projectTeam.recordPullRequestCorrection({
+                    projectId: input.projectId,
+                    repository: input.repository,
+                    number: input.number,
+                    kind: "pr_change_request",
+                    userText: [input.body, ...input.comments.map((comment) => comment.body)]
+                      .map((text) => text.trim())
+                      .filter((text) => text.length > 0)
+                      .join("\n\n"),
+                  }),
+            ),
+          ),
         [WS_METHODS.pullRequestsReplyToThread]: (input) =>
           withPullRequestViewer(input, pullRequests.replyToThread(input)),
         [WS_METHODS.pullRequestsSetThreadResolution]: (input) =>

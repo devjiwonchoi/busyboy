@@ -1,9 +1,12 @@
+import { shortWorkName, parseRequestMessage } from "@t3tools/shared/requestMessage";
 import {
   CommandId,
   isTurnFailedBlocker,
   TURN_FAILED_RETRY,
   MessageId,
   type ProjectAttentionAnsweredBy,
+  type ProjectAttentionContext,
+  type ProjectAttentionDetail,
   ProjectAttentionBatchId,
   type ProjectAttentionItem,
   ProjectAttentionItemId,
@@ -63,7 +66,7 @@ export function relayedAnswerText(
   answer: string,
   answeredBy: ProjectAttentionAnsweredBy,
 ): string {
-  const trimmed = trimQuestion(question);
+  const trimmed = trimQuestion(parseRequestMessage(question).headline);
   const prefix =
     answeredBy === "user"
       ? USER_ANSWER_PREFIX
@@ -76,21 +79,35 @@ export function relayedAnswerText(
 export class AttentionRouter extends Context.Service<
   AttentionRouter,
   {
-    readonly ask: (input: {
-      readonly task: ProjectTask;
-      readonly kind: ProjectAttentionKind;
-      readonly question: string;
-      readonly options: ReadonlyArray<string>;
-      readonly askerThreadId: ThreadId | null;
-      /** The project whose chat shows the card. Defaults to the task's project. */
-      readonly projectId?: ProjectId;
-      /** For a plan approval: the spec version under review. */
-      readonly specVersion?: number;
-      /** For a plan approval: the card's Goal section. */
-      readonly summary?: string;
-      /** For a plan approval: the card's Verification section. */
-      readonly verification?: string;
-    }) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
+    readonly ask: (
+      input: (
+        | {
+            readonly task: ProjectTask;
+            /** The project whose chat shows the card. Defaults to the task's project. */
+            readonly projectId?: ProjectId;
+          }
+        | {
+            /** No task: the card is about the project, e.g. a blocked PM. */
+            readonly task: null;
+            readonly projectId: ProjectId;
+          }
+      ) & {
+        readonly kind: ProjectAttentionKind;
+        readonly question: string;
+        readonly options: ReadonlyArray<string>;
+        readonly askerThreadId: ThreadId | null;
+        /** For a plan approval: the spec version under review. */
+        readonly specVersion?: number;
+        /** For a plan approval: the card's Goal section. */
+        readonly summary?: string;
+        /** For a plan approval: the card's Verification section. */
+        readonly verification?: string;
+        readonly context?: ProjectAttentionContext;
+        readonly senderRole?: ProjectAttentionItem["senderRole"] | undefined;
+        readonly senderName?: string | null | undefined;
+        readonly details?: ReadonlyArray<ProjectAttentionDetail> | null | undefined;
+      },
+    ) => Effect.Effect<ProjectAttentionItem, ProjectTeamError>;
     /** Saves the answer and relays it to the thread that asked. */
     readonly answer: (input: {
       readonly item: ProjectAttentionItem;
@@ -130,7 +147,8 @@ const make = Effect.gen(function* () {
 
   const ask: AttentionRouter["Service"]["ask"] = (input) =>
     Effect.gen(function* () {
-      const projectId = input.projectId ?? input.task.projectId;
+      const projectId =
+        input.task === null ? input.projectId : (input.projectId ?? input.task.projectId);
       const now = yield* nowIso;
       const latest = yield* repository.getLatestAttentionItem(projectId);
       const batchId =
@@ -141,7 +159,7 @@ const make = Effect.gen(function* () {
       const item = yield* repository.createAttentionItem({
         id: ProjectAttentionItemId.make(yield* newId("attention")),
         projectId,
-        taskId: input.task.id,
+        taskId: input.task === null ? null : input.task.id,
         kind: input.kind,
         question: input.question,
         options: input.options,
@@ -151,10 +169,25 @@ const make = Effect.gen(function* () {
         specVersion: input.specVersion ?? null,
         summary: input.summary ?? null,
         verification: input.verification ?? null,
+        context: input.context ?? null,
+        details: input.details ?? null,
+        senderRole:
+          input.senderRole === undefined ? (input.task === null ? "pm" : "lead") : input.senderRole,
+        senderName:
+          input.senderName === undefined
+            ? input.task === null
+              ? null
+              : shortWorkName(input.task.title)
+            : input.senderName,
       });
       yield* publish(projectId);
       return item;
-    }).pipe(orTeamError("Could not save the question.", input.task.projectId));
+    }).pipe(
+      orTeamError(
+        "Could not save the question.",
+        input.task === null ? input.projectId : input.task.projectId,
+      ),
+    );
 
   const requireOpen = (item: ProjectAttentionItem): Effect.Effect<void, ProjectTeamError> =>
     item.answeredAt !== null

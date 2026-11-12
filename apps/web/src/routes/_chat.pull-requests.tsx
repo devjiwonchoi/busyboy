@@ -1684,6 +1684,8 @@ function PullRequestsRouteView() {
             onAddPullRequest={() => undefined}
             onAddPullRequests={() => undefined}
             onAddSideChat={() => undefined}
+            onAddTaskPlan={() => undefined}
+            taskPlanAvailable={false}
             browserAvailable={false}
             terminalAvailable={false}
             diffAvailable={false}

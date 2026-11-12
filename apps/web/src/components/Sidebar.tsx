@@ -156,9 +156,10 @@ import {
   readIsProjectManagerThread,
   useLeadThreadTask,
   useProjectManagerForThread,
+  useAnyProjectTeamAttentionPending,
+  useProjectManagerEntries,
   type ProjectManagerEntry,
 } from "../state/projectTeam";
-import { useDirectorProjectKeys, useProjectOnlyManagerEntries } from "../state/director";
 import { SidebarProjectManagerBadges, SidebarProjectManagerHeading } from "./SidebarProjectManager";
 import {
   buildThreadRouteParams,
@@ -169,6 +170,7 @@ import { formatRelativeTimeLabel } from "../timestampFormat";
 import type { SidebarThreadSummary } from "../types";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { cn } from "~/lib/utils";
+import { CloudBadge } from "./CloudBadge";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectEnvironmentBadge } from "./ProjectEnvironmentBadge";
 import {
@@ -265,6 +267,7 @@ import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarRowSwipe, type SidebarRowSwipeAction } from "./sidebar/SidebarRowSwipe";
 import { JumpHintBadge } from "./sidebar/JumpHintBadge";
 import {
+  MemoryHoldLabel,
   SidebarTaskRow,
   SidebarTreeToggle,
   SidebarThreadGroupRow,
@@ -448,18 +451,22 @@ function useSidebarThreads(input: {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly routeThreadKey: string | null;
+  readonly routeTaskId: string | null;
   readonly projectGroups: readonly SidebarProjectSnapshot[];
 }) {
-  const { scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey, projectGroups } = input;
+  const {
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    routeThreadKey,
+    routeTaskId,
+    projectGroups,
+  } = input;
   const allThreads = useThreadShells();
   const sideChatParents = useSideChatStore((state) => state.parentByThreadKey);
-  const directorProjectKeys = useDirectorProjectKeys(useEnvironmentIds());
-  // Side chats live in their thread's right panel, not in the list. The
-  // Director's chat lives behind its rail avatar.
+  // Side chats live in their thread's right panel, not in the list.
   const threads = allThreads.filter(
-    (thread) =>
-      sideChatParents[threadShellKey(thread)] === undefined &&
-      !directorProjectKeys.has(`${thread.environmentId}:${thread.projectId}`),
+    (thread) => sideChatParents[threadShellKey(thread)] === undefined,
   );
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const [workingShelfExpanded, setWorkingShelfExpanded] = useLocalStorage(
@@ -482,7 +489,7 @@ function useSidebarThreads(input: {
     NO_COLLAPSED_PROJECTS,
     Schema.Array(Schema.String),
   );
-  const projectManagerEntries = useProjectOnlyManagerEntries(useEnvironmentIds());
+  const projectManagerEntries = useProjectManagerEntries(useEnvironmentIds());
   const projectKeyByProject = new Map<string, string>(
     projectGroups.flatMap((group) =>
       group.memberProjects.map(
@@ -558,10 +565,21 @@ function useSidebarThreads(input: {
       .map((group) => group.projectKey),
     new Set(projectGroups.filter((group) => group.isScratch).map((group) => group.projectKey)),
   );
+  // Only the manager whose project holds the open thread or task shows its sessions.
+  const routeShell = routeThreadKey === null ? undefined : shellByKey.get(routeThreadKey);
+  const expandedProjectKey = routeShell
+    ? projectKeyOf(routeShell)
+    : ([...projectManagerByProjectKey].find(([, manager]) =>
+        manager.entry.summary.tasks.some((task) => task.id === routeTaskId),
+      )?.[0] ?? null);
   // Build the visible tree before navigation and sorting so collapsed descendants disappear there too.
   const projectTaskTrees = new Map<string, ReturnType<typeof sidebarTaskTree>>();
   const treeDepthByThreadKey = new Map<string, number>();
   for (const [projectKey, manager] of projectManagerByProjectKey) {
+    if (projectKey !== expandedProjectKey) {
+      projectTaskTrees.set(projectKey, { rows: [], toggles: new Map() });
+      continue;
+    }
     const tree = sidebarTaskTree({
       threads: activeThreadsByProject.get(projectKey) ?? [],
       tasks: manager.entry.summary.tasks,
@@ -618,6 +636,7 @@ function useSidebarThreads(input: {
     taskByLeadKey,
     collapsedProjectKeys,
     projectTaskTrees,
+    expandedProjectKey,
     treeDepthByThreadKey,
     toggleTaskCollapsed: (key: string) =>
       setCollapsedTaskKeyList((keys) =>
@@ -1792,14 +1811,21 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const projectManagerBadges = projectManager ? (
     <SidebarProjectManagerBadges summary={projectManager} />
   ) : null;
+  const cloudIndicator = thread.location === "cloud" ? <CloudBadge variant="icon" /> : null;
+  const memoryHoldIndicator =
+    leadTask?.task.memoryHold != null ? <MemoryHoldLabel task={leadTask.task} /> : null;
   const indicators =
     draftIndicator !== null ||
+    memoryHoldIndicator !== null ||
     pinIndicator !== null ||
+    cloudIndicator !== null ||
     projectIndicator !== null ||
     projectManagerBadges !== null ? (
       <>
         {draftIndicator}
         {pinIndicator}
+        {memoryHoldIndicator}
+        {cloudIndicator}
         {projectIndicator}
         {projectManagerBadges}
       </>
@@ -2326,6 +2352,9 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     },
   );
 
+  // Until the PM data arrives, PM chats and their task threads would list as ordinary
+  // rows and then regroup under the PM, so the list stays empty instead.
+  const projectTeamPending = useAnyProjectTeamAttentionPending();
   const {
     threads,
     workingShelfEnabled,
@@ -2353,6 +2382,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     collapsedProjectKeys,
     toggleProjectCollapsed,
     projectTaskTrees,
+    expandedProjectKey,
     treeDepthByThreadKey,
     toggleTaskCollapsed,
     toggleThreadGroupExpanded,
@@ -2361,6 +2391,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
     serverConfigs,
     optimisticDrop,
     routeThreadKey,
+    routeTaskId,
     projectGroups,
   });
 
@@ -3850,7 +3881,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
               </p>
             )
           ) : null}
-          {!isSearchingThreads ? (
+          {!isSearchingThreads && !projectTeamPending ? (
             <TooltipProvider
               key="sidebar-thread-tooltips-150"
               delay={150}
@@ -4055,6 +4086,9 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                             const projectKey = item.marker.slice("project:".length);
                             const projectGroup = projectGroupByScopeKey.get(projectKey);
                             const manager = projectManagerByProjectKey.get(projectKey);
+                            // A manager's rows show only while its project is open.
+                            const hiddenByRoute =
+                              manager !== undefined && projectKey !== expandedProjectKey;
                             items.push(
                               <SidebarProjectHeader
                                 key={item.marker}
@@ -4067,8 +4101,13 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
                                   optimisticDrop === null &&
                                   renamingThreadKey === null
                                 }
-                                expanded={!collapsedProjectKeys.has(projectKey)}
-                                onToggle={() => toggleProjectCollapsed(projectKey)}
+                                expanded={!collapsedProjectKeys.has(projectKey) && !hiddenByRoute}
+                                onToggle={() => {
+                                  // Opening a closed manager only clears a saved fold.
+                                  if (hiddenByRoute && !collapsedProjectKeys.has(projectKey))
+                                    return;
+                                  toggleProjectCollapsed(projectKey);
+                                }}
                                 onNewThread={
                                   projectGroup ? () => handleProjectNewThread(projectGroup) : null
                                 }
@@ -4155,6 +4194,7 @@ export default function Sidebar({ withChromeHeader = true }: { withChromeHeader?
             </TooltipProvider>
           ) : null}
           {!isSearchingThreads &&
+          !projectTeamPending &&
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length + activeThreadCount + workingThreads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">

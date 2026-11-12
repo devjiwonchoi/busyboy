@@ -11,7 +11,6 @@ import { useDesktopUpdateState } from "~/state/desktopUpdate";
 import { serverEnvironment } from "~/state/server";
 import { resolveVersionMismatch } from "~/versionSkew";
 import type { ServerUpdateOutcome, ServerUpdateTarget } from "../ServerUpdateAction";
-import { promptDesktopUpdateReadyOnce } from "../desktopUpdate.toast";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
   closeFinishedUpdateRun,
@@ -314,14 +313,6 @@ let notifiedNotAppliedVersion: string | null = null;
 export function DesktopUpdateLaunchNotice() {
   const state = useDesktopUpdateState();
   const notAppliedVersion = state?.notAppliedVersion ?? null;
-  const run = useUpdateEverythingRun();
-
-  useEffect(() => {
-    // An update-everything run installs this app itself.
-    const bridge = window.desktopBridge;
-    if (!bridge || !state || run !== null) return;
-    promptDesktopUpdateReadyOnce(bridge, state);
-  }, [state, run]);
 
   useEffect(() => {
     const saved = takeSavedUpdateEverythingResult();

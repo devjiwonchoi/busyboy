@@ -6,6 +6,7 @@ import { pendingSubagentRequestsByThread } from "@t3tools/client-runtime/state/t
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ProjectTeamAttentionIndex } from "@t3tools/client-runtime/state/project-team";
+import { isSnoozedAttention } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   OrchestrationV2ThreadShell,
@@ -24,7 +25,6 @@ import {
   hasDesktopNotifications,
   hasNotificationSound,
   playNotificationSound,
-  setNotificationBadge,
   unlockNotificationAudio,
 } from "../threadNotifications";
 import { resolveSidebarThreadStatus } from "./Sidebar.logic";
@@ -40,32 +40,26 @@ export function ThreadNotificationCoordinator() {
   const onNotification = (environmentId: EnvironmentId, notification: Notification) => {
     pending.current.get(notification.tag)?.notification.close();
     pending.current.set(notification.tag, { environmentId, notification });
-    setNotificationBadge(pending.current.size);
   };
 
   useEffect(() => {
     const activeIds = new Set(environmentIds);
-    const count = pending.current.size;
     for (const [tag, entry] of pending.current) {
       if (activeIds.has(entry.environmentId)) continue;
       entry.notification.close();
       pending.current.delete(tag);
     }
-    if (count !== pending.current.size) setNotificationBadge(pending.current.size);
   }, [environmentIds]);
 
   useEffect(() => {
     const clear = () => {
       for (const { notification } of pending.current.values()) notification.close();
       pending.current.clear();
-      setNotificationBadge(0);
     };
     clear();
     if (!hasDesktopNotifications(mode)) return;
-    const unsubscribe = window.desktopBridge?.onNotificationBadgeClear?.(clear);
     window.addEventListener("focus", clear);
     return () => {
-      unsubscribe?.();
       window.removeEventListener("focus", clear);
       clear();
     };
@@ -252,11 +246,6 @@ function EnvironmentNotifications({
         });
       // Leads keep running while the PM is off, so its blockers still need the user.
       if (summary.latestBatchId !== null && summary.latestBatchId !== before.latestBatchId) {
-        if (hasNotificationSound(mode)) {
-          void playNotificationSound("input", () =>
-            hasNotificationSound(getClientSettings().notificationMode),
-          );
-        }
         notify(
           `${who} · Needs you: ${summary.openCount}`,
           "attention",
@@ -340,7 +329,10 @@ const NOTIFICATION_QUESTION_MAX_CHARS = 140;
 /** "<task name>: <question>" for the newest open card, so the alert says what is waiting. */
 function newestOpenCardText(summary: ProjectTeamAttentionSummary): string | null {
   const card = summary.decisionCards.findLast(
-    (candidate) => candidate.item.answeredAt === null && candidate.item.supersededAt === null,
+    (candidate) =>
+      candidate.item.answeredAt === null &&
+      candidate.item.supersededAt === null &&
+      !isSnoozedAttention(candidate.item),
   );
   if (!card) return null;
   const question = card.item.question.replace(/\s+/g, " ").trim();

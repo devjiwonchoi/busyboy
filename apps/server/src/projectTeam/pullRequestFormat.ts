@@ -1,6 +1,9 @@
+import { isTemporaryWorktreeBranch } from "@t3tools/shared/git";
+
 export interface PullRequestText {
   readonly title: string;
   readonly body: string;
+  readonly headBranch?: string;
 }
 
 export const PR_TITLE_MAX_CHARS = 60;
@@ -19,8 +22,23 @@ const TEST_COMMAND =
 const EXAMPLE_TITLE = `"Fix login redirect"`;
 
 /** Each problem is one line that says what is wrong AND the exact fix. Empty = conforming. */
-export function pullRequestFormatProblems(pr: PullRequestText): ReadonlyArray<string> {
-  return [...titleProblems(pr.title.trim()), ...bodyProblems(pr.body)];
+export function pullRequestFormatProblems(
+  pr: PullRequestText,
+  options: { readonly branchPrefix?: string | null } = {},
+): ReadonlyArray<string> {
+  return [
+    ...titleProblems(pr.title.trim()),
+    ...bodyProblems(pr.body),
+    ...branchProblems(pr.headBranch, options.branchPrefix),
+  ];
+}
+
+/** `branchPrefix` is the user's branch prefix setting, which temporary names also use. */
+function branchProblems(branch: string | undefined, branchPrefix?: string | null): Array<string> {
+  if (branch === undefined || !isTemporaryWorktreeBranch(branch, branchPrefix)) return [];
+  return [
+    `The branch ${JSON.stringify(branch)} still has its temporary worktree name: rename it with git branch -m to a short name for the change under the same prefix (such as busyboy/add-search), push it, open the pull request from it, and close this one.`,
+  ];
 }
 
 function titleProblems(title: string): Array<string> {

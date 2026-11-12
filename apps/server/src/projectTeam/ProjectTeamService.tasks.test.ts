@@ -16,6 +16,8 @@ import * as TestClock from "effect/testing/TestClock";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
 import {
+  askPlanApproval,
+  attentionContext,
   createAcceptedTask,
   PROJECT_ID,
   readyPlan,
@@ -32,6 +34,86 @@ const service = ProjectTeamService.ProjectTeamService;
 const todo = newProjectTaskTodo;
 
 describe("ProjectTeamService tasks as specs", () => {
+  it.effect(
+    "assigns unique prefixes to concurrent registrations and keeps them after renaming",
+    () =>
+      withTeam((harness) =>
+        Effect.gen(function* () {
+          const team = yield* service;
+          const bench = ProjectId.make("benchmarks");
+          const bot = ProjectId.make("bot");
+          harness.addProject(bench, "next-benchmarks");
+          harness.addProject(bot, "next-bot");
+          yield* Effect.all([team.ensureManager(bench), team.ensureManager(bot)], {
+            concurrency: "unbounded",
+          });
+          const first = yield* team.attentionSnapshot;
+          const keys = first.projects
+            .filter((project) => project.projectId === bench || project.projectId === bot)
+            .map((project) => project.taskKeyPrefix);
+          assert.strictEqual(new Set(keys).size, 2);
+          const stored = harness.projects.get(bot)!;
+          harness.projects.set(bot, { ...stored, title: "Renamed project" });
+          const second = yield* team.attentionSnapshot;
+          assert.deepStrictEqual(
+            second.projects.map((project) => project.taskKeyPrefix),
+            first.projects.map((project) => project.taskKeyPrefix),
+          );
+          const collision = yield* team
+            .updateSettings({
+              projectId: bot,
+              taskKeyPrefix: first.projects.find((project) => project.projectId === bench)!
+                .taskKeyPrefix,
+            })
+            .pipe(Effect.flip);
+          assert.include(collision.message, "next-benchmarks");
+        }),
+      ),
+  );
+
+  it.effect("repairs existing NB collisions and exposes project-scoped historical aliases", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* service;
+        const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+        const bench = ProjectId.make("benchmarks");
+        const bot = ProjectId.make("bot");
+        harness.addProject(bench, "next-benchmarks");
+        harness.addProject(bot, "next-bot");
+        const managers = yield* Effect.all([team.ensureManager(bench), team.ensureManager(bot)]);
+        for (const manager of managers) {
+          yield* repository.updateManagerSettings({
+            projectId: manager.projectId,
+            settings: {
+              ...manager.settings,
+              taskKeyPrefix: "NB",
+              taskKeyAliases: [],
+            },
+            now: "2026-11-04T00:00:00.000Z",
+          });
+        }
+        const snapshot = yield* team.attentionSnapshot;
+        assert.strictEqual(
+          snapshot.projects.find((project) => project.projectId === bench)?.taskKeyPrefix,
+          "NB",
+        );
+        assert.strictEqual(
+          snapshot.projects.find((project) => project.projectId === bot)?.taskKeyPrefix,
+          "NB2",
+        );
+        assert.deepStrictEqual(
+          snapshot.projects.find((project) => project.projectId === bot)?.taskKeyAliases,
+          ["NB"],
+        );
+        const repeated = yield* team.attentionSnapshot;
+        assert.deepStrictEqual(
+          repeated.projects.map((project) => project.taskKeyPrefix),
+          snapshot.projects.map((project) => project.taskKeyPrefix),
+        );
+      }),
+    ),
+  );
+
   it.effect("lets the user shape a task's spec, restore a version and split a todo", () =>
     withTeam(() =>
       Effect.gen(function* () {
@@ -254,7 +336,8 @@ describe("ProjectTeamService tasks as specs", () => {
           .updateTask(planner, { stage: "running", planSummary: "Keep scrollTop." })
           .pipe(Effect.flip);
         assert.include(early.message, "no approved plan");
-        const { item: card } = yield* team.askUser(planner, {
+        const { item: card } = yield* askPlanApproval(planner, {
+          context: attentionContext({ action: "Approve the plan?" }),
           kind: "approval",
           question: "Approve the plan?",
         });
@@ -340,7 +423,8 @@ describe("ProjectTeamService tasks as specs", () => {
         });
 
         // Asking for approval pins spec v2 and shows the task as Waiting for approval.
-        const first = yield* team.askUser(lead, {
+        const first = yield* askPlanApproval(lead, {
+          context: attentionContext({ action: "Plan: keep it." }),
           kind: "approval",
           question: "Plan: keep it.",
           // Leads can't bring back "Approve only": approving always starts the work.
@@ -392,11 +476,13 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.include(relayed, "Looks close.");
 
         // The next version asks again; an older open card is replaced, not left waiting.
-        const second = yield* team.askUser(lead, {
+        const second = yield* askPlanApproval(lead, {
+          context: attentionContext({ action: "Plan v3." }),
           kind: "approval",
           question: "Plan v3.",
         });
-        const third = yield* team.askUser(lead, {
+        const third = yield* askPlanApproval(lead, {
+          context: attentionContext({ action: "Plan v3 again." }),
           kind: "approval",
           question: "Plan v3 again.",
         });
@@ -454,7 +540,8 @@ describe("ProjectTeamService tasks as specs", () => {
         // A card that already waited past the grace period is answered when AFK comes on.
         yield* writeReadyPlan(leadA);
         yield* writeReadyPlan(leadB);
-        const waiting = yield* team.askUser(leadA, {
+        const waiting = yield* askPlanApproval(leadA, {
+          context: attentionContext({ action: "Plan A." }),
           kind: "approval",
           question: "Plan A.",
         });
@@ -469,7 +556,8 @@ describe("ProjectTeamService tasks as specs", () => {
         assert.strictEqual(answeredA?.answeredBy ?? null, "afk");
 
         // A new card waits through the grace period, then the sweep approves it.
-        const asked = yield* team.askUser(leadB, {
+        const asked = yield* askPlanApproval(leadB, {
+          context: attentionContext({ action: "Plan B." }),
           kind: "approval",
           question: "Plan B.",
         });
@@ -618,15 +706,18 @@ describe("AFK", () => {
         );
 
         yield* team.askUser(leadThreadId, {
+          context: attentionContext({ action: "Which list?" }),
           kind: "decision",
           question: "Which list?",
           options: ["Flat", "Grouped (Recommended)"],
         });
         const blocker = yield* team.askUser(leadThreadId, {
+          context: attentionContext({ action: "Merge PR #9?" }),
           kind: "blocker",
           question: "Merge PR #9?",
         });
         yield* team.askUser(leadThreadId, {
+          context: attentionContext({ action: "Any naming preference?" }),
           kind: "decision",
           question: "Any naming preference?",
         });
@@ -686,6 +777,7 @@ describe("AFK", () => {
         const { leadThreadId } = yield* team.startTask(pm, { taskId: task.id }, harness.delegate);
         yield* team.updateSettings({ projectId: PROJECT_ID, afk: { hours: null } });
         const asked = yield* team.askUser(leadThreadId, {
+          context: attentionContext({ action: "Which list?" }),
           kind: "decision",
           question: "Which list?",
           options: ["Flat", "Grouped (Recommended)"],

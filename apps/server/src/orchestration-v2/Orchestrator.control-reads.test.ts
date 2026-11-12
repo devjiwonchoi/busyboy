@@ -22,6 +22,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as DelegatedTaskQuestionReactor from "./DelegatedTaskQuestionReactor.ts";
@@ -605,6 +606,138 @@ it.effect("keeps delegated child pull-request links independent of the parent", 
     const parentAfterChildLink = yield* projections.getThreadProjection(parentThreadId);
     assert.deepEqual(parentAfterChildLink.thread.linkedPullRequest, parentPullRequest);
     assert.deepEqual(parentAfterChildLink.thread.pullRequests, parent.thread.pullRequests);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("marks a delegated child cloud only when its request asks for cloud", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const parentThreadId = ThreadId.make("thread:cloud-parent");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-cloud-parent"),
+      threadId: parentThreadId,
+      projectId: ProjectId.make("project:cloud"),
+      title: "Parent",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* orchestrator.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("start-cloud-parent"),
+      threadId: parentThreadId,
+      messageId: MessageId.make("message:cloud-parent"),
+      text: "Delegate the work",
+      attachments: [],
+      dispatchMode: { type: "start_immediately" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const parentRun = (yield* projections.getThreadProjection(parentThreadId)).runs[0]!;
+    const delegate = (id: string, location?: "cloud") =>
+      orchestrator.dispatch({
+        type: "delegated_task.request",
+        commandId: CommandId.make(id),
+        parentThreadId,
+        parentRunId: parentRun.id,
+        parentNodeId: parentRun.rootNodeId!,
+        task: "Build it",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        ...(location === undefined ? {} : { location }),
+        createdBy: "agent",
+        creationSource: "mcp",
+      });
+    yield* delegate("delegate-cloud", "cloud");
+    yield* delegate("delegate-local");
+    const [cloudChild, localChild] = (yield* projections.getThreadProjection(
+      parentThreadId,
+    )).subagents.map((subagent) => subagent.childThreadId!);
+    assert.equal((yield* projections.getThreadProjection(cloudChild!)).thread.location, "cloud");
+    assert.equal((yield* projections.getThreadShell(cloudChild!))?.location, "cloud");
+    const localShell = yield* projections.getThreadShell(localChild!);
+    assert.isFalse(localShell !== null && "location" in localShell);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("holds a moving lead's new turns until its queue resumes, and moves its location", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const gate = yield* LeadMoveGate.LeadMoveGate;
+    const threadId = ThreadId.make("thread:moving-lead");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-moving-lead"),
+      threadId,
+      projectId: ProjectId.make("project:moving"),
+      title: "Lead",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const send = (id: string) =>
+      orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make(id),
+        threadId,
+        messageId: MessageId.make(`message:${id}`),
+        text: id,
+        attachments: [],
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+    yield* send("first-turn");
+    // The first turn has ended; the lead is idle when the move starts.
+    const first = (yield* projections.getThreadProjection(threadId)).runs[0]!;
+    yield* projections.apply({
+      id: EventId.make("first-turn-ended"),
+      type: "run.updated",
+      threadId,
+      runId: first.id,
+      providerInstanceId: first.providerInstanceId,
+      occurredAt: yield* DateTime.now,
+      payload: { ...first, status: "interrupted", completedAt: yield* DateTime.now },
+    });
+
+    gate.hold(threadId, "move");
+    yield* send("sent-mid-move");
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("move-to-cloud"),
+      threadId,
+      location: "cloud",
+    });
+    const moving = yield* projections.getThreadProjection(threadId);
+    assert.equal(moving.thread.location, "cloud");
+    assert.deepEqual(
+      moving.runs.map((run) => [run.status, run.queueHeld === true]),
+      [
+        ["interrupted", false],
+        ["queued", true],
+      ],
+    );
+
+    gate.release(threadId, "move");
+    yield* orchestrator.dispatch({
+      type: "queue.resume",
+      commandId: CommandId.make("move-done"),
+      threadId,
+    });
+    const moved = (yield* projections.getThreadProjection(threadId)).runs[1]!;
+    assert.isFalse(moved.status === "queued" && moved.queueHeld === true);
   }).pipe(Effect.provide(layerTest)),
 );
 

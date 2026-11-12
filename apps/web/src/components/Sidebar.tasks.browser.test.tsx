@@ -228,7 +228,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function renderSidebarApp() {
+function renderSidebarApp(initialPath = "/") {
   const rootRoute = createRootRoute({
     component: () => (
       <SidebarProvider>
@@ -244,7 +244,7 @@ function renderSidebarApp() {
   );
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
   return { router, render: () => act(async () => root.render(<RouterProvider router={router} />)) };
 }
@@ -265,18 +265,19 @@ function threadRow(title: string): HTMLElement | null {
   );
 }
 
-/** The row shows "⏳ <key>": an hourglass and the key it waits on, never a flag. */
-function expectWaitingOn(row: HTMLElement | null, key: string) {
+/** The row shows "⏳ <name>": an hourglass and the task it waits on, never a flag. */
+function expectWaitingOn(row: HTMLElement | null, name: string) {
   const marker = row?.querySelector<HTMLElement>("[data-waiting-marker]");
   expect(marker).toBeTruthy();
   expect(marker!.querySelector("[data-waiting-icon]")).not.toBeNull();
-  expect(marker!.querySelector("[aria-hidden]")?.textContent).toBe(key);
+  expect(marker!.querySelector("[data-waiting-keys]")?.textContent).toBe(name);
   expect(row!.querySelector(".lucide-flag")).toBeNull();
 }
 
 describe("sidebar tasks", () => {
   it("lists tasks by key, opens their pages, and ignores Cmd+N", async () => {
-    const app = renderSidebarApp();
+    // Tasks show under their PM while its chat is open.
+    const app = renderSidebarApp("/env-1/pm-thread");
     await app.render();
 
     // Tasks with no session yet show by key, with subtasks under their parent.
@@ -284,7 +285,7 @@ describe("sidebar tasks", () => {
     expect(taskRowButton("BB-3")?.getAttribute("aria-label")).toBe(
       "BB-3 Clean up build warnings, Todo",
     );
-    expect(taskRowButton("BB-4")?.closest("li")?.className).toContain("pl-10");
+    expect(taskRowButton("BB-4")?.closest("li")?.getAttribute("data-tree-depth")).toBe("1");
     // Linear-style markers: the parent counts its subtasks; a waiting task shows an
     // hourglass and the key of the unfinished task it waits on (BB-1 is done, so it no
     // longer counts). No flag: it read like a priority.
@@ -294,12 +295,12 @@ describe("sidebar tasks", () => {
         ?.getAttribute("data-subtask-progress"),
     ).toBe("0/1");
     expect(taskRowButton("BB-4")?.getAttribute("aria-label")).toBe(
-      "BB-4 Silence tsc warnings, Todo, BB-2 끝나야 시작 · Fix drag scroll",
+      "BB-4 Silence tsc warnings, Todo, Fix drag scroll · busyboy 끝나야 시작",
     );
-    expectWaitingOn(taskRowButton("BB-4"), "BB-2");
+    expectWaitingOn(taskRowButton("BB-4"), "Fix drag scroll · busyboy");
     expect(taskRowButton("BB-3")?.querySelector("[data-waiting-marker]")).toBeNull();
     // A lead's row shows it too.
-    expectWaitingOn(threadRow("BB-2 Fix drag scroll"), "BB-3");
+    expectWaitingOn(threadRow("BB-2 Fix drag scroll"), "Clean up build warnings · busyboy");
     expect(container.querySelector(".lucide-flag")).toBeNull();
     // Questions are answered in the PM chat, so the sidebar has no "Waiting on you" entry.
     expect(container.textContent).not.toContain("Waiting on you");
@@ -347,15 +348,17 @@ describe("sidebar tasks", () => {
   it("opens the PM chat from its heading, then folds the PM section from it", async () => {
     const app = renderSidebarApp();
     await app.render();
-    await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
     const heading = () =>
       container.querySelector<HTMLElement>('[data-testid="sidebar-project-manager-heading"]')!;
     const toggle = () => heading().querySelector<HTMLElement>("button[aria-expanded]")!;
-    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    // From elsewhere, the PM's tasks are hidden.
+    await vi.waitFor(() => expect(toggle().getAttribute("aria-expanded")).toBe("false"));
+    expect(taskRowButton("BB-3")).toBeNull();
 
-    // From elsewhere, the heading opens the PM chat and leaves the section open.
+    // The heading opens the PM chat and shows its tasks.
     await userEvent.click(toggle());
     await vi.waitFor(() => expect(app.router.state.location.pathname).toBe("/env-1/pm-thread"));
+    await vi.waitFor(() => expect(taskRowButton("BB-3")).not.toBeNull());
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
 
     // On the PM chat, clicking it folds the tasks and threads under it.

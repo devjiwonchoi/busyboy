@@ -1,12 +1,16 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
 import * as NodePath from "node:path";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import type * as Crypto from "effect/Crypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   MessageId,
   NodeId,
   type OrchestrationV2ConversationMessage,
+  type OrchestrationV2ProviderThread,
+  type OrchestrationV2Run,
   type OrchestrationV2ProviderTurn,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2Subagent,
@@ -16,6 +20,8 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   PLAN_APPROVAL_START,
   ProjectId,
+  type ProjectAttentionContext,
+  type ProjectTeamAskUserInput,
   type ProjectTaskSpec,
   type ProjectTeamTaskCreateInput,
   ProviderInstanceId,
@@ -41,21 +47,29 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ProviderSessionManager from "../orchestration-v2/ProviderSessionManager.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
+import type { DeepPartial } from "@t3tools/shared/Struct";
+import type { ServerSettings as ServerSettingsValue } from "@t3tools/contracts";
 import * as UsageService from "../usage/UsageService.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
 import * as ContextCare from "./ContextCare.ts";
 import * as RoleStepReactor from "./RoleStepReactor.ts";
 import * as DefaultManagerReactor from "./defaultManagerReactor.ts";
 import { directorWorkspaceRoot } from "./director.ts";
+import { planDepth, requiredPlanGates } from "./planGates.ts";
 import * as FinishedTaskCleanup from "./FinishedTaskCleanup.ts";
 import type { PullRequestText } from "./pullRequestFormat.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
+import * as RevertLogReader from "./RevertLogReader.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import * as ShipWakeReactor from "./ShipWakeReactor.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import * as StalledTaskSweep from "./StalledTaskSweep.ts";
+import * as MemoryGovernor from "./MemoryGovernor.ts";
 import * as GoalAlignmentReactor from "./GoalAlignmentReactor.ts";
 import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 
@@ -65,6 +79,20 @@ export const SCRATCH_ROOT = "/data/scratch";
 /** The model a delegated child runs on when the call names no target. */
 export const DEFAULT_PROVIDER_INSTANCE_ID = ProviderInstanceId.make("claude");
 export const DEFAULT_MODEL = "claude-opus-5-5";
+
+/** Explicit context for test questions; unknown reversibility avoids inventing safety. */
+export const attentionContext = ({
+  action,
+}: {
+  readonly action: string;
+}): ProjectAttentionContext => ({
+  action,
+  reason: "요청한 작업을 이어 가려면 사용자의 답변이 필요합니다.",
+  impacts: [],
+  cost: null,
+  reversibility: "unknown",
+  recommendation: "설명한 범위를 확인한 뒤 답변하는 안을 추천합니다.",
+});
 
 export interface FakeThread {
   readonly id: ThreadId;
@@ -81,6 +109,13 @@ export interface FakeThread {
     Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage"> &
       Partial<Pick<OrchestrationV2ProviderTurn, "runAttemptId" | "turnTokenUsage">>
   >;
+  /** Provider threads; `id`, `driver` and `nativeThreadRef` matter to a lead move. */
+  providerThreads?: Array<
+    Pick<OrchestrationV2ProviderThread, "id" | "driver" | "nativeThreadRef"> &
+      Partial<Pick<OrchestrationV2ProviderThread, "providerSessionId">>
+  >;
+  /** Runs; only `status`, `queueHeld` and `requestedAt` matter, to see held messages. */
+  runs?: Array<Pick<OrchestrationV2Run, "status" | "queueHeld" | "requestedAt">>;
   /** Run attempts; only `id` and `runId` matter, to tie provider turns to their run. */
   attempts?: Array<{ readonly id: string; readonly runId: string }>;
   worktreePath?: string | null;
@@ -90,7 +125,7 @@ export interface FakeThread {
   pullRequests?: Array<Pick<ThreadPullRequestLink, "host" | "repository" | "number" | "url">>;
   /** Shell fields a test sets directly, e.g. `status` or `pendingRuntimeRequest`. */
   shell?: Partial<OrchestrationV2ThreadShell>;
-  /** Turn items; only `user_input_request` and `approval_request` matter to the team services. */
+  /** Turn items: pending requests and the tool calls a permission-denial check reads. */
   turnItems?: Array<OrchestrationV2TurnItem>;
 }
 
@@ -108,8 +143,12 @@ export interface TeamHarness {
   checkedOutBranch: (worktreePath: string) => string | null;
   /** The commit checked out in a worktree, read by the review gate; null when unknown. */
   worktreeHead: (worktreePath: string) => string | null;
+  /** The default branch's revert log in a project folder; null when it can't be read. */
+  revertLog: (workspaceRoot: string) => string | null;
   /** Runs after a thread is archived, like the server's worktree cleanup effect. */
   onArchive: (threadId: ThreadId) => Effect.Effect<void>;
+  /** Runs when a run is interrupted; by default the run stops at once. */
+  onInterrupt: (threadId: ThreadId, runId: string) => Effect.Effect<void>;
   /** Runs after a thread is unarchived with restoreWorktree, like the restore effect. */
   onRestore: (threadId: ThreadId) => Effect.Effect<void>;
   /** Starts every task lead on a thread named lead-<n>. */
@@ -141,13 +180,17 @@ export type TeamServices =
   | TaskOutcomeReactor.TaskOutcomeReactor
   | ShipWakeReactor.ShipWakeReactor
   | StalledTaskSweep.StalledTaskSweep
+  | MemoryGovernor.MemoryGovernor
   | GoalAlignmentReactor.GoalAlignmentReactor
   | DefaultManagerReactor.DefaultManagerReactor
   | ContextCare.ContextCare
   | RoleStepReactor.RoleStepReactor
   | FinishedTaskCleanup.FinishedTaskCleanup
   | SqlClient.SqlClient
-  | ServerConfig.ServerConfig;
+  | ServerConfig.ServerConfig
+  | Crypto.Crypto
+  | ServerSettings.ServerSettingsService
+  | ThreadManagement.ThreadManagementService;
 
 export function assistantMessage(input: {
   readonly threadId: ThreadId;
@@ -256,6 +299,15 @@ const toShell = (thread: FakeThread): OrchestrationV2ThreadShell =>
 /** Runs `body` against the team services with in-memory storage and fake threads. */
 export const withTeam = <A, E>(
   body: (harness: TeamHarness) => Effect.Effect<A, E, TeamServices>,
+  options: {
+    /** The cloud lead runtime the team reads; defaults to none (cloud refused, sync a no-op). */
+    readonly cloudLead?: CloudLeadService.CloudLeadHooksShape;
+    /** The Mac's memory as the sampler reads it; defaults to always plenty. */
+    readonly memory?: () => MemoryHeadroom.MemorySnapshot;
+    /** Provider sessions the memory governor reads and releases; defaults to none. */
+    readonly sessions?: Partial<ProviderSessionManager.ProviderSessionManagerV2Shape>;
+    readonly settings?: DeepPartial<ServerSettingsValue>;
+  } = {},
 ): Effect.Effect<A, E> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(Date.parse(START));
@@ -292,6 +344,9 @@ export const withTeam = <A, E>(
           if (command.type === "thread.metadata.update" && command.branch !== undefined) {
             target.branch = command.branch;
           }
+          if (command.type === "thread.metadata.update" && command.location !== undefined) {
+            target.shell = { ...target.shell, location: command.location };
+          }
           if (command.type === "thread.archive") target.archivedAt = START;
           if (command.type === "thread.unarchive") target.archivedAt = null;
           if (command.type === "thread.delete") target.deletedAt = START;
@@ -303,7 +358,9 @@ export const withTeam = <A, E>(
                 ? harness.onArchive(command.threadId)
                 : command.type === "thread.unarchive" && command.restoreWorktree === true
                   ? harness.onRestore(command.threadId)
-                  : Effect.void,
+                  : command.type === "run.interrupt"
+                    ? harness.onInterrupt(command.threadId, command.runId)
+                    : Effect.void,
             ),
           ),
           Effect.as({ sequence: 1, storedEvents: [] }),
@@ -347,7 +404,10 @@ export const withTeam = <A, E>(
       getThreadRecords: ((
         threadId: ThreadId,
         _fields: unknown,
-        filter?: { messageRunIds?: ReadonlyArray<string> },
+        filter?: {
+          messageRunIds?: ReadonlyArray<string>;
+          turnItemRunIds?: ReadonlyArray<string>;
+        },
       ) =>
         Effect.sync(() => {
           const thread = threads.get(threadId);
@@ -361,8 +421,14 @@ export const withTeam = <A, E>(
             messages,
             subagents: thread?.subagents ?? [],
             providerTurns: thread?.providerTurns ?? [],
+            providerThreads: thread?.providerThreads ?? [],
+            runs: thread?.runs ?? [],
             attempts: thread?.attempts ?? [],
-            turnItems: thread?.turnItems ?? [],
+            turnItems: (thread?.turnItems ?? []).filter(
+              (item) =>
+                filter?.turnItemRunIds === undefined ||
+                (item.runId !== null && filter.turnItemRunIds.includes(item.runId)),
+            ),
           };
         })) as never,
     });
@@ -391,6 +457,7 @@ export const withTeam = <A, E>(
       namedProjectsRoot: "/data/projects",
     });
 
+    const settingsLayer = ServerSettings.layerTest(options.settings);
     const layer = Layer.mergeAll(
       TaskOutcomeReactor.layer,
       ShipWakeReactor.layer,
@@ -399,17 +466,21 @@ export const withTeam = <A, E>(
       DefaultManagerReactor.layer,
       ContextCare.layer,
       RoleStepReactor.layer,
+      MemoryGovernor.layer,
     ).pipe(
       Layer.provideMerge(ProjectTeamService.layerWithDependencies),
       Layer.provideMerge(ProjectTeamRepository.layer),
       Layer.provideMerge(SqlitePersistence.layerMemory),
-      Layer.provide(
+      // Each test gets its own gate: holds must not leak between tests.
+      Layer.provideMerge(Layer.sync(LeadMoveGate.LeadMoveGate, LeadMoveGate.makeLeadMoveGate)),
+      // Merged, so a test can build another service over the same fakes (e.g. a restart).
+      Layer.provideMerge(
         Layer.mergeAll(
           threadManagement,
           gitWorkflow,
           projectStore,
           providerRegistry,
-          ServerSettings.layerTest(),
+          settingsLayer,
           Layer.mock(UsageService.UsageService)({
             estimateCostUsd: (input) =>
               Effect.sync(() =>
@@ -423,11 +494,23 @@ export const withTeam = <A, E>(
               ),
           }),
           NodeCrypto.layer,
+          ...(options.cloudLead === undefined
+            ? []
+            : [Layer.succeed(CloudLeadService.CloudLeadHooks, options.cloudLead)]),
+          ...(options.memory === undefined
+            ? []
+            : [MemoryHeadroom.layerFromSource(options.memory).pipe(Layer.provide(settingsLayer))]),
+          ...(options.sessions === undefined
+            ? []
+            : [Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)(options.sessions)]),
           managedProjectFolders,
           Path.layer,
           PullRequestTextReader.layerTest((url) => Option.fromNullishOr(pullRequests.get(url))),
           WorktreeHeadReader.layerTest((worktreePath) =>
             Option.fromNullishOr(harness.worktreeHead(worktreePath)),
+          ),
+          RevertLogReader.layerTest((workspaceRoot) =>
+            Option.fromNullishOr(harness.revertLog(workspaceRoot)),
           ),
           PullRequestShipGate.layerTest({
             read: (url) => Option.fromNullishOr(shipStates.get(url)),
@@ -464,8 +547,14 @@ export const withTeam = <A, E>(
       costPerToken: null,
       checkedOutBranch: () => null,
       worktreeHead: () => null,
+      revertLog: () => null,
       onArchive: () => Effect.void,
       onRestore: () => Effect.void,
+      onInterrupt: (threadId) =>
+        Effect.sync(() => {
+          const thread = threads.get(threadId);
+          if (thread !== undefined) thread.activeRunId = null;
+        }),
       delegate: (input) =>
         Effect.gen(function* () {
           yield* Ref.update(delegated, (all) => [...all, input]);
@@ -570,31 +659,14 @@ export const startLead = (
     return yield* team.startTask(pm, { taskId: task.id }, delegate);
   });
 
-/** Existing task fixtures go through the same proposal and user acceptance as the chat. */
+/** A task in Todo, created the way task_create does but without starting its lead. */
 export const createAcceptedTask = (caller: ThreadId, input: ProjectTeamTaskCreateInput) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
-    const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
     const { task } = yield* team.createTask(caller, {
       goal: input.request,
       verification: "Check the requested result.",
       ...input,
-    });
-    const role = yield* team.roleOf(caller);
-    if (role.type === "none") {
-      throw new Error("The proposer must have a team role.");
-    }
-    const [item] = yield* repository.listOpenAttentionItems({
-      projectId: role.projectId,
-      taskId: task.id,
-    });
-    if (item === undefined) {
-      throw new Error("The task proposal card is missing.");
-    }
-    yield* team.answerDecision({
-      projectId: item.projectId,
-      attentionItemId: item.id,
-      answer: "태스크로 추가",
     });
     return yield* team.readTask(caller, { taskId: task.id });
   });
@@ -617,12 +689,30 @@ export const readyPlan = (spec: ProjectTaskSpec): ProjectTaskSpec => ({
     },
   ],
   files: [{ path: "hello.sh", change: "new", why: "the script", todos: ["t1"] }],
+  ...readyGates,
 });
 
-/** The lead writes a plan that meets the Definition of Ready. */
+/** Every plan gate filled, so a plan passes the empty-gate check at any task size. */
+export const readyGates = {
+  problem: "Nothing prints hello today; after this, hello.sh prints it.",
+  why: "The user asked for it; without it the demo has no output. Asked whether it needs flags: no.",
+  currentState: "No hello.sh exists in the repository root.",
+  nonGoals: "A Windows script: the demo runs on macOS only.",
+  humanCheckpoints: "None: no sign-in, tokens or payment.",
+  budget: "One hour; drop the color output if it runs over.",
+  risks: "It fails if the shell is not bash: t1 uses POSIX sh only.",
+  alternatives: "A Node script: rejected, it needs a runtime.",
+} satisfies Partial<ProjectTaskSpec>;
+
+/** The lead sets its task's size, which plan approval needs. */
+export const setSize = (lead: ThreadId, size: "small" | "medium" | "large" = "small") =>
+  Effect.flatMap(ProjectTeamService.ProjectTeamService, (team) => team.updateTask(lead, { size }));
+
+/** The lead writes a plan that meets the Definition of Ready, and sizes a task with no size. */
 export const writeReadyPlan = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
+    if ((yield* leadTask(lead)).metrics.size === null) yield* setSize(lead);
     const read = yield* team.readSpec(lead, {});
     return yield* team.writeSpec(lead, {
       baseVersion: read.current.version,
@@ -631,15 +721,90 @@ export const writeReadyPlan = (lead: ThreadId) =>
     });
   });
 
+let checkerCount = 0;
+/**
+ * Starts plan checkers on threads named checker-<n>, on the target model like
+ * delegate_task. Tests that look at the delegation pass harness.delegate instead.
+ */
+export const checkerDelegate: ProjectTeamService.DelegateStep = (input) =>
+  Effect.sync(() => {
+    checkerCount += 1;
+    return {
+      taskId: NodeId.make(`checker-node-${checkerCount}`),
+      childThreadId: ThreadId.make(`checker-${checkerCount}`),
+      providerInstanceId: input.target?.providerInstanceId ?? DEFAULT_PROVIDER_INSTANCE_ID,
+      model: input.target?.model ?? DEFAULT_MODEL,
+    } as OrchestratorMcpDelegateTaskResult;
+  });
+
+/** The lead asks the user to approve its plan; the plan checker starts and no card goes up yet. */
+export const requestApproval = (
+  lead: ThreadId,
+  input: Partial<ProjectTeamAskUserInput> = {},
+  delegate: ProjectTeamService.DelegateStep = checkerDelegate,
+) =>
+  Effect.flatMap(ProjectTeamService.ProjectTeamService, (team) =>
+    team.requestPlanApproval(
+      lead,
+      {
+        context: attentionContext({ action: "Approve the plan?" }),
+        kind: "approval",
+        question: "Approve the plan?",
+        ...input,
+      },
+      delegate,
+    ),
+  );
+
+/** The lead's task, read the way the PM sees it. */
+export const leadTask = (lead: ThreadId) =>
+  Effect.gen(function* () {
+    const repository = yield* ProjectTeamRepository.ProjectTeamRepository;
+    const task = yield* repository.findTaskByLeadThreadId(lead);
+    if (Option.isNone(task)) throw new Error(`No task led by ${lead}.`);
+    return task.value;
+  });
+
+/**
+ * The plan checker of the lead's task records its verdicts: every required gate passes
+ * unless `fail` names gates. Returns the approval card it raised, if any.
+ */
+export const passPlanCheck = (lead: ThreadId, fail: ReadonlyArray<string> = []) =>
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService.ProjectTeamService;
+    const task = yield* leadTask(lead);
+    const check = task.planCheck;
+    if (check?.checker == null) throw new Error(`#${task.number} has no plan checker.`);
+    const detail = yield* team.getTaskDetail({ projectId: task.projectId, taskId: task.id });
+    const spec = detail.versions.find((version) => version.version === check.specVersion)!;
+    const verdicts = requiredPlanGates(planDepth(task.metrics.size, spec.spec)).map((gate) => ({
+      gate: gate.id,
+      pass: !fail.includes(gate.id),
+      reason: fail.includes(gate.id) ? `${gate.label} 내용이 부족해요.` : "충분해요.",
+    }));
+    yield* team.setPlanCheck(check.checker.threadId, { specVersion: check.specVersion, verdicts });
+    const after = yield* team.getTaskDetail({ projectId: task.projectId, taskId: task.id });
+    return {
+      item: after.openAttention.find((item) => item.kind === "approval"),
+      task: after.task,
+    };
+  });
+
+/** The lead asks for plan approval and the plan checker passes it: the card is up. */
+export const askPlanApproval = (lead: ThreadId, input: Partial<ProjectTeamAskUserInput> = {}) =>
+  Effect.gen(function* () {
+    yield* requestApproval(lead, input);
+    const { item } = yield* passPlanCheck(lead);
+    if (item === undefined) throw new Error("The plan check raised no approval card.");
+    return { item };
+  });
+
 /** The lead writes a ready plan and the user approves it, so the task is running. */
 export const approvePlan = (lead: ThreadId) =>
   Effect.gen(function* () {
     const team = yield* ProjectTeamService.ProjectTeamService;
     yield* writeReadyPlan(lead);
-    const { item } = yield* team.askUser(lead, {
-      kind: "approval",
-      question: "Approve the plan?",
-    });
+    const { item } = yield* askPlanApproval(lead);
     yield* team.answerDecision({
       projectId: item.projectId,
       attentionItemId: item.id,

@@ -44,6 +44,7 @@ import {
   ProviderDriverKind,
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+import { ProjectTaskStepModels, ProjectTaskStepModelsPatch } from "./projectTeam.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -782,6 +783,76 @@ export const BackgroundActivitySettings = Schema.Struct({
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type BackgroundActivitySettings = typeof BackgroundActivitySettings.Type;
 
+const GIB = 1024 * 1024 * 1024;
+export const TaskExecutionLocationPolicy = Schema.Literals([
+  "local_only",
+  "local_first",
+  "cloud_first",
+]);
+export type TaskExecutionLocationPolicy = typeof TaskExecutionLocationPolicy.Type;
+export const DEFAULT_TASK_EXECUTION_LOCATION: TaskExecutionLocationPolicy = "local_only";
+export const DEFAULT_TASK_START_MIN_FREE_BYTES = 1.5 * GIB;
+export const DEFAULT_TASK_PAUSE_BELOW_FREE_BYTES = 0.75 * GIB;
+export const DEFAULT_TASK_MAX_CONCURRENT_SESSIONS = 10;
+export const MIN_TASK_MAX_CONCURRENT_SESSIONS = 1;
+export const MAX_TASK_MAX_CONCURRENT_SESSIONS = 50;
+/** Free-memory thresholds stay between 64 MiB and 64 GiB. */
+const TaskMemoryThresholdBytes = Schema.Int.check(
+  Schema.isBetween({ minimum: 64 * 1024 * 1024, maximum: 64 * GIB }),
+);
+const TaskMaxConcurrentSessions = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_TASK_MAX_CONCURRENT_SESSIONS,
+    maximum: MAX_TASK_MAX_CONCURRENT_SESSIONS,
+  }),
+);
+const pauseBelowStart = Schema.makeFilter(
+  (settings: {
+    readonly startMinFreeBytes?: number | undefined;
+    readonly pauseBelowFreeBytes?: number | undefined;
+  }) =>
+    settings.startMinFreeBytes === undefined ||
+    settings.pauseBelowFreeBytes === undefined ||
+    settings.pauseBelowFreeBytes < settings.startMinFreeBytes ||
+    "The pause threshold must be below the start threshold.",
+);
+
+/**
+ * Where task leads run and how much free memory they need. `local_only` never
+ * sends or moves work to the cloud; the other two use the cloud when the Mac is
+ * short on memory (`cloud_first` starts there to begin with).
+ */
+export const TaskExecutionSettings = Schema.Struct({
+  location: TaskExecutionLocationPolicy.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TASK_EXECUTION_LOCATION)),
+  ),
+  /** A new session starts locally only with at least this much memory available. */
+  startMinFreeBytes: TaskMemoryThresholdBytes.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TASK_START_MIN_FREE_BYTES)),
+  ),
+  /** Below this much available memory, running sessions are paused. */
+  pauseBelowFreeBytes: TaskMemoryThresholdBytes.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TASK_PAUSE_BELOW_FREE_BYTES)),
+  ),
+  /** Safety cap on task leads running at once, whatever the memory. */
+  maxConcurrentSessions: TaskMaxConcurrentSessions.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TASK_MAX_CONCURRENT_SESSIONS)),
+  ),
+}).pipe(Schema.withDecodingDefault(Effect.succeed({})));
+export type TaskExecutionSettings = typeof TaskExecutionSettings.Type;
+
+/**
+ * The settings as the server applies them: a pause threshold at or above the
+ * start threshold (possible after two separate patches) drops to half of it.
+ */
+export function resolveTaskExecutionSettings(
+  settings: TaskExecutionSettings,
+): TaskExecutionSettings {
+  return settings.pauseBelowFreeBytes < settings.startMinFreeBytes
+    ? settings
+    : { ...settings, pauseBelowFreeBytes: Math.floor(settings.startMinFreeBytes / 2) };
+}
+
 export const BrowserAgentHistoryAccess = Schema.Literals(["ask", "allow", "off"]);
 export type BrowserAgentHistoryAccess = typeof BrowserAgentHistoryAccess.Type;
 export const DEFAULT_BROWSER_AGENT_HISTORY_ACCESS: BrowserAgentHistoryAccess = "ask";
@@ -1041,6 +1112,9 @@ export const ServerSettings = Schema.Struct({
 
   autoResumeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   backgroundActivity: BackgroundActivitySettings,
+  taskExecution: TaskExecutionSettings,
+  /** The model and thinking level for each task step (plan, implement, review) in every project. */
+  taskStepModels: ProjectTaskStepModels.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 
   automaticGitFetchInterval: Schema.DurationFromMillis.pipe(
     Schema.withDecodingDefault(
@@ -1101,7 +1175,7 @@ export const ServerSettings = Schema.Struct({
   branchNamingMode: BranchNamingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("static" as const)),
   ),
-  branchNamePrefix: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("t3"))),
+  branchNamePrefix: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("busyboy"))),
   branchNameInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   removeAgentCreditsOnMerge: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
@@ -1331,6 +1405,15 @@ export const ServerSettingsPatch = Schema.Struct({
       baseProfile: Schema.optionalKey(BackgroundActivityProfile),
       overrides: Schema.optionalKey(BackgroundActivityOverrides),
     }),
+  ),
+  taskStepModels: Schema.optionalKey(ProjectTaskStepModelsPatch),
+  taskExecution: Schema.optionalKey(
+    Schema.Struct({
+      location: Schema.optionalKey(TaskExecutionLocationPolicy),
+      startMinFreeBytes: Schema.optionalKey(TaskMemoryThresholdBytes),
+      pauseBelowFreeBytes: Schema.optionalKey(TaskMemoryThresholdBytes),
+      maxConcurrentSessions: Schema.optionalKey(TaskMaxConcurrentSessions),
+    }).check(pauseBelowStart),
   ),
   automaticGitFetchInterval: Schema.optionalKey(Schema.DurationFromMillis),
   providerHealthRefreshInterval: Schema.optionalKey(Schema.DurationFromMillis),

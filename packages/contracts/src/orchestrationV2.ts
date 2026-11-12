@@ -37,7 +37,9 @@ import {
   TurnItemId,
 } from "./baseSchemas.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
+import { ExecutionLocation } from "./executionLocation.ts";
 import { ComputerUseAppRequestStatus } from "./desktopComputerUse.ts";
+import { OperationPermissionStatus } from "./operationPermission.ts";
 import {
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
@@ -356,6 +358,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  /** Where the agent runs; absent means local. A cloud thread's worktree is a mirror. */
+  location: Schema.optional(ExecutionLocation),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.optional(Schema.Array(ThreadPullRequestLink)),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -1379,6 +1383,18 @@ const OrchestrationV2BrowserRequestFields = {
   browserStatus: OrchestrationV2BrowserRequestStatus,
 } as const;
 
+/** A bounded execution approval. Raw arguments and credentials are never recorded here. */
+const OrchestrationV2OperationPermissionFields = {
+  type: Schema.Literal("operation_permission"),
+  operation: Schema.String,
+  summary: Schema.String,
+  reason: Schema.String,
+  targetDescription: Schema.String,
+  fingerprint: Schema.String,
+  expiresAt: IsoDateTime,
+  permissionStatus: OperationPermissionStatus,
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1564,6 +1580,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2BrowserRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2OperationPermissionFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1858,6 +1878,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  location: Schema.optional(ExecutionLocation),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.optional(Schema.Array(ThreadPullRequestLink)),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -2312,6 +2333,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2OperationPermissionFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
     type: Schema.Literal("subagent"),
     subagentId: NodeId,
     origin: Schema.Literals(["provider_native", "app_owned"]),
@@ -2677,6 +2702,8 @@ export const OrchestrationV2Command = Schema.Union([
     limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecoveryUpdate)),
     /** Link (object) or unlink (null) a pull request (#8160); absent leaves it unchanged. */
     linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+    /** Moves where the agent runs; its live provider session is detached. */
+    location: Schema.optional(ExecutionLocation),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.pull-request.link"),
@@ -2936,6 +2963,8 @@ export const OrchestrationV2Command = Schema.Union([
     runtimeMode: RuntimeMode,
     interactionMode: ProviderInteractionMode,
     workspaceStrategy: Schema.optional(OrchestrationV2ThreadLaunchWorkspaceStrategy),
+    // Omitted means local.
+    location: Schema.optional(ExecutionLocation),
     // Omitted behaves as "settled_only" (no wake while the parent has a live
     // run); producers that want fire-and-forget wakes must set "always", and
     // producers whose results arrive through another channel set "never".
@@ -3079,6 +3108,16 @@ const OrchestrationV2InternalCommand = Schema.Union([
     historyLimit: Schema.optional(Schema.Int),
     autoApprove: Schema.optional(Schema.Boolean),
     browserStatus: OrchestrationV2BrowserRequestStatus,
+  }),
+  /** Internal: the waiting call and authenticated app answer path own this request. */
+  Schema.Struct({
+    ...OrchestrationV2OperationPermissionFields,
+    type: Schema.Literal("operation_permission.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    nodeId: NodeId,
+    turnItemId: TurnItemId,
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

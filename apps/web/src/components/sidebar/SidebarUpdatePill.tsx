@@ -14,13 +14,15 @@ import {
   getDesktopUpdateActionError,
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateDownloadedVersion,
+  getDesktopUpdateReleaseUrl,
   isDesktopUpdateButtonDisabled,
   isDesktopUpdatePreparing,
   resolveDesktopUpdateButtonAction,
   shouldShowArm64IntelBuildWarning,
 } from "../desktopUpdate.logic";
-import { installDesktopUpdate, showDesktopUpdateReadyPrompt } from "../desktopUpdate.toast";
+import { installDesktopUpdate, openDesktopUpdateReleaseNotes } from "../desktopUpdate.toast";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Button } from "../ui/button";
 import { Popover, PopoverCreateHandle, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { SidebarMenuItem } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -246,11 +248,6 @@ function SidebarUpdateControl() {
 
     if (!bridge || !state) return;
 
-    if (action === "install") {
-      showDesktopUpdateReadyPrompt(bridge, state);
-      return;
-    }
-
     setIsActionPending(true);
 
     if (action === "download") {
@@ -378,6 +375,72 @@ function SidebarUpdateControl() {
               }
             : {})}
         />
+        {confirmDialog}
+      </SidebarMenuItem>
+    );
+  }
+
+  const bridge = window.desktopBridge;
+  if (action === "install" && !runsEverything && state && bridge) {
+    const readyVersion = getDesktopUpdateDownloadedVersion(state);
+    const releaseUrl = getDesktopUpdateReleaseUrl(readyVersion);
+    const restart = async () => {
+      if (isActionPending) return;
+      setIsActionPending(true);
+      await installDesktopUpdate(bridge);
+      setIsActionPending(false);
+    };
+    const versionLabel = releaseUrl ? (
+      <button
+        type="button"
+        aria-label={`v${readyVersion} release notes`}
+        className="min-w-0 flex-1 cursor-pointer truncate text-left text-muted-foreground tabular-nums underline-offset-3 hover:text-foreground hover:underline"
+        onClick={() => void openDesktopUpdateReleaseNotes(bridge, releaseUrl)}
+      >
+        v{readyVersion}
+      </button>
+    ) : (
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">Update ready</span>
+    );
+    return (
+      <SidebarMenuItem className="ml-auto flex min-w-0 flex-1">
+        <div
+          data-testid="desktop-update-ready"
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full bg-sidebar-control-surface pr-1 pl-3 text-xs text-sidebar-foreground"
+        >
+          {shouldUseSidebarUpdateReleaseNotesPopover(true, state) ? (
+            <Popover
+              onOpenChange={(open, details) => {
+                handleSidebarUpdateReleaseNotesPopoverOpenChange(open, details);
+              }}
+            >
+              <PopoverTrigger closeDelay={150} openOnHover render={versionLabel} />
+              <PopoverPopup
+                align="start"
+                aria-label="Nightly update release notes"
+                initialFocus={false}
+                side="top"
+                tooltipStyle
+              >
+                <SidebarUpdateReleaseNotes shell={bridge} state={state} tooltip={tooltip} />
+              </PopoverPopup>
+            </Popover>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger render={versionLabel} />
+              <TooltipPopup side="top">{releaseUrl ? "Release notes" : tooltip}</TooltipPopup>
+            </Tooltip>
+          )}
+          <Button
+            size="xs"
+            className="shrink-0 rounded-full"
+            aria-label={tooltip}
+            disabled={isActionPending}
+            onClick={() => void restart()}
+          >
+            Restart
+          </Button>
+        </div>
         {confirmDialog}
       </SidebarMenuItem>
     );

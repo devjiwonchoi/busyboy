@@ -47,11 +47,15 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamRequestSitrep]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamAnswerDecision]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamSnoozeDecision]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamUnsnoozeDecision]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamAskLead]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamUpdateSettings]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamUpdateTaskSpec]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamRestoreTaskSpec]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamSplitTaskTodo]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectTeamSetTaskRoleModels]: AuthOrchestrationOperateScope,
+  [WS_METHODS.projectTeamMoveTask]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;

@@ -919,7 +919,7 @@ export interface DesktopBridge {
   getPathForFile?: (file: File) => string;
   getClientPlatform?: () => string;
   setNotificationBadge?: (badge: { count: number; image: string | null }) => Promise<void>;
-  onNotificationBadgeClear?: (listener: () => void) => () => void;
+  requestAttention?: () => Promise<void>;
   onTrackpadScrollEnd?: (listener: () => void) => () => void;
   /**
    * The OS locale as a BCP-47 tag, which the renderer cannot read for itself:

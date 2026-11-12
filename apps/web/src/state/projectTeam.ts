@@ -17,6 +17,10 @@ import type {
   ProjectDecisionCard,
   ProjectId,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamSnoozeDecisionInput,
+  ProjectTeamUnsnoozeDecisionInput,
+  ProjectTeamAskLeadInput,
+  ProjectTeamMoveTaskInput,
   ProjectTeamRestoreTaskSpecInput,
   ProjectTeamSetTaskRoleModelsInput,
   ProjectTeamSplitTaskTodoInput,
@@ -30,12 +34,15 @@ import type {
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { useMemo } from "react";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
-import { useThreadShell } from "./entities";
+import { useProjects, useThreadShell } from "./entities";
 import { environmentThreadShells } from "./threads";
 import {
+  buildTaskReferenceCatalog,
+  type TaskReferenceCatalog,
   decisionCardsForThread,
   type LeadThreadTask,
   taskForLeadThread,
@@ -46,6 +53,21 @@ import { useEnvironmentQuery } from "./query";
 import { useAtomCommand } from "./use-atom-command";
 
 export const projectTeamEnvironment = createProjectTeamEnvironmentAtoms(connectionAtomRuntime);
+
+// Only successful streams establish an alert baseline, including after reconnects.
+const loadedAttentionEnvironmentsAtom = Atom.family((environmentIdsKey: string) =>
+  Atom.make((get) =>
+    (environmentIdsKey.split(",") as EnvironmentId[]).filter(
+      (environmentId) =>
+        environmentId !== "" &&
+        AsyncResult.isSuccess(get(projectTeamEnvironment.attention({ environmentId, input: {} }))),
+    ),
+  ),
+);
+
+export function useLoadedProjectTeamEnvironmentIds(environmentIds: ReadonlyArray<EnvironmentId>) {
+  return useAtomValue(loadedAttentionEnvironmentsAtom(environmentIds.join(",")));
+}
 
 const EMPTY_SUMMARY_ATOM = Atom.make<ProjectTeamAttentionSummary | null>(null).pipe(
   Atom.withLabel("web-project-team:empty"),
@@ -62,6 +84,56 @@ export const environmentProjectTeamAttentionAtom = Atom.family((environmentId: E
     return Option.getOrElse(AsyncResult.value(result), () => EMPTY_PROJECT_TEAM_ATTENTION_INDEX);
   }).pipe(Atom.withLabel(`web-project-team:attention:${environmentId}`)),
 );
+
+/** How long a view waits for the PM data before it shows anyway. */
+export const PROJECT_TEAM_ATTENTION_GRACE_MS = 3000;
+
+// Turns true once, a fixed time after the first view asked, so a stream that never
+// answers (an unreachable environment) cannot keep views blank. It only covers startup:
+// an environment that connects later is not held back, so its PM chat may still flash.
+const attentionGraceExpiredAtom = Atom.make((get) => {
+  const timer = setTimeout(() => get.setSelf(true), PROJECT_TEAM_ATTENTION_GRACE_MS);
+  get.addFinalizer(() => clearTimeout(timer));
+  return false;
+}).pipe(Atom.keepAlive, Atom.withLabel("web-project-team:attention-grace-expired"));
+
+// Whether a thread is a PM chat is only known once the attention stream sends its first
+// value. Until then a PM chat and the sidebar would render as ordinary threads and then
+// switch to the PM layout, so views that depend on it wait. A failed stream is no longer
+// pending, since waiting on it would never end.
+const environmentAttentionPendingAtom = Atom.family((environmentId: EnvironmentId) =>
+  Atom.make(
+    (get): boolean =>
+      !get(attentionGraceExpiredAtom) &&
+      AsyncResult.isInitial(get(projectTeamEnvironment.attention({ environmentId, input: {} }))),
+  ).pipe(Atom.withLabel(`web-project-team:attention-pending:${environmentId}`)),
+);
+
+const NOT_PENDING_ATOM = Atom.make(false).pipe(
+  Atom.withLabel("web-project-team:attention-pending:none"),
+);
+
+// A PM always has its own thread, so only environments with threads can hold one.
+const anyAttentionPendingAtom = Atom.make((get): boolean => {
+  const environmentIds = new Set(
+    get(environmentThreadShells.threadShellsAtom).map((thread) => thread.environmentId),
+  );
+  return [...environmentIds].some((environmentId) =>
+    get(environmentAttentionPendingAtom(environmentId)),
+  );
+}).pipe(Atom.withLabel("web-project-team:attention-pending:any"));
+
+/** True while this environment has not yet said which of its threads are PM chats. */
+export function useProjectTeamAttentionPending(environmentId: EnvironmentId | null): boolean {
+  return useAtomValue(
+    environmentId === null ? NOT_PENDING_ATOM : environmentAttentionPendingAtom(environmentId),
+  );
+}
+
+/** True while any environment with threads has not yet said which threads are PM chats. */
+export function useAnyProjectTeamAttentionPending(): boolean {
+  return useAtomValue(anyAttentionPendingAtom);
+}
 
 const projectManagerAtom = Atom.family((key: string) => {
   const ref = parseScopedProjectKey(key);
@@ -204,6 +276,27 @@ export function useAnswerDecision() {
     answerDecision({ environmentId, input });
 }
 
+/** Sets a card aside with the user's reason; it leaves the waiting list until brought back. */
+export function useSnoozeDecision() {
+  const snoozeDecision = useAtomCommand(projectTeamEnvironment.snoozeDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamSnoozeDecisionInput) =>
+    snoozeDecision({ environmentId, input });
+}
+
+/** Brings a snoozed card back to the waiting list. */
+export function useUnsnoozeDecision() {
+  const unsnoozeDecision = useAtomCommand(projectTeamEnvironment.unsnoozeDecision);
+  return (environmentId: EnvironmentId, input: ProjectTeamUnsnoozeDecisionInput) =>
+    unsnoozeDecision({ environmentId, input });
+}
+
+/** Asks the lead that raised a card a question from the card's side chat. */
+export function useAskLead() {
+  const askLead = useAtomCommand(projectTeamEnvironment.askLead);
+  return (environmentId: EnvironmentId, input: ProjectTeamAskLeadInput) =>
+    askLead({ environmentId, input });
+}
+
 export type ProjectTeamSettingsPatch = Omit<ProjectTeamUpdateSettingsInput, "projectId">;
 
 /** Saves the user's PM settings; the server then holds sitrep values for 24 hours before adjusting. */
@@ -239,6 +332,13 @@ export function useSetTaskRoleModels() {
   const setTaskRoleModels = useAtomCommand(projectTeamEnvironment.setTaskRoleModels);
   return (environmentId: EnvironmentId, input: ProjectTeamSetTaskRoleModelsInput) =>
     setTaskRoleModels({ environmentId, input });
+}
+
+/** Moves a task's lead between the Mac and a cloud sandbox; resolves once the move is done. */
+export function useMoveTask() {
+  const moveTask = useAtomCommand(projectTeamEnvironment.moveTask, { reportFailure: false });
+  return (environmentId: EnvironmentId, input: ProjectTeamMoveTaskInput) =>
+    moveTask({ environmentId, input });
 }
 
 /** One task's detail, refetched whenever the team's attention changes. */
@@ -286,9 +386,13 @@ const numberedThreadTitlesAtom = Atom.family((key: string) => {
 });
 
 /** What the task-reference linker needs besides the tasks: the key prefix and thread titles. */
-export function useTaskReferenceLinkContext(ref: ScopedThreadRef | null): {
+export function useTaskReferenceLinkContext(
+  ref: ScopedThreadRef | null,
+  explicitEnvironmentId?: EnvironmentId | null,
+): {
   readonly taskKeyPrefix: string | null;
   readonly threadTitles: ReadonlyArray<string>;
+  readonly catalog: TaskReferenceCatalog;
 } {
   const projectId = useThreadShell(ref)?.projectId ?? null;
   const projectRef =
@@ -299,7 +403,20 @@ export function useTaskReferenceLinkContext(ref: ScopedThreadRef | null): {
       ? EMPTY_THREAD_TITLES_ATOM
       : numberedThreadTitlesAtom(scopedProjectKey(projectRef)),
   );
-  return { taskKeyPrefix: summary?.taskKeyPrefix ?? null, threadTitles };
+  const environmentId = ref?.environmentId ?? explicitEnvironmentId ?? null;
+  const entries = useProjectManagerEntries(environmentId === null ? [] : [environmentId]);
+  const projects = useProjects();
+  const catalog = useMemo(
+    () =>
+      buildTaskReferenceCatalog({
+        environmentId,
+        contextualProjectId: summary?.kind === "director" ? null : projectId,
+        entries,
+        projects,
+      }),
+    [environmentId, summary?.kind, projectId, entries, projects],
+  );
+  return { taskKeyPrefix: summary?.taskKeyPrefix ?? null, threadTitles, catalog };
 }
 
 /** The task this thread leads, with whether it waits on the user; null for other threads. */

@@ -92,6 +92,7 @@ import { useWorkspaceContentWidth } from "../layout/workspace-content-width";
 import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { replyWithRequestLink } from "@t3tools/shared/requestMessage";
 import { collectProviderUsageLimits } from "@t3tools/shared/usageLimits";
 import type { ComposerEditorHandle } from "../../components/ComposerEditor";
 import type { StatusTone } from "../../components/StatusPill";
@@ -119,6 +120,7 @@ import type {
   ThreadFeedLatestRun,
 } from "../../lib/threadActivity";
 import { PendingApprovalCard } from "./PendingApprovalCard";
+import { ProjectTeamCards } from "./ProjectTeamCards";
 import { ComposerErrorNotice } from "./ComposerErrorNotice";
 import { ComposerFeedback } from "./ComposerFeedback";
 import { ComposerUsageLimits } from "./ComposerUsageLimits";
@@ -1234,6 +1236,20 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                       />
                     </Animated.View>
                   ) : null}
+                  <ProjectTeamCards
+                    environmentId={props.environmentId}
+                    threadId={props.selectedThread.id}
+                    canOperateThread={props.canOperateThread}
+                    onReply={(link) =>
+                      props.onChangeDraftMessage(replyWithRequestLink(props.draftMessage, link))
+                    }
+                    onOpenLead={(threadId) => {
+                      navigation.navigate("Thread", {
+                        environmentId: props.environmentId,
+                        threadId,
+                      });
+                    }}
+                  />
                   {props.activePendingApproval || props.activePendingUserInput ? (
                     <Animated.View
                       className="shrink-0 gap-3 px-4 pb-3"

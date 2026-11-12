@@ -192,29 +192,29 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("counts notifying threads across environments, replaces repeat alerts, and clears on focus", async () => {
+it("replaces repeat OS alerts and closes them on focus without driving the waiting badge", async () => {
   await render();
   complete();
   await render();
-  expect(state.badge).toHaveBeenLastCalledWith(1);
+  expect(state.badge).toHaveBeenCalledTimes(0);
   complete("one", "2026-09-13T08:01:00Z");
   complete("two");
   await render();
-  expect(state.badge).toHaveBeenLastCalledWith(2);
+  expect(state.badge).toHaveBeenCalledTimes(0);
   expect(TestNotification.sent[0]!.close).toHaveBeenCalledOnce();
   focused = true;
   window.dispatchEvent(new Event("focus"));
-  expect(state.badge).toHaveBeenLastCalledWith(0);
+  expect(state.badge).toHaveBeenCalledTimes(0);
   expect(
     TestNotification.sent.every((notification) => notification.close.mock.calls.length > 0),
   ).toBe(true);
   focused = false;
   complete("two", "2026-09-13T08:02:00Z");
   await render();
-  expect(state.badge).toHaveBeenLastCalledWith(1);
+  expect(state.badge).toHaveBeenCalledTimes(0);
 });
 
-it("does not badge old completions on first load or reconnect", async () => {
+it("does not notify old completions on first load or reconnect", async () => {
   complete();
   await render();
   state.shells.set("one", { status: "connecting", snapshot: Option.none() });
@@ -222,7 +222,7 @@ it("does not badge old completions on first load or reconnect", async () => {
   complete("one", "2026-09-13T08:01:00Z");
   await render();
   expect(TestNotification.sent).toHaveLength(0);
-  expect(state.badge.mock.calls.every(([count]) => count === 0)).toBe(true);
+  expect(state.badge).toHaveBeenCalledTimes(0);
 });
 
 it("removes alerts only from environments that leave the client", async () => {
@@ -230,44 +230,30 @@ it("removes alerts only from environments that leave the client", async () => {
   complete("one");
   complete("two");
   await render();
-  expect(state.badge).toHaveBeenLastCalledWith(2);
+  expect(state.badge).toHaveBeenCalledTimes(0);
   const [removed, retained] = TestNotification.sent;
   state.environmentIds = ["two"];
   await render();
-  expect(state.badge).toHaveBeenLastCalledWith(1);
+  expect(state.badge).toHaveBeenCalledTimes(0);
   expect(removed!.close).toHaveBeenCalledOnce();
   expect(retained!.close).not.toHaveBeenCalled();
   await render();
   expect(removed!.close).toHaveBeenCalledOnce();
   state.environmentIds = [];
   await render();
-  expect(state.badge).toHaveBeenLastCalledWith(0);
+  expect(state.badge).toHaveBeenCalledTimes(0);
   expect(retained!.close).toHaveBeenCalledOnce();
 });
 
-it("starts a fresh count after another native app window gains focus", async () => {
-  let clear: (() => void) | undefined;
-  const unsubscribe = vi.fn();
-  Object.assign(window, {
-    desktopBridge: {
-      onNotificationBadgeClear: (listener: () => void) => {
-        clear = listener;
-        return unsubscribe;
-      },
-    },
-  });
+it("closes outstanding OS notifications on disposal without changing the waiting badge", async () => {
   await render();
   complete();
   await render();
-  clear!();
-  expect(state.badge).toHaveBeenLastCalledWith(0);
-  complete("two");
-  await render();
-  expect(state.badge).toHaveBeenLastCalledWith(1);
+  const notification = TestNotification.sent[0]!;
   await act(async () => root.unmount());
   root = createRoot(document.createElement("div"));
-  expect(unsubscribe).toHaveBeenCalledOnce();
-  expect(state.badge).toHaveBeenLastCalledWith(0);
+  expect(notification.close).toHaveBeenCalledOnce();
+  expect(state.badge).toHaveBeenCalledTimes(0);
 });
 
 it.each(["off", "sound", "denied", "archived"])(
@@ -287,17 +273,17 @@ it.each(["off", "sound", "denied", "archived"])(
       );
     await render();
     expect(TestNotification.sent).toHaveLength(0);
-    expect(state.badge.mock.calls.every(([count]) => count === 0)).toBe(true);
+    expect(state.badge).toHaveBeenCalledTimes(0);
   },
 );
 
 it.each(["hasPendingApprovals", "hasPendingUserInput"] as const)(
-  "badges %s and clears when notifications are disabled",
+  "notifies %s and closes alerts when notifications are disabled",
   async (flag) => {
     await render();
     state.shells.set("one", shell({ [flag]: true }));
     await render();
-    expect(state.badge).toHaveBeenLastCalledWith(1);
+    expect(state.badge).toHaveBeenCalledTimes(0);
     const notification = TestNotification.sent[0]!;
     notification.dispatchEvent(new Event("click"));
     expect(state.navigate).toHaveBeenCalledWith({
@@ -306,7 +292,7 @@ it.each(["hasPendingApprovals", "hasPendingUserInput"] as const)(
     });
     state.mode = "sound";
     await render();
-    expect(state.badge).toHaveBeenLastCalledWith(0);
+    expect(state.badge).toHaveBeenCalledTimes(0);
     expect(notification.close).toHaveBeenCalled();
   },
 );
@@ -317,13 +303,13 @@ it("shows native alerts without adding a badge while focused", async () => {
   complete();
   await render();
   expect(TestNotification.sent).toHaveLength(1);
-  expect(state.badge.mock.calls.every(([count]) => count === 0)).toBe(true);
+  expect(state.badge).toHaveBeenCalledTimes(0);
 });
 
-it("badges background failures", async () => {
+it("notifies background failures without driving the waiting badge", async () => {
   await render();
   state.shells.set("one", shell({ latestTurn: { ...thread.latestTurn, state: "error" } }));
   await render();
   expect(TestNotification.sent[0]?.title).toBe("Thread failed");
-  expect(state.badge).toHaveBeenLastCalledWith(1);
+  expect(state.badge).toHaveBeenCalledTimes(0);
 });

@@ -55,7 +55,8 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
       | typeof WS_METHODS.projectTeamUpdateTaskSpec
       | typeof WS_METHODS.projectTeamRestoreTaskSpec
       | typeof WS_METHODS.projectTeamSplitTaskTodo
-      | typeof WS_METHODS.projectTeamSetTaskRoleModels,
+      | typeof WS_METHODS.projectTeamSetTaskRoleModels
+      | typeof WS_METHODS.projectTeamMoveTask,
   >(
     label: string,
     tag: Tag,
@@ -81,6 +82,8 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
     restoreTaskSpec: taskCommand("restore-task-spec", WS_METHODS.projectTeamRestoreTaskSpec),
     splitTaskTodo: taskCommand("split-task-todo", WS_METHODS.projectTeamSplitTaskTodo),
     setTaskRoleModels: taskCommand("set-task-role-models", WS_METHODS.projectTeamSetTaskRoleModels),
+    // Moves the lead between the Mac and a cloud sandbox; resolves once the move is done.
+    moveTask: taskCommand("move-task", WS_METHODS.projectTeamMoveTask),
     // The attention stream carries the result, so no command updates state itself.
     requestSitrep: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:request-sitrep",
@@ -100,6 +103,31 @@ export function createProjectTeamEnvironmentAtoms<R, E>(
         mode: "singleFlight",
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
       },
+    }),
+    // Sets a card aside with the user's reason; the attention stream then shows it snoozed.
+    snoozeDecision: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:snooze-decision",
+      tag: WS_METHODS.projectTeamSnoozeDecision,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
+      },
+    }),
+    unsnoozeDecision: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:unsnooze-decision",
+      tag: WS_METHODS.projectTeamUnsnoozeDecision,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.attentionItemId]),
+      },
+    }),
+    // A side chat question for the card's lead; the card itself stays as it is.
+    askLead: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project-team:ask-lead",
+      tag: WS_METHODS.projectTeamAskLead,
+      scheduler: commandScheduler,
     }),
     updateSettings: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project-team:update-settings",

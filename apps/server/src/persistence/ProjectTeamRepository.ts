@@ -8,14 +8,20 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 
 import {
   emptyProjectTaskSpec,
+  ExecutionLocation,
   IsoDateTime,
   NonNegativeInt,
   PositiveInt,
   ProjectAttentionAnsweredBy,
   ProjectAttentionBatchId,
+  ProjectAttentionContext,
+  ProjectAttentionDetail,
   ProjectAttentionItem,
   ProjectAttentionItemId,
   ProjectAttentionKind,
+  ProjectCorrection,
+  ProjectCorrectionKind,
+  ProjectCorrectionStage,
   ProjectId,
   ProjectMemoryEntry,
   ProjectMemoryEntryId,
@@ -28,8 +34,12 @@ import {
   ProjectTaskEventKind,
   ProjectTaskId,
   ProjectTaskOutcome,
+  ProjectTaskPlanCheck,
   ProjectTaskReady,
   ProjectTaskModelRole,
+  ProjectTaskMemoryHold,
+  ProjectTaskHold,
+  ProjectTaskStallCause,
   ProjectTaskModelStep,
   ProjectTaskModelSteps,
   ProjectTaskMetrics,
@@ -45,6 +55,7 @@ import {
   ProjectTaskStage,
   ProjectTeamSettings,
   ProjectManagerKind,
+  ProjectWorkKind,
   ThreadId,
   WorkspaceGoal,
   WorkspaceGoalId,
@@ -89,8 +100,6 @@ export interface CreateProjectTaskInput {
   readonly waitsOn: ReadonlyArray<ProjectTaskId>;
   readonly now: IsoDateTime;
   readonly parentTaskId?: ProjectTaskId | undefined;
-  /** "proposed" stores a PM's or the Director's proposal, hidden until the user adds it. Defaults to inbox. */
-  readonly stage?: "inbox" | "proposed" | undefined;
   /** Spec v1. Defaults to the request as background. */
   readonly spec?: ProjectTaskSpec | undefined;
   /** Who wrote spec v1. Defaults to the PM. */
@@ -107,6 +116,8 @@ export interface UpdateProjectTaskInput {
   /** null removes the parent. */
   readonly parentTaskId?: ProjectTaskId | null;
   readonly leadThreadId?: ThreadId;
+  /** Where the task's lead runs; set when the task starts. */
+  readonly location?: ExecutionLocation;
   readonly prUrl?: string;
   readonly planSummary?: string;
   readonly resultSummary?: string;
@@ -136,7 +147,7 @@ export interface AppendProjectTaskEventInput {
 export interface CreateProjectAttentionItemInput {
   readonly id: ProjectAttentionItemId;
   readonly projectId: ProjectId;
-  readonly taskId: ProjectTaskId;
+  readonly taskId: ProjectTaskId | null;
   readonly kind: ProjectAttentionKind;
   readonly question: string;
   readonly options: ReadonlyArray<string>;
@@ -149,7 +160,13 @@ export interface CreateProjectAttentionItemInput {
   readonly summary?: string | null;
   /** For a plan approval: the card's Verification section. */
   readonly verification?: string | null;
+  readonly context?: ProjectAttentionContext | null;
+  readonly details?: ReadonlyArray<ProjectAttentionDetail> | null;
+  readonly senderRole?: ProjectAttentionItem["senderRole"] | undefined;
+  readonly senderName?: string | null | undefined;
 }
+
+export type InsertProjectCorrectionInput = ProjectCorrection;
 
 export interface CreateProjectSitrepInput {
   readonly id: ProjectSitrepId;
@@ -160,6 +177,17 @@ export interface CreateProjectSitrepInput {
 }
 
 type Result<A> = Effect.Effect<A, ProjectTeamRepositoryError>;
+
+export const ProjectTaskStallRecord = Schema.Struct({
+  stallId: Schema.String,
+  taskId: ProjectTaskId,
+  cause: ProjectTaskStallCause,
+  startedAt: IsoDateTime,
+  wokeAt: Schema.NullOr(IsoDateTime),
+  notifiedAt: Schema.NullOr(IsoDateTime),
+  endedAt: Schema.NullOr(IsoDateTime),
+});
+export type ProjectTaskStallRecord = typeof ProjectTaskStallRecord.Type;
 
 export class ProjectTeamRepository extends Context.Service<
   ProjectTeamRepository,
@@ -251,6 +279,12 @@ export class ProjectTeamRepository extends Context.Service<
       readonly startsIterateRound: boolean;
       readonly now: IsoDateTime;
     }) => Result<Option.Option<ProjectTask>>;
+    /** Stores the task's latest plan gate check, or clears it with null. */
+    readonly setTaskPlanCheck: (input: {
+      readonly id: ProjectTaskId;
+      readonly planCheck: ProjectTaskPlanCheck | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
     /** Stores the Ready gate's pass, or clears it with null. */
     readonly setTaskReady: (input: {
       readonly id: ProjectTaskId;
@@ -265,6 +299,70 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectTaskId;
       readonly now: IsoDateTime;
     }) => Result<Option.Option<ProjectTask>>;
+    /**
+     * Sets or clears where the task's lead is being moved, and its location when given.
+     * `expectedMoveTarget` makes the write conditional; none when it does not match.
+     */
+    readonly setTaskMove: (input: {
+      readonly id: ProjectTaskId;
+      readonly moveTarget: ExecutionLocation | null;
+      readonly location?: ExecutionLocation;
+      readonly expectedMoveTarget?: ExecutionLocation | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Tasks with a move in progress, in any project. */
+    readonly listMovingTasks: () => Result<ReadonlyArray<ProjectTask>>;
+    /** Sets or clears why the task is held for memory; clearing it ends any stall. */
+    readonly setTaskMemoryHold: (input: {
+      readonly id: ProjectTaskId;
+      readonly memoryHold: ProjectTaskMemoryHold | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /**
+     * Starts (from `at`, unless one is running) or ends (at `at`) the time a held
+     * task's hold is holding back work, which ending adds to its memoryStallMs.
+     */
+    readonly setTaskMemoryStall: (input: {
+      readonly id: ProjectTaskId;
+      readonly stalling: boolean;
+      readonly at: IsoDateTime;
+      /** When a stall starts: whether the location setting is local only, kept apart in the metrics. */
+      readonly localOnly?: boolean;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Sets or clears the task's hold: a deliberate stop and its resume condition. */
+    readonly setTaskHold: (input: {
+      readonly id: ProjectTaskId;
+      readonly hold: ProjectTaskHold | null;
+      readonly now: IsoDateTime;
+    }) => Result<Option.Option<ProjectTask>>;
+    /** Opens a stall of this cause for the task unless one is open; returns the open one. */
+    readonly openTaskStall: (input: {
+      readonly stallId: string;
+      readonly taskId: ProjectTaskId;
+      readonly cause: ProjectTaskStallCause;
+      readonly startedAt: IsoDateTime;
+    }) => Result<ProjectTaskStallRecord>;
+    /** Every stall of a task, open or ended, oldest first. */
+    readonly listTaskStalls: (input: {
+      readonly taskId: ProjectTaskId;
+    }) => Result<ReadonlyArray<ProjectTaskStallRecord>>;
+    /** Open stalls, of one task or of every task. */
+    readonly listOpenTaskStalls: (input: {
+      readonly taskId?: ProjectTaskId;
+    }) => Result<ReadonlyArray<ProjectTaskStallRecord>>;
+    /** Records that the server woke the lead or told the user about an open stall. */
+    readonly markTaskStall: (input: {
+      readonly stallId: string;
+      readonly wokeAt?: IsoDateTime;
+      readonly notifiedAt?: IsoDateTime;
+    }) => Result<void>;
+    /** Ends the task's open stalls at `endedAt` and adds their time to its metrics. */
+    readonly closeTaskStalls: (input: {
+      readonly taskId: ProjectTaskId;
+      readonly endedAt: IsoDateTime;
+    }) => Result<ReadonlyArray<ProjectTaskStallRecord>>;
+    /** Tasks held for memory, in any project, lowest number first. */
+    readonly listMemoryHeldTasks: () => Result<ReadonlyArray<ProjectTask>>;
     /** Replaces the task's own model per role. */
     readonly setTaskRoleModels: (input: {
       readonly id: ProjectTaskId;
@@ -355,6 +453,15 @@ export class ProjectTeamRepository extends Context.Service<
       readonly id: ProjectAttentionItemId;
       readonly supersededAt: IsoDateTime;
     }) => Result<Option.Option<ProjectAttentionItem>>;
+    /**
+     * Sets an open item aside with the user's reason, or brings it back when reason is null.
+     * The item stays open. None when it does not exist or is already closed.
+     */
+    readonly snoozeAttentionItem: (input: {
+      readonly id: ProjectAttentionItemId;
+      readonly snoozedAt: IsoDateTime | null;
+      readonly reason: string | null;
+    }) => Result<Option.Option<ProjectAttentionItem>>;
     /** Closes the task's open items (of one kind, or all) without an answer; returns the closed items. */
     readonly supersedeOpenAttentionItems: (input: {
       readonly taskId: ProjectTaskId;
@@ -384,10 +491,30 @@ export class ProjectTeamRepository extends Context.Service<
       readonly projectId: ProjectId;
       readonly limit: number;
     }) => Result<ReadonlyArray<ProjectAttentionItem>>;
+    /** A project's answered items of one kind, oldest answer first. */
+    readonly listAnsweredAttentionItems: (input: {
+      readonly projectId: ProjectId;
+      readonly kind: ProjectAttentionKind;
+    }) => Result<ReadonlyArray<ProjectAttentionItem>>;
     /** The newest item, answered or not, for batching. */
     readonly getLatestAttentionItem: (
       projectId: ProjectId,
     ) => Result<Option.Option<ProjectAttentionItem>>;
+
+    /**
+     * Stores a correction unless one with its source key exists. Returns the stored row and
+     * whether this call added it.
+     */
+    readonly insertCorrection: (
+      input: InsertProjectCorrectionInput,
+    ) => Result<{ readonly inserted: boolean; readonly correction: ProjectCorrection }>;
+    /** When live correction recording started; older moments are filled by the backfill. */
+    readonly getCorrectionsStartedAt: () => Result<IsoDateTime>;
+    /** Corrections, oldest first; all projects when projectId is absent. */
+    readonly listCorrections: (input: {
+      readonly projectId?: ProjectId | undefined;
+      readonly since?: IsoDateTime | undefined;
+    }) => Result<ReadonlyArray<ProjectCorrection>>;
 
     readonly listMemory: (projectId: ProjectId) => Result<ReadonlyArray<ProjectMemoryEntry>>;
     /** Replaces the content for a topic; a new topic takes the given id. */
@@ -479,15 +606,19 @@ const TaskRow = Schema.Struct({
   waitsOn: Schema.fromJsonString(Schema.Array(ProjectTaskId)),
   review: Schema.NullOr(Schema.fromJsonString(ProjectTaskReview)),
   ready: Schema.NullOr(Schema.fromJsonString(ProjectTaskReady)),
+  planCheck: Schema.NullOr(Schema.fromJsonString(ProjectTaskPlanCheck)),
   roleModels: Schema.fromJsonString(ProjectTaskRoleModels),
   modelSteps: Schema.fromJsonString(ProjectTaskModelSteps),
   stepUsage: Schema.fromJsonString(ProjectTaskStepUsages),
   metrics: Schema.fromJsonString(ProjectTaskMetrics),
+  hold: Schema.NullOr(Schema.fromJsonString(ProjectTaskHold)),
 });
+const HoldJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskHold));
 const RoleModelsJson = Schema.fromJsonString(ProjectTaskRoleModels);
 const ModelStepJson = Schema.fromJsonString(ProjectTaskModelStep);
 const ReviewJson = Schema.fromJsonString(ProjectTaskReview);
 const ReadyJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskReady));
+const PlanCheckJson = Schema.NullOr(Schema.fromJsonString(ProjectTaskPlanCheck));
 const AttentionRow = Schema.Struct({
   ...ProjectAttentionItem.fields,
   supersededAt: Schema.NullOr(IsoDateTime),
@@ -496,10 +627,33 @@ const AttentionRow = Schema.Struct({
   summary: Schema.NullOr(Schema.String),
   verification: Schema.NullOr(Schema.String),
   options: Schema.fromJsonString(Schema.Array(Schema.String)),
+  context: Schema.NullOr(Schema.fromJsonString(ProjectAttentionContext)),
+  senderRole: ProjectAttentionItem.fields.senderRole,
+  senderName: ProjectAttentionItem.fields.senderName,
+  details: Schema.NullOr(Schema.fromJsonString(Schema.Array(ProjectAttentionDetail))),
+  snoozedAt: Schema.NullOr(IsoDateTime),
+  snoozeReason: Schema.NullOr(Schema.String),
 });
 const SpecVersionRow = Schema.Struct({
   ...ProjectTaskSpecVersion.fields,
   spec: Schema.fromJsonString(ProjectTaskSpec),
+});
+const CorrectionRow = Schema.Struct({
+  id: Schema.String,
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  kind: ProjectCorrectionKind,
+  stage: ProjectCorrectionStage,
+  workKind: ProjectWorkKind,
+  userText: Schema.String,
+  whatDiffered: Schema.String,
+  sourceKey: Schema.String,
+  backfilled: Schema.Number,
+  createdAt: IsoDateTime,
+});
+const toCorrection = (row: typeof CorrectionRow.Type): ProjectCorrection => ({
+  ...row,
+  backfilled: row.backfilled !== 0,
 });
 const CountRow = Schema.Struct({ count: NonNegativeInt });
 const IdRow = Schema.Struct({ id: Schema.String });
@@ -548,6 +702,10 @@ export const make = Effect.gen(function* () {
     waits_on_json AS "waitsOn",
     parent_task_id AS "parentTaskId",
     lead_thread_id AS "leadThreadId",
+    location AS "location",
+    move_target AS "moveTarget",
+    memory_hold AS "memoryHold",
+    hold_json AS "hold",
     pr_url AS "prUrl",
     plan_summary AS "planSummary",
     result_summary AS "resultSummary",
@@ -557,6 +715,7 @@ export const make = Effect.gen(function* () {
     ship_round AS "shipRound",
     review_json AS "review",
     ready_json AS "ready",
+    plan_check_json AS "planCheck",
     role_models_json AS "roleModels",
     model_steps_json AS "modelSteps",
     step_usage_json AS "stepUsage",
@@ -590,7 +749,13 @@ export const make = Effect.gen(function* () {
     answered_by AS "answeredBy",
     spec_version AS "specVersion",
     summary AS "summary",
-    verification AS "verification"
+    verification AS "verification",
+    context_json AS "context",
+    details_json AS "details",
+    sender_role AS "senderRole",
+    sender_name AS "senderName",
+    snoozed_at AS "snoozedAt",
+    snooze_reason AS "snoozeReason"
   `);
   const memoryColumns = sql.literal(`
     entry_id AS "id",
@@ -703,17 +868,16 @@ export const make = Effect.gen(function* () {
       request: Schema.String,
       waitsOn: WaitsOnJson,
       parentTaskId: Schema.NullOr(ProjectTaskId),
-      stage: Schema.Literals(["inbox", "proposed"]),
       now: IsoDateTime,
     }),
     Result: TaskRow,
-    execute: ({ id, projectId, title, request, waitsOn, parentTaskId, stage, now }) => sql`
+    execute: ({ id, projectId, title, request, waitsOn, parentTaskId, now }) => sql`
       INSERT INTO project_tasks (
         task_id, project_id, number, title, request, stage, waits_on_json, parent_task_id,
         nudge_count, stage_changed_at, created_at, updated_at
       )
       SELECT
-        ${id}, ${projectId}, COALESCE(MAX(number), 0) + 1, ${title}, ${request}, ${stage},
+        ${id}, ${projectId}, COALESCE(MAX(number), 0) + 1, ${title}, ${request}, 'inbox',
         ${waitsOn}, ${parentTaskId}, 0, ${now}, ${now}, ${now}
       FROM project_tasks
       WHERE project_id = ${projectId}
@@ -736,8 +900,7 @@ export const make = Effect.gen(function* () {
       FROM project_tasks
       WHERE ${sql.and([
         sql`project_id = ${projectId}`,
-        // Proposals stay out of every list unless a caller asks for them.
-        stages === undefined ? sql`stage <> 'proposed'` : sql.in("stage", stages),
+        ...(stages === undefined ? [] : [sql.in("stage", stages)]),
       ])}
       ORDER BY number ASC
     `,
@@ -753,6 +916,26 @@ export const make = Effect.gen(function* () {
       LIMIT 1
     `,
   });
+  /**
+   * metrics_json with the open memory hold's length, up to `now`, added to
+   * memoryStallMs, and to memoryLocalOnlyStallMs when it began under local only.
+   */
+  const metricsWithMemoryStall = (now: string) => {
+    const elapsed = sql`MAX(
+      0,
+      CAST(ROUND((julianday(${now}) - julianday(memory_stall_since)) * 86400000) AS INTEGER)
+    )`;
+    return sql`
+      CASE WHEN memory_stall_since IS NULL THEN metrics_json ELSE json_set(
+        metrics_json,
+        '$.memoryStallMs',
+        COALESCE(json_extract(metrics_json, '$.memoryStallMs'), 0) + ${elapsed},
+        '$.memoryLocalOnlyStallMs',
+        COALESCE(json_extract(metrics_json, '$.memoryLocalOnlyStallMs'), 0) +
+          CASE WHEN memory_stall_local_only = 1 THEN ${elapsed} ELSE 0 END
+      ) END
+    `;
+  };
   const updateTaskRow = SqlSchema.findOneOption({
     Request: Schema.Struct({
       id: ProjectTaskId,
@@ -762,6 +945,7 @@ export const make = Effect.gen(function* () {
       waitsOn: Schema.optional(WaitsOnJson),
       parentTaskId: Schema.optional(Schema.NullOr(ProjectTaskId)),
       leadThreadId: Schema.optional(ThreadId),
+      location: Schema.optional(ExecutionLocation),
       prUrl: Schema.optional(Schema.String),
       planSummary: Schema.optional(Schema.String),
       resultSummary: Schema.optional(Schema.String),
@@ -773,6 +957,9 @@ export const make = Effect.gen(function* () {
       const stage = input.stage ?? null;
       const stageChanged = sql`(${stage} IS NOT NULL AND ${stage} <> stage)`;
       const setParent = input.parentTaskId === undefined ? 0 : 1;
+      // Finishing ends a memory stall and a wait to start. A "paused" hold stays as a
+      // marker that the lead's queue was held for memory, so reopening the task
+      // resumes exactly those messages (FinishedTaskCleanup.reviveLead).
       return sql`
         UPDATE project_tasks SET
           stage = COALESCE(${stage}, stage),
@@ -791,6 +978,20 @@ export const make = Effect.gen(function* () {
             ELSE ship_round
           END,
           ready_json = CASE WHEN ${stageChanged} THEN NULL ELSE ready_json END,
+          metrics_json = CASE
+            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled')
+              THEN ${metricsWithMemoryStall(input.now)}
+            ELSE metrics_json
+          END,
+          memory_stall_since = CASE
+            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') THEN NULL
+            ELSE memory_stall_since
+          END,
+          memory_hold = CASE
+            WHEN ${stageChanged} AND ${stage} IN ('done', 'cancelled') AND memory_hold = 'waiting'
+              THEN NULL
+            ELSE memory_hold
+          END,
           title = COALESCE(${input.title ?? null}, title),
           waits_on_json = COALESCE(${input.waitsOn ?? null}, waits_on_json),
           parent_task_id = CASE
@@ -798,6 +999,7 @@ export const make = Effect.gen(function* () {
             ELSE parent_task_id
           END,
           lead_thread_id = COALESCE(${input.leadThreadId ?? null}, lead_thread_id),
+          location = COALESCE(${input.location ?? null}, location),
           pr_url = COALESCE(${input.prUrl ?? null}, pr_url),
           plan_summary = COALESCE(${input.planSummary ?? null}, plan_summary),
           result_summary = COALESCE(${input.resultSummary ?? null}, result_summary),
@@ -837,6 +1039,17 @@ export const make = Effect.gen(function* () {
       RETURNING ${taskColumns}
     `,
   });
+  const updateTaskPlanCheck = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, planCheck: PlanCheckJson, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, planCheck, now }) => sql`
+      UPDATE project_tasks SET
+        plan_check_json = ${planCheck},
+        updated_at = ${now}
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
   const reopenShipRoundRow = SqlSchema.findOneOption({
     Request: Schema.Struct({ id: ProjectTaskId, now: IsoDateTime }),
     Result: TaskRow,
@@ -847,6 +1060,194 @@ export const make = Effect.gen(function* () {
         updated_at = ${now}
       WHERE task_id = ${id} AND stage = 'in_review'
       RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskMove = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectTaskId,
+      moveTarget: Schema.NullOr(ExecutionLocation),
+      location: Schema.NullOr(ExecutionLocation),
+      checkExpected: Schema.Boolean,
+      expectedMoveTarget: Schema.NullOr(ExecutionLocation),
+      now: IsoDateTime,
+    }),
+    Result: TaskRow,
+    execute: (input) => sql`
+      UPDATE project_tasks SET
+        move_target = ${input.moveTarget},
+        location = COALESCE(${input.location}, location),
+        updated_at = ${input.now}
+      WHERE task_id = ${input.id}
+        AND (${input.checkExpected ? 1 : 0} = 0 OR move_target IS ${input.expectedMoveTarget})
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskMemoryHold = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectTaskId,
+      memoryHold: Schema.NullOr(ProjectTaskMemoryHold),
+      now: IsoDateTime,
+    }),
+    Result: TaskRow,
+    // Clearing the hold ends its stall, adding the time it held work back.
+    execute: (input) => sql`
+      UPDATE project_tasks SET
+        metrics_json = CASE
+          WHEN ${input.memoryHold} IS NULL THEN ${metricsWithMemoryStall(input.now)}
+          ELSE metrics_json
+        END,
+        memory_stall_since = CASE
+          WHEN ${input.memoryHold} IS NULL THEN NULL
+          ELSE memory_stall_since
+        END,
+        memory_hold = ${input.memoryHold},
+        updated_at = ${input.now}
+      WHERE task_id = ${input.id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const startTaskMemoryStall = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, since: IsoDateTime, localOnly: Schema.Boolean }),
+    Result: TaskRow,
+    // A stall already running keeps its start; a task not held, or finished, cannot stall.
+    execute: ({ id, since, localOnly }) => sql`
+      UPDATE project_tasks SET
+        memory_stall_local_only = CASE
+          WHEN memory_stall_since IS NULL THEN ${localOnly ? 1 : 0}
+          ELSE memory_stall_local_only
+        END,
+        memory_stall_since = COALESCE(memory_stall_since, ${since})
+      WHERE task_id = ${id}
+        AND memory_hold IS NOT NULL
+        AND stage NOT IN ('done', 'cancelled')
+      RETURNING ${taskColumns}
+    `,
+  });
+  const stopTaskMemoryStall = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, now }) => sql`
+      UPDATE project_tasks SET
+        metrics_json = ${metricsWithMemoryStall(now)},
+        memory_stall_since = NULL
+      WHERE task_id = ${id} AND memory_stall_since IS NOT NULL
+      RETURNING ${taskColumns}
+    `,
+  });
+  const updateTaskHold = SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: ProjectTaskId, hold: HoldJson, now: IsoDateTime }),
+    Result: TaskRow,
+    execute: ({ id, hold, now }) => sql`
+      UPDATE project_tasks SET
+        hold_json = ${hold},
+        updated_at = ${now}
+      WHERE task_id = ${id}
+      RETURNING ${taskColumns}
+    `,
+  });
+  const stallColumns = sql.literal(`
+    stall_id AS "stallId",
+    task_id AS "taskId",
+    cause AS "cause",
+    started_at AS "startedAt",
+    woke_at AS "wokeAt",
+    notified_at AS "notifiedAt",
+    ended_at AS "endedAt"
+  `);
+  const insertTaskStall = SqlSchema.void({
+    Request: Schema.Struct({
+      stallId: Schema.String,
+      taskId: ProjectTaskId,
+      cause: ProjectTaskStallCause,
+      startedAt: IsoDateTime,
+    }),
+    // One open stall per task and cause.
+    execute: (input) => sql`
+      INSERT INTO project_task_stalls (stall_id, task_id, cause, started_at)
+      SELECT ${input.stallId}, ${input.taskId}, ${input.cause}, ${input.startedAt}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM project_task_stalls
+        WHERE task_id = ${input.taskId} AND cause = ${input.cause} AND ended_at IS NULL
+      )
+    `,
+  });
+  const findOpenTaskStalls = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: Schema.NullOr(ProjectTaskId) }),
+    Result: ProjectTaskStallRecord,
+    execute: ({ taskId }) => sql`
+      SELECT ${stallColumns}
+      FROM project_task_stalls
+      WHERE ended_at IS NULL AND (${taskId} IS NULL OR task_id = ${taskId})
+      ORDER BY started_at ASC
+    `,
+  });
+  const findTaskStalls = SqlSchema.findAll({
+    Request: Schema.Struct({ taskId: ProjectTaskId }),
+    Result: ProjectTaskStallRecord,
+    execute: ({ taskId }) => sql`
+      SELECT ${stallColumns}
+      FROM project_task_stalls
+      WHERE task_id = ${taskId}
+      ORDER BY started_at ASC
+    `,
+  });
+  const updateTaskStallMarks = SqlSchema.void({
+    Request: Schema.Struct({
+      stallId: Schema.String,
+      wokeAt: Schema.NullOr(IsoDateTime),
+      notifiedAt: Schema.NullOr(IsoDateTime),
+    }),
+    execute: ({ stallId, wokeAt, notifiedAt }) => sql`
+      UPDATE project_task_stalls SET
+        woke_at = COALESCE(woke_at, ${wokeAt}),
+        notified_at = COALESCE(notified_at, ${notifiedAt})
+      WHERE stall_id = ${stallId}
+    `,
+  });
+  const endTaskStall = SqlSchema.void({
+    Request: Schema.Struct({ stallId: Schema.String, endedAt: IsoDateTime }),
+    execute: ({ stallId, endedAt }) => sql`
+      UPDATE project_task_stalls SET ended_at = ${endedAt}
+      WHERE stall_id = ${stallId} AND ended_at IS NULL
+    `,
+  });
+  const addAvoidableStall = SqlSchema.void({
+    Request: Schema.Struct({
+      taskId: ProjectTaskId,
+      cause: ProjectTaskStallCause,
+      ms: Schema.Number,
+    }),
+    // json_set needs the parent object, so it is created first when missing.
+    execute: ({ taskId, cause, ms }) => sql`
+      UPDATE project_tasks SET
+        metrics_json = json_set(
+          CASE WHEN json_type(metrics_json, '$.avoidableStallMs') = 'object'
+            THEN metrics_json
+            ELSE json_set(metrics_json, '$.avoidableStallMs', json('{}'))
+          END,
+          '$.avoidableStallMs.' || ${cause},
+          COALESCE(json_extract(metrics_json, '$.avoidableStallMs.' || ${cause}), 0) + ${ms}
+        )
+      WHERE task_id = ${taskId}
+    `,
+  });
+  const findMemoryHeldTasks = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: TaskRow,
+    execute: () => sql`
+      SELECT ${taskColumns}
+      FROM project_tasks
+      WHERE memory_hold IS NOT NULL
+      ORDER BY number ASC
+    `,
+  });
+  const findMovingTasks = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: TaskRow,
+    execute: () => sql`
+      SELECT ${taskColumns}
+      FROM project_tasks
+      WHERE move_target IS NOT NULL
     `,
   });
   const updateTaskRoleModels = SqlSchema.findOneOption({
@@ -1030,7 +1431,7 @@ export const make = Effect.gen(function* () {
     execute: ({ parentTaskId }) => sql`
       SELECT ${taskColumns}
       FROM project_tasks
-      WHERE parent_task_id = ${parentTaskId} AND stage <> 'proposed'
+      WHERE parent_task_id = ${parentTaskId}
       ORDER BY number ASC
     `,
   });
@@ -1042,7 +1443,6 @@ export const make = Effect.gen(function* () {
       SELECT ${taskColumns}
       FROM project_tasks
       WHERE EXISTS (SELECT 1 FROM json_each(waits_on_json) WHERE value = ${taskId})
-        AND stage <> 'proposed'
       ORDER BY created_at ASC
     `,
   });
@@ -1151,7 +1551,6 @@ export const make = Effect.gen(function* () {
       SELECT ${taskColumns}
       FROM project_tasks
       WHERE project_id = ${projectId}
-        AND stage <> 'proposed'
         AND (
           title LIKE ${pattern} ESCAPE '\\'
           OR request LIKE ${pattern} ESCAPE '\\'
@@ -1239,7 +1638,7 @@ export const make = Effect.gen(function* () {
     Request: Schema.Struct({
       id: ProjectAttentionItemId,
       projectId: ProjectId,
-      taskId: ProjectTaskId,
+      taskId: Schema.NullOr(ProjectTaskId),
       kind: ProjectAttentionKind,
       question: Schema.String,
       options: OptionsJson,
@@ -1249,17 +1648,21 @@ export const make = Effect.gen(function* () {
       specVersion: Schema.NullOr(PositiveInt),
       summary: Schema.NullOr(Schema.String),
       verification: Schema.NullOr(Schema.String),
+      context: Schema.NullOr(Schema.fromJsonString(ProjectAttentionContext)),
+      senderRole: ProjectAttentionItem.fields.senderRole,
+      senderName: ProjectAttentionItem.fields.senderName,
+      details: Schema.NullOr(Schema.fromJsonString(Schema.Array(ProjectAttentionDetail))),
     }),
     Result: AttentionRow,
     execute: (item) => sql`
       INSERT INTO project_attention_items (
         item_id, project_id, task_id, kind, question, options_json,
-        asker_thread_id, batch_id, created_at, spec_version, summary, verification
+        asker_thread_id, batch_id, created_at, spec_version, summary, verification, context_json, details_json, sender_role, sender_name
       )
       VALUES (
         ${item.id}, ${item.projectId}, ${item.taskId}, ${item.kind}, ${item.question},
         ${item.options}, ${item.askerThreadId}, ${item.batchId}, ${item.createdAt},
-        ${item.specVersion}, ${item.summary}, ${item.verification}
+        ${item.specVersion}, ${item.summary}, ${item.verification}, ${item.context}, ${item.details}, ${item.senderRole}, ${item.senderName}
       )
       RETURNING ${attentionColumns}
     `,
@@ -1291,6 +1694,20 @@ export const make = Effect.gen(function* () {
     execute: ({ id, supersededAt }) => sql`
       UPDATE project_attention_items
       SET superseded_at = ${supersededAt}
+      WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
+      RETURNING ${attentionColumns}
+    `,
+  });
+  const snoozeAttentionRow = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      id: ProjectAttentionItemId,
+      snoozedAt: Schema.NullOr(IsoDateTime),
+      reason: Schema.NullOr(Schema.String),
+    }),
+    Result: AttentionRow,
+    execute: ({ id, snoozedAt, reason }) => sql`
+      UPDATE project_attention_items
+      SET snoozed_at = ${snoozedAt}, snooze_reason = ${reason}
       WHERE item_id = ${id} AND answered_at IS NULL AND superseded_at IS NULL
       RETURNING ${attentionColumns}
     `,
@@ -1381,6 +1798,76 @@ export const make = Effect.gen(function* () {
       WHERE project_id = ${projectId}
       ORDER BY created_at DESC, rowid DESC
       LIMIT 1
+    `,
+  });
+
+  const findAnsweredProjectAttention = SqlSchema.findAll({
+    Request: Schema.Struct({ projectId: ProjectId, kind: ProjectAttentionKind }),
+    Result: AttentionRow,
+    execute: ({ projectId, kind }) => sql`
+      SELECT ${attentionColumns}
+      FROM project_attention_items
+      WHERE project_id = ${projectId} AND kind = ${kind} AND answered_at IS NOT NULL
+      ORDER BY answered_at ASC, rowid ASC
+    `,
+  });
+
+  // Corrections
+
+  const correctionColumns = sql.literal(`
+    correction_id AS "id",
+    project_id AS "projectId",
+    task_id AS "taskId",
+    kind AS "kind",
+    stage AS "stage",
+    work_kind AS "workKind",
+    user_text AS "userText",
+    what_differed AS "whatDiffered",
+    source_key AS "sourceKey",
+    backfilled AS "backfilled",
+    created_at AS "createdAt"
+  `);
+  const insertCorrectionRow = SqlSchema.findAll({
+    Request: ProjectCorrection,
+    Result: CorrectionRow,
+    execute: (row) => sql`
+      INSERT INTO project_corrections (
+        correction_id, project_id, task_id, kind, stage, work_kind, user_text,
+        what_differed, source_key, backfilled, created_at
+      ) VALUES (
+        ${row.id}, ${row.projectId}, ${row.taskId}, ${row.kind}, ${row.stage}, ${row.workKind},
+        ${row.userText}, ${row.whatDiffered}, ${row.sourceKey}, ${row.backfilled ? 1 : 0},
+        ${row.createdAt}
+      )
+      ON CONFLICT (source_key) DO NOTHING
+      RETURNING ${correctionColumns}
+    `,
+  });
+  const findCorrectionBySource = SqlSchema.findOne({
+    Request: Schema.Struct({ sourceKey: Schema.String }),
+    Result: CorrectionRow,
+    execute: ({ sourceKey }) => sql`
+      SELECT ${correctionColumns} FROM project_corrections WHERE source_key = ${sourceKey}
+    `,
+  });
+  const findCorrectionsStartedAt = SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ value: IsoDateTime }),
+    execute: () => sql`
+      SELECT value FROM project_correction_state WHERE key = 'recording_started_at'
+    `,
+  });
+  const findCorrections = SqlSchema.findAll({
+    Request: Schema.Struct({
+      projectId: Schema.NullOr(ProjectId),
+      since: Schema.NullOr(IsoDateTime),
+    }),
+    Result: CorrectionRow,
+    execute: ({ projectId, since }) => sql`
+      SELECT ${correctionColumns} FROM project_corrections
+      WHERE (${projectId} IS NULL OR project_id = ${projectId})
+        AND (${since} IS NULL OR created_at >= ${since})
+      ORDER BY created_at ASC, rowid ASC
     `,
   });
 
@@ -1585,7 +2072,6 @@ export const make = Effect.gen(function* () {
           request: input.request,
           waitsOn: input.waitsOn,
           parentTaskId: input.parentTaskId ?? null,
-          stage: input.stage ?? "inbox",
           now: input.now,
         });
         yield* insertSpecVersion({
@@ -1638,8 +2124,67 @@ export const make = Effect.gen(function* () {
       updateTaskReview(input).pipe(Effect.mapError(toRepositoryError("recordTaskReview"))),
     setTaskReady: (input) =>
       updateTaskReady(input).pipe(Effect.mapError(toRepositoryError("setTaskReady"))),
+    setTaskPlanCheck: (input) =>
+      updateTaskPlanCheck(input).pipe(Effect.mapError(toRepositoryError("setTaskPlanCheck"))),
     reopenShipRound: (input) =>
       reopenShipRoundRow(input).pipe(Effect.mapError(toRepositoryError("reopenShipRound"))),
+    setTaskMove: (input) =>
+      updateTaskMove({
+        id: input.id,
+        moveTarget: input.moveTarget,
+        location: input.location ?? null,
+        checkExpected: input.expectedMoveTarget !== undefined,
+        expectedMoveTarget: input.expectedMoveTarget ?? null,
+        now: input.now,
+      }).pipe(Effect.mapError(toRepositoryError("setTaskMove"))),
+    listMovingTasks: () =>
+      findMovingTasks(undefined).pipe(Effect.mapError(toRepositoryError("listMovingTasks"))),
+    setTaskMemoryHold: (input) =>
+      updateTaskMemoryHold(input).pipe(Effect.mapError(toRepositoryError("setTaskMemoryHold"))),
+    setTaskMemoryStall: (input) =>
+      (input.stalling
+        ? startTaskMemoryStall({
+            id: input.id,
+            since: input.at,
+            localOnly: input.localOnly ?? false,
+          })
+        : stopTaskMemoryStall({ id: input.id, now: input.at })
+      ).pipe(Effect.mapError(toRepositoryError("setTaskMemoryStall"))),
+    setTaskHold: (input) =>
+      updateTaskHold(input).pipe(Effect.mapError(toRepositoryError("setTaskHold"))),
+    openTaskStall: (input) =>
+      Effect.gen(function* () {
+        yield* insertTaskStall(input);
+        const open = yield* findOpenTaskStalls({ taskId: input.taskId });
+        return open.find((stall) => stall.cause === input.cause)!;
+      }).pipe(Effect.mapError(toRepositoryError("openTaskStall"))),
+    listTaskStalls: (input) =>
+      findTaskStalls(input).pipe(Effect.mapError(toRepositoryError("listTaskStalls"))),
+    listOpenTaskStalls: (input) =>
+      findOpenTaskStalls({ taskId: input.taskId ?? null }).pipe(
+        Effect.mapError(toRepositoryError("listOpenTaskStalls")),
+      ),
+    markTaskStall: (input) =>
+      updateTaskStallMarks({
+        stallId: input.stallId,
+        wokeAt: input.wokeAt ?? null,
+        notifiedAt: input.notifiedAt ?? null,
+      }).pipe(Effect.mapError(toRepositoryError("markTaskStall"))),
+    closeTaskStalls: (input) =>
+      Effect.gen(function* () {
+        const open = yield* findOpenTaskStalls({ taskId: input.taskId });
+        const endedMs = Date.parse(input.endedAt);
+        for (const stall of open) {
+          yield* endTaskStall({ stallId: stall.stallId, endedAt: input.endedAt });
+          const ms = Math.max(0, endedMs - Date.parse(stall.startedAt));
+          yield* addAvoidableStall({ taskId: stall.taskId, cause: stall.cause, ms });
+        }
+        return open.map((stall) => ({ ...stall, endedAt: input.endedAt }));
+      }).pipe(sql.withTransaction, Effect.mapError(toRepositoryError("closeTaskStalls"))),
+    listMemoryHeldTasks: () =>
+      findMemoryHeldTasks(undefined).pipe(
+        Effect.mapError(toRepositoryError("listMemoryHeldTasks")),
+      ),
     setTaskRoleModels: (input) =>
       updateTaskRoleModels(input).pipe(Effect.mapError(toRepositoryError("setTaskRoleModels"))),
     recordModelStep: (input) =>
@@ -1707,6 +2252,10 @@ export const make = Effect.gen(function* () {
         specVersion: input.specVersion ?? null,
         summary: input.summary ?? null,
         verification: input.verification ?? null,
+        context: input.context ?? null,
+        details: input.details ?? null,
+        senderRole: input.senderRole ?? null,
+        senderName: input.senderName ?? null,
       }).pipe(Effect.mapError(toRepositoryError("createAttentionItem"))),
     getAttentionItem: (id) =>
       findAttention({ id }).pipe(Effect.mapError(toRepositoryError("getAttentionItem"))),
@@ -1716,6 +2265,8 @@ export const make = Effect.gen(function* () {
       supersedeAttentionRow(input).pipe(
         Effect.mapError(toRepositoryError("supersedeAttentionItem")),
       ),
+    snoozeAttentionItem: (input) =>
+      snoozeAttentionRow(input).pipe(Effect.mapError(toRepositoryError("snoozeAttentionItem"))),
     supersedeOpenAttentionItems: (input) =>
       supersedeAttentionRows(input).pipe(
         Effect.mapError(toRepositoryError("supersedeOpenAttentionItems")),
@@ -1736,9 +2287,31 @@ export const make = Effect.gen(function* () {
       findRecentlyAnswered(input).pipe(
         Effect.mapError(toRepositoryError("listRecentlyAnsweredAttentionItems")),
       ),
+    listAnsweredAttentionItems: (input) =>
+      findAnsweredProjectAttention(input).pipe(
+        Effect.mapError(toRepositoryError("listAnsweredAttentionItems")),
+      ),
     getLatestAttentionItem: (projectId) =>
       findLatestAttention({ projectId }).pipe(
         Effect.mapError(toRepositoryError("getLatestAttentionItem")),
+      ),
+
+    insertCorrection: (input) =>
+      Effect.gen(function* () {
+        const [inserted] = yield* insertCorrectionRow(input);
+        if (inserted !== undefined) return { inserted: true, correction: toCorrection(inserted) };
+        const existing = yield* findCorrectionBySource({ sourceKey: input.sourceKey });
+        return { inserted: false, correction: toCorrection(existing) };
+      }).pipe(Effect.mapError(toRepositoryError("insertCorrection"))),
+    getCorrectionsStartedAt: () =>
+      findCorrectionsStartedAt(undefined).pipe(
+        Effect.map((row) => row.value),
+        Effect.mapError(toRepositoryError("getCorrectionsStartedAt")),
+      ),
+    listCorrections: (input) =>
+      findCorrections({ projectId: input.projectId ?? null, since: input.since ?? null }).pipe(
+        Effect.map((rows) => rows.map(toCorrection)),
+        Effect.mapError(toRepositoryError("listCorrections")),
       ),
 
     listMemory: (projectId) =>

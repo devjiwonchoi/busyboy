@@ -1,5 +1,23 @@
 import {
+  formatRequestLink,
+  matchRequestReference,
+  parseRequestMessage,
+  requestLinkIds,
+  requestMessageProblems,
+  todoTitleProblems,
+  plainTextProblems,
+} from "@t3tools/shared/requestMessage";
+import {
+  isSandboxRotationDecision,
+  SANDBOX_ROTATION_MOVE_LOCAL,
+  SANDBOX_ROTATION_OPTIONS,
+  isSnoozedAttention,
   isTurnFailedBlocker,
+  isStallBlocker,
+  STALL_RESTART,
+  type ProjectTaskHold,
+  type ProjectAttentionDetail,
+  type ProjectAttentionContext,
   TURN_FAILED_CANCEL,
   TURN_FAILED_OPTIONS,
   TURN_FAILED_RETRY,
@@ -11,6 +29,9 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROJECT_TEAM_SETTINGS,
   DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_SERVER_SETTINGS,
+  resolveTaskExecutionSettings,
+  type ExecutionLocation,
   type IsoDateTime,
   MessageId,
   type OrchestrationV2ConversationMessage,
@@ -19,10 +40,9 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpFailure,
   type ProjectAttentionItem,
+  type ProjectSnoozedAttention,
+  ProjectAttentionItemId,
   PLAN_APPROVAL_START,
-  TASK_PROPOSAL_ACCEPT,
-  TASK_PROPOSAL_DISMISS,
-  taskProposalOutcome,
   planApprovalOutcome,
   type ProjectDecisionCard,
   type ProjectSitrep,
@@ -38,6 +58,7 @@ import {
   type ProjectManagerVoice,
   ProjectMemoryEntryId,
   type ProjectTask,
+  type ProjectTaskMemoryHold,
   type ProjectTaskBrief,
   ProjectTaskStatus,
   type ProjectTaskStatusSignals,
@@ -57,6 +78,8 @@ import {
   type ProjectTeamAttentionAnswerInput,
   type ProjectTeamAttentionDismissInput,
   type ProjectTeamAttentionItemResult,
+  type ProjectTeamPlanCheckSetInput,
+  type ProjectTaskPlanCheck,
   type ProjectTeamAttentionSnapshot,
   type ProjectTeamAttentionSummary,
   type ProjectTeamError,
@@ -67,6 +90,10 @@ import {
   type ProjectTeamMemoryWriteInput,
   type ProjectTeamMemoryWriteResult,
   type ProjectTeamAnswerDecisionInput,
+  type ProjectTeamSnoozeDecisionInput,
+  type ProjectTeamUnsnoozeDecisionInput,
+  type ProjectTeamAskLeadInput,
+  type ProjectTeamAskLeadResult,
   type ProjectTeamRequestSitrepInput,
   type ProjectTeamRequestSitrepResult,
   type ProjectTeamSettings,
@@ -95,11 +122,14 @@ import {
   type ProjectTeamSplitTaskTodoInput,
   type ProjectTeamSplitTaskTodoResult,
   type ProjectTeamSetTaskRoleModelsInput,
+  type ProjectTeamMoveTaskInput,
   type ProjectTeamTaskDelegateInput,
+  type ProjectTaskDelegatedRole,
   type ProjectTaskModelRole,
   type ProjectTaskModelTarget,
   type ProjectMergeOwner,
   mergeOwnerOf,
+  type ProjectTaskRoleModels,
   type ProjectTaskRoleModelsPatch,
   applyRoleModelsPatch,
   type ProjectTeamTaskDetail,
@@ -115,6 +145,7 @@ import {
   type ProjectTeamTaskReadyInput,
   type ProjectTaskSpecVersion,
   defaultTaskKeyPrefix,
+  formatLeadQuestion,
   formatTaskKey,
   ProviderInstanceId,
   ThreadId,
@@ -130,6 +161,13 @@ import {
   type ProjectTeamGoalWriteInput,
   type ProjectTeamPmNudgeInput,
   type ProjectTeamPmNudgeResult,
+  correctionStageOf,
+  type ProjectCorrection,
+  type ProjectCorrectionKind,
+  type ProjectTeamCorrectionRecordInput,
+  type ProjectTeamCorrectionRecordResult,
+  type ProjectTeamCorrectionsReport,
+  type ProjectTeamCorrectionsReportInput,
   type WorkspaceGoal,
   type WorkspaceGoalAlignment,
   type WorkspaceGoalLink,
@@ -147,6 +185,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
@@ -166,7 +205,16 @@ import {
   splitReadySubtasks,
 } from "./breakdown.ts";
 import { directorWorkspaceRoot, epicStage } from "./director.ts";
+import {
+  MAX_PLAN_CHECK_ROUNDS,
+  PLAN_CHECKER_ENDED_HINT,
+  PLAN_GATES,
+  planCheckerBrief,
+  planDepth,
+  requiredPlanGates,
+} from "./planGates.ts";
 import { planReadinessGaps, specLinkProblems, unprovenCriteria } from "./planReadiness.ts";
+import { makeOfflineJournalReplay } from "./OfflineJournalReplay.ts";
 import { isWaitingOnUser, readOtherThreads } from "./otherThreads.ts";
 import {
   MINUTE_MS,
@@ -192,19 +240,53 @@ import { pullRequestFormatProblems } from "./pullRequestFormat.ts";
 import * as PullRequestTextReader from "./PullRequestTextReader.ts";
 import * as PullRequestShipGate from "./PullRequestShipGate.ts";
 import * as WorktreeHeadReader from "./WorktreeHeadReader.ts";
+import * as RevertLogReader from "./RevertLogReader.ts";
+import {
+  type CorrectionReportTask,
+  classifyWorkKind,
+  correctionReport,
+  isDirectionChangeNote,
+  isPlainApproval,
+  oneLine,
+  parseRevertCommits,
+  planFeedbackLine,
+  shortHash,
+} from "./corrections.ts";
+import * as CloudLeadService from "../cloudLead/CloudLeadService.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
+import {
+  activeLocalLeads,
+  admitTaskLead,
+  CLOUD_FALLBACK_NOTE,
+  MEMORY_WAIT_REASON,
+} from "./memoryPolicy.ts";
+import { inspectMovableLead, leadControl, moveTaskLead } from "../cloudLead/TaskMover.ts";
 import { managerLastMessage } from "./managerLastMessage.ts";
+import { type PermissionDenial, permissionBlockerCard } from "./permissionBlocker.ts";
 import { PROJECT_DIRECTION_TOPIC, projectDirectionLine } from "./projectDirection.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
+import { resumeWhenText } from "./stallLedger.ts";
+import { CLOUD_PINNED_NOTE } from "./startFailure.ts";
 import {
   DELEGATE_ROLE,
   modelStepEventBody,
   resolveRoleModels,
+  withoutUnavailableAppSteps,
+  type ResolvedRoleModels,
   toDelegateTarget,
 } from "./roleModels.ts";
 import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
+import { liveTaskChildren, taskChildren } from "./taskChildren.ts";
+import { allocateTaskKeyPrefixes } from "./taskKeyPrefixes.ts";
 import { resolveUserLanguage } from "./userLanguage.ts";
 
 export const MAX_TASK_NUDGES = 2;
+const STEP_LABEL: Record<ProjectTaskDelegatedRole, string> = {
+  implement: "구현",
+  review: "리뷰",
+  fix: "수정",
+};
 const DEFAULT_TASK_EVENT_LIMIT = 20;
 /** Stages the PM presence counts; done and cancelled tasks never show. */
 /** A task waiting on another may start once that one is in review or done. */
@@ -230,6 +312,13 @@ const DEFAULT_TASK_SEARCH_LIMIT = 20;
 const LEAD_MESSAGE_SUMMARY_MAX_CHARS = 300;
 export const PM_RELAY_NOT_USER_WORDS =
   "Decision cards need the user's own words. Quote exactly what the user wrote in this chat after the card appeared, or let them click the card.";
+/** How a side chat question names the card it was asked from. */
+const LEAD_QUESTION_CARD_LABEL = {
+  approval: "플랜 승인",
+  decision: "결정",
+  blocker: "블로커",
+} as const;
+
 /** Where a person types: messages the user wrote in the app, not ones an agent or the server sent. */
 const USER_TYPED_SOURCES: ReadonlySet<OrchestrationV2ConversationMessage["creationSource"]> =
   new Set(["web", "mobile"]);
@@ -268,6 +357,13 @@ export function isUserChatAnswer(
   );
 }
 
+/** Started stages task_start may start again once the task's lead stopped. */
+const RESTARTABLE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
+  "planning",
+  "running",
+  "blocked",
+]);
+
 /** Stages whose task lead has work to show; stalled tasks come from these. */
 const LIVE_TASK_STAGES: ReadonlySet<ProjectTaskStage> = new Set([
   "planning",
@@ -291,7 +387,7 @@ export function directorAddedTaskWakeText(
 ): string {
   return [
     `[Director added task] ${key} ${task.title}`,
-    `The Director put it in your inbox on the user's behalf. Treat it as the user's request: start it with task_start (taskId: ${task.id}) when a slot is free, and tell the user in one line if it has to wait.`,
+    `The Director put it in your Todo on the user's behalf. Treat it as the user's request and start it now with task_start (taskId: ${task.id}). If every slot is busy or a waitsOn task is unfinished, it waits in Todo until you can start it; tell the user in one line.`,
   ].join("\n");
 }
 
@@ -313,7 +409,8 @@ export function buildJournal(input: {
 }): Array<ProjectTeamJournalEntry> {
   const taskById = new Map(input.tasks.map((task) => [task.id as string, task]));
   const label = (taskId: string | null) => {
-    const task = taskId === null ? undefined : taskById.get(taskId);
+    if (taskId === null) return "a PM question";
+    const task = taskById.get(taskId);
     return task === undefined ? "a task" : `#${task.number}`;
   };
   const entries: Array<ProjectTeamJournalEntry> = [];
@@ -451,8 +548,26 @@ export type DelegateStep = (
   onChildCreated?: (child: DelegatedChild) => Effect.Effect<void>,
 ) => Effect.Effect<OrchestratorMcpDelegateTaskResult, OrchestratorMcpFailure>;
 
+/** A plan approval request the server sent to the plan checker instead of the user. */
+export interface PlanApprovalRequested {
+  readonly planCheck: ProjectTaskPlanCheck;
+  /** What the lead does next. */
+  readonly message: string;
+}
+
+/** Starts the message that brings the plan checker's failing verdicts to the lead. */
+export const PLAN_CHECK_FAILED_PREFIX = "[Plan check]";
+
 /** Starts the task log note pm_nudge leaves; the daily limit reads it back. */
 export const PM_NUDGE_NOTE_PREFIX = "Director nudged the PM: ";
+/** Starts the task log note the PM's added scope leaves; the scope follows the first ": ". */
+export const SCOPE_NOTE_PREFIX = "Scope added by the PM";
+/** Starts the task log note correction_record leaves. */
+export const CORRECTION_NOTE_PREFIX = "사용자 교정을 기록했어요: ";
+const CORRECTION_REPORT_DAYS = 90;
+const CORRECTION_RECENT_LIMIT = 20;
+export const CORRECTION_NOT_USER_WORDS =
+  "correction_record needs the user's own words: quote exactly what the user wrote in this chat.";
 /** pm_nudge sends one message per task within this window. */
 export const PM_NUDGE_INTERVAL_MS = 24 * 60 * MINUTE_MS;
 /** Recent closed Director cards read to tell whether a nudge relays a new answer. */
@@ -475,7 +590,10 @@ function toAlignableTask(
   task: ProjectTask,
   openAttention: ReadonlyArray<ProjectAttentionItem>,
 ): AlignableTask {
-  const cards = openAttention.filter((item) => item.taskId === task.id);
+  // A snoozed card is the user's own pause, not a question waiting on them.
+  const cards = openAttention.filter(
+    (item) => item.taskId === task.id && !isSnoozedAttention(item),
+  );
   return {
     id: task.id,
     projectId: task.projectId,
@@ -561,6 +679,30 @@ export function describeManagerAction(
     case "model_step":
       return `ran a step of ${task}`;
   }
+}
+
+/** Splits open cards into those still waiting and those the user snoozed. */
+export function splitSnoozedAttention(open: ReadonlyArray<ProjectAttentionItem>): {
+  readonly waiting: ReadonlyArray<ProjectAttentionItem>;
+  readonly snoozed: ReadonlyArray<ProjectSnoozedAttention>;
+} {
+  const waiting: Array<ProjectAttentionItem> = [];
+  const snoozed: Array<ProjectSnoozedAttention> = [];
+  for (const item of open) {
+    if (!isSnoozedAttention(item)) {
+      waiting.push(item);
+      continue;
+    }
+    snoozed.push({
+      id: item.id,
+      taskId: item.taskId,
+      kind: item.kind,
+      title: item.question.split("\n")[0] ?? "",
+      reason: item.snoozeReason ?? "",
+      snoozedAt: item.snoozedAt!,
+    });
+  }
+  return { waiting, snoozed };
 }
 
 /** Journal text for turning AFK on or off. */
@@ -657,9 +799,14 @@ export class ProjectTeamService extends Context.Service<
     ) => Effect.Effect<ProjectTeamRepository.ProjectManagerRecord, ProjectTeamError>;
     readonly roleOf: (threadId: ThreadId) => Effect.Effect<ProjectTeamRole, ProjectTeamError>;
 
+    /**
+     * task_create. A PM's task starts at once through `delegate` when a slot is free;
+     * without `delegate` it only lands in Todo.
+     */
     readonly createTask: (
       callerThreadId: ThreadId,
       input: ProjectTeamTaskCreateInput,
+      delegate?: DelegateTaskLead,
     ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
     readonly startTask: (
       callerThreadId: ThreadId,
@@ -747,10 +894,27 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamUpdateSettingsInput,
     ) => Effect.Effect<ProjectTeamSettingsResult, ProjectTeamError>;
 
+    /** ask_user for decisions and blockers; a lead's plan approval goes through requestPlanApproval. */
     readonly askUser: (
       callerThreadId: ThreadId,
       input: ProjectTeamAskUserInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+    /**
+     * ask_user(kind: "approval"): a lead asks the user to approve its plan. Once the plan
+     * passes the structural checks, a separate checker session (on a different model when
+     * one is set up) judges the plan gates; the approval card goes up only when it passes
+     * (see setPlanCheck).
+     */
+    readonly requestPlanApproval: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamAskUserInput,
+      delegate: DelegateStep,
+    ) => Effect.Effect<PlanApprovalRequested, ProjectTeamError>;
+    /** task_plan_check_set: the plan checker records its verdict on every required gate. */
+    readonly setPlanCheck: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamPlanCheckSetInput,
+    ) => Effect.Effect<ProjectTeamTaskResult, ProjectTeamError>;
     readonly answerAttention: (
       callerThreadId: ThreadId,
       input: ProjectTeamAttentionAnswerInput,
@@ -782,10 +946,39 @@ export class ProjectTeamService extends Context.Service<
       input: ProjectTeamSetTaskRoleModelsInput,
     ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
 
+    /**
+     * projectTeam.moveTask RPC: moves the task's lead between the Mac and a cloud
+     * sandbox, keeping its work, plan and claude session.
+     */
+    readonly moveTask: (
+      input: ProjectTeamMoveTaskInput,
+    ) => Effect.Effect<ProjectTeamTaskDetail, ProjectTeamError>;
+
     /** projectTeam.answerDecision RPC: the user answered a card; goes straight to the lead. */
     readonly answerDecision: (
       input: ProjectTeamAnswerDecisionInput,
     ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+
+    /**
+     * projectTeam.snoozeDecision RPC: the user set an open card aside with a reason. The card
+     * stays open, the lead is not told, and AFK and the stall watch leave it alone.
+     */
+    readonly snoozeDecision: (
+      input: ProjectTeamSnoozeDecisionInput,
+    ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+
+    /** projectTeam.unsnoozeDecision RPC: the user brought a snoozed card back. */
+    readonly unsnoozeDecision: (
+      input: ProjectTeamUnsnoozeDecisionInput,
+    ) => Effect.Effect<ProjectTeamAttentionItemResult, ProjectTeamError>;
+
+    /**
+     * projectTeam.askLead RPC: the user's question from a card's side chat, sent to the lead
+     * that raised the card. Leaves the card, the task and its plan as they are.
+     */
+    readonly askLead: (
+      input: ProjectTeamAskLeadInput,
+    ) => Effect.Effect<ProjectTeamAskLeadResult, ProjectTeamError>;
 
     readonly listMemory: (
       callerThreadId: ThreadId,
@@ -815,6 +1008,29 @@ export class ProjectTeamService extends Context.Service<
       callerThreadId: ThreadId,
       input: ProjectTeamPmNudgeInput,
     ) => Effect.Effect<ProjectTeamPmNudgeResult, ProjectTeamError>;
+    /** correction_record: the PM or Director records that the user corrected a task's work. */
+    readonly recordCorrection: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamCorrectionRecordInput,
+    ) => Effect.Effect<ProjectTeamCorrectionRecordResult, ProjectTeamError>;
+    /** corrections_report: Director only. Correction rates, recent and repeated corrections. */
+    readonly correctionsReport: (
+      callerThreadId: ThreadId,
+      input: ProjectTeamCorrectionsReportInput,
+    ) => Effect.Effect<ProjectTeamCorrectionsReport, ProjectTeamError>;
+    /**
+     * The user requested changes on, or reverted, a pull request in the app: record it on
+     * the task that opened it. Does nothing for a pull request no task opened. Never fails.
+     */
+    readonly recordPullRequestCorrection: (input: {
+      readonly projectId: ProjectId;
+      readonly repository: string;
+      readonly number: number;
+      readonly kind: "pr_change_request" | "revert";
+      readonly userText: string;
+    }) => Effect.Effect<void>;
+    /** Records corrections found in past cards, task logs and git history; safe to rerun. */
+    readonly backfillCorrections: Effect.Effect<void>;
     /** The workspace's goal alignment, or none when there is no Director. */
     readonly goalAlignmentReport: Effect.Effect<
       Option.Option<GoalAlignmentReport>,
@@ -831,11 +1047,29 @@ export class ProjectTeamService extends Context.Service<
     /** The current snapshot, then a fresh one after every change. */
     readonly streamAttention: Stream.Stream<ProjectTeamAttentionSnapshot, ProjectTeamError>;
 
+    /**
+     * A PM or task lead turn ended on a permission denial nothing moved past: raise a
+     * blocker for the user unless that thread already has an open card. None when no
+     * card was raised.
+     */
+    readonly raisePermissionBlocker: (input: {
+      readonly threadId: ThreadId;
+      readonly denial: PermissionDenial;
+    }) => Effect.Effect<Option.Option<ProjectAttentionItem>, ProjectTeamError>;
     /** Records how a task lead's turn ended; failed blocks the task and raises a blocker. */
     readonly recordOutcome: (input: {
       readonly task: ProjectTask;
       readonly outcome: ProjectTaskOutcome;
       readonly detail?: string;
+      /**
+       * For a lead that failed to start: the message naming the real cause, raised
+       * with a single 다시 시작 button instead of the usual failed-turn card.
+       */
+      readonly startFailureCard?: {
+        readonly question: string;
+        readonly details: ReadonlyArray<ProjectAttentionDetail>;
+        readonly context: ProjectAttentionContext;
+      };
     }) => Effect.Effect<
       { readonly task: ProjectTask; readonly event: ProjectTaskEvent },
       ProjectTeamError
@@ -869,12 +1103,14 @@ const make = Effect.gen(function* () {
   /** Live status signals per task: open questions and the lead thread's state. */
   const liveTaskSignals = (
     tasks: ReadonlyArray<ProjectTask>,
-    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId" | "kind">>,
+    openAttention: ReadonlyArray<Pick<ProjectAttentionItem, "taskId" | "kind" | "snoozedAt">>,
   ) =>
     Effect.gen(function* () {
-      const asking = new Set(openAttention.map((item) => item.taskId));
+      // Snoozed cards don't make their task wait on the user.
+      const waiting = openAttention.filter((item) => (item.snoozedAt ?? null) === null);
+      const asking = new Set(waiting.map((item) => item.taskId));
       const blocked = new Set(
-        openAttention.filter((item) => item.kind === "blocker").map((item) => item.taskId),
+        waiting.filter((item) => item.kind === "blocker").map((item) => item.taskId),
       );
       const entries = yield* Effect.forEach(
         tasks,
@@ -914,6 +1150,10 @@ const make = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const pullRequestText = yield* PullRequestTextReader.PullRequestTextReader;
   const worktreeHeads = yield* WorktreeHeadReader.WorktreeHeadReader;
+  const revertLogs = yield* RevertLogReader.RevertLogReader;
+  const cloudLead = yield* CloudLeadService.CloudLeadHooks;
+  const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
   const shipGate = yield* PullRequestShipGate.PullRequestShipGate;
 
   // At boot the provider cache may still be empty, so probe once before giving up.
@@ -927,7 +1167,12 @@ const make = Effect.gen(function* () {
   const directorRoot = directorWorkspaceRoot(path, serverConfig.baseDir);
   const isDirectorRoot = (workspaceRoot: string) => path.resolve(workspaceRoot) === directorRoot;
   const managerLocks = yield* KeyedLock.make<ProjectId>();
+  // Prefixes belong to the whole server, so different projects share this lock.
+  const taskKeyLocks = yield* KeyedLock.make<"prefixes">();
   const taskStartLocks = yield* KeyedLock.make<ProjectId>();
+  // The safety cap counts leads in every project, so its check and the start it
+  // admits run one at a time app-wide. Taken inside a project's start lock, never around it.
+  const leadStartLock = yield* Semaphore.make(1);
   const specLocks = yield* KeyedLock.make<ProjectTaskId>();
   // Goal writes read, change and save the whole goal; parallel calls must not drop each other's changes.
   const goalLocks = yield* KeyedLock.make<"goals">();
@@ -968,26 +1213,57 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  // Call with taskKeyLocks held, before taking any per-project settings lock.
+  const reconcileTaskKeyPrefixes = Effect.gen(function* () {
+    const managers = yield* repository.listManagers();
+    const named = yield* Effect.forEach(managers, (manager) =>
+      Effect.map(projects.get(manager.projectId), (project) => ({ manager, project })),
+    );
+    const assignments = allocateTaskKeyPrefixes({
+      projects: named.flatMap(({ manager, project }) =>
+        Option.isSome(project) && project.value.deletedAt === null
+          ? [
+              {
+                projectId: manager.projectId,
+                title: project.value.title,
+                prefix: manager.settings.taskKeyPrefix,
+                aliases: manager.settings.taskKeyAliases ?? [],
+              },
+            ]
+          : [],
+      ),
+    });
+    for (const assignment of assignments) {
+      const manager = managers.find((candidate) => candidate.projectId === assignment.projectId)!;
+      if (manager.settings.taskKeyPrefix === assignment.prefix) continue;
+      yield* sitreps.withSettingsLock(
+        manager.projectId,
+        Effect.gen(function* () {
+          const latest = yield* requireManager(manager.projectId);
+          yield* repository.updateManagerSettings({
+            projectId: manager.projectId,
+            settings: {
+              ...latest.settings,
+              taskKeyPrefix: assignment.prefix,
+              taskKeyAliases: assignment.aliases,
+            },
+            now: yield* nowIso,
+          });
+        }),
+      );
+      yield* router.publish(manager.projectId);
+    }
+  });
+
   const requireTask = (taskId: ProjectTaskId, projectId: ProjectId) =>
     repository.getTask(taskId).pipe(
       orTeamError("Could not read the task.", projectId),
       Effect.flatMap((task) =>
         Option.isSome(task) && task.value.projectId === projectId
-          ? refuseProposal(task.value, projectId)
+          ? Effect.succeed(task.value)
           : Effect.fail(teamError(`Task ${taskId} was not found in this project.`, projectId)),
       ),
     );
-
-  /** A proposal is not a task until the user adds it from its card, so no tool may act on it. */
-  const refuseProposal = (task: ProjectTask, projectId: ProjectId) =>
-    task.stage === "proposed"
-      ? Effect.fail(
-          teamError(
-            `#${task.number} ${task.title} is a proposal the user has not added yet. Only the user can add it, with 태스크로 추가 on its card; you are woken when they do.`,
-            projectId,
-          ),
-        )
-      : Effect.succeed(task);
 
   /** A task in any project: waitsOn and parents may cross projects. */
   const requireAnyTask = (taskId: ProjectTaskId, projectId: ProjectId) =>
@@ -996,7 +1272,7 @@ const make = Effect.gen(function* () {
       Effect.flatMap(
         Option.match({
           onNone: () => Effect.fail(teamError(`Task ${taskId} was not found.`, projectId)),
-          onSome: (task) => refuseProposal(task, projectId),
+          onSome: (task) => Effect.succeed(task),
         }),
       ),
     );
@@ -1100,27 +1376,51 @@ const make = Effect.gen(function* () {
         input.parentTaskId !== undefined
           ? yield* repository.getTask(input.id)
           : Option.none<ProjectTask>();
-      const updated = yield* repository.updateTask({ ...input, now });
-      if (Option.isNone(updated)) return yield* teamError(`Task ${input.id} was not found.`);
+      const written = yield* repository.updateTask({ ...input, now });
+      if (Option.isNone(written)) return yield* teamError(`Task ${input.id} was not found.`);
+      let current = written.value;
+      if (input.stage !== undefined && current.stageChangedAt === now) {
+        // A stage change is progress: any stall the task was in ends here.
+        yield* repository
+          .closeTaskStalls({ taskId: current.id, endedAt: now })
+          .pipe(orTeamError("Could not close the task's stalls.", current.projectId));
+        // A hold belongs to a stopped task; one that moves on is no longer held.
+        if (current.stage !== "inbox" && current.hold != null) {
+          const cleared = yield* repository
+            .setTaskHold({ id: current.id, hold: null, now })
+            .pipe(orTeamError("Could not clear the hold.", current.projectId));
+          if (Option.isSome(cleared)) current = cleared.value;
+        }
+      }
       if (
         Option.isSome(before) &&
         !isDependencyCleared(before.value.stage) &&
-        isDependencyCleared(updated.value.stage)
+        isDependencyCleared(current.stage)
       ) {
-        yield* wakeUnblockedProjects(updated.value);
+        yield* wakeUnblockedProjects(current);
+      }
+      // A finished cloud task's sandbox is mirrored once more and deleted, in the background.
+      if (
+        FinishedTaskCleanup.isFinishedStage(current.stage) &&
+        current.location === "cloud" &&
+        current.leadThreadId !== null
+      ) {
+        yield* cloudLead
+          .release(current.leadThreadId)
+          .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
       }
       // A finished task's questions can no longer be answered, so close them.
-      if (FinishedTaskCleanup.isFinishedStage(updated.value.stage)) {
+      if (FinishedTaskCleanup.isFinishedStage(current.stage)) {
         if (answeringItem === undefined) {
           yield* repository.supersedeOpenAttentionItems({
-            taskId: updated.value.id,
+            taskId: current.id,
             supersededAt: now,
           });
         } else {
           // Keep the cancellation card open until the stage update succeeds and its answer is saved.
           const open = yield* repository.listOpenAttentionItems({
-            projectId: updated.value.projectId,
-            taskId: updated.value.id,
+            projectId: current.projectId,
+            taskId: current.id,
           });
           for (const item of open) {
             if (item.id !== answeringItem.id) {
@@ -1133,13 +1433,13 @@ const make = Effect.gen(function* () {
       const previous = Option.isSome(before) ? before.value : undefined;
       if (input.stage !== undefined || input.parentTaskId !== undefined) {
         const parents = new Set<ProjectTaskId>();
-        if (updated.value.parentTaskId !== null) parents.add(updated.value.parentTaskId);
+        if (current.parentTaskId !== null) parents.add(current.parentTaskId);
         if (input.parentTaskId !== undefined && previous?.parentTaskId) {
           parents.add(previous.parentTaskId);
         }
         for (const parentId of parents) yield* syncEpic(parentId);
       }
-      return updated.value;
+      return current;
     });
 
   /**
@@ -1219,15 +1519,17 @@ const make = Effect.gen(function* () {
         projectId,
         stages: ["awaiting_approval"],
       });
+      const open = yield* repository.listOpenAttentionItems({ projectId });
+      // A snoozed card is the user's own pause: AFK never answers it or approves its plan.
+      const snoozedTasks = new Set(open.filter(isSnoozedAttention).map((item) => item.taskId));
       for (const task of waitingPlans) {
-        if (!due(task.stageChangedAt)) continue;
+        if (!due(task.stageChangedAt) || snoozedTasks.has(task.id)) continue;
         yield* autoApprovePlan(task);
         changed = true;
       }
-      const open = yield* repository.listOpenAttentionItems({ projectId });
-      // Plan cards were answered with their tasks above; blockers and task proposals wait for the user.
+      // Plan cards were answered with their tasks above; blockers wait for the user.
       for (const item of open) {
-        if (item.kind !== "decision" || !due(item.createdAt)) continue;
+        if (item.kind !== "decision" || isSnoozedAttention(item) || !due(item.createdAt)) continue;
         const answer = afkPickOption(item.options) ?? AFK_FREE_FORM_ANSWER;
         yield* router.answer({
           item,
@@ -1303,6 +1605,28 @@ const make = Effect.gen(function* () {
   const activeTasks = (projectId: ProjectId) =>
     repository.listTasks({ projectId, stages: SitrepScheduler.ACTIVE_TASK_STAGES });
 
+  const taskExecutionSettings = serverSettings.getSettings.pipe(
+    Effect.map((settings) => resolveTaskExecutionSettings(settings.taskExecution)),
+    Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskExecution),
+  );
+
+  /** The app-wide model and thinking level per step. */
+  const appStepModels = serverSettings.getSettings.pipe(
+    Effect.map((settings) => settings.taskStepModels),
+    Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS.taskStepModels),
+  );
+  const roleModelsFor = (task: ProjectTask, project: ProjectTaskRoleModels | undefined) =>
+    Effect.gen(function* () {
+      const app = yield* appStepModels;
+      const providers = yield* providerRegistry.getProviders;
+      return withoutUnavailableAppSteps(resolveRoleModels(task.roleModels, project, app), providers);
+    });
+
+  const setMemoryHold = (task: ProjectTask, memoryHold: ProjectTaskMemoryHold | null) =>
+    Effect.flatMap(nowIso, (now) =>
+      repository.setTaskMemoryHold({ id: task.id, memoryHold, now }),
+    ).pipe(orTeamError("Could not record the memory hold.", task.projectId));
+
   /** Notes a sitrep milestone when a stage change left nothing running. */
   const noteIdleMilestone = (projectId: ProjectId, previousStage: ProjectTaskStage) =>
     Effect.gen(function* () {
@@ -1374,77 +1698,86 @@ const make = Effect.gen(function* () {
     });
 
   const ensureManager: ProjectTeamService["Service"]["ensureManager"] = (projectId) =>
-    managerLocks.withLock(
-      projectId,
-      Effect.gen(function* () {
-        const project = yield* projects.get(projectId);
-        if (Option.isNone(project)) {
-          return yield* teamError(`Project ${projectId} was not found.`, projectId);
-        }
-        const kind: ProjectManagerKind = isDirectorRoot(project.value.workspaceRoot)
-          ? "director"
-          : "pm";
-        const existing = yield* repository.getManager(projectId);
-        if (Option.isSome(existing)) {
-          const shell = yield* threads.getThreadShell(existing.value.threadId);
-          if (shell !== null && shell.deletedAt === null) {
-            return yield* reviveManager(existing.value, shell, project.value.title);
-          }
-        }
-        const defaults =
-          kind === "director"
-            ? { ...DEFAULT_PROJECT_TEAM_SETTINGS, persona: DIRECTOR_PERSONA }
-            : DEFAULT_PROJECT_TEAM_SETTINGS;
-        const persona = resolvePersona(
-          projectId,
-          Option.isSome(existing) ? existing.value.settings : defaults,
-        );
-        const settings = resolveProjectSettings(
-          yield* serverSettings.getSettings,
-          projectId,
-        ).settings;
-        const modelSelection: ModelSelection = project.value.defaultModelSelection ??
-          settings.defaultModelSelection ??
-          (yield* availableModelSelection) ?? {
-            instanceId: ProviderInstanceId.make("codex"),
-            model: DEFAULT_MODEL,
-          };
-        const threadId = ThreadId.make(yield* newId("project-pm"));
-        yield* threads.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make(`project-team:create-pm:${threadId}`),
-          threadId,
-          projectId,
-          title: persona.name,
-          modelSelection,
-          runtimeMode: settings.defaultRuntimeMode,
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-          branch: null,
-          worktreePath: null,
-          createdBy: "system",
-          creationSource: "server",
-        });
-        // A replaced PM keeps the stored settings: persona, on/off, interval and the rest.
-        const upserted = yield* sitreps.withSettingsLock(
+    taskKeyLocks.withLock(
+      "prefixes",
+      managerLocks
+        .withLock(
           projectId,
           Effect.gen(function* () {
-            const stored = yield* repository.getManager(projectId);
-            const kept = Option.isSome(stored) ? stored.value.settings : defaults;
-            return yield* repository.upsertManager({
+            const project = yield* projects.get(projectId);
+            if (Option.isNone(project)) {
+              return yield* teamError(`Project ${projectId} was not found.`, projectId);
+            }
+            const kind: ProjectManagerKind = isDirectorRoot(project.value.workspaceRoot)
+              ? "director"
+              : "pm";
+            const existing = yield* repository.getManager(projectId);
+            if (Option.isSome(existing)) {
+              const shell = yield* threads.getThreadShell(existing.value.threadId);
+              if (shell !== null && shell.deletedAt === null) {
+                return yield* reviveManager(existing.value, shell, project.value.title);
+              }
+            }
+            const defaults =
+              kind === "director"
+                ? { ...DEFAULT_PROJECT_TEAM_SETTINGS, persona: DIRECTOR_PERSONA }
+                : DEFAULT_PROJECT_TEAM_SETTINGS;
+            const persona = resolvePersona(
               projectId,
+              Option.isSome(existing) ? existing.value.settings : defaults,
+            );
+            const settings = resolveProjectSettings(
+              yield* serverSettings.getSettings,
+              projectId,
+            ).settings;
+            const modelSelection: ModelSelection = project.value.defaultModelSelection ??
+              settings.defaultModelSelection ??
+              (yield* availableModelSelection) ?? {
+                instanceId: ProviderInstanceId.make("codex"),
+                model: DEFAULT_MODEL,
+              };
+            const threadId = ThreadId.make(yield* newId("project-pm"));
+            yield* threads.dispatch({
+              type: "thread.create",
+              commandId: CommandId.make(`project-team:create-pm:${threadId}`),
               threadId,
-              kind,
-              settings: { ...kept, persona: resolvePersona(projectId, kept) },
-              now: yield* nowIso,
+              projectId,
+              title: persona.name,
+              modelSelection,
+              runtimeMode: settings.defaultRuntimeMode,
+              interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+              branch: null,
+              worktreePath: null,
+              createdBy: "system",
+              creationSource: "server",
             });
-          }),
-        );
-        const manager = yield* persistPersona(upserted);
-        // A sitrep the old PM thread was writing will never be posted.
-        if (Option.isSome(existing)) yield* sitreps.abandonPending(projectId);
-        yield* router.publish(projectId);
-        return manager;
-      }).pipe(orTeamError("Could not set up the project's PM.", projectId)),
+            // A replaced PM keeps the stored settings: persona, on/off, interval and the rest.
+            const upserted = yield* sitreps.withSettingsLock(
+              projectId,
+              Effect.gen(function* () {
+                const stored = yield* repository.getManager(projectId);
+                const kept = Option.isSome(stored) ? stored.value.settings : defaults;
+                return yield* repository.upsertManager({
+                  projectId,
+                  threadId,
+                  kind,
+                  settings: { ...kept, persona: resolvePersona(projectId, kept) },
+                  now: yield* nowIso,
+                });
+              }),
+            );
+            const manager = yield* persistPersona(upserted);
+            // A sitrep the old PM thread was writing will never be posted.
+            if (Option.isSome(existing)) yield* sitreps.abandonPending(projectId);
+            yield* router.publish(projectId);
+            return manager;
+          }).pipe(orTeamError("Could not set up the project's PM.", projectId)),
+        )
+        .pipe(
+          Effect.tap(() => reconcileTaskKeyPrefixes),
+          Effect.flatMap(() => requireManager(projectId)),
+          orTeamError("Could not set up the project's PM.", projectId),
+        ),
     );
 
   /** Refuses a new task whose title matches an open task's: that work belongs there. */
@@ -1515,7 +1848,11 @@ const make = Effect.gen(function* () {
       return { task };
     });
 
-  const createTask: ProjectTeamService["Service"]["createTask"] = (callerThreadId, input) =>
+  const createTask: ProjectTeamService["Service"]["createTask"] = (
+    callerThreadId,
+    input,
+    delegate,
+  ) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm", "director", "lead"], "task_create");
       if (role.type === "lead") return yield* draftSubtask(callerThreadId, role, input);
@@ -1524,7 +1861,7 @@ const make = Effect.gen(function* () {
       const verification = input.verification?.trim() ?? "";
       if (goal.length === 0 || verification.length === 0) {
         return yield* teamError(
-          "task_create needs goal and verification: the end state and how to check it, in the user's language. They go on the proposal card the user adds the task from.",
+          "task_create needs goal and verification: the end state and how to check it, in the user's language. They go into the request the task lead plans from.",
           role.projectId,
         );
       }
@@ -1544,7 +1881,7 @@ const make = Effect.gen(function* () {
       }
       if (input.goalId !== undefined && role.type !== "director") {
         return yield* teamError(
-          "Only the Director links proposals to goals; leave goalId out.",
+          "Only the Director links tasks to goals; leave goalId out.",
           role.projectId,
         );
       }
@@ -1554,7 +1891,7 @@ const make = Effect.gen(function* () {
           return yield* teamError(`Goal ${goal.id} is ${goal.status}.`, role.projectId);
         }
       }
-      // A proposal, not a task: it stays out of every list until the user adds it from its card.
+      // The task goes straight to Todo; the user shapes its scope at plan approval.
       const task = yield* repository.createTask({
         id: ProjectTaskId.make(yield* newId("task")),
         projectId,
@@ -1562,14 +1899,12 @@ const make = Effect.gen(function* () {
         request: `${input.request}\n\nGoal: ${goal}\n\nVerification: ${verification}`,
         waitsOn,
         parentTaskId: input.parentTaskId,
-        stage: "proposed",
         now: yield* nowIso,
         author: "pm",
         authorThreadId: callerThreadId,
       });
+      yield* appendEvent(task, "created", task.title, callerThreadId);
       yield* appendEvent(task, "note", `Intake: ${intake}`, callerThreadId);
-      yield* appendEvent(task, "note", "Proposed; waits for the user to add it.", callerThreadId);
-      // Alignment ignores proposals, so the link counts only once the user adds the task.
       if (input.goalId !== undefined) {
         const goalId = input.goalId;
         yield* goalLocks.withLock(
@@ -1584,89 +1919,56 @@ const make = Effect.gen(function* () {
           }),
         );
       }
-      // The card shows in the proposer's chat, which for the Director is its own project.
-      yield* router.ask({
-        task,
-        projectId: role.projectId,
-        kind: "proposal",
-        question: task.title,
-        options: [TASK_PROPOSAL_ACCEPT, TASK_PROPOSAL_DISMISS],
-        askerThreadId: callerThreadId,
-        summary: goal,
-        verification,
-      });
-      return { task };
-    }).pipe(orTeamError("Could not propose the task."));
+      if (task.parentTaskId !== null) {
+        yield* syncEpic(task.parentTaskId);
+      }
+      yield* router.publish(task.projectId);
+      if (task.projectId !== role.projectId) {
+        // The Director routed it: that project's PM starts it.
+        yield* wakeManagerWith(
+          task.projectId,
+          `project-team:director-added:${task.id}`,
+          directorAddedTaskWakeText(yield* keyOf(task), task),
+        );
+        return { task };
+      }
+      // A PM's task starts right away; without a free slot it waits in Todo.
+      if (role.type !== "pm" || delegate === undefined) return { task };
+      return yield* startTask(callerThreadId, { taskId: task.id }, delegate).pipe(
+        Effect.map((started): ProjectTeamTaskResult => ({ task: started.task })),
+        // Only a full slot or an unfinished dependency means "wait"; other failures surface.
+        Effect.catch((failure) =>
+          Effect.gen(function* () {
+            const current = yield* requireTask(task.id, task.projectId);
+            const reason = current.stage === "inbox" ? yield* startWaitReason(current) : null;
+            if (reason === null) return yield* Effect.fail(failure);
+            const waiting = `Waiting in Todo: ${reason}`;
+            yield* appendEvent(current, "note", waiting, callerThreadId);
+            return { task: current, waiting };
+          }),
+        ),
+      );
+    }).pipe(orTeamError("Could not create the task."));
 
-  /**
-   * The user answered a proposal card. Add: the proposal becomes an inbox task and the
-   * proposer hears it (for the Director's proposal to a project, that project's PM too).
-   * Remove or feedback: the card closes, the proposal stays hidden, and the proposer hears why.
-   */
-  const answerProposal = (item: ProjectAttentionItem, answer: string, senderThreadId: ThreadId) =>
+  /** Why an inbox task cannot start yet: every lead slot is busy or a dependency is unfinished. */
+  const startWaitReason = (task: ProjectTask) =>
     Effect.gen(function* () {
-      const found = yield* repository.getTask(item.taskId);
-      const outcome = taskProposalOutcome(answer);
-      if (
-        Option.isNone(found) ||
-        (found.value.stage !== "proposed" &&
-          !(outcome === "accept" && found.value.stage === "inbox" && item.answeredAt === null))
-      ) {
-        return yield* teamError("This proposal is no longer open.", item.projectId);
+      // The cap is app-wide: leads running on this Mac in every project count.
+      const running = yield* activeLocalLeads(repository);
+      const limit = (yield* taskExecutionSettings).maxConcurrentSessions;
+      if (running >= limit) {
+        return `${running} of ${limit} task leads are already running.`;
       }
-      const proposal = found.value;
-      if (outcome !== "accept") {
-        const relayText =
-          outcome === "dismiss"
-            ? `[제안 빠짐] ${proposal.title}\nThe user removed this proposal. Don't propose it again unless they ask.`
-            : `[제안 피드백] ${proposal.title}\n${answer}\nThe proposal is closed. Post a new task_create proposal if it still makes sense.`;
-        const closed = yield* router.answer({
-          item,
-          answer,
-          senderThreadId,
-          answeredBy: "user",
-          relayText,
-        });
-        // After the answer lands: a failed relay keeps the card open with its goal link.
-        yield* unlinkFromGoals(proposal.id);
-        return closed;
-      }
-      const key = yield* keyOf(proposal);
-      const routed = proposal.projectId !== item.projectId;
-      const manager = yield* repository.getManager(item.projectId);
-      const epic = !routed && Option.isSome(manager) && manager.value.kind === "director";
-
-      // Make the task runnable before the proposer hears approval. A retry after a relay
-      // failure can finish answering the open card without repeating the stage events.
-      if (proposal.stage === "proposed") {
-        const task = yield* setTask({ id: proposal.id, stage: "inbox" });
-        yield* appendEvent(task, "created", task.title, null);
-        yield* appendEvent(task, "note", "The user added it from its proposal card.", null);
-        if (task.parentTaskId !== null) {
-          yield* syncEpic(task.parentTaskId);
+      for (const dependencyId of task.waitsOn) {
+        const dependency = yield* requireAnyTask(dependencyId, task.projectId);
+        if (!isDependencyCleared(dependency.stage)) {
+          return `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`;
         }
       }
-      const answered = yield* router.answer({
-        item,
-        answer,
-        senderThreadId,
-        answeredBy: "user",
-        relayText: routed
-          ? `[제안 승인됨] ${key} ${proposal.title}\nThe user added it to that project's Todo, and its PM was told to start it with task_start.`
-          : epic
-            ? `[제안 승인됨] ${key} ${proposal.title}\nThe user added this epic. Now propose one task per project with task_create(projectId, parentTaskId: ${proposal.id}).`
-            : `[제안 승인됨] ${key} ${proposal.title}\nThe user added it to Todo. Start it with task_start (taskId: ${proposal.id}) when a slot is free.`,
-      });
-      if (routed) {
-        yield* wakeManagerWith(
-          proposal.projectId,
-          `project-team:director-added:${proposal.id}`,
-          directorAddedTaskWakeText(key, proposal),
-        );
+      if (task.memoryHold === "waiting") {
+        return `${MEMORY_WAIT_REASON}: #${task.number} starts by itself once the Mac has room.`;
       }
-      yield* router.publish(proposal.projectId);
-      yield* router.publish(item.projectId);
-      return answered;
+      return null;
     });
 
   /**
@@ -1746,7 +2048,12 @@ const make = Effect.gen(function* () {
         return yield* teamError(`#${task.number} is finished.`, role.projectId);
       }
       const manager = yield* requireManager(role.projectId);
-      const model = resolveRoleModels(task.roleModels, manager.settings.roleModels)[input.role];
+      const resolved = yield* roleModelsFor(task, manager.settings.roleModels);
+      // A cloud task's children share the lead's checkout, so they run in its sandbox.
+      const model =
+        task.location === "cloud" && input.isolation !== "worktree"
+          ? yield* cloudStepModel(task, input.role, resolved[input.role], resolved.plan)
+          : resolved[input.role];
       const key = yield* keyOf(task);
       // Links the child before it acts: its usage row, and for a review its reviewer
       // session. Opening the row again (a retry, or the call after the hook) is a no-op.
@@ -1804,123 +2111,443 @@ const make = Effect.gen(function* () {
       return result;
     }).pipe(orTeamError("Could not delegate the step."));
 
-  const startTask: ProjectTeamService["Service"]["startTask"] = (callerThreadId, input, delegate) =>
+  /**
+   * The model a step of a cloud task runs on, in the lead's sandbox. Codex runs
+   * there only with the cloud Codex login; otherwise the step moves to the plan
+   * model, which the task's notes and model steps show. A lasting failure (no
+   * login, or one codex rejects) moves this task's implement and fix (or its
+   * review) for good; a passing one (the login busy elsewhere) only this step.
+   */
+  const cloudStepModel = (
+    task: ProjectTask,
+    role: ProjectTaskDelegatedRole,
+    model: ResolvedRoleModels[ProjectTaskModelRole],
+    plan: ResolvedRoleModels["plan"],
+  ) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["pm"], "task_start");
-      return yield* taskStartLocks.withLock(
-        role.projectId,
-        Effect.gen(function* () {
-          const task = yield* requireTask(input.taskId, role.projectId);
-          if (task.stage !== "inbox") {
-            return yield* teamError(`#${task.number} is already ${task.stage}.`, role.projectId);
-          }
-          const manager = yield* requireManager(role.projectId);
-          const active = yield* activeTasks(role.projectId);
-          const limit = manager.settings.maxConcurrentTasks;
-          if (active.length >= limit) {
+      if (model === null) return model;
+      const providers = yield* providerRegistry.getProviders;
+      const driver = providers.find(
+        (provider) => provider.instanceId === model.target.providerInstanceId,
+      )?.driver;
+      if (driver !== "codex") return model;
+      const shell =
+        task.leadThreadId === null
+          ? null
+          : yield* threads.getThreadShell(task.leadThreadId).pipe(Effect.orElseSucceed(() => null));
+      const check =
+        shell?.worktreePath == null
+          ? { ok: false as const, reason: "the lead has no worktree", transient: true }
+          : yield* cloudLead.checkCodex(shell.worktreePath);
+      if (check.ok) return model;
+      const target: ProjectTaskModelTarget | null =
+        plan?.target ??
+        (shell === null
+          ? null
+          : {
+              providerInstanceId: shell.modelSelection.instanceId,
+              model: shell.modelSelection.model,
+            });
+      if (target === null) return model;
+      const modelName = `${target.providerInstanceId} · ${target.model}`;
+      if (check.transient) {
+        yield* appendEvent(
+          task,
+          "note",
+          `클라우드에서 지금 Codex를 쓸 수 없어서 이번 ${STEP_LABEL[role]} 단계만 ${modelName}(으)로 돌려요. 이유: ${check.reason}`,
+          null,
+        );
+        return { target, source: "task" as const };
+      }
+      const updated = yield* repository.setTaskRoleModels({
+        id: task.id,
+        roleModels: applyRoleModelsPatch(
+          task.roleModels,
+          role === "review" ? { review: target } : { implement: target, fix: target },
+        ),
+        now: yield* nowIso,
+      });
+      yield* appendEvent(
+        Option.getOrElse(updated, () => task),
+        "note",
+        `클라우드에서 Codex를 쓸 수 없어서 이 태스크만 ${role === "review" ? "리뷰" : "구현·수정"} 모델을 ${modelName}(으)로 바꿨어요. 이유: ${check.reason}`,
+        null,
+      );
+      return { target, source: "task" as const };
+    });
+
+  /**
+   * Starts an inbox task's lead, or a started task's lead again once it stopped. A
+   * restart elsewhere comes back as a move, which runs outside the start lock.
+   */
+  const startTaskLocked = (
+    callerThreadId: ThreadId,
+    projectId: ProjectId,
+    input: Parameters<ProjectTeamService["Service"]["startTask"]>[1],
+    delegate: Parameters<ProjectTeamService["Service"]["startTask"]>[2],
+  ) => {
+    const role = { projectId };
+    return taskStartLocks.withLock(
+      projectId,
+      Effect.gen(function* () {
+        const task = yield* requireTask(input.taskId, role.projectId);
+        // A started task whose lead stopped can start again; one whose lead works cannot.
+        const restart = RESTARTABLE_TASK_STAGES.has(task.stage);
+        if (task.stage !== "inbox" && !restart) {
+          return yield* teamError(`#${task.number} is already ${task.stage}.`, role.projectId);
+        }
+        const replacedLead = restart ? task.leadThreadId : null;
+        if (restart) {
+          if (
+            task.moveTarget != null ||
+            (replacedLead !== null && (yield* isLeadBusy(threads, replacedLead)))
+          ) {
             return yield* teamError(
-              `#${task.number} stays in the inbox: ${active.length} of ${limit} task leads are already running.`,
+              `#${task.number}'s lead is still working. Wait for its turn to end or stop it, then start it again.`,
               role.projectId,
             );
           }
-          for (const dependencyId of task.waitsOn) {
-            const dependency = yield* requireAnyTask(dependencyId, role.projectId);
-            if (!isDependencyCleared(dependency.stage)) {
+          const open = yield* repository.listOpenAttentionItems({
+            projectId: task.projectId,
+            taskId: task.id,
+          });
+          // A question the lead is waiting on needs the user's answer, not a restart.
+          if (open.some((item) => !isTurnFailedBlocker(item))) {
+            return yield* teamError(
+              `#${task.number} waits on the user's answer to an open question. Answer or close it before starting the task again.`,
+              role.projectId,
+            );
+          }
+        }
+        const manager = yield* requireManager(role.projectId);
+        const active = (yield* activeTasks(role.projectId)).filter((other) => other.id !== task.id);
+        const execution = yield* taskExecutionSettings;
+        const limit = execution.maxConcurrentSessions;
+        // A started local task already holds a slot, which its restart reuses.
+        const holdsSlot =
+          (SitrepScheduler.ACTIVE_TASK_STAGES as ReadonlyArray<string>).includes(task.stage) &&
+          (task.location ?? "local") === "local";
+        // The cap is app-wide: leads running on this Mac in every project count.
+        const running = (yield* activeLocalLeads(repository)) - (holdsSlot ? 1 : 0);
+        let unmovable: string | null = null;
+        if (running >= limit) {
+          return yield* teamError(
+            restart
+              ? `#${task.number} cannot start again yet: ${running} of ${limit} task leads are already running.`
+              : `#${task.number} stays in the inbox: ${running} of ${limit} task leads are already running.`,
+            role.projectId,
+          );
+        }
+        for (const dependencyId of task.waitsOn) {
+          const dependency = yield* requireAnyTask(dependencyId, role.projectId);
+          if (!isDependencyCleared(dependency.stage)) {
+            return yield* teamError(
+              `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`,
+              role.projectId,
+            );
+          }
+        }
+        const coveredBy = yield* breakdownCoverage(task);
+        if (coveredBy === null && task.parentTaskId !== null && (yield* isLeadDraft(task))) {
+          return yield* teamError(
+            `#${task.number} is a drafted subtask. It starts once the user approves its parent's plan, which covers the whole breakdown.`,
+            role.projectId,
+          );
+        }
+        const memory = yield* repository.listMemory(role.projectId);
+        const key = formatTaskKey(
+          yield* taskKeyPrefixFor(role.projectId, manager.settings),
+          task.number,
+        );
+        const spec = yield* latestSpec(task);
+        // A task whose plan was already approved resumes straight into the work.
+        const resume = task.planSummary !== null;
+        const userLanguage = resolveUserLanguage(
+          task.request,
+          yield* recentUserWords(manager.threadId),
+        );
+        // A restart must not reuse the first lead's request id, or it gets that lead back.
+        const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
+        const roleModels = yield* roleModelsFor(task, manager.settings.roleModels);
+        // A plan model the user picked wins over the PM's choice.
+        const leadTarget =
+          roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
+        // The user's execution-location setting and the Mac's free memory pick the place.
+        const headroom = (yield* memoryHeadroom.checkFresh).headroom;
+        const admission = admitTaskLead({
+          active: running,
+          cap: limit,
+          policy: execution.location,
+          headroom,
+          requested: input.location,
+        });
+        const waitInTodo = Effect.gen(function* () {
+          if (task.memoryHold !== "waiting") {
+            yield* setMemoryHold(task, "waiting");
+            yield* appendEvent(
+              task,
+              "note",
+              `${MEMORY_WAIT_REASON}: 메모리 여유가 생기면 시작해요.`,
+              null,
+            );
+            yield* router.publish(role.projectId);
+          }
+        });
+        /**
+         * Holds the task in Todo. Only a wait while memory is short stalls it:
+         * a wait for start spacing is deliberate pacing.
+         */
+        const waitForMemory = (memoryShort: boolean) =>
+          Effect.gen(function* () {
+            yield* waitInTodo;
+            if (memoryShort) {
+              const at = yield* nowIso;
+              yield* repository
+                .setTaskMemoryStall({
+                  id: task.id,
+                  stalling: true,
+                  at,
+                  localOnly: execution.location === "local_only",
+                })
+                .pipe(orTeamError("Could not record the memory stall.", task.projectId));
+            }
+          });
+        // Only inbox tasks wait for memory: the governor starts those by itself.
+        if (admission.type === "wait") {
+          if (restart) {
+            return yield* teamError(
+              `#${task.number} cannot start again yet: ${admission.reason} Try again once the Mac has room.`,
+              role.projectId,
+            );
+          }
+          if (admission.memory) yield* waitForMemory(headroom !== "ok");
+          return yield* teamError(
+            `#${task.number} stays in the inbox: ${admission.reason} It starts once the Mac has room; do not retry it.`,
+            role.projectId,
+          );
+        }
+        /**
+         * Every local start claims the shared start gate: a fresh ok reading and
+         * time since the last local start for its memory to show. When it cannot,
+         * the task waits for memory and the governor has the PM start it later.
+         */
+        const claimLocalStart = (why: (claim: MemoryHeadroom.StartClaim) => string) =>
+          Effect.gen(function* () {
+            const claim = yield* memoryHeadroom.claimStart(MemoryHeadroom.START_SPACING_MS);
+            if (claim.type === "started") return;
+            if (restart) {
               return yield* teamError(
-                `#${task.number} waits on #${dependency.number}, which is ${dependency.stage}.`,
+                `#${task.number} cannot start again yet: ${why(claim)} Try again once the Mac has room.`,
                 role.projectId,
               );
             }
-          }
-          const coveredBy = yield* breakdownCoverage(task);
-          if (coveredBy === null && task.parentTaskId !== null && (yield* isLeadDraft(task))) {
+            yield* waitForMemory(claim.type === "short");
             return yield* teamError(
-              `#${task.number} is a drafted subtask. It starts once the user approves its parent's plan, which covers the whole breakdown.`,
+              `#${task.number} stays in the inbox: ${why(claim)} It starts by itself once the Mac has room; do not retry it.`,
               role.projectId,
             );
-          }
-          const memory = yield* repository.listMemory(role.projectId);
-          const key = formatTaskKey(
-            yield* taskKeyPrefixFor(role.projectId, manager.settings),
-            task.number,
-          );
-          const spec = yield* latestSpec(task);
-          // A task whose plan was already approved resumes straight into the work.
-          const resume = task.planSummary !== null;
-          const userLanguage = resolveUserLanguage(
-            task.request,
-            yield* recentUserWords(manager.threadId),
-          );
-          // A restart must not reuse the first lead's request id, or it gets that lead back.
-          const earlierSessions = (yield* repository.listTaskSessions(task.id)).length;
-          const roleModels = resolveRoleModels(task.roleModels, manager.settings.roleModels);
-          // A plan model the user picked wins over the PM's choice.
-          const leadTarget =
-            roleModels.plan === null ? input.target : toDelegateTarget(roleModels.plan.target);
-          const lead = yield* delegate({
-            task: buildTaskLeadPrompt({
-              task,
-              key,
-              spec,
-              resume,
-              memory,
-              otherTasks: active,
-              ...((yield* activeAfk(manager.settings)) === null ? {} : { afkRule: AFK_AGENT_RULE }),
-              ...(userLanguage === null ? {} : { userLanguage }),
-              ...(coveredBy === null
-                ? {}
-                : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
-              roleModels,
-            }),
-            title: `${key} ${task.title}`,
-            role: "implementation",
-            isolation: "worktree",
-            mode: "async",
-            clientRequestId:
-              earlierSessions === 0
-                ? `task-start:${task.id}`
-                : `task-start:${task.id}:${earlierSessions + 1}`,
-            ...(leadTarget === undefined ? {} : { target: leadTarget }),
-          }).pipe(
-            Effect.mapError((failure) =>
-              teamError(
-                `Could not start a task lead for #${task.number}: ${failure.message}`,
-                role.projectId,
-              ),
-            ),
-          );
-          const started = yield* setTask({
-            id: task.id,
-            stage: "planning",
-            leadThreadId: lead.childThreadId,
-            // The parent's approved breakdown is this subtask's approved plan.
-            ...(coveredBy === null || task.planSummary !== null
-              ? {}
-              : { planSummary: yield* coveredPlanSummary(task, coveredBy) }),
           });
-          yield* repository.addTaskSession({
+        const notNow = (claim: MemoryHeadroom.StartClaim) =>
+          claim.type === "spaced"
+            ? `another session started on this Mac moments ago, and its memory has not shown yet (${MEMORY_WAIT_REASON}).`
+            : `${MEMORY_WAIT_REASON}.`;
+        // The setting picks the place for a restart too: a lead elsewhere moves
+        // there with its worktree and session.
+        if (restart && replacedLead !== null && (task.location ?? "local") !== admission.location) {
+          const inspected = yield* inspectMovableLead(
+            { threads, providers: providerRegistry.getProviders },
+            replacedLead,
+          ).pipe(Effect.mapError((error) => teamError(error.detail, role.projectId)));
+          if (inspected.movable) {
+            if (admission.location === "local") yield* claimLocalStart(notNow);
+            const open = yield* repository.listOpenAttentionItems({
+              projectId: task.projectId,
+              taskId: task.id,
+            });
+            return {
+              kind: "move" as const,
+              lead: replacedLead,
+              to: admission.location,
+              failedCards: open.filter(isTurnFailedBlocker).map((item) => item.id),
+              failuresBefore: yield* countFailedOutcomes(task),
+            };
+          }
+          unmovable = inspected.reason;
+        }
+        if (admission.location === "local") yield* claimLocalStart(notNow);
+        const delegateLead = (location: ExecutionLocation, requestSuffix: string) =>
+          Effect.gen(function* () {
+            return yield* delegate({
+              task: buildTaskLeadPrompt({
+                task: { ...task, location },
+                key,
+                spec,
+                resume,
+                memory,
+                otherTasks: active,
+                ...((yield* activeAfk(manager.settings)) === null
+                  ? {}
+                  : { afkRule: AFK_AGENT_RULE }),
+                ...(userLanguage === null ? {} : { userLanguage }),
+                ...(coveredBy === null
+                  ? {}
+                  : { coveredBy: { key: yield* keyOf(coveredBy), title: coveredBy.title } }),
+                roleModels,
+              }),
+              title: `${key} ${task.title}`,
+              role: "implementation",
+              isolation: "worktree",
+              mode: "async",
+              clientRequestId:
+                earlierSessions === 0
+                  ? `task-start:${task.id}${requestSuffix}`
+                  : `task-start:${task.id}:${earlierSessions + 1}${requestSuffix}`,
+              ...(leadTarget === undefined ? {} : { target: leadTarget }),
+              // Always explicit, so delegate_task never re-places a lead the
+              // admission already placed (it may move an unplaced child to the cloud).
+              location,
+            }).pipe(
+              Effect.mapError((failure) =>
+                teamError(
+                  `Could not start a task lead for #${task.number}: ${failure.message}`,
+                  role.projectId,
+                ),
+              ),
+            );
+          });
+        // The setting, not the PM, sent it to the cloud: when the cloud cannot
+        // take it, start here if the Mac has room, else wait for memory.
+        const { lead, location, note } = yield* delegateLead(admission.location, "").pipe(
+          Effect.map((lead) => ({ lead, location: admission.location, note: admission.note })),
+          Effect.catch((failure) =>
+            Effect.gen(function* () {
+              if (admission.location !== "cloud" || input.location === "cloud") {
+                return yield* Effect.fail(failure);
+              }
+              yield* claimLocalStart(
+                (claim) => `the cloud could not start it (${failure.message}) and ${notNow(claim)}`,
+              );
+              const lead = yield* delegateLead("local", ":local");
+              return { lead, location: "local" as const, note: CLOUD_FALLBACK_NOTE };
+            }),
+          ),
+        );
+        const started = yield* setTask({
+          id: task.id,
+          stage: "planning",
+          leadThreadId: lead.childThreadId,
+          location,
+          // The parent's approved breakdown is this subtask's approved plan.
+          ...(coveredBy === null || task.planSummary !== null
+            ? {}
+            : { planSummary: yield* coveredPlanSummary(task, coveredBy) }),
+        });
+        yield* repository.addTaskSession({
+          taskId: started.id,
+          threadId: lead.childThreadId,
+          role: resume ? "implementer" : "lead",
+          createdAt: started.stageChangedAt,
+        });
+        yield* appendEvent(started, "stage_changed", `${task.stage} → planning`, callerThreadId);
+        if (note !== null) {
+          yield* appendEvent(started, "note", note, null);
+        }
+        if (location === "cloud" && input.location === "cloud") {
+          yield* appendEvent(started, "note", CLOUD_PINNED_NOTE, null);
+        }
+        if (task.memoryHold != null) yield* setMemoryHold(started, null);
+        // Starting ends a hold and any stall it was in (not started, condition not acted on).
+        if (task.hold != null) yield* setHold(started, null, callerThreadId);
+        else {
+          yield* repository
+            .closeTaskStalls({ taskId: started.id, endedAt: started.stageChangedAt })
+            .pipe(orTeamError("Could not close the task's stalls.", role.projectId));
+        }
+        // Logged as the lead's, so the PM's latest action still reads "started".
+        const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
+        yield* repository
+          .startModelRun({
             taskId: started.id,
             threadId: lead.childThreadId,
-            role: resume ? "implementer" : "lead",
-            createdAt: started.stageChangedAt,
-          });
-          yield* appendEvent(started, "stage_changed", "inbox → planning", callerThreadId);
-          // Logged as the lead's, so the PM's latest action still reads "started".
-          const withStep = yield* recordModelStep(started, "plan", lead, lead.childThreadId);
-          yield* repository
-            .startModelRun({
-              taskId: started.id,
-              threadId: lead.childThreadId,
-              role: "plan",
-              providerInstanceId: lead.providerInstanceId,
-              model: lead.model,
-              startedAt: started.stageChangedAt,
-            })
-            .pipe(orTeamError("Could not record the plan step.", role.projectId));
-          yield* router.publish(role.projectId);
-          return { task: withStep, leadThreadId: lead.childThreadId };
-        }),
+            role: "plan",
+            providerInstanceId: lead.providerInstanceId,
+            model: lead.model,
+            startedAt: started.stageChangedAt,
+          })
+          .pipe(orTeamError("Could not record the plan step.", role.projectId));
+        if (replacedLead !== null) {
+          yield* retireReplacedLead(withStep, replacedLead, unmovable);
+        }
+        yield* router.publish(role.projectId);
+        return {
+          kind: "started" as const,
+          result: { task: withStep, leadThreadId: lead.childThreadId },
+        };
+      }).pipe(leadStartLock.withPermits(1)),
+    );
+  };
+
+  const countFailedOutcomes = (task: ProjectTask) =>
+    repository
+      .listTaskEvents({ taskId: task.id, limit: Number.MAX_SAFE_INTEGER })
+      .pipe(
+        Effect.map(
+          (events) =>
+            events.filter(
+              (event) =>
+                event.kind === "outcome" &&
+                (event.body === "failed" || event.body.startsWith("failed:")),
+            ).length,
+        ),
       );
+
+  /**
+   * The replaced lead goes quiet: its cards close, since answers would reach a lead
+   * that left, and its later messages stay queued.
+   */
+  const retireReplacedLead = (task: ProjectTask, replaced: ThreadId, unmovable: string | null) =>
+    Effect.gen(function* () {
+      leadMoveGate.hold(replaced, "replaced");
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      for (const item of open) {
+        if (item.askerThreadId === replaced || isTurnFailedBlocker(item)) {
+          yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: yield* nowIso });
+        }
+      }
+      yield* appendEvent(
+        task,
+        "note",
+        unmovable === null
+          ? "멈춘 리드 대신 새 리드로 다시 시작했어요."
+          : `리드를 옮길 수 없어 새 리드로 다시 시작했어요. 이유: ${unmovable}`,
+        null,
+      );
+    });
+
+  const startTask: ProjectTeamService["Service"]["startTask"] = (callerThreadId, input, delegate) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["pm"], "task_start");
+      const start = yield* startTaskLocked(callerThreadId, role.projectId, input, delegate);
+      if (start.kind === "started") return start.result;
+      // Outside the start lock: a move can take minutes. A failed move leaves the task as it was.
+      yield* moveTask({ projectId: role.projectId, taskId: input.taskId, to: start.to });
+      const moved = yield* requireTask(input.taskId, role.projectId);
+      // The moved lead may already have failed again; that newer failure keeps its card.
+      if ((yield* countFailedOutcomes(moved)) === start.failuresBefore) {
+        const open = yield* repository.listOpenAttentionItems({
+          projectId: moved.projectId,
+          taskId: moved.id,
+        });
+        for (const item of open.filter((item) => start.failedCards.includes(item.id))) {
+          yield* restoreFailedTurnStage(item, TURN_FAILED_RETRY);
+          yield* repository.supersedeAttentionItem({ id: item.id, supersededAt: yield* nowIso });
+        }
+      }
+      yield* router.publish(role.projectId);
+      return { task: yield* requireTask(moved.id, role.projectId), leadThreadId: start.lead };
     }).pipe(orTeamError("Could not start the task."));
 
   /**
@@ -2057,8 +2684,27 @@ const make = Effect.gen(function* () {
         ),
       );
 
+  /** The task a plan checker session judges, or null when the caller is not one. */
+  const checkerTaskOf = (callerThreadId: ThreadId) =>
+    Effect.gen(function* () {
+      if ((yield* roleOf(callerThreadId)).type !== "none") return null;
+      const session = yield* repository
+        .findTaskSessionByThreadId(callerThreadId)
+        .pipe(orTeamError("Could not read the session."));
+      if (Option.isNone(session) || session.value.role !== "checker") return null;
+      const task = yield* repository
+        .getTask(session.value.taskId)
+        .pipe(orTeamError("Could not read the task."));
+      return Option.getOrNull(task);
+    });
+
   const readSpec: ProjectTeamService["Service"]["readSpec"] = (callerThreadId, input) =>
     Effect.gen(function* () {
+      // The plan checker reads the plan it judges.
+      const checked = yield* checkerTaskOf(callerThreadId);
+      if (checked !== null && (input.taskId === undefined || input.taskId === checked.id)) {
+        return yield* specResult(checked, yield* latestSpec(checked));
+      }
       const { task } = yield* specTaskFor(callerThreadId, input.taskId, "task_spec_read", "read");
       return yield* specResult(task, yield* latestSpec(task));
     }).pipe(orTeamError("Could not read the spec."));
@@ -2164,17 +2810,33 @@ const make = Effect.gen(function* () {
         .getThreadShell(task.leadThreadId)
         .pipe(Effect.orElseSucceed(() => null));
       if (shell === null || shell.worktreePath === null) return Option.none<string>();
+      if (shell.location === "cloud") yield* syncCloudLead(task.leadThreadId);
       return yield* worktreeHeads.read(shell.worktreePath);
     });
+
+  /**
+   * A cloud lead's Mac worktree is a mirror updated at turn end. Gates and
+   * review steps run mid-turn, so they mirror the sandbox first.
+   */
+  const syncCloudLead = (leadThreadId: ThreadId) =>
+    cloudLead.syncToMac(leadThreadId).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("could not mirror a cloud lead before reading its worktree", {
+          leadThreadId,
+          detail: error.message,
+        }),
+      ),
+    );
 
   const shortSha = (sha: string) => sha.slice(0, 7);
 
   /** The review model a task's reviews must come from, or null when none is set. */
   const reviewModelOf = (task: ProjectTask) =>
-    Effect.map(
-      requireManager(task.projectId),
-      (manager) =>
-        resolveRoleModels(task.roleModels, manager.settings.roleModels).review?.target ?? null,
+    Effect.flatMap(requireManager(task.projectId), (manager) =>
+      Effect.map(
+        roleModelsFor(task, manager.settings.roleModels),
+        (resolved) => resolved.review?.target ?? null,
+      ),
     );
 
   /**
@@ -2604,7 +3266,16 @@ const make = Effect.gen(function* () {
         // The pull request follows the user's PR rules; one that can't be read is let through.
         const url = prUrl ?? task.prUrl;
         const text = url === null ? Option.none() : yield* pullRequestText.read(url);
-        const problems = Option.isSome(text) ? pullRequestFormatProblems(text.value) : [];
+        const branchPrefix = yield* serverSettings.getSettings.pipe(
+          Effect.map(
+            (settings) =>
+              resolveProjectSettings(settings, task.projectId).settings.branchNamePrefix,
+          ),
+          Effect.orElseSucceed(() => null),
+        );
+        const problems = Option.isSome(text)
+          ? pullRequestFormatProblems(text.value, { branchPrefix })
+          : [];
         if (problems.length > 0) {
           return yield* teamError(
             `The pull request does not follow the PR rules yet. Fix it with gh pr edit, then move to In Review again:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
@@ -2612,6 +3283,79 @@ const make = Effect.gen(function* () {
           );
         }
       }
+    });
+
+  /**
+   * A started task stops only with a resume condition, so the server can start it
+   * again; a Todo task may be held too. The condition must name a real task.
+   */
+  const checkHold = (task: ProjectTask, input: ProjectTeamTaskUpdateInput, projectId: ProjectId) =>
+    Effect.gen(function* () {
+      const parking = input.stage === "inbox" && task.stage !== "inbox";
+      if (parking && input.hold === undefined) {
+        return yield* teamError(
+          `Stopping #${task.number} needs a resume condition: pass hold: {resumeWhen, reason}, where resumeWhen is {type:"task",taskId} (another task finishing), {type:"time",at} (an ISO time) or {type:"user",note} (the user's decision). A stop with no condition is refused, because nobody would start it again.`,
+          projectId,
+        );
+      }
+      if (input.hold === undefined) return null;
+      if (!parking && task.stage !== "inbox") {
+        return yield* teamError(
+          `Only a task that stops (stage "inbox") or waits in Todo can be held; #${task.number} is ${task.stage}.`,
+          projectId,
+        );
+      }
+      const { resumeWhen } = input.hold;
+      if (resumeWhen.type === "task") {
+        if (resumeWhen.taskId === task.id) {
+          return yield* teamError("A task cannot wait on itself.", projectId);
+        }
+        yield* requireAnyTask(resumeWhen.taskId, projectId);
+      }
+      if (resumeWhen.type === "time" && Number.isNaN(Date.parse(resumeWhen.at))) {
+        return yield* teamError(`resumeWhen.at is not a time: ${resumeWhen.at}`, projectId);
+      }
+      const hold: ProjectTaskHold = {
+        resumeWhen,
+        reason: input.hold.reason,
+        since: yield* nowIso,
+      };
+      return hold;
+    });
+
+  /** Saves a hold; a deliberate stop ends any stall the task was in. */
+  const setHold = (task: ProjectTask, hold: ProjectTaskHold | null, actor: ThreadId | null) =>
+    Effect.gen(function* () {
+      const now = yield* nowIso;
+      const saved = yield* repository
+        .setTaskHold({ id: task.id, hold, now })
+        .pipe(orTeamError("Could not save the hold.", task.projectId));
+      yield* repository
+        .closeTaskStalls({ taskId: task.id, endedAt: now })
+        .pipe(orTeamError("Could not close the task's stalls.", task.projectId));
+      if (hold !== null) {
+        const condition = yield* holdConditionText(hold);
+        yield* appendEvent(
+          task,
+          "note",
+          `멈춤: ${hold.reason} · 다시 시작 조건: ${condition}`,
+          actor,
+        );
+      }
+      yield* router.publish(task.projectId);
+      return Option.getOrElse(saved, () => task);
+    });
+
+  const holdConditionText = (hold: ProjectTaskHold) =>
+    Effect.gen(function* () {
+      const titles = new Map<string, string>();
+      if (hold.resumeWhen.type === "task") {
+        const other = yield* repository
+          .getTask(hold.resumeWhen.taskId)
+          .pipe(Effect.orElseSucceed(() => Option.none<ProjectTask>()));
+        if (Option.isSome(other)) titles.set(other.value.id, other.value.title);
+      }
+      return resumeWhenText(hold.resumeWhen, (id) => titles.get(id));
     });
 
   const updateTask = (
@@ -2652,6 +3396,7 @@ const make = Effect.gen(function* () {
       if (input.stage !== undefined && input.stage !== task.stage) {
         yield* checkStageGate(task, input.stage, input.prUrl);
       }
+      const hold = yield* checkHold(task, input, role.projectId);
       const dependencies =
         input.waitsOn === undefined
           ? undefined
@@ -2699,6 +3444,9 @@ const make = Effect.gen(function* () {
       }
       if (input.note !== undefined) {
         yield* appendEvent(updated, "note", input.note, callerThreadId);
+      }
+      if (hold !== null) {
+        yield* setHold(updated, hold, callerThreadId);
       }
       if (input.title !== undefined && input.title !== task.title) {
         yield* appendEvent(updated, "note", `Renamed from "${task.title}"`, callerThreadId);
@@ -2849,7 +3597,7 @@ const make = Effect.gen(function* () {
       yield* appendEvent(
         current,
         "note",
-        `Scope added by the PM${open.length > 0 ? "; the open approval card closed" : ""}: ${note}`,
+        `${SCOPE_NOTE_PREFIX}${open.length > 0 ? "; the open approval card closed" : ""}: ${note}`,
         callerThreadId,
       );
       yield* router.publish(task.projectId);
@@ -2880,7 +3628,8 @@ const make = Effect.gen(function* () {
           projectId: role.projectId,
           taskId: task.id,
         });
-        const existing = open.find((item) => item.kind === "blocker");
+        // A blocker the user snoozed would hide the escalation, so raise a new one.
+        const existing = open.find((item) => item.kind === "blocker" && !isSnoozedAttention(item));
         if (existing !== undefined) {
           return { status: "escalated", task, attentionItem: existing } as const;
         }
@@ -2988,10 +3737,13 @@ const make = Effect.gen(function* () {
       const briefs = (stage: ProjectTaskStage) =>
         tasks.filter((task) => task.stage === stage).map(brief);
       const changedSince = (task: ProjectTask) => isoMillis(task.stageChangedAt) > sinceMs;
-      const newAttention: ReadonlyArray<ProjectAttentionItem> =
+      const { waiting, snoozed } = splitSnoozedAttention(openAttention);
+      // Snoozed cards are the user's own pause, not new work waiting on them.
+      const newAttention: ReadonlyArray<ProjectAttentionItem> = (
         since === null
           ? openAttention
-          : yield* repository.listAttentionItemsSince({ projectId, since });
+          : yield* repository.listAttentionItemsSince({ projectId, since })
+      ).filter((item) => !isSnoozedAttention(item));
       const journal = buildJournal({
         tasks,
         endings: yield* repository.listRecentTaskEndings({ projectId, limit: JOURNAL_LIMIT }),
@@ -3027,7 +3779,8 @@ const make = Effect.gen(function* () {
         stalled: tasks
           .filter((task) => task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage))
           .map(brief),
-        openAttention,
+        openAttention: waiting,
+        snoozedAttention: snoozed,
         settings: manager.settings,
         changes: {
           since,
@@ -3078,6 +3831,7 @@ const make = Effect.gen(function* () {
           projectId: manager.projectId,
         });
         const brief = yield* liveTaskSignals(tasks, openAttention);
+        const { waiting, snoozed } = splitSnoozedAttention(openAttention);
         const briefs = tasks.map(brief);
         for (const item of briefs) briefById.set(item.id, item);
         alignable.push(...tasks.map((task) => toAlignableTask(task, openAttention)));
@@ -3093,7 +3847,8 @@ const make = Effect.gen(function* () {
           taskKeyPrefix: prefix,
           statusCounts: countTaskStatuses(briefs),
           openTasks: briefs.filter((item) => item.stage !== "done" && item.stage !== "cancelled"),
-          openAttention,
+          openAttention: waiting,
+          snoozedAttention: snoozed,
           summary: summary?.content ?? null,
         });
       }
@@ -3144,6 +3899,23 @@ const make = Effect.gen(function* () {
     actorThreadId: ThreadId | null,
   ) =>
     Effect.gen(function* () {
+      yield* reconcileTaskKeyPrefixes;
+      if (patch.taskKeyPrefix !== undefined) {
+        const collisions = (yield* repository.listManagers()).filter(
+          (candidate) =>
+            candidate.projectId !== projectId &&
+            candidate.settings.taskKeyPrefix === patch.taskKeyPrefix,
+        );
+        for (const collision of collisions) {
+          const project = yield* projects.get(collision.projectId);
+          if (Option.isNone(project) || project.value.deletedAt !== null) continue;
+          const title = project.value.title;
+          return yield* teamError(
+            `태스크 접두어 ${patch.taskKeyPrefix}는 ‘${title}’ 프로젝트에서 사용 중입니다. 다른 접두어를 지정해 주세요.`,
+            projectId,
+          );
+        }
+      }
       const { persona: personaPatch, ...plain } = patch;
       if (
         Object.values(plain).every((value) => value === undefined) &&
@@ -3214,7 +3986,20 @@ const make = Effect.gen(function* () {
               ...(quietHours === undefined ? {} : { quietHours }),
               persona,
               ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
-              ...(patch.taskKeyPrefix === undefined ? {} : { taskKeyPrefix: patch.taskKeyPrefix }),
+              ...(patch.taskKeyPrefix === undefined
+                ? {}
+                : {
+                    taskKeyPrefix: patch.taskKeyPrefix,
+                    taskKeyAliases: [
+                      ...new Set([
+                        ...(manager.settings.taskKeyAliases ?? []),
+                        ...(manager.settings.taskKeyPrefix === undefined ||
+                        manager.settings.taskKeyPrefix === patch.taskKeyPrefix
+                          ? []
+                          : [manager.settings.taskKeyPrefix]),
+                      ]),
+                    ],
+                  }),
               ...(patch.mergeOwner === undefined ? {} : { mergeOwner: patch.mergeOwner }),
               ...(afk === undefined ? {} : { afk }),
               // Only setting the interval by hand stops it adapting, for good; other fields
@@ -3281,7 +4066,10 @@ const make = Effect.gen(function* () {
       }
       yield* router.publish(projectId);
       return { projectId, settings };
-    }).pipe(orTeamError("Could not update the team settings.", projectId));
+    }).pipe(
+      (effect) => taskKeyLocks.withLock("prefixes", effect),
+      orTeamError("Could not update the team settings.", projectId),
+    );
 
   const updateSettingsAsManager: ProjectTeamService["Service"]["updateSettingsAsManager"] = (
     callerThreadId,
@@ -3329,13 +4117,16 @@ const make = Effect.gen(function* () {
     });
 
   /**
-   * A plan approval reviews the latest spec version. It replaces the task's older open
-   * approval card and shows the task as Waiting for approval until the user answers.
+   * A plan approval reviews the latest spec version. Once the plan passes the server's
+   * structural checks, a separate checker session (on a different model when one is set
+   * up) judges the plan gates; the task stays in planning (so AFK cannot approve it) and
+   * the card waits for the checker.
    */
   const askPlanApproval = (
     callerThreadId: ThreadId,
     task: ProjectTask,
     input: ProjectTeamAskUserInput,
+    delegate: DelegateStep,
   ) =>
     Effect.gen(function* () {
       if (FinishedTaskCleanup.isFinishedStage(task.stage)) {
@@ -3350,11 +4141,20 @@ const make = Effect.gen(function* () {
         );
       }
       const spec = yield* latestSpec(task);
+      const titleProblems = spec.spec.todos.flatMap((todo) =>
+        todoTitleProblems(todo.text).map((problem) => `Todo ${todo.id} '${todo.text}': ${problem}`),
+      );
+      if (titleProblems.length > 0) {
+        return yield* teamError(
+          `${titleProblems.join("\n")}\nKeep each step one short plain line; move done-when and order into the spec's doneWhen/dependsOn, which the card shows only under details.`,
+          task.projectId,
+        );
+      }
       const unlinked = (yield* openDrafts(task)).filter(
         (draft) => !spec.spec.todos.some((todo) => todo.subtaskId === draft.id),
       );
       const gaps = [
-        ...planReadinessGaps(spec.spec),
+        ...planReadinessGaps(spec.spec, task.metrics.size),
         ...unlinked.map(
           (draft) =>
             `Subtask #${draft.number} "${draft.title}" has no todo: add one with subtaskId "${draft.id}" so the card shows it in the breakdown.`,
@@ -3366,6 +4166,277 @@ const make = Effect.gen(function* () {
           task.projectId,
         );
       }
+      return yield* startPlanCheck(callerThreadId, task, spec, input, delegate);
+    });
+
+  const sameModel = (a: ProjectTaskModelTarget | null, b: ProjectTaskModelTarget | null) =>
+    a !== null &&
+    b !== null &&
+    a.providerInstanceId === b.providerInstanceId &&
+    a.model === b.model;
+
+  /**
+   * The models a plan check may run on, in order: the review, implement and fix models
+   * that differ from the plan model, then the review model, then the lead's own model
+   * (null). A cloud task's checker runs in the lead's sandbox, so a Codex model it cannot
+   * use there is skipped. It never changes the task's role models.
+   */
+  const planCheckerCandidates = (task: ProjectTask) =>
+    Effect.gen(function* () {
+      const manager = yield* requireManager(task.projectId);
+      const resolved = yield* roleModelsFor(task, manager.settings.roleModels);
+      const shell =
+        task.leadThreadId === null
+          ? null
+          : yield* threads.getThreadShell(task.leadThreadId).pipe(Effect.orElseSucceed(() => null));
+      const leadModel: ProjectTaskModelTarget | null =
+        shell?.modelSelection == null
+          ? null
+          : {
+              providerInstanceId: shell.modelSelection.instanceId,
+              model: shell.modelSelection.model,
+            };
+      const planModel = resolved.plan?.target ?? leadModel;
+      const ordered: Array<ProjectTaskModelTarget> = [];
+      const add = (target: ProjectTaskModelTarget | undefined) => {
+        if (target !== undefined && !ordered.some((entry) => sameModel(entry, target))) {
+          ordered.push(target);
+        }
+      };
+      for (const entry of [resolved.review, resolved.implement, resolved.fix]) {
+        if (entry !== null && !sameModel(entry.target, planModel)) add(entry.target);
+      }
+      add(resolved.review?.target);
+      const providers = task.location === "cloud" ? yield* providerRegistry.getProviders : [];
+      let codexInCloud: boolean | null = null;
+      const usable = (target: ProjectTaskModelTarget) =>
+        Effect.gen(function* () {
+          if (task.location !== "cloud") return true;
+          const driver = providers.find(
+            (provider) => provider.instanceId === target.providerInstanceId,
+          )?.driver;
+          if (driver !== "codex") return true;
+          if (codexInCloud === null) {
+            codexInCloud =
+              shell?.worktreePath == null
+                ? false
+                : (yield* cloudLead.checkCodex(shell.worktreePath)).ok;
+          }
+          return codexInCloud;
+        });
+      const candidates: Array<ProjectTaskModelTarget | null> = yield* Effect.filter(
+        ordered,
+        usable,
+      );
+      // The lead's own model, unless a candidate above already is it.
+      if (leadModel === null || !candidates.some((entry) => sameModel(entry, leadModel))) {
+        candidates.push(null);
+      }
+      const isPlanModel = (target: ProjectTaskModelTarget | null) =>
+        target === null
+          ? planModel === null || leadModel === null || sameModel(leadModel, planModel)
+          : sameModel(target, planModel);
+      return { candidates, isPlanModel };
+    });
+
+  /** Stores a plan check and starts its checker session; the card waits for its verdicts. */
+  const startPlanCheck = (
+    callerThreadId: ThreadId,
+    task: ProjectTask,
+    spec: ProjectTaskSpecVersion,
+    input: ProjectTeamAskUserInput,
+    delegate: DelegateStep,
+  ) =>
+    Effect.gen(function* () {
+      // A new request replaces an open card for an older plan, and any check in flight.
+      const now = yield* nowIso;
+      yield* repository.supersedeOpenAttentionItems({
+        taskId: task.id,
+        kind: "approval",
+        supersededAt: now,
+      });
+      const planning = yield* moveTaskStage(task, "planning", callerThreadId);
+      // Rounds count the checks that sent this plan back. A card the user saw (after a
+      // pass, or after the last round) starts over; a request replacing a check in
+      // flight, or one the spec made stale, keeps its round.
+      const previous = planning.planCheck ?? null;
+      const round =
+        previous === null || previous.status === "passed"
+          ? 1
+          : previous.status === "checking" || previous.status === "stale"
+            ? previous.round
+            : previous.round < MAX_PLAN_CHECK_ROUNDS
+              ? previous.round + 1
+              : 1;
+      const key = yield* keyOf(planning);
+      const depth = planDepth(planning.metrics.size, spec.spec);
+      const pending: ProjectTaskPlanCheck = {
+        specVersion: spec.version,
+        round,
+        status: "checking",
+        requiredGates: requiredPlanGates(depth).map((gate) => gate.id),
+        verdicts: [],
+        checker: null,
+        startedAt: now,
+        checkedAt: null,
+        ask: {
+          question: input.question,
+          context: input.context,
+          ...(input.details === undefined ? {} : { details: input.details }),
+          ...(input.senderName === undefined ? {} : { senderName: input.senderName }),
+        },
+      };
+      yield* storePlanCheck(planning, pending);
+      // Links the checker before it acts, so its task_plan_check_set is accepted.
+      const linkChecker = (child: DelegatedChild, sameModelAsPlan: boolean) =>
+        Effect.gen(function* () {
+          const startedAt = yield* nowIso;
+          yield* repository.startModelRun({
+            taskId: planning.id,
+            threadId: child.childThreadId,
+            // Its time and tokens count toward planning.
+            role: "plan",
+            providerInstanceId: child.providerInstanceId,
+            model: child.model,
+            startedAt,
+          });
+          yield* repository.addTaskSession({
+            taskId: planning.id,
+            threadId: child.childThreadId,
+            role: "checker",
+            createdAt: startedAt,
+          });
+          const current = yield* requireTask(planning.id, planning.projectId);
+          if (current.planCheck?.startedAt !== pending.startedAt) return;
+          yield* storePlanCheck(current, {
+            ...current.planCheck,
+            checker: {
+              providerInstanceId: child.providerInstanceId,
+              model: child.model,
+              threadId: child.childThreadId,
+              sameModelAsPlan,
+            },
+          });
+        }).pipe(orTeamError("Could not record the plan checker.", planning.projectId));
+      const brief = planCheckerBrief({
+        taskId: planning.id,
+        key,
+        title: planning.title,
+        specVersion: spec.version,
+        round,
+        depth,
+      });
+      const { candidates, isPlanModel } = yield* planCheckerCandidates(planning);
+      const describe = (target: ProjectTaskModelTarget | null) =>
+        target === null ? "the lead's own model" : `${target.providerInstanceId} · ${target.model}`;
+      // Starts the checker on the first candidate that starts, never retrying one that failed.
+      const startFrom = (
+        index: number,
+      ): Effect.Effect<
+        { readonly child: OrchestratorMcpDelegateTaskResult; readonly sameModelAsPlan: boolean },
+        OrchestratorMcpFailure
+      > => {
+        const target = candidates[index] ?? null;
+        const sameModelAsPlan = isPlanModel(target);
+        return delegate(
+          {
+            task: brief,
+            title: `${key} plan check`,
+            role: DELEGATE_ROLE.review,
+            mode: "async",
+            ...(target === null ? {} : { target: toDelegateTarget(target) }),
+          },
+          (child) =>
+            linkChecker(child, sameModelAsPlan).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("could not link the plan checker before it ran", { cause }),
+              ),
+            ),
+        ).pipe(
+          Effect.map((child) => ({ child, sameModelAsPlan })),
+          Effect.catch((failure) =>
+            index + 1 >= candidates.length
+              ? Effect.fail(failure)
+              : appendEvent(
+                  planning,
+                  "note",
+                  `Could not start the plan checker on ${describe(target)} (${failure.message}); trying ${describe(candidates[index + 1] ?? null)}.`,
+                  null,
+                ).pipe(
+                  Effect.orElseSucceed(() => undefined),
+                  Effect.andThen(startFrom(index + 1)),
+                ),
+          ),
+        );
+      };
+      // A request while a check is still pending means its checker ended without verdicts
+      // (for example on a usage limit), so start on the next candidate instead.
+      const silent = previous?.status === "checking" ? previous.checker : null;
+      const silentIndex =
+        silent === null || silent === undefined
+          ? -1
+          : candidates.findIndex((target) =>
+              target === null
+                ? isPlanModel(null) && silent.sameModelAsPlan
+                : target.providerInstanceId === silent.providerInstanceId &&
+                  target.model === silent.model,
+            );
+      const firstIndex =
+        silentIndex >= 0 && silentIndex + 1 < candidates.length ? silentIndex + 1 : 0;
+      if (firstIndex > 0) {
+        yield* appendEvent(
+          planning,
+          "note",
+          `The plan checker on ${describe(candidates[silentIndex] ?? null)} ended without verdicts; trying ${describe(candidates[firstIndex] ?? null)}.`,
+          null,
+        ).pipe(Effect.orElseSucceed(() => undefined));
+      }
+      const { child: started, sameModelAsPlan } = yield* startFrom(firstIndex).pipe(
+        Effect.catch((failure) =>
+          Effect.gen(function* () {
+            // Nothing checks the plan, so the lead may ask again.
+            yield* storePlanCheck(planning, previous);
+            return yield* teamError(
+              `Could not start the plan checker for #${planning.number}: ${failure.message}. Ask for approval again.`,
+              planning.projectId,
+            );
+          }),
+        ),
+      );
+      yield* linkChecker(started, sameModelAsPlan);
+      const checked = yield* requireTask(planning.id, planning.projectId);
+      const planCheck = checked.planCheck ?? pending;
+      const on = `${started.providerInstanceId} · ${started.model ?? "default model"}`;
+      yield* appendEvent(
+        planning,
+        "note",
+        `Sent the plan (spec v${spec.version}) to the plan checker on ${on}${sameModelAsPlan ? " (same model as the plan, separate session)" : ""}, round ${round}.`,
+        callerThreadId,
+      );
+      yield* router.publish(planning.projectId);
+      return {
+        planCheck,
+        message: `The plan in spec v${spec.version} passed the server's checks. A separate plan checker session on ${on}${sameModelAsPlan ? " (the plan's own model: no other model is set up)" : ""} now reviews each plan gate (round ${round} of ${MAX_PLAN_CHECK_ROUNDS}); the user sees no card yet. Its verdicts arrive as a message: end your turn now. ${PLAN_CHECKER_ENDED_HINT}`,
+      };
+    });
+
+  const storePlanCheck = (task: ProjectTask, planCheck: ProjectTaskPlanCheck | null) =>
+    Effect.gen(function* () {
+      const updated = yield* repository
+        .setTaskPlanCheck({ id: task.id, planCheck, now: yield* nowIso })
+        .pipe(orTeamError("Could not store the plan check.", task.projectId));
+      return Option.getOrElse(updated, () => task);
+    });
+
+  /** Raises the plan approval card the lead asked for, once its plan check is decided. */
+  const raisePlanApprovalCard = (
+    task: ProjectTask,
+    spec: ProjectTaskSpecVersion,
+    ask: ProjectTaskPlanCheck["ask"],
+  ) =>
+    Effect.gen(function* () {
+      const asker = task.leadThreadId;
+      if (asker === null) return yield* teamError(`#${task.number} has no lead.`, task.projectId);
       const now = yield* nowIso;
       yield* repository.supersedeOpenAttentionItems({
         taskId: task.id,
@@ -3375,24 +4446,184 @@ const make = Effect.gen(function* () {
       const item = yield* router.ask({
         task,
         kind: "approval",
-        question: input.question,
+        question: ask.question,
+        context: ask.context,
+        details: ask.details,
+        senderName: ask.senderName,
         // One way to approve: approving always starts the work.
         options: [PLAN_APPROVAL_START],
-        askerThreadId: callerThreadId,
+        askerThreadId: asker,
         specVersion: spec.version,
         // The card opens with the plan's summary; its todos come from the pinned version.
         summary: spec.spec.summary,
       });
-      yield* moveTaskStage(task, "awaiting_approval", callerThreadId);
+      yield* moveTaskStage(task, "awaiting_approval", asker);
       yield* appendEvent(
         task,
         "note",
         `Asked the user to approve the plan (spec v${spec.version}).`,
-        callerThreadId,
+        asker,
       );
       // While the user is AFK, the AFK sweep approves it after the grace period.
-      return { item };
+      return item;
     });
+
+  /** Sends the lead a server message, such as the plan checker's verdicts. */
+  const tellLead = (task: ProjectTask, keyPrefix: string, text: string) =>
+    Effect.gen(function* () {
+      if (task.leadThreadId === null) return;
+      const key = `${keyPrefix}:${yield* newId(task.id)}`;
+      yield* threads.sendToThread({
+        projectId: task.projectId,
+        commandId: CommandId.make(key),
+        threadId: task.leadThreadId,
+        messageId: MessageId.make(key),
+        text,
+        attachments: [],
+        mode: "auto",
+        createdBy: "agent",
+        creationSource: "server",
+      });
+    });
+
+  const setPlanCheck: ProjectTeamService["Service"]["setPlanCheck"] = (callerThreadId, input) =>
+    Effect.gen(function* () {
+      const session = yield* repository
+        .findTaskSessionByThreadId(callerThreadId)
+        .pipe(orTeamError("Could not read the plan checker session."));
+      if (Option.isNone(session) || session.value.role !== "checker") {
+        return yield* teamError(
+          "task_plan_check_set is only for the plan checker session the server started for a task. A lead fixes its plan and asks for approval again; it does not judge its own plan.",
+        );
+      }
+      const found = yield* repository
+        .getTask(session.value.taskId)
+        .pipe(orTeamError("Could not read the task."));
+      if (Option.isNone(found)) {
+        return yield* teamError(`Task ${session.value.taskId} was not found.`);
+      }
+      const task = found.value;
+      if (input.taskId !== undefined && input.taskId !== task.id) {
+        return yield* teamError(
+          "task_plan_check_set records the check of the task you were started for only.",
+          task.projectId,
+        );
+      }
+      const check = task.planCheck ?? null;
+      if (
+        check === null ||
+        check.status !== "checking" ||
+        check.checker?.threadId !== callerThreadId ||
+        FinishedTaskCleanup.isFinishedStage(task.stage)
+      ) {
+        return yield* teamError(
+          `This plan check of #${task.number} is no longer pending: the lead asked again, or it was already decided. Record nothing and end your turn.`,
+          task.projectId,
+        );
+      }
+      // The checker records the version it read; a spec that moved past the check makes it stale.
+      const latest = yield* latestSpec(task);
+      const stale = input.specVersion !== check.specVersion || latest.version !== check.specVersion;
+      // The gates fixed when the check started; a check stored before that uses today's.
+      const required =
+        check.requiredGates.length > 0
+          ? check.requiredGates
+          : requiredPlanGates(planDepth(task.metrics.size, latest.spec)).map((gate) => gate.id);
+      const given = new Map(input.verdicts.map((verdict) => [verdict.gate, verdict]));
+      const problems = stale
+        ? []
+        : [
+            ...required
+              .filter((gate) => !given.has(gate))
+              .map((gate) => `missing a verdict for gate ${gate}`),
+            ...input.verdicts
+              .filter((verdict) => !required.includes(verdict.gate))
+              .map((verdict) => `gate ${verdict.gate} is not one of this plan's required gates`),
+            ...(given.size < input.verdicts.length ? ["give one verdict per gate"] : []),
+          ];
+      if (problems.length > 0) {
+        return yield* teamError(
+          `Give one verdict for each of these gates: ${required.join(", ")}.\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+          task.projectId,
+        );
+      }
+      const verdicts = stale ? [] : required.map((gate) => given.get(gate)!);
+      const failing = verdicts.filter((verdict) => !verdict.pass);
+      const decided: ProjectTaskPlanCheck = {
+        ...check,
+        status: stale ? "stale" : failing.length === 0 ? "passed" : "failed",
+        verdicts,
+        checkedAt: yield* nowIso,
+      };
+      // A newer request may have replaced this check while it was judged.
+      const current = yield* requireTask(task.id, task.projectId);
+      const still = current.planCheck ?? null;
+      if (
+        still === null ||
+        still.status !== "checking" ||
+        still.checker?.threadId !== callerThreadId ||
+        still.startedAt !== check.startedAt ||
+        still.specVersion !== check.specVersion
+      ) {
+        return yield* teamError(
+          `This plan check of #${task.number} is no longer pending: the lead asked again. Record nothing and end your turn.`,
+          task.projectId,
+        );
+      }
+      const stored = yield* storePlanCheck(current, decided);
+      const labelOf = (id: string) => PLAN_GATES.find((gate) => gate.id === id)?.label ?? id;
+      const by = `${check.checker.providerInstanceId} · ${check.checker.model ?? "default model"}${check.checker.sameModelAsPlan ? " (same model as the plan, separate session)" : ""}`;
+      yield* appendEvent(
+        stored,
+        "note",
+        stale
+          ? `Plan check round ${check.round} (spec v${check.specVersion}) by ${by} is stale: the checker read spec v${input.specVersion} and the latest is v${latest.version}. It counts as no round.`
+          : `Plan check round ${check.round} (spec v${check.specVersion}) by ${by}: ${failing.length === 0 ? "every gate passed" : `${failing.length} of ${verdicts.length} gates failed`}.\n${verdicts
+              .map(
+                (verdict) =>
+                  `${verdict.pass ? "✓" : "✗"} ${verdict.gate} (${labelOf(verdict.gate)}): ${verdict.reason}`,
+              )
+              .join("\n")}`,
+        callerThreadId,
+      );
+      if (stored.stage !== "planning") {
+        // The task moved on while it was checked; the verdicts are kept, but no card goes up.
+        yield* appendEvent(
+          stored,
+          "note",
+          `#${stored.number} is no longer in planning (${stored.stage}), so the plan check raised no card.`,
+          null,
+        );
+      } else if (stale) {
+        // The plan changed while it was checked; a card for the old version would be stale.
+        yield* tellLead(
+          stored,
+          "project-team:plan-check",
+          `${PLAN_CHECK_FAILED_PREFIX} The plan checker was asked to judge spec v${check.specVersion}, but the spec is now v${latest.version}, so the check is stale, no card went up and it counts as no round. Ask for approval again with ask_user(kind: "approval").`,
+        );
+      } else if (failing.length === 0) {
+        yield* raisePlanApprovalCard(stored, latest, check.ask);
+      } else if (check.round < MAX_PLAN_CHECK_ROUNDS) {
+        yield* tellLead(
+          stored,
+          "project-team:plan-check",
+          `${PLAN_CHECK_FAILED_PREFIX} The plan checker failed ${failing.length} of ${verdicts.length} gates of your plan (spec v${check.specVersion}, round ${check.round} of ${MAX_PLAN_CHECK_ROUNDS}), so the user has no card yet:\n${failing
+            .map((verdict) => `- ${verdict.gate} "${labelOf(verdict.gate)}": ${verdict.reason}`)
+            .join("\n")}\nFix them with task_spec_write, then ask_user(kind: "approval") again.`,
+        );
+      } else {
+        // The task must not stall on the checker: the user decides with the verdicts in view.
+        yield* raisePlanApprovalCard(stored, latest, check.ask);
+        yield* appendEvent(
+          stored,
+          "note",
+          `The plan still failed ${failing.length} gate(s) after ${check.round} check rounds, so the approval card went up anyway.`,
+          null,
+        );
+      }
+      yield* router.publish(stored.projectId);
+      return { task: yield* requireTask(stored.id, stored.projectId) };
+    }).pipe(orTeamError("Could not record the plan check."));
 
   /** Moves a task to a new stage and logs it; no-op when it is already there. */
   const moveTaskStage = (
@@ -3419,10 +4650,24 @@ const make = Effect.gen(function* () {
    */
   const afterPlanApprovalAnswer = (item: ProjectAttentionItem, actorThreadId: ThreadId | null) =>
     Effect.gen(function* () {
-      if (item.kind !== "approval" || item.answer === null) return;
+      if (item.kind !== "approval" || item.answer === null || item.taskId === null) return;
       const task = yield* requireTask(item.taskId, item.projectId);
-      if (task.stage !== "awaiting_approval") return;
       const outcome = planApprovalOutcome(item.answer);
+      // Feedback from the user (or the PM with their words) corrects the plan; AFK never does.
+      if (outcome === "changes" && item.answeredBy !== "afk" && !isPlainApproval(item.answer)) {
+        yield* storeCorrection({
+          task,
+          kind: "plan_changes",
+          userText: item.answer,
+          whatDiffered: planFeedbackLine(item.answer),
+          sourceKey: `attention:${item.id}`,
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("could not record a plan correction", { itemId: item.id, cause }),
+          ),
+        );
+      }
+      if (task.stage !== "awaiting_approval") return;
       yield* moveTaskStage(
         task,
         outcome === "start" ? "running" : outcome === "approve_only" ? "inbox" : "planning",
@@ -3436,16 +4681,74 @@ const make = Effect.gen(function* () {
       }
     });
 
+  /** The caller's role once its ask_user message passes the request-message rules. */
+  const checkedAsker = (callerThreadId: ThreadId, input: ProjectTeamAskUserInput) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["lead", "director", "pm"], "ask_user");
+      // Validate only agent-authored asks; server-raised blockers bypass this entry point.
+      const problems = requestMessageProblems(input.question, input.details);
+      if (role.type === "lead" && input.senderName !== undefined) {
+        problems.push(...plainTextProblems([input.senderName]));
+        // The input schema already bounds its length; it does not forbid line breaks.
+        if (/[\r\n]/.test(input.senderName)) {
+          problems.push("Keep senderName on one line.");
+        }
+      }
+      if (
+        input.kind === "decision" &&
+        (input.options?.length ?? 0) >= 2 &&
+        input.options!.filter((option) => /\((?:Recommended|추천)\)/i.test(option)).length !== 1
+      ) {
+        problems.push(
+          "A decision with multiple options needs exactly one marked (Recommended) or (추천).",
+        );
+      }
+      if (problems.length > 0) {
+        return yield* teamError(
+          `Invalid request message:\n${problems.join("\n")}\nUse an ask on line 1, a blank line, then 1-3 short plain paragraphs and optional numbered steps. Put extra explanation in details.`,
+          role.projectId,
+        );
+      }
+      return role;
+    });
+
+  const requestPlanApproval: ProjectTeamService["Service"]["requestPlanApproval"] = (
+    callerThreadId,
+    input,
+    delegate,
+  ) =>
+    Effect.gen(function* () {
+      const request = { ...input, kind: "approval" as const };
+      const role = yield* checkedAsker(callerThreadId, request);
+      if (role.type !== "lead") {
+        return yield* teamError(
+          "Plan approvals come from task leads: a PM asks the user only for blockers and decisions, the Director only for decisions.",
+          role.projectId,
+        );
+      }
+      const task = yield* requireTask(role.taskId, role.projectId);
+      return yield* askPlanApproval(callerThreadId, task, request, delegate);
+    }).pipe(orTeamError("Could not ask the user."));
+
   const askUser: ProjectTeamService["Service"]["askUser"] = (callerThreadId, input) =>
     Effect.gen(function* () {
-      const role = yield* requireRole(callerThreadId, ["lead", "director"], "ask_user");
+      const role = yield* checkedAsker(callerThreadId, input);
       if (role.type === "director") return yield* askAsDirector(callerThreadId, role, input);
+      if (role.type === "pm") return yield* askAsManager(callerThreadId, role, input);
       const task = yield* requireTask(role.taskId, role.projectId);
-      if (input.kind === "approval") return yield* askPlanApproval(callerThreadId, task, input);
+      if (input.kind === "approval") {
+        return yield* teamError(
+          "A plan approval goes through the plan check first: use requestPlanApproval.",
+          role.projectId,
+        );
+      }
       const item = yield* router.ask({
         task,
         kind: input.kind,
         question: input.question,
+        context: input.context,
+        details: input.details,
+        senderName: input.senderName,
         options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
@@ -3453,6 +4756,43 @@ const make = Effect.gen(function* () {
       yield* appendEvent(task, "note", `Asked the user (${input.kind}).`, callerThreadId);
       return { item };
     }).pipe(orTeamError("Could not ask the user."));
+
+  /**
+   * The PM's own blocker or decision card: about the project, not a task. It shows in
+   * the PM chat and the Director's waiting list, and the answer comes back to the PM.
+   */
+  const askAsManager = (
+    callerThreadId: ThreadId,
+    role: Extract<ProjectTeamRole, { readonly type: "pm" }>,
+    input: ProjectTeamAskUserInput,
+  ) =>
+    Effect.gen(function* () {
+      if (input.kind === "approval") {
+        return yield* teamError(
+          "A PM asks the user only for blockers and decisions (kind: blocker or decision). Plan approvals come from task leads.",
+          role.projectId,
+        );
+      }
+      if (input.taskId !== undefined) {
+        return yield* teamError(
+          "A PM's ask_user has no taskId: the card is about the project. A task's lead asks about its own task.",
+          role.projectId,
+        );
+      }
+      const item = yield* router.ask({
+        task: null,
+        projectId: role.projectId,
+        kind: input.kind,
+        question: input.question,
+        context: input.context,
+        details: input.details,
+        senderRole: "pm",
+        senderName: null,
+        options: input.options ?? [],
+        askerThreadId: callerThreadId,
+      });
+      return { item };
+    });
 
   /**
    * The Director's decision card: about a task in any project, shown in the Director's
@@ -3482,6 +4822,10 @@ const make = Effect.gen(function* () {
         projectId: role.projectId,
         kind: "decision",
         question: input.question,
+        context: input.context,
+        details: input.details,
+        senderRole: "director",
+        senderName: null,
         options: input.options ?? [],
         askerThreadId: callerThreadId,
       });
@@ -3492,11 +4836,15 @@ const make = Effect.gen(function* () {
   // Restore before relaying so even an immediately failed retry can open a new blocker.
   const restoreFailedTurnStage = (item: ProjectAttentionItem, answer: string) =>
     Effect.gen(function* () {
+      const choice = answer.split("\nNote:")[0]?.trim();
+      const retry =
+        (isTurnFailedBlocker(item) && choice === TURN_FAILED_RETRY) ||
+        (isStallBlocker(item) && choice === STALL_RESTART);
       if (
-        !isTurnFailedBlocker(item) ||
+        !retry ||
+        item.taskId === null ||
         item.answeredAt !== null ||
-        item.supersededAt !== null ||
-        answer.split("\nNote:")[0]?.trim() !== TURN_FAILED_RETRY
+        item.supersededAt !== null
       ) {
         return;
       }
@@ -3564,16 +4912,57 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["pm"], "attention_answer");
-      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
+        messageRoles: ["user"],
+      });
+      // Use only a user-written message that actually contains the quoted answer.
+      const matchedMessage = messages
+        .filter((message) => isUserChatAnswer(input.answer, [message], 0))
+        .sort(
+          (a, b) => DateTime.toEpochMillis(b.createdAt) - DateTime.toEpochMillis(a.createdAt),
+        )[0];
+      const referenceText = `${input.answer}\n${matchedMessage?.text ?? ""}`;
+      const openItems = yield* repository.listOpenAttentionItems({ projectId: role.projectId });
+      let attentionItemId = input.attentionItemId;
+      if (attentionItemId === undefined) {
+        const reference = matchRequestReference(referenceText, openItems);
+        if (reference.kind !== "link" && reference.kind !== "words") {
+          return yield* teamError(
+            `Which open request is this reply for? Ask the user to choose:\n${openItems
+              .filter((item) => !isSnoozedAttention(item))
+              .map((item) =>
+                formatRequestLink(item.id, parseRequestMessage(item.question).headline),
+              )
+              .join("\n")}`,
+            role.projectId,
+          );
+        }
+        attentionItemId = ProjectAttentionItemId.make(reference.id);
+        if (!openItems.some((item) => item.id === attentionItemId)) {
+          return yield* teamError(
+            `Request ${reference.id} is not open in this project.`,
+            role.projectId,
+          );
+        }
+      }
+      const item = yield* repository.getAttentionItem(attentionItemId);
       if (Option.isNone(item) || item.value.projectId !== role.projectId) {
         return yield* teamError(
-          `Attention item ${input.attentionItemId} was not found in this project.`,
+          `Attention item ${attentionItemId} was not found in this project.`,
           role.projectId,
         );
       }
-      if (item.value.kind === "proposal") {
+      const conflictingId = requestLinkIds(referenceText).find((id) => id !== attentionItemId);
+      if (conflictingId !== undefined) {
+        const other = yield* repository.getAttentionItem(
+          ProjectAttentionItemId.make(conflictingId),
+        );
+        const headline =
+          Option.isSome(other) && other.value.projectId === role.projectId
+            ? parseRequestMessage(other.value.question).headline
+            : conflictingId;
         return yield* teamError(
-          "Only the user can add a proposed task: they press 태스크로 추가 on its card.",
+          `This reply points at another request: ${headline}`,
           role.projectId,
         );
       }
@@ -3582,9 +4971,6 @@ const make = Effect.gen(function* () {
       // A closed card skips the check so the router reports why it cannot be answered.
       const open = item.value.answeredAt === null && item.value.supersededAt === null;
       if (open && item.value.kind !== "blocker") {
-        const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
-          messageRoles: ["user"],
-        });
         if (!isUserChatAnswer(input.answer, messages, isoMillis(item.value.createdAt))) {
           return yield* teamError(PM_RELAY_NOT_USER_WORDS, role.projectId);
         }
@@ -3595,7 +4981,7 @@ const make = Effect.gen(function* () {
         item.value.supersededAt === null &&
         isTurnFailedBlocker(item.value) &&
         input.answer.split("\nNote:")[0]?.trim() === TURN_FAILED_CANCEL;
-      if (cancel) {
+      if (cancel && item.value.taskId !== null) {
         yield* updateTask(
           callerThreadId,
           {
@@ -3612,7 +4998,8 @@ const make = Effect.gen(function* () {
           item: item.value,
           answer: input.answer,
           senderThreadId: callerThreadId,
-          relay: !cancel,
+          // The PM relaying the answer to its own card already has it.
+          relay: !cancel && item.value.askerThreadId !== callerThreadId,
           answeredBy: "pm",
         })
         .pipe(
@@ -3657,27 +5044,25 @@ const make = Effect.gen(function* () {
         );
       }
       if (role.type === "director" && item.value.kind !== "decision") {
-        return yield* teamError(
-          "The Director can only close decision cards. Only the user can resolve proposals.",
-          role.projectId,
-        );
+        return yield* teamError("The Director can only close decision cards.", role.projectId);
       }
+      const taskId = item.value.taskId;
       const task =
-        role.type === "director"
-          ? yield* requireAnyTask(item.value.taskId, role.projectId)
-          : { id: item.value.taskId, projectId: item.value.projectId };
+        taskId === null
+          ? null
+          : role.type === "director"
+            ? yield* requireAnyTask(taskId, role.projectId)
+            : { id: taskId, projectId: item.value.projectId };
       const dismissed = yield* router.dismiss({
         item: item.value,
         reason: input.reason,
         senderThreadId: callerThreadId,
-        notifyAsker: role.type === "pm",
+        // The PM closing its own card needs no message about it.
+        notifyAsker: role.type === "pm" && item.value.askerThreadId !== callerThreadId,
       });
-      yield* appendEvent(
-        task,
-        "note",
-        `Question closed: ${input.reason}`,
-        callerThreadId,
-      );
+      if (task !== null) {
+        yield* appendEvent(task, "note", `Question closed: ${input.reason}`, callerThreadId);
+      }
       return { item: dismissed };
     }).pipe(orTeamError("Could not close the question."));
 
@@ -3749,6 +5134,177 @@ const make = Effect.gen(function* () {
       yield* router.publish(task.projectId);
       return yield* taskDetail(next);
     }).pipe(orTeamError("Could not set the task's models.", input.projectId));
+
+  const moveTask: ProjectTeamService["Service"]["moveTask"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* requireTask(input.taskId, input.projectId);
+      // Children on the lead's checkout run where it runs: none may be mid-turn during a move.
+      const sharedChildren = (lead: ThreadId, worktreePath: string, live: boolean) =>
+        threads.listProjectThreads({ projectId: task.projectId, includeSubagents: true }).pipe(
+          Effect.map((shells) =>
+            (live ? liveTaskChildren : taskChildren)(shells, lead).filter(
+              (child) => child.worktreePath === worktreePath,
+            ),
+          ),
+          orTeamError("Could not list the task's child sessions.", task.projectId),
+        );
+      if (task.leadThreadId !== null) {
+        const leadShell = yield* threads
+          .getThreadShell(task.leadThreadId)
+          .pipe(Effect.orElseSucceed(() => null));
+        if (leadShell?.worktreePath != null) {
+          const working = yield* sharedChildren(task.leadThreadId, leadShell.worktreePath, true);
+          if (working.length > 0) {
+            return yield* teamError(
+              `리드가 맡긴 작업(${working.map((child) => child.title).join(", ")})이 아직 진행 중이라 옮길 수 없어요. 끝난 뒤 다시 옮겨 주세요.`,
+              task.projectId,
+            );
+          }
+        }
+      }
+      const moved = yield* moveTaskLead(
+        {
+          threads,
+          cloudLead,
+          gate: leadMoveGate,
+          providers: providerRegistry.getProviders,
+          setMove: ({ task: target, ...rest }) =>
+            Effect.flatMap(nowIso, (now) =>
+              repository.setTaskMove({ id: target.id, now, ...rest }),
+            ).pipe(orTeamError("Could not record the move.", target.projectId)),
+          note: (target, body) =>
+            appendEvent(target, "note", body, null).pipe(
+              orTeamError("Could not note the move.", target.projectId),
+            ),
+          publish: (target) => router.publish(target.projectId),
+          newKey: (prefix) => newId(prefix).pipe(Effect.orDie),
+          isFinished: (target) => FinishedTaskCleanup.isFinishedStage(target.stage),
+          sharedChildren: (lead, worktreePath) =>
+            sharedChildren(lead, worktreePath, false).pipe(
+              Effect.map((children) => children.map((child) => child.id)),
+            ),
+        },
+        task,
+        input.to,
+      ).pipe(Effect.mapError((error) => teamError(error.detail, task.projectId)));
+      // A lead paused for memory and moved away no longer waits for this Mac's
+      // memory; the governor lets its held messages run.
+      const released =
+        moved.memoryHold == null
+          ? moved
+          : Option.getOrElse(yield* setMemoryHold(moved, null), () => moved);
+      return yield* taskDetail(released);
+    }).pipe(orTeamError("Could not move the task.", input.projectId));
+
+  /**
+   * A move cut short by a server restart: the task stays where it was, its lead's
+   * thread is pointed back there, and its held messages run.
+   */
+  const recoverInterruptedMoves = Effect.gen(function* () {
+    for (const task of yield* repository.listMovingTasks()) {
+      yield* repository.setTaskMove({ id: task.id, moveTarget: null, now: yield* nowIso });
+      if (task.leadThreadId !== null) {
+        const lead = task.leadThreadId;
+        const key = yield* newId("task-move:recover");
+        yield* threads
+          .dispatch({
+            type: "thread.metadata.update",
+            commandId: CommandId.make(`${key}:location`),
+            threadId: lead,
+            location: task.location ?? "local",
+          })
+          .pipe(Effect.ignore);
+        yield* threads
+          .dispatch({
+            type: "queue.resume",
+            commandId: CommandId.make(`${key}:resume`),
+            threadId: lead,
+          })
+          .pipe(Effect.ignore);
+      }
+      yield* appendEvent(
+        task,
+        "note",
+        "서버가 다시 시작돼 리드 이동이 중단됐어요. 위치는 그대로예요.",
+        null,
+      );
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("could not recover interrupted moves", { cause }),
+    ),
+  );
+
+  /**
+   * A cloud lead's sandbox could not be replaced before its lifetime limit: ask the user
+   * whether to bring the lead to the Mac, once per open card.
+   */
+  const raiseSandboxRotationDecision = (leadThreadId: ThreadId, reason: string) =>
+    Effect.gen(function* () {
+      const found = yield* repository.findTaskByLeadThreadId(leadThreadId);
+      if (Option.isNone(found)) return;
+      const task = found.value;
+      if (!LIVE_TASK_STAGES.has(task.stage) || task.location !== "cloud") return;
+      const open = yield* repository.listOpenAttentionItems({
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      if (open.some(isSandboxRotationDecision)) return;
+      const who = `${yield* keyOf(task)} ${task.title}`;
+      yield* router.ask({
+        task,
+        kind: "decision",
+        question: `${who}: 클라우드 샌드박스를 새로 바꾸지 못했어요\n\n이유: ${reason}\n\n지금 샌드박스는 사용 시간이 끝나면 멈춰요. 로컬로 가져오면 지금까지의 작업과 대화를 그대로 이어가요.`,
+        options: SANDBOX_ROTATION_OPTIONS,
+        askerThreadId: leadThreadId,
+        context: {
+          action: "클라우드 리드를 어디서 계속할지 정합니다",
+          reason: `${who}: 샌드박스 사용 시간이 곧 끝나는데 새 샌드박스로 옮기지 못했어요.`,
+          impacts: [],
+          cost: null,
+          reversibility: "reversible",
+          recommendation: "작업이 끊기지 않도록 '로컬로 가져오기'를 추천해요.",
+        },
+      });
+      yield* appendEvent(task, "note", "클라우드 샌드박스 교체에 실패해 결정을 요청했어요.", null);
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("could not raise the sandbox rotation decision", { leadThreadId, cause }),
+      ),
+    );
+
+  const leadControlDeps = {
+    threads,
+    gate: leadMoveGate,
+    newKey: (prefix: string) => newId(prefix).pipe(Effect.orDie),
+  };
+  yield* cloudLead.setRotationHandler({
+    // A move mirrors and releases the sandbox itself.
+    busy: (lead) => leadMoveGate.isHeldFor(lead, "move"),
+    interrupt: (lead) =>
+      Effect.gen(function* () {
+        leadMoveGate.hold(lead, "rotation");
+        yield* leadControl(leadControlDeps, lead, "rotation").stopTurn;
+      }).pipe(Effect.orDie),
+    resume: (lead) =>
+      Effect.gen(function* () {
+        const control = leadControl(leadControlDeps, lead, "rotation");
+        // A move that began meanwhile tells the lead where it continues.
+        const stillCloud =
+          !leadMoveGate.isHeldFor(lead, "move") &&
+          (yield* threads.getThreadShell(lead).pipe(
+            Effect.map((shell) => shell?.location === "cloud"),
+            Effect.orElseSucceed(() => false),
+          ));
+        if (stillCloud) {
+          yield* control
+            .tellLead("[교체] 새 클라우드 샌드박스에서 이어가요.")
+            .pipe(Effect.catch(() => Effect.void));
+        }
+        yield* control.resumeQueue;
+      }),
+    failed: raiseSandboxRotationDecision,
+  });
 
   const updateTaskSpec: ProjectTeamService["Service"]["updateTaskSpec"] = (input) =>
     Effect.gen(function* () {
@@ -3842,16 +5398,13 @@ const make = Effect.gen(function* () {
           input.projectId,
         );
       }
-      if (item.value.kind === "proposal") {
-        return { item: yield* answerProposal(item.value, input.answer, manager.threadId) };
-      }
       // Cancelling must stop the lead without starting another turn with the answer.
       const cancel =
         item.value.answeredAt === null &&
         item.value.supersededAt === null &&
         isTurnFailedBlocker(item.value) &&
         input.answer.split("\nNote:")[0]?.trim() === TURN_FAILED_CANCEL;
-      if (cancel) {
+      if (cancel && item.value.taskId !== null) {
         yield* updateTask(
           manager.threadId,
           {
@@ -3862,13 +5415,27 @@ const make = Effect.gen(function* () {
           item.value,
         );
       }
+      // A sandbox that could not be replaced: the lead comes to the Mac before the card closes.
+      const rotation = isSandboxRotationDecision(item.value);
+      if (
+        rotation &&
+        item.value.answeredAt === null &&
+        item.value.supersededAt === null &&
+        item.value.taskId !== null &&
+        input.answer.split("\nNote:")[0]?.trim() === SANDBOX_ROTATION_MOVE_LOCAL
+      ) {
+        const task = yield* requireTask(item.value.taskId, item.value.projectId);
+        if (task.location === "cloud") {
+          yield* moveTask({ projectId: task.projectId, taskId: task.id, to: "local" });
+        }
+      }
       const restored = yield* restoreFailedTurnStage(item.value, input.answer);
       const answered = yield* router
         .answer({
           item: item.value,
           answer: input.answer,
           senderThreadId: manager.threadId,
-          relay: !cancel,
+          relay: !cancel && !rotation,
           answeredBy: "user",
         })
         .pipe(
@@ -3883,12 +5450,143 @@ const make = Effect.gen(function* () {
             }),
           ),
         );
-      // The Director's cards are about tasks in other projects.
-      const task = yield* requireAnyTask(answered.taskId, answered.projectId);
-      yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
+      if (answered.taskId !== null) {
+        // The Director's cards are about tasks in other projects.
+        const task = yield* requireAnyTask(answered.taskId, answered.projectId);
+        yield* appendEvent(task, "note", `The user answered (${answered.kind}).`, null);
+      }
       yield* afterPlanApprovalAnswer(answered, null);
       return { item: answered };
     }).pipe(orTeamError("Could not answer the question.", input.projectId));
+
+  /** Sets an open card aside (reason) or brings it back (null); the lead hears nothing. */
+  const setSnooze = (
+    input: { readonly projectId: ProjectId; readonly attentionItemId: ProjectAttentionItemId },
+    reason: string | null,
+  ) =>
+    Effect.gen(function* () {
+      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      if (Option.isNone(item) || item.value.projectId !== input.projectId) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} was not found in this project.`,
+          input.projectId,
+        );
+      }
+      if (reason !== null && reason.trim().length === 0) {
+        return yield* teamError("A snooze needs a reason.", input.projectId);
+      }
+      // Only an open card can be set aside, and only a snoozed one can come back.
+      if (item.value.answeredAt !== null || item.value.supersededAt !== null) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is already closed.`,
+          input.projectId,
+        );
+      }
+      const snoozed = isSnoozedAttention(item.value);
+      if (reason !== null && snoozed) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is already snoozed.`,
+          input.projectId,
+        );
+      }
+      if (reason === null && !snoozed) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is not snoozed.`,
+          input.projectId,
+        );
+      }
+      const updated = yield* repository.snoozeAttentionItem({
+        id: item.value.id,
+        snoozedAt: reason === null ? null : yield* nowIso,
+        reason: reason === null ? null : reason.trim(),
+      });
+      if (Option.isNone(updated)) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} is already closed.`,
+          input.projectId,
+        );
+      }
+      if (updated.value.taskId !== null) {
+        const task = yield* requireAnyTask(updated.value.taskId, updated.value.projectId);
+        yield* appendEvent(
+          task,
+          "note",
+          reason === null
+            ? "사용자가 보류한 카드를 다시 꺼냈어요."
+            : `사용자가 카드를 보류했어요: ${clip(reason.trim(), 200)}`,
+          null,
+        );
+      }
+      yield* router.publish(updated.value.projectId);
+      return { item: updated.value };
+    });
+
+  const snoozeDecision: ProjectTeamService["Service"]["snoozeDecision"] = (input) =>
+    setSnooze(input, input.reason).pipe(orTeamError("Could not snooze the card.", input.projectId));
+
+  const unsnoozeDecision: ProjectTeamService["Service"]["unsnoozeDecision"] = (input) =>
+    setSnooze(input, null).pipe(orTeamError("Could not bring the card back.", input.projectId));
+
+  const askLead: ProjectTeamService["Service"]["askLead"] = (input) =>
+    Effect.gen(function* () {
+      const manager = yield* requireManager(input.projectId);
+      const item = yield* repository.getAttentionItem(input.attentionItemId);
+      if (Option.isNone(item) || item.value.projectId !== input.projectId) {
+        return yield* teamError(
+          `Attention item ${input.attentionItemId} was not found in this project.`,
+          input.projectId,
+        );
+      }
+      // A card without a task came from the PM, which answers questions about it itself.
+      if (item.value.taskId === null) {
+        const askerThreadId = item.value.askerThreadId ?? manager.threadId;
+        const key = `project-team:ask-lead:${yield* newId(item.value.id)}`;
+        yield* threads.sendToThread({
+          projectId: item.value.projectId,
+          commandId: CommandId.make(key),
+          threadId: askerThreadId,
+          messageId: MessageId.make(key),
+          senderThreadId: manager.threadId,
+          text: formatLeadQuestion({
+            cardId: item.value.id,
+            cardLabel: `${LEAD_QUESTION_CARD_LABEL[item.value.kind]} · ${resolvePersona(manager.projectId, manager.settings).name}`,
+            question: input.question,
+            quotes: input.quotes,
+          }),
+          attachments: [],
+          mode: "auto",
+          createdBy: "user",
+          creationSource: "server",
+        });
+        return { messageId: key };
+      }
+      // The task's own lead: on a Director card the asker is the Director, not the lead.
+      const task = yield* requireAnyTask(item.value.taskId, item.value.projectId);
+      const leadThreadId = task.leadThreadId;
+      if (leadThreadId === null) {
+        return yield* teamError(`Task ${task.id} has no task lead to ask yet.`, input.projectId);
+      }
+      const key = `project-team:ask-lead:${yield* newId(item.value.id)}`;
+      yield* threads.sendToThread({
+        projectId: task.projectId,
+        commandId: CommandId.make(key),
+        threadId: leadThreadId,
+        messageId: MessageId.make(key),
+        senderThreadId: manager.threadId,
+        text: formatLeadQuestion({
+          cardId: item.value.id,
+          cardLabel: `${LEAD_QUESTION_CARD_LABEL[item.value.kind]} · ${yield* keyOf(task)} ${task.title}`,
+          question: input.question,
+          quotes: input.quotes,
+        }),
+        attachments: [],
+        mode: "auto",
+        createdBy: "user",
+        creationSource: "server",
+      });
+      yield* appendEvent(task, "note", "사용자가 카드에서 리드에게 질문했어요.", null);
+      return { messageId: key };
+    }).pipe(orTeamError("Could not send the question to the lead.", input.projectId));
 
   /**
    * Wakes the PM of every other project with an inbox task that this task just cleared:
@@ -4199,22 +5897,6 @@ const make = Effect.gen(function* () {
       return yield* saveGoal({ ...goal, links, updatedAt: yield* nowIso }, projectId);
     });
 
-  /** A dropped proposal leaves no goal link behind. */
-  const unlinkFromGoals = (taskId: ProjectTaskId) =>
-    goalLocks.withLock(
-      "goals",
-      Effect.gen(function* () {
-        for (const goal of yield* repository.listWorkspaceGoals()) {
-          if (!goal.links.some((link) => link.taskId === taskId)) continue;
-          yield* repository.saveWorkspaceGoal({
-            ...goal,
-            links: goal.links.filter((link) => link.taskId !== taskId),
-            updatedAt: yield* nowIso,
-          });
-        }
-      }),
-    );
-
   const pmNudge: ProjectTeamService["Service"]["pmNudge"] = (callerThreadId, input) =>
     Effect.gen(function* () {
       const role = yield* requireRole(callerThreadId, ["director"], "pm_nudge");
@@ -4281,6 +5963,312 @@ const make = Effect.gen(function* () {
       yield* appendEvent(task, "note", `${PM_NUDGE_NOTE_PREFIX}${input.message}`, callerThreadId);
       return { status: "sent", nextAllowedAt: null } satisfies ProjectTeamPmNudgeResult;
     }).pipe(orTeamError("Could not nudge the PM."));
+
+  // Corrections: moments the user corrected agent work.
+
+  const workKindOf = (task: ProjectTask) =>
+    repository.getLatestSpecVersion(task.id).pipe(
+      Effect.map((version) =>
+        classifyWorkKind({
+          title: task.title,
+          request: task.request,
+          files: Option.isSome(version) ? version.value.spec.files.map((file) => file.path) : [],
+        }),
+      ),
+    );
+
+  /** Stores one correction; a second call with the same source key keeps the first. */
+  const storeCorrection = (input: {
+    readonly task: ProjectTask;
+    readonly kind: ProjectCorrectionKind;
+    readonly userText: string;
+    readonly whatDiffered: string;
+    readonly sourceKey: string;
+    readonly backfilled?: boolean;
+    readonly createdAt?: IsoDateTime;
+  }) =>
+    Effect.gen(function* () {
+      const correction: ProjectCorrection = {
+        id: yield* newId("correction"),
+        projectId: input.task.projectId,
+        taskId: input.task.id,
+        kind: input.kind,
+        stage: correctionStageOf(input.kind),
+        workKind: yield* workKindOf(input.task),
+        userText: input.userText,
+        whatDiffered: oneLine(input.whatDiffered),
+        sourceKey: input.sourceKey,
+        backfilled: input.backfilled ?? false,
+        createdAt: input.createdAt ?? (yield* nowIso),
+      };
+      return yield* repository.insertCorrection(correction);
+    });
+
+  /** The project's tasks whose pull request has this number (and repository, when given). */
+  const tasksWithPullRequest = (projectId: ProjectId, number: number, repository_: string | null) =>
+    Effect.map(repository.listTasks({ projectId }), (tasks) =>
+      tasks.flatMap((task) => {
+        const parsed = task.prUrl === null ? null : parseChangeRequestUrl(task.prUrl);
+        return parsed !== null &&
+          parsed.number === number &&
+          (repository_ === null || parsed.repository === repository_.toLowerCase())
+          ? [{ task, repository: parsed.repository }]
+          : [];
+      }),
+    );
+
+  const recordCorrection: ProjectTeamService["Service"]["recordCorrection"] = (
+    callerThreadId,
+    input,
+  ) =>
+    Effect.gen(function* () {
+      const role = yield* requireRole(callerThreadId, ["pm", "director"], "correction_record");
+      const task =
+        role.type === "director"
+          ? yield* requireAnyTask(input.taskId, role.projectId)
+          : yield* requireTask(input.taskId, role.projectId);
+      const { messages } = yield* threads.getThreadRecords(callerThreadId, ["messages"], {
+        messageRoles: ["user"],
+      });
+      const matched = messages
+        .filter((message) => isUserChatAnswer(input.userText, [message], 0))
+        .toSorted(
+          (a, b) => DateTime.toEpochMillis(b.createdAt) - DateTime.toEpochMillis(a.createdAt),
+        )[0];
+      if (matched === undefined) return yield* teamError(CORRECTION_NOT_USER_WORDS, role.projectId);
+      const stored = yield* storeCorrection({
+        task,
+        kind: input.kind,
+        userText: input.userText,
+        whatDiffered: input.whatDiffered,
+        sourceKey: `chat:${matched.id}:${task.id}:${input.kind}`,
+      });
+      if (stored.inserted) {
+        yield* appendEvent(
+          task,
+          "note",
+          `${CORRECTION_NOTE_PREFIX}${stored.correction.whatDiffered}`,
+          callerThreadId,
+        );
+      }
+      return { correction: stored.correction, recorded: stored.inserted };
+    }).pipe(orTeamError("Could not record the correction."));
+
+  const recordPullRequestCorrection: ProjectTeamService["Service"]["recordPullRequestCorrection"] =
+    (input) =>
+      Effect.gen(function* () {
+        const manager = yield* repository.getManager(input.projectId);
+        if (Option.isNone(manager) || manager.value.kind !== "pm") return;
+        const matches = yield* tasksWithPullRequest(
+          input.projectId,
+          input.number,
+          input.repository,
+        );
+        for (const { task, repository: repo } of matches) {
+          const text = input.userText.trim();
+          yield* input.kind === "revert"
+            ? storeCorrection({
+                task,
+                kind: "revert",
+                userText: "Reverted in the app",
+                whatDiffered: `머지 뒤 되돌림: ${task.title}`,
+                sourceKey: `revert:${repo}#${input.number}`,
+              })
+            : storeCorrection({
+                task,
+                kind: "pr_change_request",
+                userText: text,
+                whatDiffered:
+                  text.split("\n").find((line) => line.trim().length > 0) ?? "변경 요청",
+                sourceKey: `review:${repo}#${input.number}:${shortHash(text)}`,
+              });
+        }
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("could not record a pull request correction", {
+            projectId: input.projectId,
+            number: input.number,
+            cause,
+          }),
+        ),
+      );
+
+  /** Records reverts on the default branch; returns how many were new. */
+  const syncReverts = (projectId: ProjectId, startedAt: IsoDateTime) =>
+    Effect.gen(function* () {
+      const project = yield* projects.get(projectId);
+      if (Option.isNone(project) || project.value.deletedAt !== null) return 0;
+      const log = yield* revertLogs.read(project.value.workspaceRoot);
+      if (Option.isNone(log)) return 0;
+      let added = 0;
+      for (const revert of parseRevertCommits(log.value)) {
+        for (const { task, repository: repo } of yield* tasksWithPullRequest(
+          projectId,
+          revert.prNumber,
+          null,
+        )) {
+          const stored = yield* storeCorrection({
+            task,
+            kind: "revert",
+            userText: revert.subject,
+            whatDiffered: `머지 뒤 되돌림: ${task.title}`,
+            // The same key as a revert made in the app, so one revert is one row.
+            sourceKey: `revert:${repo}#${revert.prNumber}`,
+            // Only reverts from before live recording started count as filled in.
+            backfilled: revert.committedAt === null || revert.committedAt < startedAt,
+            ...(revert.committedAt === null ? {} : { createdAt: revert.committedAt }),
+          });
+          if (stored.inserted) added += 1;
+        }
+      }
+      return added;
+    });
+
+  const backfillCorrections: ProjectTeamService["Service"]["backfillCorrections"] = Effect.gen(
+    function* () {
+      const added: Record<ProjectCorrectionKind, number> = {
+        plan_changes: 0,
+        direction_change: 0,
+        pr_change_request: 0,
+        revert: 0,
+      };
+      const startedAt = yield* repository.getCorrectionsStartedAt();
+      const managers = (yield* repository.listManagers()).filter(
+        (manager) => manager.kind === "pm",
+      );
+      for (const manager of managers) {
+        const tasks = yield* repository.listTasks({ projectId: manager.projectId });
+        const taskById = new Map(tasks.map((task) => [task.id as string, task]));
+        const approvals = yield* repository.listAnsweredAttentionItems({
+          projectId: manager.projectId,
+          kind: "approval",
+        });
+        for (const item of approvals) {
+          const task = item.taskId === null ? undefined : taskById.get(item.taskId);
+          if (
+            task === undefined ||
+            item.answer === null ||
+            (item.answeredBy !== "user" && item.answeredBy !== "pm") ||
+            planApprovalOutcome(item.answer) !== "changes" ||
+            isPlainApproval(item.answer)
+          ) {
+            continue;
+          }
+          const stored = yield* storeCorrection({
+            task,
+            kind: "plan_changes",
+            userText: item.answer,
+            whatDiffered: planFeedbackLine(item.answer),
+            sourceKey: `attention:${item.id}`,
+            backfilled: true,
+            ...(item.answeredAt === null ? {} : { createdAt: item.answeredAt }),
+          });
+          if (stored.inserted) added.plan_changes += 1;
+        }
+        // Scope the PM added to running work changed its direction; to work in review, the PR.
+        for (const task of tasks) {
+          const events = yield* repository.listTaskEvents({
+            taskId: task.id,
+            limit: Number.MAX_SAFE_INTEGER,
+          });
+          let stage: ProjectTaskStage = "inbox";
+          for (const event of events) {
+            if (event.kind === "stage_changed") {
+              const next = event.body.split(" → ")[1]?.trim();
+              if (Schema.is(ProjectTaskStage)(next)) stage = next;
+              continue;
+            }
+            if (event.kind !== "note" || !event.body.startsWith(SCOPE_NOTE_PREFIX)) continue;
+            if (stage !== "running" && stage !== "in_review") continue;
+            // Since live recording started, the PM records these moments itself.
+            if (event.createdAt >= startedAt) continue;
+            const scope = event.body.slice(event.body.indexOf(": ") + 2).trim();
+            // Only a note that turns the work around counts; added scope is not a correction.
+            if (!isDirectionChangeNote(scope)) continue;
+            const kind = stage === "in_review" ? "pr_change_request" : "direction_change";
+            const stored = yield* storeCorrection({
+              task,
+              kind,
+              userText: scope,
+              whatDiffered: scope,
+              sourceKey: `event:${event.id}`,
+              backfilled: true,
+              createdAt: event.createdAt,
+            });
+            if (stored.inserted) added[kind] += 1;
+          }
+        }
+        added.revert += yield* syncReverts(manager.projectId, startedAt).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("could not sync revert commits", {
+              projectId: manager.projectId,
+              cause,
+            }).pipe(Effect.as(0)),
+          ),
+        );
+      }
+      yield* Effect.logInfo("backfilled corrections", added);
+    },
+  ).pipe(
+    Effect.catchCause((cause) => Effect.logWarning("could not backfill corrections", { cause })),
+  );
+
+  const correctionsReport: ProjectTeamService["Service"]["correctionsReport"] = (
+    callerThreadId,
+    input,
+  ) =>
+    Effect.gen(function* () {
+      yield* requireRole(callerThreadId, ["director"], "corrections_report");
+      const now = yield* nowIso;
+      const since = isoFromMillis(
+        isoMillis(now) - (input.sinceDays ?? CORRECTION_REPORT_DAYS) * 24 * 60 * MINUTE_MS,
+      );
+      const managers = (yield* repository.listManagers()).filter(
+        (manager) =>
+          manager.kind === "pm" &&
+          (input.projectId === undefined || manager.projectId === input.projectId),
+      );
+      const scope: Array<{ projectId: ProjectId; name: string }> = [];
+      const tasks: Array<CorrectionReportTask> = [];
+      const corrections: Array<ProjectCorrection> = [];
+      for (const manager of managers) {
+        const project = yield* projects.get(manager.projectId);
+        if (Option.isNone(project) || project.value.deletedAt !== null) continue;
+        scope.push({ projectId: manager.projectId, name: project.value.title });
+        const prefix = yield* taskKeyPrefixFor(manager.projectId, manager.settings);
+        const planAnswered = new Set(
+          (yield* repository.listAnsweredAttentionItems({
+            projectId: manager.projectId,
+            kind: "approval",
+          }))
+            .filter((item) => item.answeredBy === "user" || item.answeredBy === "pm")
+            .map((item) => item.taskId),
+        );
+        for (const task of yield* repository.listTasks({ projectId: manager.projectId })) {
+          tasks.push({
+            id: task.id,
+            projectId: task.projectId,
+            projectName: project.value.title,
+            key: formatTaskKey(prefix, task.number),
+            title: task.title,
+            stage: task.stage,
+            prUrl: task.prUrl,
+            workKind: yield* workKindOf(task),
+            planAnswered: planAnswered.has(task.id),
+            updatedAt: task.updatedAt,
+          });
+        }
+        corrections.push(...(yield* repository.listCorrections({ projectId: manager.projectId })));
+      }
+      return correctionReport({
+        projects: scope,
+        tasks,
+        corrections,
+        since,
+        workKind: input.workKind,
+        recentLimit: input.recentLimit ?? CORRECTION_RECENT_LIMIT,
+      });
+    }).pipe(orTeamError("Could not read corrections."));
 
   const goalAlignmentReport: ProjectTeamService["Service"]["goalAlignmentReport"] = Effect.gen(
     function* () {
@@ -4355,7 +6343,9 @@ const make = Effect.gen(function* () {
       const isStalled = (task: ProjectTask) =>
         task.lastOutcome === "stalled" && LIVE_TASK_STAGES.has(task.stage);
       const live = tasks.filter((task) => LIVE_TASK_STAGES.has(task.stage));
-      const askingTaskIds = new Set(openAttention.map((item) => item.taskId));
+      const askingTaskIds = new Set(
+        openAttention.filter((item) => !isSnoozedAttention(item)).map((item) => item.taskId),
+      );
       // Running means a lead is working: not in review, not stalled, not waiting on the user.
       const running = tasks.filter(
         (task) =>
@@ -4377,7 +6367,8 @@ const make = Effect.gen(function* () {
       return {
         running: running.length,
         // Same unit as the summary's openCount: open questions, not tasks.
-        waitingOnUser: openAttention.length + otherThreadsWaiting,
+        waitingOnUser:
+          openAttention.filter((item) => !isSnoozedAttention(item)).length + otherThreadsWaiting,
         stalled: live.filter(isStalled).length,
         inbox: tasks.filter((task) => task.stage === "inbox").length,
         nextSitrepAt,
@@ -4385,8 +6376,15 @@ const make = Effect.gen(function* () {
       } satisfies ProjectManagerPresence;
     });
 
-  /** Open questions and the latest closed ones, oldest first, each with its task's name. */
-  const listDecisionCards = (projectId: ProjectId, open: ReadonlyArray<ProjectAttentionItem>) =>
+  /**
+   * Open questions and the latest closed ones, oldest first, each with its task's name.
+   * A card without a task carries the PM's name instead.
+   */
+  const listDecisionCards = (
+    projectId: ProjectId,
+    open: ReadonlyArray<ProjectAttentionItem>,
+    pmName: string,
+  ) =>
     Effect.gen(function* () {
       const closed = yield* repository.listRecentClosedAttentionItems({
         projectId,
@@ -4400,8 +6398,16 @@ const make = Effect.gen(function* () {
       );
       return yield* Effect.forEach(items, (item) =>
         Effect.gen(function* () {
-          // Proposals are left out of task lists, and the Director's cards may be about
-          // tasks in other projects.
+          if (item.taskId === null) {
+            const card: ProjectDecisionCard = {
+              item,
+              taskNumber: null,
+              taskTitle: pmName,
+              plan: null,
+            };
+            return [card];
+          }
+          // The Director's cards may be about tasks in other projects.
           const task =
             tasks.get(item.taskId) ?? Option.getOrUndefined(yield* repository.getTask(item.taskId));
           if (task === undefined) return [];
@@ -4410,26 +6416,36 @@ const make = Effect.gen(function* () {
             taskNumber: task.number,
             taskTitle: task.title,
             plan: yield* approvalPlanFor(item),
-            proposal: item.kind === "proposal" ? { projectId: task.projectId } : null,
           };
           return [card];
-        }),
+        }).pipe(
+          // One unreadable row (say, a spec that no longer decodes) drops only its card,
+          // not every project's summary and waiting items.
+          Effect.catch((error) =>
+            Effect.logWarning("could not read a decision card", {
+              attentionId: item.id,
+              taskId: item.taskId,
+              error,
+            }).pipe(Effect.as<ReadonlyArray<ProjectDecisionCard>>([])),
+          ),
+        ),
       ).pipe(Effect.map((cards) => cards.flat()));
     });
 
   /** A plan approval card shows the summary and todos of the spec version it asks about. */
   const approvalPlanFor = (item: ProjectAttentionItem) => {
     const specVersion = item.specVersion;
-    return item.kind !== "approval" || specVersion === null
+    const taskId = item.taskId;
+    return item.kind !== "approval" || specVersion === null || taskId === null
       ? Effect.succeed(null)
       : Effect.gen(function* () {
           const version = yield* repository.getSpecVersion({
-            taskId: item.taskId,
+            taskId,
             version: specVersion,
           });
           if (Option.isNone(version)) return null;
           // The breakdown this one approval covers.
-          const subtasks = (yield* repository.listChildTasks(item.taskId))
+          const subtasks = (yield* repository.listChildTasks(taskId))
             .filter((child) => child.stage !== "cancelled")
             .map((child) => ({
               taskId: child.id,
@@ -4505,6 +6521,7 @@ const make = Effect.gen(function* () {
 
   const attentionSnapshot: ProjectTeamService["Service"]["attentionSnapshot"] = Effect.gen(
     function* () {
+      yield* taskKeyLocks.withLock("prefixes", reconcileTaskKeyPrefixes);
       const managers = yield* repository.listManagers();
       const summaries = yield* Effect.forEach(managers, (manager) =>
         Effect.gen(function* () {
@@ -4540,18 +6557,21 @@ const make = Effect.gen(function* () {
           );
           const otherThreadsWaiting = waitingThreads.length;
           const presence = yield* managerPresence(manager, open, latestSitrep, otherThreadsWaiting);
-          const decisionCards = yield* listDecisionCards(projectId, open);
+          const decisionCards = yield* listDecisionCards(
+            projectId,
+            open,
+            resolvePersona(projectId, manager.settings).name,
+          );
           const tasks = yield* repository.listTasks({ projectId });
           const projectTaskIds = new Set(tasks.map((task) => task.id));
           // Top-level tasks are the goals: no parent, or a parent outside this project.
           const latestVersions = yield* repository.listLatestSpecVersionNumbers(projectId);
-          // Cancelled goals and unadded proposals never show on the map, so their specs aren't read.
+          // Cancelled goals never show on the map, so their specs aren't read.
           const checksByTask = new Map(
             yield* Effect.forEach(
               tasks.filter(
                 (task) =>
                   task.stage !== "cancelled" &&
-                  task.stage !== "proposed" &&
                   (task.parentTaskId === null || !projectTaskIds.has(task.parentTaskId)),
               ),
               (task) =>
@@ -4589,7 +6609,9 @@ const make = Effect.gen(function* () {
             ...(manager.kind === "director"
               ? { kind: "director" as const, briefing: briefingLine }
               : {}),
-            openCount: open.length + otherThreadsWaiting,
+            // A snoozed card stays on decisionCards (marked) but no longer counts as waiting.
+            openCount:
+              open.filter((item) => !isSnoozedAttention(item)).length + otherThreadsWaiting,
             latestBatchId: Option.isSome(latestItem) ? latestItem.value.batchId : null,
             latestSitrepId: Option.isSome(latestPosted) ? latestPosted.value.id : null,
             unreadSitrepCount: yield* repository.countUnreadSitreps(projectId),
@@ -4600,6 +6622,7 @@ const make = Effect.gen(function* () {
             presence,
             decisionCards,
             taskKeyPrefix: yield* taskKeyPrefixFor(projectId, manager.settings),
+            taskKeyAliases: manager.settings.taskKeyAliases ?? [],
             lastMessage: yield* readManagerLastMessage(manager.threadId),
             afkAnswers,
             direction:
@@ -4613,10 +6636,22 @@ const make = Effect.gen(function* () {
               title: task.title,
               stage: task.stage,
               leadThreadId: task.leadThreadId,
+              location: task.location,
+              moveTarget: task.moveTarget ?? null,
+              // A finished task keeps its pause only as a marker for reopening.
+              memoryHold:
+                task.stage === "done" || task.stage === "cancelled"
+                  ? null
+                  : (task.memoryHold ?? null),
               prUrl: task.prUrl,
               lastOutcome: task.lastOutcome,
-              openQuestion: open.some((item) => item.taskId === task.id),
-              openBlocker: open.some((item) => item.taskId === task.id && item.kind === "blocker"),
+              openQuestion: open.some(
+                (item) => item.taskId === task.id && !isSnoozedAttention(item),
+              ),
+              openBlocker: open.some(
+                (item) =>
+                  item.taskId === task.id && item.kind === "blocker" && !isSnoozedAttention(item),
+              ),
               ready: task.ready !== null,
               updatedAt: task.updatedAt,
               iterateRound: task.iterateRound,
@@ -4698,11 +6733,13 @@ const make = Effect.gen(function* () {
         (event) => event.kind === "stage_changed" && event.body.startsWith("blocked → "),
       );
       // A retry's previous card can still be open while its answer is being relayed.
+      const failureCard = (item: ProjectAttentionItem) =>
+        isTurnFailedBlocker(item) || isStallBlocker(item);
       const stale = (item: ProjectAttentionItem) =>
-        isTurnFailedBlocker(item) &&
+        failureCard(item) &&
         retry !== undefined &&
         isoMillis(item.createdAt) < isoMillis(retry.createdAt);
-      if (failed && !open.some((item) => isTurnFailedBlocker(item) && !stale(item))) {
+      if (failed && !open.some((item) => failureCard(item) && !stale(item))) {
         // Replace server escalations, but preserve questions the lead asked itself.
         for (const item of open) {
           const nudgeLimit =
@@ -4718,18 +6755,82 @@ const make = Effect.gen(function* () {
             });
           }
         }
-        const reason = turnFailedReason(input.detail);
-        yield* router.ask({
-          task: updated,
-          kind: "blocker",
-          question: `#${task.number} ${task.title}: 리드 작업이 실패했어요${reason ? ` (${reason})` : ""}${input.detail ? `\n\n오류: ${input.detail}` : ""}\n\n다시 시도하면 리드가 멈춘 곳부터 이어서 해요. 리드에게 전할 말이 있으면 함께 적어 주세요.`,
-          options: [...TURN_FAILED_OPTIONS],
-          askerThreadId: task.leadThreadId,
-        });
+        if (input.startFailureCard !== undefined) {
+          yield* router.ask({
+            task: updated,
+            kind: "blocker",
+            question: input.startFailureCard.question,
+            details: input.startFailureCard.details,
+            context: input.startFailureCard.context,
+            options: [STALL_RESTART],
+            askerThreadId: task.leadThreadId,
+          });
+        } else {
+          const reason = turnFailedReason(input.detail);
+          yield* router.ask({
+            task: updated,
+            kind: "blocker",
+            question: `#${task.number} ${task.title}: 리드 작업이 실패했어요${reason ? ` (${reason})` : ""}${input.detail ? `\n\n오류: ${input.detail}` : ""}\n\n다시 시도하면 리드가 멈춘 곳부터 이어서 해요. 리드에게 전할 말이 있으면 함께 적어 주세요.`,
+            options: [...TURN_FAILED_OPTIONS],
+            askerThreadId: task.leadThreadId,
+          });
+        }
       }
       yield* router.publish(task.projectId);
       return { task: updated, event };
     }).pipe(orTeamError("Could not record the task outcome.", input.task.projectId));
+
+  const raisePermissionBlocker: ProjectTeamService["Service"]["raisePermissionBlocker"] = (input) =>
+    Effect.gen(function* () {
+      const task = yield* repository.findTaskByLeadThreadId(input.threadId);
+      if (Option.isSome(task)) {
+        const current = task.value;
+        if (!LIVE_TASK_STAGES.has(current.stage)) return Option.none();
+        const open = yield* repository.listOpenAttentionItems({
+          projectId: current.projectId,
+          taskId: current.id,
+        });
+        // A snoozed card must not hide a new denial from the user.
+        if (open.some((item) => !isSnoozedAttention(item))) return Option.none();
+        const card = permissionBlockerCard({
+          who: `${yield* keyOf(current)} ${current.title}`,
+          denial: input.denial,
+        });
+        const item = yield* router.ask({
+          task: current,
+          kind: "blocker",
+          ...card,
+          askerThreadId: input.threadId,
+        });
+        yield* appendEvent(current, "note", "Raised a blocker for a permission denial.", null);
+        return Option.some(item);
+      }
+      const manager = yield* repository.getManagerByThreadId(input.threadId);
+      if (
+        Option.isNone(manager) ||
+        manager.value.kind === "director" ||
+        !manager.value.settings.enabled
+      ) {
+        return Option.none();
+      }
+      const projectId = manager.value.projectId;
+      const open = yield* repository.listOpenAttentionItems({ projectId });
+      if (open.some((item) => item.askerThreadId === input.threadId && !isSnoozedAttention(item))) {
+        return Option.none();
+      }
+      const card = permissionBlockerCard({
+        who: resolvePersona(projectId, manager.value.settings).name,
+        denial: input.denial,
+      });
+      const item = yield* router.ask({
+        task: null,
+        projectId,
+        kind: "blocker",
+        ...card,
+        askerThreadId: input.threadId,
+      });
+      return Option.some(item);
+    }).pipe(orTeamError("Could not raise the permission blocker."));
 
   const modelSessionOf: ProjectTeamService["Service"]["modelSessionOf"] = (threadId) =>
     repository
@@ -4770,7 +6871,11 @@ const make = Effect.gen(function* () {
       return reopened;
     }).pipe(orTeamError("Could not record the pull request update."));
 
-  return {
+  yield* taskKeyLocks.withLock("prefixes", reconcileTaskKeyPrefixes);
+
+  yield* recoverInterruptedMoves;
+
+  const service = {
     ensureManager,
     roleOf,
     createTask,
@@ -4790,13 +6895,19 @@ const make = Effect.gen(function* () {
     updateSettingsAsManager,
     updateSettings,
     askUser,
+    requestPlanApproval,
+    setPlanCheck,
     getTaskDetail,
     updateTaskSpec,
     restoreTaskSpec,
     splitTaskTodo,
     setTaskRoleModels,
+    moveTask,
     delegateStep,
     answerDecision,
+    snoozeDecision,
+    unsnoozeDecision,
+    askLead,
     answerAttention,
     dismissAttention,
     listMemory,
@@ -4805,16 +6916,36 @@ const make = Effect.gen(function* () {
     goalWrite,
     goalLink,
     pmNudge,
+    recordCorrection,
+    correctionsReport,
+    recordPullRequestCorrection,
+    backfillCorrections,
     goalAlignmentReport,
     requestSitrep,
     attentionSnapshot,
     afkSweep,
     streamAttention,
     recordOutcome,
+    raisePermissionBlocker,
     recordShipWake,
     modelSessionOf,
     recordRunUsage,
   } satisfies ProjectTeamService["Service"];
+
+  yield* cloudLead.setOfflineHandler(
+    makeOfflineJournalReplay({
+      team: service,
+      repository,
+      threads,
+      providers: providerRegistry.getProviders,
+      models: (task) =>
+        Effect.gen(function* () {
+          const manager = yield* requireManager(task.projectId);
+          return yield* roleModelsFor(task, manager.settings.roleModels);
+        }),
+    }),
+  );
+  return service;
 });
 
 export const layer = Layer.effect(ProjectTeamService, make);
@@ -4824,6 +6955,14 @@ export const layerWithDependencies = layer.pipe(
   Layer.provideMerge(FinishedTaskCleanup.layer),
   Layer.provideMerge(SitrepScheduler.layer),
   Layer.provideMerge(AttentionRouter.layer),
+);
+
+/** Records corrections found in history once at startup, without holding startup up. */
+export const layerCorrectionBackfill = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const team = yield* ProjectTeamService;
+    yield* Effect.forkScoped(team.backfillCorrections);
+  }),
 );
 
 /** Answers questions for an AFK user a little after their grace period ends. */

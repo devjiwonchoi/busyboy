@@ -1,5 +1,8 @@
 import {
   formatTaskKey,
+  isSnoozedAttention,
+  type EnvironmentId,
+  type ProjectId,
   type ProjectAttentionKind,
   type ProjectDecisionCard,
   type ProjectTaskReference,
@@ -88,6 +91,74 @@ const taskMapBySummary = new WeakMap<
   ReadonlyMap<number, ProjectTaskReference>
 >();
 
+/** A task name and route from the same server as the message that mentions it. */
+export type NamedTaskReference = {
+  readonly task: ProjectTaskReference;
+  readonly projectId: ProjectId;
+  readonly projectTitle: string;
+  readonly key: string;
+};
+
+export type TaskReferenceCatalog = {
+  readonly byId: ReadonlyMap<string, NamedTaskReference>;
+  readonly byKey: ReadonlyMap<string, ReadonlyArray<NamedTaskReference>>;
+  readonly contextualProjectId: ProjectId | null;
+};
+
+/** Keep server boundaries and historical aliases when resolving a written task key. */
+export function buildTaskReferenceCatalog(input: {
+  readonly environmentId: EnvironmentId | null;
+  readonly contextualProjectId: ProjectId | null;
+  readonly entries: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly summary: Pick<ProjectTeamAttentionSummary, "projectId" | "tasks" | "taskKeyPrefix"> & {
+      readonly taskKeyAliases?: ReadonlyArray<string>;
+    };
+  }>;
+  readonly projects: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly id: ProjectId;
+    readonly title: string;
+  }>;
+}): TaskReferenceCatalog {
+  const byId = new Map<string, NamedTaskReference>();
+  const byKey = new Map<string, NamedTaskReference[]>();
+  for (const { environmentId, summary } of input.entries) {
+    if (environmentId !== input.environmentId) {
+      continue;
+    }
+    const projectTitle =
+      input.projects.find(
+        (project) => project.environmentId === environmentId && project.id === summary.projectId,
+      )?.title ?? "프로젝트";
+    for (const task of summary.tasks) {
+      const reference = {
+        task,
+        projectId: summary.projectId,
+        projectTitle,
+        key: formatTaskKey(summary.taskKeyPrefix, task.number),
+      };
+      byId.set(task.id, reference);
+      for (const prefix of new Set([summary.taskKeyPrefix, ...(summary.taskKeyAliases ?? [])])) {
+        const key = formatTaskKey(prefix, task.number);
+        const candidates = byKey.get(key) ?? [];
+        candidates.push(reference);
+        byKey.set(key, candidates);
+      }
+    }
+  }
+  return { byId, byKey, contextualProjectId: input.contextualProjectId };
+}
+
+/** A project-local historical key can be unambiguous even after its prefix changed. */
+export function taskReferenceCandidates(catalog: TaskReferenceCatalog, key: string) {
+  const candidates = catalog.byKey.get(key) ?? [];
+  const contextual = candidates.filter(
+    (candidate) => candidate.projectId === catalog.contextualProjectId,
+  );
+  return contextual.length === 1 ? contextual : candidates;
+}
+
 export interface LeadThreadTask {
   readonly task: ProjectTaskReference;
   /** The task's key, such as "BU-82". */
@@ -108,16 +179,23 @@ export function taskForLeadThread(
 export const isOpenDecisionCard = (card: ProjectDecisionCard): boolean =>
   card.item.answeredAt === null && card.item.supersededAt === null;
 
+/** An open card the user set aside: it stays answerable but leaves the waiting list. */
+export const isSnoozedDecisionCard = (card: ProjectDecisionCard): boolean =>
+  isSnoozedAttention(card.item);
+
+/** Open and not snoozed: what the waiting list and its count show. */
+export const isWaitingDecisionCard = (card: ProjectDecisionCard): boolean =>
+  isOpenDecisionCard(card) && !isSnoozedDecisionCard(card);
+
 /** Something waiting on the user, as the pending bar above the composer lists it. */
 export type PendingActionItem =
   | { readonly kind: "card"; readonly id: string; readonly label: string }
   | { readonly kind: "thread"; readonly threadId: ThreadId; readonly label: string };
 
-const CARD_LABEL: Record<ProjectAttentionKind, string> = {
+export const CARD_LABEL: Record<ProjectAttentionKind, string> = {
   approval: "승인 대기",
   decision: "결정 필요",
   blocker: "블로커",
-  proposal: "태스크 제안",
 };
 
 const THREAD_LABEL: Record<ProjectWaitingThread["kind"], string> = {
@@ -132,7 +210,7 @@ export function pendingActionItems(input: {
   readonly waitingThreads: ReadonlyArray<ProjectWaitingThread>;
 }): ReadonlyArray<PendingActionItem> {
   return [
-    ...input.cards.filter(isOpenDecisionCard).map((card): PendingActionItem => ({
+    ...input.cards.filter(isWaitingDecisionCard).map((card): PendingActionItem => ({
       kind: "card",
       id: card.item.id,
       label: `${CARD_LABEL[card.item.kind]}: ${card.taskTitle}`,
@@ -145,20 +223,35 @@ export function pendingActionItems(input: {
   ];
 }
 
+/** A plan approval the Director chat also shows: open, or answered. Moot ones stay out. */
+const isDirectorApprovalCard = (card: ProjectDecisionCard): boolean =>
+  card.item.kind === "approval" &&
+  (card.item.answeredAt !== null || card.item.supersededAt === null);
+
 /**
  * The question cards a thread shows in its timeline, open or closed, oldest first: every
  * card in the project for its PM thread, and the cards a task lead asked for that lead's
- * own thread.
+ * own thread. The Director's thread also shows every project's plan approvals.
  */
 export function decisionCardsForThread(
-  summaries: Iterable<Pick<ProjectTeamAttentionSummary, "pmThreadId" | "decisionCards">>,
+  summaries: Iterable<Pick<ProjectTeamAttentionSummary, "pmThreadId" | "kind" | "decisionCards">>,
   threadId: ThreadId,
 ): ReadonlyArray<ProjectDecisionCard> {
+  const list = [...summaries];
+  const isDirectorThread = list.some(
+    (summary) => isDirectorSummary(summary) && summary.pmThreadId === threadId,
+  );
   const cards: ProjectDecisionCard[] = [];
-  for (const summary of summaries) {
+  for (const summary of list) {
     const isPmThread = summary.pmThreadId === threadId;
     for (const card of summary.decisionCards) {
-      if (isPmThread || card.item.askerThreadId === threadId) cards.push(card);
+      if (
+        isPmThread ||
+        card.item.askerThreadId === threadId ||
+        (isDirectorThread && isDirectorApprovalCard(card))
+      ) {
+        cards.push(card);
+      }
     }
   }
   return cards.toSorted((a, b) => Date.parse(a.item.createdAt) - Date.parse(b.item.createdAt));
@@ -179,18 +272,4 @@ export function splitDirectorEntry<
     else projects.push(entry);
   }
   return { director, projects };
-}
-
-/** "environmentId:projectId" of every Director system project, to hide them from project lists. */
-export function directorProjectKeys(
-  entries: ReadonlyArray<{
-    readonly environmentId: string;
-    readonly summary: Pick<ProjectTeamAttentionSummary, "kind" | "projectId">;
-  }>,
-): ReadonlySet<string> {
-  return new Set(
-    entries
-      .filter((entry) => isDirectorSummary(entry.summary))
-      .map((entry) => `${entry.environmentId}:${entry.summary.projectId}`),
-  );
 }

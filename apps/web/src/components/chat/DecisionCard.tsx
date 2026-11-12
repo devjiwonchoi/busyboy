@@ -1,5 +1,6 @@
 import {
   isTurnFailedBlocker,
+  isSandboxRotationDecision,
   TURN_FAILED_RETRY,
   TURN_FAILED_CANCEL,
   type EnvironmentId,
@@ -18,12 +19,13 @@ import { useAnswerDecision } from "../../state/projectTeam";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { AnsweredQuestionSection } from "./AnsweredQuestionSection";
 import ChatMarkdown from "../ChatMarkdown";
-import { useRelatedTask } from "../task/TaskRelations";
 import { Button } from "../ui/button";
-import { parseDecisionOption, splitDecisionQuestion } from "./DecisionCard.logic";
+import { decisionQuestionPresentation, parseDecisionOption } from "./DecisionCard.logic";
 import { AFK_ANSWERED_LABEL } from "./Afk";
-import { ProposalCard } from "./ProposalCard";
+import { RequestMessage } from "./RequestMessage";
 import { PlanApprovalCard } from "./PlanApprovalCard";
+import { AttentionContext, AttentionTaskLink, useRequestSender } from "./AttentionContext";
+import { CardDetailWithSideChat, type CardDetailTab, CardSideChat } from "./CardSideChat";
 
 const QUESTION_ID = "answer";
 
@@ -31,7 +33,6 @@ const KIND_LABEL: Record<ProjectDecisionCard["item"]["kind"], string> = {
   decision: "Decision",
   approval: "Plan approval",
   blocker: "Blocker",
-  proposal: "태스크 제안",
 };
 
 /** Questions asked without options still need something to pick; the note carries the detail. */
@@ -40,20 +41,14 @@ function cardOptions(card: ProjectDecisionCard): ReadonlyArray<string> {
   return ["Give feedback"];
 }
 
-/** "Decision · Fix login", or "Decision · BB-7 Fix login" where the task isn't obvious. */
-export function decisionCardHeader(card: ProjectDecisionCard, taskKey?: string): string {
-  const task = taskKey === undefined ? card.taskTitle : `${taskKey} ${card.taskTitle}`;
-  return `${KIND_LABEL[card.item.kind]} · ${task}`;
-}
-
-/** The card's question in the shape the shared question card renders. */
+/** The card's question in the shape the shared question card renders, under its sender line. */
 export function decisionCardQuestion(
   card: ProjectDecisionCard,
-  taskKey?: string,
+  header: string,
 ): OrchestrationV2UserInputQuestion {
   return {
     id: QUESTION_ID,
-    header: decisionCardHeader(card, taskKey),
+    header,
     question: card.item.question,
     options: cardOptions(card).map((label) => ({ label, description: label })),
     multiSelect: false,
@@ -87,14 +82,11 @@ export function DecisionCard({
   threadRef: ScopedThreadRef;
   cwd: string | undefined;
 }) {
-  const related = useRelatedTask(environmentId, card.item.taskId);
-  if (card.item.kind === "proposal") {
-    return <ProposalCard card={card} environmentId={environmentId} />;
-  }
+  const sender = useRequestSender(card, environmentId);
   if (card.item.kind === "approval") {
-    return <PlanApprovalCard card={card} environmentId={environmentId} />;
+    return <PlanApprovalCard card={card} environmentId={environmentId} threadRef={threadRef} />;
   }
-  const question = decisionCardQuestion(card, related?.key);
+  const question = decisionCardQuestion(card, sender);
   if (card.item.answeredAt !== null) {
     return (
       <div data-decision-card={card.item.id} data-decision-card-state="answered">
@@ -103,6 +95,7 @@ export function DecisionCard({
           answer={answeredPayload(card)}
           answeredLabel={card.item.answeredBy === "afk" ? AFK_ANSWERED_LABEL : "Answered"}
         />
+        <AttentionContext context={card.item.context} planApproval={false} />
       </div>
     );
   }
@@ -121,6 +114,9 @@ export function DecisionCard({
         <p className="mt-1 line-clamp-3 whitespace-pre-wrap">{card.item.question}</p>
       </div>
     );
+  }
+  if (!isTurnFailedBlocker(card.item) && !isSandboxRotationDecision(card.item)) {
+    return <RequestMessage card={card} environmentId={environmentId} threadRef={threadRef} />;
   }
   return (
     <OpenDecisionCard
@@ -152,7 +148,12 @@ export function OpenDecisionCard({
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
-  const { headline, context } = splitDecisionQuestion(card.item.question);
+  const [tab, setTab] = useState<CardDetailTab>("card");
+  const { headline, context } = decisionQuestionPresentation({
+    question: card.item.question,
+    action: card.item.context?.action,
+    taskTitle: card.taskTitle,
+  });
   const options = card.item.options.map(parseDecisionOption);
   const turnFailed = isTurnFailedBlocker(card.item);
   // A typed answer stands on its own, so a pick is optional whenever the note has text.
@@ -189,7 +190,8 @@ export function OpenDecisionCard({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p data-decision-card-meta className="truncate text-xs text-muted-foreground">
-            {question.header}
+            {KIND_LABEL[card.item.kind]} ·{" "}
+            <AttentionTaskLink card={card} environmentId={environmentId} children={undefined} />
           </p>
           <h3 data-decision-card-headline className="wrap-break-word text-base font-semibold">
             {headline}
@@ -205,6 +207,7 @@ export function OpenDecisionCard({
           {expanded ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
         </Button>
       </div>
+      <AttentionContext context={card.item.context} planApproval={false} />
       {context ? (
         <DecisionContext context={context} expanded={expanded} cwd={cwd} threadRef={threadRef} />
       ) : null}
@@ -259,7 +262,12 @@ export function OpenDecisionCard({
                 ) : null}
               </span>
               <span className="min-w-0 flex-1 wrap-break-word">
-                <span className="text-sm font-medium">{option.label}</span>
+                <span
+                  data-decision-option-label
+                  className={`text-sm ${option.label.length > 120 ? "font-normal" : "font-medium"}`}
+                >
+                  {option.label}
+                </span>
                 {option.recommended ? (
                   <span
                     data-decision-option-recommended
@@ -351,12 +359,17 @@ export function OpenDecisionCard({
         <DialogPopup
           showCloseButton={false}
           bottomStickOnMobile={false}
-          className={`max-h-[90dvh] w-[min(92vw,64rem)] max-w-none ${turnFailed ? "border-destructive/40" : ""}`}
+          className={`h-[85dvh] max-h-[90dvh] w-[min(96vw,80rem)] max-w-none overflow-hidden ${turnFailed ? "border-destructive/40" : ""}`}
           data-decision-card-expanded={card.item.id}
           data-decision-card-variant={turnFailed ? "turn-failed" : undefined}
         >
           <DialogTitle className="sr-only">{headline}</DialogTitle>
-          <div className="max-h-[90dvh] overflow-y-auto">{panel(true)}</div>
+          <CardDetailWithSideChat
+            tab={tab}
+            onTabChange={setTab}
+            detail={<div className="min-h-0 flex-1 overflow-y-auto p-4">{panel(true)}</div>}
+            sideChat={<CardSideChat card={card} environmentId={environmentId} />}
+          />
         </DialogPopup>
       </Dialog>
     </div>
@@ -422,7 +435,7 @@ function DecisionContext({
           aria-expanded={unfolded}
           onClick={() => setUnfolded(!unfolded)}
         >
-          {unfolded ? "Show less" : "Show more"}
+          {unfolded ? "접기" : "전체 보기"}
         </Button>
       ) : null}
     </div>

@@ -11,6 +11,7 @@ import { lazy, Suspense, useState } from "react";
 
 import { useProjectManager, useUpdateTeamSettings } from "../../state/projectTeam";
 import { useEnvironmentScope } from "../../state/session";
+import { formatEnvironmentQueryError } from "../../state/query";
 import { ProjectIconGlyph } from "../ProjectFavicon";
 import { RoleModelPicker } from "../task/RoleModelPicker";
 import { Button } from "../ui/button";
@@ -65,6 +66,7 @@ export function ProjectManagerSettingsSection(props: {
   const canOperate = useEnvironmentScope(projectRef.environmentId, AuthOrchestrationOperateScope);
   const updateSettings = useUpdateTeamSettings();
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [prefixError, setPrefixError] = useState<string | null>(null);
   // Custom shows its text box at once; the server's next summary takes over.
   const [pendingVoice, setPendingVoice] = useState<{
     from: ProjectManagerVoice;
@@ -91,12 +93,18 @@ export function ProjectManagerSettingsSection(props: {
     if (!TASK_KEY_PREFIX_PATTERN.test(prefix)) {
       toastManager.add({
         type: "warning",
-        title: "Use 1 to 6 capital letters or digits, starting with a letter",
+        title: "영문 대문자로 시작하는 1~6자의 영문 대문자와 숫자를 입력해 주세요",
       });
       input.value = summary.taskKeyPrefix;
       return;
     }
-    void updateSettings(projectRef, { taskKeyPrefix: prefix });
+    setPrefixError(null);
+    void updateSettings(projectRef, { taskKeyPrefix: prefix }).then((result) => {
+      if (result._tag === "Failure") {
+        setPrefixError(formatEnvironmentQueryError(result.cause));
+        input.value = summary.taskKeyPrefix;
+      }
+    });
   };
   const saveVoice = (next: ProjectManagerVoice) => {
     if (next === voice) return;
@@ -146,22 +154,29 @@ export function ProjectManagerSettingsSection(props: {
             }
           />
           <SettingsRow
-            title="Task key prefix"
-            description={`Tasks are named like ${summary.taskKeyPrefix}-7. It comes from the project name until you change it.`}
+            title="태스크 접두어"
+            description={`보조 키는 ${summary.taskKeyPrefix}-7처럼 표시됩니다. 같은 서버의 다른 프로젝트와 겹치지 않는 접두어를 사용합니다.`}
             control={
-              <Input
-                key={summary.taskKeyPrefix}
-                size="sm"
-                className="w-full font-mono uppercase sm:w-28"
-                aria-label="Task key prefix"
-                maxLength={6}
-                disabled={!canOperate}
-                defaultValue={summary.taskKeyPrefix}
-                onBlur={(event) => saveTaskKeyPrefix(event.currentTarget)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.currentTarget.blur();
-                }}
-              />
+              <div className="flex flex-col gap-1">
+                <Input
+                  key={summary.taskKeyPrefix}
+                  size="sm"
+                  className="w-full font-mono uppercase sm:w-28"
+                  aria-label="Task key prefix"
+                  maxLength={6}
+                  disabled={!canOperate}
+                  defaultValue={summary.taskKeyPrefix}
+                  onBlur={(event) => saveTaskKeyPrefix(event.currentTarget)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+                {prefixError === null ? null : (
+                  <p role="alert" className="text-xs text-destructive">
+                    {prefixError}
+                  </p>
+                )}
+              </div>
             }
           />
           <SettingsRow
@@ -242,7 +257,7 @@ export function ProjectManagerSettingsSection(props: {
           />
           <SettingsRow
             title="Models per role"
-            description="A task can change these on its page. An unset role runs on the task lead's model."
+            description="A task can change these on its page. An unset role uses the app's step models in Settings."
           >
             <ul className="flex flex-col pb-2" aria-label="Models per role">
               {PROJECT_TASK_MODEL_ROLES.map((role) => (
@@ -261,9 +276,9 @@ export function ProjectManagerSettingsSection(props: {
                     environmentId={projectRef.environmentId}
                     projectId={projectRef.projectId}
                     value={summary.settings.roleModels?.[role] ?? null}
-                    unsetLabel="Lead's model"
+                    unsetLabel="App default"
                     ariaLabel={`${ROLE_MODEL_ROWS[role].title} model`}
-                    clearLabel={`Use the lead's model for ${ROLE_MODEL_ROWS[role].title.toLowerCase()}`}
+                    clearLabel={`Use the app default for ${ROLE_MODEL_ROWS[role].title.toLowerCase()}`}
                     disabled={!canOperate}
                     onChange={(target) =>
                       void updateSettings(projectRef, { roleModels: { [role]: target } })

@@ -1,3 +1,4 @@
+import { PLAN_GATE_LABELS, type PlanGateTextField } from "@t3tools/shared/planGates";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentId,
@@ -13,13 +14,15 @@ import type {
 import {
   approvalPlanOf,
   effectiveRoleModel,
+  isSnoozedAttention,
   newProjectTaskTodo,
   PROJECT_TASK_MODEL_ROLES,
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { GitPullRequestIcon } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
+import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import {
   useProjectManager,
@@ -30,6 +33,8 @@ import {
   useUpdateTaskSpec,
 } from "~/state/projectTeam";
 import { taskRouteParams } from "~/taskRoutes";
+import { CloudBadge } from "../CloudBadge";
+import { MoveTaskButton } from "../MoveTaskButton";
 import { DecisionCard } from "../chat/DecisionCard";
 import { PlanSummary } from "../chat/PlanMarkdown";
 import {
@@ -66,7 +71,7 @@ export interface TaskPlanProps {
   readonly className?: string;
 }
 
-type SpecTextField = "background" | "goal" | "successCriteria" | "nonGoals";
+type SpecTextField = "background" | "goal" | "successCriteria" | PlanGateTextField;
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -149,10 +154,12 @@ function TaskPlanBody(props: {
   const isLatest = shown.version === latest.version;
   const previous = versions.find((version) => version.version === shown.version - 1) ?? null;
   const spec = shown.spec;
+  // A snoozed card is the user's own pause, so it doesn't make the task wait on them.
+  const waitingAttention = detail.openAttention.filter((item) => !isSnoozedAttention(item));
   const status = useLiveTaskStatus(environmentId, {
     ...task,
-    openQuestion: detail.openAttention.length > 0,
-    openBlocker: detail.openAttention.some((item) => item.kind === "blocker"),
+    openQuestion: waitingAttention.length > 0,
+    openBlocker: waitingAttention.some((item) => item.kind === "blocker"),
     ready: task.ready !== null,
   });
   const archived = task.stage === "done" || task.stage === "cancelled";
@@ -219,6 +226,17 @@ function TaskPlanBody(props: {
     </section>
   );
 
+  // Plan gates around 안 하는 것 in gate order; empty ones show only while editing.
+  const gateSections = (part: "before" | "after") => {
+    const index = PLAN_GATE_LABELS.findIndex((gate) => gate.id === "nonGoals");
+    return PLAN_GATE_LABELS.filter((_, at) => (part === "before" ? at < index : at > index)).map(
+      (gate) =>
+        gate.field !== null && ((editing && isLatest) || spec[gate.field].trim().length > 0) ? (
+          <Fragment key={gate.id}>{section(gate.label, gate.field)}</Fragment>
+        ) : null,
+    );
+  };
+
   return (
     <div className={cn("min-w-0", props.className)} data-testid="task-plan">
       <div className="flex flex-wrap items-center gap-2">
@@ -235,8 +253,10 @@ function TaskPlanBody(props: {
           {status.label}
         </span>
         <TaskPhaseBadge view={taskPhaseView({ ...task, status: status.status })} />
+        {task.location === "cloud" ? <CloudBadge /> : null}
+        <MoveTaskButton environmentId={environmentId} projectId={task.projectId} task={task} />
         {relations?.progress ? <SubtaskProgressBadge progress={relations.progress} /> : null}
-        <WaitingMarker blockedBy={relations?.blockedBy ?? []} />
+        <WaitingMarker blockedBy={relations?.blockedBy ?? []} linkToTask />
         <div className="ml-auto">
           <Select
             value={String(shown.version)}
@@ -329,19 +349,24 @@ function TaskPlanBody(props: {
       {props.pmThreadId !== null && detail.openAttention.length > 0 ? (
         <section className="mt-5 flex flex-col gap-3" aria-label="Waiting on you">
           {detail.openAttention.map((item) => (
-            <DecisionCard
-              key={item.id}
-              card={{
-                item,
-                taskNumber: task.number,
-                taskTitle: task.title,
-                plan: planFor(item),
-                proposal: null,
-              }}
-              environmentId={environmentId}
-              threadRef={scopeThreadRef(environmentId, props.pmThreadId!)}
-              cwd={undefined}
-            />
+            <div key={item.id} className="min-w-0">
+              {isSnoozedAttention(item) ? (
+                <p data-task-snoozed-card={item.id} className="mb-1 text-muted-foreground text-xs">
+                  보류 중 · 이유: {item.snoozeReason ?? ""}
+                </p>
+              ) : null}
+              <DecisionCard
+                card={{
+                  item,
+                  taskNumber: task.number,
+                  taskTitle: task.title,
+                  plan: planFor(item),
+                }}
+                environmentId={environmentId}
+                threadRef={scopeThreadRef(environmentId, props.pmThreadId!)}
+                cwd={undefined}
+              />
+            </div>
           ))}
         </section>
       ) : null}
@@ -371,7 +396,9 @@ function TaskPlanBody(props: {
       ) : (
         section("Success criteria", "successCriteria")
       )}
+      {gateSections("before")}
       {section("Non-goals", "nonGoals")}
+      {gateSections("after")}
 
       <section className="mt-5">
         <h2 className={SECTION_HEADING}>
@@ -534,6 +561,10 @@ function TaskModels(props: {
   const { task } = props.detail;
   const setTaskRoleModels = useSetTaskRoleModels();
   const label = useRoleModelLabel(props.environmentId);
+  const appStepModels = useEnvironmentSettings(
+    props.environmentId,
+    (settings) => settings.taskStepModels,
+  );
   return (
     <section className="mt-5" aria-label="모델" data-task-models="">
       <h2 className={SECTION_HEADING}>모델</h2>
@@ -547,7 +578,7 @@ function TaskModels(props: {
       </div>
       <ul className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
         {PROJECT_TASK_MODEL_ROLES.map((role) => {
-          const inherited = effectiveRoleModel(role, {}, props.projectRoleModels);
+          const inherited = effectiveRoleModel(role, {}, props.projectRoleModels, appStepModels);
           return (
             <li key={role} data-role-model={role} className="contents">
               <span className="text-muted-foreground text-xs">{TASK_MODEL_ROLE_LABELS[role]}</span>
@@ -557,7 +588,9 @@ function TaskModels(props: {
                   projectId={task.projectId}
                   value={task.roleModels[role] ?? null}
                   unsetLabel={
-                    inherited === null ? "리드 모델" : `${label(inherited.target)} · 프로젝트`
+                    inherited === null
+                      ? "리드 모델"
+                      : `${label(inherited.target)} · ${inherited.source === "project" ? "프로젝트" : "앱"}`
                   }
                   ariaLabel={`${TASK_MODEL_ROLE_LABELS[role]} 모델`}
                   clearLabel={`${TASK_MODEL_ROLE_LABELS[role]} 모델 지우기`}

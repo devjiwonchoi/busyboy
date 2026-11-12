@@ -79,6 +79,8 @@ async function render() {
         onAddPullRequest={noop}
         onAddPullRequests={noop}
         onAddSideChat={onAddSideChat}
+        onAddTaskPlan={noop}
+        taskPlanAvailable={false}
         browserAvailable={false}
         terminalAvailable={false}
         diffAvailable={false}

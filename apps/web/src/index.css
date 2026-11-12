@@ -2393,3 +2393,17 @@ code {
     box-shadow: 0 0 0 2px transparent;
   }
 }
+
+@keyframes waiting-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 40%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-waiting-pulse="true"] {
+    animation: waiting-pulse 1.2s ease-out 1;
+  }
+}

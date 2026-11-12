@@ -31,10 +31,23 @@ function toNativeHeaderMenuItems(items: HomeListFilterMenu["items"]): NativeHead
   );
 }
 
+/** The home ellipsis menu: the goal map and settings. */
+export function homeMenuItems(
+  onOpenGoalMap: () => void,
+  onOpenSettings: () => void,
+): NativeHeaderMenuItems {
+  return [
+    { type: "action", label: "전체 프로젝트", onPress: onOpenGoalMap },
+    { type: "action", label: "설정", onPress: onOpenSettings },
+  ];
+}
+
 export function createSidebarHeaderItems(input: {
   readonly filterIcon: string;
   readonly filterMenu: HomeListFilterMenu;
   readonly onOpenSettings: () => void;
+  /** When set, settings moves into a menu that also opens the goal map. */
+  readonly onOpenGoalMap?: () => void;
 }): NativeStackHeaderItem[] {
   return [
     withNativeGlassHeaderItem({
@@ -48,13 +61,22 @@ export function createSidebarHeaderItems(input: {
         items: toNativeHeaderMenuItems(input.filterMenu.items),
       },
     }),
-    withNativeGlassHeaderItem({
-      type: "button",
-      axisBehavior: "horizontalOnly",
-      label: "Settings",
-      accessibilityLabel: "Open settings",
-      icon: sfSymbolIcon("gearshape"),
-      onPress: input.onOpenSettings,
-    }),
+    input.onOpenGoalMap === undefined
+      ? withNativeGlassHeaderItem({
+          type: "button",
+          axisBehavior: "horizontalOnly",
+          label: "Settings",
+          accessibilityLabel: "Open settings",
+          icon: sfSymbolIcon("gearshape"),
+          onPress: input.onOpenSettings,
+        })
+      : withNativeGlassHeaderItem({
+          type: "menu",
+          axisBehavior: "horizontalOnly",
+          label: "",
+          accessibilityLabel: "메뉴",
+          icon: sfSymbolIcon("ellipsis"),
+          menu: { items: homeMenuItems(input.onOpenGoalMap, input.onOpenSettings) },
+        }),
   ];
 }

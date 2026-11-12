@@ -11,6 +11,14 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 
+import { descendantsOf, ProcessTreeSignalerRef, type ProcessTreeSignaler } from "./ProcessTree.ts";
+
+/**
+ * After a graceful signal, how long jobs that outlived the shell get before
+ * they are force-killed. The manager only escalates while the shell is alive.
+ */
+const ORPHAN_KILL_GRACE_MS = 3_000;
+
 export class NodePtyModuleLoadError extends Schema.TaggedError<NodePtyModuleLoadError>()(
   "NodePtyModuleLoadError",
   {
@@ -171,10 +179,24 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
   private exitEvent: PtyAdapter.PtyExitEvent | undefined;
   private readonly exitListeners = new Set<(event: PtyAdapter.PtyExitEvent) => void>();
   private readonly exitSubscription: import("node-pty").IDisposable;
+  private readonly treeSignaler: ProcessTreeSignaler;
+  /**
+   * Descendants seen while the shell was alive, by pid and start time; they
+   * reparent away once it exits, and a pid the OS reuses is told apart.
+   */
+  private readonly trackedDescendants = new Map<number, string>();
+  /** Signalling waits on a process-table read; this keeps kills in order. */
+  private signalling: Promise<void> = Promise.resolve();
+  private orphanKillTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(process: import("node-pty").IPty, platform: NodeJS.Platform) {
+  constructor(
+    process: import("node-pty").IPty,
+    platform: NodeJS.Platform,
+    treeSignaler: ProcessTreeSignaler,
+  ) {
     this.process = process;
     this.platform = platform;
+    this.treeSignaler = treeSignaler;
     this.exitSubscription = process.onExit((event) => {
       if (this.exitEvent) return;
       this.exitEvent = { exitCode: event.exitCode, signal: event.signal ?? null };
@@ -198,7 +220,63 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
 
   kill(signal?: string): void {
     // node-pty terminates the Windows process tree without a POSIX signal.
-    this.process.kill(this.platform === "win32" ? undefined : signal);
+    if (this.platform === "win32") {
+      this.process.kill(undefined);
+      return;
+    }
+    const treeSignal = (signal ?? "SIGHUP") as NodeJS.Signals;
+    this.enqueue(async () => {
+      const shellAlive = this.exitEvent === undefined;
+      // The tree is read before the shell is signalled: once it exits, its jobs reparent.
+      await this.signalTree(treeSignal, shellAlive);
+      if (shellAlive && this.exitEvent === undefined) this.process.kill(signal);
+    });
+    if (treeSignal !== "SIGKILL") this.scheduleOrphanKill();
+  }
+
+  /** Runs `task` after earlier signalling; a failure is dropped (the shell may be gone). */
+  private enqueue(task: () => Promise<void>): void {
+    this.signalling = this.signalling.then(task).catch(() => undefined);
+  }
+
+  /**
+   * Signals the shell's process group and every descendant, including jobs a
+   * job-control shell moved into their own groups, so dev servers and other
+   * background jobs do not outlive the terminal. A tracked pid is signalled
+   * only while it still names the process seen before.
+   */
+  private async signalTree(signal: NodeJS.Signals, shellAlive: boolean): Promise<void> {
+    const table = await this.treeSignaler.table();
+    const live = new Map(table.map((entry) => [entry.pid, entry]));
+    for (const [pid, startedAt] of this.trackedDescendants) {
+      if (live.get(pid)?.startedAt !== startedAt) this.trackedDescendants.delete(pid);
+    }
+    const roots = shellAlive ? [this.pid] : [...this.trackedDescendants.keys()];
+    for (const entry of descendantsOf(table, roots)) {
+      this.trackedDescendants.set(entry.pid, entry.startedAt);
+    }
+    // Once the shell is gone its group id may be reused; signal it only while a
+    // process we know still belongs to it.
+    const groupLive =
+      shellAlive ||
+      [...this.trackedDescendants.keys()].some((pid) => live.get(pid)?.pgid === this.pid);
+    if (groupLive) this.treeSignaler.signal(-this.pid, signal);
+    for (const pid of this.trackedDescendants.keys()) this.treeSignaler.signal(pid, signal);
+  }
+
+  private scheduleOrphanKill(): void {
+    if (this.orphanKillTimer !== undefined) return;
+    // @effect-diagnostics-next-line globalTimers:off -- PtyProcess.kill is synchronous and fire-and-forget.
+    this.orphanKillTimer = setTimeout(() => {
+      this.orphanKillTimer = undefined;
+      // Only jobs left behind: while the shell lives the manager owns escalation.
+      if (this.exitEvent === undefined) return;
+      this.enqueue(async () => {
+        await this.signalTree("SIGKILL", false);
+        this.trackedDescendants.clear();
+      });
+    }, ORPHAN_KILL_GRACE_MS);
+    this.orphanKillTimer.unref?.();
   }
 
   onData(callback: (data: string) => void): () => void {
@@ -227,6 +305,7 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
 
 export const make = Effect.fn("NodePtyAdapter.make")(function* () {
   const loadNodePtyModule = yield* NodePtyModuleLoaderRef;
+  const treeSignaler = yield* ProcessTreeSignalerRef;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform = yield* HostProcess.Platform;
@@ -271,7 +350,10 @@ export const make = Effect.fn("NodePtyAdapter.make")(function* () {
             env,
             name: "xterm-256color",
           });
-          return { nativeProcess, process: new NodePtyProcess(nativeProcess, platform) };
+          return {
+            nativeProcess,
+            process: new NodePtyProcess(nativeProcess, platform, treeSignaler),
+          };
         },
         catch: (cause) =>
           new PtyAdapter.PtySpawnError({

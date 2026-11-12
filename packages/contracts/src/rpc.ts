@@ -341,6 +341,10 @@ import {
   ProjectTeamAttentionSnapshot,
   ProjectTeamError,
   ProjectTeamAnswerDecisionInput,
+  ProjectTeamSnoozeDecisionInput,
+  ProjectTeamUnsnoozeDecisionInput,
+  ProjectTeamAskLeadInput,
+  ProjectTeamAskLeadResult,
   ProjectTeamAttentionItemResult,
   ProjectTeamRequestSitrepInput,
   ProjectTeamRequestSitrepResult,
@@ -351,12 +355,14 @@ import {
   ProjectTeamSplitTaskTodoInput,
   ProjectTeamSplitTaskTodoResult,
   ProjectTeamSetTaskRoleModelsInput,
+  ProjectTeamMoveTaskInput,
   ProjectTeamTaskDetail,
   ProjectTeamTaskRefInput,
   ProjectTeamUpdateTaskSpecInput,
 } from "./projectTeam.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import { BrowserRequestAnswerInput, BrowserRequestError } from "./browserRequest.ts";
+import { OperationPermissionAnswerInput, OperationPermissionError } from "./operationPermission.ts";
 import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
@@ -514,18 +520,23 @@ export const WS_METHODS = {
   scheduledTasksRotateWebhookToken: "scheduledTasks.rotateWebhookToken",
   secretsAnswerRequest: "secrets.answerRequest",
   browserRequestsAnswer: "browserRequests.answer",
+  operationPermissionsAnswer: "operationPermissions.answer",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
 
   projectTeamSubscribeAttention: "projectTeam.subscribeAttention",
   projectTeamRequestSitrep: "projectTeam.requestSitrep",
   projectTeamAnswerDecision: "projectTeam.answerDecision",
+  projectTeamSnoozeDecision: "projectTeam.snoozeDecision",
+  projectTeamUnsnoozeDecision: "projectTeam.unsnoozeDecision",
+  projectTeamAskLead: "projectTeam.askLead",
   projectTeamUpdateSettings: "projectTeam.updateSettings",
   projectTeamGetTask: "projectTeam.getTask",
   projectTeamUpdateTaskSpec: "projectTeam.updateTaskSpec",
   projectTeamRestoreTaskSpec: "projectTeam.restoreTaskSpec",
   projectTeamSplitTaskTodo: "projectTeam.splitTaskTodo",
   projectTeamSetTaskRoleModels: "projectTeam.setTaskRoleModels",
+  projectTeamMoveTask: "projectTeam.moveTask",
 
   pullRequestsList: "pullRequests.list",
   pullRequestsListStats: "pullRequests.listStats",
@@ -1793,6 +1804,11 @@ const WsBrowserRequestsAnswerRpc = Rpc.make(WS_METHODS.browserRequestsAnswer, {
   error: Schema.Union([BrowserRequestError, EnvironmentAuthorizationError]),
 });
 
+const WsOperationPermissionsAnswerRpc = Rpc.make(WS_METHODS.operationPermissionsAnswer, {
+  payload: OperationPermissionAnswerInput,
+  error: Schema.Union([OperationPermissionError, EnvironmentAuthorizationError]),
+});
+
 const WsScheduledTasksListWebhookDeliveriesRpc = Rpc.make(
   WS_METHODS.scheduledTasksListWebhookDeliveries,
   {
@@ -1830,6 +1846,24 @@ const WsProjectTeamAnswerDecisionRpc = Rpc.make(WS_METHODS.projectTeamAnswerDeci
   error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
 });
 
+const WsProjectTeamSnoozeDecisionRpc = Rpc.make(WS_METHODS.projectTeamSnoozeDecision, {
+  payload: ProjectTeamSnoozeDecisionInput,
+  success: ProjectTeamAttentionItemResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamUnsnoozeDecisionRpc = Rpc.make(WS_METHODS.projectTeamUnsnoozeDecision, {
+  payload: ProjectTeamUnsnoozeDecisionInput,
+  success: ProjectTeamAttentionItemResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamAskLeadRpc = Rpc.make(WS_METHODS.projectTeamAskLead, {
+  payload: ProjectTeamAskLeadInput,
+  success: ProjectTeamAskLeadResult,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
 const WsProjectTeamUpdateSettingsRpc = Rpc.make(WS_METHODS.projectTeamUpdateSettings, {
   payload: ProjectTeamUpdateSettingsInput,
   success: ProjectTeamSettingsResult,
@@ -1862,6 +1896,12 @@ const WsProjectTeamSplitTaskTodoRpc = Rpc.make(WS_METHODS.projectTeamSplitTaskTo
 
 const WsProjectTeamSetTaskRoleModelsRpc = Rpc.make(WS_METHODS.projectTeamSetTaskRoleModels, {
   payload: ProjectTeamSetTaskRoleModelsInput,
+  success: ProjectTeamTaskDetail,
+  error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectTeamMoveTaskRpc = Rpc.make(WS_METHODS.projectTeamMoveTask, {
+  payload: ProjectTeamMoveTaskInput,
   success: ProjectTeamTaskDetail,
   error: Schema.Union([ProjectTeamError, EnvironmentAuthorizationError]),
 });
@@ -1957,17 +1997,22 @@ export const WsRpcGroup = RpcGroup.make(
   WsScheduledTasksRotateWebhookTokenRpc,
   WsSecretsAnswerRequestRpc,
   WsBrowserRequestsAnswerRpc,
+  WsOperationPermissionsAnswerRpc,
   WsScheduledTasksListWebhookDeliveriesRpc,
   WsScheduledTasksGetWebhookDeliveryRpc,
   WsProjectTeamSubscribeAttentionRpc,
   WsProjectTeamRequestSitrepRpc,
   WsProjectTeamAnswerDecisionRpc,
+  WsProjectTeamSnoozeDecisionRpc,
+  WsProjectTeamUnsnoozeDecisionRpc,
+  WsProjectTeamAskLeadRpc,
   WsProjectTeamUpdateSettingsRpc,
   WsProjectTeamGetTaskRpc,
   WsProjectTeamUpdateTaskSpecRpc,
   WsProjectTeamRestoreTaskSpecRpc,
   WsProjectTeamSplitTaskTodoRpc,
   WsProjectTeamSetTaskRoleModelsRpc,
+  WsProjectTeamMoveTaskRpc,
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,
   WsServerGetBackgroundPolicyRpc,

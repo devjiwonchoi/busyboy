@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as nodePath from "node:path";
 
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { type OrchestrationV2DomainEvent, ThreadId } from "@t3tools/contracts";
@@ -17,13 +18,16 @@ import * as GitManager from "../git/GitManager.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
+import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectTeamRepository from "../persistence/ProjectTeamRepository.ts";
+import * as PreviewManager from "../preview/Manager.ts";
 import * as ThreadWorktreeService from "../orchestration-v2/ThreadWorktreeService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
-import { FinishedTaskCleanup } from "./FinishedTaskCleanup.ts";
+import { FinishedTaskCleanup, layer as finishedTaskCleanupLayer } from "./FinishedTaskCleanup.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { START, type TeamHarness, setUpManager, startLead, withTeam } from "./testkit.ts";
 
@@ -240,5 +244,56 @@ describe("FinishedTaskCleanup", () => {
           assert.isTrue(fs.existsSync(busyWorktree));
         }).pipe(Effect.scoped),
       ),
+  );
+});
+
+describe("FinishedTaskCleanup with previews", () => {
+  it.effect("closes the previews of a finished lead and its helpers as it archives them", () =>
+    Effect.gen(function* () {
+      const lead = ThreadId.make("lead-1");
+      const helper = ThreadId.make("lead-1-helper");
+      const shellOf = (id: ThreadId, parentThreadId: ThreadId | null) =>
+        ({ id, lineage: { parentThreadId }, activeRunId: null, worktreePath: null }) as never;
+      const order: Array<string> = [];
+
+      const cleanupLayer = finishedTaskCleanupLayer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(ThreadManagement.ThreadManagementService)({
+              listProjectThreads: () =>
+                Effect.succeed([shellOf(lead, null), shellOf(helper, lead)]),
+              getThreadShell: (id) => Effect.succeed(shellOf(id, null)),
+              getThreadRecords: () => Effect.succeed({ subagents: [] } as never),
+              dispatch: (command) =>
+                Effect.sync(() => {
+                  order.push(`${command.type}:${"threadId" in command ? command.threadId : ""}`);
+                }) as never,
+            }),
+            Layer.mock(ProjectTeamRepository.ProjectTeamRepository)({}),
+            Layer.mock(GitWorkflowService.GitWorkflowService)({}),
+            Layer.mock(PreviewManager.PreviewManager)({
+              close: (input) =>
+                Effect.sync(() => {
+                  order.push(`preview.close:${input.threadId}`);
+                }),
+            }),
+            NodeCrypto.layer,
+          ),
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const cleanup = yield* FinishedTaskCleanup;
+        const task = { id: "task-1", projectId: "project-1", stage: "done", leadThreadId: lead };
+        yield* cleanup.archiveLead(task as never);
+      }).pipe(Effect.provide(cleanupLayer));
+
+      assert.deepEqual(order, [
+        `thread.archive:${helper}`,
+        `preview.close:${helper}`,
+        `thread.archive:${lead}`,
+        `preview.close:${lead}`,
+      ]);
+    }),
   );
 });

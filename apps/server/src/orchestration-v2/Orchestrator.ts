@@ -107,7 +107,12 @@ import * as EffectOutbox from "./EffectOutbox.ts";
 import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
-import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
+import {
+  DispatchModeLimit,
+  approvedDispatchTargetModeMismatch,
+  exceededDispatchModeLimit,
+  isApprovedDispatchTarget,
+} from "./DispatchModeLimit.ts";
 import {
   applyToProjection,
   emptyProjection,
@@ -127,6 +132,7 @@ import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { ProviderSwitchServiceV2 } from "./ProviderSwitchService.ts";
+import * as LeadMoveGate from "../cloudLead/LeadMoveGate.ts";
 import { isAutomaticCompletionRun, queuedRunsInDeliveryOrder } from "./QueuedRunOrder.ts";
 import { RuntimePolicyV2 } from "./RuntimePolicy.ts";
 import {
@@ -477,6 +483,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "secret_request.record":
     case "computer_use_app_request.record":
     case "browser_request.record":
+    case "operation_permission.record":
       return command.threadId;
     case "thread.fork":
     case "thread.merge_back":
@@ -607,7 +614,7 @@ function latestStableRun(
   );
 }
 
-function runForSourcePoint(
+export function runForSourcePoint(
   projection: Pick<OrchestrationV2ThreadProjection, "runs" | "checkpoints">,
   sourcePoint: Extract<
     OrchestrationV2Command,
@@ -770,6 +777,14 @@ function rootProviderThreadsForProvider(
     );
 }
 
+/** A location update that moves the thread; absent counts as local. */
+function locationChanges(
+  command: { readonly location?: OrchestrationV2AppThread["location"] },
+  thread: Pick<OrchestrationV2AppThread, "location">,
+): boolean {
+  return command.location !== undefined && command.location !== (thread.location ?? "local");
+}
+
 function isHandoffSourceRun(run: OrchestrationV2Run): boolean {
   return run.status === "completed" || run.status === "failed" || run.status === "interrupted";
 }
@@ -819,6 +834,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const providerSessions = yield* ProviderSessionManagerV2;
   const providerSwitchService = yield* ProviderSwitchServiceV2;
+  const leadMoveGate = yield* LeadMoveGate.LeadMoveGate;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const runtimePolicy = yield* RuntimePolicyV2;
   const threadForkService = yield* ThreadForkServiceV2;
@@ -2615,8 +2631,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       command.type === "provider.switch" ||
       command.type === "thread.archive" ||
       (command.type === "thread.metadata.update" &&
-        command.worktreePath !== undefined &&
-        command.worktreePath !== thread.worktreePath);
+        ((command.worktreePath !== undefined && command.worktreePath !== thread.worktreePath) ||
+          locationChanges(command, thread)));
     const providerContext = needsProviderState
       ? yield* projectionStore
           .getThreadProviderContext(
@@ -2751,6 +2767,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 }),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
+            ...(command.location === undefined ? {} : { location: command.location }),
             ...(command.linkedPullRequest === undefined
               ? {}
               : {
@@ -3135,8 +3152,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       command.type === "thread.archive"
         ? (providerContext?.providerSessions ?? []).map((session) => session.id)
         : command.type === "thread.metadata.update" &&
-            command.worktreePath !== undefined &&
-            command.worktreePath !== thread.worktreePath
+            ((command.worktreePath !== undefined && command.worktreePath !== thread.worktreePath) ||
+              locationChanges(command, thread))
           ? (providerContext?.providerSessions ?? []).map((session) => session.id)
           : command.type === "thread.runtime-mode.set"
             ? (providerContext?.providerSessions ?? [])
@@ -3302,7 +3319,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       },
     ) {
       const limit = yield* DispatchModeLimit;
-      const exceeded = limit === undefined ? undefined : exceededDispatchModeLimit(limit, modes);
+      if (limit !== undefined && isApprovedDispatchTarget(limit, threadId, modes)) {
+        return;
+      }
+      const exceeded =
+        limit === undefined
+          ? undefined
+          : (approvedDispatchTargetModeMismatch(limit, threadId, modes) ??
+            exceededDispatchModeLimit(limit, modes));
       if (limit === undefined || exceeded === undefined) return;
       const refusal = {
         threadId,
@@ -4658,7 +4682,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         projection.thread.worktreePath === null
           ? latestRun
           : undefined;
-      const queueBehindRun = activeRun ?? worktreeMissingRun;
+      // A message sent while a task lead moves waits, held, behind its last run.
+      const movingBehindRun =
+        activeRun === undefined && leadMoveGate.isHeld(command.threadId)
+          ? (latestRun ?? undefined)
+          : undefined;
+      const queueBehindRun = activeRun ?? worktreeMissingRun ?? movingBehindRun;
       const pendingMergeBackTransfers = pendingMergeBackTransfersForThread(projection);
       const shouldQueue =
         queueBehindRun !== undefined &&
@@ -4736,7 +4765,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         const attemptId = idAllocator.derive.runAttempt({ runId, attemptOrdinal: 1 });
         const rootNodeId = idAllocator.derive.rootNode({ runId });
         const checkpointScope =
-          queueBehindRun.status === "preparing" || worktreeMissingRun !== undefined
+          queueBehindRun.status === "preparing" ||
+          worktreeMissingRun !== undefined ||
+          movingBehindRun !== undefined
             ? null
             : yield* runtimePolicy.resolve({ thread: projection.thread, modelSelection }).pipe(
                 Effect.flatMap((resolvedRuntimePolicy) =>
@@ -4774,6 +4805,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           activeAttemptId: attemptId,
           status: "queued",
           ...(worktreeMissingRun !== undefined ||
+          movingBehindRun !== undefined ||
+          leadMoveGate.isHeld(command.threadId) ||
           projection.runs.some(
             (candidate) => candidate.status === "queued" && candidate.queueHeld === true,
           )
@@ -6372,9 +6405,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         ...(command.title === undefined ? {} : { title: command.title }),
         ordinal: parentProjection.subagents.length + 1,
       });
+      // A child runs where its command says; delegate_task defaults it to the parent's place.
+      const { location: _parentLocation, ...parentThread } = parentProjection.thread;
       const childThread: OrchestrationV2AppThread = {
         ...makeSubagentChildThread({
-          parentThread: parentProjection.thread,
+          parentThread,
           childThreadId,
           parentNodeId: taskNodeId,
           activeProviderThreadId: null,
@@ -6388,6 +6423,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         runtimeMode: command.runtimeMode,
         interactionMode: command.interactionMode,
         ...(command.workspaceStrategy === undefined ? {} : { branch: null, worktreePath: null }),
+        ...(command.location === "cloud" ? { location: "cloud" as const } : {}),
       };
       const task: OrchestrationV2Subagent = {
         id: taskNodeId,
@@ -7204,6 +7240,138 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       });
     },
   );
+
+  const dispatchOperationPermissionRecord = Effect.fn(
+    "orchestrationV2.dispatch.operationPermissionRecord",
+  )(function* (
+    command: Extract<
+      OrchestrationV2InternalCommand,
+      { readonly type: "operation_permission.record" }
+    >,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(command.threadId, ["runs", "turnItems", "attempts", "providerTurns"], {
+        messageRoles: [],
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    const run = projection.runs.find((candidate) => candidate.id === command.runId);
+    const reject = (cause: string) =>
+      new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause,
+      });
+    if (run === undefined || run.rootNodeId !== command.nodeId) {
+      return yield* reject("The permission request does not belong to this run's root node.");
+    }
+    const existing = projection.turnItems.find((item) => item.id === command.turnItemId);
+    if (existing !== undefined && existing.type !== "operation_permission") {
+      return yield* reject("The turn item is not an operation permission request.");
+    }
+    const now = yield* DateTime.now;
+    const expiresAt = Date.parse(command.expiresAt);
+    if (!Number.isFinite(expiresAt)) {
+      return yield* reject("The permission request has an invalid expiration time.");
+    }
+    const status = command.permissionStatus;
+    if (existing === undefined) {
+      if (
+        status !== "pending" ||
+        !isBlockingRun(run) ||
+        projection.thread.archivedAt !== null ||
+        projection.thread.deletedAt !== null
+      ) {
+        return yield* reject("Only an active run can open a pending permission request.");
+      }
+      if (expiresAt <= DateTime.toEpochMillis(now)) {
+        return yield* reject("The permission request has expired.");
+      }
+    } else {
+      if (
+        existing.runId !== command.runId ||
+        existing.nodeId !== command.nodeId ||
+        existing.operation !== command.operation ||
+        existing.summary !== command.summary ||
+        existing.reason !== command.reason ||
+        existing.targetDescription !== command.targetDescription ||
+        existing.fingerprint !== command.fingerprint ||
+        existing.expiresAt !== command.expiresAt
+      ) {
+        return yield* reject("The permission request's approved operation cannot change.");
+      }
+      const allowed =
+        existing.permissionStatus === "pending"
+          ? ["approved", "declined", "cancelled", "expired"]
+          : existing.permissionStatus === "approved"
+            ? ["consumed", "cancelled", "expired"]
+            : existing.permissionStatus === "consumed"
+              ? ["succeeded", "failed"]
+              : [];
+      if (!allowed.includes(status)) {
+        return yield* reject("The permission request cannot make this state transition.");
+      }
+      if (
+        (status === "approved" || status === "consumed") &&
+        (!isBlockingRun(run) ||
+          projection.thread.archivedAt !== null ||
+          projection.thread.deletedAt !== null ||
+          expiresAt <= DateTime.toEpochMillis(now))
+      ) {
+        return yield* reject("The permission request's run stopped or its approval expired.");
+      }
+    }
+    const pending = status === "pending" || status === "approved";
+    const turnItem: OrchestrationV2TurnItem = {
+      id: command.turnItemId,
+      threadId: command.threadId,
+      runId: command.runId,
+      nodeId: command.nodeId,
+      providerThreadId: run.providerThreadId,
+      providerTurnId: providerTurnForRun(projection, run)?.id ?? null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: existing?.ordinal ?? (yield* nextTurnItemOrdinal(projection)),
+      status:
+        status === "consumed"
+          ? "running"
+          : pending
+            ? "waiting"
+            : status === "succeeded"
+              ? "completed"
+              : status === "failed"
+                ? "failed"
+                : "cancelled",
+      title: "실행 승인",
+      startedAt: existing?.startedAt ?? now,
+      completedAt: pending || status === "consumed" ? null : now,
+      updatedAt: now,
+      type: "operation_permission",
+      operation: command.operation,
+      summary: command.summary,
+      reason: command.reason,
+      targetDescription: command.targetDescription,
+      fingerprint: command.fingerprint,
+      expiresAt: command.expiresAt,
+      permissionStatus: status,
+    };
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      runId: command.runId,
+      nodeId: command.nodeId,
+      providerInstanceId: run.providerInstanceId,
+      occurredAt: now,
+      payload: turnItem,
+    });
+  });
 
   const dispatchRuntimeRequestRespond = (
     command: Extract<OrchestrationV2Command, { readonly type: "runtime-request.respond" }>,
@@ -10830,6 +10998,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "browser_request.record":
         yield* dispatchBrowserRequestRecord(command, events);
+        break;
+      case "operation_permission.record":
+        yield* dispatchOperationPermissionRecord(command, events);
         break;
       default:
         return yield* dispatchUnsupported(command);

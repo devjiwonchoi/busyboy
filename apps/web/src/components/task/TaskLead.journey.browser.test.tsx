@@ -112,7 +112,7 @@ import { useLeadThreadTask } from "~/state/projectTeam";
 import { RightPanelSheet } from "../RightPanelSheet";
 import { RightPanelTabs } from "../RightPanelTabs";
 import { TaskPage } from "./TaskPage";
-import { TaskPlanSurface, TaskPlanToggle, useOpenTaskPlanOnEntry } from "./TaskPlanSurface";
+import { TaskPlanSurface, TaskPlanToggle } from "./TaskPlanSurface";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -197,7 +197,6 @@ const noop = () => undefined;
 function ThreadView(props: { threadRef: ScopedThreadRef }) {
   const ref = props.threadRef;
   const leadTask = useLeadThreadTask(ref, "project-1" as never);
-  useOpenTaskPlanOnEntry(ref, leadTask !== null);
   const panel = useRightPanelStore((store) => selectThreadRightPanelState(store.byThreadKey, ref));
   const sheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const active = panel.surfaces.find((surface) => surface.id === panel.activeSurfaceId) ?? null;
@@ -236,7 +235,8 @@ function ThreadView(props: { threadRef: ScopedThreadRef }) {
       onAddPullRequest={noop}
       onAddPullRequests={noop}
       onAddSideChat={noop}
-      onAddTaskPlan={leadTask === null ? undefined : () => store().open(ref, "task-plan")}
+      onAddTaskPlan={() => store().open(ref, "task-plan")}
+      taskPlanAvailable={leadTask !== null}
       browserAvailable
       terminalAvailable={false}
       diffAvailable={false}
@@ -292,6 +292,47 @@ async function addFromMenu(label: string) {
     return found;
   });
   await userEvent.click(item);
+}
+
+const panelOpen = (ref: ScopedThreadRef) =>
+  selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, ref).isOpen;
+
+/** Entering a lead thread leaves the panel closed; the header's Plan button opens it. */
+async function openPlanFromHeader() {
+  await vi.waitFor(() => expect(showPlan()).not.toBeNull());
+  expect(panelOpen(LEAD)).toBe(false);
+  expect(planBody()).toBeNull();
+  await userEvent.click(showPlan()!);
+  await vi.waitFor(() =>
+    expect(planBody()?.textContent).toContain("The plan is a tab in the right sidebar."),
+  );
+}
+
+/** The lead saves a new plan version, and a new subtask and decision card show up. */
+async function arriveNewWork() {
+  await act(() => {
+    state.detail = {
+      ...state.detail,
+      versions: [
+        ...state.detail.versions,
+        { ...state.detail.versions.at(-1)!, version: state.detail.versions.length + 1 },
+      ],
+      openAttention: [
+        { id: "card-new", kind: "decision", question: "새 질문", options: [] },
+      ] as never,
+    };
+    state.managers = [
+      {
+        environmentId: "env-1",
+        summary: {
+          projectId: "project-1",
+          taskKeyPrefix: "BU",
+          tasks: [taskRef("task-70", 70, "New subtask", { parentTaskId: "task-49" })],
+        },
+      },
+    ];
+    for (const listener of state.listeners) listener();
+  });
 }
 
 async function switchToBrowserAndBack() {
@@ -352,16 +393,18 @@ function seedStructure() {
 function expectStructure() {
   const plan = planBody()!;
   const parent = plan.querySelector<HTMLElement>("[data-task-parent]")!;
-  expect(parent.textContent).toBe("BU-53Director");
+  expect(parent.textContent).toBe("Director · 프로젝트");
   expect(parent.getAttribute("href")).toBe("#task-53");
   expect(plan.querySelector("[data-subtask-progress]")?.getAttribute("data-subtask-progress")).toBe(
     "1/2",
   );
   const waiting = plan.querySelector<HTMLElement>("[data-waiting-marker]")!;
   expect(waiting.querySelector(".sr-only")?.textContent).toBe(
-    "BU-55 끝나야 시작 · Dependency model",
+    "Dependency model · 프로젝트 끝나야 시작",
   );
-  expect(waiting.querySelector("[aria-hidden]")?.textContent).toBe("BU-55");
+  expect(waiting.querySelector("[data-waiting-keys]")?.textContent).toBe(
+    "Dependency model · 프로젝트",
+  );
   expect(plan.querySelector(".lucide-flag")).toBeNull();
   expect(
     plan.querySelector("[data-relation-group='blocked-by'] h3 .lucide-hourglass"),
@@ -390,20 +433,19 @@ describe("task lead thread on desktop", () => {
     await page.viewport(1280, 800);
     seedStructure();
     await renderThread(LEAD);
+    await openPlanFromHeader();
     await vi.waitFor(() =>
       expect(planBody()?.querySelector("[data-task-structure]")).not.toBeNull(),
     );
     expectStructure();
   });
 
-  it("opens on the Plan tab in the right panel, switches to Browser and back", async () => {
+  it("opens Plan from the header, switches to Browser and back, and stays closed after updates", async () => {
     await page.viewport(1280, 800);
     await renderThread(LEAD);
 
-    // Entering the task opens the right panel on Plan, to the right of the chat.
-    await vi.waitFor(() =>
-      expect(planBody()?.textContent).toContain("The plan is a tab in the right sidebar."),
-    );
+    // Entering the task leaves the panel closed until the user opens the plan.
+    await openPlanFromHeader();
     expect(planBody()!.textContent).toContain("Plan, Browser and back.");
     expect(tab("Plan")?.dataset.activeTab).toBe("true");
     expect(planBody()!.getBoundingClientRect().left).toBeGreaterThanOrEqual(
@@ -424,15 +466,26 @@ describe("task lead thread on desktop", () => {
     await userEvent.click(showPlan()!);
     await vi.waitFor(() => expect(planBody()).not.toBeNull());
 
-    // Leaving on Browser and coming back lands on the plan again.
+    // Leaving on Browser and coming back keeps the user's tab.
     await userEvent.click(tab("Browser")!.querySelector("button:last-of-type")!);
     await renderThread(OTHER);
     await renderThread(LEAD);
-    await vi.waitFor(() => expect(tab("Plan")?.dataset.activeTab).toBe("true"));
-    expect(planBody()).not.toBeNull();
+    await vi.waitFor(() => expect(tab("Browser")?.dataset.activeTab).toBe("true"));
+    expect(planBody()).toBeNull();
+
+    // Once closed, a new plan version, subtask or card and re-entry leave it closed.
+    await act(() => useRightPanelStore.getState().close(LEAD));
+    await arriveNewWork();
+    await renderThread(OTHER);
+    await renderThread(LEAD);
+    await arriveNewWork();
+    expect(panelOpen(LEAD)).toBe(false);
+    expect(planBody()).toBeNull();
+    expect(showPlan()).not.toBeNull();
+    await page.screenshot({ path: "__screenshots__/lead-stays-closed-desktop.png" });
   });
 
-  it("offers no plan on a thread that leads no task", async () => {
+  it("shows Plan disabled on a thread that leads no task", async () => {
     await page.viewport(1280, 800);
     useRightPanelStore.getState().openBrowser(OTHER, null);
     await renderThread(OTHER);
@@ -440,8 +493,12 @@ describe("task lead thread on desktop", () => {
     expect(showPlan()).toBeNull();
     await userEvent.click(document.querySelector<HTMLElement>('[aria-label="Add panel surface"]')!);
     await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
-    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((e) => e.textContent);
-    expect(labels.some((label) => label?.startsWith("Plan"))).toBe(false);
+    const plan = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) =>
+      e.textContent?.startsWith("Plan"),
+    )!;
+    expect(plan.getAttribute("aria-disabled")).toBe("true");
+    await userEvent.click(plan, { force: true });
+    expect(planBody()).toBeNull();
   });
 });
 
@@ -450,19 +507,18 @@ describe("task lead thread on a phone", () => {
     await page.viewport(390, 844);
     seedStructure();
     await renderThread(LEAD);
+    await openPlanFromHeader();
     await vi.waitFor(() =>
       expect(planBody()?.querySelector("[data-task-structure]")).not.toBeNull(),
     );
     expectStructure();
   });
 
-  it("opens the panel sheet on Plan, switches to Browser and back, and reopens from the header", async () => {
+  it("opens the panel sheet on Plan from the header, stays closed after updates, and reopens", async () => {
     await page.viewport(390, 844);
     await renderThread(LEAD);
 
-    await vi.waitFor(() =>
-      expect(planBody()?.textContent).toContain("The plan is a tab in the right sidebar."),
-    );
+    await openPlanFromHeader();
     expect(tab("Plan")?.dataset.activeTab).toBe("true");
     await userEvent.click(planBody()!.querySelector('[aria-label="Move the plan"]')!);
     await vi.waitFor(() => expect(state.updates).toHaveLength(1));
@@ -476,6 +532,13 @@ describe("task lead thread on a phone", () => {
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, LEAD).isOpen,
     ).toBe(false);
     expect(chat().getBoundingClientRect().width).toBeGreaterThan(380);
+    await arriveNewWork();
+    await renderThread(OTHER);
+    await renderThread(LEAD);
+    await arriveNewWork();
+    expect(panelOpen(LEAD)).toBe(false);
+    expect(showPlan()).not.toBeNull();
+    await page.screenshot({ path: "__screenshots__/lead-stays-closed-phone.png" });
     await userEvent.click(showPlan()!);
     await vi.waitFor(() => expect(showPlan()).toBeNull());
     expect(tab("Plan")?.dataset.activeTab).toBe("true");

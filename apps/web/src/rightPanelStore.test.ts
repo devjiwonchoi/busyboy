@@ -1224,3 +1224,35 @@ describe("rightPanelStore", () => {
     expect(store.getUserActionRevision(refA)).toBe(revision);
   });
 });
+
+it("drops a saved Director workspace tab, which is now the All projects page", () => {
+  expect(
+    migratePersistedRightPanelState({
+      byThreadKey: {
+        "env-1:thread-A": {
+          isOpen: true,
+          activeSurfaceId: "director-workspace",
+          surfaces: [
+            { id: "director-workspace", kind: "director-workspace" },
+            { id: "diff", kind: "diff" },
+          ],
+        },
+        "env-1:thread-B": {
+          isOpen: true,
+          activeSurfaceId: "director-workspace",
+          surfaces: [{ id: "director-workspace", kind: "director-workspace" }],
+        },
+      },
+    }),
+  ).toEqual({
+    byThreadKey: {
+      "env-1:thread-A": {
+        isOpen: true,
+        activeSurfaceId: "diff",
+        surfaces: [{ id: "diff", kind: "diff" }],
+      },
+      "env-1:thread-B": { isOpen: false, activeSurfaceId: null, surfaces: [] },
+    },
+    threadPanelVisibilityByThreadKey: {},
+  });
+});

@@ -33,7 +33,7 @@ import {
   buildTemporaryWorktreeBranchName,
   flattenTemporaryWorktreeBranchName,
   isTemporaryWorktreeBranch,
-  WORKTREE_BRANCH_PREFIX,
+  resolveWorktreeBranchPrefix,
 } from "@t3tools/shared/git";
 
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
@@ -42,6 +42,7 @@ import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.t
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
@@ -184,6 +185,12 @@ export class ThreadLaunchService extends Context.Service<
   }
 >()("t3/orchestration-v2/ThreadLaunchService") {}
 
+/** The ref directory a temporary branch lives in, e.g. `jiwon` for `jiwon/1a2b3c4d`. */
+function temporaryBranchParent(branch: string): string {
+  const normalized = branch.trim().toLowerCase();
+  return normalized.slice(0, normalized.lastIndexOf("/"));
+}
+
 const isThreadLaunchError = Schema.is(ThreadLaunchError);
 
 function failureDetail(error: unknown): string {
@@ -195,6 +202,9 @@ function failureDetail(error: unknown): string {
   return `Workspace preparation failed: ${error instanceof Error ? error.message : String(error)}`;
 }
 
+/** A setup script waits at most this long for free memory. */
+const SETUP_HEADROOM_WAIT_MS = 5 * 60_000;
+
 const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
   const setupTracker = yield* WorktreeSetupTracker.WorktreeSetupTracker;
@@ -204,6 +214,7 @@ const make = Effect.gen(function* () {
   const setupScripts = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
   const textGeneration = yield* TextGeneration.TextGeneration;
   const receipts = yield* CommandReceiptStore.CommandReceiptStoreV2;
   const ids = yield* IdAllocator.IdAllocatorV2;
@@ -363,10 +374,18 @@ const make = Effect.gen(function* () {
         });
 
       const requestedBranch = input.workspaceStrategy.branch;
+      const branchPrefix = yield* serverSettings.getSettings.pipe(
+        Effect.map((settings) =>
+          resolveWorktreeBranchPrefix(
+            resolveProjectSettings(settings, input.projectId).settings.branchNamePrefix,
+          ),
+        ),
+        Effect.orElseSucceed(() => resolveWorktreeBranchPrefix(null)),
+      );
       let branch: string | null;
       if (input.workspaceStrategy.type === "worktree" && requestedBranch === undefined) {
         const uuid = yield* randomUuidV4;
-        branch = buildTemporaryWorktreeBranchName(() => uuid.replaceAll("-", ""));
+        branch = buildTemporaryWorktreeBranchName(() => uuid.replaceAll("-", ""), branchPrefix);
       } else {
         branch = requestedBranch ?? null;
       }
@@ -424,15 +443,16 @@ const make = Effect.gen(function* () {
         if (startFromOrigin) yield* setupTracker.stageStatus(threadId, "fetch", "done");
         if (
           branch !== null &&
-          isTemporaryWorktreeBranch(branch) &&
+          isTemporaryWorktreeBranch(branch, branchPrefix) &&
+          branch.includes("/") &&
           (yield* git
             .hasCommit({
               cwd: project.workspaceRoot,
-              refName: `refs/heads/${WORKTREE_BRANCH_PREFIX}`,
+              refName: `refs/heads/${temporaryBranchParent(branch)}`,
             })
             .pipe(Effect.mapError(mapError(input, "provision-worktree", threadId))))
         ) {
-          branch = flattenTemporaryWorktreeBranchName(branch);
+          branch = flattenTemporaryWorktreeBranchName(branch, temporaryBranchParent(branch));
         }
         yield* setupTracker.stageStatus(threadId, "checkout", "running");
         const worktree = yield* git
@@ -483,7 +503,7 @@ const make = Effect.gen(function* () {
         worktreePath !== null &&
         branch !== null &&
         initialMessage !== undefined &&
-        isTemporaryWorktreeBranch(branch)
+        isTemporaryWorktreeBranch(branch, branchPrefix)
       ) {
         const oldBranch = branch;
         const worktreeCwd = worktreePath;
@@ -576,6 +596,16 @@ const make = Effect.gen(function* () {
           .pipe(Effect.mapError(mapError(input, "update-thread", threadId)));
       }
       yield* setupTracker.stageStatus(threadId, "setup-script", "running");
+      // Setup scripts (installs, builds) are memory-heavy: they wait a bounded time
+      // for free memory, then run anyway so the thread is not left unprepared.
+      if ((memoryHeadroom.latest()?.headroom ?? "ok") !== "ok") {
+        if (tracked) {
+          yield* setupTracker.appendTail(threadId, "setup-script", "Waiting for free memory…");
+        }
+        yield* MemoryHeadroom.waitForHeadroom(memoryHeadroom, {
+          timeoutMs: SETUP_HEADROOM_WAIT_MS,
+        });
+      }
       const setup = yield* setupScripts
         .runForThread({
           threadId,

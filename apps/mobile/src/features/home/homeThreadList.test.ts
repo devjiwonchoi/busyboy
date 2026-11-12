@@ -359,6 +359,43 @@ describe("home project scopes", () => {
     ).toHaveLength(2);
   });
 
+  it("keeps the Director's folder inside a checkout out of that repository's scope", () => {
+    // The server sends no repository identity for the Director's system folder.
+    const environmentId = EnvironmentId.make("environment-1");
+    const repo = makeProject({
+      environmentId,
+      id: ProjectId.make("project-busyboy"),
+      title: "busyboy",
+      workspaceRoot: "/repo",
+      repositoryIdentity: {
+        canonicalKey: "github.com/example/busyboy",
+        locator: {
+          source: "git-remote" as const,
+          remoteName: "origin",
+          remoteUrl: "git@github.com:example/busyboy.git",
+        },
+        rootPath: "/repo",
+      },
+    });
+    const director = makeProject({
+      environmentId,
+      id: ProjectId.make("project-director"),
+      title: "director",
+      workspaceRoot: "/repo/.busyboy/director",
+      repositoryIdentity: null,
+    });
+
+    const scopes = buildHomeProjectScopes({
+      projects: [repo, director],
+      environmentId: null,
+      projectGroupingMode: "repository",
+    });
+    expect(scopes.map((scope) => scope.projects.map((project) => project.id))).toEqual(
+      expect.arrayContaining([[repo.id], [director.id]]),
+    );
+    expect(scopes).toHaveLength(2);
+  });
+
   it("prefers an exact scope key over a project ID that collides with it", () => {
     const environmentId = EnvironmentId.make("environment-local");
     const collidingProject = makeProject({

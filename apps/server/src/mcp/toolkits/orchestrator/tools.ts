@@ -1,5 +1,7 @@
 import {
   OrchestratorMcpCapabilitiesResult,
+  OrchestratorMcpCloudSecretSaveInput,
+  OrchestratorMcpCloudSecretSaveResult,
   OrchestrationV2StopWorkflowInput,
   OrchestratorMcpCreateThreadsInput,
   OrchestratorMcpCreateThreadsResult,
@@ -180,6 +182,19 @@ const RequestSecretTool = Tool.make("request_secret", {
   .annotate(Tool.Title, "Request a secret from the user")
   .annotate(Tool.Destructive, false);
 
+const CloudSecretSaveTool = Tool.make("cloud_secret_save", {
+  description:
+    "Save a secret the user entered with request_secret for cloud task leads, which run in a Vercel Sandbox: the Vercel token, team id or project id, the Claude setup-token (claude_oauth_token), a GitHub token, or an MCP server's auth value (kind mcp, with name '<server>:<KEY>', KEY being the env var or header name the server reads it from). First call request_secret, then pass its secretRef here; the ref is consumed. Saving a kind again replaces the stored value. The value is never returned to you.",
+  parameters: OrchestratorMcpCloudSecretSaveInput,
+  success: OrchestratorMcpCloudSecretSaveResult,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies,
+})
+  .annotate(Tool.Title, "Save a cloud lead secret")
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.Idempotent, false);
+
 export const CreateThreadsTool = Tool.make("create_threads", {
   description:
     "Needs an agent running inside a T3 thread. Create one or more ORDINARY TOP-LEVEL T3 conversations. This is not delegation and does not create child agents/subagents. For delegated work, choose models from orchestrator_capabilities. Prefer native subagents only when they support the chosen model; otherwise call delegate_task, including for same-provider work. Use create_threads for a batch of separate top-level threads sharing this checkout. Prefer t3_thread_launch for a single thread. Both require the user to request separate/new/top-level threads or conversations. Each entry may override provider, model, options, runtime mode, and interaction mode; omitted settings inherit, except an omitted runtime mode, which starts at the project's default permission mode, never broader than this thread's. Project, branch, and worktree always inherit and cannot be overridden here. For independent implementation or a PR stack in its own worktree, use t3_thread_launch with workspaceStrategy instead of asking the agent to create a worktree in its prompt.",
@@ -285,6 +300,7 @@ export const OrchestratorToolkit = Toolkit.make(
   UpdateScheduledTaskTool,
   DeleteScheduledTaskTool,
   RequestSecretTool,
+  CloudSecretSaveTool,
   CreateThreadsTool,
   ThreadListTool,
   ThreadReadTool,

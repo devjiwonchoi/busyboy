@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { formatCostUsd, formatStepDuration, formatTokenCount } from "./taskUsage.logic";
+import { EMPTY_PROJECT_TASK_METRICS } from "@t3tools/contracts";
+
+import {
+  avoidableStallText,
+  formatCostUsd,
+  formatKoreanDuration,
+  formatStepDuration,
+  formatTokenCount,
+  taskUsageTotal,
+} from "./taskUsage.logic";
 
 describe("task usage formatting", () => {
   it("rounds tokens to k and M without showing 1000k", () => {
@@ -20,5 +29,46 @@ describe("task usage formatting", () => {
     expect(formatStepDuration(65 * 60_000)).toBe("1h 5m");
     expect(formatCostUsd(1.4)).toBe("$1.40");
     expect(formatCostUsd(0.004)).toBe("<$0.01");
+  });
+
+  it("formats memory stall time in Korean units", () => {
+    expect(formatKoreanDuration(40_000)).toBe("40초");
+    expect(formatKoreanDuration(12 * 60_000)).toBe("12분");
+    expect(formatKoreanDuration(65 * 60_000)).toBe("1시간 5분");
+    expect(formatKoreanDuration(2 * 60 * 60_000)).toBe("2시간");
+  });
+
+  it("adds memory stall time to the total only when memory held the task", () => {
+    const usage = {
+      plan: {
+        runs: 1,
+        durationMs: 3 * 60_000,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: null,
+      },
+    };
+    expect(taskUsageTotal(usage, EMPTY_PROJECT_TASK_METRICS)).toBe(
+      "합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0",
+    );
+    // Memory stalls moved to the avoidable stall line.
+    expect(
+      taskUsageTotal(usage, { ...EMPTY_PROJECT_TASK_METRICS, memoryStallMs: 12 * 60_000 }),
+    ).toBe("합계 3m · 리뷰 지적 0 · 수정 0회 · CI 실패 0");
+  });
+
+  it("sums avoidable stalls by cause, keeping local-only memory stalls apart", () => {
+    expect(avoidableStallText(EMPTY_PROJECT_TASK_METRICS)).toBeNull();
+    expect(avoidableStallText({ ...EMPTY_PROJECT_TASK_METRICS, memoryStallMs: 400 })).toBeNull();
+    expect(
+      avoidableStallText({
+        ...EMPTY_PROJECT_TASK_METRICS,
+        memoryStallMs: 18 * 60_000,
+        memoryLocalOnlyStallMs: 13 * 60_000,
+        avoidableStallMs: { no_progress: 20 * 60_000, start_failed: 60_000 },
+      }),
+    ).toBe(
+      "피할 수 있었던 멈춤 39분 · 진행 없음 20분 · 시작 실패 1분 · 메모리 부족 5분 · '로컬만' 설정에서 메모리 부족 13분",
+    );
   });
 });

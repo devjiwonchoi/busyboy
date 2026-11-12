@@ -15,6 +15,7 @@ import {
 } from "../composerDraftStore";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { useEnvironmentThreadRefs, useThreadRefs, useQuietThreadShell } from "../state/entities";
+import { useProjectTeamAttentionPending } from "../state/projectTeam";
 import { useEnvironmentShellStatus } from "../state/shell";
 import {
   buildThreadRouteParams,
@@ -92,6 +93,11 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     serverThreadDeleted: serverThreadShell?.deletedAt != null,
     draftThreadExists: draftThread !== null,
   });
+  // Until the PM data arrives a PM chat would draw as an ordinary thread, so the chat
+  // stays blank instead of flashing that layout.
+  const projectTeamPending = useProjectTeamAttentionPending(
+    target.kind === "server" ? target.threadRef.environmentId : null,
+  );
   const serverThreadStarted = threadHasStarted(serverThreadShell);
   const environmentHasAnyThreads = environmentThreadRefs.length > 0 || environmentHasDraftThreads;
 
@@ -163,7 +169,10 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
         />
       );
     }
-  } else if (renderState === "ready" || (renderState === "loading" && serverThreadShell !== null)) {
+  } else if (
+    !projectTeamPending &&
+    (renderState === "ready" || (renderState === "loading" && serverThreadShell !== null))
+  ) {
     view = (
       <ChatView
         key={nextChatViewKey?.key}

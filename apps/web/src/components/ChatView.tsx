@@ -234,10 +234,12 @@ import {
   useThreadDecisionCards,
   useThreadWaitingThreads,
 } from "../state/projectTeam";
-import { pendingActionItems } from "../state/projectTeam.logic";
-import { useOpenTaskPlanOnEntry } from "./task/TaskPlanSurface";
-import { pendingActionsBannerItem, revealDecisionCard } from "./chat/PendingActionsBar";
-import { useDirectorPendingActions } from "./director/useDirectorPendingActions";
+import {
+  DirectorPendingActions,
+  ThreadPendingActions,
+  revealDecisionCard,
+} from "./chat/PendingActionsButton";
+import { useDirectorThreadRef } from "~/state/director";
 import { useSideChatCitationInbox } from "./chat/useSideChatCitationInbox";
 import { useChatAnnotations, withComposerAnnotations } from "./chat/useChatAnnotations";
 import {
@@ -1613,7 +1615,12 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadShell?.projectId ?? null,
   );
   const isTaskLeadThread = leadTask !== null;
-  useOpenTaskPlanOnEntry(isServerThread ? activeThreadRef : null, isTaskLeadThread);
+  const director = useDirectorThreadRef();
+  const isDirectorThread =
+    !sideChat &&
+    director !== null &&
+    routeThreadRef.environmentId === director.environmentId &&
+    routeThreadRef.threadId === director.threadId;
   const timelineThreadError =
     serverRuntime?.status === "failed" &&
     serverRuntime.lastErrorClass === "usage_limit" &&
@@ -5239,24 +5246,9 @@ export default function ChatView(props: ChatViewProps) {
     cancelTimelineLiveFollowForUserNavigationStable();
     revealDecisionCard(legendListRef.current, cardId);
   });
-  const directorPendingActions = useDirectorPendingActions({
-    threadRef: sideChat ? null : routeThreadRef,
-    cards: decisionCards,
-    onRevealCard: revealDecisionCardInTimeline,
-  });
-  const pendingActionsBanner = paintOnlyDisplayedTimeline
-    ? null
-    : (directorPendingActions?.banner ??
-      pendingActionsBannerItem({
-        id: `pending-actions:${routeThreadKey}`,
-        items: pendingActionItems({ cards: decisionCards, waitingThreads }),
-        onRevealCard: revealDecisionCardInTimeline,
-        onOpenThread: onOpenRelatedThreadStable,
-      }));
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [
-      pendingActionsBanner,
       childInputBannerItem,
       goalBannerItem,
       backgroundWorkBannerItem,
@@ -8093,29 +8085,41 @@ export default function ChatView(props: ChatViewProps) {
                   : { historyControls: threadHistoryControls })}
               />
 
-              {!isThreadFindActive && (
-                <div
-                  className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex flex-wrap justify-center gap-2 py-1.5"
-                  style={{ bottom: scrollToEndClearance + 4 }}
-                >
-                  {showScrollToBottom && (
-                    <Button
-                      aria-label="Scroll to end"
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => {
-                        composerRef.current?.restoreAfterTimelineReachedEnd();
-                        scrollToEnd(true);
-                      }}
-                      className="pointer-events-auto"
-                      size="xs"
-                      variant="glass"
-                    >
-                      <ChevronDownIcon className="size-3.5" />
-                      Scroll to end
-                    </Button>
-                  )}
-                </div>
-              )}
+              {/* The waiting count stays during find; only "Scroll to end" steps aside. */}
+              <div
+                className="chat-scroll-to-bottom pointer-events-none absolute z-30 flex flex-wrap justify-center gap-2 py-1.5"
+                style={{ bottom: scrollToEndClearance + 4 }}
+              >
+                {isDirectorThread ? (
+                  <DirectorPendingActions onRevealCard={revealDecisionCardInTimeline} />
+                ) : paintOnlyDisplayedTimeline ? null : (
+                  <ThreadPendingActions
+                    cards={decisionCards}
+                    waitingThreads={waitingThreads}
+                    environmentId={routeThreadRef.environmentId}
+                    threadRef={routeThreadRef}
+                    cwd={gitCwd ?? undefined}
+                    onRevealCard={revealDecisionCardInTimeline}
+                    onOpenThread={onOpenRelatedThreadStable}
+                  />
+                )}
+                {showScrollToBottom && !isThreadFindActive && (
+                  <Button
+                    aria-label="Scroll to end"
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      composerRef.current?.restoreAfterTimelineReachedEnd();
+                      scrollToEnd(true);
+                    }}
+                    className="pointer-events-auto"
+                    size="xs"
+                    variant="glass"
+                  >
+                    <ChevronDownIcon className="size-3.5" />
+                    Scroll to end
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div
@@ -8582,7 +8586,8 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddSideChat={startSideChatStable}
-          onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
+          onAddTaskPlan={addTaskPlanSurfaceStable}
+          taskPlanAvailable={isTaskLeadThread}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
@@ -8634,7 +8639,8 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
             onAddSideChat={startSideChatStable}
-            onAddTaskPlan={isTaskLeadThread ? addTaskPlanSurfaceStable : undefined}
+            onAddTaskPlan={addTaskPlanSurfaceStable}
+            taskPlanAvailable={isTaskLeadThread}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}
@@ -8650,7 +8656,6 @@ export default function ChatView(props: ChatViewProps) {
 
       <RevertConfirmHost threadKey={routeThreadKey} onConfirm={onConfirmRevertStable} />
       {sideChat ? null : <LinkPullRequestDialogHost />}
-      {directorPendingActions?.dialog}
       <ThreadVisitWatermark threadRef={routeThreadRef} />
       <ExpandedImageDialogHost threadKey={routeThreadKey} />
     </div>

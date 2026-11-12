@@ -1,11 +1,13 @@
 import { StackActions, useNavigation } from "@react-navigation/native";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { isDuoDevice } from "../../lib/device-type";
 import type { AppNativeStackNavigationOptions } from "../../native/StackHeader";
 import { useDeviceType } from "../../native/native-layout-metrics";
 import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
+import { CloudPill } from "./CloudPill";
+import { MoveTaskButton, type MoveTaskControlProps } from "./MoveTaskButton";
 import {
   ThreadGitControls,
   useThreadGitCenterHeaderItems,
@@ -14,6 +16,13 @@ import {
 
 type NativeHeaderItems = ReadonlyArray<Record<string, unknown>>;
 
+const CLOUD_HEADER_ITEM = {
+  type: "custom" as const,
+  identifier: "thread-right-cloud",
+  element: <CloudPill />,
+  hidesSharedBackground: true,
+};
+
 export function useThreadHeaderOptions(props: {
   readonly title: string;
   readonly subtitle: string;
@@ -21,14 +30,58 @@ export function useThreadHeaderOptions(props: {
   readonly usesNativeHeaderGlass: boolean;
   readonly gitControls: Parameters<typeof ThreadGitControls>[0];
   readonly onReturnToThread?: () => void;
+  /** Set for a task lead that runs in a cloud sandbox; shows a small Cloud pill. */
+  readonly runsInCloud?: boolean;
+  /** Set for a task lead's thread; shows the move between Mac and cloud button. */
+  readonly moveTask?: MoveTaskControlProps | null;
 }) {
   const usesNativeWorkspaceColumns = useNativeWorkspaceColumnsSupported();
   const deviceType = useDeviceType();
   const usesDuoHeader = usesNativeWorkspaceColumns && isDuoDevice(deviceType);
   const navigation = useNavigation();
   const { layout, panes, togglePrimarySidebar } = useAdaptiveWorkspaceLayout();
-  const threadCenterHeaderItems = useThreadGitCenterHeaderItems(props.gitControls);
-  const compactRightHeaderItems = useThreadGitRightHeaderItems(props.gitControls);
+  const gitCenterHeaderItems = useThreadGitCenterHeaderItems(props.gitControls);
+  const gitRightHeaderItems = useThreadGitRightHeaderItems(props.gitControls);
+  // The item re-renders only when what it shows changes; presses read the latest callbacks.
+  const moveTaskRef = useRef(props.moveTask);
+  moveTaskRef.current = props.moveTask;
+  const moveTaskShown = props.moveTask != null;
+  const moveLocation = props.moveTask?.location;
+  const movingTo = props.moveTask?.movingTo ?? null;
+  const moveDisabledReason = props.moveTask?.disabledReason ?? null;
+  const leadingHeaderItems = useMemo<NativeHeaderItems>(
+    () => [
+      ...(props.runsInCloud ? [CLOUD_HEADER_ITEM] : []),
+      ...(moveTaskShown && moveLocation !== undefined
+        ? [
+            {
+              type: "custom" as const,
+              identifier: "thread-right-move-task",
+              element: (
+                <MoveTaskButton
+                  location={moveLocation}
+                  movingTo={movingTo}
+                  disabledReason={moveDisabledReason}
+                  onMove={(to) => moveTaskRef.current?.onMove(to)}
+                  onExplainDisabled={(reason) => moveTaskRef.current?.onExplainDisabled(reason)}
+                />
+              ),
+              hidesSharedBackground: true,
+            },
+          ]
+        : []),
+    ],
+    [props.runsInCloud, moveTaskShown, moveLocation, movingTo, moveDisabledReason],
+  );
+  // The Cloud pill and move button lead the trailing items, so they sit nearest the title.
+  const threadCenterHeaderItems = useMemo<NativeHeaderItems>(
+    () => [...leadingHeaderItems, ...gitCenterHeaderItems],
+    [leadingHeaderItems, gitCenterHeaderItems],
+  );
+  const compactRightHeaderItems = useMemo<NativeHeaderItems>(
+    () => [...leadingHeaderItems, ...gitRightHeaderItems],
+    [leadingHeaderItems, gitRightHeaderItems],
+  );
   const splitLeftHeaderItems = useMemo<NativeHeaderItems>(
     () => [
       ...(!usesDuoHeader

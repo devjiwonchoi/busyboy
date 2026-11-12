@@ -317,6 +317,7 @@ import {
 import { SecretRequestCard } from "./SecretRequestCard";
 import { ComputerUseAppRequestCard } from "./ComputerUseAppRequestCard";
 import { BrowserRequestCard } from "./BrowserRequestCard";
+import { OperationPermissionCard } from "./OperationPermissionCard";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 
 import { SkillChipIcon, SkillInlineText } from "./SkillInlineText";
@@ -899,7 +900,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
   // Run status/timestamps churn on every stream event; the shared row context
   // must not change with them or every timeline row re-renders per event.
   const runs = useStableHandoffRuns(runsProp);
-  const minimapItems = deriveTimelineMinimapItems(rows);
+  const minimapItems = deriveTimelineMinimapItems(rows, {
+    skipAppEvents: pmTimelineState !== null,
+  });
   const restoreRowIndex =
     restoringThreadPosition && rememberedPosition?.atEnd === false
       ? rows.findIndex((row) => row.id === rememberedPosition.rowId)
@@ -3042,6 +3045,15 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
   if (item.type === "browser_request") {
     return (
       <BrowserRequestCard
+        environmentId={ctx.activeThreadEnvironmentId}
+        item={item}
+        visibility={visibility}
+      />
+    );
+  }
+  if (item.type === "operation_permission") {
+    return (
+      <OperationPermissionCard
         environmentId={ctx.activeThreadEnvironmentId}
         item={item}
         visibility={visibility}

@@ -249,7 +249,6 @@ function makeDetail(): ProjectTeamTaskDetail {
 const planCard: ProjectDecisionCard = {
   taskNumber: 7,
   taskTitle: "Fix drag scroll",
-  proposal: null,
   plan: approvalPlanOf(spec),
   item: {
     id: ProjectAttentionItemId.make("attention-plan"),
@@ -268,6 +267,9 @@ const planCard: ProjectDecisionCard = {
     specVersion: 1,
     summary: null,
     verification: null,
+    details: null,
+    senderRole: null,
+    senderName: null,
   },
 };
 
@@ -342,7 +344,7 @@ for (const viewport of [
       ]);
       expect(container.textContent).toContain("Models per role");
       const implement = byLabel("Implement model")!;
-      expect(implement.textContent).toContain("Lead's model");
+      expect(implement.textContent).toContain("App default");
       expectInside(implement, container);
 
       await chooseModel(implement, "GPT-5.4");
@@ -350,14 +352,14 @@ for (const viewport of [
         { roleModels: { implement: { providerInstanceId: CODEX, model: "gpt-5.4" } } },
       ]);
       await vi.waitFor(() => expect(byLabel("Implement model")!.textContent).toContain("GPT-5.4"));
-      expect(byLabel("Review model")!.textContent).toContain("Lead's model");
+      expect(byLabel("Review model")!.textContent).toContain("App default");
 
-      await userEvent.click(byLabel("Use the lead's model for implement")!);
+      await userEvent.click(byLabel("Use the app default for implement")!);
       expect(server.settingsPatches.at(-1)).toEqual({ roleModels: { implement: null } });
       await vi.waitFor(() =>
-        expect(byLabel("Implement model")!.textContent).toContain("Lead's model"),
+        expect(byLabel("Implement model")!.textContent).toContain("App default"),
       );
-      expect(byLabel("Use the lead's model for implement")).toBeNull();
+      expect(byLabel("Use the app default for implement")).toBeNull();
     });
 
     it("shows which model ran each step on the task page and overrides a role", async () => {
@@ -383,9 +385,10 @@ for (const viewport of [
       );
       expect(section.querySelector("[data-model-step='plan']")?.textContent).toBe("계획 · GPT-5.4");
       expect(section.querySelector("[data-model-step='review']")).toBeNull();
-      // Unset roles show what they fall back to: the project's model, else the lead's.
+      // Unset roles show what they fall back to: the project's model, else the app's step.
       expect(byLabel("리뷰 모델")!.textContent).toContain("GPT-5.5 · 프로젝트");
-      expect(byLabel("수정 모델")!.textContent).toContain("리드 모델");
+      // Fix follows the app's implement step.
+      expect(byLabel("수정 모델")!.textContent).toContain("gpt-6.1-sol · 앱");
       expectInside(byLabel("수정 모델")!, container);
 
       await chooseModel(byLabel("수정 모델")!, "GPT-5.4");
@@ -404,7 +407,7 @@ for (const viewport of [
         taskId: TASK_ID,
         roleModels: { fix: null },
       });
-      await vi.waitFor(() => expect(byLabel("수정 모델")!.textContent).toContain("리드 모델"));
+      await vi.waitFor(() => expect(byLabel("수정 모델")!.textContent).toContain("gpt-6.1-sol · 앱"));
     });
 
     it("shows each step's time, tokens and cost, and the task's total", async () => {
@@ -422,7 +425,15 @@ for (const viewport of [
               costUsd: 2.1,
             },
           },
-          metrics: { size: "medium", reviewFindings: 3, fixRounds: 1, ciFailures: 0 },
+          metrics: {
+            size: "medium",
+            reviewFindings: 3,
+            fixRounds: 1,
+            ciFailures: 0,
+            memoryStallMs: 18 * 60_000,
+            memoryLocalOnlyStallMs: 13 * 60_000,
+            avoidableStallMs: { no_progress: 20 * 60_000, answered_idle: 20 * 60_000 },
+          },
         },
       };
       await act(async () =>
@@ -444,8 +455,14 @@ for (const viewport of [
       expect(total.textContent).toBe(
         "합계 20m · 1.4M/47k 토큰 · 약 $3.00 · 리뷰 지적 3 · 수정 1회 · CI 실패 0 · 크기 중",
       );
+      const stalls = section.querySelector<HTMLElement>("[data-task-avoidable-stalls]")!;
+      expect(stalls.textContent).toBe(
+        "피할 수 있었던 멈춤 58분 · 진행 없음 20분 · 답을 받고도 멈춤 20분 · 메모리 부족 5분 · '로컬만' 설정에서 메모리 부족 13분",
+      );
       expectInside(implement, container);
       expectInside(total, container);
+      expectInside(stalls, container);
+      await page.screenshot({ path: `__screenshots__/task-avoidable-stalls-${viewport.name}.png` });
     });
 
     it("sets who merges in team settings and keeps it", async () => {

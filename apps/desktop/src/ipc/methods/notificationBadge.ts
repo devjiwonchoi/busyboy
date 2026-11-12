@@ -5,7 +5,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as ElectronApp from "../../electron/ElectronApp.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
-import { SET_NOTIFICATION_BADGE_CHANNEL } from "../channels.ts";
+import { REQUEST_ATTENTION_CHANNEL, SET_NOTIFICATION_BADGE_CHANNEL } from "../channels.ts";
 
 const NotificationBadge = Schema.Struct({
   count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2_147_483_647 })),
@@ -22,7 +22,6 @@ export function applyNotificationBadge(
   { count, image }: typeof NotificationBadge.Type,
 ): void {
   try {
-    if (Electron.BrowserWindow.getFocusedWindow()) count = 0;
     if (platform === "win32") {
       const overlay = count > 0 && image ? Electron.nativeImage.createFromDataURL(image) : null;
       for (const window of Electron.BrowserWindow.getAllWindows()) {
@@ -46,12 +45,15 @@ export const installNotificationBadge = Effect.fn("desktop.ipc.installNotificati
     const ipc = yield* DesktopIpc.DesktopIpc;
     const app = yield* ElectronApp.ElectronApp;
     const platform = yield* HostProcess.Platform;
-    const clear = () => {
-      applyNotificationBadge(platform, { count: 0, image: null });
-      for (const window of Electron.BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) window.webContents.send(SET_NOTIFICATION_BADGE_CHANNEL);
-      }
-    };
+    const clear = () => applyNotificationBadge(platform, { count: 0, image: null });
+    yield* ipc.handle(
+      DesktopIpc.makeIpcMethod({
+        channel: REQUEST_ATTENTION_CHANNEL,
+        payload: Schema.Void,
+        result: Schema.Void,
+        handler: () => Effect.sync(() => requestAttention(platform)),
+      }),
+    );
     yield* ipc.handle(
       DesktopIpc.makeIpcMethod({
         channel: SET_NOTIFICATION_BADGE_CHANNEL,
@@ -59,13 +61,35 @@ export const installNotificationBadge = Effect.fn("desktop.ipc.installNotificati
         result: Schema.Void,
         handler: (badge) =>
           Effect.sync(() => {
-            if (badge.count > 0 && Electron.BrowserWindow.getFocusedWindow()) clear();
-            else applyNotificationBadge(platform, badge);
+            applyNotificationBadge(platform, badge);
           }),
       }),
     );
-    yield* app.on("browser-window-focus", clear);
+    yield* app.on("browser-window-focus", () => {
+      if (platform === "win32") {
+        for (const window of Electron.BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.flashFrame(false);
+          }
+        }
+      }
+    });
     yield* app.on("before-quit", clear);
     yield* Effect.addFinalizer(() => Effect.sync(clear));
   },
 );
+
+/** Attention is quiet while any BusyBoy window is focused. */
+export function requestAttention(platform: NodeJS.Platform): void {
+  if (Electron.BrowserWindow.getFocusedWindow()) {
+    return;
+  }
+  if (platform === "darwin") {
+    Electron.app.dock?.bounce("informational");
+  } else if (platform === "win32") {
+    const window = Electron.BrowserWindow.getAllWindows().find(
+      (window) => !window.isDestroyed() && window.isVisible(),
+    );
+    window?.flashFrame(true);
+  }
+}

@@ -10,6 +10,8 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
+import { ExecutionLocation } from "./executionLocation.ts";
+import { ProviderOptionSelection } from "./model.ts";
 import { OrchestratorMcpTarget } from "./orchestratorMcp.ts";
 import { ProjectIconOverride } from "./project.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
@@ -33,7 +35,11 @@ export type ProjectMemoryEntryId = typeof ProjectMemoryEntryId.Type;
 export const ProjectSitrepId = TrimmedNonEmptyString.pipe(Schema.brand("ProjectSitrepId"));
 export type ProjectSitrepId = typeof ProjectSitrepId.Type;
 
-export const DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 6;
+/**
+ * No longer enforced: task leads start by free memory under the user's safety cap
+ * (ServerSettings.taskExecution.maxConcurrentSessions). Kept so stored settings decode.
+ */
+export const DEFAULT_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 10;
 export const MAX_PROJECT_TEAM_MAX_CONCURRENT_TASKS = 32;
 export const DEFAULT_PROJECT_TEAM_SITREP_INTERVAL_MINUTES = 60;
 /** Bounds for an interval the user sets directly. */
@@ -44,8 +50,6 @@ export const MIN_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES = 15;
 export const MAX_PROJECT_TEAM_AUTO_SITREP_INTERVAL_MINUTES = 480;
 
 export const ProjectTaskStage = Schema.Literals([
-  /** A PM's or the Director's proposal; it becomes a task only when the user adds it. */
-  "proposed",
   "inbox",
   "planning",
   /** The plan is written and waits for the user's approval. */
@@ -76,7 +80,6 @@ export function projectTaskPhase(stage: ProjectTaskStage): ProjectTaskPhase | nu
       return "iterate";
     case "in_review":
       return "ship";
-    case "proposed":
     case "done":
     case "blocked":
     case "cancelled":
@@ -143,10 +146,14 @@ export const PROJECT_TASK_MODEL_ROLES: ReadonlyArray<ProjectTaskModelRole> = [
   "fix",
 ];
 
-/** A provider instance and one of its models, as orchestrator_capabilities lists them. */
+/**
+ * A provider instance, one of its models and its option selections (such as the Claude
+ * `effort` or Codex `reasoningEffort` thinking level), as orchestrator_capabilities lists them.
+ */
 export const ProjectTaskModelTarget = Schema.Struct({
   providerInstanceId: ProviderInstanceId,
   model: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+  options: Schema.optionalKey(Schema.Array(ProviderOptionSelection).check(Schema.isMaxLength(16))),
 });
 export type ProjectTaskModelTarget = typeof ProjectTaskModelTarget.Type;
 
@@ -167,7 +174,7 @@ export const ProjectTaskRoleModelsPatch = Schema.Struct({
   fix: Schema.optionalKey(Schema.NullOr(ProjectTaskModelTarget)),
 }).annotate({
   description:
-    "Provider and model per role (plan, implement, review, fix) from orchestrator_capabilities. null clears a role so it runs on the lead's own model.",
+    "Provider, model and options (such as the thinking level: effort or reasoningEffort) per role (plan, implement, review, fix) from orchestrator_capabilities. null clears a role so it falls back to the app's step model.",
 });
 export type ProjectTaskRoleModelsPatch = typeof ProjectTaskRoleModelsPatch.Type;
 
@@ -186,16 +193,76 @@ export function applyRoleModelsPatch(
   return next;
 }
 
-/** The model a role runs on: the task's override, else the project default, else none. */
+/** The three steps the app sets models for. Fix follows implement. */
+export const ProjectTaskStepRole = Schema.Literals(["plan", "implement", "review"]);
+export type ProjectTaskStepRole = typeof ProjectTaskStepRole.Type;
+export const PROJECT_TASK_STEP_ROLES: ReadonlyArray<ProjectTaskStepRole> = [
+  "plan",
+  "implement",
+  "review",
+];
+
+/** The app-wide model and thinking level per step; every project starts from these. */
+export const DEFAULT_PROJECT_TASK_STEP_MODELS: {
+  readonly [K in ProjectTaskStepRole]: ProjectTaskModelTarget;
+} = {
+  plan: {
+    providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+    model: "claude-opus-5-5",
+    options: [{ id: "effort", value: "xhigh" }],
+  },
+  implement: {
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    model: "gpt-6.1-sol",
+    options: [{ id: "reasoningEffort", value: "medium" }],
+  },
+  review: {
+    providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+    model: "claude-opus-5-5",
+    options: [{ id: "effort", value: "high" }],
+  },
+};
+
+export const ProjectTaskStepModels = Schema.Struct({
+  plan: ProjectTaskModelTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TASK_STEP_MODELS.plan)),
+  ),
+  implement: ProjectTaskModelTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TASK_STEP_MODELS.implement)),
+  ),
+  review: ProjectTaskModelTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_TASK_STEP_MODELS.review)),
+  ),
+});
+export type ProjectTaskStepModels = typeof ProjectTaskStepModels.Type;
+
+export const ProjectTaskStepModelsPatch = Schema.Struct({
+  plan: Schema.optionalKey(ProjectTaskModelTarget),
+  implement: Schema.optionalKey(ProjectTaskModelTarget),
+  review: Schema.optionalKey(ProjectTaskModelTarget),
+});
+export type ProjectTaskStepModelsPatch = typeof ProjectTaskStepModelsPatch.Type;
+
+export type ProjectTaskModelSource = "task" | "project" | "app";
+
+/**
+ * The model a role runs on: the task's override, else the project's, else the app's step
+ * model. Fix has no app step of its own: without a fix override it follows implement.
+ * Null only when no app step models are given and nothing else is set.
+ */
 export function effectiveRoleModel(
   role: ProjectTaskModelRole,
   task: ProjectTaskRoleModels,
   project: ProjectTaskRoleModels | undefined,
-): { readonly target: ProjectTaskModelTarget; readonly source: "task" | "project" } | null {
+  app?: ProjectTaskStepModels | undefined,
+): { readonly target: ProjectTaskModelTarget; readonly source: ProjectTaskModelSource } | null {
   const own = task[role];
   if (own !== undefined) return { target: own, source: "task" };
   const fallback = project?.[role];
-  return fallback === undefined ? null : { target: fallback, source: "project" };
+  if (fallback !== undefined) return { target: fallback, source: "project" };
+  if (role === "fix") return effectiveRoleModel("implement", task, project, app);
+  const step = app?.[role];
+  return step === undefined ? null : { target: step, source: "app" };
 }
 
 /** The model that last ran a role on a task, as delegate_task reported it. */
@@ -238,6 +305,60 @@ export type ProjectTaskStepUsages = typeof ProjectTaskStepUsages.Type;
 export const ProjectTaskSize = Schema.Literals(["small", "medium", "large"]);
 export type ProjectTaskSize = typeof ProjectTaskSize.Type;
 
+/**
+ * Why a task sat still when it could have moved:
+ * - no_progress: its lead stopped without finishing, asking or holding.
+ * - answered_idle: the user answered, but the lead did not move on.
+ * - not_started: it could start (a free slot, nothing it waits on) but nobody started it.
+ * - start_failed: its lead failed to start.
+ * - hold_not_resumed: its resume condition was met, but nobody started it.
+ */
+export const ProjectTaskStallCause = Schema.Literals([
+  "no_progress",
+  "answered_idle",
+  "not_started",
+  "start_failed",
+  "hold_not_resumed",
+]);
+export type ProjectTaskStallCause = typeof ProjectTaskStallCause.Type;
+
+/** What each stall cause reads as on the task and in messages. */
+export const PROJECT_TASK_STALL_CAUSE_LABELS: Record<ProjectTaskStallCause, string> = {
+  no_progress: "진행 없음",
+  answered_idle: "답을 받고도 멈춤",
+  not_started: "시작되지 않음",
+  start_failed: "시작 실패",
+  hold_not_resumed: "조건이 풀렸는데 시작 안 됨",
+};
+
+/** What lets a held task start again. */
+export const ProjectTaskResumeWhen = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("task"),
+    /** Resume once this task is done or cancelled. */
+    taskId: ProjectTaskId,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("time"),
+    /** Resume at this time. */
+    at: IsoDateTime,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("user"),
+    /** What the user decides; the task waits on them, so the wait is not a stall. */
+    note: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
+  }),
+]);
+export type ProjectTaskResumeWhen = typeof ProjectTaskResumeWhen.Type;
+
+/** A deliberate stop and the condition that ends it. */
+export const ProjectTaskHold = Schema.Struct({
+  resumeWhen: ProjectTaskResumeWhen,
+  reason: Schema.String,
+  since: IsoDateTime,
+});
+export type ProjectTaskHold = typeof ProjectTaskHold.Type;
+
 /** Outcome counts kept per task, to compare model choices later. */
 export const ProjectTaskMetrics = Schema.Struct({
   size: Schema.NullOr(ProjectTaskSize).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -247,6 +368,19 @@ export const ProjectTaskMetrics = Schema.Struct({
   fixRounds: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
   /** Failed pull request checks that woke the lead. */
   ciFailures: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /**
+   * Milliseconds the task was held for memory (waiting to start, or its lead
+   * paused) when it could have run: time the system stopped it, not the user.
+   */
+  memoryStallMs: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  /** The part of memoryStallMs that happened while the location setting was local only. */
+  memoryLocalOnlyStallMs: Schema.optionalKey(NonNegativeInt),
+  /**
+   * Finished avoidable stalls by cause, in milliseconds: time the task could have
+   * moved but the system or the process stopped it. Waits on the user and holds
+   * with a resume condition are not stalls. Memory stalls stay in memoryStallMs.
+   */
+  avoidableStallMs: Schema.optionalKey(Schema.Record(Schema.String, NonNegativeInt)),
 });
 export type ProjectTaskMetrics = typeof ProjectTaskMetrics.Type;
 
@@ -255,6 +389,7 @@ export const EMPTY_PROJECT_TASK_METRICS: ProjectTaskMetrics = {
   reviewFindings: 0,
   fixRounds: 0,
   ciFailures: 0,
+  memoryStallMs: 0,
 };
 
 export const ProjectTaskOutcome = Schema.Literals([
@@ -346,8 +481,6 @@ export function resolveProjectTaskStatus(
   if (signals.openQuestion) return "ask_question";
   if (task.stage === "blocked") return "fatal";
   switch (task.stage) {
-    // A proposal never reaches a task list; read it as Todo if one does.
-    case "proposed":
     case "inbox":
       return "todo";
     case "planning":
@@ -370,6 +503,98 @@ const ProjectTaskPullRequestUrl = TrimmedNonEmptyString.check(Schema.isMaxLength
   description: "Pull request URL.",
 });
 
+/**
+ * Why a task is held for memory: `waiting` stays in Todo until there is room to
+ * start its lead; `paused` had its lead's session stopped and resumes later.
+ */
+export const ProjectTaskMemoryHold = Schema.Literals(["waiting", "paused"]);
+export type ProjectTaskMemoryHold = typeof ProjectTaskMemoryHold.Type;
+
+/** Explicit decision scope supplied by the requester, never inferred from prose. */
+export const ProjectAttentionContext = Schema.Struct({
+  action: TrimmedNonEmptyString.check(
+    Schema.isMaxLength(240),
+    Schema.makeFilter((action) => !/[\r\n]/u.test(action) || "Action must fit on one line."),
+  ),
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)),
+  impacts: Schema.Array(Schema.Literals(["merge", "deploy", "cost", "publish"])),
+  cost: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(1_000))),
+  reversibility: Schema.Literals(["reversible", "requires_work", "irreversible", "unknown"]),
+  recommendation: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+}).check(
+  Schema.makeFilter((context) =>
+    context.impacts.includes("cost") === (context.cost !== null)
+      ? true
+      : "A cost impact requires an amount or uncertainty explanation; otherwise cost must be null.",
+  ),
+);
+export type ProjectAttentionContext = typeof ProjectAttentionContext.Type;
+
+export const ProjectAttentionDetail = Schema.Struct({
+  label: TrimmedNonEmptyString.check(Schema.isMaxLength(20)),
+  text: TrimmedNonEmptyString.check(Schema.isMaxLength(500)),
+});
+export type ProjectAttentionDetail = typeof ProjectAttentionDetail.Type;
+
+/**
+ * Where a plan check stands: its checker is judging, every gate passed, one failed, or
+ * the spec moved past the version it judged (stale: it counts as no round).
+ */
+export const ProjectTaskPlanCheckStatus = Schema.Literals([
+  "checking",
+  "passed",
+  "failed",
+  "stale",
+]);
+export type ProjectTaskPlanCheckStatus = typeof ProjectTaskPlanCheckStatus.Type;
+
+/** The checker's verdict on one plan gate. */
+export const ProjectTaskPlanGateVerdict = Schema.Struct({
+  gate: TrimmedNonEmptyString.check(Schema.isMaxLength(64)).annotate({
+    description: 'The gate id, such as "problem" or "risks".',
+  }),
+  pass: Schema.Boolean,
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)).annotate({
+    description: "One sentence on why, in the user's language (Korean if the spec is Korean).",
+  }),
+});
+export type ProjectTaskPlanGateVerdict = typeof ProjectTaskPlanGateVerdict.Type;
+
+/**
+ * The latest check of the task's plan against the plan gates, by a separate checker
+ * session, on a model other than the plan's when one is set up. The approval card waits
+ * for it; `ask` is the lead's approval request, raised as the card once the check passes.
+ */
+export const ProjectTaskPlanCheck = Schema.Struct({
+  specVersion: PositiveInt,
+  /** 1 for the first check since the task entered planning; the card goes up after round 3 regardless. */
+  round: PositiveInt,
+  status: ProjectTaskPlanCheckStatus,
+  /** The gate ids the checker must judge, fixed when the check starts. */
+  requiredGates: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  /** One per required gate once the checker answered; empty while checking. */
+  verdicts: Schema.Array(ProjectTaskPlanGateVerdict),
+  /** The model and session that check it; null when the checker could not start. */
+  checker: Schema.NullOr(
+    Schema.Struct({
+      providerInstanceId: Schema.String,
+      model: Schema.NullOr(Schema.String),
+      threadId: ThreadId,
+      /** True when no other model was usable, so it runs on the plan's model in its own session. */
+      sameModelAsPlan: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+    }),
+  ),
+  startedAt: IsoDateTime,
+  checkedAt: Schema.NullOr(IsoDateTime),
+  ask: Schema.Struct({
+    question: Schema.String,
+    context: ProjectAttentionContext,
+    details: Schema.optional(Schema.Array(ProjectAttentionDetail)),
+    senderName: Schema.optional(Schema.String),
+  }),
+});
+export type ProjectTaskPlanCheck = typeof ProjectTaskPlanCheck.Type;
+
 export const ProjectTask = Schema.Struct({
   id: ProjectTaskId,
   projectId: ProjectId,
@@ -381,6 +606,14 @@ export const ProjectTask = Schema.Struct({
   /** The task this one was split from, shown as its parent. */
   parentTaskId: Schema.NullOr(ProjectTaskId).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   leadThreadId: Schema.NullOr(ThreadId),
+  /** Where the task's lead runs, set when the task starts; absent means local. */
+  location: Schema.optional(ExecutionLocation),
+  /** Set while the lead is being moved there; null or absent otherwise. */
+  moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
+  /** Held for memory: waiting to start, or its lead paused; null or absent otherwise. */
+  memoryHold: Schema.optional(Schema.NullOr(ProjectTaskMemoryHold)),
+  /** Stopped on purpose until its resume condition holds; null when not held. */
+  hold: Schema.optional(Schema.NullOr(ProjectTaskHold)),
   prUrl: Schema.NullOr(Schema.String),
   planSummary: Schema.NullOr(Schema.String),
   resultSummary: Schema.NullOr(Schema.String),
@@ -397,6 +630,8 @@ export const ProjectTask = Schema.Struct({
   review: Schema.NullOr(ProjectTaskReview).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** Set by task_ready once the pull request passed the Ready gate; the status reads it. */
   ready: Schema.NullOr(ProjectTaskReady).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** The latest plan gate check; null or absent before the first approval request. */
+  planCheck: Schema.optional(Schema.NullOr(ProjectTaskPlanCheck)),
   /** This task's model per role; a role it leaves out uses the project's. */
   roleModels: ProjectTaskRoleModels.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   /** The model that last ran each role. */
@@ -539,6 +774,20 @@ export const ProjectTaskSpec = Schema.Struct({
   files: Schema.Array(ProjectTaskFile)
     .check(Schema.isMaxLength(300))
     .pipe(Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<ProjectTaskFile>))),
+  /** Plan gate "문제": the current state, the desired state, and how the change is measured. */
+  problem: textOrEmpty(8_000),
+  /** Plan gate "왜": who asked, what is lost without it, and a requirement questioned. */
+  why: textOrEmpty(8_000),
+  /** Plan gate "현재 상태": evidence of today's state; for a bug, symptom vs root cause and a baseline. */
+  currentState: textOrEmpty(8_000),
+  /** Plan gate "사람 필요 지점": where a person must act (sign-in, tokens, payment), or "none" and why. */
+  humanCheckpoints: textOrEmpty(8_000),
+  /** Plan gate "예산": the time or token appetite, and the scope cut if it runs over. */
+  budget: textOrEmpty(8_000),
+  /** Plan gate "위험": a pre-mortem and rabbit holes, each mapped to a todo or a non-goal. */
+  risks: textOrEmpty(8_000),
+  /** Plan gate "대안": the options considered and why each was rejected. */
+  alternatives: textOrEmpty(8_000),
 }).check(
   Schema.makeFilter((spec) =>
     new Set(spec.todos.map((todo) => todo.id)).size === spec.todos.length
@@ -567,6 +816,13 @@ export function emptyProjectTaskSpec(background = ""): ProjectTaskSpec {
     prototypeWaiver: "",
     criteria: [],
     files: [],
+    problem: "",
+    why: "",
+    currentState: "",
+    humanCheckpoints: "",
+    budget: "",
+    risks: "",
+    alternatives: "",
   };
 }
 
@@ -597,6 +853,8 @@ export const ProjectTaskSessionRole = Schema.Literals([
   "planner",
   "implementer",
   "reviewer",
+  /** Judges the plan against the plan gates before the approval card goes up. */
+  "checker",
 ]);
 export type ProjectTaskSessionRole = typeof ProjectTaskSessionRole.Type;
 
@@ -634,13 +892,7 @@ export function formatTaskKey(prefix: string, taskNumber: number): string {
   return `${prefix}-${taskNumber}`;
 }
 
-/** "proposal": a PM's or the Director's task proposal; only the user's click adds it. */
-export const ProjectAttentionKind = Schema.Literals([
-  "decision",
-  "approval",
-  "blocker",
-  "proposal",
-]);
+export const ProjectAttentionKind = Schema.Literals(["decision", "approval", "blocker"]);
 export type ProjectAttentionKind = typeof ProjectAttentionKind.Type;
 
 /** "afk": the server answered for the user while AFK was on. */
@@ -650,7 +902,8 @@ export type ProjectAttentionAnsweredBy = typeof ProjectAttentionAnsweredBy.Type;
 export const ProjectAttentionItem = Schema.Struct({
   id: ProjectAttentionItemId,
   projectId: ProjectId,
-  taskId: ProjectTaskId,
+  /** Null for a card about the project rather than a task, e.g. a blocked PM. */
+  taskId: Schema.NullOr(ProjectTaskId),
   kind: ProjectAttentionKind,
   question: Schema.String,
   options: Schema.Array(Schema.String),
@@ -681,8 +934,46 @@ export const ProjectAttentionItem = Schema.Struct({
   summary: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** For a plan approval: the card's Verification section (markdown). Null for other kinds and older cards. */
   verification: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  context: Schema.optionalKey(Schema.NullOr(ProjectAttentionContext)),
+  senderRole: Schema.NullOr(Schema.Literals(["lead", "pm", "director"])).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  senderName: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  details: Schema.NullOr(Schema.Array(ProjectAttentionDetail).check(Schema.isMaxLength(8))).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /**
+   * Set while the user has set the open item aside ("보류"). It stays open but leaves the
+   * waiting list and count, and AFK and the stall watch leave its task alone.
+   */
+  snoozedAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
+  /** Why the user snoozed it; required to snooze. */
+  snoozeReason: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type ProjectAttentionItem = typeof ProjectAttentionItem.Type;
+
+/** A card the user snoozed, as the PM and Director see it: mention only as a count. */
+export const ProjectSnoozedAttention = Schema.Struct({
+  id: ProjectAttentionItemId,
+  taskId: Schema.NullOr(ProjectTaskId),
+  kind: ProjectAttentionKind,
+  /** The card's first line. */
+  title: Schema.String,
+  reason: Schema.String,
+  snoozedAt: IsoDateTime,
+});
+export type ProjectSnoozedAttention = typeof ProjectSnoozedAttention.Type;
+
+/** True for an open item the user set aside. */
+export function isSnoozedAttention(item: {
+  readonly answeredAt: string | null;
+  readonly supersededAt: string | null;
+  readonly snoozedAt?: string | null | undefined;
+}): boolean {
+  return (
+    item.answeredAt === null && item.supersededAt === null && (item.snoozedAt ?? null) !== null
+  );
+}
 
 // Exact options distinguish actionable turn failures from existing free-form blockers.
 export const TURN_FAILED_RETRY = "다시 시도";
@@ -697,9 +988,42 @@ export function isTurnFailedBlocker(item: Pick<ProjectAttentionItem, "kind" | "o
   );
 }
 
+/** The one button on a card the server raises when a task stalled or failed to start. */
+export const STALL_RESTART = "다시 시작";
+export const STALL_OPTIONS = [STALL_RESTART] as const;
+
+export function isStallBlocker(item: {
+  readonly kind: string;
+  readonly options: ReadonlyArray<string>;
+}): boolean {
+  return item.kind === "blocker" && item.options.length === 1 && item.options[0] === STALL_RESTART;
+}
+
+/** The decision raised when a cloud lead's sandbox could not be replaced before its limit. */
+export const SANDBOX_ROTATION_MOVE_LOCAL = "로컬로 가져오기";
+export const SANDBOX_ROTATION_KEEP = "클라우드에 두기";
+export const SANDBOX_ROTATION_OPTIONS = [
+  SANDBOX_ROTATION_MOVE_LOCAL,
+  SANDBOX_ROTATION_KEEP,
+] as const;
+
+export function isSandboxRotationDecision(
+  item: Pick<ProjectAttentionItem, "kind" | "options">,
+): boolean {
+  return (
+    item.kind === "decision" &&
+    item.options.length === SANDBOX_ROTATION_OPTIONS.length &&
+    item.options.every((option, index) => option === SANDBOX_ROTATION_OPTIONS[index])
+  );
+}
+
 export function turnFailedReason(detail: string | undefined): string | null {
   if (detail === undefined) {
     return null;
+  }
+  // A cloud lead without a saved Claude setup-token fails before claude starts.
+  if (/setup-token|claude_oauth_token|CLAUDE_CODE_OAUTH_TOKEN/i.test(detail)) {
+    return "Claude 토큰이 없어요";
   }
   if (/\b401\b|unauthorized|token[_ ]expired|authentication/i.test(detail)) {
     return "로그인 만료 401";
@@ -764,20 +1088,16 @@ export function approvalPlanOf(
   };
 }
 
-/** A question shown to the user as a card, with the name of the task that asked it. */
+/**
+ * A question shown to the user as a card, with the name of the task that asked it.
+ * A card without a task has a null taskNumber and the PM's name as taskTitle.
+ */
 export const ProjectDecisionCard = Schema.Struct({
   item: ProjectAttentionItem,
-  taskNumber: PositiveInt,
+  taskNumber: Schema.NullOr(PositiveInt),
   taskTitle: Schema.String,
   /** For a plan approval: the plan it asks about. Null for other kinds and missing versions. */
   plan: Schema.NullOr(ProjectApprovalPlan).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
-  /**
-   * For a task proposal: the project the task goes to, which for the Director is not
-   * the card's project. Null for other kinds.
-   */
-  proposal: Schema.NullOr(Schema.Struct({ projectId: ProjectId })).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null)),
-  ),
 });
 export type ProjectDecisionCard = typeof ProjectDecisionCard.Type;
 
@@ -913,7 +1233,7 @@ export const ProjectTeamSettings = Schema.Struct({
   /** Absent until the user or PM picks one; the server resolves a per-project default. */
   persona: Schema.optionalKey(ProjectManagerPersona),
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  /** Absent until the user picks one; the server derives it from the project's name. */
+  /** Assigned once from the project name; unique within this server. */
   taskKeyPrefix: Schema.optionalKey(ProjectTaskKeyPrefix),
   /** Absent when off. Only the user can set it, through the app. */
   afk: Schema.optionalKey(ProjectTeamAfk),
@@ -923,6 +1243,8 @@ export const ProjectTeamSettings = Schema.Struct({
   roleModels: Schema.optionalKey(ProjectTaskRoleModels),
   /** Who merges Ready pull requests. Absent means the PM. */
   mergeOwner: Schema.optionalKey(ProjectMergeOwner),
+  /** Previous prefixes, only for resolving historical references in their project. */
+  taskKeyAliases: Schema.optionalKey(Schema.Array(ProjectTaskKeyPrefix)),
 });
 export type ProjectTeamSettings = typeof ProjectTeamSettings.Type;
 
@@ -1031,7 +1353,12 @@ export const ProjectTeamWorkspaceProject = Schema.Struct({
   statusCounts: Schema.Record(ProjectTaskStatus, NonNegativeInt),
   /** Tasks not done or cancelled. */
   openTasks: Schema.Array(ProjectTaskBrief),
+  /** Open cards still waiting on the user; snoozed ones are in snoozedAttention. */
   openAttention: Schema.Array(ProjectAttentionItem),
+  /** Cards the user set aside on purpose. Mention only as "보류 N건"; never chase them. */
+  snoozedAttention: Schema.Array(ProjectSnoozedAttention).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   /** The PM's "summary" memory topic, or null when it has none yet. */
   summary: Schema.NullOr(Schema.String),
 });
@@ -1156,7 +1483,12 @@ export const ProjectTeamStatus = Schema.Struct({
   /** How many tasks have each user-facing status. */
   statusCounts: Schema.optional(Schema.Record(ProjectTaskStatus, NonNegativeInt)),
   stalled: Schema.Array(ProjectTaskBrief),
+  /** Open cards still waiting on the user; snoozed ones are in snoozedAttention. */
   openAttention: Schema.Array(ProjectAttentionItem),
+  /** Cards the user set aside on purpose. Mention only as "보류 N건"; never chase them. */
+  snoozedAttention: Schema.Array(ProjectSnoozedAttention).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   settings: ProjectTeamSettings,
   changes: Schema.Struct({
     /** Defaults to the later of the last sitrep and the last user message. */
@@ -1210,21 +1542,23 @@ export const ProjectTeamTaskCreateInput = Schema.Struct({
   }),
   goal: Schema.optional(ProjectTaskRequest).annotate({
     description:
-      "PM and Director, required: the end state the task delivers, in the user's language. Shown on the proposal card as 목표.",
+      "PM and Director, required: the end state the task delivers, in the user's language. It goes into the request the task lead plans from.",
   }),
   verification: Schema.optional(ProjectTaskRequest).annotate({
     description:
-      "PM and Director, required: how to check it is done, in the user's language. Shown on the proposal card as 확인 방법.",
+      "PM and Director, required: how to check it is done, in the user's language. It goes into the request the task lead plans from.",
   }),
   goalId: Schema.optional(WorkspaceGoalId).annotate({
     description:
-      "Director only. The workspace goal this work serves; once the user adds the task it is linked to that goal.",
+      "Director only. The workspace goal this work serves; the task is linked to it right away.",
   }),
 });
 export type ProjectTeamTaskCreateInput = typeof ProjectTeamTaskCreateInput.Type;
 
 export const ProjectTeamTaskResult = Schema.Struct({
   task: ProjectTask,
+  /** task_create: why the new task waits in Todo instead of starting now. */
+  waiting: Schema.optional(Schema.String),
 });
 export type ProjectTeamTaskResult = typeof ProjectTeamTaskResult.Type;
 
@@ -1233,6 +1567,10 @@ export const ProjectTeamTaskStartInput = Schema.Struct({
   target: Schema.optional(OrchestratorMcpTarget).annotate({
     description:
       "Provider and model for the task lead. Omit to use the PM's own. A plan model set for the project or task wins.",
+  }),
+  location: Schema.optional(ExecutionLocation).annotate({
+    description:
+      "Where the task lead runs follows the user's execution-location setting, which also decides when the Mac is short on memory. local runs it on the user's Mac. cloud runs a Claude lead's CLI in a Vercel Sandbox with the same settings; the app shows the same progress, cards and pull request, marked Cloud. cloud is honored only when the setting allows the cloud; under local only it runs locally. Use cloud only when the user asks for it.",
   }),
 });
 export type ProjectTeamTaskStartInput = typeof ProjectTeamTaskStartInput.Type;
@@ -1277,6 +1615,15 @@ export const ProjectTeamTaskUpdateInput = Schema.Struct({
   waitsOn: Schema.optional(Schema.Array(ProjectTaskId)).annotate({
     description:
       "PM only. Replaces the tasks this one waits on; [] clears them. May be tasks in other projects.",
+  }),
+  hold: Schema.optional(
+    Schema.Struct({
+      resumeWhen: ProjectTaskResumeWhen,
+      reason: ProjectTaskSummaryText,
+    }),
+  ).annotate({
+    description:
+      'Required to stop a started task (stage "inbox"); the PM may also hold a Todo task. resumeWhen is {type:"task",taskId} (resumes when that task is done or cancelled), {type:"time",at} (an ISO time), or {type:"user",note} (waits on the user\'s decision). The server tells the PM to start it once the condition holds. task_start clears it.',
   }),
   parentTaskId: Schema.optional(Schema.NullOr(ProjectTaskId)).annotate({
     description:
@@ -1428,11 +1775,15 @@ export type ProjectTeamSettingsResult = typeof ProjectTeamSettingsResult.Type;
 export const ProjectTeamAskUserInput = Schema.Struct({
   kind: Schema.Literals(["decision", "approval", "blocker"]).annotate({
     description:
-      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card with the spec's summary and todos. blocker: something only a person can unblock.",
+      "decision: a choice only the user can make. approval: sign-off on the plan in the spec; the server attaches the latest spec version and shows the user a review card with the spec's summary and todos. blocker: something only a person can unblock. A PM may ask only decision or blocker.",
+  }),
+  senderName: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(24))).annotate({
+    description:
+      "Task lead only: a short plain name for your work, such as 목표 그래프. Shown as '<project> · <name> 리드'. No task keys.",
   }),
   question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description:
-      "Self-contained question. For approval, one line saying what the task is. For a decision or blocker, the first line is the question itself, naming the task; the card shows it as the title. Context goes below it and starts folded.",
+      "Whole messenger-style message: first line is the ask (at most 80 characters), then a blank line and 1-3 short plain paragraphs describing what, why, done-when, cost and reversibility. Optionally use numbered steps. No headings, labels, bullets, task keys, internal ids, code, paths or identifiers.",
   }),
   options: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(512))).check(
@@ -1440,32 +1791,24 @@ export const ProjectTeamAskUserInput = Schema.Struct({
     ),
   ).annotate({
     description:
-      'Suggested answers, if any, shown as choices. Write each as "Label — one-line tradeoff" and mark the one you recommend with "(Recommended)".',
+      'Suggested answers, if any, shown as choices. Write each as "Label: one-line tradeoff" and, when there are multiple options, mark exactly one with "(Recommended)" or "(추천)".',
+  }),
+  details: Schema.optional(
+    Schema.Array(ProjectAttentionDetail).check(Schema.isMaxLength(8)),
+  ).annotate({
+    description:
+      "Optional folded details shown only under 자세히 보기. At most 8 label/text pairs; labels at most 20 characters, text at most 500. Use plain language without internal keys, ids, code or paths.",
+  }),
+  context: ProjectAttentionContext.annotate({
+    description:
+      "Required action, reason, explicit impacts (use [] for none), cost (null when absent), reversibility and recommendation. Essential risks stay visible on the card. This describes scope and does not grant additional authority.",
   }),
   taskId: Schema.optional(ProjectTaskId).annotate({
     description:
-      "Director only, required: the task (in any project) the decision is mainly about. The card shows in your own chat and the answer comes back to you. A task lead leaves it out.",
+      "Director only, required: the task (in any project) the decision is mainly about. The card shows in your own chat and the answer comes back to you. A task lead and a PM leave it out.",
   }),
 });
 export type ProjectTeamAskUserInput = typeof ProjectTeamAskUserInput.Type;
-
-/** Task proposal answers. Anything else is the user's feedback on the proposal. */
-export const TASK_PROPOSAL_ACCEPT = "태스크로 추가";
-export const TASK_PROPOSAL_DISMISS = "빼기";
-
-export type TaskProposalOutcome = "accept" | "dismiss" | "feedback";
-
-/** What an answer to a task proposal card means. */
-export function taskProposalOutcome(answer: string): TaskProposalOutcome {
-  const trimmed = answer.trim();
-  if (trimmed === TASK_PROPOSAL_ACCEPT) {
-    return "accept";
-  }
-  if (trimmed === TASK_PROPOSAL_DISMISS) {
-    return "dismiss";
-  }
-  return "feedback";
-}
 
 /** Plan approval answers. Anything else is feedback on the plan. */
 export const PLAN_APPROVAL_START = "Approve and start";
@@ -1588,6 +1931,25 @@ export const ProjectTeamTaskReviewSetInput = Schema.Struct({
 });
 export type ProjectTeamTaskReviewSetInput = typeof ProjectTeamTaskReviewSetInput.Type;
 
+export const ProjectTeamPlanCheckSetInput = Schema.Struct({
+  taskId: ProjectTeamOwnTaskId,
+  specVersion: PositiveInt.annotate({
+    description: "The spec version you judged, as your brief names it.",
+  }),
+  verdicts: Schema.Array(ProjectTaskPlanGateVerdict)
+    .check(Schema.isMinLength(1), Schema.isMaxLength(20))
+    .annotate({ description: "One verdict for every gate your brief lists." }),
+});
+export type ProjectTeamPlanCheckSetInput = typeof ProjectTeamPlanCheckSetInput.Type;
+
+/** What ask_user returns: the card, or for a plan approval the plan check it started. */
+export const ProjectTeamAskUserResult = Schema.Struct({
+  item: Schema.optional(ProjectAttentionItem),
+  planCheck: Schema.optional(ProjectTaskPlanCheck),
+  message: Schema.optional(Schema.String),
+});
+export type ProjectTeamAskUserResult = typeof ProjectTeamAskUserResult.Type;
+
 export const ProjectTeamTaskReadyInput = Schema.Struct({
   taskId: ProjectTeamOwnTaskId,
   head: ReviewHead,
@@ -1629,7 +1991,10 @@ export const ProjectTeamAttentionItemResult = Schema.Struct({
 export type ProjectTeamAttentionItemResult = typeof ProjectTeamAttentionItemResult.Type;
 
 export const ProjectTeamAttentionAnswerInput = Schema.Struct({
-  attentionItemId: ProjectAttentionItemId,
+  attentionItemId: Schema.optional(ProjectAttentionItemId).annotate({
+    description:
+      "Request being answered. Omit to resolve from the user’s request link or words. A conflicting request link is rejected.",
+  }),
   answer: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)).annotate({
     description: "What the user actually said. Never an answer of your own.",
   }),
@@ -1746,6 +2111,167 @@ export const ProjectTeamPmNudgeResult = Schema.Struct({
 });
 export type ProjectTeamPmNudgeResult = typeof ProjectTeamPmNudgeResult.Type;
 
+/** How the user corrected agent work. */
+export const ProjectCorrectionKind = Schema.Literals([
+  /** The user answered a plan approval card with feedback. */
+  "plan_changes",
+  /** Mid-run, the user changed direction. */
+  "direction_change",
+  /** The user asked for changes to a pull request. */
+  "pr_change_request",
+  /** A merged task pull request was reverted. */
+  "revert",
+]);
+export type ProjectCorrectionKind = typeof ProjectCorrectionKind.Type;
+
+/** Where the work was when the user corrected it. */
+export const ProjectCorrectionStage = Schema.Literals(["plan", "running", "pr", "merged"]);
+export type ProjectCorrectionStage = typeof ProjectCorrectionStage.Type;
+
+export const PROJECT_CORRECTION_STAGES: ReadonlyArray<ProjectCorrectionStage> = [
+  "plan",
+  "running",
+  "pr",
+  "merged",
+];
+
+export function correctionStageOf(kind: ProjectCorrectionKind): ProjectCorrectionStage {
+  switch (kind) {
+    case "plan_changes":
+      return "plan";
+    case "direction_change":
+      return "running";
+    case "pr_change_request":
+      return "pr";
+    case "revert":
+      return "merged";
+  }
+}
+
+/** What a task changes, guessed from its title, request and planned files. */
+export const ProjectWorkKind = Schema.Literals(["ui", "server", "release", "docs", "other"]);
+export type ProjectWorkKind = typeof ProjectWorkKind.Type;
+
+export const ProjectCorrection = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  kind: ProjectCorrectionKind,
+  stage: ProjectCorrectionStage,
+  workKind: ProjectWorkKind,
+  /** The user's own words. */
+  userText: Schema.String,
+  /** One line on what differed from what the agent did. */
+  whatDiffered: Schema.String,
+  /** Unique per moment, so recording it twice keeps one row. */
+  sourceKey: TrimmedNonEmptyString,
+  /** Found in history after the fact rather than recorded when it happened. */
+  backfilled: Schema.Boolean,
+  createdAt: IsoDateTime,
+});
+export type ProjectCorrection = typeof ProjectCorrection.Type;
+
+export const ProjectTeamCorrectionRecordInput = Schema.Struct({
+  taskId: ProjectTaskId.annotate({ description: "The task the user corrected." }),
+  kind: Schema.Literals(["direction_change", "pr_change_request", "revert"]).annotate({
+    description:
+      "direction_change: the user redirected or reversed running work. pr_change_request: they asked for changes to the task's pull request. revert: they asked to undo merged work.",
+  }),
+  userText: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)).annotate({
+    description: "The user's exact words from this chat. The server checks them.",
+  }),
+  whatDiffered: TrimmedNonEmptyString.check(Schema.isMaxLength(300)).annotate({
+    description: "One line on what the user wanted instead, in the user's language.",
+  }),
+});
+export type ProjectTeamCorrectionRecordInput = typeof ProjectTeamCorrectionRecordInput.Type;
+
+export const ProjectTeamCorrectionRecordResult = Schema.Struct({
+  correction: ProjectCorrection,
+  /** False when this moment was already recorded. */
+  recorded: Schema.Boolean,
+});
+export type ProjectTeamCorrectionRecordResult = typeof ProjectTeamCorrectionRecordResult.Type;
+
+export const ProjectTeamCorrectionsReportInput = Schema.Struct({
+  projectId: Schema.optional(ProjectId).annotate({ description: "Only this project." }),
+  workKind: Schema.optional(ProjectWorkKind).annotate({ description: "Only this kind of work." }),
+  sinceDays: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 365 })),
+  ).annotate({
+    description: "Look back this many days. Default 90.",
+  }),
+  recentLimit: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+  ).annotate({
+    description: "How many recent corrections to list. Default 20.",
+  }),
+});
+export type ProjectTeamCorrectionsReportInput = typeof ProjectTeamCorrectionsReportInput.Type;
+
+export const ProjectCorrectionRate = Schema.Struct({
+  /** "task" counts whole tasks: corrected at any stage. */
+  stage: Schema.Union([ProjectCorrectionStage, Schema.Literal("task")]),
+  eligible: NonNegativeInt,
+  corrected: NonNegativeInt,
+  passed: NonNegativeInt,
+  /** corrected / eligible; 0 when nothing was eligible. */
+  rate: Schema.Number,
+});
+export type ProjectCorrectionRate = typeof ProjectCorrectionRate.Type;
+
+export const ProjectCorrectionRates = Schema.Struct({
+  projectId: ProjectId,
+  projectName: Schema.String,
+  /** Null for the project's total over every kind of work. */
+  workKind: Schema.NullOr(ProjectWorkKind),
+  stages: Schema.Array(ProjectCorrectionRate),
+});
+export type ProjectCorrectionRates = typeof ProjectCorrectionRates.Type;
+
+export const ProjectCorrectionReportEntry = Schema.Struct({
+  projectId: ProjectId,
+  projectName: Schema.String,
+  taskId: ProjectTaskId,
+  taskKey: Schema.String,
+  title: Schema.String,
+  kind: ProjectCorrectionKind,
+  stage: ProjectCorrectionStage,
+  workKind: ProjectWorkKind,
+  userText: Schema.String,
+  whatDiffered: Schema.String,
+  createdAt: IsoDateTime,
+  backfilled: Schema.Boolean,
+});
+export type ProjectCorrectionReportEntry = typeof ProjectCorrectionReportEntry.Type;
+
+export const ProjectCorrectionRepeat = Schema.Struct({
+  projectId: ProjectId,
+  projectName: Schema.String,
+  workKind: ProjectWorkKind,
+  stage: ProjectCorrectionStage,
+  count: NonNegativeInt,
+  examples: Schema.Array(Schema.String),
+  /** Three or more: worth proposing to the user as a saved preference. */
+  suggestRule: Schema.Boolean,
+});
+export type ProjectCorrectionRepeat = typeof ProjectCorrectionRepeat.Type;
+
+export const ProjectTeamCorrectionsReport = Schema.Struct({
+  since: IsoDateTime,
+  rates: Schema.Array(ProjectCorrectionRates),
+  recent: Schema.Array(ProjectCorrectionReportEntry),
+  repeated: Schema.Array(ProjectCorrectionRepeat),
+  /** Corrections found in history rather than recorded live, by kind, over all time. */
+  backfilled: Schema.Struct({
+    plan_changes: NonNegativeInt,
+    direction_change: NonNegativeInt,
+    pr_change_request: NonNegativeInt,
+    revert: NonNegativeInt,
+  }),
+});
+export type ProjectTeamCorrectionsReport = typeof ProjectTeamCorrectionsReport.Type;
+
 // Client RPCs.
 
 export const ProjectManagerLastAction = Schema.Struct({
@@ -1783,6 +2309,11 @@ export const ProjectTaskReference = Schema.Struct({
   title: Schema.String,
   stage: ProjectTaskStage,
   leadThreadId: Schema.NullOr(ThreadId),
+  location: Schema.optional(ExecutionLocation),
+  /** Where the lead is being moved; null or absent when it is not moving. */
+  moveTarget: Schema.optional(Schema.NullOr(ExecutionLocation)),
+  /** Held for memory ("메모리 대기"); null or absent when not held. */
+  memoryHold: Schema.optional(Schema.NullOr(ProjectTaskMemoryHold)),
   /** The task's pull request, shown on its sidebar row while in review. */
   prUrl: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   /** How the lead's last turn ended; "stalled" marks a live task that stopped making progress. */
@@ -1865,6 +2396,8 @@ export const ProjectTeamAttentionSummary = Schema.Struct({
   tasks: Schema.Array(ProjectTaskReference),
   /** Resolved task ID prefix, such as BB for BB-7. */
   taskKeyPrefix: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("T"))),
+  /** Previous keys may be ambiguous across projects; never pick a global alias at random. */
+  taskKeyAliases: Schema.optionalKey(Schema.Array(Schema.String)),
   /** The PM chat's latest message the user would see, or null before the first one. */
   lastMessage: Schema.NullOr(ProjectManagerLastMessage).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -1910,6 +2443,130 @@ export const ProjectTeamAnswerDecisionInput = Schema.Struct({
   answer: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
 });
 export type ProjectTeamAnswerDecisionInput = typeof ProjectTeamAnswerDecisionInput.Type;
+
+export const PROJECT_ATTENTION_SNOOZE_REASON_MAX = 500;
+
+/** Sets an open card aside with a reason; it stays open until answered or brought back. */
+export const ProjectTeamSnoozeDecisionInput = Schema.Struct({
+  projectId: ProjectId,
+  attentionItemId: ProjectAttentionItemId,
+  reason: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_ATTENTION_SNOOZE_REASON_MAX)),
+});
+export type ProjectTeamSnoozeDecisionInput = typeof ProjectTeamSnoozeDecisionInput.Type;
+
+/** Brings a snoozed card back to the waiting list. */
+export const ProjectTeamUnsnoozeDecisionInput = Schema.Struct({
+  projectId: ProjectId,
+  attentionItemId: ProjectAttentionItemId,
+});
+export type ProjectTeamUnsnoozeDecisionInput = typeof ProjectTeamUnsnoozeDecisionInput.Type;
+
+/** A plan passage the user quoted in a card's side chat. */
+export const ProjectLeadQuestionQuote = Schema.Struct({
+  section: Schema.String.check(Schema.isMaxLength(200)),
+  quote: TrimmedNonEmptyString.check(Schema.isMaxLength(4_000)),
+});
+export type ProjectLeadQuestionQuote = typeof ProjectLeadQuestionQuote.Type;
+
+/** The user's question from a card's side chat, for the lead that raised the card. */
+export const ProjectTeamAskLeadInput = Schema.Struct({
+  projectId: ProjectId,
+  attentionItemId: ProjectAttentionItemId,
+  question: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
+  quotes: Schema.Array(ProjectLeadQuestionQuote)
+    .check(Schema.isMaxLength(20))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+});
+export type ProjectTeamAskLeadInput = typeof ProjectTeamAskLeadInput.Type;
+
+export const ProjectTeamAskLeadResult = Schema.Struct({
+  messageId: Schema.String,
+});
+export type ProjectTeamAskLeadResult = typeof ProjectTeamAskLeadResult.Type;
+
+/** Starts a question the user asked a lead from a card's side chat. */
+export const LEAD_QUESTION_PREFIX = "[사용자 질문]";
+
+/** Starts the lead's reply to a side chat question; the side chat shows only these. */
+export const LEAD_ANSWER_PREFIX = "[답변]";
+
+const LEAD_QUESTION_CARD = /^<!-- card:(\S+) -->$/;
+
+/**
+ * The lead-thread message for a side chat question: the prefix and card on the first line,
+ * a hidden card id, the quotes as "> " blocks split by a bare ">" line, then the question.
+ */
+export function formatLeadQuestion(input: {
+  readonly cardId: string;
+  readonly cardLabel: string;
+  readonly question: string;
+  readonly quotes: ReadonlyArray<ProjectLeadQuestionQuote>;
+}): string {
+  const quotes = input.quotes.map((entry) => {
+    const section = entry.section.trim();
+    const text = section.length > 0 ? `[${section}] ${entry.quote.trim()}` : entry.quote.trim();
+    return text
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+  });
+  return [
+    `${LEAD_QUESTION_PREFIX} ${input.cardLabel}`.trimEnd(),
+    `<!-- card:${input.cardId} -->`,
+    ...(quotes.length > 0 ? [quotes.join("\n>\n")] : []),
+    "",
+    input.question.trim(),
+  ].join("\n");
+}
+
+/** Reads a message written by formatLeadQuestion back; null for any other message. */
+export function parseLeadQuestion(text: string): {
+  readonly cardId: string | null;
+  readonly quotes: ReadonlyArray<string>;
+  readonly question: string;
+} | null {
+  if (!text.startsWith(LEAD_QUESTION_PREFIX)) return null;
+  const lines = text.split("\n").slice(1);
+  const card = LEAD_QUESTION_CARD.exec(lines[0] ?? "");
+  const quotes: string[] = [];
+  let current: string[] = [];
+  let index = card === null ? 0 : 1;
+  for (; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    if (line === ">") {
+      if (current.length > 0) quotes.push(current.join("\n"));
+      current = [];
+    } else if (line.startsWith("> ")) {
+      current.push(line.slice(2));
+    } else {
+      break;
+    }
+  }
+  if (current.length > 0) quotes.push(current.join("\n"));
+  return { cardId: card?.[1] ?? null, quotes, question: lines.slice(index).join("\n").trim() };
+}
+
+/**
+ * The lead's side chat reply: the card it answers (from the question's card line, which the
+ * reply repeats) and its text without the prefix. Null for any other message.
+ */
+export function parseLeadAnswer(
+  text: string,
+): { readonly cardId: string | null; readonly text: string } | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith(LEAD_ANSWER_PREFIX)) {
+    // A streamed reply can show only part of the prefix yet.
+    return trimmed.length > 0 && LEAD_ANSWER_PREFIX.startsWith(trimmed)
+      ? { cardId: null, text: "" }
+      : null;
+  }
+  const lines = trimmed.slice(LEAD_ANSWER_PREFIX.length).trim().split("\n");
+  const card = LEAD_QUESTION_CARD.exec(lines[0]?.trim() ?? "");
+  return {
+    cardId: card?.[1] ?? null,
+    text: (card === null ? lines : lines.slice(1)).join("\n").trim(),
+  };
+}
 
 export const ProjectTeamUpdateSettingsInput = Schema.Struct({
   projectId: ProjectId,
@@ -2001,6 +2658,14 @@ export const ProjectTeamSetTaskRoleModelsInput = Schema.Struct({
   roleModels: ProjectTaskRoleModelsPatch,
 });
 export type ProjectTeamSetTaskRoleModelsInput = typeof ProjectTeamSetTaskRoleModelsInput.Type;
+
+/** projectTeam.moveTask: the user moves a task's lead between the Mac and a cloud sandbox. */
+export const ProjectTeamMoveTaskInput = Schema.Struct({
+  projectId: ProjectId,
+  taskId: ProjectTaskId,
+  to: ExecutionLocation,
+});
+export type ProjectTeamMoveTaskInput = typeof ProjectTeamMoveTaskInput.Type;
 
 export class ProjectTeamError extends Schema.TaggedError<ProjectTeamError>()("ProjectTeamError", {
   message: Schema.String,

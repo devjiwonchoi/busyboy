@@ -27,7 +27,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import { AgentScope } from "@t3tools/shared/AgentScope";
-import { isTemporaryWorktreeBranch } from "@t3tools/shared/git";
+import { looksLikeTemporaryWorktreeBranch } from "@t3tools/shared/git";
 import { getModelSelectionStringOptionValue, modelSelectionsEqual } from "@t3tools/shared/model";
 import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
@@ -774,7 +774,8 @@ export const layer: Layer.Layer<
               if (
                 child.worktreePath === null ||
                 child.branch === null ||
-                !isTemporaryWorktreeBranch(child.branch)
+                // A wrong guess only costs one HEAD lookup.
+                !looksLikeTemporaryWorktreeBranch(child.branch)
               )
                 return storedEvents;
               // Git renames before scanning committed threads. If that scan missed this

@@ -30,11 +30,11 @@ import { makeProjectManagerSummaryFixture } from "../../test-fixtures";
 import { MessagesTimeline } from "./MessagesTimeline";
 import { PlanApprovalCard } from "./PlanApprovalCard";
 import {
-  PendingBar,
-  followPendingAction,
-  pendingBar,
-  pendingBarIcon,
-} from "./PendingActionsBar.testing";
+  PendingActions,
+  pendingButton,
+  pendingDialog,
+  revealPendingCard,
+} from "./PendingActionsButton.testing";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
@@ -73,7 +73,7 @@ async function answerDecision(input: ProjectTeamAnswerDecisionInput) {
   const current = server.summary!;
   const card = current.decisionCards.find((entry) => entry.item.id === input.attentionItemId)!;
   const outcome = planApprovalOutcome(input.answer);
-  server.stages[card.item.taskId] =
+  server.stages[card.item.taskId as string] =
     outcome === "start" ? "running" : outcome === "approve_only" ? "inbox" : "planning";
   publish({
     ...current,
@@ -107,6 +107,13 @@ vi.mock(import("../../state/projectTeam"), async (original) => ({
 vi.mock(import("../../state/environments"), async (original) => ({
   ...(await original()),
   useEnvironmentIds: (() => [ENVIRONMENT_ID]) as never,
+}));
+
+vi.mock(import("../../state/entities"), async (original) => ({
+  ...(await original()),
+  useProjects: (() => [
+    { id: "project-1", environmentId: "environment-local", title: "BusyBoy" },
+  ]) as never,
 }));
 
 // The chat sits inside the app's router; a plain link stands in for it here.
@@ -162,7 +169,6 @@ function planCard(
   return {
     taskNumber,
     taskTitle: title,
-    proposal: null,
     plan: null,
     item: {
       id: ProjectAttentionItemId.make(id),
@@ -181,6 +187,9 @@ function planCard(
       specVersion: 2,
       summary: sections.goal,
       verification: sections.verification,
+      details: null,
+      senderRole: "lead",
+      senderName: title,
     },
   } satisfies ProjectDecisionCard;
 }
@@ -267,7 +276,7 @@ const timelineProps: Omit<TimelineProps, "timelineEntries"> = {
   onManualNavigation: () => {},
 };
 
-/** The PM chat: the real timeline and the pending bar above the composer. */
+/** The PM chat: the real timeline and the waiting button above the composer. */
 function PmChat() {
   const summary = useServerSummary();
   const cards = summary === null ? [] : decisionCardsForThread([summary], PM_THREAD_ID);
@@ -276,7 +285,7 @@ function PmChat() {
       <div data-testid="timeline" className="flex min-h-0 flex-1 flex-col">
         <MessagesTimeline {...timelineProps} timelineEntries={ENTRIES} decisionCards={cards} />
       </div>
-      <PendingBar cards={cards} listRef={listRef} />
+      <PendingActions cards={cards} listRef={listRef} threadId={PM_THREAD_ID} />
     </>
   );
 }
@@ -324,9 +333,10 @@ function buttonIn(element: HTMLElement, name: string): HTMLButtonElement {
   return match!;
 }
 
-/** Jumps to the card from the pending bar, as the user does from the end of the chat. */
+/** Jumps to the card from the waiting dialog, as the user does from the end of the chat. */
 async function jumpTo(id: string) {
-  await followPendingAction(id);
+  await revealPendingCard(id);
+  await vi.waitFor(() => expect(pendingDialog()).toBeNull());
   return vi.waitFor(
     () => {
       const element = cardIn(id);
@@ -341,81 +351,53 @@ for (const viewport of [
   { name: "desktop", width: 1100, height: 800 },
   { name: "phone", width: 390, height: 844 },
 ]) {
+  it(`shows a new task straight in planning, with only plan cards to answer (${viewport.name})`, async () => {
+    await page.viewport(viewport.width, viewport.height);
+    // The PM's task_create started this task at once: no card asks to add it.
+    server.summary = {
+      ...server.summary!,
+      tasks: [...TASKS, taskRef(10, "Dark mode toggle", { stage: "planning" })],
+    };
+    await act(async () => root.render(<PmChat />));
+    // Only the two plan approvals wait on the user.
+    await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 2개"));
+    const login = await jumpTo("attention-login");
+    expect(login.dataset.decisionCardState).toBe("open");
+    expect(buttonIn(login, "승인")).toBeTruthy();
+    const cards = [...container.querySelectorAll<HTMLElement>("[data-decision-card]")];
+    expect(cards.every((card) => !card.textContent?.includes("Dark mode toggle"))).toBe(true);
+    const labels = [...container.querySelectorAll("button")].map((button) =>
+      button.textContent?.trim(),
+    );
+    expect(labels).not.toContain("태스크로 추가");
+    expect(labels).not.toContain("빼기");
+    expect(container.textContent).not.toContain("태스크 제안");
+    await page.screenshot({ path: `__screenshots__/no-proposal-card-${viewport.name}.png` });
+  });
+
   it(`approves a plan from its card without opening the review (${viewport.name})`, async () => {
     await page.viewport(viewport.width, viewport.height);
     await act(async () => root.render(<PmChat />));
-    await vi.waitFor(() => expect(pendingBar()?.textContent).toContain("기다리는 일 2개"));
+    await vi.waitFor(() => expect(pendingButton()?.textContent).toBe("기다리는 일 2개"));
     expect(taskStatus("task-3")).toBe("Waiting for approval");
 
     const login = await jumpTo("attention-login");
     expect(login.dataset.decisionCardState).toBe("open");
-    // Reads like a doc: the task title as the big heading over a small meta line, then
-    // Goal and Verification as headed sections, the bullets as real lists.
-    const title = login.querySelector<HTMLElement>("[data-plan-title]")!;
-    expect(title.textContent).toBe("Login redirect");
-    expect(login.querySelector("[data-plan-meta]")?.textContent).toMatch(
-      /^BB-3 · Plan approval · v\d+$/,
+    expect(login.querySelector("[data-decision-card-headline]")?.textContent).toBe(
+      "This task fixes login redirect.",
     );
-    expect(parseFloat(getComputedStyle(title).fontSize)).toBeGreaterThanOrEqual(18);
-    const sections = [...login.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
-    expect(sections.map((section) => section.querySelector("h3")?.textContent)).toEqual([
-      "Goal",
-      "Verification",
-    ]);
+    expect(login.querySelector("[data-decision-card-meta]")?.textContent).toBe(
+      "BusyBoy · Login redirect 리드",
+    );
+    expect(login.textContent?.includes("BB-3")).toBe(false);
+    expect(login.querySelector("[data-request-bubble]")?.textContent).toContain(LOGIN_GOAL);
     expect(
-      title.compareDocumentPosition(sections[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    const [goal, verification] = sections;
-    expect([...goal!.querySelectorAll("ul > li")].map((item) => item.textContent)).toEqual([
-      "The login redirect moves into the auth guard",
-      "Signing in always lands on the page you asked for",
-      "The old /next query param is dropped",
-    ]);
-    expect(goal!.querySelector("strong")?.textContent).toBe("auth guard");
-    expect(goal!.querySelector("code")?.textContent).toBe("/next");
-    expect(goal!.textContent).not.toContain("- ");
-    expect(verification!.querySelectorAll("ul > li")).toHaveLength(2);
-    // Verification is a read-only checklist.
-    const checks = [...verification!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-    expect(checks).toHaveLength(2);
-    expect(checks.every((check) => !check.checked)).toBe(true);
-    expect(checks.every((check) => check.disabled || check.readOnly)).toBe(true);
-    // Each bullet sits on its own line.
-    const items = goal!.querySelectorAll("li");
-    expect(items[1]!.getBoundingClientRect().top).toBeGreaterThan(
-      items[0]!.getBoundingClientRect().bottom - 1,
-    );
-    expect(login.textContent).not.toContain("This task fixes");
+      [...login.querySelectorAll("[data-request-bubble] button")].map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["승인", "자세히 보기"]);
 
-    // Where the task sits, Linear-style, in one quiet line under the title.
-    const structure = login.querySelector<HTMLElement>("[data-task-structure-line]")!;
-    expect(structure.textContent!.replace(/\s*·\s*/g, " · ")).toBe(
-      "Part of BB-1 · Blocked by BB-2 · 1/2 subtasks",
-    );
-    expect(
-      title.compareDocumentPosition(structure) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      structure.compareDocumentPosition(sections[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect([...structure.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
-      "#task-1",
-      "#task-2",
-    ]);
-    expect(structure.getBoundingClientRect().right).toBeLessThanOrEqual(
-      login.getBoundingClientRect().right,
-    );
-
-    // One way to approve; the buttons fit inside the card at this width.
-    expect(login.textContent).not.toContain("Approve only");
-    const cardRect = login.getBoundingClientRect();
-    for (const name of ["Approve", "Review plan"]) {
-      const rect = buttonIn(login, name).getBoundingClientRect();
-      expect(rect.left).toBeGreaterThanOrEqual(cardRect.left);
-      expect(rect.right).toBeLessThanOrEqual(cardRect.right);
-    }
-
-    await userEvent.click(buttonIn(login, "Approve"));
+    await userEvent.click(buttonIn(login, "승인"));
 
     // Same answer the review modal sends, and the modal never opened.
     await vi.waitFor(() => expect(server.answers).toHaveLength(1));
@@ -427,28 +409,28 @@ for (const viewport of [
     expect(document.querySelector("[data-plan-review]")).toBeNull();
     expect(taskStatus("task-3")).toBe("In Progress");
 
-    // The card records the outcome and drops off the pending bar.
+    // The card records the outcome and drops off the waiting count.
     await vi.waitFor(() => {
       const answered = cardIn("attention-login")!;
       expect(answered.dataset.decisionCardState).toBe("answered");
       expect(answered.textContent).toContain("Approved and started");
-      expect(pendingBar()?.textContent).toContain("승인 대기: Task page cache");
+      expect(pendingButton()?.textContent).toBe("기다리는 일 1개");
     });
 
     // An older card's single summary shows as Goal only, and approving it starts too.
     const cache = await jumpTo("attention-cache");
     // A task with no parent, blockers or subtasks has no structure line.
     expect(cache.querySelector("[data-task-structure-line]")).toBeNull();
-    const oldSections = [...cache.querySelectorAll<HTMLElement>("[data-plan-summary-section]")];
-    expect(oldSections.map((section) => section.dataset.planSummarySection)).toEqual(["Goal"]);
-    expect(oldSections[0]!.textContent).toContain("keep the last 5 task pages in memory");
-    await userEvent.click(buttonIn(cache, "Approve"));
+    expect(cache.querySelector("[data-request-bubble]")?.textContent).toContain(
+      "keep the last 5 task pages in memory",
+    );
+    await userEvent.click(buttonIn(cache, "승인"));
     await vi.waitFor(() => expect(server.answers).toHaveLength(2));
     expect(server.answers[1]!.answer).toBe(PLAN_APPROVAL_START);
     expect(taskStatus("task-9")).toBe("In Progress");
     await vi.waitFor(() => {
       expect(cardIn("attention-cache")?.textContent).toContain("Approved and started");
-      expect(pendingBarIcon()).toBeNull();
+      expect(pendingButton()).toBeNull();
     });
   });
 }

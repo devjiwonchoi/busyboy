@@ -1,3 +1,5 @@
+import { parseRequestMessage, requestLinkIds } from "@t3tools/shared/requestMessage";
+import { useEnvironmentProjectTeamAttention } from "~/state/projectTeam";
 import { MarkdownFindContext, findRevealRef } from "./chat/markdownFindContext";
 import {
   buildFileLinkParentSuffixByPath,
@@ -110,7 +112,12 @@ import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
 import { TaskReferenceChip } from "./chat/TaskReferenceChip";
-import { parseTaskReferenceHref, remarkTaskReferences } from "./chat/taskReferences.logic";
+import {
+  parseTaskReferenceChoiceHref,
+  parseTaskReferenceHref,
+  remarkTaskReferences,
+} from "./chat/taskReferences.logic";
+import { taskReferenceCandidates } from "../state/projectTeam.logic";
 import { useTaskReferenceLinkContext, useThreadTaskReferences } from "../state/projectTeam";
 import {
   artifactTemplateFromHastProperties,
@@ -2253,6 +2260,7 @@ function useChatMarkdownState({
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const taskReferences = useThreadTaskReferences(threadRef ?? null);
+  const taskLinkContext = useTaskReferenceLinkContext(threadRef ?? null, explicitEnvironmentId);
   const markdownRef = useRef<HTMLDivElement>(null);
   const mediaRequestId = useRef(0);
   // A preview opened from another thread or workspace never carries over.
@@ -2417,10 +2425,13 @@ function useChatMarkdownState({
     return buildFileLinkParentSuffixByPath(filePaths);
   })();
   const markdownUrlTransform = (href: string) => {
+    if (href.startsWith("t3-request:")) return href;
     if (parseAssistantCitationHref(href)) return href;
     if (parseComposerContextHref(href)) return href;
     if (parseThreadLinkHref(href)) return href;
-    if (parseTaskReferenceHref(href) !== null) return href;
+    if (parseTaskReferenceHref(href) !== null || parseTaskReferenceChoiceHref(href) !== null) {
+      return href;
+    }
     if (isWindowsDrivePathHref(href)) return href;
     return rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href);
   };
@@ -2654,6 +2665,7 @@ function useChatMarkdownState({
     pullRequestsEnabled,
     skills,
     taskReferences,
+    taskLinkContext,
     threadRef,
     updateThreadPullRequestLink,
   };
@@ -2806,14 +2818,72 @@ const CHAT_MARKDOWN_COMPONENTS = {
       fileLinkChip,
       renderContextReference,
       taskReferences,
+      taskLinkContext,
     } = use(ChatMarkdownRendererContext);
     const text = use(ChatMarkdownTextContext);
+    if (href?.startsWith("t3-request:")) {
+      const id = requestLinkIds(href)[0];
+      return (
+        <RequestQuoteChip
+          id={id ?? ""}
+          label={nodeToPlainText(children)}
+          environmentId={environmentId}
+        />
+      );
+    }
     const citation = href ? parseAssistantCitationHref(href) : null;
     if (citation) return <AssistantCitationChip citation={citation} />;
-    const taskNumber = href ? parseTaskReferenceHref(href) : null;
-    const referencedTask = taskNumber === null ? undefined : taskReferences?.get(taskNumber);
+    const taskReference = href ? parseTaskReferenceHref(href) : null;
+    const namedReference =
+      typeof taskReference === "string"
+        ? taskLinkContext.catalog.byId.get(taskReference)
+        : undefined;
+    if (namedReference !== undefined) {
+      return (
+        <TaskReferenceChip
+          environmentId={environmentId ?? null}
+          task={namedReference.task}
+          projectId={namedReference.projectId}
+          projectTitle={namedReference.projectTitle}
+          taskKey={namedReference.key}
+        />
+      );
+    }
+    const choiceKey = href ? parseTaskReferenceChoiceHref(href) : null;
+    const choices = choiceKey ? taskReferenceCandidates(taskLinkContext.catalog, choiceKey) : [];
+    if (choices.length > 0) {
+      return (
+        <span
+          data-task-reference-choices=""
+          className="inline-flex max-w-full flex-wrap items-baseline gap-1"
+        >
+          <span className="text-muted-foreground text-xs">프로젝트 선택:</span>
+          {choices.map((reference) => (
+            <TaskReferenceChip
+              key={reference.task.id}
+              environmentId={environmentId ?? null}
+              task={reference.task}
+              projectId={reference.projectId}
+              projectTitle={reference.projectTitle}
+              taskKey={reference.key}
+            />
+          ))}
+        </span>
+      );
+    }
+    const referencedTask =
+      typeof taskReference === "number" ? taskReferences?.get(taskReference) : undefined;
     if (referencedTask !== undefined) {
-      return <TaskReferenceChip environmentId={environmentId ?? null} task={referencedTask} />;
+      const named = taskLinkContext.catalog.byId.get(referencedTask.id);
+      return (
+        <TaskReferenceChip
+          environmentId={environmentId ?? null}
+          task={referencedTask}
+          projectId={named?.projectId}
+          projectTitle={named?.projectTitle}
+          taskKey={named?.key}
+        />
+      );
     }
     const linkedThreadId = href ? parseThreadLinkHref(href) : null;
     if (linkedThreadId) {
@@ -3295,24 +3365,22 @@ function ChatMarkdown({
     localMediaPreview,
     closeLocalMediaPreview,
   } = useChatMarkdownState({ text, ...props });
-  const { taskReferences } = componentState;
-  const taskLinkContext = useTaskReferenceLinkContext(
-    taskReferences === null ? null : (props.threadRef ?? null),
-  );
+  const { taskReferences, taskLinkContext } = componentState;
+  const hasTaskReferences = taskReferences !== null || taskLinkContext.catalog.byId.size > 0;
   const incrementalParsing =
     props.isStreaming === true &&
     extraRemarkPlugins.length === 0 &&
-    taskReferences === null &&
+    !hasTaskReferences &&
     /(?:^|\n) {0,3}(?:`{3}|~{3})/.test(text);
   const remarkPlugins = [
     ...(lineBreaks ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : CHAT_MARKDOWN_REMARK_PLUGINS),
     ...extraRemarkPlugins,
-    ...(taskReferences === null
+    ...(!hasTaskReferences
       ? []
       : [
           [
             remarkTaskReferences,
-            { tasks: taskReferences, ...taskLinkContext },
+            { tasks: taskReferences ?? new Map(), ...taskLinkContext },
           ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>[number],
         ]),
     ...(incrementalParsing ? [createIncrementalMarkdownPlugin()] : []),
@@ -3353,3 +3421,59 @@ function ChatMarkdown({
 }
 
 export default memo(ChatMarkdown);
+
+/** Request references stay readable even before the attention stream has loaded. */
+function RequestQuoteChip({
+  id,
+  label,
+  environmentId,
+}: {
+  id: string;
+  label: string;
+  environmentId: EnvironmentId | null;
+}) {
+  if (environmentId === null) {
+    return <RequestQuoteButton id={id} headline={label.replace(/^↩\s*/, "")} />;
+  }
+  return <ResolvedRequestQuoteChip id={id} label={label} environmentId={environmentId} />;
+}
+
+function ResolvedRequestQuoteChip({
+  id,
+  label,
+  environmentId,
+}: {
+  id: string;
+  label: string;
+  environmentId: EnvironmentId;
+}) {
+  const attention = useEnvironmentProjectTeamAttention(environmentId);
+  const card = [...attention.byProjectId.values()]
+    .flatMap((summary) => summary.decisionCards)
+    .find((entry) => entry.item.id === id);
+  return (
+    <RequestQuoteButton
+      id={id}
+      headline={
+        card ? parseRequestMessage(card.item.question).headline : label.replace(/^↩\s*/, "")
+      }
+    />
+  );
+}
+
+function RequestQuoteButton({ id, headline }: { id: string; headline: string }) {
+  return (
+    <button
+      type="button"
+      data-request-quote={id}
+      className="inline-flex max-w-full items-center truncate rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+      onClick={() => {
+        document
+          .querySelector<HTMLElement>(`[data-decision-card="${CSS.escape(id)}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }}
+    >
+      ↩ {headline}
+    </button>
+  );
+}

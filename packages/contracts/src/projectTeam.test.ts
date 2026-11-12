@@ -2,6 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  formatLeadQuestion,
+  parseLeadQuestion,
+  parseLeadAnswer,
   isTurnFailedBlocker,
   turnFailedReason,
   TURN_FAILED_OPTIONS,
@@ -12,6 +15,7 @@ import {
   afkPickOption,
   afkSetting,
   DEFAULT_PROJECT_TEAM_SETTINGS,
+  ProjectAttentionContext,
   ProjectAttentionItem,
   ProjectManagerPresence,
   ProjectTask,
@@ -33,6 +37,8 @@ import {
   projectTaskPhase,
   applyRoleModelsPatch,
   effectiveRoleModel,
+  DEFAULT_PROJECT_TASK_STEP_MODELS,
+  ProjectTaskStepModels,
   ProjectTaskReference,
 } from "./projectTeam.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
@@ -53,7 +59,7 @@ describe("ProjectTeamSettings", () => {
         intervalPinnedAt: "2026-11-05T00:00:00.000Z",
       }),
     ).toEqual({
-      maxConcurrentTasks: 6,
+      maxConcurrentTasks: 10,
       sitrepIntervalMinutes: 30,
       sitrepNotify: true,
       quietHours: { start: "22:00", end: "07:30" },
@@ -174,7 +180,7 @@ describe("ProjectTask", () => {
       roleModels: {},
       modelSteps: {},
       stepUsage: {},
-      metrics: { size: null, reviewFindings: 0, fixRounds: 0, ciFailures: 0 },
+      metrics: { size: null, reviewFindings: 0, fixRounds: 0, ciFailures: 0, memoryStallMs: 0 },
     });
     // A review stored before review sessions existed was the lead's own.
     expect(
@@ -384,18 +390,45 @@ describe("MCP inputs", () => {
     expect(decode({ reason: "user_asked" })).toEqual({});
   });
 
-  it("validates ask_user kinds", () => {
+  it("requires explicit decision scope for every ask_user kind", () => {
     const decode = Schema.decodeUnknownSync(ProjectTeamAskUserInput);
-    expect(decode({ kind: "blocker", question: "  Which account?  " })).toEqual({
-      kind: "blocker",
-      question: "Which account?",
-    });
-    expect(decode({ kind: "approval", question: "Approve the plan?" })).toEqual({
-      kind: "approval",
-      question: "Approve the plan?",
-    });
-    expect(() => decode({ kind: "fyi", question: "Hi" })).toThrow();
-    expect(() => decode({ kind: "decision", question: "   " })).toThrow();
+    const context = {
+      action: "Use the current results",
+      reason: "Two completed runs provide a baseline; three runs failed.",
+      impacts: [],
+      cost: null,
+      reversibility: "reversible",
+      recommendation: "Use these results and investigate the failed runs separately.",
+    };
+    for (const kind of ["decision", "approval", "blocker"]) {
+      expect(decode({ kind, question: "  Use the results?  ", context })).toEqual({
+        kind,
+        question: "Use the results?",
+        context,
+      });
+      expect(() => decode({ kind, question: "Use the results?" })).toThrow();
+    }
+    expect(() => decode({ kind: "fyi", question: "Hi", context })).toThrow();
+    expect(() => decode({ kind: "decision", question: "   ", context })).toThrow();
+  });
+
+  it("requires a cost amount or explicit uncertainty and nonempty scope fields", () => {
+    const decode = Schema.decodeUnknownSync(ProjectAttentionContext);
+    const context = {
+      action: "Rerun calibration",
+      reason: "Retry after the timeout fix",
+      impacts: ["cost"],
+      cost: "Unknown until execution; estimated $6-10",
+      reversibility: "irreversible",
+      recommendation: "Keep current results to avoid additional spending",
+    };
+    expect(decode(context)).toEqual(context);
+    expect(() => decode({ ...context, cost: null })).toThrow();
+    expect(() => decode({ ...context, impacts: [] })).toThrow();
+    expect(() => decode({ ...context, action: "Rerun\ncalibration" })).toThrow();
+    expect(() => decode({ ...context, reason: " " })).toThrow();
+    expect(() => decode({ ...context, recommendation: "" })).toThrow();
+    expect(() => decode({ ...context, reversibility: "safe" })).toThrow();
   });
 });
 
@@ -466,6 +499,7 @@ describe("project team RPCs", () => {
       WS_METHODS.projectTeamSubscribeAttention,
       WS_METHODS.projectTeamRequestSitrep,
       WS_METHODS.projectTeamAnswerDecision,
+      WS_METHODS.projectTeamAskLead,
       WS_METHODS.projectTeamUpdateSettings,
     ]) {
       expect(WsRpcGroup.requests.has(method)).toBe(true);
@@ -600,6 +634,41 @@ describe("role models", () => {
     expect(effectiveRoleModel("fix", {}, undefined)).toBeNull();
   });
 
+  it("falls back to the app's step models, with fix following implement", () => {
+    const app = DEFAULT_PROJECT_TASK_STEP_MODELS;
+    expect(effectiveRoleModel("review", {}, undefined, app)).toEqual({
+      target: app.review,
+      source: "app",
+    });
+    expect(effectiveRoleModel("fix", {}, undefined, app)).toEqual({
+      target: app.implement,
+      source: "app",
+    });
+    expect(effectiveRoleModel("fix", {}, { implement: claude }, app)).toEqual({
+      target: claude,
+      source: "project",
+    });
+    expect(effectiveRoleModel("fix", { fix: codex }, { implement: claude }, app)).toEqual({
+      target: codex,
+      source: "task",
+    });
+  });
+
+  it("keeps a role's thinking level through the settings update and the app defaults", () => {
+    const withEffort = { ...codex, options: [{ id: "reasoningEffort", value: "medium" }] };
+    expect(
+      Schema.decodeUnknownSync(ProjectTeamSettingsUpdateInput)({
+        roleModels: { implement: withEffort },
+      }).roleModels,
+    ).toEqual({ implement: withEffort });
+    expect(Schema.decodeUnknownSync(ProjectTaskStepModels)({})).toEqual(
+      DEFAULT_PROJECT_TASK_STEP_MODELS,
+    );
+    expect(
+      Schema.decodeUnknownSync(ProjectTaskStepModels)({ implement: withEffort }).implement,
+    ).toEqual(withEffort);
+  });
+
   it("reads tasks and references from older servers with no models", () => {
     const reference = Schema.decodeUnknownSync(ProjectTaskReference)({
       id: "t",
@@ -621,6 +690,10 @@ describe("failed-turn blockers", () => {
     ["unexpected status 401 Unauthorized: token_expired", "로그인 만료 401"],
     ["authentication failed", "로그인 만료 401"],
     ["TOKEN EXPIRED", "로그인 만료 401"],
+    [
+      "Cloud leads need a Claude setup-token. Run `claude setup-token`, then save it with request_secret and cloud_secret_save (kind claude_oauth_token).",
+      "Claude 토큰이 없어요",
+    ],
     ["429", "사용량 한도 429"],
     ["rate-limit", "사용량 한도 429"],
     ["usage limit", "사용량 한도 429"],
@@ -653,5 +726,53 @@ describe("failed-turn blockers", () => {
       expect(isTurnFailedBlocker({ kind: "blocker", options })).toBe(false);
     }
     expect(isTurnFailedBlocker({ kind: "decision", options: TURN_FAILED_OPTIONS })).toBe(false);
+  });
+});
+
+describe("lead questions", () => {
+  it("formats a side chat question with its card and quotes and reads it back", () => {
+    const text = formatLeadQuestion({
+      cardId: "attention:1",
+      cardLabel: "플랜 승인 · BU-7 Fix login",
+      question: "왜 이렇게 해요?",
+      quotes: [
+        { section: "Summary", quote: "first line\nsecond line" },
+        { section: "", quote: "plain" },
+      ],
+    });
+    expect(text).toBe(
+      [
+        "[사용자 질문] 플랜 승인 · BU-7 Fix login",
+        "<!-- card:attention:1 -->",
+        "> [Summary] first line",
+        "> second line",
+        ">",
+        "> plain",
+        "",
+        "왜 이렇게 해요?",
+      ].join("\n"),
+    );
+    expect(parseLeadQuestion(text)).toEqual({
+      cardId: "attention:1",
+      quotes: ["[Summary] first line\nsecond line", "plain"],
+      question: "왜 이렇게 해요?",
+    });
+  });
+
+  it("ignores other messages", () => {
+    expect(parseLeadQuestion("[User answer via BusyBoy] yes")).toBeNull();
+    expect(parseLeadAnswer("Working on the tests now.")).toBeNull();
+  });
+
+  it("reads the lead's reply, including one still streaming its prefix", () => {
+    expect(parseLeadAnswer("[답변] 오늘 고쳐야 해서요.")).toEqual({
+      cardId: null,
+      text: "오늘 고쳐야 해서요.",
+    });
+    expect(parseLeadAnswer("[답변]\n<!-- card:attention:1 -->\n오늘이요.")).toEqual({
+      cardId: "attention:1",
+      text: "오늘이요.",
+    });
+    expect(parseLeadAnswer("[답")).toEqual({ cardId: null, text: "" });
   });
 });

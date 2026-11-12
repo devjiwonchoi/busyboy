@@ -2,6 +2,7 @@ import {
   OrchestratorMcpDelegateTaskResult,
   OrchestratorMcpFailure,
   ProjectTeamAskUserInput,
+  ProjectTeamAskUserResult,
   ProjectTeamAttentionAnswerInput,
   ProjectTeamAttentionDismissInput,
   ProjectTeamAttentionItemResult,
@@ -33,6 +34,7 @@ import {
   ProjectTeamTaskTodoSetInput,
   ProjectTeamTaskEvidenceSetInput,
   ProjectTeamTaskReviewSetInput,
+  ProjectTeamPlanCheckSetInput,
   ProjectTeamTaskReadyInput,
   ProjectTeamTaskDelegateInput,
   ProjectTeamGoalWriteInput,
@@ -40,6 +42,10 @@ import {
   ProjectTeamGoalResult,
   ProjectTeamPmNudgeInput,
   ProjectTeamPmNudgeResult,
+  ProjectTeamCorrectionRecordInput,
+  ProjectTeamCorrectionRecordResult,
+  ProjectTeamCorrectionsReport,
+  ProjectTeamCorrectionsReportInput,
 } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -60,19 +66,21 @@ const shared = {
 
 const TaskCreateTool = Tool.make("task_create", {
   ...shared,
+  dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "PM/Director: post a task proposal card (title, goal, verification, and which project) in your chat. Include intake explaining why this is new work; goal and verification are required. Write title, goal and verification in the user's language, and the request so a task lead can act on it alone. Nothing is created until the user presses 태스크로 추가. Wait for [제안 승인됨], then start it with task_start when a slot is free (Director: the target project's PM is woken on acceptance). [제안 빠짐] means the user dropped it; [제안 피드백] carries their feedback — post a new proposal if still useful. Set waitsOn and parentTaskId only to tasks already added by the user; they may be in other projects. Director: pass goalId when the work serves a workspace goal; the task is linked to it once added. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
+    "PM/Director: create a task (title, goal, verification, and which project). Include intake explaining why this is new work; goal and verification are required. Write title, goal and verification in the user's language, and the request so a task lead can act on it alone. There is no approval step for the task itself: the user shapes its scope at the lead's plan approval. PM: the task lands in Todo and its lead starts right away; if every slot is busy or a waitsOn task is unfinished, it waits in Todo (the result's `waiting` says why) and you start it with task_start once it can run. Director: with projectId the task goes to that project's Todo and its PM is woken to start it; without projectId it is an epic in your own project, then create one task per project with parentTaskId. waitsOn and parentTaskId may name tasks in other projects. Director: pass goalId when the work serves a workspace goal; the task is linked to it right away. Task lead: draft a subtask of your own task for your plan's breakdown; it waits in Todo until the user approves your plan.",
   parameters: ProjectTeamTaskCreateInput,
   success: ProjectTeamTaskResult,
 })
   .annotate(Tool.Title, "Create a team task")
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.OpenWorld, true);
 
 const TaskStartTool = Tool.make("task_start", {
   ...shared,
   dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "PM only. Start an inbox task: a task lead runs it in its own worktree as your async child, and each of its turn ends wakes you. Refused while maxConcurrentTasks leads run or a waitsOn task is unfinished; leave the task in the inbox then.",
+    "PM only. Start an inbox task: a task lead runs it in its own worktree as your async child, and each of its turn ends wakes you. Refused while the lead cap is full, a waitsOn task is unfinished, or the Mac is short on memory and the user keeps work local; leave the task in the inbox then. A task waiting for memory is marked so; you are told when to start it. A planning, running or blocked task whose lead is not working can be started again: a different location moves the same lead there with its worktree and session (a lead that cannot move, such as a Codex lead, is replaced by a fresh lead there), the same location starts a fresh lead. It is refused while the lead is still working or waits on the user's answer to an open question.",
   parameters: ProjectTeamTaskStartInput,
   success: ProjectTeamTaskStartResult,
 })
@@ -142,6 +150,16 @@ const TaskReviewSetTool = Tool.make("task_review_set", {
   success: ProjectTeamTaskResult,
 })
   .annotate(Tool.Title, "Record a review")
+  .annotate(Tool.Destructive, false);
+
+const TaskPlanCheckSetTool = Tool.make("task_plan_check_set", {
+  ...shared,
+  description:
+    "Plan checker only: the session the server started to judge a task's plan against the plan gates. Pass the taskId, the specVersion you read with task_spec_read (the server treats a version other than your brief's as a stale check), and one verdict for every gate it lists: { gate, pass, reason }, each reason one sentence in the user's language. When every gate passes, the user gets the approval card; otherwise the lead gets the failing gates to fix. Task leads and the PM cannot call it.",
+  parameters: ProjectTeamPlanCheckSetInput,
+  success: ProjectTeamTaskResult,
+})
+  .annotate(Tool.Title, "Record a plan check")
   .annotate(Tool.Destructive, false);
 
 const TaskReadyTool = Tool.make("task_ready", {
@@ -234,10 +252,11 @@ const TeamSettingsUpdateTool = Tool.make("team_settings_update", {
 
 const AskUserTool = Tool.make("ask_user", {
   ...shared,
+  dependencies: [...shared.dependencies, OrchestratorMcpService.OrchestratorMcpService],
   description:
-    "Task lead, and Director for decisions. Director: kind decision only, with taskId set to the task it is mainly about; bundle everything the user must decide into one card in your chat, and relay the answer to that project's PM yourself. Task lead: the only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. A subtask covered by its parent's approved breakdown never asks for approval. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers \"Approve and start\" or feedback with inline comments. Ask once with a self-contained question, then end your turn; the answer arrives as a message.",
+    "Task lead, PM, and Director for decisions. PM: kind blocker or decision only, no taskId; raise a blocker whenever you stop on a permission denial, a missing token or a choice only the user can make, because a chat reply alone is easy to miss. The card shows in your chat and the Director's waiting list with your project's name, and the answer comes back to you as a message. Director: kind decision only, with taskId set to the task it is mainly about; bundle everything the user must decide into one card in your chat, and relay the answer to that project's PM yourself. Task lead: pass senderName as a short plain name for your work (at most 24 characters, no task keys). The only way a task lead reaches the user: plan approval, a decision, or a blocker only a person can resolve. A subtask covered by its parent's approved breakdown never asks for approval. For approval, write the plan into the spec first and pass goal and verification, the two sections the card shows so the user can approve from it; the user reviews that spec version in a card and answers \"Approve and start\" or feedback with inline comments. Always supply context with the action, reason, explicit impacts, cost, reversibility and recommendation. Missing context is rejected. Write question as one messenger-style message: ask on line 1, blank line, then 1-3 short plain paragraphs with optional numbered steps; no headings, labels, bullets, task keys, ids, paths or code. Optional details are up to 8 label/text pairs shown only under 자세히 보기. Decisions with multiple options require exactly one marked (Recommended) or (추천). A plan approval first goes to a separate plan checker session, on a different model when one is set up, which judges every plan gate; the user sees the card only once it passes, and failing gates come back to you as a message. Ask once, then end your turn; the answer arrives as a message.",
   parameters: ProjectTeamAskUserInput,
-  success: ProjectTeamAttentionItemResult,
+  success: ProjectTeamAskUserResult,
 })
   .annotate(Tool.Title, "Ask the user")
   .annotate(Tool.Destructive, false);
@@ -245,7 +264,7 @@ const AskUserTool = Tool.make("ask_user", {
 const AttentionAnswerTool = Tool.make("attention_answer", {
   ...shared,
   description:
-    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's. Approval and decision cards need the user's own words: the answer must quote exactly what the user wrote in this chat after the card appeared, or the call fails; otherwise let the user click the card. Blocker answers are not checked.",
+    "PM only. Relay the user's answer to an open question to the task lead that asked it. Pass only what the user actually said, never your own answer or another agent's. Approval and decision cards need the user's own words: the answer must quote exactly what the user wrote in this chat after the card appeared, or the call fails; otherwise let the user click the card. Blocker answers are not checked. attentionItemId is optional: omit it to resolve from the user’s request link or words; conflicting request links are rejected.",
   parameters: ProjectTeamAttentionAnswerInput,
   success: ProjectTeamAttentionItemResult,
 })
@@ -324,6 +343,29 @@ const PmNudgeTool = Tool.make("pm_nudge", {
   .annotate(Tool.Title, "Nudge a project PM")
   .annotate(Tool.Destructive, false);
 
+const CorrectionRecordTool = Tool.make("correction_record", {
+  ...shared,
+  description:
+    "PM and Director only. Record that the user corrected a task's work: they reversed or redirected running work (direction_change), asked for changes on its pull request (pr_change_request), or asked to undo merged work (revert). Pass their exact words from this chat (the server checks them) and one line on what differed. Plan card answers are recorded automatically; new scope that doesn't contradict earlier direction is not a correction.",
+  parameters: ProjectTeamCorrectionRecordInput,
+  success: ProjectTeamCorrectionRecordResult,
+})
+  .annotate(Tool.Title, "Record a correction")
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
+const CorrectionsReportTool = Tool.make("corrections_report", {
+  ...shared,
+  description:
+    "Director only. How often the user corrects agent work: rates per project and kind of work (ui, server, release, docs, other) at each stage (plan, running, pr, merged) plus per task, the newest corrections, repeated groups (suggestRule when there are 3 or more), and how many were found in history (backfilled). Defaults to the last 90 days.",
+  parameters: ProjectTeamCorrectionsReportInput,
+  success: ProjectTeamCorrectionsReport,
+})
+  .annotate(Tool.Title, "Read correction rates")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true);
+
 export const ProjectTeamToolkit = Toolkit.make(
   TaskCreateTool,
   TaskStartTool,
@@ -333,6 +375,7 @@ export const ProjectTeamToolkit = Toolkit.make(
   TaskTodoSetTool,
   TaskEvidenceSetTool,
   TaskReviewSetTool,
+  TaskPlanCheckSetTool,
   TaskReadyTool,
   TaskDelegateTool,
   TaskNudgeTool,
@@ -350,4 +393,6 @@ export const ProjectTeamToolkit = Toolkit.make(
   GoalWriteTool,
   GoalLinkTool,
   PmNudgeTool,
+  CorrectionRecordTool,
+  CorrectionsReportTool,
 );

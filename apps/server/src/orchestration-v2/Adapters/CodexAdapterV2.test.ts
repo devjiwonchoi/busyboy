@@ -39,6 +39,7 @@ import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Predicate from "effect/Predicate";
 import * as FileSystem from "effect/FileSystem";
 import { MCP_APP_OUTPUT_KEY, readMcpAppReference } from "@t3tools/shared/mcpApp";
@@ -55,6 +56,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import packageJson from "../../../package.json" with { type: "json" };
 import * as ServerConfig from "../../config.ts";
+import * as CloudLeadService from "../../cloudLead/CloudLeadService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { PROJECT_MANAGER_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
@@ -862,6 +864,107 @@ describe("CodexAdapterV2 process spawning", () => {
       ),
       Effect.provideService(HostProcess.Platform, "linux"),
     ),
+  );
+});
+
+describe("CodexAdapterV2 cloud threads", () => {
+  it.effect(
+    "starts a cloud thread's app-server in its sandbox through the relay, never on the Mac",
+    () =>
+      Effect.gen(function* () {
+        const localSpawns: Array<string> = [];
+        const spawner = ChildProcessSpawner.make((command) => {
+          if (ChildProcess.isStandardCommand(command)) localSpawns.push(command.command);
+          return Effect.fail(
+            PlatformError.systemError({
+              _tag: "NotFound",
+              module: "ChildProcess",
+              method: "spawn",
+            }),
+          );
+        });
+        const prepared: Array<unknown> = [];
+        const remoteSpawns: Array<{ args: ReadonlyArray<string>; env: unknown }> = [];
+        const threadId = ThreadId.make("thread-cloud-codex");
+        yield* (yield* McpProviderSessions.McpProviderSessions).set({
+          environmentId: EnvironmentId.make("environment-cloud-codex"),
+          threadId,
+          providerSessionId: "mcp-session-cloud-codex",
+          providerInstanceId: ProviderInstanceId.make("codex"),
+          endpoint: "http://127.0.0.1:43123/mcp",
+          authorizationHeader: "Bearer cloud-codex",
+          browserToolsAvailable: false,
+        });
+        const adapter = yield* CodexAdapterV2.createCodexAdapterV2({
+          instanceId: CodexAdapterV2.CODEX_DEFAULT_INSTANCE_ID,
+          displayName: undefined,
+          environment: [],
+          enabled: true,
+          config: DEFAULT_CODEX_SETTINGS,
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              CodexAdapterV2.layerAppServerClientFactory,
+              ServerConfig.layerTest(process.cwd(), { prefix: "t3-codex-cloud-" }),
+            ),
+          ),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.provideService(
+            ProviderEventLoggers.ProviderEventLoggers,
+            ProviderEventLoggers.NoOpProviderEventLoggers,
+          ),
+          Effect.provideService(CloudLeadService.CloudLeadHooks, {
+            ...CloudLeadService.unavailableHooks,
+            prepare: (input) =>
+              Effect.sync(() => {
+                prepared.push(input);
+                return {
+                  spawn: () => {
+                    throw new Error("not used");
+                  },
+                  spawnCodex: async (options) => {
+                    remoteSpawns.push(options);
+                    throw new Error("stop here");
+                  },
+                  mcpUrl: "http://127.0.0.1:8788/mcp",
+                  paths: { toRemote: (text: string) => text, toMac: (text: string) => text },
+                };
+              }),
+            checkCodex: () => Effect.die("not used"),
+            syncToMac: () => Effect.void,
+            release: () => Effect.void,
+          }),
+        );
+
+        const exit = yield* adapter
+          .openSession({
+            threadId,
+            providerSessionId: ProviderSessionId.make("provider-session-cloud-codex"),
+            modelSelection: CODEX_TEST_MODEL_SELECTION,
+            runtimePolicy: CODEX_TEST_RUNTIME_POLICY,
+            location: "cloud",
+          })
+          .pipe(Effect.scoped, Effect.exit);
+
+        assert.isTrue(Exit.isFailure(exit));
+        assert.deepEqual(prepared, [
+          {
+            threadId,
+            worktreePath: CODEX_TEST_RUNTIME_POLICY.cwd,
+            mcpEndpoint: "http://127.0.0.1:43123/mcp",
+          },
+        ]);
+        assert.deepEqual(
+          remoteSpawns.map((spawn) => spawn.args),
+          [["app-server"]],
+        );
+        assert.deepEqual(localSpawns, []);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+        Effect.provideService(HostProcess.Platform, "linux"),
+      ),
   );
 });
 
@@ -6931,12 +7034,26 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       expectedClass: "usage_limit",
     },
     { name: "retry", code: "usageLimitExceeded", notification: true, expectedClass: "usage_limit" },
+    {
+      name: "subscription-sharing",
+      code: "other",
+      notification: false,
+      expectedClass: "usage_limit",
+    },
+    {
+      name: "subscription-sharing-retry",
+      code: "other",
+      notification: true,
+      expectedClass: "usage_limit",
+    },
   ] as const)("classifies Codex terminal failures from $name evidence", (scenario) =>
     Effect.scoped(
       Effect.gen(function* () {
         const nativeThreadId = `native-limit-${scenario.name}`;
         const nativeTurnId = `turn-limit-${scenario.name}`;
-        const message = "Provider stopped this request.";
+        const message = scenario.name.startsWith("subscription-sharing")
+          ? "stream disconnected before completion: The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead."
+          : "Provider stopped this request.";
         const resetAt = "2033-05-19T07:20:00.000Z";
         const snapshot = {
           type: "emit_inbound" as const,
@@ -7004,7 +7121,9 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                       params: {
                         threadId: nativeThreadId,
                         turnId: nativeTurnId,
-                        willRetry: scenario.name === "retry",
+                        willRetry:
+                          scenario.name === "retry" ||
+                          scenario.name === "subscription-sharing-retry",
                         error: {
                           message,
                           codexErrorInfo: scenario.code,

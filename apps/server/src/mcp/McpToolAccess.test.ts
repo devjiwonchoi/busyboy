@@ -6,14 +6,22 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
   ThreadId,
+  type OrchestrationV2ServerCommand,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import { McpSchema, McpServer, Tool, Toolkit } from "effect/ai";
 
 import { OrchestratorProjectionError } from "../orchestration-v2/Orchestrator.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import {
+  DispatchModeLimit,
+  type DispatchModeLimitValue,
+} from "../orchestration-v2/DispatchModeLimit.ts";
+import * as OperationPermissions from "../permissions/OperationPermissions.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as McpToolAccess from "./McpToolAccess.ts";
@@ -345,3 +353,274 @@ it.effect("refuses a change when the calling thread cannot be read", () =>
     ),
   ),
 );
+
+function permissionProbe() {
+  const callerId = ThreadId.make("thread:permission-probe-caller");
+  const targetId = ThreadId.make("thread:permission-probe-target");
+  const caller = threadCaller(callerId);
+  const targets = new Map([
+    [callerId, liveThreadShell(callerId, { runtimeMode: "auto" })],
+    [targetId, liveThreadShell(targetId)],
+  ]);
+  const cards = new Map<
+    string,
+    Extract<OrchestrationV2ServerCommand, { type: "operation_permission.record" }>
+  >();
+  let question = "Publish the release?";
+  let writes = 0;
+  let dispatchLimit: DispatchModeLimitValue | undefined;
+  const management = Layer.mock(ThreadManagement.ThreadManagementService)({
+    getThreadShell: (id) => Effect.sync(() => targets.get(id) ?? null),
+    getThreadRecords: () =>
+      Effect.sync(
+        () =>
+          ({
+            thread: targets.get(callerId),
+            runs: [
+              {
+                id: "run:permission-probe",
+                ordinal: 1,
+                status: "running",
+                rootNodeId: "node:permission-probe",
+                providerInstanceId: ProviderInstanceId.make("codex"),
+                providerThreadId: "provider-thread:permission-probe",
+              },
+            ],
+            providerThreads: [
+              {
+                id: "provider-thread:permission-probe",
+                providerSessionId: caller.thread!.providerSessionId,
+              },
+            ],
+          }) as never,
+      ),
+    dispatch: (command) =>
+      Effect.sync(() => {
+        if (command.type === "operation_permission.record") {
+          cards.set(command.turnItemId, command);
+        }
+        return {} as never;
+      }),
+  });
+  const write = Effect.gen(function* () {
+    dispatchLimit = yield* DispatchModeLimit;
+    writes += 1;
+    return { ran: "ran" };
+  });
+  const toolkit = Toolkit.make(
+    Tool.make("approved_thread_write", {
+      ...probe,
+      parameters: Schema.Struct({ threadId: ThreadId }),
+    }),
+    Tool.make("approved_environment_write", probe),
+  );
+  const handlers = McpToolAccess.toLayer(toolkit, {
+    approved_thread_write: McpToolAccess.writesThreads(
+      (input) => [input.threadId],
+      () => write,
+      "test.thread.write",
+      { snapshot: () => Effect.sync(() => ({ questions: [question] })) },
+    ),
+    approved_environment_write: McpToolAccess.writesEnvironment(() => write, {
+      operation: "test.environment.update",
+    }),
+  });
+  const server = McpHttpServer.toolkitRegistration(toolkit, handlers).pipe(
+    Layer.provideMerge(McpServer.McpServer.layer),
+    Layer.provideMerge(management),
+  );
+  const permissionsServer = server.pipe(
+    Layer.provideMerge(OperationPermissions.layer.pipe(Layer.provide(management))),
+  );
+  const pendingCard = Effect.gen(function* () {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const card = [...cards.values()].find((item) => item.permissionStatus === "pending");
+      if (card !== undefined) {
+        return card.turnItemId;
+      }
+      yield* Effect.yieldNow;
+    }
+    throw new Error("The MCP wrapper did not open a permission card.");
+  });
+  return {
+    changeQuestion: () => {
+      question = "Delete the release?";
+    },
+    callerId,
+    targetId,
+    caller,
+    cards,
+    targets,
+    server,
+    permissionsServer,
+    pendingCard,
+    writes: () => writes,
+    dispatchLimit: () => dispatchLimit,
+  };
+}
+
+for (const tool of ["approved_thread_write", "approved_environment_write"] as const) {
+  it.effect(`waits for a direct user approval before executing ${tool}`, () => {
+    const h = permissionProbe();
+    return Effect.gen(function* () {
+      const permissions = yield* OperationPermissions.OperationPermissions;
+      const fiber = yield* call(
+        tool,
+        h.caller,
+        tool === "approved_thread_write" ? { threadId: h.targetId } : {},
+      ).pipe(Effect.forkChild);
+      const turnItemId = yield* h.pendingCard;
+      expect(h.writes()).toBe(0);
+      yield* permissions.answer({ threadId: h.callerId, turnItemId, decision: "allow" });
+      yield* TestClock.adjust("1 second");
+      expect(yield* Fiber.join(fiber)).toBe("ran");
+      expect(h.writes()).toBe(1);
+      expect(h.cards.get(turnItemId)?.permissionStatus).toBe("succeeded");
+      expect(h.targets.get(h.callerId)?.runtimeMode).toBe("auto");
+      if (tool === "approved_thread_write") {
+        expect(h.dispatchLimit()?.runtimeMode).toBe("auto");
+        expect(h.dispatchLimit()?.approvedTargets).toEqual([
+          {
+            threadId: h.targetId,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+          },
+        ]);
+      }
+    }).pipe(Effect.provide(h.permissionsServer));
+  });
+
+  it.effect(`does not execute ${tool} when the user declines`, () => {
+    const h = permissionProbe();
+    return Effect.gen(function* () {
+      const permissions = yield* OperationPermissions.OperationPermissions;
+      const fiber = yield* call(
+        tool,
+        h.caller,
+        tool === "approved_thread_write" ? { threadId: h.targetId } : {},
+      ).pipe(Effect.forkChild);
+      const turnItemId = yield* h.pendingCard;
+      yield* permissions.answer({ threadId: h.callerId, turnItemId, decision: "deny" });
+      yield* TestClock.adjust("1 second");
+      expect(yield* Fiber.join(fiber)).toBe("capability_denied");
+      expect(h.writes()).toBe(0);
+      expect(h.cards.get(turnItemId)?.permissionStatus).toBe("declined");
+    }).pipe(Effect.provide(h.permissionsServer));
+  });
+
+  it.effect(`does not execute ${tool} without the permission service`, () => {
+    const h = permissionProbe();
+    return call(
+      tool,
+      h.caller,
+      tool === "approved_thread_write" ? { threadId: h.targetId } : {},
+    ).pipe(
+      Effect.map((outcome) => {
+        expect(outcome).toBe("capability_denied");
+        expect(h.writes()).toBe(0);
+        expect(h.cards.size).toBe(0);
+      }),
+      Effect.provide(h.server),
+    );
+  });
+}
+
+for (const changed of ["caller", "target"] as const) {
+  it.effect(`rejects an approved thread write after the ${changed} mode changes`, () => {
+    const h = permissionProbe();
+    return Effect.gen(function* () {
+      const permissions = yield* OperationPermissions.OperationPermissions;
+      const fiber = yield* call("approved_thread_write", h.caller, { threadId: h.targetId }).pipe(
+        Effect.forkChild,
+      );
+      const turnItemId = yield* h.pendingCard;
+      const changedId = changed === "caller" ? h.callerId : h.targetId;
+      h.targets.set(changedId, {
+        ...h.targets.get(changedId)!,
+        runtimeMode: changed === "caller" ? "full-access" : "auto",
+      });
+      yield* permissions.answer({ threadId: h.callerId, turnItemId, decision: "allow" });
+      yield* TestClock.adjust("1 second");
+      expect(yield* Fiber.join(fiber)).toBe("capability_denied");
+      expect(h.writes()).toBe(0);
+      expect(h.cards.get(turnItemId)?.permissionStatus).toBe("failed");
+    }).pipe(Effect.provide(h.permissionsServer));
+  });
+}
+
+it("shows executable settings and their values while redacting credentials from the approval", () => {
+  const summary = McpToolAccess.operationSummary("t3_project_update", {
+    projectId: "project:one",
+    scripts: [
+      { name: "Setup", command: "API_TOKEN=private-value pnpm install", runOnWorktreeCreate: true },
+    ],
+    defaultModelSelection: { instanceId: "codex", model: "selected-model" },
+    backgroundActivity: { profile: "always" },
+    sourceControlWritingStyle: { customInstructions: "Authorization: Bearer private-bearer" },
+    answers: { secret: "private-answer" },
+    token: "private-token",
+  });
+  expect(summary.includes("pnpm install")).toBe(true);
+  expect(summary.includes('"runOnWorktreeCreate": true')).toBe(true);
+  expect(summary.includes("selected-model")).toBe(true);
+  expect(summary.includes('"profile": "always"')).toBe(true);
+  expect(summary.match(/private-(value|bearer|answer|token)/)).toBeNull();
+  expect(summary.includes("비밀값 숨김")).toBe(true);
+});
+
+it.effect("shows the pending question and rejects approval when its context changes", () => {
+  const h = permissionProbe();
+  return Effect.gen(function* () {
+    const permissions = yield* OperationPermissions.OperationPermissions;
+    const fiber = yield* call("approved_thread_write", h.caller, { threadId: h.targetId }).pipe(
+      Effect.forkChild,
+    );
+    const turnItemId = yield* h.pendingCard;
+    expect(h.cards.get(turnItemId)?.summary.includes("Publish the release?")).toBe(true);
+    h.changeQuestion();
+    yield* permissions.answer({ threadId: h.callerId, turnItemId, decision: "allow" });
+    yield* TestClock.adjust("1 second");
+    expect(yield* Fiber.join(fiber)).toBe("capability_denied");
+    expect(h.writes()).toBe(0);
+  }).pipe(Effect.provide(h.permissionsServer));
+});
+
+it("shows the proposed answer while masking credential fields", () => {
+  const summary = McpToolAccess.operationSummary("t3_pending_request_respond", {
+    answers: { release: "Publish version 2", password: "private-password" },
+  });
+  expect(summary.includes("Publish version 2")).toBe(true);
+  expect(summary.includes("private-password")).toBe(false);
+});
+
+it("previews attachment identity and transfer context without file contents or upload credentials", () => {
+  const summary = McpToolAccess.operationSummary("t3_thread_send_attachments", {
+    attachments: [
+      {
+        id: "file-one",
+        type: "file",
+        name: "release.txt",
+        mimeType: "text/plain",
+        sizeBytes: 42,
+        url: "https://upload.example/private-upload",
+        dataUrl: "private-content",
+        source: { accessibleText: "private-screen" },
+      },
+    ],
+    sourceThreadId: "thread:source",
+    targetThreadId: "thread:target",
+    sourcePoint: { type: "run", runId: "run:approved" },
+  });
+  for (const value of [
+    "release.txt",
+    "text/plain",
+    "42",
+    "file-one",
+    "thread:source",
+    "thread:target",
+    "run:approved",
+  ]) {
+    expect(summary.includes(value)).toBe(true);
+  }
+  expect(summary.match(/private-(upload|content|screen)/)).toBeNull();
+});

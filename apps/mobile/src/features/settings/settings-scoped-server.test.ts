@@ -4,6 +4,7 @@ import {
   type ProjectId,
   type ServerSettings,
 } from "@t3tools/contracts";
+import { planTaskExecutionMemoryPatch } from "@t3tools/shared/taskExecutionSettings";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { SettingsTarget } from "./settings-environment-filter";
@@ -160,3 +161,43 @@ describe("mobile project settings scope", () => {
     ).toEqual([]);
   });
 });
+
+describe("mobile task execution settings", () => {
+  it("writes the memory thresholds to every selected environment but not to a project", () => {
+    const targets = resolveMobileSettingsTargets(
+      [
+        environment(firstId, DEFAULT_SERVER_SETTINGS),
+        environment(secondId, DEFAULT_SERVER_SETTINGS),
+      ],
+      null,
+    );
+    const plan = planTaskExecutionMemoryPatch({ startMinFreeGb: 2, pauseBelowFreeGb: 1 });
+    if (!plan.ok) throw new Error(plan.message);
+
+    expect(planMobileScopedSettingsPatch(targets, false, plan.patch)).toEqual([
+      {
+        environmentId: firstId,
+        patch: { taskExecution: { startMinFreeBytes: 2 * GIB, pauseBelowFreeBytes: GIB } },
+      },
+      {
+        environmentId: secondId,
+        patch: { taskExecution: { startMinFreeBytes: 2 * GIB, pauseBelowFreeBytes: GIB } },
+      },
+    ]);
+
+    const projectTargets = resolveMobileSettingsTargets(
+      [environment(firstId, DEFAULT_SERVER_SETTINGS)],
+      [{ environmentId: firstId, id: firstProject }],
+    );
+    expect(planMobileScopedSettingsPatch(projectTargets, true, plan.patch)).toEqual([]);
+  });
+
+  it("keeps a pause threshold at or above the start threshold out of the patch", () => {
+    expect(planTaskExecutionMemoryPatch({ startMinFreeGb: 1, pauseBelowFreeGb: 1.5 })).toEqual({
+      ok: false,
+      message: "멈추는 기준은 시작 기준보다 작아야 해요.",
+    });
+  });
+});
+
+const GIB = 1024 * 1024 * 1024;

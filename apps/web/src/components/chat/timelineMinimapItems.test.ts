@@ -79,3 +79,23 @@ describe("timeline minimap previews", () => {
     expect(resolveTimelineMinimapPreview(first)?.assistantText).toBe("First");
   });
 });
+
+describe("timeline minimap in PM and Director chats", () => {
+  it("leaves out app-sent prompts that the chat draws as one-line events", () => {
+    const source = rows([
+      ["user", "[목표 점검] Goal alignment changed"],
+      ["assistant", "Checking"],
+      ["user", "[목표 점검] Goal alignment changed again"],
+      ["user", "사용자 질문"],
+    ]);
+    for (const index of [0, 2]) {
+      const row = source[index]!;
+      if (row.kind !== "message") throw new Error("expected a message row");
+      Object.assign(row.message, { createdBy: "system", creationSource: "server" });
+    }
+
+    expect(deriveTimelineMinimapItems(source)).toHaveLength(3);
+    const items = deriveTimelineMinimapItems(source, { skipAppEvents: true });
+    expect(items.map((item) => item.userText)).toEqual(["사용자 질문"]);
+  });
+});

@@ -79,11 +79,13 @@ export function useRoleModelLabel(environmentId: EnvironmentId) {
  */
 export function RoleModelPicker(props: {
   environmentId: EnvironmentId;
-  projectId: ProjectId;
+  /** Null for app-wide settings that belong to no project. */
+  projectId: ProjectId | null;
   value: ProjectTaskModelTarget | null;
   unsetLabel: string;
   ariaLabel: string;
-  clearLabel: string;
+  /** Without one, a set role has no clear button. */
+  clearLabel?: string | undefined;
   disabled?: boolean | undefined;
   size?: ComposerControlSize | undefined;
   triggerClassName?: string | undefined;
@@ -127,7 +129,7 @@ export function RoleModelPicker(props: {
           props.onChange({ providerInstanceId, model })
         }
       />
-      {value === null ? null : (
+      {value === null || props.clearLabel === undefined ? null : (
         <Button
           size="icon-micro"
           variant="ghost-muted"

@@ -8,12 +8,14 @@ import {
   buildTemporaryWorktreeBranchName,
   flattenTemporaryWorktreeBranchName,
   isTemporaryWorktreeBranch,
+  looksLikeTemporaryWorktreeBranch,
   normalizeGitRemoteUrl,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
   parseOriginUrlFromGitConfig,
   resolveAutoFeatureBranchName,
   sanitizeFeatureBranchName,
-  WORKTREE_BRANCH_PREFIX,
+  DEFAULT_WORKTREE_BRANCH_PREFIX as WORKTREE_BRANCH_PREFIX,
+  resolveWorktreeBranchPrefix,
 } from "./git.ts";
 
 describe("normalizeGitRemoteUrl", () => {
@@ -204,7 +206,59 @@ describe("isTemporaryWorktreeBranch", () => {
     expect(isTemporaryWorktreeBranch("t3code/f4ae4e0e-f971-4d48-c4f2-9cf0aa54ab12")).toBe(false);
   });
 
-  it("matches the flat fallback used when a plain t3 branch exists", () => {
+  it("defaults temporary branches to the busyboy prefix", () => {
+    expect(WORKTREE_BRANCH_PREFIX).toBe("busyboy");
+    expect(buildTemporaryWorktreeBranchName(() => "deadbeef")).toBe("busyboy/deadbeef");
+    expect(buildTemporaryWorktreeBranchName(() => "deadbeef", "")).toBe("busyboy/deadbeef");
+    expect(buildTemporaryWorktreeBranchName(() => "deadbeef", " / ")).toBe("busyboy/deadbeef");
+  });
+
+  it("names temporary branches with the user's branch prefix", () => {
+    expect(buildTemporaryWorktreeBranchName(() => "deadbeef", "jiwon")).toBe("jiwon/deadbeef");
+    expect(buildTemporaryWorktreeBranchName(() => "deadbeef", "jiwon/")).toBe("jiwon/deadbeef");
+    expect(buildTemporaryWorktreeBranchName(() => "deadbeef", "Team/Ji Won")).toBe(
+      "team/ji-won/deadbeef",
+    );
+    expect(resolveWorktreeBranchPrefix("Team/Ji Won/")).toBe("team/ji-won");
+  });
+
+  it("recognizes temporary names with the user's prefix only when that prefix is given", () => {
+    expect(isTemporaryWorktreeBranch("jiwon/deadbeef", "jiwon")).toBe(true);
+    expect(isTemporaryWorktreeBranch("jiwon-deadbeef", "jiwon/")).toBe(true);
+    expect(isTemporaryWorktreeBranch("team/jiwon/deadbeef", "team/jiwon")).toBe(true);
+    expect(isTemporaryWorktreeBranch("jiwon/deadbeef")).toBe(false);
+    expect(isTemporaryWorktreeBranch("jiwon/add-search", "jiwon")).toBe(false);
+    expect(isTemporaryWorktreeBranch("jiwon/deadbeef0", "jiwon")).toBe(false);
+    expect(isTemporaryWorktreeBranch("other/deadbeef", "jiwon")).toBe(false);
+  });
+
+  it("keeps recognizing old t3 temporary names with any prefix", () => {
+    for (const prefix of [undefined, "", "jiwon"]) {
+      expect(isTemporaryWorktreeBranch("t3/deadbeef", prefix)).toBe(true);
+      expect(isTemporaryWorktreeBranch("t3-deadbeef", prefix)).toBe(true);
+      expect(isTemporaryWorktreeBranch("t3code/deadbeef", prefix)).toBe(true);
+      expect(isTemporaryWorktreeBranch("busyboy/deadbeef", prefix)).toBe(true);
+    }
+    expect(isTemporaryWorktreeBranch("t3/feature/demo")).toBe(false);
+  });
+
+  it("guesses temporary names under any prefix when the prefix is unknown", () => {
+    expect(looksLikeTemporaryWorktreeBranch("jiwon/deadbeef")).toBe(true);
+    expect(looksLikeTemporaryWorktreeBranch("t3/deadbeef")).toBe(true);
+    expect(looksLikeTemporaryWorktreeBranch("t3-deadbeef")).toBe(true);
+    expect(looksLikeTemporaryWorktreeBranch("jiwon/add-search")).toBe(false);
+    expect(looksLikeTemporaryWorktreeBranch("deadbeef")).toBe(false);
+  });
+
+  it("flattens a temporary name under the user's prefix", () => {
+    expect(flattenTemporaryWorktreeBranchName("team/jiwon/deadbeef", "team/jiwon")).toBe(
+      "team/jiwon-deadbeef",
+    );
+    expect(flattenTemporaryWorktreeBranchName("t3/deadbeef", "jiwon")).toBe("jiwon-deadbeef");
+    expect(isTemporaryWorktreeBranch("team/jiwon-deadbeef", "team/jiwon")).toBe(true);
+  });
+
+  it("matches the flat fallback used when a plain prefix branch exists", () => {
     const flat = flattenTemporaryWorktreeBranchName(`${WORKTREE_BRANCH_PREFIX}/deadbeef`);
     expect(flat).toBe(`${WORKTREE_BRANCH_PREFIX}-deadbeef`);
     expect(isTemporaryWorktreeBranch(flat)).toBe(true);

@@ -21,6 +21,8 @@ import {
   type OrchestratorMcpDelegateTaskResult,
   type OrchestratorMcpInteractionMode,
   type OrchestratorMcpDeleteScheduledTaskInput,
+  type OrchestratorMcpCloudSecretSaveInput,
+  type OrchestratorMcpCloudSecretSaveResult,
   type OrchestratorMcpRequestSecretInput,
   type OrchestratorMcpRequestSecretResult,
   type OrchestratorMcpDeleteScheduledTaskResult,
@@ -80,6 +82,8 @@ import {
 } from "@t3tools/provider-core/server/subagentProjection";
 import {
   DispatchModeLimit,
+  approvedDispatchTargetModeMismatch,
+  isApprovedDispatchTarget,
   type DispatchModeRefusal,
 } from "../orchestration-v2/DispatchModeLimit.ts";
 import { runOutcome } from "../orchestration-v2/RestartBackgroundNote.ts";
@@ -91,6 +95,7 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import { capWebhookRuntimeMode } from "../scheduledTasks/Schedule.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import {
   clientRuntimeModeCeiling,
   type McpInvocationScope,
@@ -99,6 +104,7 @@ import {
 } from "./McpInvocationContext.ts";
 import * as Metrics from "../observability/Metrics.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as CloudLeadSecrets from "../cloudLead/CloudLeadSecrets.ts";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_WAIT_TIMEOUT_MS = 60 * 60 * 1_000;
@@ -139,6 +145,11 @@ export interface OrchestratorMcpDelegateTaskOptions {
    * branch instead of the parent's local commit, so it never inherits a stale checkout.
    */
   readonly worktreeBase?: "origin-default";
+  /**
+   * "claimed": the caller already claimed this local start from MemoryHeadroom
+   * (task_start does), so the child does not wait for the start gate again.
+   */
+  readonly localStart?: "claimed";
   /**
    * Runs once the child thread exists and before a mode=wait call blocks, so a caller can
    * link the child (for example as a task's review session) before the child acts.
@@ -214,6 +225,14 @@ export interface OrchestratorMcpServiceShape {
     scope: McpInvocationScope,
     input: OrchestratorMcpRequestSecretInput,
   ) => Effect.Effect<OrchestratorMcpRequestSecretResult, OrchestratorMcpFailure>;
+  /**
+   * Consumes a request_secret ref into the cloud lead secret store. The value
+   * never reaches the result, logs, spans or errors.
+   */
+  readonly cloudSecretSave: (
+    scope: McpInvocationScope,
+    input: OrchestratorMcpCloudSecretSaveInput,
+  ) => Effect.Effect<OrchestratorMcpCloudSecretSaveResult, OrchestratorMcpFailure>;
   readonly listThreads: (
     scope: McpInvocationScope,
     input: OrchestratorMcpThreadListInput,
@@ -656,6 +675,22 @@ export function resolveInteractionMode(
     : Effect.succeed(resolved);
 }
 
+const hasCurrentApprovedDispatchTarget = Effect.fn("mcp.hasCurrentApprovedDispatchTarget")(
+  function* (thread: Pick<OrchestrationV2ThreadShell, "id" | "runtimeMode" | "interactionMode">) {
+    const limit = yield* DispatchModeLimit;
+    const mismatch = approvedDispatchTargetModeMismatch(limit, thread.id, thread);
+    if (mismatch !== undefined) {
+      return yield* failure(
+        mismatch === "runtime"
+          ? "runtime_mode_escalation_denied"
+          : "interaction_mode_escalation_denied",
+        `The approved target's ${mismatch} mode changed. Request approval again.`,
+      );
+    }
+    return isApprovedDispatchTarget(limit, thread.id, thread);
+  },
+);
+
 function stablePart(value: string): string {
   return encodeURIComponent(value);
 }
@@ -888,6 +923,8 @@ function turnItemText(item: OrchestrationV2TurnItem): string | null {
       return item.requestKind === "sign_in"
         ? `Asked the user to sign in to ${item.origin ?? "a site"}: ${item.browserStatus}.`
         : `Asked to read browsing history: ${item.browserStatus}.`;
+    case "operation_permission":
+      return `${item.operation}: ${item.summary}\n${item.targetDescription}\n${item.permissionStatus}`;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":
@@ -945,6 +982,25 @@ const make = Effect.gen(function* () {
   const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const memoryHeadroom = yield* MemoryHeadroom.MemoryHeadroom;
+
+  /** The user's execution-location setting; local_only when it cannot be read. */
+  const executionLocation = serverSettings.getSettings.pipe(
+    Effect.map((settings) => settings.taskExecution.location),
+    Effect.orElseSucceed(() => "local_only" as const),
+  );
+
+  /**
+   * A new local child claims the shared start gate, waiting while memory is
+   * short or another session just started; after HEADROOM_WAIT_MS it is refused.
+   */
+  const awaitLocalHeadroom = Effect.gen(function* () {
+    if (yield* MemoryHeadroom.waitToStart(memoryHeadroom)) return;
+    return yield* failure(
+      "orchestration_error",
+      "Mac memory is short, so this child was not started. Delegate it again later. (메모리 여유 부족)",
+    );
+  });
 
   const defaultRuntimeModeFor = (projectId: ProjectId) =>
     serverSettings.getSettings.pipe(
@@ -980,6 +1036,7 @@ const make = Effect.gen(function* () {
         )
       : Effect.succeed(project.defaultModelSelection);
   const secretRequests = yield* SecretRequests.SecretRequests;
+  const cloudLeadSecrets = yield* CloudLeadSecrets.CloudLeadSecrets;
 
   const requireCapability = (scope: McpInvocationScope) =>
     scope.capabilities.has("orchestration")
@@ -1945,6 +2002,39 @@ const make = Effect.gen(function* () {
         return { status, secretRef: secretRef.value };
       }).pipe(Effect.withSpan("OrchestratorMcpService.requestSecret")),
 
+    cloudSecretSave: (scope, input) =>
+      Effect.gen(function* () {
+        const { parent } = yield* loadThreadCaller(scope, "cloud_secret_save");
+        yield* Effect.annotateCurrentSpan({ "cloud_lead_secret.kind": input.kind });
+        const key = { kind: input.kind, name: input.name };
+        const cloudSecretFailure = (error: CloudLeadSecrets.CloudLeadSecretsError) =>
+          failure(
+            error.reason === "store_failed" ? "orchestration_error" : "invalid_request",
+            error.message,
+          );
+        // Check the name before consuming: a ref is used once, so a request
+        // the store would refuse must not spend it.
+        yield* CloudLeadSecrets.storeName(key).pipe(Effect.mapError(cloudSecretFailure));
+        const value = yield* secretRequests
+          .consume({ ref: input.secretRef, projectId: parent.thread.projectId })
+          .pipe(
+            Effect.mapError((error) =>
+              failure(
+                error.reason === "read_failed" || error.reason === "consume_failed"
+                  ? "orchestration_error"
+                  : "invalid_request",
+                error.message,
+              ),
+            ),
+          );
+        yield* cloudLeadSecrets.save({ ...key, value }).pipe(Effect.mapError(cloudSecretFailure));
+        return {
+          status: "saved" as const,
+          kind: input.kind,
+          ...(input.name === undefined ? {} : { name: input.name }),
+        };
+      }).pipe(Effect.withSpan("OrchestratorMcpService.cloudSecretSave")),
+
     capabilities: (scope) =>
       Effect.gen(function* () {
         const { parent, limits } = yield* loadCaller(scope);
@@ -2034,6 +2124,55 @@ const make = Effect.gen(function* () {
           providers,
           skipProjectEnablementFilter: isRetryOfAcceptedDelegation,
         });
+        // A cloud parent's children run in the cloud too; one sharing its
+        // checkout shares its sandbox, so the Mac mirror is never edited directly.
+        const parentCloud = parent.thread.location === "cloud";
+        const policy = yield* executionLocation;
+        // Under local_only nothing leaves this Mac: a cloud request from a local
+        // parent runs here. A cloud parent's children share its sandbox, as before.
+        const forcedLocal = policy === "local_only" && !parentCloud && input.location === "cloud";
+        let cloud =
+          !forcedLocal &&
+          (input.location === "cloud" || (parentCloud && input.location !== "local"));
+        if (parentCloud && !cloud && input.isolation !== "worktree") {
+          return yield* failure(
+            "invalid_request",
+            "This thread runs in the cloud, so a local child would edit the Mac mirror of its checkout. Leave location unset, or give the child its own worktree with isolation worktree.",
+          );
+        }
+        if (cloud) {
+          const driver = providers.find(
+            (provider) => provider.instanceId === target.modelSelection.instanceId,
+          )?.driver;
+          if (driver !== "claudeAgent" && driver !== "codex") {
+            return yield* failure(
+              "invalid_request",
+              `Cloud runs only Claude and Codex agents; ${target.modelSelection.instanceId} uses ${driver ?? "an unknown driver"}. Pick a Claude or Codex target, or run it locally.`,
+            );
+          }
+        }
+        // A new local child needs room on the Mac; a cloud parent's children run in
+        // its sandbox and are not counted against it. When the Mac is short and the
+        // user allows the cloud, a child with no place of its own goes there instead,
+        // but only one that asked for its own checkout: one sharing its parent's
+        // checkout stays here and waits for memory.
+        if (!cloud && !isRetryOfAcceptedDelegation && options?.localStart !== "claimed") {
+          const driver = providers.find(
+            (provider) => provider.instanceId === target.modelSelection.instanceId,
+          )?.driver;
+          const mayUseCloud =
+            policy !== "local_only" &&
+            input.location === undefined &&
+            input.isolation === "worktree" &&
+            (driver === "claudeAgent" || driver === "codex");
+          if (mayUseCloud && (yield* memoryHeadroom.check).headroom !== "ok") {
+            cloud = true;
+          } else {
+            yield* awaitLocalHeadroom;
+          }
+        }
+        // A cloud child of a local parent needs its own checkout to mirror.
+        const ownWorktree = input.isolation === "worktree" || (cloud && !parentCloud);
         const runtimeMode = yield* resolveRuntimeMode(
           parent.thread.runtimeMode,
           input.runtimeMode,
@@ -2045,7 +2184,7 @@ const make = Effect.gen(function* () {
           input.interactionMode,
         );
         let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
-        if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
+        if (ownWorktree && !isRetryOfAcceptedDelegation) {
           const project = yield* requireProject(parent.thread.projectId);
           if (options?.worktreeBase === "origin-default") {
             workspaceStrategy = yield* originDefaultWorktreeStrategy(
@@ -2089,6 +2228,7 @@ const make = Effect.gen(function* () {
             runtimeMode,
             interactionMode,
             ...(workspaceStrategy === undefined ? {} : { workspaceStrategy }),
+            ...(cloud ? { location: "cloud" as const } : {}),
             // Async delegations wake the parent on every child terminal; wait
             // delegations deliver through the blocking tool call, so a wake is
             // only needed if the parent settled first (timeout, disconnect).
@@ -2627,7 +2767,9 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const { parent, limits, target } = yield* loadScopedThread(scope, input.threadId);
         yield* assertLiveCallerForOtherThread(scope, parent, target);
-        yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        if (!(yield* hasCurrentApprovedDispatchTarget(target.thread))) {
+          yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        }
         yield* resolveInteractionMode(limits.interactionMode, target.thread.interactionMode);
 
         const mode = input.mode ?? "auto";
@@ -2700,7 +2842,9 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const { parent, limits, target } = yield* loadScopedThread(scope, input.threadId);
         yield* assertLiveCallerForOtherThread(scope, parent, target);
-        yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        if (!(yield* hasCurrentApprovedDispatchTarget(target.thread))) {
+          yield* resolveRuntimeMode(limits.runtimeMode, target.thread.runtimeMode);
+        }
         yield* resolveInteractionMode(limits.interactionMode, target.thread.interactionMode);
         const key = yield* requestKey(input.clientRequestId);
         const result = yield* threadManagement
@@ -2753,5 +2897,6 @@ export const layer: Layer.Layer<
   | ScheduledTaskService.ScheduledTaskService
   | ProjectService.ProjectService
   | SecretRequests.SecretRequests
+  | CloudLeadSecrets.CloudLeadSecrets
   | ServerSettings.ServerSettingsService
 > = Layer.effect(OrchestratorMcpService, make);

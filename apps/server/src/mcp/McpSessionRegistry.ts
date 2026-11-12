@@ -1,4 +1,4 @@
-import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { type ExecutionLocation, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -22,6 +22,8 @@ export interface McpCredentialRequest {
    */
   readonly browserToolsAvailable?: boolean;
   readonly capabilities?: ReadonlySet<McpInvocationContext.McpCapability>;
+  /** Where the thread's agent runs; absent means local. */
+  readonly location?: ExecutionLocation;
 }
 
 export interface McpIssuedCredential {
@@ -127,6 +129,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
           threadId: ThreadId.make(request.threadId),
           providerSessionId,
           providerInstanceId: ProviderInstanceId.make(request.providerInstanceId),
+          ...(request.location === "cloud" ? { location: "cloud" as const } : {}),
         },
         client: undefined,
         capabilities: new Set<McpInvocationContext.McpCapability>([

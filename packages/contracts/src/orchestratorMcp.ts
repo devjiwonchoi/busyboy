@@ -25,6 +25,7 @@ import {
 import { ProviderInteractionMode, RuntimeMode } from "./providerPolicy.ts";
 import { ThreadLinkedPullRequest } from "./threadPullRequest.ts";
 import { ThreadTitleRegeneration } from "./threadTitle.ts";
+import { ExecutionLocation } from "./executionLocation.ts";
 import {
   OrchestrationV2Actor,
   OrchestrationV2CreationSource,
@@ -176,6 +177,10 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
   timeoutMs: Schema.optional(Schema.Number).annotate({
     description:
       "Wait budget for mode=wait only. Default 10 minutes. Elapsing it returns waitTimedOut=true on that call and does not cancel the child.",
+  }),
+  location: Schema.optional(ExecutionLocation).annotate({
+    description:
+      "Where the child runs. Defaults to the parent's location. local runs it on the user's Mac. cloud runs a Claude or Codex child in a Vercel Sandbox: a child of a cloud parent shares the parent's sandbox and checkout (its own with isolation worktree); a child of a local parent gets its own checkout. A cloud worktree on the Mac is a read-only mirror updated after each turn.",
   }),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
   runtimeMode: Schema.optional(
@@ -610,6 +615,40 @@ export const OrchestratorMcpRequestSecretResult = Schema.Union([
   }),
 ]);
 export type OrchestratorMcpRequestSecretResult = typeof OrchestratorMcpRequestSecretResult.Type;
+
+export const CloudLeadSecretKind = Schema.Literals([
+  "vercel_token",
+  "vercel_team_id",
+  "vercel_project_id",
+  "claude_oauth_token",
+  "github_token",
+  // The cloud's own ChatGPT login for Codex: the auth.json of a separate `codex login`.
+  "codex_auth_json",
+  "mcp",
+]);
+export type CloudLeadSecretKind = typeof CloudLeadSecretKind.Type;
+
+export const OrchestratorMcpCloudSecretSaveInput = Schema.Struct({
+  kind: CloudLeadSecretKind.annotate({
+    description:
+      "Which cloud lead secret this is. mcp is an auth value for an MCP server, named by name.",
+  }),
+  name: Schema.optional(TrimmedNonEmptyString).annotate({
+    description:
+      "Required for kind mcp: '<server>:<KEY>', KEY being the env var or header name. Omit for every other kind.",
+  }),
+  secretRef: SecretRef.annotate({
+    description: "The secretRef returned by request_secret. It is consumed by this save.",
+  }),
+});
+export type OrchestratorMcpCloudSecretSaveInput = typeof OrchestratorMcpCloudSecretSaveInput.Type;
+
+export const OrchestratorMcpCloudSecretSaveResult = Schema.Struct({
+  status: Schema.Literal("saved"),
+  kind: CloudLeadSecretKind,
+  name: Schema.optional(TrimmedNonEmptyString),
+});
+export type OrchestratorMcpCloudSecretSaveResult = typeof OrchestratorMcpCloudSecretSaveResult.Type;
 
 export const OrchestratorMcpDeleteScheduledTaskInput = Schema.Struct({
   scheduledTaskId: ScheduledTaskId,

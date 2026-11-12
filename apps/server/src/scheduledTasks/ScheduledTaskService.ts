@@ -105,6 +105,7 @@ export type WebhookTriggerResult =
     };
 
 const decodeTask = Schema.decodeUnknownEffect(ScheduledTask);
+const encodeTask = Schema.encodeSync(Schema.fromJsonString(ScheduledTask));
 const decodeTaskId = Schema.decodeUnknownOption(ScheduledTaskId);
 const decodeScheduleJson = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ScheduledTask.fields.schedule),
@@ -179,7 +180,7 @@ export class ScheduledTaskService extends Context.Service<
       input: ScheduledTaskDeleteInput,
     ) => Effect.Effect<ScheduledTaskDeleteResult, ScheduledTaskError>;
     readonly runNow: (
-      input: ScheduledTaskRunNowInput,
+      input: ScheduledTaskRunNowInput & { readonly expectedTask?: ScheduledTask },
     ) => Effect.Effect<ScheduledTaskRunNowResult, ScheduledTaskError>;
     readonly rotateWebhookToken: (
       input: ScheduledTaskRotateWebhookTokenInput,
@@ -634,6 +635,7 @@ export const layer = Layer.effect(
       task: ScheduledTask,
       trigger: "scheduled" | "manual" | "webhook",
       webhook?: { readonly deliveryId: string; readonly prompt: string },
+      expectedTask?: ScheduledTask,
     ) {
       const reserved = yield* Ref.modify(activeRuns, (active) => {
         if (active.has(task.id)) return [false, active] as const;
@@ -666,6 +668,13 @@ export const layer = Layer.effect(
             return yield* taskError("Schedule task not found.", { taskId: task.id });
           }
           return task;
+        }
+        // Run the exact saved configuration the person approved, never a later edit.
+        // The immutable `active` snapshot also supplies every dispatch field below.
+        if (expectedTask !== undefined && encodeTask(active) !== encodeTask(expectedTask)) {
+          return yield* taskError("Schedule task changed after approval. Request approval again.", {
+            taskId: task.id,
+          });
         }
         const parsedNextRunAt =
           active.nextRunAt === null ? Option.none() : DateTime.make(active.nextRunAt);
@@ -1072,7 +1081,7 @@ export const layer = Layer.effect(
         Effect.as({ id: input.id }),
       );
 
-    const runNow: ScheduledTaskService["Service"]["runNow"] = (input: ScheduledTaskRunNowInput) =>
+    const runNow: ScheduledTaskService["Service"]["runNow"] = (input) =>
       Effect.gen(function* () {
         const task = yield* loadTask(input.id);
         if (task.schedule.type === "webhook") {
@@ -1080,7 +1089,7 @@ export const layer = Layer.effect(
             taskId: input.id,
           });
         }
-        const next = yield* runTask(task, "manual").pipe(
+        const next = yield* runTask(task, "manual", undefined, input.expectedTask).pipe(
           Effect.mapError((cause) =>
             taskError("Could not run schedule task.", { taskId: input.id, cause }),
           ),

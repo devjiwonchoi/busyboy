@@ -8,9 +8,18 @@ import {
   t3AcpPromptWithInstructions,
   t3OrchestrationPromptForFirstRun,
   t3OrchestrationSystemPrompt,
+  USER_FACING_TASK_INSTRUCTIONS,
 } from "./orchestrationInstructions.ts";
 
 describe("T3 orchestration provider instructions", () => {
+  it("requires messenger requests and resolves user request references", () => {
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "one messenger-style message");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "No headings, labels, bullets, task keys");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "Optional details has up to 8 label/text pairs");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "omit attentionItemId");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "t3-request:<id>");
+    assert.include(USER_FACING_TASK_INSTRUCTIONS, "Required context still applies");
+  });
   it("distinguishes delegated subagents from ordinary top-level threads", () => {
     assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "Use `delegate_task`");
     assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "ordinary top-level T3 conversations");
@@ -20,6 +29,18 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(
       T3_CODE_ORCHESTRATION_INSTRUCTIONS,
       "Do not use `t3_thread_send` on `childThreadId`",
+    );
+  });
+
+  it("tells the PM to start a cloud lead only when the user asks", () => {
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      'Only when the user asks for it, call `task_start` with location "cloud"',
+    );
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "The app marks such a task Cloud.");
+    assert.include(
+      PROJECT_MANAGER_INSTRUCTIONS,
+      "Computer Use and the local app preview don't work there.",
     );
   });
 
@@ -96,6 +117,15 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"Delegated task … reached a terminal state"');
   });
 
+  it("has the PM's task_create start the task, with scope shaped at plan approval", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "its lead starts right away");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "shapes its scope at the lead's plan approval");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "the result's `waiting` says why");
+    for (const text of ["태스크로 추가", "[제안 승인됨]", "[제안 빠짐]", "[제안 피드백]"]) {
+      assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, text);
+    }
+  });
+
   it("tells the PM to report only on a due sitrep", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "call `team_status` first");
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "[Sitrep due] since <time>");
@@ -147,12 +177,46 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(PROJECT_MANAGER_INSTRUCTIONS, "After a context compaction, call `team_status`");
   });
 
+  it("has the PM and the Director stop work only with a resume condition", () => {
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "never just say so in chat: call `task_update`");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "`hold: {resumeWhen, reason}`");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, "A stop without a condition is refused.");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, '"#N … its resume condition is met …"');
+    assert.notInclude(PROJECT_MANAGER_INSTRUCTIONS, "N tasks look stalled");
+    const director = directorInstructions({ name: "Director", voice: "calm" });
+    assert.include(director, "name the condition that ends the pause");
+  });
+
   it("gives the PM its name and voice", () => {
     const text = projectManagerInstructions({ name: "Remy", voice: "Terse and dry." });
     assert.include(text, PROJECT_MANAGER_INSTRUCTIONS);
     assert.include(text, "Your name is Remy.");
     assert.include(text, "Your voice: Terse and dry.");
     assert.include(text, "`team_settings_update`");
+  });
+
+  it("gives both user-facing roles named task links and explicit decision context", () => {
+    const prompts = [
+      projectManagerInstructions({ name: "Remy", voice: "Terse." }),
+      directorInstructions({ name: "Nova", voice: "Calm." }),
+    ];
+
+    for (const text of prompts) {
+      assert.include(text, USER_FACING_TASK_INSTRUCTIONS);
+      assert.include(text, "name the work and its project first");
+      assert.include(text, "supporting detail in parentheses");
+      assert.include(text, "[로그인 리다이렉트 수정 · 웹 앱](t3-task:task%3Alogin)");
+      assert.include(text, "using `encodeURIComponent(task.id)`");
+      assert.include(text, "`action`");
+      assert.include(text, "`reason`");
+      assert.include(text, "`impacts`");
+      assert.include(text, "`cost`");
+      assert.include(text, "`reversibility`");
+      assert.include(text, "`recommendation`");
+      assert.include(text, "explicitly use [] for none");
+      assert.include(text, "Existing role, explicit-approval, and AFK restrictions still apply");
+      assert.include(text, "the card's impact labels do not grant permission");
+    }
   });
 
   it("has the Director record goals and link the work that serves them", () => {
@@ -163,7 +227,7 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "`workspace.alignment`");
   });
 
-  it("has the Director act on goal checks without approving, adding or starting work", () => {
+  it("has the Director act on goal checks without approving plans or starting work", () => {
     const text = directorInstructions({ name: "Nova", voice: "Calm." });
     assert.include(text, "### Working from goals");
     assert.include(text, 'When you receive "[목표 점검]"');
@@ -171,7 +235,33 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(text, "`pm_nudge` with `projectId`, `taskId` and the reason");
     assert.include(text, "어느 목표인가요?");
     assert.include(text, "gather everything the user must decide into one `ask_user`");
-    assert.include(text, "You never approve plans, add tasks or start leads");
+    assert.include(text, "You never approve plans or start leads");
+    assert.notInclude(text, "태스크로 추가");
+  });
+
+  it("has the PM and Director record the user's corrections in their own words", () => {
+    for (const text of [
+      projectManagerInstructions({ name: "Mina", voice: "Calm." }),
+      directorInstructions({ name: "Nova", voice: "Calm." }),
+    ]) {
+      assert.include(text, "call `correction_record` with their exact words");
+      assert.include(
+        text,
+        "New scope that doesn't contradict earlier direction is not a correction",
+      );
+      assert.include(text, "Plan card answers are recorded automatically");
+    }
+    const pm = projectManagerInstructions({ name: "Mina", voice: "Calm." });
+    assert.include(pm, '"그게 아니라", "말고"');
+    assert.notInclude(pm, "corrections_report");
+  });
+
+  it("has the Director read correction rates and propose rules only with the user's yes", () => {
+    const text = directorInstructions({ name: "Nova", voice: "Calm." });
+    assert.include(text, "### Corrections");
+    assert.include(text, "`corrections_report` gives correction rates by project and work kind");
+    assert.include(text, "When a group has `suggestRule`, propose saving it as a preference");
+    assert.include(text, "never save it without the user's yes");
   });
 
   it("has the Director keep its one-line briefing current on goal checks and digests", () => {

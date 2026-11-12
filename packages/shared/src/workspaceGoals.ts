@@ -29,12 +29,12 @@ export interface AlignableTask {
 }
 
 const isFinished = (stage: ProjectTaskStage) => stage === "done" || stage === "cancelled";
-const isOpen = (stage: ProjectTaskStage) => stage !== "proposed" && !isFinished(stage);
+const isOpen = (stage: ProjectTaskStage) => !isFinished(stage);
 
 /**
  * A task serves an active goal when the goal links it, one of its ancestors (parents may
- * be in other projects, such as a Director epic), or its project. Proposals are ignored,
- * and so are tasks and links outside `projectIds`, such as a deleted project's.
+ * be in other projects, such as a Director epic), or its project. Tasks and links outside
+ * `projectIds`, such as a deleted project's, are ignored.
  */
 export function alignWorkspaceGoals(input: {
   readonly goals: ReadonlyArray<WorkspaceGoal>;
@@ -43,7 +43,7 @@ export function alignWorkspaceGoals(input: {
   readonly projectIds: ReadonlyArray<ProjectId>;
 }): WorkspaceGoalAlignment {
   const live = new Set<string>(input.projectIds);
-  const tasks = input.tasks.filter((task) => task.stage !== "proposed" && live.has(task.projectId));
+  const tasks = input.tasks.filter((task) => live.has(task.projectId));
   const byId = new Map(tasks.map((task) => [task.id, task] as const));
   const activeGoals = input.goals.filter((goal) => goal.status === "active");
 

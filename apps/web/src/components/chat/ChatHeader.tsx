@@ -21,6 +21,7 @@ import {
 import { isTrailingDoubleClick, resolveSidebarThreadStatus } from "../Sidebar.logic";
 import { useThreadShell } from "../../state/entities";
 import { useLeadThreadTask, useProjectManagerForThread } from "../../state/projectTeam";
+import { DirectorWorkspaceToggle } from "../director/DirectorWorkspaceToggle";
 import { TaskPlanToggle } from "../task/TaskPlanSurface";
 import { ProjectManagerHeaderIdentity } from "./ProjectManagerHeaderIdentity";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -30,6 +31,8 @@ import { readLocalApi } from "~/localApi";
 import { threadEnvironment } from "../../state/threads";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { CloudBadge } from "../CloudBadge";
+import { MoveTaskButton } from "../MoveTaskButton";
 import { ProjectFavicon } from "../ProjectFavicon";
 import {
   WorkspaceBreadcrumb,
@@ -288,11 +291,13 @@ export const ChatHeader = memo(function ChatHeader({
       onContextMenu={handleHeaderContextMenu}
     >
       {leadTask === null ? null : <TaskPlanToggle threadRef={activeThreadRef} />}
+      {projectManager?.kind === "director" ? <DirectorWorkspaceToggle /> : null}
       <WorkspaceBreadcrumb
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"
       >
-        {activeProject ? (
+        {/* The Director's project is its own hidden folder, so its crumb would only repeat the name. */}
+        {activeProject && projectManager?.kind !== "director" ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
@@ -421,6 +426,17 @@ export const ChatHeader = memo(function ChatHeader({
               <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
             </Tooltip>
           )}
+          {renamingTitle === null && activeThreadShell?.location === "cloud" ? (
+            <CloudBadge className="ms-2 shrink-0 font-normal" />
+          ) : null}
+          {renamingTitle === null && leadTask !== null && activeThreadShell !== null ? (
+            <MoveTaskButton
+              environmentId={activeThreadEnvironmentId}
+              projectId={activeThreadShell.projectId}
+              task={leadTask.task}
+              className="ms-2"
+            />
+          ) : null}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
     </div>

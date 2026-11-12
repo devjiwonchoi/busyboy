@@ -56,6 +56,7 @@ const handlers = {
           ),
         );
       }),
+    "t3_workflow_stop",
   ),
   schedule_task: McpToolAccess.startsThreads(
     () => ({}),
@@ -94,6 +95,13 @@ const handlers = {
       return yield* service.requestSecret(scope, input);
     }),
   ),
+  cloud_secret_save: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+      return yield* service.cloudSecretSave(scope, input);
+    }),
+  ),
   create_threads: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
@@ -123,6 +131,7 @@ const handlers = {
         const service = yield* ThreadMetadataMcpService.ThreadMetadataMcpService;
         return yield* service.update(scope, input);
       }),
+    "t3_thread_update",
   ),
   t3_thread_send: McpToolAccess.writesThreads(
     (input) => [input.threadId],
@@ -132,6 +141,7 @@ const handlers = {
         const service = yield* OrchestratorMcpService.OrchestratorMcpService;
         return yield* service.sendToThread(scope, input);
       }),
+    "t3_thread_send",
   ),
   t3_thread_wait: McpToolAccess.reads((input) =>
     Effect.gen(function* () {
@@ -148,6 +158,7 @@ const handlers = {
         const service = yield* OrchestratorMcpService.OrchestratorMcpService;
         return yield* service.interruptThread(scope, input);
       }),
+    "t3_thread_interrupt",
   ),
 } satisfies McpToolAccess.Handlers<typeof OrchestratorToolkit.tools>;
 

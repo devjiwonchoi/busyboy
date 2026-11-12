@@ -11,10 +11,12 @@ import {
   type ProjectTask,
   type ProjectTaskSpecVersion,
 } from "@t3tools/contracts";
+import { USER_FACING_TASK_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
 
 import { MEMORY_PROMPT_BUDGET } from "./memoryPrompt.ts";
+import { PLAN_GATES } from "./planGates.ts";
 import { resolveRoleModels } from "./roleModels.ts";
-import { buildTaskLeadPrompt } from "./taskLeadPrompt.ts";
+import { buildTaskLeadPrompt, nextStepHint } from "./taskLeadPrompt.ts";
 
 const projectId = ProjectId.make("project-1");
 const at = "2026-11-04T00:00:00.000Z";
@@ -29,6 +31,7 @@ const task: ProjectTask = {
   waitsOn: [],
   parentTaskId: null,
   leadThreadId: null,
+  location: "local",
   prUrl: null,
   planSummary: null,
   resultSummary: null,
@@ -122,9 +125,11 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).toContain("goal: the end state.");
     // The card no longer takes goal and verification bullets.
     expect(prompt).not.toContain("goal and verification");
-    expect(prompt).toContain("provenBy: how you will prove it");
     expect(prompt).toContain(
-      "Every criterion needs a todo that builds it, and every todo serves a criterion.",
+      "provenBy names the proof (a named test, a check you run, a screenshot)",
+    );
+    expect(prompt).toContain(
+      "every criterion has a todo that builds it, every todo serves a criterion",
     );
     expect(prompt).toContain('No delivery todos such as "open a PR" or "run the tests"');
     expect(prompt).toContain("The server refuses the request and lists what is missing");
@@ -141,13 +146,16 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).not.toContain("## Language");
     // Leads ask the user to approve the plan and read inline review comments.
     expect(prompt).toContain('ask_user(kind: "approval")');
-    expect(prompt).toContain("The card shows the user your summary and todos");
+    expect(prompt).toContain("the user gets the card, which shows your summary and todos");
     expect(prompt).toContain(
-      "summary: 2-4 sentences in your own words: what is wrong today, and what the user sees when it is done.",
+      "The user approves from the summary: 2-4 plain sentences in your own words on what is wrong today and what the user sees when it is done.",
     );
-    expect(prompt).toContain(
-      "Each one has a doneWhen line saying how the user can tell it is done",
-    );
+    expect(prompt).toContain("with a doneWhen saying how the user can tell it is done");
+    // Each spec field is described once: the gates own summary, todos and criteria.
+    expect(prompt.match(/2-4 plain sentences/g)).toHaveLength(1);
+    expect(prompt).not.toContain("   - summary:");
+    expect(prompt).not.toContain("   - todos:");
+    expect(prompt).not.toContain("   - criteria:");
     expect(prompt).toContain(
       "### Summary\nThere is no hello script. Running hello.sh prints hello.",
     );
@@ -181,8 +189,79 @@ describe("buildTaskLeadPrompt", () => {
     expect(prompt).not.toMatch(/jwn|\/[a-z-]+:[a-z-]+|plugin/i);
   });
 
+  it("teaches BusyBoy's plan gates and the separate checker", () => {
+    const prompt = buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] });
+    for (const gate of PLAN_GATES) {
+      expect(prompt).toContain(`${gate.id} "${gate.label}" (${gate.fields.join(", ")}`);
+      expect(prompt).toContain(gate.instruction);
+    }
+    expect(prompt).toContain("a small task gets a light plan (gates 1-8)");
+    expect(prompt).toContain("set the task's size with task_update(size)");
+    expect(prompt).toContain(
+      "a separate checker session, on a different model when one is set up, reviews each gate",
+    );
+    expect(prompt).toContain(
+      "If you are told the checker's task ended and no verdict message came, call ask_user",
+    );
+    expect(prompt).toContain("fix the failing gates with task_spec_write and ask again");
+    expect(prompt).not.toContain("jwn");
+    expect(prompt).not.toMatch(/\balign\b skill|\/align/i);
+    expect(nextStepHint("planning")).toContain(
+      "A separate checker session, on a different model when one is set up, reviews the gates",
+    );
+  });
+
+  it("tells the lead to answer side chat questions without changing the plan", () => {
+    const prompt = buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] });
+    const rule = prompt.split("\n").find((line) => line.includes('"[사용자 질문]"')) ?? "";
+    expect(rule).toContain('reply in one message per question: "[답변]" on the first line');
+    expect(rule).toContain('the question\'s "<!-- card:… -->" line copied as is');
+    expect(rule).toContain("Answer briefly");
+    expect(rule).toContain("Do not change the plan, spec, todos or code because of it.");
+    expect(rule).toContain('"변경 요청으로 보낼까요?"');
+    expect(rule).toContain("change the plan only when the user requests changes through the card");
+  });
+
+  it("tells a cloud lead where it runs and what it cannot reach, and a local one nothing", () => {
+    const cloud = buildTaskLeadPrompt({
+      ...base,
+      task: { ...base.task, location: "cloud" },
+      memory: [],
+      otherTasks: [],
+    });
+    const section = cloud.slice(cloud.indexOf("## Cloud"), cloud.indexOf("## Rules"));
+    expect(section).toContain("Vercel Sandbox (Linux)");
+    expect(section).toContain("read-only mirror");
+    expect(section).toContain("Commit, push and `gh` work as usual.");
+    expect(section).toContain("children run in this sandbox on this checkout");
+    expect(section).toContain("implement and fix move to the plan model");
+    expect(section).toContain("Computer Use, the local app preview");
+    expect(section).toContain("say so instead of trying");
+    expect(buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] })).not.toContain("## Cloud");
+  });
+
   it("keeps the whole prompt stable", () => {
     expect(buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] })).toMatchSnapshot();
+  });
+
+  it("names linked tasks and requires visible decision context without broadening approval", () => {
+    const prompt = buildTaskLeadPrompt({ ...base, memory: [], otherTasks: [] });
+
+    expect(prompt).toContain(USER_FACING_TASK_INSTRUCTIONS);
+    expect(prompt).toContain("[로그인 리다이렉트 수정 · 웹 앱](t3-task:task%3Alogin)");
+    expect(prompt).toContain("supporting detail in parentheses");
+    expect(prompt).toContain(
+      "required context describing its action, reason, impacts, cost, reversibility, and recommendation",
+    );
+    expect(prompt).toContain("Supply the required context fields");
+    expect(prompt).toContain("No task keys at all in request text");
+    expect(prompt).toContain("Optional details contains up to 8 label/text pairs");
+    expect(prompt).toContain("Write the whole ask_user message in question");
+    expect(prompt).toContain("Pass senderName on ask_user");
+    expect(prompt).toContain("at most 40 characters");
+    expect(prompt).toContain("Keep done-when and order in doneWhen/dependsOn");
+    expect(prompt).toContain("A plan approval authorizes only the scope the plan states");
+    expect(prompt).toContain("Merging a pull request still needs the user's explicit OK.");
   });
 
   it("tells the lead which model runs each role and to hand them off with task_delegate", () => {

@@ -1,3 +1,5 @@
+import { GoalMapScreen } from "./features/goals/GoalMapScreen";
+import { GOAL_MAP_LINKING_PATH, GOAL_MAP_ROUTE, GOAL_MAP_TITLE } from "./features/goals/goal-map";
 import { ComponentCatalogScreen } from "./features/development/ComponentCatalogScreen";
 import { PullRequestGuideStopScreen } from "./features/pull-requests/guide/PullRequestGuideScreen";
 import { PullRequestInlineCommentScreen } from "./features/pull-requests/PullRequestInlineCommentScreen";
@@ -98,6 +100,7 @@ import {
   SettingsEnvironmentMaintenanceRouteScreen,
   SettingsEnvironmentNewThreadsRouteScreen,
   SettingsEnvironmentSourceControlRouteScreen,
+  SettingsEnvironmentTaskExecutionRouteScreen,
 } from "./features/settings/SettingsServerControlsRouteScreen";
 import {
   SettingsScheduledTasksRouteScreen,
@@ -248,6 +251,11 @@ const SettingsContentStack = createV5SheetStackNavigator({
       screen: SettingsEnvironmentMaintenanceRouteScreen,
       linking: "maintenance",
       options: { title: "Maintenance" },
+    }),
+    SettingsEnvironmentTaskExecution: createNativeStackScreen({
+      screen: SettingsEnvironmentTaskExecutionRouteScreen,
+      linking: "task-execution",
+      options: { title: "작업 실행" },
     }),
     SettingsThreads: createNativeStackScreen({
       screen: SettingsThreadsRouteScreen,
@@ -671,6 +679,11 @@ const RootStackConfig = createWorkspaceStackNavigator({
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
       },
+    }),
+    [GOAL_MAP_ROUTE]: createNativeStackScreen({
+      screen: GoalMapScreen,
+      linking: GOAL_MAP_LINKING_PATH,
+      options: { ...SOLID_HEADER_OPTIONS, title: GOAL_MAP_TITLE },
     }),
     PullRequest: createNativeStackScreen({
       screen: PullRequestRouteScreen,

@@ -4,6 +4,8 @@ import { ScreenHeaderButton } from "../../components/ui/ScreenHeaderButton";
 import type { AppBarAction } from "../../components/ui/AppBar.types";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import type { ThreadInspectorMode } from "./thread-inspector-content-stack";
+import { CloudPill } from "./CloudPill";
+import { MoveTaskButton } from "./MoveTaskButton";
 import { useThreadHeaderOptions } from "./useThreadHeaderOptions";
 import { useWorkspaceListNavigation } from "../workspace/useAndroidWorkspaceNavigation";
 
@@ -83,17 +85,26 @@ export function ThreadHeader(
         options={native.options}
         optionsVersion={native.optionsVersion}
         trailing={
-          props.fileInspectorSupported && props.hasThreadCwd ? (
-            <ScreenHeaderButton
-              accessibilityLabel={
-                props.inspectorMode !== null && panes.auxiliaryPaneVisible
-                  ? "Hide inspector"
-                  : "Show inspector"
-              }
-              icon="sidebar.right"
-              selected={props.inspectorMode !== null && panes.auxiliaryPaneVisible}
-              onPress={props.onToggleInspector}
-            />
+          props.runsInCloud ||
+          props.moveTask != null ||
+          (props.fileInspectorSupported && props.hasThreadCwd) ? (
+            <>
+              {/* iOS shows these among its native header items; Android here. */}
+              {props.runsInCloud ? <CloudPill /> : null}
+              {props.moveTask != null ? <MoveTaskButton {...props.moveTask} /> : null}
+              {props.fileInspectorSupported && props.hasThreadCwd ? (
+                <ScreenHeaderButton
+                  accessibilityLabel={
+                    props.inspectorMode !== null && panes.auxiliaryPaneVisible
+                      ? "Hide inspector"
+                      : "Show inspector"
+                  }
+                  icon="sidebar.right"
+                  selected={props.inspectorMode !== null && panes.auxiliaryPaneVisible}
+                  onPress={props.onToggleInspector}
+                />
+              ) : null}
+            </>
           ) : null
         }
         onBack={layout.usesSplitView ? undefined : returnToList}

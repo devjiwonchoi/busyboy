@@ -23,6 +23,7 @@ import { defaultPersona, defaultPersonaName } from "./persona.ts";
 import * as SitrepScheduler from "./SitrepScheduler.ts";
 import { nextStepHint } from "./taskLeadPrompt.ts";
 import {
+  attentionContext,
   createAcceptedTask,
   approvePlan,
   PROJECT_ID,
@@ -321,6 +322,7 @@ describe("ProjectTeamService", () => {
         });
         const askingLead = yield* team.startTask(pm, { taskId: asking.task.id }, harness.delegate);
         yield* team.askUser(askingLead.leadThreadId, {
+          context: attentionContext({ action: "Which login provider?" }),
           kind: "decision",
           question: "Which login provider?",
         });
@@ -394,7 +396,11 @@ describe("ProjectTeamService", () => {
           prUrl: "https://github.com/acme/app/pull/9",
         });
         const asking = yield* start("Asking");
-        yield* team.askUser(asking.leadThreadId, { kind: "decision", question: "Which one?" });
+        yield* team.askUser(asking.leadThreadId, {
+          context: attentionContext({ action: "Which one?" }),
+          kind: "decision",
+          question: "Which one?",
+        });
         const stuck = yield* start("Stuck");
         yield* team.updateTask(stuck.leadThreadId, { stage: "blocked" });
         const finished = yield* start("Finished");
@@ -719,8 +725,16 @@ describe("ProjectTeamService", () => {
           context: "Later.",
         });
         yield* team.recordOutcome({ task: second.task, outcome: "stalled" });
-        yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which way?" });
-        yield* team.askUser(first.leadThreadId, { kind: "decision", question: "Which color?" });
+        yield* team.askUser(first.leadThreadId, {
+          context: attentionContext({ action: "Which way?" }),
+          kind: "decision",
+          question: "Which way?",
+        });
+        yield* team.askUser(first.leadThreadId, {
+          context: attentionContext({ action: "Which color?" }),
+          kind: "decision",
+          question: "Which color?",
+        });
         yield* TestClock.adjust("1 minute");
         yield* team.nudgeTask(pm, { taskId: second.task.id });
 
@@ -771,7 +785,7 @@ describe("ProjectTeamService", () => {
     ),
   );
 
-  it.effect("streams a fresh snapshot when the PM proposes a task", () =>
+  it.effect("streams a fresh snapshot when the PM creates a task", () =>
     withTeam(() =>
       Effect.gen(function* () {
         const team = yield* service;
@@ -791,9 +805,8 @@ describe("ProjectTeamService", () => {
         });
         const snapshots = Array.from(yield* Fiber.join(fiber));
         assert.strictEqual(snapshots[0]?.projects[0]?.presence.inbox, 0);
-        assert.strictEqual(snapshots[1]?.projects[0]?.presence.inbox, 0);
-        assert.strictEqual(snapshots[1]?.projects[0]?.decisionCards[0]?.item.kind, "proposal");
-        assert.strictEqual(snapshots[1]?.projects[0]?.decisionCards[0]?.taskTitle, "Later");
+        assert.strictEqual(snapshots[1]?.projects[0]?.presence.inbox, 1);
+        assert.deepStrictEqual(snapshots[1]?.projects[0]?.decisionCards, []);
         assert.strictEqual(
           snapshots[1]?.projects[0]?.presence.lastAction?.text,
           "noted on #1 Later",
@@ -1166,6 +1179,7 @@ describe("ProjectTeamService", () => {
         const escalation = yield* team.nudgeTask(pm, { taskId: lead.task.id });
         assert.strictEqual(escalation.status, "escalated");
         const own = yield* team.askUser(lead.leadThreadId, {
+          context: attentionContext({ action: "Need credentials" }),
           kind: "blocker",
           question: "Need credentials",
         });
@@ -1300,4 +1314,89 @@ describe("ProjectTeamService", () => {
     );
     assert.strictEqual(describe({ kind: "note", body: "hi" }, null), "noted on a task");
   });
+});
+
+describe("PM cards", () => {
+  it.effect("lets the PM raise a blocker without a task and relays the answer back to it", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const { item } = yield* team.askUser(pm, {
+          context: attentionContext({ action: "v0.0.19 릴리스 실행 방법을 정합니다" }),
+          kind: "blocker",
+          question: "릴리스가 권한 검사에 막혔어요",
+          options: ["내가 직접 실행할게요", "나중에"],
+        });
+        assert.strictEqual(item.taskId, null);
+        assert.strictEqual(item.askerThreadId, pm);
+        assert.strictEqual(item.projectId, PROJECT_ID);
+
+        const summary = (yield* team.attentionSnapshot).projects[0]!;
+        assert.strictEqual(summary.openCount, 1);
+        const card = summary.decisionCards.find((candidate) => candidate.item.id === item.id);
+        assert.strictEqual(card?.taskNumber, null);
+        assert.strictEqual(card?.taskTitle, defaultPersonaName(PROJECT_ID));
+
+        yield* team.answerDecision({
+          projectId: PROJECT_ID,
+          attentionItemId: item.id,
+          answer: "내가 직접 실행할게요",
+        });
+        const relayed = (yield* Ref.get(harness.sent)).filter((entry) => entry.threadId === pm);
+        assert.strictEqual(relayed.length, 1);
+        assert.include(relayed[0]?.text, "내가 직접 실행할게요");
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]!.openCount, 0);
+      }),
+    ),
+  );
+
+  it.effect("does not message the PM when it relays the answer to its own card", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const { item } = yield* team.askUser(pm, {
+          context: attentionContext({ action: "Release" }),
+          kind: "blocker",
+          question: "Release is blocked",
+        });
+        const answered = yield* team.answerAttention(pm, {
+          attentionItemId: item.id,
+          answer: "I ran it myself",
+        });
+        assert.strictEqual(answered.item.answer, "I ran it myself");
+        const toPm = (yield* Ref.get(harness.sent)).filter((entry) => entry.threadId === pm);
+        assert.strictEqual(toPm.length, 0);
+      }),
+    ),
+  );
+
+  it.effect("lets the PM raise a decision and close its own card, but not ask for approval", () =>
+    withTeam(() =>
+      Effect.gen(function* () {
+        const team = yield* ProjectTeamService.ProjectTeamService;
+        const pm = yield* setUpManager;
+        const approval = yield* Effect.flip(
+          team.askUser(pm, {
+            context: attentionContext({ action: "Plan" }),
+            kind: "approval",
+            question: "Approve?",
+          }),
+        );
+        assert.include(approval.message, "only for blockers and decisions");
+
+        const { item } = yield* team.askUser(pm, {
+          context: attentionContext({ action: "Pick a theme" }),
+          kind: "decision",
+          question: "Dark or light?",
+        });
+        yield* team.dismissAttention(pm, {
+          attentionItemId: item.id,
+          reason: "User decided in chat",
+        });
+        assert.strictEqual((yield* team.attentionSnapshot).projects[0]!.openCount, 0);
+      }),
+    ),
+  );
 });
