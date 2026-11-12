@@ -76,6 +76,7 @@ export interface Preferences {
   readonly planModeEnabled?: boolean;
   readonly waitingSoundEnabled?: boolean;
   readonly workingShelfEnabled?: boolean;
+  readonly oneChatScreenEnabled?: boolean;
   readonly modelFavorites?: ReadonlyArray<{
     readonly provider: ProviderInstanceId;
     readonly model: string;
@@ -147,6 +148,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     planModeEnabled?: boolean;
     waitingSoundEnabled?: boolean;
     workingShelfEnabled?: boolean;
+    oneChatScreenEnabled?: boolean;
     modelFavorites?: Preferences["modelFavorites"];
     threadListWorkingShelfExpanded?: boolean;
     threadListFilters?: ThreadListFilters;
@@ -252,6 +254,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.workingShelfEnabled === "boolean") {
     preferences.workingShelfEnabled = parsed.workingShelfEnabled;
+  }
+  if (typeof parsed.oneChatScreenEnabled === "boolean") {
+    preferences.oneChatScreenEnabled = parsed.oneChatScreenEnabled;
   }
   if (Array.isArray(parsed.modelFavorites)) {
     preferences.modelFavorites = parsed.modelFavorites.filter(

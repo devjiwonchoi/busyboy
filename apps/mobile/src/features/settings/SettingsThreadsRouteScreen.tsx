@@ -140,6 +140,8 @@ function BetaSettingsSection() {
   const preferences = useAtomValue(mobilePreferencesAtom);
   const workingShelfEnabled =
     AsyncResult.isSuccess(preferences) && preferences.value.workingShelfEnabled === true;
+  const oneChatScreenEnabled =
+    AsyncResult.isSuccess(preferences) && preferences.value.oneChatScreenEnabled === true;
 
   return (
     <View className="gap-3">
@@ -150,11 +152,18 @@ function BetaSettingsSection() {
           value={workingShelfEnabled}
           onValueChange={(value) => savePreferences({ workingShelfEnabled: value })}
         />
+        <SettingsSwitchRow
+          icon="bubble.left"
+          label="One chat screen"
+          value={oneChatScreenEnabled}
+          onValueChange={(value) => savePreferences({ oneChatScreenEnabled: value })}
+        />
       </SettingsSection>
       <Text className="px-2 text-sm text-foreground-muted">
         Fold working and monitoring threads into a Working section. They return to the top of the
         list when they need you. While this is on, active threads are ordered by time and cannot be
-        moved.
+        moved. One chat screen replaces Home with a single Director chat, a progress toast and action
+        cards in the chat.
       </Text>
     </View>
   );

@@ -535,6 +535,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarWorkingShelfEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled
       ? ["Working section"]
       : []),
+    ...(settings.oneChatScreenEnabled !== DEFAULT_UNIFIED_SETTINGS.oneChatScreenEnabled
+      ? ["One chat screen"]
+      : []),
     ...(settings.autoResumeLimitedThreads !== DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads
       ? ["Auto-resume limited threads"]
       : []),
@@ -691,6 +694,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+      oneChatScreenEnabled: DEFAULT_UNIFIED_SETTINGS.oneChatScreenEnabled,
       autoResumeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads,
       responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
       enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
@@ -2101,6 +2105,30 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
               }
               aria-label="Working section (beta)"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("one-chat-screen")}
+          description="Use one chat with the Director, a progress toast above the composer, and action cards in the chat. Turn off to return to this screen."
+          resetAction={
+            settings.oneChatScreenEnabled !== DEFAULT_UNIFIED_SETTINGS.oneChatScreenEnabled ? (
+              <SettingResetButton
+                label="one chat screen"
+                onClick={() =>
+                  updateSettings({
+                    oneChatScreenEnabled: DEFAULT_UNIFIED_SETTINGS.oneChatScreenEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.oneChatScreenEnabled}
+              onCheckedChange={(checked) => updateSettings({ oneChatScreenEnabled: Boolean(checked) })}
+              aria-label="One chat screen (beta)"
             />
           }
         />
