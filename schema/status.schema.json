@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/devjiwonchoi/busyboy/main/schema/status.schema.json",
+  "title": "BusyBoy node status",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": ["draft", "running", "asking", "review", "done", "failed", "stopped", "unknown"]
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "proven", "failed"]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "ref": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "by": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["ci", "reviewer", "worker", "human"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "grade": {
+                  "type": "string",
+                  "enum": ["rerun", "capture", "claim"]
+                }
+              },
+              "required": ["text", "ref", "by", "grade"],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": ["id", "status", "evidence"],
+        "additionalProperties": true
+      }
+    },
+    "unmatchedResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "proven", "failed"]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "ref": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "by": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["ci", "reviewer", "worker", "human"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "grade": {
+                  "type": "string",
+                  "enum": ["rerun", "capture", "claim"]
+                }
+              },
+              "required": ["text", "ref", "by", "grade"],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": ["label", "status", "evidence"],
+        "additionalProperties": true
+      }
+    },
+    "reviewFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "resolved": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "resolved"],
+        "additionalProperties": true
+      }
+    },
+    "asks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["question"]
+          },
+          "question": {
+            "type": "string"
+          },
+          "sub": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "recommended": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["key", "label", "recommended"],
+              "additionalProperties": true
+            }
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["values", "at"],
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["id", "threadId", "kind", "question", "sub", "options", "answer"],
+        "additionalProperties": true
+      }
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "proven": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "total": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["proven", "total"],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "dots": {
+      "type": "object",
+      "properties": {
+        "ask": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "waiting": {
+          "type": "boolean"
+        }
+      },
+      "required": ["ask", "failed", "waiting"],
+      "additionalProperties": true
+    },
+    "changes": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["compared"]
+            },
+            "base": {
+              "type": "string"
+            },
+            "expectedOnly": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "actualOnly": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "both": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["kind", "base", "expectedOnly", "actualOnly", "both"],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["unavailable"]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": ["kind", "reason"],
+          "additionalProperties": true
+        }
+      ]
+    }
+  },
+  "required": [
+    "state",
+    "criteria",
+    "unmatchedResults",
+    "reviewFindings",
+    "asks",
+    "progress",
+    "dots",
+    "changes"
+  ],
+  "additionalProperties": true
+}
