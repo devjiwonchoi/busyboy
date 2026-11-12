@@ -527,3 +527,35 @@ it.effect("denies manual cleanup before the handler without settings permission"
     expect(handled).toBe(false);
   }).pipe(Effect.scoped),
 );
+
+describe("node graph authorization", () => {
+  const group = WsRpcGroup.omit(
+    ...[...WsRpcGroup.requests.keys()].filter(
+      (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof WS_METHODS.nodeGraphGet> =>
+        tag !== WS_METHODS.nodeGraphGet,
+    ),
+  );
+  const graph = { nodes: [], edges: [], unlinkedAsks: [] };
+
+  it.effect("serves the node graph to a client that may read orchestration and no one else", () =>
+    Effect.gen(function* () {
+      expect(requiredScopeForRpcMethod(WS_METHODS.nodeGraphGet)).toBe(AuthOrchestrationReadScope);
+      const handler = group.toLayerHandler(WS_METHODS.nodeGraphGet, () => Effect.succeed(graph));
+
+      const reader = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(handler, RpcAuthorization.layer([AuthOrchestrationReadScope])),
+        ),
+      );
+      expect(yield* reader[WS_METHODS.nodeGraphGet]({})).toEqual(graph);
+
+      const outsider = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(Layer.mergeAll(handler, RpcAuthorization.layer([AuthTerminalReadScope]))),
+      );
+      expect(yield* outsider[WS_METHODS.nodeGraphGet]({}).pipe(Effect.flip)).toMatchObject({
+        _tag: "EnvironmentAuthorizationError",
+        requiredScope: AuthOrchestrationReadScope,
+      });
+    }).pipe(Effect.scoped),
+  );
+});
