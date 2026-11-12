@@ -42,7 +42,7 @@ describe("parseRecord on real records with a contract", () => {
     expect(state).toBe("running");
     expect(contract).toMatchObject({
       id: "busyboy/clean-room",
-      title: "Computer Use와 내장 브라우저를 클린룸 방식으로 BusyBoy에 도입",
+      title: "Bring computer use and the in-app browser into BusyBoy clean-room style",
       version: 2,
       approved: { by: "user", on: "2026-11-04" },
       purpose: null,
@@ -55,11 +55,11 @@ describe("parseRecord on real records with a contract", () => {
     );
     expect(contract?.criteria[0]).toEqual({
       id: "1",
-      text: "사양서와 모든 PR diff에 OpenAI 코드·문구·내부 식별자가 없게 하기",
+      text: "Keep spec and every PR diff free of OpenAI code, wording and internal identifiers",
       check: null,
-      how: "오염 검사 스크립트가 사양서, 핸드오프 답변, 각 PR diff에서 0건을 보고함",
+      how: "The contamination check reports zero hits in the spec, handoff answers and each PR diff",
     });
-    expect(contract?.criteria[19]?.text).toBe("블랙박스 비교로 완성도 확인");
+    expect(contract?.criteria[19]?.text).toBe("Confirm completeness by black-box comparison");
     expect(contract?.expectedFiles).toHaveLength(46);
     expect(contract?.expectedFiles[4]).toEqual({
       path: "native/computer-use/Cargo.toml",
@@ -107,34 +107,37 @@ describe("parseRecord on real records with a contract", () => {
   it("reads the new template's intention, don'ts, parent and waits-on lines", () => {
     const { contract, issues } = parseRecord("busyboy/mobile-notify", {
       "ALIGN.md": [
-        "# ALIGN: 모바일 알림",
+        "# ALIGN: Mobile notifications",
         "",
         "Version: 2 · Status: approved by user on 2026-11-12",
         "",
         "# Goal",
         "",
-        "Intention: 답할 카드를 폰에서 놓치지 않게",
+        "Intention: Never miss a card to answer on the phone",
         "Parent: skill-migration",
         "Waits on: busyboy/cards-ui criterion 2, skills/align-plan criterion 5",
         "",
         "# Don'ts",
         "",
-        "- Out of scope: 새 푸시 서비스 추가",
-        "- Must not happen: 잠금화면에 카드 내용 노출",
+        "- Out of scope: adding a new push service",
+        "- Must not happen: card content on the lock screen",
         "- Out of scope: none",
         "",
         "# Success criteria",
         "",
-        "## 1 · 답할 카드가 생기면 1분 안에 폰 알림",
+        "## 1 · Notify the phone within a minute of a new card",
         "- Check: evidence",
-        "- Proven by: 기기 녹화",
+        "- Proven by: device recording",
       ].join("\n"),
     });
     expect(issues).toEqual([]);
     expect(contract).toMatchObject({
-      purpose: "답할 카드를 폰에서 놓치지 않게",
+      purpose: "Never miss a card to answer on the phone",
       parent: "skill-migration",
-      dont: ["Out of scope: 새 푸시 서비스 추가", "Must not happen: 잠금화면에 카드 내용 노출"],
+      dont: [
+        "Out of scope: adding a new push service",
+        "Must not happen: card content on the lock screen",
+      ],
       waitsOn: [
         { node: "busyboy/cards-ui", criterion: "2" },
         { node: "skills/align-plan", criterion: "5" },
@@ -142,9 +145,9 @@ describe("parseRecord on real records with a contract", () => {
       criteria: [
         {
           id: "1",
-          text: "답할 카드가 생기면 1분 안에 폰 알림",
+          text: "Notify the phone within a minute of a new card",
           check: "evidence",
-          how: "기기 녹화",
+          how: "device recording",
         },
       ],
     });

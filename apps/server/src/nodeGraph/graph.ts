@@ -206,8 +206,8 @@ export const buildGraph = (
             file: "ALIGN.md",
             message:
               target === undefined
-                ? `기다리는 노드 ${wait.node}를 찾지 못했습니다.`
-                : `${wait.node}에 기준 ${wait.criterion}이 없습니다.`,
+                ? `Node ${wait.node} this node waits on was not found.`
+                : `${wait.node} has no criterion ${wait.criterion}.`,
           },
         ]);
       }

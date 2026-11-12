@@ -16,7 +16,8 @@ export interface AskSource {
   readonly questions: ReadonlyArray<OrchestrationV2UserInputQuestion>;
 }
 
-const RECOMMENDED = /\((recommended|추천)\)/i;
+// "(Recommended)", or the Korean word for it that BusyBoy cards use.
+const RECOMMENDED = /\((recommended|\u{CD94}\u{CC9C})\)/iu;
 
 const answerValues = (value: unknown): ReadonlyArray<string> => {
   if (typeof value === "string") return [value];
@@ -38,7 +39,7 @@ export const toAsk = (source: AskSource): NodeAsk | null => {
     id: request.id,
     threadId: source.threadId,
     kind: "question",
-    question: first?.question ?? "질문",
+    question: first?.question ?? "Question",
     sub: first?.header ?? null,
     options: (first?.options ?? []).map((option, index) => ({
       key: String.fromCharCode(65 + index),

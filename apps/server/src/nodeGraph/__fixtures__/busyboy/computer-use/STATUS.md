@@ -6,7 +6,7 @@
 - Plan: ~/code/busyboy/.jwn/computer-use/PLAN.md, version v0.4, AUTHORIZED 2026-10-27 (v0.3 is preserved in PLAN.v0.3-authorized.md). v0.2 (authorized earlier) is preserved in PLAN.v
 - Delivery permission: commits, push, 5 ready-for-review PRs (A–E) into main in order, and Moniterate. Merge, deploy and reviewer messaging are not authorized.
 - Reviews: the v0.3 plan debate is done (all approve with corrections → v0.4). PR A implementation review pass 1 is in REVIEW.md: R1 resolved; R3/R4 are gaps carried to PR B.
-- Compaction: skipped for approval "computer-use-v0.3-2026-10-27". The user replied "진행 ㄱ" (proceed) instead of running /compact, on 2026-10-27, and that is recorded as the user's direction. No compac
+- Compaction: skipped for approval "computer-use-v0.3-2026-10-27". The user replied "go ahead" (proceed) instead of running /compact, on 2026-10-27, and that is recorded as the user's direction. No compac
 
 ## Continuation
 

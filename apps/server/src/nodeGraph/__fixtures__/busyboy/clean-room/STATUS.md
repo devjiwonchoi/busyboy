@@ -1,11 +1,11 @@
 # clean-room — STATUS
 
-- Goal: ChatGPT Computer Use와 내장 브라우저를 클린룸 방식으로 BusyBoy에 도입 (PR 스택 2개)
-- Owning chat: 이 BusyBoy 스레드 (분석 쪽), 2026-11-04. Caller: /jwn:align → Iterate (승인됨)
-- Plan: .jwn/clean-room/ALIGN.md v2, approved 2026-11-04 ("ㅇㅇ 진행해")
+- Goal: bring computer use and the in-app browser into BusyBoy clean-room style (two PR stacks)
+- Owning chat: this BusyBoy thread (analysis side), 2026-11-04. Caller: /jwn:align → Iterate (approved)
+- Plan: .jwn/clean-room/ALIGN.md v2, approved 2026-11-04
 
 ## Continuation
 
 - State: continuing
-- Current: 2 조율 (두 구현 스레드 진행 중)
-- Next: 질의응답·오염 검사 요청 처리, E2E 순서(CU → 브라우저), 블랙박스 비교
+- Current: 2 coordination (two implementation threads running)
+- Next: answer questions and contamination checks, E2E order (computer use, then browser), black-box comparison

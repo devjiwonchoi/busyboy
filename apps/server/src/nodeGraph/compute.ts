@@ -41,7 +41,7 @@ export const matchCriterion = (
   row: VerifyRow,
   criteria: ReadonlyArray<NodeContractCriterion>,
 ): NodeContractCriterion | null => {
-  const number = /^\s*(?:criterion\s*|기준\s*)?#?(\d+[a-z]?)\b/i.exec(row.label)?.[1];
+  const number = /^\s*(?:criterion\s*)?#?(\d+[a-z]?)\b/i.exec(row.label)?.[1];
   if (number !== undefined) {
     const byNumber = criteria.find((criterion) => criterion.id === number);
     if (byNumber) return byNumber;

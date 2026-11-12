@@ -34,24 +34,25 @@ export const describeChanges = (
   previous: TimelineSnapshot | null,
   next: TimelineSnapshot,
 ): ReadonlyArray<string> => {
-  if (previous === null) return ["기록을 처음 관찰했습니다."];
+  if (previous === null) return ["First observation of this record."];
   const changes: Array<string> = [];
-  if (previous.state !== next.state) changes.push(`상태: ${previous.state} → ${next.state}`);
+  if (previous.state !== next.state) changes.push(`State: ${previous.state} → ${next.state}`);
   for (const [id, status] of Object.entries(next.criteria)) {
     const before = previous.criteria[id];
-    if (before !== status) changes.push(`기준 ${id}: ${before ?? "없음"} → ${status}`);
+    if (before !== status) changes.push(`Criterion ${id}: ${before ?? "none"} → ${status}`);
   }
   for (const id of Object.keys(previous.criteria)) {
-    if (!(id in next.criteria)) changes.push(`기준 ${id}: 삭제됨`);
+    if (!(id in next.criteria)) changes.push(`Criterion ${id}: removed`);
   }
   for (const [label, status] of Object.entries(next.unmatched)) {
     const before = previous.unmatched[label];
-    if (before !== status) changes.push(`검증 "${label}": ${before ?? "없음"} → ${status}`);
+    if (before !== status) changes.push(`Verification "${label}": ${before ?? "none"} → ${status}`);
   }
   for (const [id, resolved] of Object.entries(next.review)) {
     const before = previous.review[id];
-    if (before === undefined) changes.push(`리뷰 ${id}: 새 항목${resolved ? " (해결됨)" : ""}`);
-    else if (before !== resolved) changes.push(`리뷰 ${id}: ${resolved ? "해결됨" : "다시 열림"}`);
+    if (before === undefined) changes.push(`Review ${id}: new${resolved ? " (resolved)" : ""}`);
+    else if (before !== resolved)
+      changes.push(`Review ${id}: ${resolved ? "resolved" : "reopened"}`);
   }
   return changes;
 };

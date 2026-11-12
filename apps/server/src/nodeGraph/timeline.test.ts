@@ -45,7 +45,7 @@ describe("process timeline", () => {
       "VERIFY.md": VERIFY("pending"),
     };
     expect(await observe(first, "2026-11-12T10:00:00.000Z")).toEqual([
-      { at: "2026-11-12T10:00:00.000Z", changes: ["기록을 처음 관찰했습니다."] },
+      { at: "2026-11-12T10:00:00.000Z", changes: ["First observation of this record."] },
     ]);
 
     expect(await observe(first, "2026-11-12T10:01:00.000Z")).toHaveLength(1);
@@ -54,12 +54,12 @@ describe("process timeline", () => {
     const proven = { ...first, "VERIFY.md": VERIFY("pass") };
     expect((await observe(proven, "2026-11-12T10:02:00.000Z")).at(-1)).toEqual({
       at: "2026-11-12T10:02:00.000Z",
-      changes: ["기준 2: pending → proven"],
+      changes: ["Criterion 2: pending → proven"],
     });
 
     const done = { ...proven, "STATUS.md": "- State: done\n" };
     expect((await observe(done, "2026-11-12T10:03:00.000Z")).at(-1)?.changes).toEqual([
-      "상태: running → done",
+      "State: running → done",
     ]);
     expect(storedLines()).toHaveLength(3);
   });

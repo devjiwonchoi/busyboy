@@ -8,11 +8,11 @@ const threadId = ThreadId.make("thread-lead-1");
 const questions: AskSource["questions"] = [
   {
     id: "q1",
-    header: "모바일 알림",
-    question: "이 끝 상태로 갈까요?",
+    header: "Mobile notifications",
+    question: "Go with this end state?",
     options: [
-      { label: "합의 (추천)", description: "그대로 진행" },
-      { label: "고칠래", description: "기준을 바꿈" },
+      { label: "Agree (Recommended)", description: "Proceed as is" },
+      { label: "Change it", description: "Change the criteria" },
     ],
   },
 ];
@@ -35,11 +35,11 @@ describe("question tool calls as action cards", () => {
       id: "request-1",
       threadId,
       kind: "question",
-      question: "이 끝 상태로 갈까요?",
-      sub: "모바일 알림",
+      question: "Go with this end state?",
+      sub: "Mobile notifications",
       options: [
-        { key: "A", label: "합의 (추천)", recommended: true },
-        { key: "B", label: "고칠래", recommended: false },
+        { key: "A", label: "Agree (Recommended)", recommended: true },
+        { key: "B", label: "Change it", recommended: false },
       ],
       answer: null,
     });
@@ -48,12 +48,13 @@ describe("question tool calls as action cards", () => {
   it("fills the chosen answer and its time once answered", () => {
     const resolvedAt = DateTime.makeUnsafe("2026-11-12T10:00:00.000Z");
     expect(
-      toAsk(source({ status: "resolved", resolvedAt, answers: { q1: "합의 (추천)" } }))?.answer,
-    ).toEqual({ values: ["합의 (추천)"], at: "2026-11-12T10:00:00.000Z" });
+      toAsk(source({ status: "resolved", resolvedAt, answers: { q1: "Agree (Recommended)" } }))
+        ?.answer,
+    ).toEqual({ values: ["Agree (Recommended)"], at: "2026-11-12T10:00:00.000Z" });
     expect(
-      toAsk(source({ status: "resolved", resolvedAt, answers: { q1: { answers: ["고칠래"] } } }))
+      toAsk(source({ status: "resolved", resolvedAt, answers: { q1: { answers: ["Change it"] } } }))
         ?.answer?.values,
-    ).toEqual(["고칠래"]);
+    ).toEqual(["Change it"]);
   });
 
   it("makes no card for other requests or questions nobody can answer anymore", () => {

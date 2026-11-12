@@ -51,9 +51,9 @@ const pendingQuestion = (id: string) => ({
       questions: [
         {
           id: "q1",
-          header: "알림",
-          question: "이 끝 상태로 갈까요?",
-          options: [{ label: "합의 (추천)", description: "진행" }],
+          header: "Notifications",
+          question: "Go with this end state?",
+          options: [{ label: "Agree (Recommended)", description: "Proceed" }],
         },
       ],
     },
@@ -118,7 +118,7 @@ describe("NodeGraphService", () => {
       expect(notify.timeline).toHaveLength(1);
       expect(notify.status.changes).toEqual({
         kind: "unavailable",
-        reason: "ALIGN.md에 파일 트리가 없습니다.",
+        reason: "ALIGN.md has no file tree.",
       });
       expect(graph.nodes[1]?.issues.map((issue) => issue.kind)).toEqual(["missing_contract"]);
       expect(graph.unlinkedAsks).toEqual([

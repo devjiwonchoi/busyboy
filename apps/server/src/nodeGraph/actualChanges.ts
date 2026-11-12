@@ -44,22 +44,22 @@ export type ChangedFiles =
  */
 export const changedFiles = async (cwd: string): Promise<ChangedFiles> => {
   if ((await git(cwd, ["rev-parse", "--is-inside-work-tree"]))?.trim() !== "true") {
-    return { kind: "unavailable", reason: "git 작업 폴더가 아닙니다." };
+    return { kind: "unavailable", reason: "Not a git working tree." };
   }
   const branch = await defaultBranch(cwd);
   if (branch === null) {
-    return { kind: "unavailable", reason: "기본 브랜치를 찾지 못했습니다." };
+    return { kind: "unavailable", reason: "No default branch found." };
   }
   const base = (await git(cwd, ["merge-base", "HEAD", branch]))?.trim();
   if (!base) {
-    return { kind: "unavailable", reason: `${branch}와의 분기점을 찾지 못했습니다.` };
+    return { kind: "unavailable", reason: `No merge base with ${branch}.` };
   }
   const [tracked, untracked] = await Promise.all([
     git(cwd, ["diff", "--name-only", base]),
     git(cwd, ["ls-files", "--others", "--exclude-standard"]),
   ]);
   if (tracked === null || untracked === null) {
-    return { kind: "unavailable", reason: "변경 파일 목록을 읽지 못했습니다." };
+    return { kind: "unavailable", reason: "Could not list changed files." };
   }
   return {
     kind: "files",
@@ -74,7 +74,7 @@ export const changesFor = (
   changed: ChangedFiles,
 ): NodeChanges => {
   if (expected.length === 0) {
-    return { kind: "unavailable", reason: "ALIGN.md에 파일 트리가 없습니다." };
+    return { kind: "unavailable", reason: "ALIGN.md has no file tree." };
   }
   if (changed.kind === "unavailable") return changed;
   return compareChanges(expected, changed.files, changed.base);

@@ -84,9 +84,7 @@ export const make = Effect.gen(function* () {
     ).join("|");
 
   const readRecords = Effect.gen(function* () {
-    const rows = yield* projects
-      .list()
-      .pipe(Effect.mapError(toError("프로젝트 목록을 읽지 못했습니다")));
+    const rows = yield* projects.list().pipe(Effect.mapError(toError("Could not list projects")));
     return yield* Effect.tryPromise({
       try: async () => {
         const dirs = await listRecordDirs({
@@ -110,7 +108,7 @@ export const make = Effect.gen(function* () {
           }),
         );
       },
-      catch: toError("기록을 읽지 못했습니다"),
+      catch: toError("Could not read records"),
     });
   });
 
@@ -161,7 +159,7 @@ export const make = Effect.gen(function* () {
         }
       }
       return { byNode, unlinked };
-    }).pipe(Effect.mapError(toError("질문 기록을 읽지 못했습니다")));
+    }).pipe(Effect.mapError(toError("Could not read question requests")));
 
   const build = (withChanges: boolean) =>
     Effect.gen(function* () {
@@ -175,7 +173,7 @@ export const make = Effect.gen(function* () {
                   .filter((record) => (record.parsed.contract?.expectedFiles.length ?? 0) > 0)
                   .map((record) => record.dir.workdir),
               ),
-            catch: toError("실제 변경을 읽지 못했습니다"),
+            catch: toError("Could not read actual changes"),
           })
         : new Map<string, ChangedFiles>();
       const entries: ReadonlyArray<GraphEntry> = records.map((record) => {
@@ -184,11 +182,14 @@ export const make = Effect.gen(function* () {
           ...record,
           asks: byNode.get(record.dir.nodeId) ?? [],
           changes: !withChanges
-            ? ({ kind: "unavailable", reason: "변경 비교는 그래프를 읽을 때만 합니다." } as const)
+            ? ({
+                kind: "unavailable",
+                reason: "Changes are compared only when the graph is read.",
+              } as const)
             : changesFor(
                 record.parsed.contract?.expectedFiles ?? [],
                 // Only checkouts with a file tree were read; without one, changesFor says so.
-                checkout ?? { kind: "unavailable", reason: "변경 파일 목록을 읽지 않았습니다." },
+                checkout ?? { kind: "unavailable", reason: "Changed files were not read." },
               ),
         };
       });
@@ -207,7 +208,7 @@ export const make = Effect.gen(function* () {
               }),
             })),
           ),
-        catch: toError("과정 타임라인을 쓰지 못했습니다"),
+        catch: toError("Could not write the timeline"),
       });
       return { ...graph, nodes };
     });

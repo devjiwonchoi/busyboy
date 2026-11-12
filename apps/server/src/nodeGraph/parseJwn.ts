@@ -188,7 +188,7 @@ const parseWaitsOn = (
         issues.push({
           kind: "invalid_line",
           file: "ALIGN.md",
-          message: `Waits on 항목을 읽지 못했습니다: "${part.trim()}"`,
+          message: `Could not read a Waits on entry: "${part.trim()}"`,
         });
       }
     }
@@ -207,7 +207,7 @@ export const parseAlign = (
     issues.push({
       kind: "missing_title",
       file: "ALIGN.md",
-      message: "첫 제목 '# ALIGN: <제목>'이 없습니다.",
+      message: "The first heading '# ALIGN: <title>' is missing.",
     });
   }
   const version = firstMatch(lines, /^\s*Version:\s*(\d+)/i)?.[1];
@@ -219,8 +219,8 @@ export const parseAlign = (
       kind: "missing_criteria",
       file: "ALIGN.md",
       message: criteriaLines
-        ? "'Success criteria' 섹션에 '## n · 기준' 형식의 기준이 없습니다."
-        : "'# Success criteria' 섹션이 없습니다.",
+        ? "The 'Success criteria' section has no '## n · criterion' headings."
+        : "The '# Success criteria' section is missing.",
     });
   }
   const dontLines = section(lines, (name) => /^don[’']?ts$/.test(name));
@@ -258,8 +258,8 @@ export const parseStatusState = (text: string): NodeState => {
 };
 
 export const resultStatus = (result: string): NodeCriterionStatus => {
-  if (/^\s*\**\s*(pass|passed|ok|proven|yes|met|✅|통과)/i.test(result)) return "proven";
-  if (/^\s*\**\s*(fail|failed|not met|no\b|❌|실패)/i.test(result)) return "failed";
+  if (/^\s*\**\s*(pass|passed|ok|proven|yes|met|✅)/i.test(result)) return "proven";
+  if (/^\s*\**\s*(fail|failed|not met|no\b|❌)/i.test(result)) return "failed";
   return "pending";
 };
 
@@ -319,12 +319,12 @@ export const parseVerify = (text: string): ReadonlyArray<VerifyRow> => {
     }
     if (columns === null) {
       const find = (pattern: RegExp) => cells.findIndex((cell) => pattern.test(cell));
-      const label = find(/criteri|기준/i);
-      const result = find(/result|status|결과/i);
+      const label = find(/criteri/i);
+      const result = find(/result|status/i);
       columns =
         label === -1 || result === -1
           ? { label: -1, result: -1, evidence: -1, by: -1 }
-          : { label, result, evidence: find(/evidence|증거|proof/i), by: find(/^by$|누가/i) };
+          : { label, result, evidence: find(/evidence|proof/i), by: find(/^by$/i) };
       continue;
     }
     if (columns.label === -1 || isSeparatorRow(cells)) continue;
@@ -339,7 +339,7 @@ export const parseVerify = (text: string): ReadonlyArray<VerifyRow> => {
   return rows;
 };
 
-const RESOLVED = /\b(resolved|fixed|accepted|won['’]?t fix|dropped)\b|해결/i;
+const RESOLVED = /\b(resolved|fixed|accepted|won['’]?t fix|dropped)\b/i;
 
 export const parseReview = (text: string): ReadonlyArray<NodeReviewFinding> => {
   const findings = new Map<string, boolean>();
@@ -380,7 +380,7 @@ const readText = (
   issues.push({
     kind: "unreadable_file",
     file: name,
-    message: `파일을 읽지 못했습니다: ${content.error}`,
+    message: `Could not read the file: ${content.error}`,
   });
   return null;
 };
@@ -402,7 +402,8 @@ export const parseRecord = (id: string, files: RecordFiles): ParsedRecord => {
     issues.push({
       kind: "missing_contract",
       file: "ALIGN.md",
-      message: "ALIGN.md가 없어 합의된 끝 상태(기준)를 알 수 없습니다. 진행도는 계산하지 않습니다.",
+      message:
+        "No ALIGN.md, so the agreed end state and its criteria are unknown. Progress is not computed.",
     });
   }
 
