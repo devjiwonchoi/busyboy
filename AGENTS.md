@@ -14,3 +14,9 @@ Do not add research notes, reports, specs, plans, or other documents to the repo
 Every user-facing UI or behavior change goes into both `apps/web` and `apps/mobile` (the Expo app) in the same task.
 - If a change applies to only one of them, say why in the PR body.
 - Verify with screenshots of both the desktop web app and the mobile app. A phone-sized viewport of the web app does not count as mobile app verification.
+
+## Write everything in the codebase in English
+
+All text committed to this repository is English, whatever language the user writes in.
+- This covers code, identifiers, comments, UI copy, error and log messages, test names and fixtures, docs and READMEs, and commit and PR messages.
+- Conversation with the user stays in their language: chat replies, questions, cards, and task notes. Everything in the repository, its commits, and its PRs is English.
