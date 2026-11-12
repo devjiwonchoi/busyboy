@@ -227,6 +227,10 @@ import {
 } from "../files/filePath";
 import { waitForThreadShellReady } from "./threadForkNavigation";
 import { resolveUserMessageIntentBadge } from "./userMessageIntentBadge";
+import {
+  replyStartAssistantMessageIds as resolveReplyStartAssistantMessageIds,
+  resolveAssistantBubbles,
+} from "./assistant-bubbles";
 import { fileChipMenu, resolveFileChipTarget, type FileChipAction } from "./fileChipMenu";
 import { useFileChipShare } from "./useFileChipShare";
 import {
@@ -259,6 +263,8 @@ function formatMessageTime(input: string): string {
 const TURN_FOLD_HEIGHT = 42;
 const USER_BUBBLE_HORIZONTAL_PADDING = 3.5 * 3.5;
 const ASSISTANT_ROW_HORIZONTAL_PADDING = 3.5;
+// px-3.5 inside each assistant bubble.
+const ASSISTANT_BUBBLE_HORIZONTAL_PADDING = 14;
 const THREAD_FEED_DISCLOSURE_ENTER_TRANSITION = FadeIn.delay(
   THREAD_DISCLOSURE_TRANSITION_MS,
 ).duration(140);
@@ -982,6 +988,7 @@ function renderFeedEntry(
     readonly workRowSizing: ReturnType<typeof deriveThreadWorkLogSizing>;
     readonly workGroupScrollPositions: Map<string, ThreadWorkGroupScrollPosition>;
     readonly terminalAssistantMessageIds: ReadonlySet<string>;
+    readonly replyStartAssistantMessageIds: ReadonlySet<string>;
     readonly unsettledTurnId: RunId | null;
     readonly failedRunIds: ReadonlySet<RunId>;
     readonly onCopyWorkRow: (rowId: string, value: string) => void;
@@ -1369,18 +1376,45 @@ function renderFeedEntry(
         )}
         {...(enterAnimated ? { entering: FadeIn.duration(220) } : {})}
       >
+        {props.replyStartAssistantMessageIds.has(message.id) ? (
+          <Text className="mb-1 px-1 font-t3-medium text-xs text-foreground-muted">BusyBoy</Text>
+        ) : null}
         {renderedText.trim().length > 0 ? (
-          <MarkdownImageAvailableWidthContext value={props.markdownContentWidth}>
-            <AssistantMarkdownContent
-              markdown={renderedText}
-              environmentId={props.environmentId}
-              markdownStyles={styles}
-              linkHandlers={props.markdownLinkHandlers}
-              onUseArtifactTemplate={props.onUseArtifactTemplate}
-              renderImage={props.renderMarkdownImage}
-              skills={props.skills}
-            />
-          </MarkdownImageAvailableWidthContext>
+          // One messenger bubble per paragraph; a streaming reply grows a new one per paragraph.
+          <View className="items-start gap-1">
+            {resolveAssistantBubbles(renderedText).map((bubble, index) => (
+              <View
+                // Earlier paragraphs never change while streaming, so the index is stable.
+                // oxlint-disable-next-line react/no-array-index-key
+                key={index}
+                className="min-w-0 rounded-[18px] bg-subtle px-3.5 py-2.5"
+                // Pinned width also covers the blocks Android and iOS mis-measure in a
+                // shrink-to-fit bubble (see the note on WIDE_MARKDOWN_BLOCK_OPTIONS).
+                style={
+                  bubble.wide || hasWideMarkdownBlock(bubble.text, WIDE_MARKDOWN_BLOCK_OPTIONS)
+                    ? { width: "100%" }
+                    : { maxWidth: "85%" }
+                }
+              >
+                <MarkdownImageAvailableWidthContext
+                  value={Math.max(
+                    0,
+                    props.markdownContentWidth - ASSISTANT_BUBBLE_HORIZONTAL_PADDING * 2,
+                  )}
+                >
+                  <AssistantMarkdownContent
+                    markdown={bubble.text}
+                    environmentId={props.environmentId}
+                    markdownStyles={styles}
+                    linkHandlers={props.markdownLinkHandlers}
+                    onUseArtifactTemplate={props.onUseArtifactTemplate}
+                    renderImage={props.renderMarkdownImage}
+                    skills={props.skills}
+                  />
+                </MarkdownImageAvailableWidthContext>
+              </View>
+            ))}
+          </View>
         ) : null}
         {attachments.map((attachment) => {
           return isImageAttachment(attachment) ? (
@@ -2205,6 +2239,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     }
     return new Set(terminalIdsByTurn.values());
   }, [props.feed]);
+  const replyStartAssistantMessageIds = useMemo(
+    () => resolveReplyStartAssistantMessageIds(props.feed),
+    [props.feed],
+  );
   useEffect(() => {
     const previous = previousLatestTurnRef.current;
     previousLatestTurnRef.current = props.latestRun;
@@ -2456,6 +2494,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
               workRowSizing,
               workGroupScrollPositions,
               terminalAssistantMessageIds,
+              replyStartAssistantMessageIds,
               unsettledTurnId,
               failedRunIds,
               onCopyWorkRow,
@@ -2505,6 +2544,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       workRowSizing,
       workGroupScrollPositions,
       terminalAssistantMessageIds,
+      replyStartAssistantMessageIds,
       unsettledTurnId,
       failedRunIds,
       iconSubtleColor,

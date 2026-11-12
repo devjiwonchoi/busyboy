@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 
 import {
+  CHAT_REPLY_STYLE_INSTRUCTION,
+  DIRECTOR_INSTRUCTIONS,
   directorInstructions,
   PROJECT_MANAGER_INSTRUCTIONS,
   projectManagerInstructions,
@@ -12,6 +14,12 @@ import {
 } from "./orchestrationInstructions.ts";
 
 describe("T3 orchestration provider instructions", () => {
+  it("asks the PM and Director for short messenger-style paragraphs", () => {
+    assert.include(CHAT_REPLY_STYLE_INSTRUCTION, "Lead with the conclusion");
+    assert.include(CHAT_REPLY_STYLE_INSTRUCTION, "one chat message");
+    assert.include(PROJECT_MANAGER_INSTRUCTIONS, CHAT_REPLY_STYLE_INSTRUCTION);
+    assert.include(DIRECTOR_INSTRUCTIONS, CHAT_REPLY_STYLE_INSTRUCTION);
+  });
   it("requires messenger requests and resolves user request references", () => {
     assert.include(USER_FACING_TASK_INSTRUCTIONS, "one messenger-style message");
     assert.include(USER_FACING_TASK_INSTRUCTIONS, "No headings, labels, bullets, task keys");

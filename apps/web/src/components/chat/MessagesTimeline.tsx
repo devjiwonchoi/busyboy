@@ -1,6 +1,7 @@
 import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { shallow } from "zustand/vanilla/shallow";
 import { shouldPreserveAssistantLineBreaks } from "@t3tools/shared/markdownPipeline";
+import { isWideBubbleChunk, splitAssistantMarkdownIntoBubbles } from "@t3tools/shared/chatBubbles";
 import { MarkdownFindContext, findRevealRef } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } from "./WorkLog";
@@ -897,6 +898,10 @@ const ConversationTimeline = memo(function ConversationTimeline({
     rows,
     timelineEntries,
   );
+  // Outside PM and Director chats, a plain sender line opens each reply instead of the persona header.
+  const assistantSenderMessageIds = useStableMessageIdSet(
+    pmTimelineState === null ? derivePmAuthorHeaderMessageIds(rows) : EMPTY_MESSAGE_ID_SET,
+  );
   // Run status/timestamps churn on every stream event; the shared row context
   // must not change with them or every timeline row re-renders per event.
   const runs = useStableHandoffRuns(runsProp);
@@ -1466,84 +1471,86 @@ const ConversationTimeline = memo(function ConversationTimeline({
     <MarkdownFindContext value={findActive}>
       <TimelineRowCtx value={sharedState}>
         <PmTimelineCtx value={pmTimelineState}>
-          <TimelineRowActivityCtx value={activityState}>
-            <TooltipScrollDismissArea
-              ref={setTimelineViewportElement}
-              className="relative h-full min-h-0"
-              data-assistant-citation-viewport="true"
-            >
-              {onCiteAssistantText && citationThreadRef ? (
-                <AssistantSelectionToolbar
-                  viewport={timelineViewportElement}
-                  threadRef={citationThreadRef}
-                  onCite={onCiteAssistantText}
-                  onAskInSideChat={onAskInSideChat}
+          <AssistantSenderCtx value={assistantSenderMessageIds}>
+            <TimelineRowActivityCtx value={activityState}>
+              <TooltipScrollDismissArea
+                ref={setTimelineViewportElement}
+                className="relative h-full min-h-0"
+                data-assistant-citation-viewport="true"
+              >
+                {onCiteAssistantText && citationThreadRef ? (
+                  <AssistantSelectionToolbar
+                    viewport={timelineViewportElement}
+                    threadRef={citationThreadRef}
+                    onCite={onCiteAssistantText}
+                    onAskInSideChat={onAskInSideChat}
+                  />
+                ) : null}
+                <LegendList<MessagesTimelineRow>
+                  ref={setTimelineList}
+                  data={rows}
+                  extraData={`${listIdentityKey}:${rows.length}`}
+                  keyExtractor={keyExtractor}
+                  getItemType={getItemType}
+                  renderItem={renderItem}
+                  estimatedItemSize={90}
+                  initialScrollAtEnd={
+                    !findActive && citationRequest === null && rememberedPosition?.atEnd !== false
+                  }
+                  // Legend needs a data refresh to mount new pins without a scroll event.
+                  dataVersion={readyCitationRequest?.key ?? listIdentityKey}
+                  {...(alwaysRender ? { alwaysRender } : {})}
+                  onLoad={handleListLoad}
+                  {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
+                  contentInsetEndAdjustment={anchoredEndSpace ? contentInsetEndAdjustment : 0}
+                  maintainScrollAtEnd={
+                    citationPositioning ||
+                    (restoringThreadPosition && rememberedPosition?.atEnd === false) ||
+                    anchoredEndSpace ||
+                    !liveFollowEnabled ||
+                    fullscreenAppRowId !== null ||
+                    disclosureToggleSettling
+                      ? false
+                      : isWorking && !prefersReducedMotion && settlingListIdentity === null
+                        ? TIMELINE_MAINTAIN_SCROLL_AT_END_SMOOTH
+                        : TIMELINE_MAINTAIN_SCROLL_AT_END
+                  }
+                  maintainVisibleContentPosition={
+                    findActive ||
+                    citationPositioning ||
+                    (restoringThreadPosition && rememberedPosition?.atEnd === false)
+                      ? false
+                      : maintainVisibleContentPosition
+                  }
+                  maintainScrollAtEndThreshold={1}
+                  onScroll={handleScroll}
+                  onItemSizeChanged={handleItemSizeChanged}
+                  className={cn(
+                    "messages-timeline-scroll scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]",
+                    topFadeEnabled && "topbar-scroll-fade",
+                  )}
+                  ListHeaderComponent={listHeader}
+                  ListFooterComponent={timelineListFooter}
                 />
-              ) : null}
-              <LegendList<MessagesTimelineRow>
-                ref={setTimelineList}
-                data={rows}
-                extraData={`${listIdentityKey}:${rows.length}`}
-                keyExtractor={keyExtractor}
-                getItemType={getItemType}
-                renderItem={renderItem}
-                estimatedItemSize={90}
-                initialScrollAtEnd={
-                  !findActive && citationRequest === null && rememberedPosition?.atEnd !== false
-                }
-                // Legend needs a data refresh to mount new pins without a scroll event.
-                dataVersion={readyCitationRequest?.key ?? listIdentityKey}
-                {...(alwaysRender ? { alwaysRender } : {})}
-                onLoad={handleListLoad}
-                {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
-                contentInsetEndAdjustment={anchoredEndSpace ? contentInsetEndAdjustment : 0}
-                maintainScrollAtEnd={
-                  citationPositioning ||
-                  (restoringThreadPosition && rememberedPosition?.atEnd === false) ||
-                  anchoredEndSpace ||
-                  !liveFollowEnabled ||
-                  fullscreenAppRowId !== null ||
-                  disclosureToggleSettling
-                    ? false
-                    : isWorking && !prefersReducedMotion && settlingListIdentity === null
-                      ? TIMELINE_MAINTAIN_SCROLL_AT_END_SMOOTH
-                      : TIMELINE_MAINTAIN_SCROLL_AT_END
-                }
-                maintainVisibleContentPosition={
-                  findActive ||
-                  citationPositioning ||
-                  (restoringThreadPosition && rememberedPosition?.atEnd === false)
-                    ? false
-                    : maintainVisibleContentPosition
-                }
-                maintainScrollAtEndThreshold={1}
-                onScroll={handleScroll}
-                onItemSizeChanged={handleItemSizeChanged}
-                className={cn(
-                  "messages-timeline-scroll scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain [overflow-anchor:none]",
-                  topFadeEnabled && "topbar-scroll-fade",
-                )}
-                ListHeaderComponent={listHeader}
-                ListFooterComponent={timelineListFooter}
-              />
-              <TimelineMinimap
-                items={minimapItems}
-                hasPersistentGutter={minimapHasPersistentGutter}
-                hitStripWidth={minimapHitStripWidth}
-                currentIndex={minimapCurrentIndex}
-                stripMap={minimapStripMap}
-                onWheel={forwardMinimapWheel}
-                onSelect={(item) => {
-                  onManualNavigation();
-                  void listRef.current?.scrollToIndex({
-                    index: item.rowIndex,
-                    animated: true,
-                    viewOffset: 24,
-                  });
-                }}
-              />
-            </TooltipScrollDismissArea>
-          </TimelineRowActivityCtx>
+                <TimelineMinimap
+                  items={minimapItems}
+                  hasPersistentGutter={minimapHasPersistentGutter}
+                  hitStripWidth={minimapHitStripWidth}
+                  currentIndex={minimapCurrentIndex}
+                  stripMap={minimapStripMap}
+                  onWheel={forwardMinimapWheel}
+                  onSelect={(item) => {
+                    onManualNavigation();
+                    void listRef.current?.scrollToIndex({
+                      index: item.rowIndex,
+                      animated: true,
+                      viewOffset: 24,
+                    });
+                  }}
+                />
+              </TooltipScrollDismissArea>
+            </TimelineRowActivityCtx>
+          </AssistantSenderCtx>
         </PmTimelineCtx>
       </TimelineRowCtx>
     </MarkdownFindContext>
@@ -2149,6 +2156,28 @@ function UserVideoAttachment({ file }: { readonly file: ChatFileAttachment }) {
 
 const MESSAGE_HEADING_LEVEL = 3;
 
+const EMPTY_MESSAGE_ID_SET: ReadonlySet<MessageId> = new Set();
+
+/** First assistant message of each reply outside PM threads; it shows the sender line. */
+const AssistantSenderCtx = createContext<ReadonlySet<MessageId>>(EMPTY_MESSAGE_ID_SET);
+
+/** Keeps the set's identity while its ids stay the same, so rows don't re-render per stream event. */
+function useStableMessageIdSet(next: ReadonlySet<MessageId>): ReadonlySet<MessageId> {
+  const [state, setState] = useState(next);
+  if (state === next) return state;
+  if (state.size === next.size && [...next].every((id) => state.has(id))) return state;
+  setState(next);
+  return next;
+}
+
+function AssistantSenderLine() {
+  return (
+    <div className="mb-1 px-2 text-xs font-medium text-muted-foreground" data-assistant-sender="">
+      BusyBoy
+    </div>
+  );
+}
+
 function MessageAuthorHeading({ children }: { children: string }) {
   return <h3 className="sr-only select-none">{children}</h3>;
 }
@@ -2687,10 +2716,37 @@ function AssistantTimelineRow({
   const ctx = use(TimelineRowCtx);
   const pm = use(PmTimelineCtx);
   const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
+  const senderMessageIds = use(AssistantSenderCtx);
   const header =
     authorHeader ??
-    (pm !== null && pm.authorHeaderMessageIds.has(row.message.id) ? pm.authorHeader : null);
+    (pm !== null ? (
+      pm.authorHeaderMessageIds.has(row.message.id) ? (
+        pm.authorHeader
+      ) : null
+    ) : senderMessageIds.has(row.message.id) ? (
+      <AssistantSenderLine />
+    ) : null);
   const sitrepReply = pm?.sitrepReplies.get(row.message.id) ?? null;
+  const streaming = Boolean(row.message.streaming);
+  // Decided once per reply so every bubble of it wraps the same way.
+  const lineBreaks = shouldPreserveAssistantLineBreaks(messageText);
+  const renderMarkdown = (text: string, isStreaming: boolean) => (
+    <ChatMarkdown
+      text={text}
+      cwd={ctx.markdownCwd}
+      threadRef={ctx.threadRef ?? undefined}
+      isStreaming={isStreaming}
+      lineBreaks={lineBreaks}
+      skills={ctx.skills}
+      headingLevelOffset={MESSAGE_HEADING_LEVEL}
+      onUseArtifactTemplate={ctx.onUseArtifactTemplate}
+      onRunShellCommand={ctx.onRunShellCommand}
+      onImageExpand={ctx.onImageExpand}
+    />
+  );
+  // A sitrep keeps its card; every other reply reads as messenger bubbles,
+  // one per paragraph, so a streaming reply grows a new bubble per paragraph.
+  const bubbles = sitrepReply === null ? splitAssistantMarkdownIntoBubbles(messageText) : null;
   const body = (
     <div className="relative min-w-0 px-1 py-0.5">
       <MessageAuthorHeading>BusyBoy</MessageAuthorHeading>
@@ -2702,18 +2758,26 @@ function AssistantTimelineRow({
           request={ctx.citationRequest}
           listRef={ctx.listRef}
         >
-          <ChatMarkdown
-            text={messageText}
-            cwd={ctx.markdownCwd}
-            threadRef={ctx.threadRef ?? undefined}
-            isStreaming={Boolean(row.message.streaming)}
-            lineBreaks={shouldPreserveAssistantLineBreaks(messageText)}
-            skills={ctx.skills}
-            headingLevelOffset={MESSAGE_HEADING_LEVEL}
-            onUseArtifactTemplate={ctx.onUseArtifactTemplate}
-            onRunShellCommand={ctx.onRunShellCommand}
-            onImageExpand={ctx.onImageExpand}
-          />
+          {bubbles === null ? (
+            renderMarkdown(messageText, streaming)
+          ) : (
+            <div className="flex flex-col items-start gap-1">
+              {bubbles.map((chunk, index) => (
+                <div
+                  // Earlier paragraphs never change while streaming, so the index is stable.
+                  // oxlint-disable-next-line react/no-array-index-key
+                  key={index}
+                  data-assistant-bubble=""
+                  className={cn(
+                    "min-w-0 max-w-full rounded-[18px] border border-border/70 bg-card px-3.5 py-2",
+                    isWideBubbleChunk(chunk) ? "w-full" : "sm:max-w-[85%]",
+                  )}
+                >
+                  {renderMarkdown(chunk, streaming && index === bubbles.length - 1)}
+                </div>
+              ))}
+            </div>
+          )}
         </AssistantCitationSource>
       </div>
       <AssistantChangedFilesSection
@@ -2724,7 +2788,7 @@ function AssistantTimelineRow({
       />
       {row.showAssistantMeta ? (
         <AssistantMessageMeta
-          className="mt-1.5"
+          className="mt-1 ps-1"
           projectedItem={row.projectedItem}
           message={row.message}
           showCopyButton={row.showAssistantCopyButton}
@@ -2824,32 +2888,12 @@ function AssistantMessageMeta({
 }) {
   const ctx = use(TimelineRowCtx);
 
+  // The time always shows, like a messenger; the actions appear on hover.
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 text-xs tabular-nums transition-opacity duration-200",
-        alwaysVisible
-          ? "opacity-100"
-          : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100",
-        className,
-      )}
-    >
-      {projectedItem && projectedItem.item.status !== "completed" ? (
-        <span className="rounded-full border border-border/70 px-1.5 py-0.5 font-mono text-3xs text-muted-foreground">
-          {projectedItem.item.status}
-        </span>
-      ) : null}
-      <AssistantCopyButton
-        message={message}
-        showCopyButton={showCopyButton}
-        streaming={copyStreaming}
-      />
-      {projectedItem?.item.type === "assistant_message" ? (
-        <AssistantForkButton projectedItem={projectedItem} />
-      ) : null}
+    <div className={cn("flex items-center gap-2 text-xs tabular-nums", className)}>
       {!message.streaming && (
         <Tooltip>
-          <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
+          <TooltipTrigger render={<p className="text-muted-foreground/80 text-xs tabular-nums" />}>
             {formatDayAwareTimestamp(message.updatedAt, ctx.timestampFormat)}
           </TooltipTrigger>
           <TooltipPopup>
@@ -2857,6 +2901,28 @@ function AssistantMessageMeta({
           </TooltipPopup>
         </Tooltip>
       )}
+      <span
+        className={cn(
+          "flex items-center gap-2 transition-opacity duration-200",
+          alwaysVisible
+            ? "opacity-100"
+            : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100",
+        )}
+      >
+        {projectedItem && projectedItem.item.status !== "completed" ? (
+          <span className="rounded-full border border-border/70 px-1.5 py-0.5 font-mono text-3xs text-muted-foreground">
+            {projectedItem.item.status}
+          </span>
+        ) : null}
+        <AssistantCopyButton
+          message={message}
+          showCopyButton={showCopyButton}
+          streaming={copyStreaming}
+        />
+        {projectedItem?.item.type === "assistant_message" ? (
+          <AssistantForkButton projectedItem={projectedItem} />
+        ) : null}
+      </span>
     </div>
   );
 }
