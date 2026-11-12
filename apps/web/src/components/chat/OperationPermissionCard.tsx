@@ -83,22 +83,22 @@ export function OperationPermissionCard(props: {
     inFlight.current = true;
     setBusy(true);
     setError(null);
-    try {
-      const result = await answer({
-        environmentId: props.environmentId,
-        input: { threadId: item.threadId, turnItemId: item.id, decision: next },
-      });
-      if (result._tag === "Success") {
-        setDecision(next);
-        return;
-      }
-      if (!isAtomCommandInterrupted(result)) {
-        setError("응답을 보내지 못했습니다. 다시 시도해 주세요.");
-      }
-      inFlight.current = false;
-    } finally {
+    const result = await answer({
+      environmentId: props.environmentId,
+      input: { threadId: item.threadId, turnItemId: item.id, decision: next },
+    }).catch((error: unknown) => {
       setBusy(false);
+      throw error;
+    });
+    setBusy(false);
+    if (result._tag === "Success") {
+      setDecision(next);
+      return;
     }
+    if (!isAtomCommandInterrupted(result)) {
+      setError("응답을 보내지 못했습니다. 다시 시도해 주세요.");
+    }
+    inFlight.current = false;
   };
 
   if (props.visibility !== "local" || !pending || expired) {
