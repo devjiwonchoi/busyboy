@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/devjiwonchoi/busyboy/main/schema/node.schema.json",
+  "title": "BusyBoy node contract",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "approved": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "by": {
+              "type": "string"
+            },
+            "on": {
+              "type": "string"
+            }
+          },
+          "required": ["by", "on"],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "parent": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "purpose": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "check": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["auto", "evidence", "human"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "how": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["id", "text", "check", "how"],
+        "additionalProperties": true
+      }
+    },
+    "dont": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "waitsOn": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "type": "string"
+          },
+          "criterion": {
+            "type": "string"
+          }
+        },
+        "required": ["node", "criterion"],
+        "additionalProperties": true
+      }
+    },
+    "expectedFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "change": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["new", "modified", "deleted"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["path", "change"],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "version",
+    "approved",
+    "parent",
+    "purpose",
+    "criteria",
+    "dont",
+    "waitsOn",
+    "expectedFiles"
+  ],
+  "additionalProperties": true
+}
