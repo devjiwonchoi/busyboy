@@ -66,18 +66,19 @@ test('choosing an option for a scripted Codex question should let the run contin
 })
 
 test('interrupting a Codex turn should still run the message queued behind it', async ({ page }) => {
-  await sendMessage(page, APPROVAL_PROMPT)
+  // Codex waits inside this turn for the answer, so only an interrupt request can end it.
+  await sendMessage(page, QUESTION_PROMPT)
 
   const transcript = page.getByRole('log', { name: 'Transcript' })
-  const approval = transcript.getByRole('group', { name: 'Approval request' })
-  await expect(approval.getByRole('button', { name: 'Allow' })).toBeVisible()
+  const question = transcript.getByRole('group', { name: 'Question' })
+  await expect(question.getByRole('button', { name: 'Blue' })).toBeVisible()
   await page.getByRole('textbox', { name: 'Message' }).fill(PLAIN_PROMPT)
   await page.getByRole('button', { name: 'Send' }).click()
   await expect(transcript.getByText(PLAIN_PROMPT)).toBeVisible()
 
   await page.getByRole('button', { name: 'Interrupt' }).click()
 
-  await expect(approval.getByRole('button', { name: 'Allow' })).toBeHidden()
+  await expect(question.getByRole('button', { name: 'Blue' })).toBeHidden()
   await expect(transcript.getByText('Hello from busyboy.', { exact: true })).toBeVisible()
-  await expect(transcript.getByText('Created notes.txt.', { exact: true })).toBeHidden()
+  await expect(transcript.getByText(/^You picked/)).toBeHidden()
 })

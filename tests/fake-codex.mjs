@@ -4,7 +4,10 @@
 // tests/provider-scripts/codex/: a `turn/start` whose text matches a recorded
 // prompt plays that turn's raw app-server messages. A recorded server request
 // waits for the adapter's reply; a recorded question in an agent message
-// waits for `turn/steer`. No model is called.
+// waits for `turn/steer`. As in Codex, `cancel` ends the turn, while
+// `decline` refuses only that action: the recording assumed it was accepted,
+// so the turn then stays open with no more output until `turn/interrupt`.
+// No model is called.
 import { randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -31,9 +34,13 @@ const notify = (method, params) => send({ method, params: { threadId, ...(curren
 function completeTurn(status, error = null) {
   if (!current) return
   const { id } = current
-  for (const [requestId] of waitingReplies) notify('serverRequest/resolved', { requestId })
+  const replies = [...waitingReplies]
   waitingReplies.clear()
   current.ended = true
+  for (const [requestId, resolve] of replies) {
+    notify('serverRequest/resolved', { requestId })
+    resolve(undefined)
+  }
   current.wake?.()
   notify('turn/completed', { turn: { id, status, error } })
   current = undefined
@@ -52,12 +59,16 @@ async function playTurn(turn) {
       const id = nextRequestId++
       const reply = new Promise((resolve) => waitingReplies.set(id, resolve))
       send({ id, method: raw.method, params: { threadId, turnId: own.id, itemId: randomUUID(), ...raw.params } })
-      own.wake = () => waitingReplies.get(id)?.(undefined)
       const result = await reply
       if (own.ended) return
-      // Only `accept` lets the recorded run go on; a declined command ends the turn like Codex's cancel.
-      if (result && 'decision' in result && result.decision !== 'accept') {
+      const decision = result && typeof result === 'object' && 'decision' in result ? result.decision : 'accept'
+      if (decision === 'cancel') {
         completeTurn('interrupted')
+        return
+      }
+      // The rest of the recording assumed an accept; after a decline the turn waits for an interrupt.
+      if (decision !== 'accept' && typeof decision === 'string' && !decision.startsWith('accept')) {
+        await new Promise((resolve) => (own.wake = resolve))
         return
       }
       continue
