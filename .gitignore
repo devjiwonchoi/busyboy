@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+next-env.d.ts
+
+# Build output
+out/
+dist/
+build/
+release/
+*.tsbuildinfo
+
+# Local agent state
+.jwn/
+.claude/worktrees/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
