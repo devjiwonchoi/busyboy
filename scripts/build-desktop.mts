@@ -41,9 +41,12 @@ rmSync(outputDir, { recursive: true, force: true })
  * platform's prebuilds, keep a binary compiled into `build/Release` when there
  * is one, and make sure `spawn-helper` stays executable.
  *
- * macOS keeps both architectures: a universal build packs x64 and arm64
- * separately (this hook runs for each) and then requires both apps to hold
- * the same Mach-O files, which `x64ArchFiles` lets it keep as they are.
+ * macOS keeps both architectures so node-pty is ready for a universal
+ * build, which packs x64 and arm64 separately (this hook runs for each) and
+ * requires both apps to hold the same Mach-O files; `x64ArchFiles` lets the
+ * merge keep node-pty's thin binaries as they are. This script does not
+ * build universal apps yet, and other native files in the server (sharp)
+ * would still need the same treatment.
  */
 function pruneNodePty(serverDir: string, platform: string, arch: string) {
   const targets = platform === 'darwin' ? ['darwin-x64', 'darwin-arm64'] : [`${platform}-${arch}`]
