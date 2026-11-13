@@ -19,7 +19,7 @@ export default defineConfig({
     command: 'pnpm build && pnpm start',
     url: baseURL,
     // Test mode lets the server run without the desktop app's token (see src/proxy.ts).
-    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1' },
+    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1', BUSYBOY_TEST_SHELL: '/bin/sh' },
     // Never reuse: another worktree may be serving a different build on the same port.
     reuseExistingServer: false,
     timeout: 180_000,
