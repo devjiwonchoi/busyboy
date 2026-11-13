@@ -7,7 +7,7 @@
 // `utilityProcess.fork` cannot start a server that lives inside app.asar.
 // The terminal's native module (node-pty) travels inside that server folder.
 import { execFileSync } from 'node:child_process'
-import { chmodSync, cpSync, existsSync, lstatSync, readdirSync, rmSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import builder from 'electron-builder'
 
@@ -36,31 +36,47 @@ run('pnpm', ['build:electron'])
 rmSync(outputDir, { recursive: true, force: true })
 
 /**
- * node-pty ships N-API prebuilds for every platform, so one binary works in
- * Node and in Electron's utility process without a rebuild. Keep only the
- * target's folder and make sure macOS keeps `spawn-helper` executable.
+ * node-pty ships N-API prebuilds, so one binary works in Node and in
+ * Electron's utility process without a rebuild. Keep only the target's
+ * prebuilds (both architectures for a universal macOS build), keep a binary
+ * compiled into `build/Release` when there is one, and make sure
+ * `spawn-helper` stays executable.
  */
-function pruneNodePty(serverDir: string, target: string) {
+function pruneNodePty(serverDir: string, platform: string, arch: string) {
+  const targets = arch === 'universal' ? [`${platform}-x64`, `${platform}-arm64`] : [`${platform}-${arch}`]
+  const packages: string[] = []
   const visit = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       // Symlinks point at folders this walk reaches anyway.
       if (!entry.isDirectory()) continue
       const path = join(dir, entry.name)
-      if (entry.name === 'prebuilds' && /node-pty(-[0-9a-f]+)?$/.test(dir)) {
-        for (const build of readdirSync(path)) {
-          if (build !== target) rmSync(join(path, build), { recursive: true, force: true })
-        }
-        const helper = join(path, target, 'spawn-helper')
-        if (existsSync(helper)) chmodSync(helper, 0o755)
+      if (/^node-pty(-[0-9a-f]+)?$/.test(entry.name) && existsSync(join(path, 'package.json'))) {
+        packages.push(path)
         continue
       }
       visit(path)
     }
   }
   visit(serverDir)
-  const kept = join(serverDir, 'node_modules', 'node-pty', 'prebuilds', target)
-  if (!existsSync(kept) || !lstatSync(kept).isDirectory()) {
-    throw new Error(`node-pty has no prebuilt binary for ${target} in the packaged server.`)
+  if (packages.length === 0) throw new Error('node-pty is missing from the packaged server.')
+
+  for (const dir of packages) {
+    const prebuilds = join(dir, 'prebuilds')
+    if (existsSync(prebuilds)) {
+      for (const build of readdirSync(prebuilds)) {
+        if (!targets.includes(build)) rmSync(join(prebuilds, build), { recursive: true, force: true })
+      }
+    }
+    const binaryDirs = [join(dir, 'build', 'Release'), ...targets.map((target) => join(prebuilds, target))]
+    for (const binaryDir of binaryDirs) {
+      const helper = join(binaryDir, 'spawn-helper')
+      if (existsSync(helper)) chmodSync(helper, 0o755)
+    }
+    const compiled = existsSync(join(dir, 'build', 'Release', 'pty.node'))
+    const missing = targets.filter((target) => !existsSync(join(prebuilds, target, 'pty.node')))
+    if (!compiled && missing.length > 0) {
+      throw new Error(`node-pty in ${dir} has no binary for ${missing.join(', ')}.`)
+    }
   }
 }
 
@@ -95,7 +111,7 @@ await builder.build({
         verbatimSymlinks: context.electronPlatformName !== 'win32',
         dereference: context.electronPlatformName === 'win32',
       })
-      pruneNodePty(join(resources, 'server'), `${context.electronPlatformName}-${builder.Arch[context.arch]}`)
+      pruneNodePty(join(resources, 'server'), context.electronPlatformName, builder.Arch[context.arch])
     },
   },
 })
