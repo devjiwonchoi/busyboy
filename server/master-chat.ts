@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { MASTER_INSTRUCTIONS, masterTiming } from './master-context'
+import { PROVIDERS } from './providers'
 import {
   answerAgent,
   compactAgent,
@@ -119,8 +120,8 @@ async function load(master: Master) {
   try {
     const state = JSON.parse(await readFile(join(folder, STATE_FILE), 'utf8')) as Partial<Record<keyof MasterState, unknown>> | null
     master.state =
-      state && (state.provider === 'claude' || state.provider === 'codex') && typeof state.sessionId === 'string'
-        ? { provider: state.provider, sessionId: state.sessionId }
+      state && PROVIDERS.some(({ id }) => id === state.provider) && typeof state.sessionId === 'string'
+        ? { provider: state.provider as ProviderId, sessionId: state.sessionId as string }
         : {}
   } catch {
     // Missing or unreadable: the next message starts a new provider session.
@@ -343,10 +344,10 @@ export type SendToMasterInput = {
   folder: string
   text: string
   /**
-   * Resolves the provider for the next turn, after the message shows: null when
-   * nobody is signed in, undefined when the sign-in check failed.
+   * Resolves the provider for the next turn, after the message shows, given the
+   * provider the master already uses. Null when no provider can be used.
    */
-  resolveProvider: () => Promise<ProviderId | null | undefined>
+  resolveProvider: (current: ProviderId | undefined) => Promise<ProviderId | null>
   mcp: McpServerInput
 }
 
@@ -365,17 +366,12 @@ export async function sendToMaster({ folder, text, resolveProvider, mcp }: SendT
   if (master.status === 'answering' && master.agentId) void interruptAgent(master.agentId)
   // A failed or slow sign-in probe must not lose the message while the master is alive.
   const live = master.agentId ? getAgent(master.agentId) : undefined
-  // `null` means nobody is signed in; `undefined` means the check itself failed,
-  // and then the running or last-used provider carries on.
-  const resolved = await resolveProvider().catch(() => undefined)
-  const provider = resolved === undefined ? (live?.provider ?? master.state.provider ?? null) : resolved
+  const provider = await resolveProvider(live?.provider ?? master.state.provider).catch(() => null)
   // A turn that ended during the probe may have scheduled compaction.
   clearTimeout(master.idleTimer)
   master.idleTimer = undefined
   if (!provider) {
-    const text =
-      resolved === null ? 'No provider is signed in. Open Setup to sign in.' : 'The sign-in check failed. Open Setup to check.'
-    saveEntry(master, newEntry('note', { text, tone: 'error' }))
+    saveEntry(master, newEntry('note', { text: 'No provider is signed in. Open Setup to sign in.', tone: 'error' }))
     scheduleCompaction(master)
     return
   }
