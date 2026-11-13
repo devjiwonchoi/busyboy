@@ -1,7 +1,7 @@
 // Turns `codex app-server` notifications and server requests into contract
-// events, and contract answers into the replies Codex expects. Shared by the
-// live adapter and the scripted replay of recorded Codex runs, so a recording
-// exercises the same mapping as a real run. Types follow the protocol of
+// events, and contract answers into the replies Codex expects. Used by the
+// Codex adapter; journeys reach it through the adapter and tests/fake-codex.mjs,
+// which replays recorded runs. Types follow the protocol of
 // codex-cli 0.167.0 (`codex app-server generate-ts`), reduced to the fields read here.
 import type { AgentAnswer, AgentEvent, Question } from './contract'
 
@@ -36,6 +36,15 @@ type UserInputQuestion = {
   header: string
   question: string
   options: { label: string; description: string }[] | null
+}
+
+/** A path in a permission request, as the 0.167.0 protocol shapes it. */
+type SandboxPath = { type: 'path'; path: string } | { type: 'glob_pattern'; pattern: string } | { type: 'special'; value: unknown }
+
+function sandboxPathLabel(path: SandboxPath) {
+  if (path.type === 'path') return path.path
+  if (path.type === 'glob_pattern') return path.pattern
+  return typeof path.value === 'string' ? path.value : JSON.stringify(path.value)
 }
 
 /** Server requests that become an approval or a question. Others are refused. */
@@ -173,9 +182,10 @@ export function codexRequestToEvent(
         fileSystem?: {
           read?: string[] | null
           write?: string[] | null
-          entries?: { path: unknown; access: unknown }[]
+          entries?: { path: SandboxPath; access: string }[]
         } | null
       }
+      const entries = permissions?.fileSystem?.entries
       return {
         type: 'approval',
         requestId,
@@ -183,12 +193,13 @@ export function codexRequestToEvent(
         detail: detailLines(
           reason,
           permissions?.network?.enabled && 'Network access',
-          permissions?.fileSystem?.write?.length && `Write: ${permissions.fileSystem.write.join(', ')}`,
-          permissions?.fileSystem?.read?.length && `Read: ${permissions.fileSystem.read.join(', ')}`,
-          // Newer servers describe paths as entries; every entry is granted on Allow, so show them all.
-          ...(permissions?.fileSystem?.entries ?? []).map(
-            (entry) => `${String(entry.access)}: ${typeof entry.path === 'string' ? entry.path : JSON.stringify(entry.path)}`,
-          ),
+          // Newer servers describe paths as entries (granted in full on Allow); the read and write lists are their legacy form.
+          ...(entries?.length
+            ? entries.map((entry) => `${entry.access}: ${sandboxPathLabel(entry.path)}`)
+            : [
+                permissions?.fileSystem?.write?.length && `Write: ${permissions.fileSystem.write.join(', ')}`,
+                permissions?.fileSystem?.read?.length && `Read: ${permissions.fileSystem.read.join(', ')}`,
+              ]),
         ),
       }
     }

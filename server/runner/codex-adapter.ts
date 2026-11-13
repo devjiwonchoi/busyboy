@@ -23,6 +23,8 @@ import { agentEnvironment, findExecutable } from './find-executable'
 /** Overrides the `codex` executable that is otherwise looked up on the login-shell PATH. */
 export const CODEX_PATH_ENV = 'BUSYBOY_CODEX_PATH'
 const SIGN_IN_TIMEOUT_MS = 20_000
+/** How long a failed start waits to learn whether Codex is signed out. */
+const ACCOUNT_CHECK_TIMEOUT_MS = 5_000
 const CLIENT_INFO = { name: 'busyboy', title: 'Busyboy', version: '0.0.0' }
 
 async function resolveCodex() {
@@ -153,6 +155,8 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   /** A turn (a message or a compaction) is running; new messages wait in `queue`. */
   let inTurn = false
   let interruptPending = false
+  /** Identifies the latest `turn/start` request, so a late reply cannot claim a newer turn. */
+  let pendingStart: object | undefined
   let stopRequested = false
   let failed = false
   let ready: Promise<void> | undefined
@@ -174,12 +178,16 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     const text = queue.shift()
     if (text === undefined) return
     inTurn = true
+    const request = {}
+    pendingStart = request
     connection
       .request<{ turn: { id: string } }>('turn/start', {
         threadId,
         input: [{ type: 'text', text, text_elements: [] }],
       })
       .then(({ turn }) => {
+        // The reply can arrive after the turn already ended and the next one began.
+        if (pendingStart !== request) return
         turnId ??= turn.id
         if (interruptPending) interruptTurn()
       })
@@ -187,6 +195,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         // A stop or exit ends the session; `stopped` reports it.
         if (stopRequested || error instanceof AppServerExited) return
         inTurn = false
+        interruptPending = false
         emit({ type: 'error', code: 'provider', message: error.message })
         emit({ type: 'turn-done' })
         startNextTurn()
@@ -221,6 +230,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     }
     for (const event of codexMessageToEvents(message)) {
       if (event.type === 'turn-done') {
+        pendingStart = undefined
         inTurn = false
         turnId = undefined
         interruptPending = false
@@ -257,7 +267,10 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     })()
     ready.catch(async (error: Error) => {
       if (error instanceof AppServerExited) return // Reported below with the process output.
-      const status = await accountStatus(current).catch(() => undefined)
+      const status = await Promise.race([
+        accountStatus(current).catch(() => undefined),
+        new Promise<undefined>((resolve) => setTimeout(resolve, ACCOUNT_CHECK_TIMEOUT_MS)),
+      ])
       if (status?.state === 'signed-out') fail('Codex is not signed in. Run `codex login`.', 'signed-out')
       else fail(error.message)
       current.kill()
@@ -303,6 +316,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         await connection.request('thread/compact/start', { threadId })
       } catch (error) {
         inTurn = false
+        interruptPending = false
         emit({ type: 'turn-done' })
         startNextTurn()
         throw error
