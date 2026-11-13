@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { delimiter } from 'node:path'
 
 const MARKER = '__BUSYBOY_PATH__'
@@ -10,18 +10,50 @@ export type ShellPathResult = {
   error?: string
 }
 
+/**
+ * Runs the login shell in its own process group. On timeout the whole group is
+ * killed and the promise settles without waiting for stdout to close, so a
+ * grandchild that keeps the pipe open cannot block startup.
+ */
 function readLoginShellPath(shell: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(
-      shell,
-      ['-ilc', `printf '%s%s%s' '${MARKER}' "$PATH" '${MARKER}'`],
-      { timeout: TIMEOUT_MS, encoding: 'utf8', env: process.env },
-      (error, stdout) => {
-        const match = stdout?.match(new RegExp(`${MARKER}(.*)${MARKER}`, 's'))
-        if (match?.[1]) resolve(match[1].trim())
-        else reject(error ?? new Error('The login shell printed no PATH.'))
-      },
-    )
+    const child = spawn(shell, ['-ilc', `printf '%s%s%s' '${MARKER}' "$PATH" '${MARKER}'`], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      env: process.env,
+    })
+    let stdout = ''
+    let settled = false
+
+    const killGroup = () => {
+      try {
+        if (child.pid) process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        // Already gone.
+      }
+    }
+    const settle = (error: Error | null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      killGroup()
+      child.stdout.destroy()
+      const match = stdout.match(new RegExp(`${MARKER}(.*)${MARKER}`, 's'))
+      if (!error && match?.[1]) resolve(match[1].trim())
+      else reject(error ?? new Error('The login shell printed no PATH.'))
+    }
+
+    const timer = setTimeout(() => settle(new Error(`The login shell did not answer within ${TIMEOUT_MS} ms.`)), TIMEOUT_MS)
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk
+      // Done as soon as the closing marker arrives, even if the pipe stays open.
+      if (stdout.split(MARKER).length >= 3) settle(null)
+    })
+    child.once('error', (error) => settle(error))
+    child.stdout.once('close', () => settle(null))
+    // A grandchild may keep stdout open after the shell exits; give the pipe a moment, then stop waiting.
+    child.once('exit', () => setTimeout(() => settle(null), 250))
   })
 }
 
