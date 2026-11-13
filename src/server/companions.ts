@@ -4,7 +4,9 @@ import { MAX_IMAGE_BYTES, MAX_IMAGE_TEXT } from '@/lib/companion-limits'
 import { dataFolder, readSettings, updateSettings } from './config'
 
 // BusyBoy's companions: the face and voice of the Director, the agent the user chats with. The user picks
-// one in setup.
+// one in setup; its voice is appended to the Director's instructions, so it
+// must stay the same for a given companion (no dynamic values) to keep the
+// provider's prompt cache warm.
 
 export type Companion = {
   id: string
@@ -70,6 +72,20 @@ export const COMPANIONS: Companion[] = [
 
 export function findCompanion(id: string | null | undefined) {
   return COMPANIONS.find((companion) => companion.id === id)
+}
+
+/**
+ * Appended to the Director's instructions: the companion's voice, and what to do
+ * when a task needs a project and none fits (setup lets the user start without one).
+ */
+export function companionInstructions(companion: Companion | undefined) {
+  const lines = [
+    'When a request needs a project folder and the user has none, or none that fits, ask the user to add the project folder first; do not guess a path.',
+  ]
+  if (companion) {
+    lines.unshift(`You are ${companion.name}, the user's director in BusyBoy, a small ${companion.animal}. ${companion.voice}`)
+  }
+  return lines.join('\n')
 }
 
 /** The companion the user chose, if any. */

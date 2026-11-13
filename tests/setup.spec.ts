@@ -3,6 +3,9 @@ import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { createGitRepository, createTempFolder, removeFolder, useTestHome } from './support/test-home'
 
+// Recorded in tests/provider-scripts/claude-plain-reply.json.
+const PLAIN_PROMPT = 'Reply with exactly this sentence and nothing else: Hello from busyboy.'
+
 // A 1×1 PNG.
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -78,6 +81,39 @@ test('finishing setup should open the main screen', async ({ page, context, base
 
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
+})
+
+test("choosing a companion should carry it into the Director's greeting", async ({ page, context, baseURL }) => {
+  const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+
+  await page.goto('/setup')
+  await chooseCompanion(page, 'Sage')
+  await page.getByRole('link', { name: 'Back' }).click()
+  await expect(page.getByRole('radio', { name: /^Sage the owl/ })).toBeChecked()
+
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('link', { name: 'Skip' }).click()
+  await page.getByRole('button', { name: 'Start without a project' }).click()
+
+  const chat = page.getByRole('region', { name: 'Chat' })
+  await expect(chat.getByText('Sage, your director', { exact: true })).toBeVisible()
+  await expect(chat.getByText("Sage here. Tell me what you're building, and we'll think it through together.")).toBeVisible()
+  expect(readSettings(home).companion).toBe('sage')
+})
+
+test('starting without a project should open the chat', async ({ page, context, baseURL }) => {
+  const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+
+  await goToStart(page)
+  await expect(page.getByText('No projects yet.')).toBeVisible()
+  await page.getByRole('button', { name: 'Start without a project' }).click()
+
+  await expect(page).toHaveURL(/\/$/)
+  await page.getByRole('textbox', { name: 'Message' }).fill(PLAIN_PROMPT)
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByRole('log', { name: 'Transcript' }).getByText('Hello from busyboy.', { exact: true })).toBeVisible()
+  expect(readSettings(home).projects).toEqual([])
 })
 
 test('continuing without a signed-in agent should not be possible', async ({ page, context, baseURL }) => {
@@ -182,6 +218,26 @@ test('dropping folders should add them as projects', async ({ page, context, bas
   await expect(page.getByRole('alert').filter({ hasText: plain })).toHaveText(
     `${plain} is not a git repository. Run git init there, or choose another folder.`,
   )
+})
+
+test('setting a companion picture should show it in the greeting', async ({ page, context, baseURL }) => {
+  const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+
+  await page.goto('/setup')
+  await page.getByRole('radio', { name: /^Mochi the penguin/ }).click()
+  await page.getByLabel('Your own picture').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG })
+  await page.getByRole('button', { name: 'Use picture' }).click()
+  await expect(page.getByRole('button', { name: 'Remove picture' })).toBeVisible()
+  expect(readFileSync(join(home, 'app-companion-image.png'))).toEqual(PNG)
+
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('link', { name: 'Skip' }).click()
+  await page.getByRole('button', { name: 'Start without a project' }).click()
+
+  const chat = page.getByRole('region', { name: 'Chat' })
+  await expect(chat.getByText('Mochi, your director', { exact: true })).toBeVisible()
+  await expect(chat.locator('img[src^="/api/companion-image"]')).toBeVisible()
 })
 
 test('adding a folder that is not a git repository should show an error', async ({ page, context, baseURL }) => {
