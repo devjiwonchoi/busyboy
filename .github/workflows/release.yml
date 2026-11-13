@@ -22,9 +22,18 @@ permissions:
   contents: write
 
 jobs:
+  # The same typecheck and tests as pull requests. Every build job waits on
+  # this through `version`.
+  checks:
+    name: CI
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
   version:
     name: Resolve next patch version
-    if: github.ref == 'refs/heads/main'
+    needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
