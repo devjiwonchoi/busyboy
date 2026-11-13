@@ -1,6 +1,7 @@
 'use client'
 
-import { PanelBottom, PanelRight } from 'lucide-react'
+import { PanelBottom, PanelRight, Settings } from 'lucide-react'
+import Link from 'next/link'
 import { useSyncExternalStore } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -54,6 +55,16 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
             onClick={toggleSidebar}
             icon={<PanelRight />}
           />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant="ghost" size="icon-sm">
+                <Link href="/setup" aria-label="Setup">
+                  <Settings />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Setup</TooltipContent>
+          </Tooltip>
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
