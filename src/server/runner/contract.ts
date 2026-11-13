@@ -81,13 +81,17 @@ export type AgentEvent =
   | { type: 'question'; requestId: string; questions: Question[] }
   /** A pending approval or question was answered (or dropped by an interrupt or stop). */
   | { type: 'answered'; requestId: string }
-  /** The current turn ended and the agent waits for the next user message. */
-  | { type: 'turn-done'; interrupted?: boolean }
+  /**
+   * The current turn ended. The agent waits for the next user message, unless `more` says a
+   * message queued during the turn starts the next turn right away.
+   */
+  | { type: 'turn-done'; interrupted?: boolean; more?: boolean }
   /** The agent process ended. `finished` is false when it ended mid-turn or crashed. */
   | { type: 'stopped'; finished: boolean }
   | { type: 'error'; message: string; code?: AgentErrorCode }
 
-export type AgentErrorCode = 'signed-out' | 'not-installed' | 'no-script' | 'provider'
+/** `lost-session`: the session to resume no longer exists, so only a new conversation can continue. */
+export type AgentErrorCode = 'signed-out' | 'not-installed' | 'no-script' | 'provider' | 'lost-session'
 
 export type AgentEventEnvelope = {
   /** Increases by one per agent, starting at 1. Use it to resume a stream. */

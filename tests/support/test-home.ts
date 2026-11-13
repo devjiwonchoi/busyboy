@@ -44,7 +44,7 @@ export function prepareDefaultHome(folder: string) {
   writeFileSync(join(folder, SETTINGS_FILE), `${JSON.stringify(settings, null, 2)}\n`)
 }
 
-type SignIn = 'signed-in' | 'signed-out' | 'not-installed' | 'unavailable'
+type SignIn = 'signed-in' | 'signed-out' | 'not-installed'
 
 /** Gives this browser context a fresh, empty data folder and optional sign-in states. */
 export async function useTestHome(

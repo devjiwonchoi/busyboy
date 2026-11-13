@@ -17,7 +17,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { COMPANIONS, companionImageUrl, currentCompanion } from '@/server/companions'
 import { isSetupComplete, readSettings } from '@/server/config'
-import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsState, type ProviderState } from '@/server/providers'
+import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsState } from '@/server/providers'
+import type { SignInStatus } from '@/server/runner/contract'
 import { continueFromAgentsAction, recheckProvidersAction, removeProjectAction, startChattingAction } from './actions'
 import { neighborSteps, parseStep, stepHref, STEPS, type StepId } from './steps'
 
@@ -109,11 +110,10 @@ async function CompanionPage() {
 
 // ---- Agents -----------------------------------------------------------------
 
-const STATUS_TEXT: Record<ProviderState['state'], string> = {
+const STATUS_TEXT: Record<SignInStatus['state'], string> = {
   'signed-in': 'Signed in',
   'signed-out': 'Signed out',
   'not-installed': 'Not installed',
-  unavailable: 'Not supported yet',
   unknown: 'Could not check',
 }
 
@@ -198,7 +198,7 @@ async function SkillsPage() {
     PROVIDERS.map(async ({ id, name }) => {
       const state = await providerState(id)
       // Only agents BusyBoy can run are listed.
-      if (state.state === 'unavailable' || state.state === 'not-installed') return null
+      if (state.state === 'not-installed') return null
       return { id, name, skills: await skillsState(id) }
     }),
   )

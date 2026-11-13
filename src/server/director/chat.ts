@@ -313,7 +313,7 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
     case 'error':
       // Only a session the provider no longer has is recovered; any other
       // startup failure is shown and the stored session is kept.
-      if (director.unconfirmedResume && LOST_SESSION.test(event.message)) {
+      if (director.unconfirmedResume && (event.code === 'lost-session' || LOST_SESSION.test(event.message))) {
         director.lostSession = true
         break
       }
@@ -351,7 +351,10 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
   }
 }
 
-/** Claude's message for a resumed session it does not have (the scripted provider uses it too). */
+/**
+ * Claude's message for a resumed session it does not have (the scripted
+ * provider uses it too). Codex reports the `lost-session` code instead.
+ */
 const LOST_SESSION = /No conversation found with session ID/i
 
 /**
