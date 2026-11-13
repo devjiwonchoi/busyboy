@@ -28,6 +28,8 @@ type AgentRecord = {
   pending: Map<string, AgentAnswer['kind']>
   /** Set by interruptAgent while a turn runs; cleared when that turn ends or the process stops. */
   interrupting: boolean
+  /** Messages sent while a turn ran; each one starts its own turn when the previous turn ends. */
+  queued: number
 }
 
 type Registry = { agents: Map<string, AgentRecord> }
@@ -94,11 +96,16 @@ function record(agent: AgentRecord, event: AgentEvent) {
         event = { ...event, interrupted: true }
         agent.interrupting = false
       }
-      agent.status = 'idle'
+      // A queued message starts its turn right away, so the agent keeps running (and can be interrupted).
+      if (agent.queued > 0) {
+        agent.queued -= 1
+        agent.status = 'running'
+      } else agent.status = 'idle'
       break
     case 'stopped':
       if (agent.status === 'stopped') return
       agent.interrupting = false
+      agent.queued = 0
       agent.status = 'stopped'
       agent.session = null
       break
@@ -120,6 +127,7 @@ function push(agent: AgentRecord, event: AgentEvent) {
 function launch(agent: AgentRecord, resumeSessionId?: string) {
   agent.status = 'starting'
   agent.interrupting = false
+  agent.queued = 0
   record(agent, { type: 'started', resumed: Boolean(resumeSessionId) })
   try {
     agent.session = adapterFor(agent.input.provider).start({
@@ -149,6 +157,7 @@ export function startAgent(input: StartAgentInput): AgentSnapshot {
     session: null,
     pending: new Map(),
     interrupting: false,
+    queued: 0,
   }
   registry.agents.set(agent.id, agent)
   launch(agent, input.resumeSessionId)
@@ -159,7 +168,8 @@ export function sendMessage(agentId: string, text: string) {
   const agent = getRecord(agentId)
   if (!agent.session) throw new Error('The agent is stopped. Resume it first.')
   record(agent, { type: 'user-message', text })
-  if (agent.status === 'idle' || agent.status === 'starting') agent.status = 'running'
+  if (agent.status === 'running' || agent.status === 'waiting') agent.queued += 1
+  else agent.status = 'running'
   agent.session.send(text)
 }
 
