@@ -191,8 +191,9 @@ export function createSelfCheck() {
       openTerminalPid = (await startTerminal(server)).pid
     },
     async recordServerStop(server: ServerHandle) {
-      await server.stop()
+      const stop = await server.stop()
       result.checks.serverStopped = !server.isRunning()
+      result.checks.serverAcknowledgedShutdown = stop.acknowledged
       if (openTerminalPid !== null) {
         result.checks.terminalStoppedWithServer = await waitForExit(openTerminalPid)
       }

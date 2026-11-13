@@ -3,6 +3,7 @@ import { chmodSync, existsSync, statSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { dirname, join } from 'node:path'
 import { spawn, type IPty } from 'node-pty'
+import { onServerShutdown } from './shutdown'
 import { isTestMode } from './working-directory'
 
 /** Output kept per terminal so a reconnecting panel can redraw the screen. */
@@ -11,6 +12,8 @@ const SCROLLBACK_LIMIT = 256 * 1024
 const DETACHED_GRACE_MS = 15_000
 /** Waits between SIGHUP, SIGTERM, and SIGKILL when a shell will not exit. */
 const KILL_ESCALATION_MS = 1_000
+/** How long a server shutdown waits for shells to exit. */
+const STOP_ALL_TIMEOUT_MS = 3_000
 const MIN_SIZE = 2
 const MAX_SIZE = 1000
 
@@ -79,6 +82,15 @@ function ensureSpawnHelperExecutable() {
   }
 }
 
+/** The account's shell from the user database; `userInfo()` throws when the uid has no entry. */
+function accountShell() {
+  try {
+    return userInfo().shell
+  } catch {
+    return null
+  }
+}
+
 /**
  * The user's login shell and its arguments. Journeys pin a plain shell with
  * BUSYBOY_TEST_SHELL (test mode only) so the developer's profile cannot
@@ -90,7 +102,7 @@ export function loginShell(): { file: string; args: string[] } {
   if (process.platform === 'win32') {
     return { file: process.env.COMSPEC || 'cmd.exe', args: [] }
   }
-  const file = process.env.SHELL || userInfo().shell || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
+  const file = process.env.SHELL || accountShell() || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
   return { file, args: ['-l'] }
 }
 
@@ -137,6 +149,9 @@ function installExitHook() {
   // their shell lives, so end the shells first or the server never exits.
   process.once('SIGTERM', killAllTerminals)
   process.once('SIGINT', killAllTerminals)
+  // The desktop app asks before it stops the server (on Windows it then
+  // terminates the process, which runs none of the hooks above).
+  onServerShutdown(stopAllTerminals)
 }
 
 export type StartTerminalOptions = { cwd: string; cols: number; rows: number }
@@ -257,8 +272,9 @@ export function killTerminal(id: string) {
   if (!terminal) return false
   finish(terminal, { type: 'exit', exitCode: -1, killed: true })
   signal(terminal, 'SIGHUP')
-  if (process.platform === 'win32' || terminal.exited) return true
+  if (terminal.exited) return true
   registry.dying.add(terminal)
+  if (process.platform === 'win32') return true
   const escalate = (steps: Array<'SIGTERM' | 'SIGKILL'>) => {
     const [next, ...rest] = steps
     if (!next) return
@@ -274,4 +290,13 @@ export function killTerminal(id: string) {
 
 export function killAllTerminals() {
   for (const id of [...registry.terminals.keys()]) killTerminal(id)
+}
+
+/** Kills every terminal and waits, up to a limit, for their processes to exit. */
+async function stopAllTerminals() {
+  killAllTerminals()
+  const deadline = Date.now() + STOP_ALL_TIMEOUT_MS
+  while (registry.dying.size > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
 }
