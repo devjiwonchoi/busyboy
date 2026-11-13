@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { claudeAdapter } from './claude-adapter'
+import { codexAdapter } from './codex-adapter'
 import type {
   AgentAnswer,
   AgentEvent,
@@ -38,8 +39,7 @@ const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 function adapterFor(provider: ProviderId): ProviderAdapter {
   const scripts = process.env[SCRIPTS_ENV]
   if (scripts) return createScriptedAdapter(scripts)
-  if (provider === 'claude') return claudeAdapter
-  throw new Error(`The ${provider} provider is not available yet.`)
+  return provider === 'codex' ? codexAdapter : claudeAdapter
 }
 
 function getRecord(agentId: string) {
