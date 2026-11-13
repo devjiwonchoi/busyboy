@@ -1,0 +1,117 @@
+{
+  "provider": "claude",
+  "description": "Claude asks before running a command that matches an ask rule, then continues once allowed.",
+  "recordedAt": "2026-11-13T20:31:07.552Z",
+  "turns": [
+    {
+      "prompt": "Run the shell command `touch notes.txt` with the Bash tool, then reply with exactly: Created notes.txt.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "63a23ac0-2c14-46d7-ac52-2f04fc95260c"
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_011Ch1ZYDqpGZ1engBrwopT6"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "id": "msg_011Ch1ZYDqpGZ1engBrwopT6",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "Bash",
+                  "input": {
+                    "command": "touch notes.txt",
+                    "description": "Create empty notes.txt file"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "canUseTool": {
+            "toolName": "Bash",
+            "input": {
+              "command": "touch notes.txt",
+              "description": "Create empty notes.txt file"
+            },
+            "description": "Create empty notes.txt file"
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_011Ch1ZYP8RjENC828yEWgVk"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": "Created notes.txt."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "id": "msg_011Ch1ZYP8RjENC828yEWgVk",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Created notes.txt."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false,
+            "terminal_reason": "completed"
+          }
+        }
+      ]
+    }
+  ]
+}
