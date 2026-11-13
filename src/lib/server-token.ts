@@ -26,3 +26,15 @@ export const MCP_PATH = '/api/mcp'
 export function mcpTokenFor(serverToken: string) {
   return createHmac('sha256', serverToken).update('busyboy-mcp-endpoint').digest('hex')
 }
+
+/** Query parameter that names a task agent's project on the MCP endpoint URL. */
+export const MCP_TASK_PROJECT_PARAM = 'project'
+
+/**
+ * A task agent's MCP token, bound to its project. With it the endpoint lists
+ * only the memory tools and keeps the agent's memory writes in its own
+ * project, so content a task agent reads cannot reach every later prompt.
+ */
+export function taskMcpTokenFor(serverToken: string, project: string) {
+  return createHmac('sha256', serverToken).update(`busyboy-mcp-task:${project}`).digest('hex')
+}
