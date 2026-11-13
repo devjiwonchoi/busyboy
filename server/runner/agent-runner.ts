@@ -25,6 +25,7 @@ type AgentRecord = {
   session: ProviderSession | null
   /** Open approvals and questions by request id, with the answer kind each takes. */
   pending: Map<string, AgentAnswer['kind']>
+  /** Set by interruptAgent while a turn runs; cleared when that turn ends or the process stops. */
   interrupting: boolean
 }
 
@@ -97,6 +98,7 @@ function record(agent: AgentRecord, event: AgentEvent) {
       break
     case 'stopped':
       if (agent.status === 'stopped') return
+      agent.interrupting = false
       agent.status = 'stopped'
       agent.session = null
       break
@@ -117,6 +119,7 @@ function push(agent: AgentRecord, event: AgentEvent) {
 
 function launch(agent: AgentRecord, resumeSessionId?: string) {
   agent.status = 'starting'
+  agent.interrupting = false
   record(agent, { type: 'started', resumed: Boolean(resumeSessionId) })
   try {
     agent.session = adapterFor(agent.input.provider).start({
@@ -163,7 +166,8 @@ export function sendMessage(agentId: string, text: string) {
 /** Ends the current turn. The agent stays alive and waits for the next message. */
 export async function interruptAgent(agentId: string) {
   const agent = getRecord(agentId)
-  if (!agent.session || agent.status === 'idle') return
+  // Only a running turn can be interrupted; otherwise the flag would mark a later turn.
+  if (!agent.session || (agent.status !== 'running' && agent.status !== 'waiting')) return
   agent.interrupting = true
   await agent.session.interrupt()
 }
@@ -185,6 +189,7 @@ export function resumeAgent(agentId: string): AgentSnapshot {
 export async function compactAgent(agentId: string) {
   const agent = getRecord(agentId)
   if (!agent.session) throw new Error('The agent is stopped.')
+  if (agent.status === 'idle') agent.status = 'running'
   await agent.session.compact()
 }
 

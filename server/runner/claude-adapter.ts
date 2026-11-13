@@ -74,9 +74,11 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   const canUseTool: CanUseTool = (toolName, toolInput, { signal, toolUseID, title, description }) => {
     const requestId = toolUseID || randomUUID()
     return new Promise<PermissionResult>((resolve) => {
+      // The SDK cancels the request (for example when the turn ends): close it for the runner too.
       const onAbort = () => {
         answers.delete(requestId)
         resolve({ behavior: 'deny', message: 'The request was cancelled.' })
+        emit({ type: 'answered', requestId })
       }
       signal.addEventListener('abort', onAbort, { once: true })
       answers.set(requestId, (answer) => {
@@ -132,7 +134,10 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       input.push(text)
     },
     async interrupt() {
-      for (const [, resolve] of answers) resolve({ kind: 'approval', allow: false, message: 'The user interrupted.' })
+      for (const [requestId, resolve] of answers) {
+        resolve({ kind: 'approval', allow: false, message: 'The user interrupted.' })
+        emit({ type: 'answered', requestId })
+      }
       await current?.interrupt()
     },
     async compact() {
