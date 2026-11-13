@@ -1,7 +1,7 @@
 'use client'
 
 import { ArrowUp } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -32,6 +32,13 @@ export function Composer({
   /** The mention start the user closed with Escape; it stays closed until another `@`. */
   const [dismissed, setDismissed] = useState<number>()
   const input = useRef<HTMLTextAreaElement>(null)
+  /** Caret position to apply right after the next render, before any further typing. */
+  const pendingCaret = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null) return
+    input.current?.setSelectionRange(pendingCaret.current, pendingCaret.current)
+    pendingCaret.current = null
+  })
   const listId = useId()
 
   const mention = mentionAt(text, caret)
@@ -58,7 +65,7 @@ export function Composer({
     const inserted = `@${name} `
     const position = before.length + inserted.length
     update(`${before}${inserted}${after.replace(/^ /, '')}`, position)
-    requestAnimationFrame(() => input.current?.setSelectionRange(position, position))
+    pendingCaret.current = position
   }
 
   function send() {
