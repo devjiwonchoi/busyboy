@@ -1,7 +1,9 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { access, mkdir, open, readFile, rename } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { cookies } from 'next/headers'
+import { unstable_rethrow } from 'next/navigation'
 import type { ProviderId } from './runner/contract'
 
 // The data folder is shared with the legacy app, which keeps its own files
@@ -61,13 +63,33 @@ export function resolveDataFolder(testHomeCookie?: string) {
   return testHome(testHomeCookie) ?? (process.env[HOME_ENV] || join(homedir(), '.busyboy'))
 }
 
+const BOUND_FOLDER_KEY = Symbol.for('busyboy.data-folder')
+const boundStore = globalThis as typeof globalThis & { [BOUND_FOLDER_KEY]?: AsyncLocalStorage<string> }
+const boundFolder = (boundStore[BOUND_FOLDER_KEY] ??= new AsyncLocalStorage<string>())
+
 /**
- * The data folder for the current request. In test mode it reads a cookie,
- * so call it only inside a request (pages after `connection()`, actions, routes).
+ * Runs `work` with a fixed data folder. Work that outlives a request (agent
+ * callbacks, background jobs) captures `await dataFolder()` during the
+ * request and runs inside this, so tests and the app use the same folder.
+ */
+export function runWithDataFolder<T>(folder: string, work: () => T): T {
+  return boundFolder.run(folder, work)
+}
+
+/**
+ * The data folder. In test mode it comes from the request's cookie; outside
+ * a request (and outside `runWithDataFolder`) it falls back to the default.
  */
 export async function dataFolder() {
+  const bound = boundFolder.getStore()
+  if (bound) return bound
   if (!isTestMode()) return resolveDataFolder()
-  return resolveDataFolder((await cookies()).get(TEST_HOME_COOKIE)?.value)
+  try {
+    return resolveDataFolder((await cookies()).get(TEST_HOME_COOKIE)?.value)
+  } catch (error) {
+    unstable_rethrow(error)
+    return resolveDataFolder()
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

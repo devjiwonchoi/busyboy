@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { cookies } from 'next/headers'
+import { unstable_rethrow } from 'next/navigation'
 import { isTestMode, readSettings, updateSettings } from './config'
 import { providerSignInStatus } from './runner/agent-runner'
 import type { ProviderId, SignInStatus } from './runner/contract'
@@ -30,7 +31,13 @@ const cache = (globalStore[CACHE_KEY] ??= new Map())
 
 async function testOverride(provider: ProviderId): Promise<ProviderState | undefined> {
   if (!isTestMode()) return undefined
-  const value = (await cookies()).get(TEST_SIGN_IN_COOKIE)?.value
+  let value: string | undefined
+  try {
+    value = (await cookies()).get(TEST_SIGN_IN_COOKIE)?.value
+  } catch (error) {
+    unstable_rethrow(error)
+    return undefined
+  }
   const pair = value
     ?.split(',')
     .map((entry) => entry.split('='))
