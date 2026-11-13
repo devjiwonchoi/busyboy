@@ -70,6 +70,7 @@ export async function POST(request: Request) {
   }
   const batch = Array.isArray(body)
   const messages = (batch ? body : [body]) as JsonRpcRequest[]
+  if (messages.length === 0) return Response.json(failure(null, -32600, 'Invalid Request'), { status: 400 })
   const responses = (await Promise.all(messages.map(handle))).filter((response) => response !== undefined)
   if (responses.length === 0) return new Response(null, { status: 202 })
   return Response.json(batch ? responses : responses[0])

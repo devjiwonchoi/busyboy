@@ -18,7 +18,14 @@ function mentionAt(text: string, caret: number): Mention | undefined {
  * project picker: arrow keys move, Enter or Tab chooses, Escape closes. The
  * chosen project is inserted as `@name` text.
  */
-export function Composer({ projects, onSend }: { projects: string[]; onSend: (text: string) => void }) {
+export function Composer({
+  projects,
+  onSend,
+}: {
+  projects: string[]
+  /** May reject; the text then comes back into an empty box. */
+  onSend: (text: string) => Promise<void> | void
+}) {
   const [text, setText] = useState('')
   const [caret, setCaret] = useState(0)
   const [active, setActive] = useState(0)
@@ -57,8 +64,14 @@ export function Composer({ projects, onSend }: { projects: string[]; onSend: (te
   function send() {
     const message = text.trim()
     if (!message) return
-    onSend(message)
     update('', 0)
+    Promise.resolve(onSend(message)).catch(() =>
+      setText((current) => {
+        if (current) return current
+        setCaret(message.length)
+        return message
+      }),
+    )
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {

@@ -102,9 +102,10 @@ export function MasterChat({ projects }: { projects: string[] }) {
         <Composer
           projects={projects}
           onSend={(text) =>
-            sendToMasterAction(text).catch(() =>
-              setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' })),
-            )
+            sendToMasterAction(text).catch((error: unknown) => {
+              setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
+              throw error
+            })
           }
         />
         {view.sendError && (

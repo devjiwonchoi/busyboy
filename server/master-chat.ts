@@ -107,8 +107,8 @@ async function load(master: Master) {
   for (const line of lines) {
     if (!line.trim()) continue
     try {
-      const entry = JSON.parse(line) as ChatEntry
-      byId.set(entry.id, entry)
+      const entry = JSON.parse(line) as ChatEntry | null
+      if (entry && typeof entry === 'object' && typeof entry.id === 'string') byId.set(entry.id, entry)
     } catch {
       // A line cut short by a crash; skip it.
     }
@@ -117,7 +117,8 @@ async function load(master: Master) {
   const lastCompaction = master.entries.findLastIndex((entry) => entry.kind === 'note' && entry.compacted)
   master.charsSinceCompact = master.entries.slice(lastCompaction + 1).reduce((sum, entry) => sum + entryLength(entry), 0)
   try {
-    master.state = JSON.parse(await readFile(join(folder, STATE_FILE), 'utf8')) as MasterState
+    const state: unknown = JSON.parse(await readFile(join(folder, STATE_FILE), 'utf8'))
+    master.state = state && typeof state === 'object' && !Array.isArray(state) ? (state as MasterState) : {}
   } catch {
     // Missing or unreadable: the next message starts a new provider session.
     master.state = {}
@@ -226,20 +227,25 @@ function onAgentEvent(master: Master, agentId: string, { event }: AgentEventEnve
       break
     // The master has no cards: it asks in its reply text and never runs
     // actions that need approval, so such requests are answered at once.
+    // Answered after the runner has delivered the request to every listener.
     case 'approval':
-      answerAgent(agentId, event.requestId, {
-        kind: 'approval',
-        allow: false,
-        message: 'The master cannot run this. Create a task for work in a project instead.',
-      })
+      queueMicrotask(() =>
+        answerAgent(agentId, event.requestId, {
+          kind: 'approval',
+          allow: false,
+          message: 'The master cannot run this. Create a task for work in a project instead.',
+        }),
+      )
       break
     case 'question':
-      answerAgent(agentId, event.requestId, {
-        kind: 'question',
-        answers: Object.fromEntries(
-          event.questions.map(({ question }) => [question, 'No answer. Ask this in your reply text instead.']),
-        ),
-      })
+      queueMicrotask(() =>
+        answerAgent(agentId, event.requestId, {
+          kind: 'question',
+          answers: Object.fromEntries(
+            event.questions.map(({ question }) => [question, 'No answer. Ask this in your reply text instead.']),
+          ),
+        }),
+      )
       break
     case 'error':
       if (compacting) master.compactFailed = true
@@ -335,9 +341,15 @@ export async function sendToMaster({ folder, text, resolveProvider, mcp }: SendT
   if (master.status === 'answering' && master.agentId) void interruptAgent(master.agentId)
   // A failed or slow sign-in probe must not lose the message while the master is alive.
   const live = master.agentId ? getAgent(master.agentId) : undefined
-  const provider = (await resolveProvider().catch(() => null)) ?? live?.provider ?? null
+  const provider = (await resolveProvider().catch(() => null)) ?? live?.provider ?? master.state.provider ?? null
+  // A turn that ended during the probe may have scheduled compaction.
+  clearTimeout(master.idleTimer)
+  master.idleTimer = undefined
   if (!provider) {
-    saveEntry(master, newEntry('note', { text: 'No provider is signed in. Open Setup to sign in.', tone: 'error' }))
+    saveEntry(
+      master,
+      newEntry('note', { text: 'No provider is signed in, or the sign-in check failed. Open Setup to check.', tone: 'error' }),
+    )
     return
   }
   master.target = { provider, mcp }
