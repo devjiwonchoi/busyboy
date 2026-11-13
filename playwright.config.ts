@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
@@ -18,7 +19,8 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && pnpm start',
     url: baseURL,
-    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1' },
+    // Agents replay recorded provider scripts instead of calling a model.
+    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1', BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts') },
     // Never reuse: another worktree may be serving a different build on the same port.
     reuseExistingServer: false,
     timeout: 180_000,
