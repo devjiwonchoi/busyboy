@@ -10,12 +10,12 @@ import {
   startAgent,
   stopAgent,
 } from '@/server/runner/agent-runner'
-import type { AgentAnswer, AgentSnapshot } from '@/server/runner/contract'
+import type { AgentAnswer, AgentSnapshot, ProviderId } from '@/server/runner/contract'
 
 // Minimal actions for the proof-of-runner chat. The master chat replaces them.
 
-export async function startAgentAction(text: string): Promise<AgentSnapshot> {
-  const agent = startAgent({ provider: 'claude', cwd: homedir() })
+export async function startAgentAction(text: string, provider: ProviderId = 'claude'): Promise<AgentSnapshot> {
+  const agent = startAgent({ provider: provider === 'codex' ? 'codex' : 'claude', cwd: homedir() })
   sendMessage(agent.id, text)
   return agent
 }

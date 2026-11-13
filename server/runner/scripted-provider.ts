@@ -10,23 +10,25 @@ import {
   type ClaudePermissionRequest,
   type ClaudeRawMessage,
 } from './claude-events'
-import type { AgentAnswer, AgentEvent, ProviderAdapter, ProviderSession, ProviderStartOptions } from './contract'
+import { codexMessageToEvents, codexRequestToEvent, type CodexRawMessage } from './codex-events'
+import type { AgentAnswer, AgentEvent, ProviderAdapter, ProviderId, ProviderSession, ProviderStartOptions } from './contract'
 
 export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
 
 /**
  * One step of a scripted turn.
  * - `event`: a normalized contract event, emitted as is.
- * - `raw`: a message in the script provider's own format, mapped by that provider's mapping.
+ * - `raw`: a message in the script provider's own format, mapped by that provider's mapping:
+ *   a Claude SDK message, or a Codex app-server notification or server request (with `id`).
  * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question.
  * - `delayMs`: wait before the next step.
- * An approval or question (from `event` or `canUseTool`) pauses the replay until it is
+ * An approval or question (from `event`, `canUseTool`, or a Codex server request) pauses the replay until it is
  * answered. With `then`, the branch named by the answer replaces the rest of the turn:
  * `allow` or `deny` for an approval, the chosen label of the first question for a question.
  */
 export type ScriptStep =
   | { event: AgentEvent; then?: Record<string, ScriptStep[]> }
-  | { raw: ClaudeRawMessage }
+  | { raw: ClaudeRawMessage | CodexRawMessage; then?: Record<string, ScriptStep[]> }
   | { canUseTool: ClaudePermissionRequest; then?: Record<string, ScriptStep[]> }
   | { delayMs: number }
 
@@ -37,17 +39,18 @@ export type ScriptTurn = {
 }
 
 export type ProviderScript = {
-  /** Whose format the `raw` and `canUseTool` steps use. */
-  provider: 'claude'
+  /** Whose format the `raw` and `canUseTool` steps use. Only agents of this provider play the script. */
+  provider: ProviderId
   description: string
   recordedAt?: string
   turns: ScriptTurn[]
 }
 
-function loadTurns(folder: string) {
+function loadTurns(folder: string, provider: ProviderId) {
   const turns = new Map<string, ScriptTurn>()
   for (const file of readdirSync(folder).filter((name) => name.endsWith('.json')).sort()) {
     const script = JSON.parse(readFileSync(join(folder, file), 'utf8')) as ProviderScript
+    if (script.provider !== provider) continue
     for (const turn of script.turns) turns.set(turn.prompt.trim(), turn)
   }
   return turns
@@ -56,6 +59,10 @@ function loadTurns(folder: string) {
 function answerKey(answer: AgentAnswer) {
   if (answer.kind === 'approval') return answer.allow ? 'allow' : 'deny'
   return Object.values(answer.answers)[0] ?? ''
+}
+
+function isTurnEnd(raw: ClaudeRawMessage | CodexRawMessage) {
+  return ('type' in raw && raw.type === 'result') || ('method' in raw && raw.method === 'turn/completed')
 }
 
 class Cancelled extends Error {}
@@ -86,14 +93,24 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     }
   }
 
+  const rawToEvents = (raw: ClaudeRawMessage | CodexRawMessage): AgentEvent[] => {
+    if (options.provider === 'claude') return claudeMessageToEvents(raw as ClaudeRawMessage)
+    const message = raw as CodexRawMessage
+    if (message.id === undefined) return codexMessageToEvents(message)
+    const request = codexRequestToEvent(`script-${++requestCount}`, message)
+    return request ? [request] : []
+  }
+
   const playSteps = async (steps: ScriptStep[]): Promise<void> => {
     for (const step of steps) {
       await cancellable(new Promise((resolve) => setTimeout(resolve, 'delayMs' in step ? step.delayMs : 0)))
       if ('delayMs' in step) continue
       let events: AgentEvent[]
       let then: Record<string, ScriptStep[]> | undefined
-      if ('raw' in step) events = claudeMessageToEvents(step.raw)
-      else if ('canUseTool' in step) {
+      if ('raw' in step) {
+        events = rawToEvents(step.raw)
+        then = step.then
+      } else if ('canUseTool' in step) {
         events = [claudePermissionToEvent(`script-${++requestCount}`, step.canUseTool)]
         then = step.then
       } else {
@@ -118,7 +135,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     while (queue.length && !stopped) {
       const text = queue.shift()!
       inTurn = true
-      const turn = loadTurns(folder).get(text.trim())
+      const turn = loadTurns(folder, options.provider).get(text.trim())
       try {
         if (!turn) {
           emit({ type: 'error', code: 'no-script', message: `No provider script has a turn for: ${text}` })
@@ -126,7 +143,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         } else {
           await playSteps(turn.steps)
           // Recorded turns end with a result message; hand-written ones may not.
-          if (inTurn && !turn.steps.some((step) => 'raw' in step && step.raw.type === 'result')) emit({ type: 'turn-done' })
+          if (inTurn && !turn.steps.some((step) => 'raw' in step && isTurnEnd(step.raw))) emit({ type: 'turn-done' })
         }
       } catch (error) {
         if (!(error instanceof Cancelled)) throw error
