@@ -84,7 +84,7 @@ test('a git hook run while creating a task should not see busyboy variables', as
     .split('\n')
     .map((line) => line.split('=')[0])
   expect(names).toContain('PATH')
-  expect(names.filter((name) => /^(BUSYBOY_|PORT$|HOSTNAME$)/.test(name))).toEqual([])
+  expect(names.filter((name) => /^(BUSYBOY_|PORT$|HOSTNAME$|NODE_ENV$|NEXT_RUNTIME$|__NEXT)/.test(name))).toEqual([])
 })
 
 test('asking for work in two projects should create two tasks', async ({ page, context, baseURL }) => {
