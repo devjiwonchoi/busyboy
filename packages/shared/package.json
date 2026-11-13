@@ -7,6 +7,10 @@
       "types": "./src/chatBubbles.ts",
       "import": "./src/chatBubbles.ts"
     },
+    "./one-chat": {
+      "types": "./src/one-chat.ts",
+      "import": "./src/one-chat.ts"
+    },
     "./requestMessage": {
       "types": "./src/requestMessage.ts",
       "import": "./src/requestMessage.ts"

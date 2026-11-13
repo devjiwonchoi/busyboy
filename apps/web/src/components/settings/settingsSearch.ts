@@ -306,6 +306,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"],
   },
   {
+    id: "one-chat-screen",
+    title: "One chat screen (beta)",
+    to: "/settings/general",
+    searchTerms: ["single chat director toast action cards new screen layout"],
+  },
+  {
     id: "thread-notifications",
     title: "Thread notifications",
     to: "/settings/general",

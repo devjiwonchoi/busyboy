@@ -33,7 +33,7 @@ import { useResolveClassNames } from "uniwind";
 
 import { AppText as Text } from "./components/ui/AppText";
 import { getCompactBrandHeaderOptions } from "./components/CompactBrandTitle";
-import { WorkspaceRootScreen } from "./features/workspace/WorkspaceRootScreen";
+import { HomeOrOneChat } from "./features/one-chat/home-or-one-chat";
 import { AndroidWorkspaceTabsProvider } from "./features/workspace/AndroidWorkspaceTabsProvider";
 import {
   PullRequestRouteScreen,
@@ -671,7 +671,7 @@ const RootStackConfig = createWorkspaceStackNavigator({
         }
       : {}),
     Home: createNativeStackScreen({
-      screen: WorkspaceRootScreen,
+      screen: HomeOrOneChat,
       linking: "",
       options: {
         ...GLASS_HEADER_OPTIONS,
