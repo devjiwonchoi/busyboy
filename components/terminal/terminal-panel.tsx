@@ -3,7 +3,7 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { SquareTerminal, X } from 'lucide-react'
+import { RotateCcw, SquareTerminal, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useShellState } from '@/components/shell/shell-state'
 import { Button } from '@/components/ui/button'
@@ -12,31 +12,40 @@ import { prefersDark, readTerminalTheme } from './terminal-theme'
 
 const FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
 
-/** Keys the app shell owns; the terminal lets them through instead of sending them to the shell. */
+/**
+ * On macOS the app's Cmd+B and Cmd+J reach the app even from the terminal.
+ * Elsewhere Ctrl+B and Ctrl+J belong to the shell (readline, tmux, line feed),
+ * so they only work as app shortcuts outside the terminal.
+ */
 function isAppShortcut(event: KeyboardEvent) {
   const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
-  const mod = mac ? event.metaKey : event.ctrlKey
-  return mod && !event.altKey && ['b', 'j'].includes(event.key.toLowerCase())
+  return mac && event.metaKey && !event.ctrlKey && !event.altKey && ['b', 'j'].includes(event.key.toLowerCase())
 }
 
 /**
  * The bottom panel's terminal. A shell starts the first time the panel opens
- * and lives on while the panel is hidden; closing the terminal or exiting the
- * shell ends it, and the next open starts a fresh one.
+ * and lives on while the panel is hidden. Closing the terminal kills it and
+ * the next open starts a fresh one. When the shell exits or cannot start, the
+ * panel says so and offers a new terminal.
  */
 export function TerminalPanel() {
   const { panelOpen, setPanelOpen } = useShellState()
   const [generation, setGeneration] = useState(0)
   const [started, setStarted] = useState(false)
   const [cwd, setCwd] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [ended, setEnded] = useState<string | null>(null)
 
   if (panelOpen && !started) setStarted(true)
 
-  const end = () => {
-    setStarted(false)
+  const restart = () => {
+    setEnded(null)
     setCwd(null)
     setGeneration((value) => value + 1)
+  }
+
+  const close = () => {
+    restart()
+    setStarted(false)
     setPanelOpen(false)
   }
 
@@ -53,26 +62,21 @@ export function TerminalPanel() {
         >
           {cwd}
         </span>
-        <Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="Close terminal" onClick={end}>
+        <Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="Close terminal" onClick={close}>
           <X />
         </Button>
       </div>
-      {error ? (
-        <p role="alert" className="p-3 text-xs text-destructive">
-          {error}
-        </p>
+      {ended ? (
+        <div role="status" className="flex shrink-0 items-center gap-2 border-b px-3 py-1 text-xs text-muted-foreground">
+          <span>{ended}</span>
+          <Button variant="outline" size="xs" onClick={restart}>
+            <RotateCcw />
+            New terminal
+          </Button>
+        </div>
       ) : null}
       {started ? (
-        <TerminalView
-          key={generation}
-          active={panelOpen}
-          onStart={(value) => {
-            setError(null)
-            setCwd(value)
-          }}
-          onError={setError}
-          onExit={end}
-        />
+        <TerminalView key={generation} active={panelOpen} onStart={setCwd} onEnd={setEnded} />
       ) : null}
     </div>
   )
@@ -81,19 +85,18 @@ export function TerminalPanel() {
 function TerminalView({
   active,
   onStart,
-  onError,
-  onExit,
+  onEnd,
 }: {
   active: boolean
   onStart: (cwd: string) => void
-  onError: (message: string) => void
-  onExit: () => void
+  /** Called once with a short line for the user when the shell is gone. */
+  onEnd: (message: string) => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<{ term: Terminal; fit: () => void } | null>(null)
-  const callbacks = useRef({ onStart, onError, onExit })
+  const callbacks = useRef({ onStart, onEnd })
   useEffect(() => {
-    callbacks.current = { onStart, onError, onExit }
+    callbacks.current = { onStart, onEnd }
   })
 
   useEffect(() => {
@@ -143,6 +146,12 @@ function TerminalView({
     host.dataset.colorScheme = prefersDark() ? 'dark' : 'light'
     scheme.addEventListener('change', onSchemeChange)
 
+    const end = (message: string) => {
+      term.options.disableStdin = true
+      term.options.cursorBlink = false
+      callbacks.current.onEnd(message)
+    }
+
     void (async () => {
       try {
         const started = await startTerminal({ cols: term.cols, rows: term.rows }, abort.signal)
@@ -156,13 +165,20 @@ function TerminalView({
         term.onData(send)
         // The panel may have been resized while the shell started.
         resizeTerminal(started.id, term.cols, term.rows)
+        let exited = false
         await followTerminal(started.id, abort.signal, (event) => {
-          if (event.type === 'data') term.write(event.data)
-          else callbacks.current.onExit()
+          if (event.type === 'data') {
+            term.write(event.data)
+            return
+          }
+          exited = true
+          end(`The shell exited with code ${event.exitCode}.`)
         })
+        if (!exited && !abort.signal.aborted) end('The connection to the shell closed.')
       } catch (error) {
         if (abort.signal.aborted) return
-        callbacks.current.onError(error instanceof Error ? error.message : String(error))
+        if (id) end('The connection to the shell closed.')
+        else end(`The shell could not start: ${error instanceof Error ? error.message : String(error)}`)
       }
     })()
 

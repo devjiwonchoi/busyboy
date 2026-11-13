@@ -34,7 +34,8 @@ test('pressing Cmd+J should open a terminal in the task worktree', async ({ page
   await run(page, 'pwd')
   await expect(terminal.locator('.xterm-rows')).toContainText(worktree)
 
-  // The shortcut still reaches the app while the terminal has focus.
+  // Outside the terminal the shortcut closes the panel again.
+  await page.getByRole('main', { name: 'Chat' }).click()
   await page.keyboard.press('ControlOrMeta+j')
   await expect(page.getByRole('region', { name: 'Bottom panel' })).toBeHidden()
 })
@@ -43,4 +44,18 @@ test('typing a command should show its output', async ({ page }) => {
   const terminal = await openTerminal(page)
   await run(page, 'echo "busyboy-$((6 * 7))"')
   await expect(terminal.locator('.xterm-rows')).toContainText('busyboy-42')
+})
+
+test('exiting the shell should offer a new terminal', async ({ page }) => {
+  const terminal = await openTerminal(page)
+  await run(page, 'exit 3')
+  const status = page.getByRole('status')
+  await expect(status).toContainText('The shell exited with code 3.')
+
+  await status.getByRole('button', { name: 'New terminal' }).click()
+  await expect(status).toBeHidden()
+  await expect(page.getByLabel('Working directory')).toHaveText(worktree)
+  await terminal.click()
+  await run(page, 'echo "again-$((1 + 1))"')
+  await expect(terminal.locator('.xterm-rows')).toContainText('again-2')
 })
