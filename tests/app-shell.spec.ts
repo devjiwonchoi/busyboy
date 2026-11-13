@@ -4,6 +4,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
   test(`opening the app should show the shell, and shortcuts should toggle the sidebar and panel (${colorScheme})`, async ({
     page,
   }) => {
+    const policyViolations: string[] = []
+    page.on('console', (message) => {
+      if (message.text().includes('Content Security Policy')) policyViolations.push(message.text())
+    })
     await page.emulateMedia({ colorScheme })
     await page.goto('/')
 
@@ -59,6 +63,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
     // A Korean input source types 'ㅠ' on the physical B key: Cmd/Ctrl+B still toggles.
     expect(await pressOnLayout('ㅠ', 'KeyB')).toBe(true)
     await expectSidebarClosed()
+
+    expect(policyViolations).toEqual([])
 
     await page.screenshot({ path: test.info().outputPath(`shell-${colorScheme}.png`) })
   })
