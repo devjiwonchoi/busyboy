@@ -312,6 +312,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       if (turnId) interruptTurn()
       // The turn was requested but Codex has not named it yet: interrupt once it does.
       else if (inTurn) interruptPending = true
+      else if (!threadId && queue.length > 0) {
+        // Codex is still starting and has read nothing: drop the waiting messages and end the turn here, as Claude does.
+        queue.length = 0
+        emit({ type: 'turn-done' })
+      }
     },
     async compact() {
       await ready?.catch(() => {})
