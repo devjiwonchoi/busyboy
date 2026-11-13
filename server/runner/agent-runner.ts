@@ -169,7 +169,12 @@ export async function interruptAgent(agentId: string) {
   // Only a running turn can be interrupted; otherwise the flag would mark a later turn.
   if (!agent.session || (agent.status !== 'running' && agent.status !== 'waiting')) return
   agent.interrupting = true
-  await agent.session.interrupt()
+  try {
+    await agent.session.interrupt()
+  } catch (error) {
+    agent.interrupting = false
+    throw error
+  }
 }
 
 export async function stopAgent(agentId: string) {

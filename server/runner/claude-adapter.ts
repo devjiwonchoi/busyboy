@@ -34,6 +34,11 @@ class MessageQueue implements AsyncIterable<SDKUserMessage> {
     } else this.items.push(message)
   }
 
+  /** Drops messages the CLI has not read yet. */
+  clear() {
+    this.items = []
+  }
+
   close() {
     this.closed = true
     this.waiting?.({ value: undefined, done: true })
@@ -138,7 +143,16 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         resolve({ kind: 'approval', allow: false, message: 'The user interrupted.' })
         emit({ type: 'answered', requestId })
       }
-      await current?.interrupt()
+      if (current) {
+        await current.interrupt()
+        return
+      }
+      // The CLI is still starting and has read nothing: drop the queued message and end the turn here.
+      input.clear()
+      if (inTurn) {
+        inTurn = false
+        emit({ type: 'turn-done' })
+      }
     },
     async compact() {
       inTurn = true
