@@ -39,7 +39,8 @@ export default defineConfig({
       CLAUDE_CONFIG_DIR: join(defaultHome, 'claude-config'),
       CODEX_HOME: join(defaultHome, 'codex-home'),
     },
-    reuseExistingServer: !process.env.CI,
+    // Never attach to a server started elsewhere: it may not be in test mode and could write to the real data folder.
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 })

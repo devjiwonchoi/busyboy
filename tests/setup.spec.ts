@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { createGitRepository, createTempFolder, removeFolder, useTestHome } from './support/test-home'
@@ -95,4 +95,36 @@ test('removing a project should keep its folder', async ({ page, context, baseUR
   await expect(page.getByText('No projects yet.')).toBeVisible()
   expect(existsSync(join(repository, '.git'))).toBe(true)
   expect(existsSync(join(repository, 'README.md'))).toBe(true)
+})
+
+test('opening the app with a corrupt settings file should show setup again', async ({ page, context, baseURL }) => {
+  const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+  const corrupt = '{"setupCompletedAt": "2026-11-14T00:00:00.000Z", "projects": ['
+  writeFileSync(join(home, 'app-settings.json'), corrupt)
+  const repository = track(createGitRepository('docs'))
+
+  await page.goto('/')
+
+  await expect(page).toHaveURL(/\/setup$/)
+  await expect(page.getByText('No projects yet.')).toBeVisible()
+  const moved = readdirSync(home).filter((name) => /^app-settings\.corrupt-.+\.json$/.test(name))
+  expect(moved).toHaveLength(1)
+  expect(readFileSync(join(home, moved[0]), 'utf8')).toBe(corrupt)
+
+  await addFolder(page, repository)
+  await expect(page.getByRole('list', { name: 'Projects' })).toContainText('docs')
+  await page.getByRole('button', { name: 'Start chatting' }).click()
+  await expect(page.getByRole('main', { name: 'Chat' })).toBeVisible()
+})
+
+test('adding a folder named @scope should add the project', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!))
+  const repository = track(createGitRepository('@scope'))
+
+  await page.goto('/setup')
+  await addFolder(page, repository)
+
+  const projects = page.getByRole('list', { name: 'Projects' })
+  await expect(projects.getByText('scope', { exact: true })).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: 'project name' })).toBeHidden()
 })

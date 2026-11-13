@@ -23,15 +23,36 @@ export async function getProject(name: string): Promise<Project | undefined> {
   return (await listProjects()).find((project) => project.name === name)
 }
 
-/** Checks the name and returns it trimmed. Names are used as folder names by later features. */
+// Names are used as folder names by later features, so they must be valid
+// file names on macOS and Windows. `@` starts a project mention in the chat.
+const INVALID_CHARACTERS = /[/\\:<>"|?*\u0000-\u001f]/g
+const RESERVED_NAMES = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i
+
+/** Checks the name and returns it trimmed. */
 function checkName(name: string) {
   const trimmed = name.trim()
   if (!trimmed) throw new ProjectError('Enter a project name.')
   if (trimmed.length > MAX_NAME_LENGTH) throw new ProjectError(`Use at most ${MAX_NAME_LENGTH} characters.`)
-  if (/[/\\]/.test(trimmed) || trimmed === '.' || trimmed === '..' || trimmed.startsWith('@')) {
-    throw new ProjectError('A project name cannot contain slashes, start with @, or be . or ..')
+  if (new RegExp(INVALID_CHARACTERS.source).test(trimmed)) {
+    throw new ProjectError('A project name cannot contain / \\ : < > " | ? * or control characters.')
   }
+  if (trimmed.startsWith('@')) throw new ProjectError('A project name cannot start with @.')
+  if (/^\.+$/.test(trimmed) || trimmed.endsWith('.')) throw new ProjectError('A project name cannot end with a dot.')
+  if (RESERVED_NAMES.test(trimmed)) throw new ProjectError(`${trimmed} is reserved on Windows. Choose another name.`)
   return trimmed
+}
+
+/** A valid name made from a folder name, for example `@scope` becomes `scope`. */
+function nameFromFolder(folder: string) {
+  let name = folder.replace(INVALID_CHARACTERS, '-').replace(/^[@\s]+/, '')
+  name = name.slice(0, MAX_NAME_LENGTH).replace(/[.\s]+$/, '').trim()
+  if (!name) name = 'project'
+  if (RESERVED_NAMES.test(name)) name = `${name.split('.')[0]}-project`
+  return name
+}
+
+function sameName(a: string, b: string) {
+  return a.toLowerCase() === b.toLowerCase()
 }
 
 function expandHome(path: string) {
@@ -64,12 +85,14 @@ async function checkRepository(input: string) {
   return real
 }
 
+/** Names are unique ignoring case, since folders on macOS and Windows usually are. */
 function uniqueName(base: string, projects: Project[]) {
-  const taken = new Set(projects.map((project) => project.name))
-  if (!taken.has(base)) return base
+  const taken = new Set(projects.map((project) => project.name.toLowerCase()))
+  if (!taken.has(base.toLowerCase())) return base
   for (let n = 2; ; n++) {
-    const candidate = `${base}-${n}`
-    if (!taken.has(candidate)) return candidate
+    const suffix = `-${n}`
+    const candidate = `${base.slice(0, MAX_NAME_LENGTH - suffix.length)}${suffix}`
+    if (!taken.has(candidate.toLowerCase())) return candidate
   }
 }
 
@@ -80,11 +103,11 @@ export async function addProject(folder: string, name?: string): Promise<Project
   return updateSettings((settings) => {
     const existing = settings.projects.find((project) => project.path === path)
     if (existing) throw new ProjectError(`This folder is already added as ${existing.name}.`)
-    if (requested && settings.projects.some((project) => project.name === requested)) {
+    if (requested && settings.projects.some((project) => sameName(project.name, requested))) {
       throw new ProjectError(`A project named ${requested} already exists.`)
     }
     const project: Project = {
-      name: requested ?? uniqueName(checkName(basename(path)), settings.projects),
+      name: requested ?? uniqueName(nameFromFolder(basename(path)), settings.projects),
       path,
       addedAt: new Date().toISOString(),
     }
@@ -98,7 +121,7 @@ export async function renameProject(name: string, newName: string): Promise<Proj
   return updateSettings((settings) => {
     const project = settings.projects.find((entry) => entry.name === name)
     if (!project) throw new ProjectError(`There is no project named ${name}.`)
-    if (next !== name && settings.projects.some((entry) => entry.name === next)) {
+    if (settings.projects.some((entry) => entry !== project && sameName(entry.name, next))) {
       throw new ProjectError(`A project named ${next} already exists.`)
     }
     project.name = next
