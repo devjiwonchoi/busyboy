@@ -117,9 +117,14 @@ class AppServerConnection {
 }
 
 async function spawnAppServer(executable: string, cwd: string, onMessage: (message: CodexRawMessage) => void) {
+  // The app server and every command it runs get the agent environment, without busyboy's own variables.
   // Next types NODE_ENV as required in ProcessEnv; the agent environment leaves it out on purpose.
   const env = (await agentEnvironment()) as NodeJS.ProcessEnv
-  const child = spawn(executable, ['app-server'], { cwd, env, stdio: 'pipe' })
+  // On Windows `codex` resolves through its npm `.cmd` shim to a `.js` entry script, which needs Node to run.
+  const script = /\.[cm]?js$/i.test(executable)
+  const command = script ? ((await findExecutable('node')) ?? 'node') : executable
+  const args = script ? [executable, 'app-server'] : ['app-server']
+  const child = spawn(command, args, { cwd, env, stdio: 'pipe' })
   return new AppServerConnection(child, onMessage)
 }
 
@@ -244,6 +249,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       for (const [requestId, request] of requests) {
         if (request.id !== undefined) connection?.respond(request.id, codexAnswerToResult(request, { kind: 'approval', allow: false }))
         requests.delete(requestId)
+        emit({ type: 'answered', requestId })
       }
       if (connection && threadId && turnId) await connection.request('turn/interrupt', { threadId, turnId }).catch(() => {})
     },
