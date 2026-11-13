@@ -82,6 +82,11 @@ export interface ActionCard {
   readonly createdAt: string;
   /** The server item to answer; null for result cards the screen makes itself. */
   readonly attentionItemId: string | null;
+  /**
+   * The project the server keeps the card under, which is where the answer goes. A Director
+   * card shows under the project of its task but is answered on the Director's project.
+   */
+  readonly attentionProjectId: string | null;
   readonly prUrl: string | null;
   /** The full question and details for the modal. */
   readonly detailParagraphs: ReadonlyArray<string>;
@@ -486,6 +491,7 @@ function serverCard(project: OneChatProject, card: ProjectDecisionCard): ActionC
     answered: answered === null ? null : { label: answered, at: item.answeredAt },
     createdAt: item.createdAt,
     attentionItemId: item.id,
+    attentionProjectId: item.projectId,
     prUrl: task?.prUrl ?? null,
     detailParagraphs: paragraphs,
     details: item.details ?? [],
@@ -520,6 +526,7 @@ function resultCard(project: OneChatProject, task: ProjectTaskReference): Action
     answered: done ? { label: RESULT_APPROVE_LABEL, at: task.updatedAt } : null,
     createdAt: task.updatedAt ?? "1970-01-01T00:00:00.000Z",
     attentionItemId: null,
+    attentionProjectId: null,
     prUrl: task.prUrl,
     detailParagraphs: [],
     details: (task.checks ?? []).map((check) => ({

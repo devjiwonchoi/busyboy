@@ -554,7 +554,7 @@ it("answers a card once even when clicked twice, and reopens it when the answer 
   );
 });
 
-it("shows the Director's own questions under the project they are about", async () => {
+it("shows the Director's own questions under their task's project and answers them on the Director", async () => {
   server.projects = [
     project("project-1", "busyboy", [task("ask", { title: "Alerts" })]),
     {
@@ -563,11 +563,16 @@ it("shows the Director's own questions under the project they are about", async 
         projectId: "director-project",
         kind: "director",
         tasks: [],
-        decisionCards: [card("d1", "ask")],
+        decisionCards: [card("d1", "ask", { projectId: "director-project" as never })],
       } as unknown as ProjectTeamAttentionSummary,
     },
   ];
   await mount();
-  expect(query("[data-one-chat-card='d1']")?.textContent).toContain("Which push service?");
+  const cardElement = query("[data-one-chat-card='d1']")!;
+  expect(cardElement.textContent).toContain("Which push service?");
   expect(query("[data-one-chat-screen]")!.textContent).toContain("Waiting on you 1");
+  await act(async () => startsWithButton("Built-in", cardElement)!.click());
+  expect(server.answers.map((answer) => [answer.projectId, answer.attentionItemId])).toEqual([
+    ["director-project", "d1"],
+  ]);
 });

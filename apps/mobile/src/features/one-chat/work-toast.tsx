@@ -51,6 +51,7 @@ function endStateCard(item: WorkItem): ActionCard | null {
     answered: null,
     createdAt: "1970-01-01T00:00:00.000Z",
     attentionItemId: null,
+    attentionProjectId: null,
     prUrl: item.prUrl,
     detailParagraphs: [],
     details: [],

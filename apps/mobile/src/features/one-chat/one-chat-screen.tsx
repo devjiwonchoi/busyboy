@@ -157,11 +157,11 @@ export function OneChatScreen() {
       composerRef.current?.focus();
       return;
     }
-    if (card.attentionItemId === null) return;
+    if (card.attentionItemId === null || card.attentionProjectId === null) return;
     markAnswered(card, option.label);
     void Promise.resolve(
       actions.answerCard(
-        card.projectId,
+        card.attentionProjectId,
         card.attentionItemId,
         card.kind === "plan" ? PLAN_APPROVAL_START : option.value,
       ),

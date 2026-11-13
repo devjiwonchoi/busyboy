@@ -32,7 +32,7 @@ const server = vi.hoisted(() => ({
   version: 0,
   sentToDirector: [] as string[],
   sentToSide: [] as string[],
-  answers: [] as { attentionItemId: string; answer: string }[],
+  answers: [] as { projectId: string; attentionItemId: string; answer: string }[],
   deleted: [] as string[],
   scrolledTo: [] as number[],
   preferences: [] as Record<string, unknown>[],
@@ -207,8 +207,8 @@ vi.mock("./use-one-chat-actions", () => ({
       server.sentToDirector.push(text);
       return true;
     },
-    answerCard: async (_projectId: string, attentionItemId: string, answer: string) => {
-      server.answers.push({ attentionItemId, answer });
+    answerCard: async (projectId: string, attentionItemId: string, answer: string) => {
+      server.answers.push({ projectId, attentionItemId, answer });
       return { _tag: "Success" };
     },
     stopDirector: () => {},
@@ -400,7 +400,11 @@ it("shows a card with one recommended option and folds it to the pick", () => {
   expect(buttonWith("Details", cardElement)).not.toBeNull();
   click(recommended[0]!);
   expect(server.answers).toEqual([
-    { attentionItemId: "c1", answer: "Built-in: no new service (Recommended)" },
+    {
+      projectId: "project-1",
+      attentionItemId: "c1",
+      answer: "Built-in: no new service (Recommended)",
+    },
   ]);
   expect(byTestId("action-card-answer")!.textContent).toContain("You chose: Built-in");
 });
@@ -427,7 +431,49 @@ it("agrees to a plan and shows its details in the agreed order", () => {
   expect(order).toEqual(order.toSorted((a, b) => a - b));
   click(buttonWith("Close", host.querySelector("[role='dialog']")!));
   click(buttonWith("Agree", byTestId("action-card")!));
-  expect(server.answers).toEqual([{ attentionItemId: "p1", answer: PLAN_APPROVAL_START }]);
+  expect(server.answers).toEqual([
+    { projectId: "project-1", attentionItemId: "p1", answer: PLAN_APPROVAL_START },
+  ]);
+});
+
+it("shows the Director's own question under its task's project and answers it on the Director", () => {
+  server.projects = [
+    project("project-1", "busyboy", [task("ask")]),
+    {
+      projectId: "director-project",
+      name: "Director",
+      summary: {
+        projectId: "director-project",
+        kind: "director",
+        tasks: [],
+        decisionCards: [card("d1", "ask", { projectId: "director-project" })],
+      } as unknown as ProjectTeamAttentionSummary,
+    },
+  ];
+  render();
+  expect(byTestId("work-toast")!.textContent).toContain("Waiting on you 1 · Running 1");
+  const cardElement = byTestId("action-card")!;
+  expect(cardElement.textContent).toContain("busyboy");
+  click(buttonWith("(Recommended)", cardElement));
+  expect(server.answers).toEqual([
+    {
+      projectId: "director-project",
+      attentionItemId: "d1",
+      answer: "Built-in: no new service (Recommended)",
+    },
+  ]);
+});
+
+it("opens the end state of a running task that has no card", () => {
+  server.projects = [project("project-1", "busyboy", [task("run", { title: "Alerts" })])];
+  render();
+  const toast = byTestId("work-toast")!;
+  click(buttonWith("Expand", toast));
+  click(toast.querySelector("[data-testid='work-row'] button"));
+  click(buttonWith("View end state", toast));
+  const dialog = host.querySelector("[role='dialog']")!;
+  expect(dialog.textContent).toContain("Alerts");
+  expect(dialog.textContent).toContain("Cards reach the phone");
 });
 
 it("asks the Director to merge from a result card instead of merging", () => {

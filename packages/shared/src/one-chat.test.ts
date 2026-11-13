@@ -283,6 +283,7 @@ describe("buildActionCards", () => {
       subline: "2 of 2 criteria proven · PR open",
       answered: null,
       attentionItemId: null,
+      attentionProjectId: null,
     });
     expect(open!.options.find((option) => option.recommended)?.label).toBe("Looks good, merge");
 

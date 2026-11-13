@@ -148,11 +148,17 @@ export function OneChatScreen() {
       composerRef.current?.setText(`Changes for ${card.taskTitle}: `);
       return;
     }
-    if (card.attentionItemId === null || data.environmentId === null) return;
+    if (
+      card.attentionItemId === null ||
+      card.attentionProjectId === null ||
+      data.environmentId === null
+    ) {
+      return;
+    }
     markAnswered(card, option.label);
     // The failure itself is reported by the command's toast.
     void answerDecision(data.environmentId, {
-      projectId: card.projectId as ProjectId,
+      projectId: card.attentionProjectId as ProjectId,
       attentionItemId: card.attentionItemId as never,
       answer: option.value,
     }).then(
