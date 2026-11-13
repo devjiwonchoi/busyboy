@@ -1,6 +1,6 @@
 import { app, BrowserWindow, session, shell } from 'electron'
 import { SERVER_TOKEN_COOKIE } from '../lib/server-token'
-import { createSelfCheck, selfCheckOutputPath } from './self-check'
+import { createSelfCheck, selfCheckOutputPath, createSelfCheckDataFolder } from './self-check'
 import { startServer, type ServerHandle } from './server-process'
 import { installLoginShellPath } from './shell-env'
 
@@ -83,6 +83,7 @@ async function authorizeWindowSession(handle: ServerHandle) {
 
 async function runSelfCheck(outputPath: string) {
   const check = createSelfCheck()
+  const removeDataFolder = createSelfCheckDataFolder()
   try {
     check.recordShellPath(await installLoginShellPath())
     server = await startServer()
@@ -95,6 +96,11 @@ async function runSelfCheck(outputPath: string) {
   } catch (error) {
     check.fail(error)
     await server?.stop()
+  }
+  try {
+    removeDataFolder()
+  } catch (error) {
+    console.error(error)
   }
   const ok = check.write(outputPath)
   app.exit(ok ? 0 : 1)
