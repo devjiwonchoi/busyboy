@@ -39,16 +39,19 @@ export function WorkToast({
           className="max-h-[180px] overflow-y-auto"
         />
       ) : null}
-      <div className="flex items-center gap-1 px-1 text-sm">
-        <span data-one-chat-toast-summary className="min-w-0 flex-1 truncate text-muted-foreground">
+      {/* On a narrow screen the buttons wrap below rather than cutting the counts off. */}
+      <div className="flex flex-wrap items-center gap-1 px-1 text-sm">
+        <span data-one-chat-toast-summary className="whitespace-nowrap text-muted-foreground">
           {workSummary(counts)}
         </span>
-        <Button size="xs" variant="ghost" onClick={() => setExpanded(!expanded)}>
-          {expanded ? "Collapse" : "Expand"}
-        </Button>
-        <Button size="xs" variant="ghost" onClick={() => setLarge(true)}>
-          Open large
-        </Button>
+        <div className="ms-auto flex gap-1">
+          <Button size="xs" variant="ghost" onClick={() => setExpanded(!expanded)}>
+            {expanded ? "Collapse" : "Expand"}
+          </Button>
+          <Button size="xs" variant="ghost" onClick={() => setLarge(true)}>
+            Open large
+          </Button>
+        </div>
       </div>
       <WorkModal
         open={large}
