@@ -62,7 +62,7 @@ const globalStore = globalThis as typeof globalThis & {
 const writeQueues = (globalStore[QUEUE_KEY] ??= new Map())
 const listeners = (globalStore[LISTENERS_KEY] ??= new Map())
 
-async function readTasksAt(folder: string): Promise<TaskRecord[]> {
+export async function readTasksAt(folder: string): Promise<TaskRecord[]> {
   try {
     const value = JSON.parse(await readFile(join(folder, TASKS_FILE), 'utf8')) as { tasks?: TaskRecord[] }
     return Array.isArray(value.tasks) ? value.tasks : []
