@@ -41,6 +41,8 @@ const scale = [
   '[&_[data-streamdown=code-block]]:my-2 [&_[data-streamdown=code-block-body]]:p-3 [&_[data-streamdown=code-block-body]]:text-[0.9em]',
   '[&_:is(th,td)]:px-2 [&_:is(th,td)]:py-1 [&_:is(th,td)]:text-xs',
   '[&_[data-streamdown=horizontal-rule]]:my-3 [&_[data-streamdown=blockquote]]:my-2',
+  // GFM task items already show a checkbox; the list's disc bullet would be a second marker.
+  '[&_li.task-list-item]:list-none',
 ].join(' ')
 
 /** Director text as Markdown. `streaming` tolerates unfinished syntax while a reply arrives. */

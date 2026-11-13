@@ -277,6 +277,9 @@ test('a Director reply with Markdown should show highlighted code and matched te
   expect(blockCode).toBeLessThanOrEqual(body)
   expect(tableCell).toBe(body)
 
+  const tasks = reply.getByRole('listitem').filter({ has: page.getByRole('checkbox') })
+  await expect(tasks).toHaveCount(2)
+  await expect(tasks.first()).toHaveCSS('list-style-type', 'none')
   // A plain link: the desktop app opens it in the browser, so no Streamdown link check.
   await expect(reply.getByRole('link', { name: 'the docs' })).toHaveAttribute('href', 'https://example.com/docs')
   // Only the code block's copy button; the table and the link get no Streamdown controls.
