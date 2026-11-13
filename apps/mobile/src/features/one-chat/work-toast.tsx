@@ -34,11 +34,36 @@ function cardForItem(item: WorkItem, cards: ReadonlyArray<ActionCard>): ActionCa
   );
 }
 
+/** A task row with no card still opens its agreed end state, read from the task spec. */
+function endStateCard(item: WorkItem): ActionCard | null {
+  if (item.taskId === null) return null;
+  return {
+    id: `end-state:${item.taskId}`,
+    kind: "plan",
+    projectId: item.projectId,
+    projectName: item.projectName,
+    taskId: item.taskId,
+    taskTitle: item.title,
+    question: item.title,
+    subline: item.statusLabel,
+    options: [],
+    criteria: [],
+    answered: null,
+    createdAt: "1970-01-01T00:00:00.000Z",
+    attentionItemId: null,
+    prUrl: item.prUrl,
+    detailParagraphs: [],
+    details: [],
+    goal: null,
+    verification: null,
+  };
+}
+
 function WorkRow(props: WorkListProps & { readonly item: WorkItem }) {
   const { item } = props;
   const [open, setOpen] = useState(false);
   const waiting = item.state === "waiting_on_me";
-  const card = cardForItem(item, props.cards);
+  const card = cardForItem(item, props.cards) ?? endStateCard(item);
   const progress = [
     item.phaseLabel,
     item.criteriaCount > 0 ? `${item.provenCount} of ${item.criteriaCount} proven` : null,

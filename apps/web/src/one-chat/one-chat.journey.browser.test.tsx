@@ -22,7 +22,7 @@ import { userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
-import { keepsClassicLayout } from "./one-chat-gate";
+import { keepsClassicLayout, OneChatGate } from "./one-chat-gate";
 import { OneChatScreen } from "./one-chat-screen";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-local");
@@ -49,6 +49,10 @@ const server = vi.hoisted(() => ({
   created: [] as string[],
   deleted: [] as string[],
   settings: [] as Record<string, unknown>[],
+  enabled: true,
+  failAnswers: false,
+  /** When set, a new side chat thread waits for this before it exists. */
+  holdCreate: null as Promise<void> | null,
 }));
 
 function publish() {
@@ -77,6 +81,7 @@ vi.mock(import("./one-chat-data"), async (original) => ({
       directorProjectId: "director-project",
       projects: server.projects,
       graph: null,
+      taskWorktrees: [],
       workItems: items,
       counts: workCounts(items),
       cards: buildActionCards(server.projects),
@@ -118,6 +123,7 @@ vi.mock(import("./one-chat-commands"), () => ({
     },
     stop: async () => {},
     createTempThread: async () => {
+      if (server.holdCreate) await server.holdCreate;
       server.created.push(SIDE_THREAD);
       server.threads.set(SIDE_THREAD, []);
       return SIDE_THREAD;
@@ -133,6 +139,7 @@ vi.mock(import("../state/projectTeam"), async (original) => ({
   ...(await original()),
   useAnswerDecision: (() => async (_environmentId: unknown, input: ProjectTeamAnswerDecisionInput) => {
     server.answers.push(input);
+    if (server.failAnswers) return { _tag: "Failure" };
     server.projects = server.projects.map((project) => ({
       ...project,
       summary: {
@@ -176,11 +183,15 @@ vi.mock(import("../hooks/useSettings"), async (original) => ({
   useUpdateClientSettings: (() => async (patch: Record<string, unknown>) => {
     server.settings.push(patch);
   }) as never,
+  useClientSettings: ((select: (settings: { oneChatScreenEnabled: boolean }) => unknown) =>
+    select({ oneChatScreenEnabled: server.enabled })) as never,
 }));
 
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
   useNavigate: (() => async () => {}) as never,
+  useLocation: ((options: { select: (location: { pathname: string }) => unknown }) =>
+    options.select({ pathname: "/" })) as never,
 }));
 
 function task(id: string, extra: Partial<ProjectTaskReference> = {}): ProjectTaskReference {
@@ -249,14 +260,21 @@ function project(
 let root: Root | null = null;
 let container: HTMLElement;
 
-async function mount() {
+async function mount(element = <OneChatScreen />) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<OneChatScreen />);
+    root!.render(element);
   });
 }
+
+/** The classic layout as the root route renders it, behind the gate. */
+const classicLayout = (
+  <OneChatGate>
+    <div data-slot="sidebar">Classic sidebar</div>
+  </OneChatGate>
+);
 
 const query = <T extends Element = HTMLElement>(selector: string) =>
   document.querySelector<T>(selector);
@@ -277,6 +295,9 @@ beforeEach(() => {
   server.created = [];
   server.deleted = [];
   server.settings = [];
+  server.enabled = true;
+  server.failAnswers = false;
+  server.holdCreate = null;
   localStorage.clear();
 });
 
@@ -293,8 +314,15 @@ it("keeps settings and task pages on the classic layout so the switch can be tur
   expect(keepsClassicLayout("/")).toBe(false);
 });
 
+it("keeps the classic screen unchanged while the switch is off", async () => {
+  server.enabled = false;
+  await mount(classicLayout);
+  expect(query("[data-slot='sidebar']")?.textContent).toBe("Classic sidebar");
+  expect(query("[data-one-chat-screen]")).toBeNull();
+});
+
 it("shows one chat with no sidebar or right panel and leads back to the classic screen", async () => {
-  await mount();
+  await mount(classicLayout);
   expect(query("[data-one-chat-screen]")).not.toBeNull();
   expect(query("[data-slot='sidebar']")).toBeNull();
   expect(query("[data-right-panel]")).toBeNull();
@@ -489,8 +517,57 @@ it("keeps the side chat out of the Director chat, quotes it into the main compos
   await vi.waitFor(() => expect(server.deleted).toEqual([SIDE_THREAD]));
 });
 
-it("opens the side chat with the shortcut", async () => {
+it("opens the side chat with the shortcut and deletes its thread when the shortcut closes it", async () => {
   await mount();
   await userEvent.keyboard("{Meta>}{Shift>}s{/Shift}{/Meta}");
   await vi.waitFor(() => expect(server.created).toEqual([SIDE_THREAD]));
+  await vi.waitFor(() => expect(query("[data-one-chat-side-chat] textarea")).not.toBeNull());
+  await userEvent.keyboard("{Meta>}{Shift>}s{/Shift}{/Meta}");
+  await vi.waitFor(() => expect(server.deleted).toEqual([SIDE_THREAD]));
+});
+
+it("deletes a side chat thread that finishes starting after the side chat closed", async () => {
+  let finishCreate = () => {};
+  server.holdCreate = new Promise((resolve) => {
+    finishCreate = resolve;
+  });
+  await mount();
+  await userEvent.keyboard("{Meta>}{Shift>}s{/Shift}{/Meta}");
+  await userEvent.keyboard("{Meta>}{Shift>}s{/Shift}{/Meta}");
+  expect(server.created).toEqual([]);
+  await act(async () => finishCreate());
+  await vi.waitFor(() => expect(server.deleted).toEqual([SIDE_THREAD]));
+});
+
+it("answers a card once even when clicked twice, and reopens it when the answer fails", async () => {
+  server.projects = [project("project-1", "busyboy", [task("ask")], [card("c1", "ask")])];
+  server.failAnswers = true;
+  await mount();
+  const recommended = startsWithButton("Built-in", query("[data-one-chat-card='c1']")!)!;
+  await act(async () => {
+    recommended.click();
+    recommended.click();
+  });
+  expect(server.answers).toHaveLength(1);
+  await vi.waitFor(() =>
+    expect(startsWithButton("Built-in", query("[data-one-chat-card='c1']")!)).not.toBeNull(),
+  );
+});
+
+it("shows the Director's own questions under the project they are about", async () => {
+  server.projects = [
+    project("project-1", "busyboy", [task("ask", { title: "Alerts" })]),
+    {
+      ...project("director-project", "Director", [], [card("d1", "ask")]),
+      summary: {
+        projectId: "director-project",
+        kind: "director",
+        tasks: [],
+        decisionCards: [card("d1", "ask")],
+      } as unknown as ProjectTeamAttentionSummary,
+    },
+  ];
+  await mount();
+  expect(query("[data-one-chat-card='d1']")?.textContent).toContain("Which push service?");
+  expect(query("[data-one-chat-screen]")!.textContent).toContain("Waiting on you 1");
 });

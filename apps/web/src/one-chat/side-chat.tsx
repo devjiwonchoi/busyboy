@@ -52,6 +52,10 @@ export function SideChat({
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
 
+  const openRef = useRef(open);
+  openRef.current = open;
+  const unmountedRef = useRef(false);
+
   useEffect(() => {
     if (!open || source === null || threadIdRef.current !== null || creatingRef.current) return;
     creatingRef.current = true;
@@ -62,6 +66,11 @@ export function SideChat({
         creatingRef.current = false;
         if (created === null) {
           setFailed(true);
+          return;
+        }
+        // Closed or left while the thread was being made: it is not needed anymore.
+        if (!openRef.current || unmountedRef.current) {
+          void commandsRef.current.deleteThread(source.environmentId, created);
           return;
         }
         threadIdRef.current = created;
@@ -79,8 +88,19 @@ export function SideChat({
     }
   };
 
+  // Every way of closing (the sheet, the shortcut, the header) removes the thread.
+  useEffect(() => {
+    if (!open) removeThread();
+  }, [open]);
+
   // Leaving the screen with the side chat open still removes its thread.
-  useEffect(() => () => removeThread(), []);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      removeThread();
+    };
+  }, []);
 
   const ref = threadId !== null && source !== null ? scopeThreadRef(source.environmentId, threadId) : null;
   const view = useThreadView(ref);
@@ -88,10 +108,7 @@ export function SideChat({
   return (
     <Sheet
       open={open}
-      onOpenChange={(next) => {
-        if (!next) removeThread();
-        onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
     >
       <SheetPopup side="right" data-one-chat-side-chat className="flex flex-col">
         <SheetHeader className="shrink-0 border-b px-4 py-3">

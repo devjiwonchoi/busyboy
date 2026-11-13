@@ -67,7 +67,8 @@ export function OneChatScreen() {
   const composerRef = useRef<OneChatComposerHandle>(null);
   const [detailsCardId, setDetailsCardId] = useState<string | null>(null);
   const [sideChatOpen, setSideChatOpen] = useState(false);
-  // Result cards have no server item; the screen remembers which ones the user answered.
+  // Cards the user just answered, shown collapsed until the server catches up. Result cards
+  // have no server item, so they stay here.
   const [answeredLocally, setAnsweredLocally] = useState<ReadonlyMap<string, string>>(new Map());
 
   const cards = data.cards.map((card) => {
@@ -77,7 +78,7 @@ export function OneChatScreen() {
       : card;
   });
   const detailsCard = cards.find((card) => card.id === detailsCardId) ?? null;
-  const mentions = projectMentionStatus(data.projects, data.graph);
+  const mentions = projectMentionStatus(data.projects, data.graph, data.taskWorktrees);
   const titles = new Map<string, string>(
     data.projects.flatMap((project) => project.summary.tasks.map((task) => [task.id, task.title])),
   );
@@ -114,12 +115,29 @@ export function OneChatScreen() {
     });
   };
 
+  // Collapses the card at once so a second click cannot answer twice.
+  const answering = useRef(new Set<string>());
+  const markAnswered = (card: ActionCard, label: string) => {
+    answering.current.add(card.id);
+    setAnsweredLocally((current) => new Map(current).set(card.id, label));
+  };
+  // A failed answer reopens the card so it can be tried again.
+  const reopen = (card: ActionCard) =>
+    setAnsweredLocally((current) => {
+      answering.current.delete(card.id);
+      const next = new Map(current);
+      next.delete(card.id);
+      return next;
+    });
+
   const pick = (card: ActionCard, option: ActionCardOption) => {
+    if (card.answered !== null || answering.current.has(card.id)) return;
     if (card.kind === "result") {
       if (option.value === RESULT_APPROVE_LABEL) {
         // Asks the Director to merge; the screen never merges by itself.
+        markAnswered(card, option.label);
         void sendToDirector(resultMergeRequestMessage(card)).then((sent) => {
-          if (sent) setAnsweredLocally(new Map(answeredLocally).set(card.id, option.label));
+          if (!sent) reopen(card);
         });
       } else if (option.value === RESULT_FIX_LABEL) {
         composerRef.current?.setText(resultFixMessage(card));
@@ -131,11 +149,18 @@ export function OneChatScreen() {
       return;
     }
     if (card.attentionItemId === null || data.environmentId === null) return;
+    markAnswered(card, option.label);
+    // The failure itself is reported by the command's toast.
     void answerDecision(data.environmentId, {
       projectId: card.projectId as ProjectId,
       attentionItemId: card.attentionItemId as never,
       answer: option.value,
-    });
+    }).then(
+      (result) => {
+        if (result._tag !== "Success") reopen(card);
+      },
+      () => reopen(card),
+    );
   };
 
   useEffect(() => {
