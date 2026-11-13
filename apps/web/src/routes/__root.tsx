@@ -37,6 +37,7 @@ import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToas
 import { ChatGptWelcomeCoordinator } from "../components/settings/ChatGptWelcomeCoordinator";
 import { ProviderAuthCallbackCoordinator } from "../components/settings/ProviderAuthCallbackCoordinator";
 import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
+import { crashDebugLinkPath } from "../components/promptLinks/crashDebugLink";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
@@ -409,6 +410,13 @@ function RootRouteErrorView({ error }: ErrorComponentProps) {
           Reload app
         </Button>
         <CopyErrorButton report={report} />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void router.navigate({ href: crashDebugLinkPath(report) })}
+        >
+          Debug in chat
+        </Button>
       </div>
 
       <div className="mt-5 overflow-hidden rounded-lg border border-border/70 bg-background/55">
