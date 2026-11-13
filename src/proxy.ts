@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { SERVER_TOKEN_COOKIE, SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER, TEST_MODE_ENV } from '@/lib/server-token'
+import { isSetupComplete, readSettingsAt, resolveDataFolder, TEST_HOME_COOKIE } from '@/server/config'
 
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost'])
 
@@ -40,7 +41,7 @@ function isAllowedHost(host: string | null) {
  * cannot use the server. Without a token, requests are allowed only in
  * `next dev` and in test mode; otherwise the server fails closed.
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const host = request.headers.get('host')
   if (!isAllowedHost(host)) return forbidden('host')
 
@@ -53,9 +54,18 @@ export function proxy(request: NextRequest) {
     // without one; NODE_ENV is inlined at build time, so a production build can
     // never take the development path, and BUSYBOY_TEST_MODE is set only by tests.
     const open = process.env.NODE_ENV === 'development' || process.env[TEST_MODE_ENV] === '1'
-    return open ? NextResponse.next() : forbidden('token')
+    if (!open) return forbidden('token')
+  } else {
+    const provided = request.cookies.get(SERVER_TOKEN_COOKIE)?.value ?? request.headers.get(SERVER_TOKEN_HEADER)
+    if (!provided || !sameToken(provided, expected)) return forbidden('token')
   }
-  const provided = request.cookies.get(SERVER_TOKEN_COOKIE)?.value ?? request.headers.get(SERVER_TOKEN_HEADER)
-  if (provided && sameToken(provided, expected)) return NextResponse.next()
-  return forbidden('token')
+  return (await setupRedirect(request)) ?? NextResponse.next()
+}
+
+// Opening the main screen goes to setup until setup is complete.
+async function setupRedirect(request: NextRequest) {
+  if (request.nextUrl.pathname !== '/' || request.method !== 'GET') return undefined
+  const folder = resolveDataFolder(request.cookies.get(TEST_HOME_COOKIE)?.value)
+  if (isSetupComplete(await readSettingsAt(folder))) return undefined
+  return NextResponse.redirect(new URL('/setup', request.url))
 }

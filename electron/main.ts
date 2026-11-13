@@ -2,7 +2,13 @@ import { dirname, join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
 import { PICK_FOLDERS_CHANNEL } from '../src/lib/desktop-bridge'
 import { SERVER_TOKEN_COOKIE } from '../src/lib/server-token'
-import { createSelfCheck, isolateSelfCheckProfile, SELF_CHECK_TIMEOUT_MS, selfCheckOutputPath } from './self-check'
+import {
+  createSelfCheck,
+  createSelfCheckDataFolder,
+  isolateSelfCheckProfile,
+  SELF_CHECK_TIMEOUT_MS,
+  selfCheckOutputPath,
+} from './self-check'
 import { serverEntry, startServer, type ServerHandle } from './server-process'
 import { installLoginShellPath } from './shell-env'
 
@@ -92,12 +98,18 @@ async function authorizeWindowSession(handle: ServerHandle) {
 
 async function runSelfCheck(outputPath: string) {
   const check = createSelfCheck()
+  const removeDataFolder = createSelfCheckDataFolder()
   let finished = false
   // Write the result and exit exactly once, whether the check ends, fails, or hangs.
   const finish = () => {
     if (finished) return
     finished = true
     clearTimeout(watchdog)
+    try {
+      removeDataFolder()
+    } catch (error) {
+      console.error(error)
+    }
     app.exit(check.write(outputPath) ? 0 : 1)
   }
   const watchdog = setTimeout(() => {

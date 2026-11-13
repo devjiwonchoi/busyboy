@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { createGitRepository, createTempFolder, removeFolder, useTestHome } from './support/test-home'
@@ -49,6 +49,36 @@ async function typeFolder(page: Page, folder: string) {
   await page.getByLabel('Folder path').fill(folder)
   await page.getByRole('button', { name: 'Add folder' }).click()
 }
+
+test('finishing setup should open the main screen', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'signed-in', codex: 'signed-out' }))
+  const repository = trackRepository(createGitRepository('shop'))
+
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/setup$/)
+  await expect(page.getByRole('navigation', { name: 'Setup steps' }).getByRole('link', { name: '1 Companion' })).toHaveAttribute(
+    'aria-current',
+    'step',
+  )
+  await chooseCompanion(page, 'Nori')
+
+  const agents = page.getByRole('list', { name: 'Agents' })
+  await expect(agents.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Signed in')
+  await expect(agents.getByRole('listitem').filter({ hasText: 'Codex' })).toContainText('Signed out')
+  await expect(page.getByLabel('Codex login command')).toHaveValue('codex login')
+  await page.getByRole('button', { name: 'Continue' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Add skills' })).toBeVisible()
+  await page.getByRole('link', { name: 'Continue' }).click()
+
+  await typeFolder(page, repository)
+  await expect(page.getByRole('list', { name: 'Projects' })).toContainText('shop')
+  await page.screenshot({ path: test.info().outputPath('setup.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Start chatting' }).click()
+
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
+})
 
 test('continuing without a signed-in agent should not be possible', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-out', codex: 'signed-out' }))
@@ -167,6 +197,27 @@ test('adding a folder that is not a git repository should show an error', async 
   await expect(page.getByText('No projects yet.')).toBeVisible()
 })
 
+test('opening the app after setup should skip setup', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+  const repository = trackRepository(createGitRepository('api'))
+
+  await goToStart(page)
+  await typeFolder(page, repository)
+  await expect(page.getByRole('list', { name: 'Projects' })).toContainText('api')
+  await page.getByRole('button', { name: 'Start chatting' }).click()
+  await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
+
+  const reopened = await context.newPage()
+  await reopened.goto('/')
+  await expect(reopened).toHaveURL(/\/$/)
+  await expect(reopened.getByRole('region', { name: 'Chat' })).toBeVisible()
+
+  await reopened.getByRole('link', { name: 'Setup' }).click()
+  await expect(reopened).toHaveURL(/\/setup$/)
+  await reopened.getByRole('link', { name: '4 Start' }).click()
+  await expect(reopened.getByRole('list', { name: 'Projects' })).toContainText('api')
+})
+
 test('removing a project should keep its folder', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
   const repository = trackRepository(createGitRepository('web'))
@@ -183,6 +234,25 @@ test('removing a project should keep its folder', async ({ page, context, baseUR
   expect(existsSync(join(repository, 'README.md'))).toBe(true)
 })
 
+test('opening the app with a corrupt settings file should show setup again', async ({ page, context, baseURL }) => {
+  const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+  const corrupt = '{"setupCompletedAt": "2026-11-14T00:00:00.000Z", "projects": ['
+  writeFileSync(join(home, 'app-settings.json'), corrupt)
+
+  await page.goto('/')
+
+  await expect(page).toHaveURL(/\/setup$/)
+  const moved = readdirSync(home).filter((name) => /^app-settings\.corrupt-.+\.json$/.test(name))
+  expect(moved).toHaveLength(1)
+  expect(readFileSync(join(home, moved[0]), 'utf8')).toBe(corrupt)
+
+  await chooseCompanion(page, 'Pip')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('link', { name: 'Skip' }).click()
+  await page.getByRole('button', { name: 'Start without a project' }).click()
+  await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
+})
+
 test('adding a folder named @scope should add the project', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
   const repository = trackRepository(createGitRepository('@scope'))
@@ -193,4 +263,25 @@ test('adding a folder named @scope should add the project', async ({ page, conte
   const projects = page.getByRole('list', { name: 'Projects' })
   await expect(projects.getByText('scope', { exact: true })).toBeVisible()
   await expect(page.getByRole('alert').filter({ hasText: 'project name' })).toBeHidden()
+})
+
+test('going back from setup after signing out should open the main screen', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+
+  await goToStart(page)
+  await page.getByRole('button', { name: 'Start without a project' }).click()
+  await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
+
+  await context.addCookies([
+    { name: 'busyboy-test-sign-in', value: 'claude=signed-out,codex=signed-out', url: baseURL! },
+  ])
+  await page.getByRole('link', { name: 'Setup' }).click()
+  await page.getByRole('link', { name: '2 Agents' }).click()
+  const agents = page.getByRole('list', { name: 'Agents' })
+  await expect(agents.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Signed out')
+
+  await page.getByRole('link', { name: 'Back to chat' }).click()
+
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
 })

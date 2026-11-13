@@ -16,7 +16,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { COMPANIONS, companionImageUrl, currentCompanion } from '@/server/companions'
-import { readSettings } from '@/server/config'
+import { isSetupComplete, readSettings } from '@/server/config'
 import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsState, type ProviderState } from '@/server/providers'
 import { continueFromAgentsAction, recheckProvidersAction, removeProjectAction, startChattingAction } from './actions'
 import { neighborSteps, parseStep, stepHref, STEPS, type StepId } from './steps'
@@ -31,6 +31,9 @@ export default function SetupPage({ searchParams }: PageProps<'/setup'>) {
     <div className="flex min-h-dvh flex-col">
       <header className="flex h-10 shrink-0 items-center border-b pr-2 pl-[var(--title-bar-inset,0.75rem)] [app-region:drag]">
         <span className="text-sm font-medium">BusyBoy</span>
+        <Suspense>
+          <BackToChat />
+        </Suspense>
       </header>
       <main aria-label="Setup" className="mx-auto w-full max-w-2xl flex-1 space-y-8 px-6 py-10">
         <Suspense fallback={<Skeleton className="h-96 w-full" />}>
@@ -38,6 +41,17 @@ export default function SetupPage({ searchParams }: PageProps<'/setup'>) {
         </Suspense>
       </main>
     </div>
+  )
+}
+
+/** Opened later from the title bar: the way back never waits for a sign-in probe. */
+async function BackToChat() {
+  await connection()
+  if (!isSetupComplete(await readSettings())) return null
+  return (
+    <Link href="/" className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'ml-auto [app-region:no-drag]' })}>
+      Back to chat
+    </Link>
   )
 }
 
