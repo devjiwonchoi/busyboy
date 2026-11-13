@@ -1,0 +1,107 @@
+{
+  "provider": "claude",
+  "description": "Claude asks the user a multiple-choice question and uses the answer.",
+  "recordedAt": "2026-11-13T15:47:26.745Z",
+  "turns": [
+    {
+      "prompt": "Use the AskUserQuestion tool to ask me one question: which color I prefer, with exactly two options, Red and Blue. Then reply with exactly: You picked <the color>.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "6c666e75-bcf6-4865-8356-93439460dec5"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "AskUserQuestion",
+                  "input": {
+                    "questions": [
+                      {
+                        "question": "Which color do you prefer?",
+                        "header": "Color",
+                        "options": [
+                          {
+                            "label": "Red",
+                            "description": "The color red"
+                          },
+                          {
+                            "label": "Blue",
+                            "description": "The color blue"
+                          }
+                        ],
+                        "multiSelect": false
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": {
+              "questions": [
+                {
+                  "question": "Which color do you prefer?",
+                  "header": "Color",
+                  "options": [
+                    {
+                      "label": "Red",
+                      "description": "The color red"
+                    },
+                    {
+                      "label": "Blue",
+                      "description": "The color blue"
+                    }
+                  ],
+                  "multiSelect": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "You picked Blue."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "You picked Blue."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false
+          }
+        }
+      ]
+    }
+  ]
+}

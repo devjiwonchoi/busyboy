@@ -12,6 +12,7 @@ import type {
   SignInStatus,
   StartAgentInput,
 } from './contract'
+import { createScriptedAdapter, SCRIPTS_ENV } from './scripted-provider'
 
 type AgentRecord = {
   id: string
@@ -33,7 +34,10 @@ const REGISTRY_KEY = Symbol.for('busyboy.agent-runner')
 const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registry }
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 
+/** With BUSYBOY_PROVIDER_SCRIPTS set, every provider is replaced by the scripted replay. */
 function adapterFor(provider: ProviderId): ProviderAdapter {
+  const scripts = process.env[SCRIPTS_ENV]
+  if (scripts) return createScriptedAdapter(scripts)
   if (provider === 'claude') return claudeAdapter
   throw new Error(`The ${provider} provider is not available yet.`)
 }
