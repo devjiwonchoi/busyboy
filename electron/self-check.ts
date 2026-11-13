@@ -1,11 +1,65 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { app, type BrowserWindow } from 'electron'
+import { SERVER_TOKEN_HEADER } from '../lib/server-token'
 import type { ServerHandle } from './server-process'
 import type { ShellPathResult } from './shell-env'
 
 const FLAG = '--self-check'
 const LOAD_TIMEOUT_MS = 30_000
+const TERMINAL_TIMEOUT_MS = 20_000
+const TERMINAL_MARKER = 'busyboy-terminal-ok'
+
+// The typed command differs from its output (quotes on Unix shells, a caret
+// escape in cmd.exe), so the shell's echo of the input cannot match by itself.
+const terminalCommand = process.platform === 'win32' ? 'echo busyboy-terminal^-ok\r' : `echo busyboy-"terminal"-ok\r`
+
+function stripAnsi(text: string) {
+  return text.replace(/\u001b\[[0-?]*[ -\/]*[@-~]|\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)|\u001b[@-_]/g, '')
+}
+
+/** Starts a pty through the server, runs `echo`, and returns what the shell printed. */
+async function runTerminalEcho(server: ServerHandle) {
+  const headers = { [SERVER_TOKEN_HEADER]: server.token, 'Content-Type': 'application/json' }
+  const started = await fetch(`${server.url}/api/terminal`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ cols: 120, rows: 30 }),
+  })
+  const body = (await started.json()) as { id?: string; cwd?: string; shell?: string; error?: string }
+  if (!started.ok || !body.id) throw new Error(body.error ?? `Starting a terminal failed with HTTP ${started.status}.`)
+  const endpoint = `${server.url}/api/terminal/${body.id}`
+
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), TERMINAL_TIMEOUT_MS)
+  let output = ''
+  try {
+    const stream = await fetch(endpoint, { headers, signal: abort.signal })
+    if (!stream.ok || !stream.body) throw new Error(`Following the terminal failed with HTTP ${stream.status}.`)
+    await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ input: terminalCommand }) })
+    const reader = stream.body.pipeThrough(new TextDecoderStream()).getReader()
+    let pending = ''
+    while (!stripAnsi(output).split(/\r?\n/).some((line) => line.trim() === TERMINAL_MARKER)) {
+      const { value, done } = await reader.read()
+      if (done) break
+      pending += value
+      const lines = pending.split('\n')
+      pending = lines.pop() ?? ''
+      for (const line of lines) {
+        const event = JSON.parse(line) as { type: string; data?: string }
+        if (event.type === 'data') output += event.data
+      }
+    }
+  } catch (error) {
+    if (!abort.signal.aborted) throw error
+  } finally {
+    clearTimeout(timer)
+    abort.abort()
+    await fetch(endpoint, { method: 'DELETE', headers }).catch(() => {})
+  }
+  const lines = stripAnsi(output).split(/\r?\n/).map((line) => line.trim())
+  return { cwd: body.cwd, shell: body.shell, printed: lines.includes(TERMINAL_MARKER), tail: lines.slice(-5) }
+}
 
 /** `--self-check` or `--self-check=<output path>`; returns the output path, or null when not set. */
 export function selfCheckOutputPath(argv: string[]): string | null {
@@ -82,6 +136,11 @@ export function createSelfCheck() {
       result.details.page = page
       result.checks.pageLoaded = page.title === 'Busyboy'
       result.checks.shellRendered = Boolean(page.shell && page.chatArea && page.sidebar && page.bottomPanel)
+    },
+    async recordTerminal(server: ServerHandle) {
+      const terminal = await runTerminalEcho(server)
+      result.details.terminal = terminal
+      result.checks.terminalEchoed = terminal.printed
     },
     async recordServerStop(server: ServerHandle) {
       await server.stop()

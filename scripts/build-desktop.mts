@@ -5,8 +5,9 @@
 // The Electron main process goes into app.asar. The standalone Next server is
 // copied next to it into `<Resources>/server`, outside the archive, because
 // `utilityProcess.fork` cannot start a server that lives inside app.asar.
+// The terminal's native module (node-pty) travels inside that server folder.
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, rmSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, lstatSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import builder from 'electron-builder'
 
@@ -33,6 +34,35 @@ if (!existsSync(join(standalone, 'server.js'))) {
 run('pnpm', ['build:electron'])
 
 rmSync(outputDir, { recursive: true, force: true })
+
+/**
+ * node-pty ships N-API prebuilds for every platform, so one binary works in
+ * Node and in Electron's utility process without a rebuild. Keep only the
+ * target's folder and make sure macOS keeps `spawn-helper` executable.
+ */
+function pruneNodePty(serverDir: string, target: string) {
+  const visit = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      // Symlinks point at folders this walk reaches anyway.
+      if (!entry.isDirectory()) continue
+      const path = join(dir, entry.name)
+      if (entry.name === 'prebuilds' && /node-pty(-[0-9a-f]+)?$/.test(dir)) {
+        for (const build of readdirSync(path)) {
+          if (build !== target) rmSync(join(path, build), { recursive: true, force: true })
+        }
+        const helper = join(path, target, 'spawn-helper')
+        if (existsSync(helper)) chmodSync(helper, 0o755)
+        continue
+      }
+      visit(path)
+    }
+  }
+  visit(serverDir)
+  const kept = join(serverDir, 'node_modules', 'node-pty', 'prebuilds', target)
+  if (!existsSync(kept) || !lstatSync(kept).isDirectory()) {
+    throw new Error(`node-pty has no prebuilt binary for ${target} in the packaged server.`)
+  }
+}
 
 const platform = targetPlatform()
 
@@ -65,6 +95,7 @@ await builder.build({
         verbatimSymlinks: context.electronPlatformName !== 'win32',
         dereference: context.electronPlatformName === 'win32',
       })
+      pruneNodePty(join(resources, 'server'), `${context.electronPlatformName}-${builder.Arch[context.arch]}`)
     },
   },
 })
