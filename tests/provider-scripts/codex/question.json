@@ -1,0 +1,103 @@
+{
+  "provider": "codex",
+  "description": "Codex asks a question in an agent message, waits, and continues once the answer steers the turn.",
+  "recordedAt": "2026-11-13T16:17:31.018Z",
+  "turns": [
+    {
+      "prompt": "Ask me one question: which color I prefer, with exactly two options, Red and Blue. Then reply with exactly: You picked <the color>.",
+      "steps": [
+        {
+          "raw": {
+            "method": "thread/started",
+            "params": {
+              "thread": {
+                "id": "01a1d5b3-09be-7ad0-9331-d5f6ea0781fa"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/completed",
+            "params": {
+              "item": {
+                "type": "agentMessage",
+                "id": "call_11d0aed97cec4d2b9861b31f3ce295ea",
+                "text": "Which color do you prefer?\n- Red\n- Blue",
+                "questions": [
+                  {
+                    "title": "Which color do you prefer?",
+                    "options": [
+                      "Red",
+                      "Blue"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg_05e81b3b9e332db7016af7381acdd887d0b44e107675b015ff",
+              "delta": "You"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg_05e81b3b9e332db7016af7381acdd887d0b44e107675b015ff",
+              "delta": " picked"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg_05e81b3b9e332db7016af7381acdd887d0b44e107675b015ff",
+              "delta": " Blue"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg_05e81b3b9e332db7016af7381acdd887d0b44e107675b015ff",
+              "delta": "."
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/completed",
+            "params": {
+              "item": {
+                "type": "agentMessage",
+                "id": "msg_05e81b3b9e332db7016af7381acdd887d0b44e107675b015ff",
+                "text": "You picked Blue."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": {
+              "turn": {
+                "id": "01a1d5b3-0aa8-72a2-8af6-e4670d979cae",
+                "status": "completed",
+                "error": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

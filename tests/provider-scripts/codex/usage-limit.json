@@ -1,0 +1,36 @@
+{
+  "provider": "codex",
+  "description": "Hand-written from the codex-cli 0.167.0 protocol: the turn fails on the usage limit, reported first by an `error` notification.",
+  "turns": [
+    {
+      "prompt": "Reply with anything.",
+      "steps": [
+        {
+          "raw": {
+            "method": "error",
+            "params": {
+              "willRetry": false,
+              "error": {
+                "message": "You've hit your usage limit. Try again at 3:00 PM.",
+                "codexErrorInfo": "usageLimitExceeded",
+                "additionalDetails": null
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": {
+              "turn": {
+                "id": "turn-1",
+                "status": "failed",
+                "error": { "message": "You've hit your usage limit.", "codexErrorInfo": "usageLimitExceeded", "additionalDetails": null }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
