@@ -1,7 +1,7 @@
 // Fails the build unless the packaged server works on its own: it copies the
 // server folder out of the repository (so no repository node_modules is
 // reachable), loads every package in src/lib/server-external-packages.ts with
-// Electron's Node, and starts the server.
+// Electron's Node, by name and through Next's aliases, and starts the server.
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -93,15 +93,38 @@ export async function checkPackagedServer(serverDir: string) {
     const loader = join(dir, 'check-server-packages.mjs')
     writeFileSync(
       loader,
-      `const smokeTests = ${JSON.stringify(smokeTests)}
+      `import { existsSync, readdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
+const smokeTests = ${JSON.stringify(smokeTests)}
+const packages = ${JSON.stringify(serverExternalPackages)}
+// The server loads each package through Next's alias in .next/node_modules
+// (<name>-<hash>), so load those too, the way the server's chunks resolve them.
+const serverRequire = createRequire(new URL('./.next/server/check.js', import.meta.url))
+const aliasDir = new URL('./.next/node_modules/', import.meta.url)
+const aliases = []
+if (existsSync(aliasDir)) {
+  for (const entry of readdirSync(aliasDir)) {
+    if (!entry.startsWith('@')) aliases.push(entry)
+    else for (const scoped of readdirSync(new URL(entry + '/', aliasDir))) aliases.push(entry + '/' + scoped)
+  }
+}
+const targets = []
+for (const name of packages) {
+  targets.push({ name, label: name, load: () => import(name) })
+  for (const alias of aliases) {
+    if (alias.startsWith(name + '-') && /^[0-9a-f]+$/.test(alias.slice(name.length + 1))) {
+      targets.push({ name, label: alias, load: async () => serverRequire(alias) })
+    }
+  }
+}
 const failures = []
-for (const name of ${JSON.stringify(serverExternalPackages)}) {
+for (const { name, label, load } of targets) {
   try {
-    const imported = await import(name)
+    const imported = await load()
     const mod = imported.default ?? imported
     if (smokeTests[name]) await new Function('mod', \`return (async () => { \${smokeTests[name]} })()\`)(mod)
   } catch (error) {
-    failures.push(\`\${name}: \${error instanceof Error ? error.message : String(error)}\`)
+    failures.push(\`\${label}: \${error instanceof Error ? error.message : String(error)}\`)
   }
 }
 if (failures.length > 0) {

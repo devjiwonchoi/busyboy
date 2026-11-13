@@ -1,7 +1,10 @@
 // Copies the assets that `output: 'standalone'` leaves out, so
-// `.next/standalone/server.js` can serve the full app on its own.
+// `.next/standalone/server.js` can serve the full app on its own, and
+// installs the packages in src/lib/server-external-packages.ts whole, as the
+// desktop build does, since tracing misses their native binaries.
 import { cpSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { installServerPackages } from './install-server-packages.mts'
 
 const root = join(import.meta.dirname, '..')
 const standalone = join(root, '.next', 'standalone')
@@ -20,3 +23,5 @@ for (const [from, to] of copies) {
   rmSync(to, { recursive: true, force: true })
   cpSync(from, to, { recursive: true })
 }
+
+installServerPackages(standalone, process.platform, process.arch)
