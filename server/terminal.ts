@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { spawn, type IPty } from 'node-pty'
-import { SERVER_TOKEN_ENV } from '@/lib/server-token'
 
 /** Output kept per terminal so a reconnecting panel can redraw the screen. */
 const SCROLLBACK_LIMIT = 256 * 1024
 /** How long a terminal outlives its last output stream before it is killed. */
 const DETACHED_GRACE_MS = 15_000
+/** Waits between SIGHUP, SIGTERM, and SIGKILL when a shell will not exit. */
+const KILL_ESCALATION_MS = 1_000
 const MIN_SIZE = 2
 const MAX_SIZE = 1000
 
@@ -21,18 +22,24 @@ type Terminal = {
   shell: string
   pty: IPty
   scrollback: string
-  exit: Extract<TerminalEvent, { type: 'exit' }> | null
+  exited: boolean
   listeners: Set<Listener>
   detachedTimer: ReturnType<typeof setTimeout> | null
 }
 
-type Registry = { terminals: Map<string, Terminal>; exitHookInstalled: boolean }
+type Registry = {
+  terminals: Map<string, Terminal>
+  /** Killed terminals whose process has not exited yet. */
+  dying: Set<Terminal>
+  exitHookInstalled: boolean
+}
 
 // Kept on globalThis so `next dev` reloads of this module reuse the same
 // registry instead of orphaning live shells.
 const registryKey = Symbol.for('busyboy.terminals')
 const registry: Registry = ((globalThis as Record<symbol, unknown>)[registryKey] as Registry | undefined) ?? {
   terminals: new Map(),
+  dying: new Set(),
   exitHookInstalled: false,
 }
 ;(globalThis as Record<symbol, unknown>)[registryKey] = registry
@@ -80,11 +87,11 @@ function shellEnvironment(cwd: string): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value
   }
-  for (const key of [SERVER_TOKEN_ENV, 'PORT', 'HOSTNAME', 'NODE_ENV', 'NEXT_RUNTIME', '__NEXT_PRIVATE_ORIGIN']) {
-    delete env[key]
-  }
+  // BUSYBOY_TOKEN, PORT, and HOSTNAME would let any program run in the shell
+  // call this server as the app. Next's private variables do not belong there either.
+  for (const key of ['PORT', 'HOSTNAME', 'NODE_ENV', 'NEXT_RUNTIME']) delete env[key]
   for (const key of Object.keys(env)) {
-    if (key.startsWith('__NEXT') || key.startsWith('NEXT_PRIVATE')) delete env[key]
+    if (key.startsWith('BUSYBOY_') || key.startsWith('__NEXT') || key.startsWith('NEXT_PRIVATE')) delete env[key]
   }
   env.TERM = 'xterm-256color'
   env.COLORTERM = 'truecolor'
@@ -107,7 +114,11 @@ function emit(terminal: Terminal, event: TerminalEvent) {
 function installExitHook() {
   if (registry.exitHookInstalled) return
   registry.exitHookInstalled = true
-  process.once('exit', killAllTerminals)
+  process.once('exit', () => {
+    killAllTerminals()
+    // Nothing can wait any more; force whatever is still running.
+    for (const terminal of registry.dying) signal(terminal, 'SIGKILL')
+  })
   // On SIGTERM and SIGINT the Next server stops accepting connections and
   // waits for open requests before it exits. Output streams stay open while
   // their shell lives, so end the shells first or the server never exits.
@@ -136,7 +147,7 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
     shell: shell.file,
     pty: process_,
     scrollback: '',
-    exit: null,
+    exited: false,
     listeners: new Set(),
     detachedTimer: null,
   }
@@ -148,11 +159,9 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
     emit(terminal, { type: 'data', data })
   })
   process_.onExit(({ exitCode, signal }) => {
-    terminal.exit = { type: 'exit', exitCode, signal }
-    emit(terminal, terminal.exit)
-    terminal.listeners.clear()
-    if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer)
-    registry.terminals.delete(id)
+    terminal.exited = true
+    registry.dying.delete(terminal)
+    finish(terminal, { type: 'exit', exitCode, signal })
   })
 
   // Nobody is listening yet; do not keep a shell nobody ever attaches to.
@@ -201,17 +210,47 @@ export function resizeTerminal(id: string, cols: number, rows: number) {
   return true
 }
 
-export function killTerminal(id: string) {
-  const terminal = registry.terminals.get(id)
-  if (!terminal) return false
-  registry.terminals.delete(id)
+/** Removes the terminal and ends every output stream with its exit event. */
+function finish(terminal: Terminal, event: Extract<TerminalEvent, { type: 'exit' }>) {
   if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer)
+  terminal.detachedTimer = null
+  registry.terminals.delete(terminal.id)
+  emit(terminal, event)
+  terminal.listeners.clear()
+}
+
+function signal(terminal: Terminal, name?: 'SIGHUP' | 'SIGTERM' | 'SIGKILL') {
+  if (terminal.exited) return
   try {
-    // SIGHUP is what a closed terminal window sends; the shell passes it on to its jobs.
-    terminal.pty.kill(process.platform === 'win32' ? undefined : 'SIGHUP')
+    // node-pty on Windows takes no signal; its kill ends the console's process tree.
+    terminal.pty.kill(process.platform === 'win32' ? undefined : name)
   } catch {
     // Already gone.
   }
+}
+
+/**
+ * Hangs up the shell like a closed terminal window (the shell passes SIGHUP
+ * on to its jobs), then escalates to SIGTERM and SIGKILL if it keeps running.
+ * Output streams end right away so nothing waits on a stubborn process.
+ */
+export function killTerminal(id: string) {
+  const terminal = registry.terminals.get(id)
+  if (!terminal) return false
+  finish(terminal, { type: 'exit', exitCode: -1, signal: 1 })
+  signal(terminal, 'SIGHUP')
+  if (process.platform === 'win32' || terminal.exited) return true
+  registry.dying.add(terminal)
+  const escalate = (steps: Array<'SIGTERM' | 'SIGKILL'>) => {
+    const [next, ...rest] = steps
+    if (!next) return
+    setTimeout(() => {
+      if (terminal.exited) return
+      signal(terminal, next)
+      escalate(rest)
+    }, KILL_ESCALATION_MS).unref()
+  }
+  escalate(['SIGTERM', 'SIGKILL'])
   return true
 }
 
