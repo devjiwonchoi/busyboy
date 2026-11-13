@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { createGitRepository, createTempFolder, removeFolder, useTestHome } from './support/test-home'
 
@@ -14,6 +14,12 @@ function track(folder: string) {
   return folder
 }
 
+/** A repository lives in its own temporary parent folder; remove both. */
+function trackRepository(repository: string) {
+  folders.push(dirname(repository))
+  return repository
+}
+
 async function addFolder(page: Page, folder: string) {
   await page.getByLabel('Folder path').fill(folder)
   await page.getByRole('button', { name: 'Add folder' }).click()
@@ -21,7 +27,7 @@ async function addFolder(page: Page, folder: string) {
 
 test('finishing setup should open the main screen', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-in', codex: 'signed-out' }))
-  const repository = track(createGitRepository('shop'))
+  const repository = trackRepository(createGitRepository('shop'))
 
   await page.goto('/')
   await expect(page).toHaveURL(/\/setup$/)
@@ -63,7 +69,7 @@ test('adding a folder that is not a git repository should show an error', async 
 
 test('opening the app after setup should skip setup', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
-  const repository = track(createGitRepository('api'))
+  const repository = trackRepository(createGitRepository('api'))
 
   await page.goto('/setup')
   await addFolder(page, repository)
@@ -83,7 +89,7 @@ test('opening the app after setup should skip setup', async ({ page, context, ba
 
 test('removing a project should keep its folder', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!))
-  const repository = track(createGitRepository('web'))
+  const repository = trackRepository(createGitRepository('web'))
 
   await page.goto('/setup')
   await addFolder(page, repository)
@@ -101,7 +107,7 @@ test('opening the app with a corrupt settings file should show setup again', asy
   const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
   const corrupt = '{"setupCompletedAt": "2026-11-14T00:00:00.000Z", "projects": ['
   writeFileSync(join(home, 'app-settings.json'), corrupt)
-  const repository = track(createGitRepository('docs'))
+  const repository = trackRepository(createGitRepository('docs'))
 
   await page.goto('/')
 
@@ -119,7 +125,7 @@ test('opening the app with a corrupt settings file should show setup again', asy
 
 test('adding a folder named @scope should add the project', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!))
-  const repository = track(createGitRepository('@scope'))
+  const repository = trackRepository(createGitRepository('@scope'))
 
   await page.goto('/setup')
   await addFolder(page, repository)
@@ -127,4 +133,28 @@ test('adding a folder named @scope should add the project', async ({ page, conte
   const projects = page.getByRole('list', { name: 'Projects' })
   await expect(projects.getByText('scope', { exact: true })).toBeVisible()
   await expect(page.getByRole('alert').filter({ hasText: 'project name' })).toBeHidden()
+})
+
+test('going back from setup after signing out should open the main screen', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+  const repository = trackRepository(createGitRepository('mobile'))
+
+  await page.goto('/setup')
+  await addFolder(page, repository)
+  await expect(page.getByRole('list', { name: 'Projects' })).toContainText('mobile')
+  await page.getByRole('button', { name: 'Start chatting' }).click()
+  await expect(page.getByRole('main', { name: 'Chat' })).toBeVisible()
+
+  await context.addCookies([
+    { name: 'busyboy-test-sign-in', value: 'claude=signed-out,codex=signed-out', url: baseURL! },
+  ])
+  await page.getByRole('link', { name: 'Setup' }).click()
+  const providers = page.getByRole('list', { name: 'Providers' })
+  await expect(providers.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Signed out')
+  await expect(providers.getByRole('listitem').filter({ hasText: 'Codex' })).toContainText('Signed out')
+
+  await page.getByRole('link', { name: 'Back to chat' }).click()
+
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('main', { name: 'Chat' })).toBeVisible()
 })

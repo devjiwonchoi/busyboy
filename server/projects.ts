@@ -20,7 +20,7 @@ export async function listProjects(): Promise<Project[]> {
 }
 
 export async function getProject(name: string): Promise<Project | undefined> {
-  return (await listProjects()).find((project) => project.name === name)
+  return (await listProjects()).find((project) => sameName(project.name, name))
 }
 
 // Names are used as folder names by later features, so they must be valid
@@ -76,13 +76,20 @@ async function checkRepository(input: string) {
   try {
     const { stdout } = await run('git', ['-C', real, 'rev-parse', '--show-toplevel'])
     topLevel = await realpath(stdout.trim())
-  } catch {
+  } catch (error) {
+    const { code, stderr } = error as NodeJS.ErrnoException & { stderr?: string }
+    if (code === 'ENOENT') throw new ProjectError('git was not found. Install git and try again.')
+    if (stderr?.includes('dubious ownership')) {
+      throw new ProjectError(`git refuses to open ${folder} because another user owns it. See git's safe.directory setting.`)
+    }
     throw new ProjectError(`${folder} is not a git repository. Run git init there, or choose another folder.`)
   }
-  if (topLevel !== real) {
+  // macOS and Windows folders are usually case-insensitive, and git may report a different case.
+  const same = process.platform === 'linux' ? topLevel === real : topLevel.toLowerCase() === real.toLowerCase()
+  if (!same) {
     throw new ProjectError(`${folder} is inside the git repository at ${topLevel}. Add that folder instead.`)
   }
-  return real
+  return topLevel
 }
 
 /** Names are unique ignoring case, since folders on macOS and Windows usually are. */
@@ -119,7 +126,7 @@ export async function addProject(folder: string, name?: string): Promise<Project
 export async function renameProject(name: string, newName: string): Promise<Project> {
   const next = checkName(newName)
   return updateSettings((settings) => {
-    const project = settings.projects.find((entry) => entry.name === name)
+    const project = settings.projects.find((entry) => sameName(entry.name, name))
     if (!project) throw new ProjectError(`There is no project named ${name}.`)
     if (settings.projects.some((entry) => entry !== project && sameName(entry.name, next))) {
       throw new ProjectError(`A project named ${next} already exists.`)
@@ -132,6 +139,6 @@ export async function renameProject(name: string, newName: string): Promise<Proj
 /** Forgets the project. Its folder and files stay as they are. */
 export async function removeProject(name: string): Promise<void> {
   await updateSettings((settings) => {
-    settings.projects = settings.projects.filter((project) => project.name !== name)
+    settings.projects = settings.projects.filter((project) => !sameName(project.name, name))
   })
 }

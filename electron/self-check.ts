@@ -1,4 +1,5 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { app, type BrowserWindow } from 'electron'
 import type { ServerHandle } from './server-process'
@@ -13,6 +14,26 @@ export function selfCheckOutputPath(argv: string[]): string | null {
   if (!arg) return null
   const value = arg.slice(FLAG.length + 1)
   return value || join(app.getPath('userData'), 'self-check.json')
+}
+
+/**
+ * Points the server at a temporary data folder where setup is complete, so
+ * the check reaches the main screen on a fresh machine and never touches
+ * the real ~/.busyboy. Returns a cleanup function. The file name and shape
+ * match server/config.ts.
+ */
+export function createSelfCheckDataFolder() {
+  const folder = mkdtempSync(join(tmpdir(), 'busyboy-self-check-'))
+  const at = new Date().toISOString()
+  const settings = {
+    version: 1,
+    setupCompletedAt: at,
+    defaultProvider: null,
+    projects: [{ name: 'self-check', path: folder, addedAt: at }],
+  }
+  writeFileSync(join(folder, 'app-settings.json'), `${JSON.stringify(settings, null, 2)}\n`)
+  process.env.BUSYBOY_HOME = folder
+  return () => rmSync(folder, { recursive: true, force: true })
 }
 
 export type SelfCheckResult = {

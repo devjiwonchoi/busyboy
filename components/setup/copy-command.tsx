@@ -18,7 +18,12 @@ export function CopyCommand({ label, command }: { label: string; command: string
         size="icon-xs"
         aria-label={copied ? 'Copied' : 'Copy command'}
         onClick={async () => {
-          await navigator.clipboard.writeText(command)
+          // Copying can be refused (no permission or no focus); the command stays visible to copy by hand.
+          const ok = await navigator.clipboard.writeText(command).then(
+            () => true,
+            () => false,
+          )
+          if (!ok) return
           setCopied(true)
           setTimeout(() => setCopied(false), 1500)
         }}

@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import { connection } from 'next/server'
+import Link from 'next/link'
 import { Suspense } from 'react'
 import { AddProjectForm } from '@/components/setup/add-project-form'
 import { CopyCommand } from '@/components/setup/copy-command'
 import { Button } from '@/components/ui/button'
-import { readSettings } from '@/server/config'
+import { isSetupComplete, readSettings } from '@/server/config'
 import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsState, type ProviderState } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 import { recheckProvidersAction, removeProjectAction, setDefaultProviderAction, startChattingAction } from './actions'
@@ -50,13 +51,16 @@ export default function SetupPage() {
         </Section>
 
         <Section title="Skills" description="Agents work best with the jwn plugin from devjiwonchoi/skills.">
-          <ul aria-label="Skills" className="divide-y rounded-lg border">
+          <ul aria-label="Skills" className="divide-y rounded-lg border empty:hidden">
             {PROVIDERS.map(({ id, name }) => (
               <Suspense key={id}>
                 <SkillsRow id={id} name={name} />
               </Suspense>
             ))}
           </ul>
+          <Suspense>
+            <NoRunnableProvider />
+          </Suspense>
         </Section>
 
         <Section title="Projects" description="A project is a folder that is a git repository.">
@@ -155,6 +159,13 @@ async function SkillsRow({ id, name }: { id: ProviderId; name: string }) {
   )
 }
 
+async function NoRunnableProvider() {
+  await connection()
+  const states = await Promise.all(PROVIDERS.map(({ id }) => providerState(id)))
+  if (states.some(({ state }) => state !== 'unavailable' && state !== 'not-installed')) return null
+  return <p className="text-muted-foreground text-sm">Install Claude Code or Codex first.</p>
+}
+
 async function ProjectList() {
   await connection()
   const { projects } = await readSettings()
@@ -180,7 +191,19 @@ async function ProjectList() {
 
 async function StartChatting() {
   await connection()
-  const [signedIn, { projects }] = await Promise.all([signedInProviders(), readSettings()])
+  const settings = await readSettings()
+  // Opened later from the title bar: the way back never waits for a sign-in probe.
+  if (isSetupComplete(settings)) {
+    return (
+      <div className="flex justify-end border-t pt-6">
+        <Button asChild>
+          <Link href="/">Back to chat</Link>
+        </Button>
+      </div>
+    )
+  }
+  const { projects } = settings
+  const signedIn = await signedInProviders()
   const hint =
     signedIn.length === 0 && projects.length === 0
       ? 'Sign in to a provider and add a project to continue.'

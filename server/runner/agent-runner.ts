@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { SERVER_TOKEN_ENV } from '@/lib/server-token'
 import { claudeAdapter } from './claude-adapter'
 import type {
   AgentAnswer,
@@ -12,7 +13,7 @@ import type {
   SignInStatus,
   StartAgentInput,
 } from './contract'
-import { createScriptedAdapter, SCRIPTS_ENV } from './scripted-provider'
+import { createScriptedAdapter, hasScripts, SCRIPTS_ENV } from './scripted-provider'
 
 type AgentRecord = {
   id: string
@@ -22,7 +23,9 @@ type AgentRecord = {
   events: AgentEventEnvelope[]
   listeners: Set<(envelope: AgentEventEnvelope) => void>
   session: ProviderSession | null
-  pending: Set<string>
+  /** Open approvals and questions by request id, with the answer kind each takes. */
+  pending: Map<string, AgentAnswer['kind']>
+  /** Set by interruptAgent while a turn runs; cleared when that turn ends or the process stops. */
   interrupting: boolean
 }
 
@@ -34,10 +37,14 @@ const REGISTRY_KEY = Symbol.for('busyboy.agent-runner')
 const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registry }
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 
-/** With BUSYBOY_PROVIDER_SCRIPTS set, every provider is replaced by the scripted replay. */
+/**
+ * With BUSYBOY_PROVIDER_SCRIPTS set, each provider that has a script in that
+ * folder is replaced by the scripted replay. The desktop app always starts the
+ * server with a token, so a token means a real install and the variable is ignored.
+ */
 function adapterFor(provider: ProviderId): ProviderAdapter {
   const scripts = process.env[SCRIPTS_ENV]
-  if (scripts) return createScriptedAdapter(scripts)
+  if (scripts && !process.env[SERVER_TOKEN_ENV] && hasScripts(scripts, provider)) return createScriptedAdapter(scripts)
   if (provider === 'claude') return claudeAdapter
   throw new Error(`The ${provider} provider is not available yet.`)
 }
@@ -71,8 +78,11 @@ function record(agent: AgentRecord, event: AgentEvent) {
       agent.sessionId = event.sessionId
       break
     case 'approval':
+      agent.pending.set(event.requestId, 'approval')
+      agent.status = 'waiting'
+      break
     case 'question':
-      agent.pending.add(event.requestId)
+      agent.pending.set(event.requestId, 'question')
       agent.status = 'waiting'
       break
     case 'answered':
@@ -88,13 +98,14 @@ function record(agent: AgentRecord, event: AgentEvent) {
       break
     case 'stopped':
       if (agent.status === 'stopped') return
+      agent.interrupting = false
       agent.status = 'stopped'
       agent.session = null
       break
   }
   if (event.type === 'turn-done' || event.type === 'stopped') {
     // Requests left open by an interrupt or stop can no longer be answered.
-    for (const requestId of agent.pending) push(agent, { type: 'answered', requestId })
+    for (const requestId of agent.pending.keys()) push(agent, { type: 'answered', requestId })
     agent.pending.clear()
   }
   push(agent, event)
@@ -108,6 +119,7 @@ function push(agent: AgentRecord, event: AgentEvent) {
 
 function launch(agent: AgentRecord, resumeSessionId?: string) {
   agent.status = 'starting'
+  agent.interrupting = false
   record(agent, { type: 'started', resumed: Boolean(resumeSessionId) })
   try {
     agent.session = adapterFor(agent.input.provider).start({
@@ -136,7 +148,7 @@ export function startAgent(input: StartAgentInput): AgentSnapshot {
     events: [],
     listeners: new Set(),
     session: null,
-    pending: new Set(),
+    pending: new Map(),
     interrupting: false,
   }
   registry.agents.set(agent.id, agent)
@@ -155,9 +167,15 @@ export function sendMessage(agentId: string, text: string) {
 /** Ends the current turn. The agent stays alive and waits for the next message. */
 export async function interruptAgent(agentId: string) {
   const agent = getRecord(agentId)
-  if (!agent.session || agent.status === 'idle') return
+  // Only a running turn can be interrupted; otherwise the flag would mark a later turn.
+  if (!agent.session || (agent.status !== 'running' && agent.status !== 'waiting')) return
   agent.interrupting = true
-  await agent.session.interrupt()
+  try {
+    await agent.session.interrupt()
+  } catch (error) {
+    agent.interrupting = false
+    throw error
+  }
 }
 
 export async function stopAgent(agentId: string) {
@@ -177,12 +195,19 @@ export function resumeAgent(agentId: string): AgentSnapshot {
 export async function compactAgent(agentId: string) {
   const agent = getRecord(agentId)
   if (!agent.session) throw new Error('The agent is stopped.')
+  if (agent.status === 'idle') agent.status = 'running'
   await agent.session.compact()
 }
 
+/**
+ * Answers an open approval or question. Returns false when it is no longer open;
+ * throws when the answer kind does not match the request.
+ */
 export function answerAgent(agentId: string, requestId: string, answer: AgentAnswer) {
   const agent = getRecord(agentId)
-  if (!agent.session || !agent.pending.has(requestId)) return false
+  const kind = agent.pending.get(requestId)
+  if (!agent.session || !kind) return false
+  if (kind !== answer.kind) throw new Error(`Request ${requestId} takes an answer of kind ${kind}, not ${answer.kind}.`)
   agent.session.answer(requestId, answer)
   record(agent, { type: 'answered', requestId })
   return true

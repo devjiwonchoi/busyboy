@@ -34,7 +34,7 @@ export async function setDefaultProviderAction(provider: ProviderId) {
 
 /** Checks sign-in again, skipping the short cache, after the user signed in from a terminal. */
 export async function recheckProvidersAction() {
-  await Promise.all([providerState('claude', { fresh: true }), providerState('codex', { fresh: true })])
+  await Promise.all(PROVIDERS.map(({ id }) => providerState(id, { fresh: true })))
   refresh()
 }
 

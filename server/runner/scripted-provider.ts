@@ -1,6 +1,8 @@
-// Replays recorded provider runs with no model call. Selected for every
-// provider when BUSYBOY_PROVIDER_SCRIPTS points at a folder of `*.json`
-// scripts (tests do this). See `ProviderScript` for the format.
+// Replays recorded provider runs with no model call. When
+// BUSYBOY_PROVIDER_SCRIPTS points at a folder of `*.json` scripts (tests do
+// this), it replaces each provider that has at least one script there; other
+// providers keep their real adapter (for example one pointed at a fake CLI).
+// See `ProviderScript` for the format.
 import { randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,17 +12,27 @@ import {
   type ClaudePermissionRequest,
   type ClaudeRawMessage,
 } from './claude-events'
-import type { AgentAnswer, AgentEvent, McpServerInput, ProviderAdapter, ProviderSession, ProviderStartOptions } from './contract'
+import type {
+  AgentAnswer,
+  AgentEvent,
+  McpServerInput,
+  ProviderAdapter,
+  ProviderId,
+  ProviderSession,
+  ProviderStartOptions,
+} from './contract'
 
 export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
 
 /**
  * One step of a scripted turn.
  * - `event`: a normalized contract event, emitted as is.
- * - `raw`: a message in the script provider's own format, mapped by that provider's mapping.
+ * - `raw`: a message in the script provider's own format, mapped by that provider's
+ *   mapping in `RAW_MAPPINGS` (a new provider adds its mapping there).
  *   A Claude `tool_use` block named `mcp__<server>__<tool>`, where `<server>` is one of the
  *   session's `mcpServers`, really calls that tool, so a replay runs busyboy's own tool code.
- * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question.
+ * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question
+ *   (Claude scripts only).
  * - `delayMs`: wait before the next step.
  * An approval or question (from `event` or `canUseTool`) pauses the replay until it is
  * answered. With `then`, the branch named by the answer replaces the rest of the turn:
@@ -28,7 +40,7 @@ export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
  */
 export type ScriptStep =
   | { event: AgentEvent; then?: Record<string, ScriptStep[]> }
-  | { raw: ClaudeRawMessage }
+  | { raw: unknown }
   | { canUseTool: ClaudePermissionRequest; then?: Record<string, ScriptStep[]> }
   | { delayMs: number }
 
@@ -39,18 +51,40 @@ export type ScriptTurn = {
 }
 
 export type ProviderScript = {
-  /** Whose format the `raw` and `canUseTool` steps use. */
-  provider: 'claude'
+  /** The provider this script replaces, and whose format its `raw` steps use. */
+  provider: ProviderId
   description: string
   recordedAt?: string
   turns: ScriptTurn[]
 }
 
-function loadTurns(folder: string) {
-  const turns = new Map<string, ScriptTurn>()
-  for (const file of readdirSync(folder).filter((name) => name.endsWith('.json')).sort()) {
-    const script = JSON.parse(readFileSync(join(folder, file), 'utf8')) as ProviderScript
-    for (const turn of script.turns) turns.set(turn.prompt.trim(), turn)
+const RAW_MAPPINGS: Partial<Record<ProviderId, (raw: unknown) => AgentEvent[]>> = {
+  claude: (raw) => claudeMessageToEvents(raw as ClaudeRawMessage),
+}
+
+function readScripts(folder: string) {
+  return readdirSync(folder)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((file) => ({ file, script: JSON.parse(readFileSync(join(folder, file), 'utf8')) as ProviderScript }))
+}
+
+/** Whether the folder has a script for this provider, so the replay should replace it. */
+export function hasScripts(folder: string, provider: ProviderId) {
+  return readScripts(folder).some(({ script }) => script.provider === provider)
+}
+
+/** The provider's turns by prompt. Two scripts may not record the same prompt. */
+function loadTurns(folder: string, provider: ProviderId) {
+  const turns = new Map<string, { file: string; turn: ScriptTurn }>()
+  for (const { file, script } of readScripts(folder)) {
+    if (script.provider !== provider) continue
+    for (const turn of script.turns) {
+      const prompt = turn.prompt.trim()
+      const existing = turns.get(prompt)
+      if (existing) throw new Error(`${existing.file} and ${file} both have a turn for: ${prompt}`)
+      turns.set(prompt, { file, turn })
+    }
   }
   return turns
 }
@@ -95,7 +129,12 @@ async function callMcpTool({ server, tool, input }: McpCall) {
 }
 
 function startScripted(folder: string, options: ProviderStartOptions): ProviderSession {
-  const { emit } = options
+  const { provider } = options
+  let turnDone = false
+  const emit = (event: AgentEvent) => {
+    if (event.type === 'turn-done') turnDone = true
+    options.emit(event)
+  }
   const queue: string[] = []
   const answers = new Map<string, (answer: AgentAnswer) => void>()
   let cancelTurn: (() => void) | undefined
@@ -126,8 +165,12 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       if ('delayMs' in step) continue
       let events: AgentEvent[]
       let then: Record<string, ScriptStep[]> | undefined
-      if ('raw' in step) events = claudeMessageToEvents(step.raw)
-      else if ('canUseTool' in step) {
+      if ('raw' in step) {
+        const mapping = RAW_MAPPINGS[provider]
+        if (!mapping) throw new Error(`Scripts cannot replay raw ${provider} messages yet.`)
+        events = mapping(step.raw)
+      } else if ('canUseTool' in step) {
+        if (provider !== 'claude') throw new Error('Only Claude scripts can use `canUseTool` steps.')
         events = [claudePermissionToEvent(`script-${++requestCount}`, step.canUseTool)]
         then = step.then
       } else {
@@ -143,8 +186,8 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
           if (branch) return playSteps(branch)
         } else emit(event)
       }
-      if ('raw' in step) {
-        for (const call of mcpCalls(step.raw, options.mcpServers)) {
+      if ('raw' in step && provider === 'claude') {
+        for (const call of mcpCalls(step.raw as ClaudeRawMessage, options.mcpServers)) {
           try {
             await cancellable(callMcpTool(call))
           } catch (error) {
@@ -162,19 +205,26 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     while (queue.length && !stopped) {
       const text = queue.shift()!
       inTurn = true
-      const turn = loadTurns(folder).get(text.trim())
+      turnDone = false
       try {
+        const turn = loadTurns(folder, provider).get(text.trim())?.turn
         if (!turn) {
-          emit({ type: 'error', code: 'no-script', message: `No provider script has a turn for: ${text}` })
-          emit({ type: 'turn-done' })
+          emit({ type: 'error', code: 'no-script', message: `No ${provider} script has a turn for: ${text}` })
         } else {
           await playSteps(turn.steps)
-          // Recorded turns end with a result message; hand-written ones may not.
-          if (inTurn && !turn.steps.some((step) => 'raw' in step && step.raw.type === 'result')) emit({ type: 'turn-done' })
         }
+        // Recorded turns end with the provider's own turn-done; hand-written ones may not.
+        if (!turnDone) emit({ type: 'turn-done' })
       } catch (error) {
-        if (!(error instanceof Cancelled)) throw error
-        if (!stopped) emit({ type: 'turn-done' })
+        if (stopped) {
+          // Ended by stop(), which already reported it.
+        } else if (error instanceof Cancelled) {
+          emit({ type: 'turn-done' })
+        } else {
+          // A broken script must end the turn with an error, not hang the agent.
+          emit({ type: 'error', code: 'no-script', message: error instanceof Error ? error.message : String(error) })
+          emit({ type: 'turn-done' })
+        }
       }
       inTurn = false
       cancelTurn = undefined
