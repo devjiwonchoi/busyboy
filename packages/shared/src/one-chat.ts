@@ -1,9 +1,11 @@
 /**
  * The one chat screen's view of the work: the toast's work list, the action cards in the chat,
- * and each project's status for @ mentions. Today it reads the attention stream; once the node
- * graph adapter lands, only `OneChatProject` input changes and the screens stay as they are.
+ * and each project's status for @ mentions. It reads BusyBoy tasks and cards from the attention
+ * stream, and skill-based work from the node graph adapter, into one shape the screens read.
  */
 import {
+  type GraphNode,
+  type NodeGraph,
   PLAN_APPROVAL_START,
   type ProjectAttentionItem,
   type ProjectDecisionCard,
@@ -26,10 +28,14 @@ export interface WorkItem {
   readonly id: string;
   readonly projectId: string;
   readonly projectName: string;
-  readonly taskId: string;
+  /** The BusyBoy task; null for skill-based work read from the node graph. */
+  readonly taskId: string | null;
+  /** The node graph node; null for BusyBoy tasks. */
+  readonly nodeId: string | null;
   readonly title: string;
   readonly state: WorkState;
-  readonly stage: ProjectTaskReference["stage"];
+  /** The BusyBoy task stage; null for node graph work. */
+  readonly stage: ProjectTaskReference["stage"] | null;
   /** Short plain line for the row, such as "Waiting for agreement" or "1 of 3 proven". */
   readonly statusLabel: string;
   /** Where the work is: Align, Build or Review. */
@@ -167,9 +173,15 @@ function statusLabel(
   return phaseLabel(task.stage) ? `${phaseLabel(task.stage)} in progress` : "";
 }
 
-/** The toast's rows: work waiting on the user first, then work in progress. */
-export function buildWorkItems(projects: ReadonlyArray<OneChatProject>): WorkItem[] {
-  const items: WorkItem[] = [];
+/**
+ * The toast's rows: work waiting on the user first, then work in progress. BusyBoy tasks come
+ * from the attention stream; skill-based work comes from the node graph when it is given.
+ */
+export function buildWorkItems(
+  projects: ReadonlyArray<OneChatProject>,
+  graph: NodeGraph | null = null,
+): WorkItem[] {
+  const items: WorkItem[] = graph ? buildGraphWorkItems(graph, projects) : [];
   for (const project of projects) {
     if (!isUserProject(project)) continue;
     const { summary } = project;
@@ -188,6 +200,7 @@ export function buildWorkItems(projects: ReadonlyArray<OneChatProject>): WorkIte
         projectId: project.projectId,
         projectName: project.name,
         taskId: task.id,
+        nodeId: null,
         title: task.title,
         state: waiting ? "waiting_on_me" : "running",
         stage: task.stage,
@@ -206,6 +219,118 @@ export function buildWorkItems(projects: ReadonlyArray<OneChatProject>): WorkIte
   }
   const rank = (item: WorkItem) => (item.state === "waiting_on_me" ? 0 : 1);
   return items.toSorted((a, b) => rank(a) - rank(b));
+}
+
+/** Node states that still need the user or are still moving. */
+const LIVE_NODE_STATES: ReadonlySet<GraphNode["status"]["state"]> = new Set([
+  "draft",
+  "running",
+  "asking",
+  "review",
+  "failed",
+]);
+
+function nodePhaseLabel(state: GraphNode["status"]["state"]): string {
+  switch (state) {
+    case "draft":
+      return "Align";
+    case "running":
+    case "asking":
+    case "failed":
+      return "Build";
+    case "review":
+      return "Review";
+    default:
+      return "";
+  }
+}
+
+function nodeStatusLabel(node: GraphNode): string {
+  const { status } = node;
+  if (status.dots.ask || status.state === "asking") return "Waiting for your answer";
+  if (status.state === "failed" || status.dots.failed) return "Stuck";
+  if (status.state === "draft") return "Waiting for agreement";
+  if (status.progress && status.progress.total > 0) {
+    return `${status.progress.proven} of ${status.progress.total} proven`;
+  }
+  const phase = nodePhaseLabel(status.state);
+  return phase ? `${phase} in progress` : "";
+}
+
+/**
+ * Skill-based work from the node graph adapter. A node needs the user when it asks a question,
+ * failed (failures are not counted apart), or is still a draft waiting for agreement.
+ */
+export function buildGraphWorkItems(
+  graph: NodeGraph,
+  projects: ReadonlyArray<OneChatProject>,
+): WorkItem[] {
+  const names = new Map(projects.map((project) => [project.projectId, project.name]));
+  const items: WorkItem[] = [];
+  for (const node of graph.nodes) {
+    if (!LIVE_NODE_STATES.has(node.status.state)) continue;
+    const { status, contract } = node;
+    const waiting =
+      status.dots.ask ||
+      status.dots.failed ||
+      status.state === "asking" ||
+      status.state === "failed" ||
+      status.state === "draft";
+    items.push({
+      id: `node:${node.id}`,
+      projectId: node.projectId ?? "",
+      projectName: (node.projectId && names.get(node.projectId)) || "",
+      taskId: null,
+      nodeId: node.id,
+      title: contract?.title ?? node.id,
+      state: waiting ? "waiting_on_me" : "running",
+      stage: null,
+      statusLabel: nodeStatusLabel(node),
+      phaseLabel: nodePhaseLabel(status.state),
+      provenCount: status.progress?.proven ?? 0,
+      criteriaCount: status.progress?.total ?? 0,
+      cardId: null,
+      childIds: graph.nodes
+        .filter((child) => child.contract?.parent === node.id)
+        .map((child) => child.id),
+      waitsOnIds: [...new Set((contract?.waitsOn ?? []).map((wait) => wait.node))],
+      prUrl: null,
+    });
+  }
+  return items;
+}
+
+/** A node's agreed end state for the detail modal, in the order the modal shows it. */
+export interface NodeEndState {
+  readonly title: string;
+  readonly purpose: string | null;
+  readonly criteria: ReadonlyArray<{
+    readonly id: string;
+    readonly text: string;
+    readonly how: string | null;
+    readonly status: "pending" | "proven" | "failed";
+  }>;
+  readonly dont: ReadonlyArray<string>;
+  readonly expectedFiles: ReadonlyArray<{ readonly path: string; readonly change: string | null }>;
+  /** Parts of the record that could not be read; shown, never hidden. */
+  readonly issues: ReadonlyArray<string>;
+}
+
+export function nodeEndState(node: GraphNode): NodeEndState {
+  const results = new Map(node.status.criteria.map((result) => [result.id, result.status]));
+  return {
+    title: node.contract?.title ?? node.id,
+    purpose: node.contract?.purpose ?? null,
+    criteria: (node.contract?.criteria ?? []).map((criterion) => ({
+      id: criterion.id,
+      text: criterion.text,
+      how: criterion.how,
+      status: results.get(criterion.id) ?? "pending",
+    })),
+    dont: node.contract?.dont ?? [],
+    expectedFiles: node.contract?.expectedFiles ?? [],
+    issues: node.issues.map((issue) => `${issue.file}: ${issue.message}`),
+  };
 }
 
 export function workCounts(items: ReadonlyArray<WorkItem>): WorkCounts {
@@ -359,8 +484,9 @@ export function buildActionCards(projects: ReadonlyArray<OneChatProject>): Actio
 /** Each project's status for the @ mention list. */
 export function projectMentionStatus(
   projects: ReadonlyArray<OneChatProject>,
+  graph: NodeGraph | null = null,
 ): ProjectMentionStatus[] {
-  const items = buildWorkItems(projects);
+  const items = buildWorkItems(projects, graph);
   return projects.filter(isUserProject).map((project) => {
     const counts = workCounts(items.filter((item) => item.projectId === project.projectId));
     const parts = [

@@ -1,4 +1,6 @@
 import {
+  type GraphNode,
+  type NodeGraph,
   PLAN_APPROVAL_START,
   type ProjectDecisionCard,
   type ProjectTaskReference,
@@ -9,7 +11,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildActionCards,
   buildWorkItems,
+  buildGraphWorkItems,
   isSideChatCommand,
+  nodeEndState,
   isToastVisible,
   mentionQueryAt,
   type OneChatProject,
@@ -321,5 +325,109 @@ describe("messages and composer helpers", () => {
     expect(isSideChatCommand("/side")).toBe(true);
     expect(isSideChatCommand(" /side ")).toBe(true);
     expect(isSideChatCommand("/sidebar")).toBe(false);
+  });
+});
+
+const node = (id: string, extra: Partial<GraphNode["status"]> = {}, parent: string | null = null): GraphNode =>
+  ({
+    id,
+    projectId: "p1",
+    recordPath: `.jwn/${id}`,
+    contract: {
+      id,
+      title: `Node ${id}`,
+      version: 1,
+      approved: null,
+      parent,
+      purpose: "Never miss a card",
+      criteria: [
+        { id: "1", text: "Alert within a minute", check: "evidence", how: "device recording" },
+        { id: "2", text: "No alert for running work", check: "auto", how: "test" },
+      ],
+      dont: ["Show card text on the lock screen"],
+      waitsOn: [
+        { node: "other", criterion: "1" },
+        { node: "other", criterion: "2" },
+      ],
+      expectedFiles: [{ path: "src/push.ts", change: "new" }],
+    },
+    status: {
+      state: "running",
+      criteria: [{ id: "1", status: "proven", evidence: [] }],
+      unmatchedResults: [],
+      reviewFindings: [],
+      asks: [],
+      progress: { proven: 1, total: 2 },
+      dots: { ask: false, failed: false, waiting: false },
+      changes: { kind: "unavailable", reason: "no checkout" },
+      ...extra,
+    },
+    issues: [],
+    timeline: [],
+  }) as unknown as GraphNode;
+
+const graph = (nodes: GraphNode[]): NodeGraph => ({ nodes, edges: [], unlinkedAsks: [] });
+
+describe("buildGraphWorkItems", () => {
+  const projects = [project("p1", "busyboy", [])];
+
+  it("maps live nodes to work rows with progress, children and waits", () => {
+    const items = buildGraphWorkItems(
+      graph([node("parent"), node("child", {}, "parent"), node("done", { state: "done" })]),
+      projects,
+    );
+    expect(items.map((item) => item.nodeId)).toEqual(["parent", "child"]);
+    expect(items[0]).toMatchObject({
+      id: "node:parent",
+      taskId: null,
+      stage: null,
+      projectName: "busyboy",
+      title: "Node parent",
+      state: "running",
+      statusLabel: "1 of 2 proven",
+      childIds: ["child"],
+      waitsOnIds: ["other"],
+    });
+  });
+
+  it("puts asking, failed and draft nodes into waiting on me", () => {
+    const items = buildGraphWorkItems(
+      graph([
+        node("ask", { dots: { ask: true, failed: false, waiting: false } }),
+        node("failed", { state: "failed" }),
+        node("draft", { state: "draft" }),
+      ]),
+      projects,
+    );
+    expect(items.map((item) => [item.statusLabel, item.state])).toEqual([
+      ["Waiting for your answer", "waiting_on_me"],
+      ["Stuck", "waiting_on_me"],
+      ["Waiting for agreement", "waiting_on_me"],
+    ]);
+  });
+
+  it("joins node work with tasks in the toast and the mention counts", () => {
+    const withTask = [project("p1", "busyboy", [task("t1")])];
+    const items = buildWorkItems(withTask, graph([node("n1", { state: "asking" })]));
+    expect(items.map((item) => item.id)).toEqual(["node:n1", "work:t1"]);
+    expect(
+      projectMentionStatus(withTask, graph([node("n1", { state: "asking" })]))[0]!.label,
+    ).toBe("Waiting on you 1 · Running 1");
+  });
+});
+
+describe("nodeEndState", () => {
+  it("lists purpose, criteria with their checks and status, do-nots and expected files", () => {
+    expect(nodeEndState(node("n1"))).toEqual({
+      title: "Node n1",
+      purpose: "Never miss a card",
+      criteria: [
+        { id: "1", text: "Alert within a minute", how: "device recording", status: "proven" },
+        { id: "2", text: "No alert for running work", how: "test", status: "pending" },
+      ],
+      dont: ["Show card text on the lock screen"],
+      expectedFiles: [{ path: "src/push.ts", change: "new" }],
+      issues: [],
+    });
   });
 });
