@@ -117,7 +117,9 @@ class AppServerConnection {
 }
 
 async function spawnAppServer(executable: string, cwd: string, onMessage: (message: CodexRawMessage) => void) {
-  const child = spawn(executable, ['app-server'], { cwd, env: await agentEnvironment(), stdio: 'pipe' })
+  // Next types NODE_ENV as required in ProcessEnv; the agent environment leaves it out on purpose.
+  const env = (await agentEnvironment()) as NodeJS.ProcessEnv
+  const child = spawn(executable, ['app-server'], { cwd, env, stdio: 'pipe' })
   return new AppServerConnection(child, onMessage)
 }
 

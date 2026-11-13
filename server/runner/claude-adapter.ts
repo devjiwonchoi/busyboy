@@ -56,10 +56,6 @@ async function resolveClaude() {
   return process.env[CLAUDE_PATH_ENV] || (await findExecutable('claude'))
 }
 
-function toStringEnv(env: NodeJS.ProcessEnv) {
-  return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined))
-}
-
 function permissionResult(answer: AgentAnswer, input: Record<string, unknown>): PermissionResult {
   if (answer.kind === 'question') return { behavior: 'allow', updatedInput: { ...input, answers: answer.answers } }
   if (answer.allow) return { behavior: 'allow', updatedInput: input }
@@ -78,9 +74,11 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   const canUseTool: CanUseTool = (toolName, toolInput, { signal, toolUseID, title, description }) => {
     const requestId = toolUseID || randomUUID()
     return new Promise<PermissionResult>((resolve) => {
+      // The SDK cancels the request (for example when the turn ends): close it for the runner too.
       const onAbort = () => {
         answers.delete(requestId)
         resolve({ behavior: 'deny', message: 'The request was cancelled.' })
+        emit({ type: 'answered', requestId })
       }
       signal.addEventListener('abort', onAbort, { once: true })
       answers.set(requestId, (answer) => {
@@ -103,7 +101,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       options: {
         cwd: options.cwd,
         pathToClaudeCodeExecutable: executable,
-        env: toStringEnv(await agentEnvironment()),
+        env: await agentEnvironment(),
         abortController: abort,
         includePartialMessages: true,
         resume: options.resumeSessionId,
@@ -136,7 +134,10 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       input.push(text)
     },
     async interrupt() {
-      for (const [, resolve] of answers) resolve({ kind: 'approval', allow: false, message: 'The user interrupted.' })
+      for (const [requestId, resolve] of answers) {
+        resolve({ kind: 'approval', allow: false, message: 'The user interrupted.' })
+        emit({ type: 'answered', requestId })
+      }
       await current?.interrupt()
     },
     async compact() {
@@ -174,7 +175,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
   try {
     const probe = query({
       prompt: idle,
-      options: { pathToClaudeCodeExecutable: executable, env: toStringEnv(await agentEnvironment()), abortController: abort },
+      options: { pathToClaudeCodeExecutable: executable, env: await agentEnvironment(), abortController: abort },
     })
     const { account } = await probe.initializationResult()
     if (account.apiProvider && account.apiProvider !== 'firstParty') return { state: 'signed-in', account: account.apiProvider }
