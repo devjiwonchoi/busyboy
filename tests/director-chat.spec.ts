@@ -252,7 +252,7 @@ test('a long chat should compact while idle', async ({ page, context, baseURL })
   await expect(transcript.getByRole('note')).toHaveText('Context compacted')
 })
 
-test('a Director reply with Markdown should show highlighted code', async ({ page, context, baseURL }) => {
+test('a Director reply with Markdown should show highlighted code and matched text sizes', async ({ page, context, baseURL }) => {
   await useProjectsHome(context, baseURL!, ['web'])
   // The app follows the system theme; check that code takes Shiki's dark colors, not the light ones.
   await page.emulateMedia({ colorScheme: 'dark' })
@@ -261,9 +261,21 @@ test('a Director reply with Markdown should show highlighted code', async ({ pag
   await send(page, MARKDOWN_REQUEST)
 
   const reply = page.getByRole('log', { name: 'Transcript' }).getByLabel('Reply', { exact: true })
+  const fontSize = (selector: string) => reply.locator(selector).first().evaluate((node) => parseFloat(getComputedStyle(node).fontSize))
   const keyword = reply.locator('[data-streamdown=code-block-body] span', { hasText: /^export$/ })
   // github-dark colors keywords #F97583; github-light would give #D73A49.
   await expect(keyword).toHaveCSS('color', 'rgb(249, 117, 131)')
+
+  const body = await fontSize('p')
+  const heading = await fontSize('h2')
+  const inlineCode = await fontSize('[data-streamdown=inline-code]')
+  const blockCode = await fontSize('[data-streamdown=code-block-body]')
+  const tableCell = await fontSize('td')
+  expect(heading).toBeGreaterThan(body)
+  expect(heading).toBeLessThanOrEqual(body * 1.25)
+  expect(inlineCode).toBeLessThanOrEqual(body)
+  expect(blockCode).toBeLessThanOrEqual(body)
+  expect(tableCell).toBe(body)
 
   // A plain link: the desktop app opens it in the browser, so no Streamdown link check.
   await expect(reply.getByRole('link', { name: 'the docs' })).toHaveAttribute('href', 'https://example.com/docs')

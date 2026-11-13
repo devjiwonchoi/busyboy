@@ -24,6 +24,25 @@ const controls: ControlsConfig = {
 // and more UI outside our component library.
 const linkSafety: LinkSafetyConfig = { enabled: false }
 
+// Streamdown sizes its elements for a document page (text-3xl/2xl headings, text-sm code and
+// table cells, my-4/mt-6 gaps). Inside a chat bubble the body text is text-xs, so these
+// selectors scale every element from the bubble's size instead. They target the
+// `data-streamdown` attributes Streamdown puts on each element.
+const scale = [
+  'space-y-2',
+  // Headings: one small step above the body text, never twice its size.
+  '[&_[data-streamdown=heading-1]]:mt-3 [&_[data-streamdown=heading-1]]:mb-1 [&_[data-streamdown=heading-1]]:text-sm',
+  '[&_[data-streamdown=heading-2]]:mt-3 [&_[data-streamdown=heading-2]]:mb-1 [&_[data-streamdown=heading-2]]:text-[13px]',
+  '[&_:is(h3,h4,h5,h6)]:mt-3 [&_:is(h3,h4,h5,h6)]:mb-1 [&_:is(h3,h4,h5,h6)]:text-xs',
+  // Code reads a little smaller than the prose around it, like inline code in most editors.
+  // Streamdown fills inline code with bg-muted, the Director bubble's own color, so it would
+  // show no chip; a foreground tint stays visible on any bubble color.
+  '[&_[data-streamdown=inline-code]]:bg-foreground/10 [&_[data-streamdown=inline-code]]:px-1 [&_[data-streamdown=inline-code]]:py-0 [&_[data-streamdown=inline-code]]:text-[0.9em]',
+  '[&_[data-streamdown=code-block]]:my-2 [&_[data-streamdown=code-block-body]]:p-3 [&_[data-streamdown=code-block-body]]:text-[0.9em]',
+  '[&_:is(th,td)]:px-2 [&_:is(th,td)]:py-1 [&_:is(th,td)]:text-xs',
+  '[&_[data-streamdown=horizontal-rule]]:my-3 [&_[data-streamdown=blockquote]]:my-2',
+].join(' ')
+
 /** Director text as Markdown. `streaming` tolerates unfinished syntax while a reply arrives. */
 export function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
   return (
@@ -33,7 +52,7 @@ export function Markdown({ text, streaming = false }: { text: string; streaming?
       plugins={plugins}
       controls={controls}
       linkSafety={linkSafety}
-      className="space-y-2 [&_pre]:text-xs"
+      className={scale}
     >
       {text}
     </Streamdown>
