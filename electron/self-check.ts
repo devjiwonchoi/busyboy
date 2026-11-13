@@ -11,11 +11,14 @@ const TERMINAL_TIMEOUT_MS = 20_000
 const TERMINAL_MARKER = 'busyboy-terminal-ok'
 
 // The typed command differs from its output (quotes on Unix shells, a caret
-// escape in cmd.exe), so the shell's echo of the input cannot match by itself.
+// escape in cmd.exe), so the shell's echo of the input never contains the
+// marker. Match it anywhere: ConPTY positions the cursor instead of writing
+// newlines, so the output has no reliable line breaks.
 const terminalCommand = process.platform === 'win32' ? 'echo busyboy-terminal^-ok\r' : `echo busyboy-"terminal"-ok\r`
 
 function stripAnsi(text: string) {
-  return text.replace(/\u001b\[[0-?]*[ -\/]*[@-~]|\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)|\u001b[@-_]/g, '')
+  // Cursor positioning starts a new row on screen; keep it as a line break.
+  return text.replace(/\u001b\[\d*(;\d*)?H/g, '\n').replace(/\u001b\[[0-?]*[ -\/]*[@-~]|\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)|\u001b[@-_]/g, '')
 }
 
 /** Starts a pty through the server, runs `echo`, and returns what the shell printed. */
@@ -39,7 +42,7 @@ async function runTerminalEcho(server: ServerHandle) {
     await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ input: terminalCommand }) })
     const reader = stream.body.pipeThrough(new TextDecoderStream()).getReader()
     let pending = ''
-    while (!stripAnsi(output).split(/\r?\n/).some((line) => line.trim() === TERMINAL_MARKER)) {
+    while (!stripAnsi(output).includes(TERMINAL_MARKER)) {
       const { value, done } = await reader.read()
       if (done) break
       pending += value
@@ -57,8 +60,13 @@ async function runTerminalEcho(server: ServerHandle) {
     abort.abort()
     await fetch(endpoint, { method: 'DELETE', headers }).catch(() => {})
   }
-  const lines = stripAnsi(output).split(/\r?\n/).map((line) => line.trim())
-  return { cwd: body.cwd, shell: body.shell, printed: lines.includes(TERMINAL_MARKER), tail: lines.slice(-5) }
+  const text = stripAnsi(output)
+  const tail = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-5)
+  return { cwd: body.cwd, shell: body.shell, printed: text.includes(TERMINAL_MARKER), tail }
 }
 
 /** `--self-check` or `--self-check=<output path>`; returns the output path, or null when not set. */
