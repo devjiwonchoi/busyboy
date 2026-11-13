@@ -20,23 +20,11 @@ export type SidebarTab = SidebarTabMeta & { Component: ComponentType }
 
 type TabModule = { tab: SidebarTabMeta; default: ComponentType }
 
-type RequireContext = {
-  keys(): string[]
-  (id: string): TabModule
-}
-
-declare const require: {
-  context(directory: string, useSubdirectories: boolean, pattern: RegExp): RequireContext
-}
-
-const tabModules = require.context('../sidebar', false, /-tab\.tsx$/)
+// Turbopack's import.meta.glob: keys are sorted the same way in dev and production.
+const tabModules = import.meta.glob<TabModule>('../sidebar/*-tab.tsx', { eager: true })
 
 export function getSidebarTabs(): SidebarTab[] {
-  return tabModules
-    .keys()
-    .map((key) => {
-      const mod = tabModules(key)
-      return { ...mod.tab, Component: mod.default }
-    })
+  return Object.values(tabModules)
+    .map((mod) => ({ ...mod.tab, Component: mod.default }))
     .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
 }

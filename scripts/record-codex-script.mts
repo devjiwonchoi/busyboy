@@ -116,11 +116,12 @@ const codex = [...shellPath.split(delimiter), ...(process.env.PATH ?? '').split(
 if (!codex) throw new Error('The `codex` command was not found on the login-shell PATH.')
 
 // Like the server's agent environment (server/runner/find-executable.ts), busyboy's own variables stay out.
+// Next types NODE_ENV as required in ProcessEnv; leaving it out is the point.
 const env = Object.fromEntries(
   Object.entries(process.env).filter(
     ([name]) => !/^(BUSYBOY_|__NEXT)/i.test(name) && !/^(PORT|HOSTNAME|NODE_ENV|NEXT_RUNTIME|ELECTRON_RUN_AS_NODE)$/i.test(name),
   ),
-)
+) as NodeJS.ProcessEnv
 const child = spawn(codex, ['app-server'], { cwd, env, stdio: ['pipe', 'pipe', 'inherit'] })
 if (values.log) writeFileSync(values.log, '')
 const pending = new Map<number, (message: Message) => void>()

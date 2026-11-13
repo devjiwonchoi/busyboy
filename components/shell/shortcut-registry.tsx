@@ -5,7 +5,11 @@ import { createContext, useContext, useEffect, useRef } from 'react'
 export type Shortcut = {
   /** Unique id, for example `toggle-sidebar`. A later registration with the same id wins. */
   id: string
-  /** The `KeyboardEvent.key` value, compared case-insensitively. */
+  /**
+   * The `KeyboardEvent.key` value, compared case-insensitively. When the layout
+   * types a non-ASCII character, single letters and digits match by physical key
+   * (`KeyB`, `Digit1`), so shortcuts work while a non-Latin input source is active.
+   */
   key: string
   /** Cmd on macOS, Ctrl elsewhere. */
   mod?: boolean
@@ -23,11 +27,24 @@ function isMacPlatform() {
   return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 }
 
+function physicalCode(key: string) {
+  if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`
+  if (/^[0-9]$/.test(key)) return `Digit${key}`
+  return null
+}
+
 function matches(shortcut: Shortcut, event: KeyboardEvent, mac: boolean) {
   const mod = mac ? event.metaKey : event.ctrlKey
   const otherMod = mac ? event.ctrlKey : event.metaKey
+  // Fall back to the physical key only when the layout types a non-ASCII
+  // character there (Korean, Cyrillic). On Latin layouts such as Dvorak the
+  // typed letter wins, so Cmd/Ctrl+X on the physical B key stays Cut.
+  const typesAscii = /^[\x20-\x7e]$/.test(event.key)
+  const sameKey =
+    event.key.toLowerCase() === shortcut.key.toLowerCase() ||
+    (!typesAscii && event.code === physicalCode(shortcut.key))
   return (
-    event.key.toLowerCase() === shortcut.key.toLowerCase() &&
+    sameKey &&
     mod === Boolean(shortcut.mod) &&
     !otherMod &&
     event.shiftKey === Boolean(shortcut.shift) &&
@@ -42,7 +59,9 @@ export function ShortcutRegistryProvider({ children }: { children: React.ReactNo
   useEffect(() => {
     const mac = isMacPlatform()
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return
+      if (event.defaultPrevented) return
+      // Plain keys belong to an active input method; modifier shortcuts still apply.
+      if (event.isComposing && !event.metaKey && !event.ctrlKey) return
       for (const shortcut of registry.current.values()) {
         if (!matches(shortcut, event, mac)) continue
         event.preventDefault()

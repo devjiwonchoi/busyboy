@@ -44,7 +44,7 @@ function keep(message: SDKMessage): Step | undefined {
       return { type: 'stream_event', event: { type: event.type, delta: { type: 'text_delta', text: event.delta.text } } }
     }
     case 'assistant': {
-      const content = message.message.content.flatMap((block) => {
+      const content = message.message.content.flatMap((block): Step[] => {
         if (block.type === 'text') return [{ type: 'text', text: block.text }]
         if (block.type === 'tool_use') return [{ type: 'tool_use', name: block.name, input: block.input }]
         return []
