@@ -16,7 +16,7 @@ export type ServerHandle = {
   url: string
   token: string
   isRunning: () => boolean
-  /** Resolves with whether the server confirmed it ended its child processes. */
+  /** Resolves with whether the server answered the shutdown message after running its shutdown handlers. */
   stop: () => Promise<{ acknowledged: boolean }>
 }
 
@@ -106,19 +106,26 @@ export async function startServer(): Promise<ServerHandle> {
       // Let the server end its terminals first: on Windows `kill()` terminates
       // the process outright and no exit hook in it runs.
       let acknowledged = false
+      let onMessage: (message: { type?: string } | null) => void = () => {}
       const shutdownDone = new Promise<void>((resolve) => {
-        child.on('message', (message: { type?: string } | null) => {
+        onMessage = (message) => {
           if (message?.type !== SHUTDOWN_DONE_MESSAGE) return
           acknowledged = true
           resolve()
-        })
+        }
+        child.on('message', onMessage)
       })
+      let timer: ReturnType<typeof setTimeout> | undefined
       child.postMessage({ type: SHUTDOWN_MESSAGE })
       await Promise.race([
         shutdownDone,
         exitedPromise,
-        new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+        new Promise((resolve) => {
+          timer = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)
+        }),
       ])
+      clearTimeout(timer)
+      child.off('message', onMessage)
       if (!running) return { acknowledged }
       child.kill()
       await Promise.race([exitedPromise, new Promise((resolve) => setTimeout(resolve, STOP_TIMEOUT_MS))])
