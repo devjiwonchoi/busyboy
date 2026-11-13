@@ -354,12 +354,10 @@ function PlanReview({
     setTab("chat");
   };
 
-  const resolveRange = (
-    id: string,
-    host: ParentNode | undefined = bodyRef.current ?? undefined,
-  ) => {
+  const resolveRange = (id: string, host?: ParentNode) => {
+    const root = host ?? bodyRef.current ?? undefined;
     const entry = comments.find((comment) => comment.id === id);
-    const section = host?.querySelector<HTMLElement>(
+    const section = root?.querySelector<HTMLElement>(
       `[data-plan-section="${CSS.escape(entry?.section ?? "")}"]`,
     );
     return entry && section ? findQuoteRange(section, entry.quote, entry.start) : null;

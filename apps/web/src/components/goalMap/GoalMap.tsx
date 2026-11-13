@@ -368,15 +368,10 @@ function NextActionPill(props: {
   const lead = nextAction.kind === "user" ? "내 차례" : null;
   const rest =
     lead !== null && props.text.startsWith(lead) ? props.text.slice(lead.length) : props.text;
-  const restFit = fitText(
-    rest,
-    props.maxWidth - pad * 2 - (lead === null ? 0 : textWidth(lead, size) * 1.08),
-    size,
-  );
-  const width = Math.min(
-    props.maxWidth,
-    pad * 2 + (lead === null ? 0 : textWidth(lead, size) * 1.08) + textWidth(restFit, size),
-  );
+  const leadWidth = lead === null ? 0 : textWidth(lead, size) * 1.08;
+  const restFit = fitText(rest, props.maxWidth - pad * 2 - leadWidth, size);
+  const restWidth = textWidth(restFit, size);
+  const width = Math.min(props.maxWidth, pad * 2 + leadWidth + restWidth);
   const open = props.onOpen;
   return (
     <g

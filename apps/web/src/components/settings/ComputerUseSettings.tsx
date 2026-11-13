@@ -6,10 +6,11 @@ import type {
 } from "@t3tools/contracts";
 import { COMPUTER_USE_ALWAYS_ALLOW_DAYS } from "@t3tools/contracts";
 import { AppWindowIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { isElectron } from "~/env";
 import { usePrimarySettings, useUpdatePrimarySettings } from "~/hooks/useSettings";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { isMacPlatform } from "~/lib/utils";
 import { ensureLocalApi } from "~/localApi";
 import { usePrimaryEnvironmentId } from "~/state/environments";
@@ -378,8 +379,8 @@ export function ComputerUseSettings() {
   const restartHelper = useAtomCommand(serverEnvironment.computerUseRestartHelper, options);
   const [status, setStatus] = useState<ComputerUseSettingsStatus | null>(null);
   const [restarting, setRestarting] = useState(false);
-  const readStatusRef = useRef(readStatus);
-  readStatusRef.current = readStatus;
+  // Stable, so the poll below keeps one interval across renders.
+  const readStatusStable = useStableCallback(readStatus);
   const enabled = settings.enableAgentComputerUse;
   const canGrantOnThisDevice = isElectron && isMacPlatform(navigator.platform);
   const canReadStatus = !isElectron || canGrantOnThisDevice;
@@ -390,7 +391,7 @@ export function ComputerUseSettings() {
     // Opening or focusing settings starts the helper so its grants show; the
     // poll only reads, so an open settings page never keeps the helper awake.
     const refresh = (start: boolean) => {
-      void readStatusRef.current({ environmentId, input: { start } }).then((result) => {
+      void readStatusStable({ environmentId, input: { start } }).then((result) => {
         if (!cancelled && result._tag === "Success") setStatus(result.value);
       });
     };
@@ -403,7 +404,7 @@ export function ComputerUseSettings() {
       window.clearInterval(interval);
       window.removeEventListener("focus", refreshAndStart);
     };
-  }, [environmentId, canReadStatus, enabled]);
+  }, [environmentId, canReadStatus, enabled, readStatusStable]);
 
   return (
     <ComputerUseSettingsView
