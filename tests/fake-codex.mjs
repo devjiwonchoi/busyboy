@@ -31,6 +31,15 @@ let current
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`)
 const notify = (method, params) => send({ method, params: { threadId, ...(current ? { turnId: current.id } : {}), ...params } })
 
+/** The reply as a command decision: permissions granted nothing, or an elicitation declined, count as a decline. */
+function replyDecision(result) {
+  if (!result || typeof result !== 'object') return 'accept'
+  if ('decision' in result) return typeof result.decision === 'string' ? result.decision : 'accept'
+  if ('action' in result) return result.action
+  if ('permissions' in result) return Object.keys(result.permissions ?? {}).length ? 'accept' : 'decline'
+  return 'accept'
+}
+
 function completeTurn(status, error = null) {
   if (!current) return
   const { id } = current
@@ -61,7 +70,7 @@ async function playTurn(turn) {
       send({ id, method: raw.method, params: { threadId, turnId: own.id, itemId: randomUUID(), ...raw.params } })
       const result = await reply
       if (own.ended) return
-      const decision = result && typeof result === 'object' && 'decision' in result ? result.decision : 'accept'
+      const decision = replyDecision(result)
       if (decision === 'cancel') {
         completeTurn('interrupted')
         return

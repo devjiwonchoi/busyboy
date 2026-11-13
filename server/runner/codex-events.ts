@@ -39,13 +39,28 @@ type UserInputQuestion = {
 }
 
 /** A path in a permission request, as the 0.167.0 protocol shapes it. */
-type SandboxPath = { type: 'path'; path: string } | { type: 'glob_pattern'; pattern: string } | { type: 'special'; value: unknown }
+type SandboxPath =
+  | { type: 'path'; path: string }
+  | { type: 'glob_pattern'; pattern: string }
+  | { type: 'special'; value: { kind: string; path?: string; subpath?: string | null } }
+
+const SPECIAL_PATHS: Record<string, string> = {
+  root: 'the whole disk',
+  minimal: 'system paths',
+  tmpdir: 'the temporary folder',
+  slash_tmp: '/tmp',
+  project_roots: 'the project folders',
+}
 
 function sandboxPathLabel(path: SandboxPath) {
   if (path.type === 'path') return path.path
   if (path.type === 'glob_pattern') return path.pattern
-  return typeof path.value === 'string' ? path.value : JSON.stringify(path.value)
+  const { kind, path: unknownPath, subpath } = path.value
+  const base = SPECIAL_PATHS[kind] ?? unknownPath ?? kind
+  return subpath ? `${subpath} in ${base}` : base
 }
+
+const ACCESS_LABELS: Record<string, string> = { read: 'Read', write: 'Write', deny: 'No access' }
 
 /** Server requests that become an approval or a question. Others are refused. */
 export const CODEX_ANSWERABLE_REQUESTS = new Set([
@@ -195,7 +210,7 @@ export function codexRequestToEvent(
           permissions?.network?.enabled && 'Network access',
           // Newer servers describe paths as entries (granted in full on Allow); the read and write lists are their legacy form.
           ...(entries?.length
-            ? entries.map((entry) => `${entry.access}: ${sandboxPathLabel(entry.path)}`)
+            ? entries.map((entry) => `${ACCESS_LABELS[entry.access] ?? entry.access}: ${sandboxPathLabel(entry.path)}`)
             : [
                 permissions?.fileSystem?.write?.length && `Write: ${permissions.fileSystem.write.join(', ')}`,
                 permissions?.fileSystem?.read?.length && `Read: ${permissions.fileSystem.read.join(', ')}`,
