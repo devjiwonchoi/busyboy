@@ -34,13 +34,21 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Toggle bottom panel' }).click()
     await expect(panel).toBeHidden()
 
-    // With a Korean input source, Cmd/Ctrl+B reports the key as 'ㅠ' on the physical B key.
-    await page.evaluate(() => {
-      const mac = /Mac/.test(navigator.platform)
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ㅠ', code: 'KeyB', metaKey: mac, ctrlKey: !mac, bubbles: true }),
+    const pressOnLayout = (key: string, code: string) =>
+      page.evaluate(
+        ([key, code]) => {
+          const mac = /Mac/.test(navigator.platform)
+          window.dispatchEvent(new KeyboardEvent('keydown', { key, code, metaKey: mac, ctrlKey: !mac, bubbles: true }))
+        },
+        [key, code],
       )
-    })
+
+    // Dvorak types 'x' on the physical B key: Cmd/Ctrl+X must stay Cut.
+    await pressOnLayout('x', 'KeyB')
+    await expect(sidebar).toBeVisible()
+
+    // A Korean input source types 'ㅠ' on the physical B key: Cmd/Ctrl+B still toggles.
+    await pressOnLayout('ㅠ', 'KeyB')
     await expect(sidebar).toBeHidden()
 
     expect(policyViolations).toEqual([])

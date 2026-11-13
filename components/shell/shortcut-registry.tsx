@@ -6,9 +6,9 @@ export type Shortcut = {
   /** Unique id, for example `toggle-sidebar`. A later registration with the same id wins. */
   id: string
   /**
-   * The `KeyboardEvent.key` value, compared case-insensitively. Single letters
-   * and digits also match by physical key (`KeyB`, `Digit1`), so shortcuts work
-   * while a non-Latin input source is active.
+   * The `KeyboardEvent.key` value, compared case-insensitively. When the layout
+   * types a non-ASCII character, single letters and digits match by physical key
+   * (`KeyB`, `Digit1`), so shortcuts work while a non-Latin input source is active.
    */
   key: string
   /** Cmd on macOS, Ctrl elsewhere. */
@@ -36,8 +36,13 @@ function physicalCode(key: string) {
 function matches(shortcut: Shortcut, event: KeyboardEvent, mac: boolean) {
   const mod = mac ? event.metaKey : event.ctrlKey
   const otherMod = mac ? event.ctrlKey : event.metaKey
+  // Fall back to the physical key only when the layout types a non-ASCII
+  // character there (Korean, Cyrillic). On Latin layouts such as Dvorak the
+  // typed letter wins, so Cmd/Ctrl+X on the physical B key stays Cut.
+  const typesAscii = /^[\x20-\x7e]$/.test(event.key)
   const sameKey =
-    event.key.toLowerCase() === shortcut.key.toLowerCase() || event.code === physicalCode(shortcut.key)
+    event.key.toLowerCase() === shortcut.key.toLowerCase() ||
+    (!typesAscii && event.code === physicalCode(shortcut.key))
   return (
     sameKey &&
     mod === Boolean(shortcut.mod) &&
