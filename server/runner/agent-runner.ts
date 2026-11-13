@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { SERVER_TOKEN_ENV } from '@/lib/server-token'
 import { claudeAdapter } from './claude-adapter'
+import { codexAdapter } from './codex-adapter'
 import type {
   AgentAnswer,
   AgentEvent,
@@ -45,8 +46,7 @@ const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 function adapterFor(provider: ProviderId): ProviderAdapter {
   const scripts = process.env[SCRIPTS_ENV]
   if (scripts && !process.env[SERVER_TOKEN_ENV] && hasScripts(scripts, provider)) return createScriptedAdapter(scripts)
-  if (provider === 'claude') return claudeAdapter
-  throw new Error(`The ${provider} provider is not available yet.`)
+  return provider === 'codex' ? codexAdapter : claudeAdapter
 }
 
 function getRecord(agentId: string) {
@@ -94,7 +94,8 @@ function record(agent: AgentRecord, event: AgentEvent) {
         event = { ...event, interrupted: true }
         agent.interrupting = false
       }
-      agent.status = 'idle'
+      // With `more`, a queued message's turn starts now: the agent keeps running and can be interrupted.
+      agent.status = event.more ? 'running' : 'idle'
       break
     case 'stopped':
       if (agent.status === 'stopped') return

@@ -43,9 +43,9 @@ function parseAnswer(value: unknown): AgentAnswer {
   throw new Error('The answer kind must be "approval" or "question".')
 }
 
-export async function startAgentAction(message: unknown): Promise<AgentSnapshot> {
+export async function startAgentAction(message: unknown, provider?: unknown): Promise<AgentSnapshot> {
   const body = text(message, 'The message')
-  const agent = startAgent({ provider: 'claude', cwd: homedir() })
+  const agent = startAgent({ provider: provider === 'codex' ? 'codex' : 'claude', cwd: homedir() })
   sendMessage(agent.id, body)
   return agent
 }

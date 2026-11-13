@@ -113,7 +113,9 @@ export function AgentConsole() {
     if (agentId && view.status !== 'stopped') await sendMessageAction(agentId, text)
     else {
       setView(initialView)
-      setAgentId((await startAgentAction(text)).id)
+      // `?provider=codex` picks Codex until the master chat chooses providers itself.
+      const provider = new URLSearchParams(window.location.search).get('provider') === 'codex' ? 'codex' : 'claude'
+      setAgentId((await startAgentAction(text, provider)).id)
     }
   }
 
