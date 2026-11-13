@@ -15,6 +15,7 @@ import { encodeHelperFrame, HelperFrameDecoder } from "./HelperFraming.ts";
 import {
   HelperSupervisor,
   helperSpawnEnv,
+  helperRootDir,
   resolveHelperSocketPath,
   SOCKET_POLL_MS,
   type HelperChild,
@@ -525,7 +526,33 @@ describe("helperSpawnEnv", () => {
   });
 });
 
+describe("helperRootDir", () => {
+  it("keeps development builds out of the installed app's helper folder", () => {
+    expect(helperRootDir("/Users/a", false)).toBe(
+      "/Users/a/Library/Application Support/BusyBoy/ComputerUse",
+    );
+    expect(helperRootDir("/Users/a", true)).toBe(
+      "/Users/a/Library/Application Support/BusyBoy/ComputerUse-dev",
+    );
+  });
+});
+
 describe("resolveHelperSocketPath", () => {
+  it("gives development builds their own TMPDIR fallback", () => {
+    const home = `/Users/${"a".repeat(80)}`;
+    expect(resolveHelperSocketPath({ homeDirectory: home, tmpDir: "/tmp/T", euid: 501 })).toBe(
+      "/tmp/T/busyboy-cu-501/helper.sock",
+    );
+    expect(
+      resolveHelperSocketPath({
+        homeDirectory: home,
+        tmpDir: "/tmp/T",
+        euid: 501,
+        development: true,
+      }),
+    ).toBe("/tmp/T/busyboy-cu-dev-501/helper.sock");
+  });
+
   it("falls back to TMPDIR when the default path is too long for a socket", () => {
     expect(resolveHelperSocketPath({ homeDirectory: "/Users/a", tmpDir: "/tmp", euid: 501 })).toBe(
       "/Users/a/Library/Application Support/BusyBoy/ComputerUse/run/helper.sock",

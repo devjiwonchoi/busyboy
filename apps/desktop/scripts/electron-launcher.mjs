@@ -265,6 +265,8 @@ export function resolveMacBundleInfoPlistStrings(executableName) {
     NSScreenCaptureUsageDescription:
       "BusyBoy captures the active window when you use the snapshot shortcut.",
     NSDocumentsFolderUsageDescription: "BusyBoy reads project files you open in the desktop app.",
+    NSAppleEventsUsageDescription:
+      "BusyBoy lets agents run scripts that control apps you allow, such as Calendar or Notes.",
   };
 }
 

@@ -114,6 +114,10 @@ describe("electron development launcher", () => {
       values.NSDocumentsFolderUsageDescription,
       "BusyBoy reads project files you open in the desktop app.",
     );
+    assert.equal(
+      values.NSAppleEventsUsageDescription,
+      "BusyBoy lets agents run scripts that control apps you allow, such as Calendar or Notes.",
+    );
   });
 
   it("ad-hoc signs the complete development app bundle", () => {
