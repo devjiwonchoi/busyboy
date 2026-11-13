@@ -7,9 +7,9 @@
   "main": "dist-electron/main.cjs",
   "packageManager": "pnpm@11.10.0",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 127.0.0.1",
     "build": "next build && node scripts/prepare-standalone.mts",
-    "start": "node .next/standalone/server.js",
+    "start": "node scripts/start-standalone.mts",
     "build:electron": "node scripts/build-electron.mts",
     "dev:desktop": "pnpm build:electron && electron .",
     "build:desktop": "node scripts/build-desktop.mts",

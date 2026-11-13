@@ -16,10 +16,11 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Journeys run against the production standalone server, as the desktop app does.
   webServer: {
-    command: 'pnpm build && node .next/standalone/server.js',
+    command: 'pnpm build && pnpm start',
     url: baseURL,
-    env: { PORT: String(port), HOSTNAME: '127.0.0.1' },
-    reuseExistingServer: !process.env.CI,
+    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1' },
+    // Never reuse: another worktree may be serving a different build on the same port.
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 })
