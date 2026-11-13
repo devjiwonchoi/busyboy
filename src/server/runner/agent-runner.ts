@@ -238,6 +238,31 @@ export function subscribeToAgent(
   return () => agent.listeners.delete(listener)
 }
 
+/**
+ * The agent's latest reply text, or null. A task agent may finish without
+ * writing records, so this is how the Director learns what it said. Replies
+ * usually arrive only as deltas; a `text` event for the same item replaces them.
+ */
+export function lastAgentReply(agentId: string): string | null {
+  const agent = registry.agents.get(agentId)
+  if (!agent) return null
+  let itemId: string | undefined
+  let text = ''
+  for (let index = agent.events.length - 1; index >= 0; index -= 1) {
+    const { event } = agent.events[index]
+    if (event.type !== 'text' && event.type !== 'text-delta') continue
+    if (itemId === undefined) itemId = event.itemId
+    // An item's events are contiguous, so an earlier item ends the reply.
+    else if (event.itemId !== itemId) break
+    if (event.type === 'text') {
+      text = event.text
+      break
+    }
+    text = event.text + text
+  }
+  return text.trim() ? text : null
+}
+
 export function providerSignInStatus(provider: ProviderId): Promise<SignInStatus> {
   return adapterFor(provider).signInStatus()
 }
