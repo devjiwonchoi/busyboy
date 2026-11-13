@@ -454,6 +454,46 @@ describe("memory-based task admission", () => {
     );
   });
 
+  it.effect(
+    "a lead with a live background subagent is not paused when tight and is told to continue after a critical pause",
+    () => {
+      const fake = fakeMac(PLENTY);
+      return withTeam(
+        (harness) =>
+          Effect.gen(function* () {
+            const governor = yield* MemoryGovernor.MemoryGovernor;
+            const pm = yield* setUpManager;
+            // Its turn ended, but a background subagent it started still reports progress.
+            const { lead, thread } = yield* startWithSession(harness, fake.mac, pm, "Screens");
+            const now = yield* DateTime.now;
+            thread.shell = {
+              ...thread.shell,
+              latestRunCompletedAt: now,
+              pendingBackgroundTasks: [{ taskId: "agent-screens", kind: "subagent" }],
+            };
+            thread.subagents = [{ origin: "provider_native", status: "running", updatedAt: now }];
+
+            fake.mac.memory = TIGHT;
+            yield* governor.tick;
+            assert.deepStrictEqual(yield* governor.paused, []);
+
+            fake.mac.memory = CRITICAL;
+            yield* governor.tick;
+            assert.deepStrictEqual(yield* governor.paused, [lead]);
+
+            fake.mac.memory = PLENTY;
+            yield* resumeTicks(governor);
+            assert.deepStrictEqual(yield* governor.paused, []);
+            const texts = (yield* commandsTo(harness, lead)).flatMap((command) =>
+              command.type === "message.dispatch" ? [command.text] : [],
+            );
+            assert.include(texts, MemoryGovernor.RESUME_NOTICE);
+          }),
+        { memory: fake.read, sessions: fake.sessions },
+      );
+    },
+  );
+
   it.effect("resumes a paused lead after a restart once there is room", () => {
     const fake = fakeMac(PLENTY);
     return withTeam(

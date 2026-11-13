@@ -56,7 +56,13 @@ import * as MemoryHeadroom from "../resourceTelemetry/MemoryHeadroom.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AttentionRouter from "./AttentionRouter.ts";
-import { MINUTE_MS, makeIdGenerator, makePeriodicGate, nowIso } from "./common.ts";
+import {
+  liveBackgroundWork,
+  MINUTE_MS,
+  makeIdGenerator,
+  makePeriodicGate,
+  nowIso,
+} from "./common.ts";
 import {
   activeLocalLeads,
   MEMORY_WAIT_REASON,
@@ -65,6 +71,7 @@ import {
 } from "./memoryPolicy.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { ACTIVE_TASK_STAGES } from "./SitrepScheduler.ts";
+import { STALL_WAKE_AFTER_MS } from "./stallLedger.ts";
 import { taskChildren } from "./taskChildren.ts";
 
 export const MEMORY_GOVERNOR_INTERVAL_MS = 5_000;
@@ -97,7 +104,7 @@ interface Candidate extends SessionCandidate {
 
 interface PausedMember {
   readonly threadId: ThreadId;
-  /** A turn was stopped, so the session is told to go on when it resumes. */
+  /** A turn or live background work was stopped, so the session is told to go on when it resumes. */
   readonly interrupted: boolean;
 }
 
@@ -189,6 +196,16 @@ const make = Effect.gen(function* () {
       );
     }).pipe(Effect.orElseSucceed(() => null));
 
+  /**
+   * Live background work (a background subagent or command) is work under way even after
+   * the turn ended: releasing the session stops it, so the lead must hear about it.
+   */
+  const backgroundWorking = (shell: OrchestrationV2ThreadShell) =>
+    Effect.gen(function* () {
+      const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
+      return (yield* liveBackgroundWork(threads, shell, nowMs, STALL_WAKE_AFTER_MS)).live;
+    });
+
   const sessionState = (shell: OrchestrationV2ThreadShell) =>
     Effect.gen(function* () {
       const providerSessionId = yield* providerSessionOf(shell);
@@ -198,8 +215,9 @@ const make = Effect.gen(function* () {
           : false;
       const millis = (value: DateTime.Utc | null | undefined) =>
         value == null ? null : DateTime.toEpochMillis(value);
+      const background = yield* backgroundWorking(shell);
       return {
-        running: shell.activeRunId !== null,
+        running: shell.activeRunId !== null || background,
         runStartedAtMs: shell.activeRunId === null ? null : millis(shell.latestRunStartedAt),
         lastVisitedAtMs: millis(shell.lastVisitedAt),
         hasLiveSession,
@@ -261,7 +279,10 @@ const make = Effect.gen(function* () {
   /** Stops one thread's turn, holding its queue, and releases its provider session. */
   const pauseThread = (threadId: ThreadId) =>
     Effect.gen(function* () {
-      const interrupted = yield* control(threadId).stopTurn.pipe(
+      const before = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
+      // Releasing the session ends its background work too, which the lead is told on resume.
+      const stoppedBackground = before === null ? false : yield* backgroundWorking(before);
+      const stoppedTurn = yield* control(threadId).stopTurn.pipe(
         Effect.catch((error) =>
           Effect.logWarning("memory governor could not stop a turn", {
             threadId,
@@ -287,7 +308,7 @@ const make = Effect.gen(function* () {
             ),
           );
       }
-      return { threadId, interrupted } satisfies PausedMember;
+      return { threadId, interrupted: stoppedTurn || stoppedBackground } satisfies PausedMember;
     });
 
   const pause = (candidate: Candidate) =>

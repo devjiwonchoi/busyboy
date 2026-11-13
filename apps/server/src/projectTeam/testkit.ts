@@ -102,8 +102,11 @@ export interface FakeThread {
   deletedAt: string | null;
   archivedAt: string | null;
   messages: Array<OrchestrationV2ConversationMessage>;
-  /** Delegated children; only `origin` and `status` matter to the team services. */
-  subagents?: Array<Pick<OrchestrationV2Subagent, "origin" | "status">>;
+  /** Delegated children; `origin`, `status` and `updatedAt` matter to the team services. */
+  subagents?: Array<
+    Pick<OrchestrationV2Subagent, "origin" | "status"> &
+      Partial<Pick<OrchestrationV2Subagent, "updatedAt">>
+  >;
   /** Provider turns; `id`, `status`, `tokenUsage`, `runAttemptId` and `turnTokenUsage` matter. */
   providerTurns?: Array<
     Pick<OrchestrationV2ProviderTurn, "id" | "status" | "tokenUsage"> &
