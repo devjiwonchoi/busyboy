@@ -79,6 +79,21 @@
                 }
               ]
             }
+          },
+          "then": {
+            "No answer. Ask this in your reply text instead.": [
+              {
+                "event": {
+                  "type": "text",
+                  "text": "Which color do you prefer, Red or Blue?"
+                }
+              },
+              {
+                "event": {
+                  "type": "turn-done"
+                }
+              }
+            ]
           }
         },
         {

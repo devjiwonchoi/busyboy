@@ -50,6 +50,21 @@
               "description": "Create empty notes.txt file"
             },
             "description": "Create empty notes.txt file"
+          },
+          "then": {
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "text": "I was not allowed to create notes.txt."
+                }
+              },
+              {
+                "event": {
+                  "type": "turn-done"
+                }
+              }
+            ]
           }
         },
         {
