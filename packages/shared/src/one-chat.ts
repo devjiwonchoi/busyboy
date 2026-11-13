@@ -121,6 +121,29 @@ function isUserProject(project: OneChatProject): boolean {
   return project.summary.kind !== "director";
 }
 
+/**
+ * The Director's own questions are stored under the Director's project but point at a task in
+ * a user project. They show under that project, or under the Director when the task is unknown.
+ */
+function directorCards(
+  projects: ReadonlyArray<OneChatProject>,
+): Array<{ project: OneChatProject; card: ProjectDecisionCard }> {
+  const cards: Array<{ project: OneChatProject; card: ProjectDecisionCard }> = [];
+  for (const director of projects) {
+    if (isUserProject(director)) continue;
+    for (const card of director.summary.decisionCards) {
+      const owner =
+        projects.find(
+          (project) =>
+            isUserProject(project) &&
+            project.summary.tasks.some((task) => task.id === card.item.taskId),
+        ) ?? director;
+      cards.push({ project: owner, card });
+    }
+  }
+  return cards;
+}
+
 function proven(task: ProjectTaskReference): { proven: number; total: number } {
   const checks = task.checks ?? [];
   return { proven: checks.filter((check) => check.passed).length, total: checks.length };
@@ -180,8 +203,30 @@ function statusLabel(
 export function buildWorkItems(
   projects: ReadonlyArray<OneChatProject>,
   graph: NodeGraph | null = null,
+  taskWorktrees: ReadonlyArray<string> = [],
 ): WorkItem[] {
-  const items: WorkItem[] = graph ? buildGraphWorkItems(graph, projects) : [];
+  const items: WorkItem[] = graph ? buildGraphWorkItems(graph, projects, taskWorktrees) : [];
+  for (const { project, card } of directorCards(projects)) {
+    if (!isOpenAttention(card.item)) continue;
+    items.push({
+      id: `work:${card.item.id}`,
+      projectId: project.projectId,
+      projectName: project.name,
+      taskId: card.item.taskId,
+      nodeId: null,
+      title: card.taskTitle || firstLine(card.item.question),
+      state: "waiting_on_me",
+      stage: null,
+      statusLabel: "Waiting for your answer",
+      phaseLabel: "",
+      provenCount: 0,
+      criteriaCount: 0,
+      cardId: card.item.id,
+      childIds: [],
+      waitsOnIds: [],
+      prUrl: null,
+    });
+  }
   for (const project of projects) {
     if (!isUserProject(project)) continue;
     const { summary } = project;
@@ -258,17 +303,44 @@ function nodeStatusLabel(node: GraphNode): string {
 }
 
 /**
+ * Worktrees of live BusyBoy tasks, read from their lead threads. A skill record inside one of
+ * them is the same work as the task, so the node graph does not count it again.
+ */
+export function taskWorktreePaths(
+  projects: ReadonlyArray<OneChatProject>,
+  threads: ReadonlyArray<{ readonly id: string; readonly worktreePath: string | null }>,
+): string[] {
+  const worktrees = new Map(threads.map((thread) => [thread.id, thread.worktreePath]));
+  const paths: string[] = [];
+  for (const project of projects) {
+    for (const task of project.summary.tasks) {
+      if (!LIVE_STAGES.has(task.stage) || task.leadThreadId === null) continue;
+      const path = worktrees.get(task.leadThreadId);
+      if (path) paths.push(path);
+    }
+  }
+  return paths;
+}
+
+function insideAny(path: string, roots: ReadonlyArray<string>): boolean {
+  return roots.some((root) => path.startsWith(root.endsWith("/") ? root : `${root}/`));
+}
+
+/**
  * Skill-based work from the node graph adapter. A node needs the user when it asks a question,
- * failed (failures are not counted apart), or is still a draft waiting for agreement.
+ * failed (failures are not counted apart), or is still a draft waiting for agreement. Nodes
+ * recorded inside a live task's worktree are skipped; the task already has a row.
  */
 export function buildGraphWorkItems(
   graph: NodeGraph,
   projects: ReadonlyArray<OneChatProject>,
+  taskWorktrees: ReadonlyArray<string> = [],
 ): WorkItem[] {
   const names = new Map(projects.map((project) => [project.projectId, project.name]));
   const items: WorkItem[] = [];
   for (const node of graph.nodes) {
     if (!LIVE_NODE_STATES.has(node.status.state)) continue;
+    if (insideAny(node.recordPath, taskWorktrees)) continue;
     const { status, contract } = node;
     const waiting =
       status.dots.ask ||
@@ -478,6 +550,10 @@ export function buildActionCards(projects: ReadonlyArray<OneChatProject>): Actio
       }
     }
   }
+  for (const { project, card } of directorCards(projects)) {
+    if (card.item.supersededAt !== null || card.item.snoozedAt) continue;
+    cards.push(serverCard(project, card));
+  }
   return cards.toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
@@ -485,8 +561,9 @@ export function buildActionCards(projects: ReadonlyArray<OneChatProject>): Actio
 export function projectMentionStatus(
   projects: ReadonlyArray<OneChatProject>,
   graph: NodeGraph | null = null,
+  taskWorktrees: ReadonlyArray<string> = [],
 ): ProjectMentionStatus[] {
-  const items = buildWorkItems(projects, graph);
+  const items = buildWorkItems(projects, graph, taskWorktrees);
   return projects.filter(isUserProject).map((project) => {
     const counts = workCounts(items.filter((item) => item.projectId === project.projectId));
     const parts = [

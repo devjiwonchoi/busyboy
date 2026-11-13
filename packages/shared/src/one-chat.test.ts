@@ -22,6 +22,7 @@ import {
   resultCardId,
   resultFixMessage,
   resultMergeRequestMessage,
+  taskWorktreePaths,
   workCounts,
 } from "./one-chat.js";
 
@@ -162,6 +163,28 @@ describe("buildWorkItems", () => {
       project("dir", "Director", [task("d1")], [], { kind: "director" }),
     ]);
     expect(items.map((item) => [item.taskId, item.state])).toEqual([["t1", "running"]]);
+  });
+
+  it("shows the Director's own open questions under the project of the task they are about", () => {
+    const projects = [
+      project("p1", "busyboy", [task("t1")]),
+      project(
+        "dir",
+        "Director",
+        [],
+        [card("d1", "t1"), card("d2", "t1", { answer: "A: faster (Recommended)" })],
+        { kind: "director" },
+      ),
+    ];
+    const items = buildWorkItems(projects);
+    expect(items.map((item) => [item.id, item.projectName, item.state, item.cardId])).toEqual([
+      ["work:d1", "busyboy", "waiting_on_me", "d1"],
+      ["work:t1", "busyboy", "running", null],
+    ]);
+    expect(buildActionCards(projects).map((item) => [item.id, item.projectName])).toEqual([
+      ["d1", "busyboy"],
+      ["d2", "busyboy"],
+    ]);
   });
 });
 
@@ -413,6 +436,26 @@ describe("buildGraphWorkItems", () => {
     expect(
       projectMentionStatus(withTask, graph([node("n1", { state: "asking" })]))[0]!.label,
     ).toBe("Waiting on you 1 · Running 1");
+  });
+});
+
+describe("taskWorktreePaths", () => {
+  it("does not count a skill record inside a live task's worktree a second time", () => {
+    const projects = [
+      project("p1", "busyboy", [
+        task("t1", { leadThreadId: "lead-1" as never }),
+        task("t2", { stage: "done", leadThreadId: "lead-2" as never }),
+      ]),
+    ];
+    const worktrees = taskWorktreePaths(projects, [
+      { id: "lead-1", worktreePath: "/work/t1" },
+      { id: "lead-2", worktreePath: "/work/t2" },
+    ]);
+    expect(worktrees).toEqual(["/work/t1"]);
+    const inTask = { ...node("in-task"), recordPath: "/work/t1/.jwn/in-task" };
+    const nextDoor = { ...node("next-door"), recordPath: "/work/t10/.jwn/next-door" };
+    const items = buildWorkItems(projects, graph([inTask, nextDoor]), worktrees);
+    expect(items.map((item) => item.id)).toEqual(["node:next-door", "work:t1"]);
   });
 });
 

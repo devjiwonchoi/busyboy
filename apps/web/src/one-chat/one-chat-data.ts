@@ -5,6 +5,7 @@ import {
   buildActionCards,
   buildWorkItems,
   type OneChatProject,
+  taskWorktreePaths,
   type WorkCounts,
   type WorkItem,
   workCounts,
@@ -12,7 +13,7 @@ import {
 import * as DateTime from "effect/DateTime";
 
 import { useEnvironmentIds } from "~/state/environments";
-import { useProjects, useThreadProjection } from "~/state/entities";
+import { useProjects, useThreadProjection, useThreadShells } from "~/state/entities";
 import { useProjectManagerEntries } from "~/state/projectTeam";
 import { useNodeGraph } from "./node-graph";
 
@@ -77,17 +78,25 @@ export interface OneChatData {
   readonly directorProjectId: string | null;
   readonly projects: ReadonlyArray<OneChatProject>;
   readonly graph: NodeGraph | null;
+  /** Live task worktrees, so their skill records are not counted twice. */
+  readonly taskWorktrees: ReadonlyArray<string>;
   readonly workItems: ReadonlyArray<WorkItem>;
   readonly counts: WorkCounts;
   readonly cards: ReadonlyArray<ActionCard>;
 }
 
-/** The Director thread and every project's work, read from the existing state. */
+/**
+ * The Director thread and every project's work in the Director's environment, read from the
+ * existing state. Cards are answered on the Director's server, so other environments stay out.
+ */
 export function useOneChatData(): OneChatData {
   const entries = useProjectManagerEntries(useEnvironmentIds());
   const knownProjects = useProjects();
+  const threads = useThreadShells();
   const director = entries.find((entry) => entry.summary.kind === "director") ?? null;
-  const projects: OneChatProject[] = entries.map((entry) => {
+  const environmentId = director?.environmentId ?? null;
+  const sameEnvironment = entries.filter((entry) => entry.environmentId === environmentId);
+  const projects: OneChatProject[] = sameEnvironment.map((entry) => {
     const project = knownProjects.find(
       (candidate) =>
         candidate.environmentId === entry.environmentId &&
@@ -99,15 +108,20 @@ export function useOneChatData(): OneChatData {
       summary: entry.summary,
     };
   });
-  const graph = useNodeGraph(director?.environmentId ?? null);
-  const workItems = buildWorkItems(projects, graph);
+  const graph = useNodeGraph(environmentId);
+  const taskWorktrees = taskWorktreePaths(
+    projects,
+    threads.filter((thread) => thread.environmentId === environmentId),
+  );
+  const workItems = buildWorkItems(projects, graph, taskWorktrees);
   return {
-    environmentId: director?.environmentId ?? null,
+    environmentId,
     directorRef:
       director === null ? null : scopeThreadRef(director.environmentId, director.summary.pmThreadId),
     directorProjectId: director?.summary.projectId ?? null,
     projects,
     graph,
+    taskWorktrees,
     workItems,
     counts: workCounts(workItems),
     cards: buildActionCards(projects),

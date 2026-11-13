@@ -118,8 +118,8 @@ export function OneChatScreen() {
     [data.chat.messages, data.cards, data.chat.running],
   );
   const mentionProjects = useMemo(
-    () => projectMentionStatus(data.projects, data.graph),
-    [data.projects, data.graph],
+    () => projectMentionStatus(data.projects, data.graph, data.taskWorktrees),
+    [data.projects, data.graph, data.taskWorktrees],
   );
   const taskTitle = useCallback(
     (taskId: string) => {

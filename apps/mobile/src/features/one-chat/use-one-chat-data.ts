@@ -13,13 +13,14 @@ import {
   buildWorkItems,
   type ActionCard,
   type OneChatProject,
+  taskWorktreePaths,
   type WorkItem,
 } from "@t3tools/shared/one-chat";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import { useMemo } from "react";
 
-import { useProjects } from "../../state/entities";
+import { useProjects, useThreadShells } from "../../state/entities";
 import { useEnvironments } from "../../state/environments";
 import { useProjectManagerEntries } from "../../state/projectTeam";
 import { useEnvironmentThread } from "../../state/threads";
@@ -94,6 +95,8 @@ export interface OneChatData {
   readonly projects: ReadonlyArray<OneChatProject>;
   /** Skill-based work; null while it loads or when the adapter is unavailable. */
   readonly graph: NodeGraph | null;
+  /** Live task worktrees, so their skill records are not counted twice. */
+  readonly taskWorktrees: ReadonlyArray<string>;
   readonly cards: ReadonlyArray<ActionCard>;
   readonly workItems: ReadonlyArray<WorkItem>;
   readonly chat: ThreadChat;
@@ -106,14 +109,14 @@ export function useOneChatData(): OneChatData {
     environments.map((environment) => environment.environmentId),
   );
   const allProjects = useProjects();
+  const threads = useThreadShells();
   const director = entries.find((entry) => entry.summary.kind === "director") ?? null;
   const environmentId = director?.environmentId ?? null;
+  // The Director's entry stays in: its own questions are stored under its project.
   const projects = useMemo(
     () =>
       entries
-        .filter(
-          (entry) => entry.environmentId === environmentId && entry.summary.kind !== "director",
-        )
+        .filter((entry) => entry.environmentId === environmentId)
         .map(
           (entry): OneChatProject => ({
             projectId: entry.summary.projectId,
@@ -130,7 +133,18 @@ export function useOneChatData(): OneChatData {
   );
   const cards = useMemo(() => buildActionCards(projects), [projects]);
   const graph = useNodeGraph(environmentId);
-  const workItems = useMemo(() => buildWorkItems(projects, graph), [projects, graph]);
+  const taskWorktrees = useMemo(
+    () =>
+      taskWorktreePaths(
+        projects,
+        threads.filter((thread) => thread.environmentId === environmentId),
+      ),
+    [projects, threads, environmentId],
+  );
+  const workItems = useMemo(
+    () => buildWorkItems(projects, graph, taskWorktrees),
+    [projects, graph, taskWorktrees],
+  );
   const directorThreadId = director?.summary.pmThreadId ?? null;
   const chat = useThreadChat(environmentId, directorThreadId);
   return {
@@ -139,6 +153,7 @@ export function useOneChatData(): OneChatData {
     directorProjectId: director?.summary.projectId ?? null,
     projects,
     graph,
+    taskWorktrees,
     cards,
     workItems,
     chat,
