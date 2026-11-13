@@ -21,16 +21,50 @@ function stripAnsi(text: string) {
   return text.replace(/\u001b\[\d*(;\d*)?H/g, '\n').replace(/\u001b\[[0-?]*[ -\/]*[@-~]|\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)|\u001b[@-_]/g, '')
 }
 
-/** Starts a pty through the server, runs `echo`, and returns what the shell printed. */
-async function runTerminalEcho(server: ServerHandle) {
-  const headers = { [SERVER_TOKEN_HEADER]: server.token, 'Content-Type': 'application/json' }
+const PROCESS_EXIT_TIMEOUT_MS = 6_000
+
+type StartedTerminal = { id: string; cwd: string; shell: string; pid: number }
+
+function serverHeaders(server: ServerHandle) {
+  return { [SERVER_TOKEN_HEADER]: server.token, 'Content-Type': 'application/json' }
+}
+
+async function startTerminal(server: ServerHandle): Promise<StartedTerminal> {
   const started = await fetch(`${server.url}/api/terminal`, {
     method: 'POST',
-    headers,
+    headers: serverHeaders(server),
     body: JSON.stringify({ cols: 120, rows: 30 }),
   })
-  const body = (await started.json()) as { id?: string; cwd?: string; shell?: string; error?: string }
-  if (!started.ok || !body.id) throw new Error(body.error ?? `Starting a terminal failed with HTTP ${started.status}.`)
+  const body = (await started.json()) as Partial<StartedTerminal> & { error?: string }
+  if (!started.ok || !body.id || !body.pid) {
+    throw new Error(body.error ?? `Starting a terminal failed with HTTP ${started.status}.`)
+  }
+  return body as StartedTerminal
+}
+
+function isRunning(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM means the process exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+async function waitForExit(pid: number) {
+  const deadline = Date.now() + PROCESS_EXIT_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (!isRunning(pid)) return true
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  return !isRunning(pid)
+}
+
+/** Starts a pty through the server, runs `echo`, closes it, and reports what happened. */
+async function runTerminalEcho(server: ServerHandle) {
+  const headers = serverHeaders(server)
+  const body = await startTerminal(server)
   const endpoint = `${server.url}/api/terminal/${body.id}`
 
   const abort = new AbortController()
@@ -66,7 +100,8 @@ async function runTerminalEcho(server: ServerHandle) {
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(-5)
-  return { cwd: body.cwd, shell: body.shell, printed: text.includes(TERMINAL_MARKER), tail }
+  const exitedAfterClose = await waitForExit(body.pid)
+  return { cwd: body.cwd, shell: body.shell, printed: text.includes(TERMINAL_MARKER), exitedAfterClose, tail }
 }
 
 /** `--self-check` or `--self-check=<output path>`; returns the output path, or null when not set. */
@@ -104,6 +139,8 @@ export function createSelfCheck() {
     checks: {},
     details: {},
   }
+
+  let openTerminalPid: number | null = null
 
   return {
     result,
@@ -149,10 +186,16 @@ export function createSelfCheck() {
       const terminal = await runTerminalEcho(server)
       result.details.terminal = terminal
       result.checks.terminalEchoed = terminal.printed
+      result.checks.terminalClosed = terminal.exitedAfterClose
+      // Leave one shell running; stopping the server must end it.
+      openTerminalPid = (await startTerminal(server)).pid
     },
     async recordServerStop(server: ServerHandle) {
       await server.stop()
       result.checks.serverStopped = !server.isRunning()
+      if (openTerminalPid !== null) {
+        result.checks.terminalStoppedWithServer = await waitForExit(openTerminalPid)
+      }
     },
     fail(error: unknown) {
       result.error = error instanceof Error ? (error.stack ?? error.message) : String(error)

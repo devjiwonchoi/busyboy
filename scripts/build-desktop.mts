@@ -37,13 +37,16 @@ rmSync(outputDir, { recursive: true, force: true })
 
 /**
  * node-pty ships N-API prebuilds, so one binary works in Node and in
- * Electron's utility process without a rebuild. Keep only the target's
- * prebuilds (both architectures for a universal macOS build), keep a binary
- * compiled into `build/Release` when there is one, and make sure
- * `spawn-helper` stays executable.
+ * Electron's utility process without a rebuild. Keep only the target
+ * platform's prebuilds, keep a binary compiled into `build/Release` when there
+ * is one, and make sure `spawn-helper` stays executable.
+ *
+ * macOS keeps both architectures: a universal build packs x64 and arm64
+ * separately (this hook runs for each) and then requires both apps to hold
+ * the same Mach-O files, which `x64ArchFiles` lets it keep as they are.
  */
 function pruneNodePty(serverDir: string, platform: string, arch: string) {
-  const targets = arch === 'universal' ? [`${platform}-x64`, `${platform}-arm64`] : [`${platform}-${arch}`]
+  const targets = platform === 'darwin' ? ['darwin-x64', 'darwin-arm64'] : [`${platform}-${arch}`]
   const packages: string[] = []
   const visit = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -80,6 +83,9 @@ function pruneNodePty(serverDir: string, platform: string, arch: string) {
   }
 }
 
+const NODE_PTY_MAC_PREBUILDS =
+  'Contents/Resources/server/{node_modules/.pnpm/node-pty@*/node_modules/node-pty,node_modules/node-pty,.next/node_modules/node-pty-*}/prebuilds/darwin-*/*'
+
 const platform = targetPlatform()
 
 await builder.build({
@@ -98,6 +104,8 @@ await builder.build({
       category: 'public.app-category.developer-tools',
       // Unsigned until code signing is set up.
       identity: null,
+      // node-pty's thin prebuilds for both architectures (see pruneNodePty).
+      x64ArchFiles: NODE_PTY_MAC_PREBUILDS,
     },
     afterPack: async (context) => {
       const resources =
