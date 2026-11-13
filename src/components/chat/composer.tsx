@@ -27,6 +27,8 @@ export function ChatComposer({
   placeholder,
   onSend,
   onStop,
+  label = 'Message',
+  sendLabel = 'Send',
 }: {
   projects: string[]
   placeholder: string
@@ -34,6 +36,9 @@ export function ChatComposer({
   onSend: (text: string) => Promise<void> | void
   /** Shown as a Stop button while there is work to stop. */
   onStop?: () => void
+  /** Accessible names, so a second composer on the screen (the side chat) is told apart. */
+  label?: string
+  sendLabel?: string
 }) {
   const [value, setValue] = useState<ComposerValue>([])
   // A chosen project becomes a mention token. getComposerText turns it back
@@ -54,7 +59,7 @@ export function ChatComposer({
 
   return (
     <Composer value={value} onValueChange={setValue} onSubmit={send} triggers={[{ character: '@', items }]}>
-      <ComposerInput aria-label="Message" placeholder={placeholder} />
+      <ComposerInput aria-label={label} placeholder={placeholder} />
       <ComposerPopup>
         <ComposerList aria-label="Choose a project">
           {(item: ComposerItemValue) => (
@@ -73,7 +78,7 @@ export function ChatComposer({
           )}
           <ComposerSubmit
             render={
-              <Button size="icon-sm" aria-label="Send">
+              <Button size="icon-sm" aria-label={sendLabel}>
                 <ArrowUp />
               </Button>
             }

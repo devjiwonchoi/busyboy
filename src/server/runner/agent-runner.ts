@@ -216,6 +216,18 @@ export function answerAgent(agentId: string, requestId: string, answer: AgentAns
   return true
 }
 
+/**
+ * Forgets a stopped agent and its events, for agents nobody comes back to.
+ * A running agent is kept. Returns whether the agent was removed.
+ */
+export function removeAgent(agentId: string) {
+  const agent = registry.agents.get(agentId)
+  if (!agent || agent.session) return false
+  agent.listeners.clear()
+  registry.agents.delete(agentId)
+  return true
+}
+
 export function getAgent(agentId: string): AgentSnapshot | undefined {
   const agent = registry.agents.get(agentId)
   return agent && snapshot(agent)
