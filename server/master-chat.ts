@@ -107,8 +107,8 @@ async function load(master: Master) {
   for (const line of lines) {
     if (!line.trim()) continue
     try {
-      const entry = JSON.parse(line) as ChatEntry | null
-      if (entry && typeof entry === 'object' && typeof entry.id === 'string') byId.set(entry.id, entry)
+      const entry = JSON.parse(line) as unknown
+      if (isEntry(entry)) byId.set(entry.id, entry)
     } catch {
       // A line cut short by a crash; skip it.
     }
@@ -117,11 +117,32 @@ async function load(master: Master) {
   const lastCompaction = master.entries.findLastIndex((entry) => entry.kind === 'note' && entry.compacted)
   master.charsSinceCompact = master.entries.slice(lastCompaction + 1).reduce((sum, entry) => sum + entryLength(entry), 0)
   try {
-    const state: unknown = JSON.parse(await readFile(join(folder, STATE_FILE), 'utf8'))
-    master.state = state && typeof state === 'object' && !Array.isArray(state) ? (state as MasterState) : {}
+    const state = JSON.parse(await readFile(join(folder, STATE_FILE), 'utf8')) as Partial<Record<keyof MasterState, unknown>> | null
+    master.state =
+      state && (state.provider === 'claude' || state.provider === 'codex') && typeof state.sessionId === 'string'
+        ? { provider: state.provider, sessionId: state.sessionId }
+        : {}
   } catch {
     // Missing or unreadable: the next message starts a new provider session.
     master.state = {}
+  }
+}
+
+/** Keeps only lines this version can show; anything else in the file is skipped. */
+function isEntry(value: unknown): value is ChatEntry {
+  if (!value || typeof value !== 'object') return false
+  const entry = value as Record<string, unknown>
+  if (typeof entry.id !== 'string' || typeof entry.at !== 'string') return false
+  switch (entry.kind) {
+    case 'user':
+    case 'master':
+      return typeof entry.text === 'string'
+    case 'note':
+      return typeof entry.text === 'string' && (entry.tone === 'info' || entry.tone === 'error')
+    case 'tasks':
+      return Array.isArray(entry.taskIds) && entry.taskIds.every((id) => typeof id === 'string')
+    default:
+      return false
   }
 }
 
@@ -321,8 +342,11 @@ function scheduleCompaction(master: Master) {
 export type SendToMasterInput = {
   folder: string
   text: string
-  /** Resolves the provider for the next turn; null when none is signed in. Called after the message shows. */
-  resolveProvider: () => Promise<ProviderId | null>
+  /**
+   * Resolves the provider for the next turn, after the message shows: null when
+   * nobody is signed in, undefined when the sign-in check failed.
+   */
+  resolveProvider: () => Promise<ProviderId | null | undefined>
   mcp: McpServerInput
 }
 
@@ -341,15 +365,18 @@ export async function sendToMaster({ folder, text, resolveProvider, mcp }: SendT
   if (master.status === 'answering' && master.agentId) void interruptAgent(master.agentId)
   // A failed or slow sign-in probe must not lose the message while the master is alive.
   const live = master.agentId ? getAgent(master.agentId) : undefined
-  const provider = (await resolveProvider().catch(() => null)) ?? live?.provider ?? master.state.provider ?? null
+  // `null` means nobody is signed in; `undefined` means the check itself failed,
+  // and then the running or last-used provider carries on.
+  const resolved = await resolveProvider().catch(() => undefined)
+  const provider = resolved === undefined ? (live?.provider ?? master.state.provider ?? null) : resolved
   // A turn that ended during the probe may have scheduled compaction.
   clearTimeout(master.idleTimer)
   master.idleTimer = undefined
   if (!provider) {
-    saveEntry(
-      master,
-      newEntry('note', { text: 'No provider is signed in, or the sign-in check failed. Open Setup to check.', tone: 'error' }),
-    )
+    const text =
+      resolved === null ? 'No provider is signed in. Open Setup to sign in.' : 'The sign-in check failed. Open Setup to check.'
+    saveEntry(master, newEntry('note', { text, tone: 'error' }))
+    scheduleCompaction(master)
     return
   }
   master.target = { provider, mcp }

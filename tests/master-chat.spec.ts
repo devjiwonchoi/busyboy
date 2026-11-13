@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
@@ -160,6 +160,21 @@ test('a question tool call from the master should not leave it waiting', async (
 
   await expect(transcript.getByLabel('Master reply')).toHaveText('Which project has the login page, web or api?')
   await expect(transcript).toHaveAttribute('data-status', 'idle')
+})
+
+test('a message sent while signed out should say no provider is signed in', async ({ page, context, baseURL }) => {
+  const { home } = await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-out', codex: 'signed-out' })
+  // An earlier conversation must not make the master use a provider the user signed out of.
+  mkdirSync(join(home, 'master'))
+  writeFileSync(join(home, 'master', 'state.json'), JSON.stringify({ provider: 'claude', sessionId: 'earlier-session' }))
+  await openChat(page)
+  const transcript = page.getByRole('log', { name: 'Transcript' })
+
+  await send(page, QUESTION)
+
+  await expect(transcript.getByLabel('Your message')).toHaveText(QUESTION)
+  await expect(transcript.getByRole('note')).toHaveText('No provider is signed in. Open Setup to sign in.')
+  await expect(transcript.getByLabel('Master reply')).toHaveCount(0)
 })
 
 test('a long chat should compact while idle', async ({ page, context, baseURL }) => {

@@ -72,13 +72,10 @@ export function Composer({
     const message = text.trim()
     if (!message) return
     update('', 0)
-    Promise.resolve(onSend(message)).catch(() =>
-      setText((current) => {
-        if (current) return current
-        setCaret(message.length)
-        return message
-      }),
-    )
+    Promise.resolve(onSend(message)).catch(() => {
+      // Bring the message back only if nothing new was typed meanwhile.
+      if (!input.current?.value) update(message, message.length)
+    })
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
