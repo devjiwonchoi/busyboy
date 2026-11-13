@@ -1,7 +1,7 @@
 // Turns `codex app-server` notifications and server requests into contract
-// events, and contract answers into the replies Codex expects. Used by the
-// Codex adapter; journeys reach it through the adapter and tests/fake-codex.mjs,
-// which replays recorded runs. Types follow the protocol of
+// events, and contract answers into the replies Codex expects. It has no
+// process handling, so a live run and a replayed recording map the same way.
+// Types follow the protocol of
 // codex-cli 0.167.0 (`codex app-server generate-ts`), reduced to the fields read here.
 import type { AgentAnswer, AgentEvent, Question } from './contract'
 
@@ -61,6 +61,30 @@ function sandboxPathLabel(path: SandboxPath) {
 }
 
 const ACCESS_LABELS: Record<string, string> = { read: 'Read', write: 'Write', deny: 'No access' }
+
+/** The permissions a request asks for, as in `item/permissions/requestApproval` and command approvals. */
+type PermissionProfile = {
+  network?: { enabled: boolean | null } | null
+  fileSystem?: {
+    read?: string[] | null
+    write?: string[] | null
+    entries?: { path: SandboxPath; access: string }[]
+  } | null
+}
+
+function permissionLines(permissions: PermissionProfile | null | undefined) {
+  const entries = permissions?.fileSystem?.entries
+  return [
+    permissions?.network?.enabled && 'Network access',
+    // Newer servers describe paths as entries (granted in full on Allow); the read and write lists are their legacy form.
+    ...(entries?.length
+      ? entries.map((entry) => `${ACCESS_LABELS[entry.access] ?? entry.access}: ${sandboxPathLabel(entry.path)}`)
+      : [
+          permissions?.fileSystem?.write?.length && `Write: ${permissions.fileSystem.write.join(', ')}`,
+          permissions?.fileSystem?.read?.length && `Read: ${permissions.fileSystem.read.join(', ')}`,
+        ]),
+  ]
+}
 
 /** Server requests that become an approval or a question. Others are refused. */
 export const CODEX_ANSWERABLE_REQUESTS = new Set([
@@ -147,9 +171,11 @@ export function codexMessageToEvents(message: CodexRawMessage): AgentEvent[] {
     case 'turn/completed': {
       const turn = params.turn as Turn
       const events: AgentEvent[] = []
-      if (turn.status === 'failed' && turn.error) {
+      if (turn.status === 'failed') {
         events.push(
-          isSignedOut(turn.error)
+          !turn.error
+            ? { type: 'error', code: 'provider', message: 'The Codex turn failed.' }
+            : isSignedOut(turn.error)
             ? { type: 'error', code: 'signed-out', message: 'Codex is not signed in. Run `codex login`.' }
             : { type: 'error', code: 'provider', message: turn.error.message },
         )
@@ -177,11 +203,25 @@ export function codexRequestToEvent(
   switch (message.method) {
     case 'item/commandExecution/requestApproval': {
       const command = displayCommand(params.command, params.commandActions)
+      const network = params.networkApprovalContext as { host?: string; protocol?: string } | null | undefined
+      // `writeStdin` sends input to a command that is already running.
+      const title =
+        params.kind === 'writeStdin'
+          ? 'Allow input to a running command?'
+          : command
+            ? `Allow Shell: ${shorten(command)}?`
+            : 'Allow a shell command?'
       return {
         type: 'approval',
         requestId,
-        title: command ? `Allow Shell: ${shorten(command)}?` : 'Allow a shell command?',
-        detail: detailLines(reason, typeof params.cwd === 'string' && `In ${params.cwd}`),
+        title,
+        // Accepting also grants what the command asks for beyond the sandbox, so it is shown.
+        detail: detailLines(
+          reason,
+          typeof params.cwd === 'string' && `In ${params.cwd}`,
+          network?.host && `Network: ${network.host}`,
+          ...permissionLines(params.additionalPermissions as PermissionProfile | null | undefined),
+        ),
       }
     }
     case 'item/fileChange/requestApproval':
@@ -192,30 +232,11 @@ export function codexRequestToEvent(
         detail: detailLines(reason, typeof params.grantRoot === 'string' && `Write access under ${params.grantRoot}`),
       }
     case 'item/permissions/requestApproval': {
-      const permissions = params.permissions as {
-        network?: { enabled: boolean | null } | null
-        fileSystem?: {
-          read?: string[] | null
-          write?: string[] | null
-          entries?: { path: SandboxPath; access: string }[]
-        } | null
-      }
-      const entries = permissions?.fileSystem?.entries
       return {
         type: 'approval',
         requestId,
         title: 'Allow extra permissions?',
-        detail: detailLines(
-          reason,
-          permissions?.network?.enabled && 'Network access',
-          // Newer servers describe paths as entries (granted in full on Allow); the read and write lists are their legacy form.
-          ...(entries?.length
-            ? entries.map((entry) => `${ACCESS_LABELS[entry.access] ?? entry.access}: ${sandboxPathLabel(entry.path)}`)
-            : [
-                permissions?.fileSystem?.write?.length && `Write: ${permissions.fileSystem.write.join(', ')}`,
-                permissions?.fileSystem?.read?.length && `Read: ${permissions.fileSystem.read.join(', ')}`,
-              ]),
-        ),
+        detail: detailLines(reason, ...permissionLines(params.permissions as PermissionProfile)),
       }
     }
     case 'item/tool/requestUserInput': {
