@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { claudeAdapter } from './claude-adapter'
 import type {
   AgentAnswer,
   AgentEvent,
@@ -36,6 +37,7 @@ const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 
 /** The adapter that runs a provider. Each provider's adapter is added here as it lands. */
 function adapterFor(provider: ProviderId): ProviderAdapter {
+  if (provider === 'claude') return claudeAdapter
   throw new Error(`The ${provider} provider is not available yet.`)
 }
 
