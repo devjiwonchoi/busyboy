@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline'
 import {
   CODEX_ANSWERABLE_REQUESTS,
@@ -37,10 +38,17 @@ export function codexThreadSettings(mode: PermissionMode) {
 
 type Pending = { resolve: (result: unknown) => void; reject: (error: Error) => void }
 
+class AppServerExited extends Error {
+  constructor() {
+    super('The Codex app server exited.')
+  }
+}
+
 /** Newline-delimited JSON-RPC over the stdio of one `codex app-server` process. */
 class AppServerConnection {
   private nextId = 1
   private pending = new Map<number, Pending>()
+  private closed = false
   readonly exited: Promise<{ code: number | null; stderr: string }>
 
   constructor(
@@ -51,6 +59,8 @@ class AppServerConnection {
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-4000)
     })
+    // A write racing the process exit fails with EPIPE; the exit itself is reported through `exited`.
+    child.stdin.on('error', () => {})
     createInterface({ input: child.stdout }).on('line', (line) => {
       if (!line.trim()) return
       let message: CodexRawMessage & { result?: unknown; error?: { message?: string } }
@@ -71,7 +81,8 @@ class AppServerConnection {
         stderr += error.message
       })
       child.on('close', (code) => {
-        for (const [, pending] of this.pending) pending.reject(new Error('The Codex app server exited.'))
+        this.closed = true
+        for (const [, pending] of this.pending) pending.reject(new AppServerExited())
         this.pending.clear()
         resolve({ code, stderr })
       })
@@ -79,10 +90,11 @@ class AppServerConnection {
   }
 
   private write(message: object) {
-    if (this.child.stdin.writable) this.child.stdin.write(`${JSON.stringify(message)}\n`)
+    if (!this.closed && this.child.stdin.writable) this.child.stdin.write(`${JSON.stringify(message)}\n`)
   }
 
   request<T = unknown>(method: string, params: unknown): Promise<T> {
+    if (this.closed) return Promise.reject(new AppServerExited())
     const id = this.nextId++
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (result: unknown) => void, reject })
@@ -111,6 +123,7 @@ class AppServerConnection {
   }
 
   kill() {
+    // Codex exits when its input ends; the signal covers a process that does not.
     this.child.stdin.end()
     this.child.kill('SIGTERM')
   }
@@ -130,14 +143,31 @@ async function spawnAppServer(executable: string, cwd: string, onMessage: (messa
 
 function startCodex(options: ProviderStartOptions): ProviderSession {
   const { emit } = options
+  // Server request ids restart with every app server, so they are scoped to this one.
+  const requestPrefix = `codex-${randomUUID().slice(0, 8)}-`
   const queue: string[] = []
   const requests = new Map<string, CodexRawMessage>()
   let connection: AppServerConnection | undefined
   let threadId: string | undefined
   let turnId: string | undefined
+  /** A turn (a message or a compaction) is running; new messages wait in `queue`. */
   let inTurn = false
+  let interruptPending = false
   let stopRequested = false
+  let failed = false
   let ready: Promise<void> | undefined
+
+  const fail = (message: string, code: 'provider' | 'signed-out' = 'provider') => {
+    if (failed || stopRequested) return
+    failed = true
+    emit({ type: 'error', code, message })
+  }
+
+  const interruptTurn = () => {
+    if (!connection || !threadId || !turnId) return
+    interruptPending = false
+    connection.request('turn/interrupt', { threadId, turnId }).catch(() => {})
+  }
 
   const startNextTurn = () => {
     if (inTurn || !connection || !threadId) return
@@ -149,8 +179,13 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         threadId,
         input: [{ type: 'text', text, text_elements: [] }],
       })
-      .then(({ turn }) => (turnId ??= turn.id))
+      .then(({ turn }) => {
+        turnId ??= turn.id
+        if (interruptPending) interruptTurn()
+      })
       .catch((error: Error) => {
+        // A stop or exit ends the session; `stopped` reports it.
+        if (stopRequested || error instanceof AppServerExited) return
         inTurn = false
         emit({ type: 'error', code: 'provider', message: error.message })
         emit({ type: 'turn-done' })
@@ -160,7 +195,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
 
   const onMessage = (message: CodexRawMessage) => {
     if (message.id !== undefined) {
-      const requestId = `codex-${message.id}`
+      const requestId = `${requestPrefix}${message.id}`
       const event = CODEX_ANSWERABLE_REQUESTS.has(message.method) ? codexRequestToEvent(requestId, message) : undefined
       if (!event) {
         connection?.respondError(message.id, `Busyboy does not handle ${message.method}.`)
@@ -170,22 +205,25 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       emit(event)
       return
     }
-    // Codex runs subagents and reviewers in their own threads; only this thread is the conversation.
-    const messageThread = message.params?.threadId
-    if (threadId && typeof messageThread === 'string' && messageThread !== threadId) return
-    if (message.method === 'turn/started') turnId = (message.params?.turn as { id: string }).id
     if (message.method === 'serverRequest/resolved') {
-      // Resolved without our answer, for example by the auto reviewer or an interrupt.
-      const requestId = `codex-${message.params?.requestId}`
+      // Resolved without our answer, for example by the auto reviewer or an interrupt. Requests
+      // from subagent threads are shown too, so this is checked before the thread filter.
+      const requestId = `${requestPrefix}${message.params?.requestId}`
       if (requests.delete(requestId)) emit({ type: 'answered', requestId })
       return
     }
-    // `thread/started` also fires for subagent threads; the session id comes from the start or resume reply.
-    if (message.method === 'thread/started') return
+    // Codex runs subagents and reviewers in their own threads; only this thread is the conversation.
+    const messageThread = message.params?.threadId
+    if (threadId && typeof messageThread === 'string' && messageThread !== threadId) return
+    if (message.method === 'turn/started') {
+      turnId = (message.params?.turn as { id: string }).id
+      if (interruptPending) interruptTurn()
+    }
     for (const event of codexMessageToEvents(message)) {
       if (event.type === 'turn-done') {
         inTurn = false
         turnId = undefined
+        interruptPending = false
       }
       emit(event)
     }
@@ -199,40 +237,40 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       return false
     }
     connection = await spawnAppServer(executable, options.cwd, onMessage)
-    if (stopRequested) connection.kill()
+    const current = connection
+    if (stopRequested) current.kill()
     ready = (async () => {
-      await connection!.initialize()
+      await current.initialize()
       const settings = {
         cwd: options.cwd,
         ...codexThreadSettings(options.permissionMode),
         developerInstructions: options.instructions ?? null,
       }
-      const response = await connection!.request<{ thread: { id: string } }>(
+      const response = await current.request<{ thread: { id: string } }>(
         options.resumeSessionId ? 'thread/resume' : 'thread/start',
-        options.resumeSessionId ? { threadId: options.resumeSessionId, ...settings } : settings,
+        // The history is not needed: the runner keeps its own transcript.
+        options.resumeSessionId ? { threadId: options.resumeSessionId, excludeTurns: true, ...settings } : settings,
       )
       threadId = response.thread.id
       emit({ type: 'session', sessionId: threadId })
       startNextTurn()
     })()
     ready.catch(async (error: Error) => {
-      if (stopRequested) return
-      const status = await accountStatus(connection!).catch(() => undefined)
-      if (status?.state === 'signed-out') {
-        emit({ type: 'error', code: 'signed-out', message: 'Codex is not signed in. Run `codex login`.' })
-      } else emit({ type: 'error', code: 'provider', message: error.message })
-      connection!.kill()
+      if (error instanceof AppServerExited) return // Reported below with the process output.
+      const status = await accountStatus(current).catch(() => undefined)
+      if (status?.state === 'signed-out') fail('Codex is not signed in. Run `codex login`.', 'signed-out')
+      else fail(error.message)
+      current.kill()
     })
-    const { code, stderr } = await connection.exited
-    if (!stopRequested && code !== 0 && threadId) {
-      emit({ type: 'error', code: 'provider', message: stderr.trim() || `The Codex app server exited with code ${code}.` })
-    }
-    return !inTurn
+    const { code, stderr } = await current.exited
+    // Only a stop ends the app server on purpose; any other exit is a failure.
+    fail(stderr.trim() || `The Codex app server exited with code ${code}.`)
+    return stopRequested && !inTurn && queue.length === 0
   }
 
   run()
     .catch((error: unknown) => {
-      emit({ type: 'error', code: 'provider', message: error instanceof Error ? error.message : String(error) })
+      fail(error instanceof Error ? error.message : String(error))
       return false
     })
     .then((finished) => emit({ type: 'stopped', finished }))
@@ -245,22 +283,35 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   return {
     send,
     async interrupt() {
-      queue.length = 0
+      // Messages queued behind the turn stay queued and run next, as with Claude.
       for (const [requestId, request] of requests) {
         if (request.id !== undefined) connection?.respond(request.id, codexAnswerToResult(request, { kind: 'approval', allow: false }))
         requests.delete(requestId)
         emit({ type: 'answered', requestId })
       }
-      if (connection && threadId && turnId) await connection.request('turn/interrupt', { threadId, turnId }).catch(() => {})
+      if (turnId) interruptTurn()
+      // The turn was requested but Codex has not named it yet: interrupt once it does.
+      else if (inTurn) interruptPending = true
     },
     async compact() {
-      await ready
+      await ready?.catch(() => {})
       if (!connection || !threadId) return
-      await connection.request('thread/compact/start', { threadId })
+      if (inTurn) throw new Error('Codex is running a turn. Compact once it ends.')
+      // Compaction runs as a turn that cannot take more input, so messages wait for it.
+      inTurn = true
+      try {
+        await connection.request('thread/compact/start', { threadId })
+      } catch (error) {
+        inTurn = false
+        emit({ type: 'turn-done' })
+        startNextTurn()
+        throw error
+      }
     },
     answer(requestId, answer: AgentAnswer) {
       if (requestId.startsWith(CODEX_MESSAGE_QUESTION_PREFIX)) {
-        // Codex waits for the answer inside the running turn; after the turn it is the next message.
+        // Codex waits inside the turn (it sleeps) for the answer, which steers the turn. If the turn
+        // ended in the meantime, the steer fails and the answer becomes the next message.
         const text = codexQuestionAnswerText(answer)
         if (!connection || !threadId || !turnId) return send(text)
         const input = [{ type: 'text', text, text_elements: [] }]
@@ -297,14 +348,18 @@ async function codexSignInStatus(): Promise<SignInStatus> {
   let timeout: NodeJS.Timeout | undefined
   try {
     return await Promise.race([
-      connection.initialize().then(() => accountStatus(connection)),
+      connection
+        .initialize()
+        .then(() => accountStatus(connection))
+        .catch(async (error: Error): Promise<SignInStatus> => {
+          // An early exit explains itself on stderr.
+          const stderr = error instanceof AppServerExited ? (await connection.exited).stderr.trim() : ''
+          return { state: 'unknown', detail: stderr || error.message }
+        }),
       new Promise<SignInStatus>((resolve) => {
         timeout = setTimeout(() => resolve({ state: 'unknown', detail: 'Codex did not report its account in time.' }), SIGN_IN_TIMEOUT_MS)
       }),
-      connection.exited.then(({ stderr }): SignInStatus => ({ state: 'unknown', detail: stderr.trim() || 'The Codex app server exited.' })),
     ])
-  } catch (error) {
-    return { state: 'unknown', detail: error instanceof Error ? error.message : String(error) }
   } finally {
     clearTimeout(timeout)
     connection.kill()
