@@ -36,12 +36,23 @@ export type Settings = {
   setupCompletedAt: string | null
   /** Used when more than one provider is signed in. */
   defaultProvider: ProviderId | null
+  /** The companion id the user picked in setup (see server/companions.ts). */
+  companion: string | null
+  /** File name of the user's own companion picture inside the data folder. */
+  companionImage: string | null
   projects: ProjectEntry[]
   /** Keys this version does not know are kept when saving. */
   [unknownKey: string]: unknown
 }
 
-const EMPTY_SETTINGS: Settings = { version: 1, setupCompletedAt: null, defaultProvider: null, projects: [] }
+const EMPTY_SETTINGS: Settings = {
+  version: 1,
+  setupCompletedAt: null,
+  defaultProvider: null,
+  companion: null,
+  companionImage: null,
+  projects: [],
+}
 
 /** Test mode never applies to the desktop app, which always starts the server with a token. */
 export function isTestMode() {
@@ -110,6 +121,8 @@ function parseSettings(text: string): Settings | undefined {
     version: typeof value.version === 'number' && value.version > 1 ? value.version : 1,
     setupCompletedAt: typeof value.setupCompletedAt === 'string' ? value.setupCompletedAt : null,
     defaultProvider: value.defaultProvider === 'claude' || value.defaultProvider === 'codex' ? value.defaultProvider : null,
+    companion: typeof value.companion === 'string' ? value.companion : null,
+    companionImage: typeof value.companionImage === 'string' ? value.companionImage : null,
     projects: Array.isArray(value.projects)
       ? value.projects.filter(
           (project): project is ProjectEntry =>
