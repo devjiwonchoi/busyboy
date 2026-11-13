@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
@@ -67,6 +67,24 @@ test('asking for work should create a worktree and show the task in chat', async
   expect(git(task.worktree, 'rev-parse', 'HEAD')).toBe(git(projects.web, 'rev-parse', 'HEAD'))
   // The task agent got the request and answered from the task-agents script.
   await expect(line.locator('[data-status]')).toHaveText('Idle')
+})
+
+test('a git hook run while creating a task should not see busyboy variables', async ({ page, context, baseURL }) => {
+  const { home, projects } = await useProjectsHome(context, baseURL!, ['web', 'api'])
+  const envFile = join(home, 'hook-env.txt')
+  const hook = join(projects.web, '.git', 'hooks', 'post-checkout')
+  writeFileSync(hook, `#!/bin/sh\nenv > '${envFile}'\n`)
+  chmodSync(hook, 0o755)
+  await openChat(page)
+
+  await send(page, ONE_PROJECT_WORK)
+
+  await expect(page.getByRole('group', { name: 'Tasks' }).getByRole('listitem')).toHaveCount(1)
+  const names = readFileSync(envFile, 'utf8')
+    .split('\n')
+    .map((line) => line.split('=')[0])
+  expect(names).toContain('PATH')
+  expect(names.filter((name) => /^(BUSYBOY_|PORT$|HOSTNAME$)/.test(name))).toEqual([])
 })
 
 test('asking for work in two projects should create two tasks', async ({ page, context, baseURL }) => {
