@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { SERVER_TOKEN_COOKIE } from '../lib/server-token'
 import { createSelfCheck, selfCheckOutputPath } from './self-check'
 import { startServer, type ServerHandle } from './server-process'
@@ -141,7 +141,10 @@ function registerAppEvents() {
     try {
       await launch()
     } catch (error) {
+      // Apps opened from Finder have no visible output, so say why on screen.
       console.error(error)
+      dialog.showErrorBox('Busyboy could not start', error instanceof Error ? error.message : String(error))
+      await server?.stop()
       app.exit(1)
     }
   })

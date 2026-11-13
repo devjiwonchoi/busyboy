@@ -9,6 +9,7 @@ const LOOPBACK = '127.0.0.1'
 const READY_TIMEOUT_MS = 30_000
 const STOP_TIMEOUT_MS = 5_000
 const START_ATTEMPTS = 3
+const PROBE_TIMEOUT_MS = 2_000
 
 export type ServerHandle = {
   url: string
@@ -48,7 +49,10 @@ async function waitUntilReady(url: string, token: string, exited: () => boolean)
   while (Date.now() < deadline) {
     if (exited()) throw new Error('The Next server exited before it was ready.')
     try {
-      const response = await fetch(url, { headers: { [SERVER_TOKEN_HEADER]: token } })
+      const response = await fetch(url, {
+        headers: { [SERVER_TOKEN_HEADER]: token },
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      })
       await response.body?.cancel()
       if (response.ok) return
     } catch {
