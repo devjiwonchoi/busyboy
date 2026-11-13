@@ -1,9 +1,24 @@
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 import { fakeClaudePidFile, fakeClaudePort, fakeClaudeURL } from './tests/fake-claude/fake-claude'
+import { prepareDefaultHome } from './tests/support/test-home'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
 const baseURL = `http://127.0.0.1:${port}`
+
+// The servers never see the real ~/.busyboy, ~/.claude, or ~/.codex. Each gets
+// a data folder where setup is complete; journeys that need their own data
+// folder set one per browser context (tests/support/test-home.ts).
+function testHome(serverPort: number) {
+  const home = join(tmpdir(), `busyboy-e2e-default-home-${serverPort}`)
+  prepareDefaultHome(home)
+  return {
+    BUSYBOY_HOME: home,
+    CLAUDE_CONFIG_DIR: join(home, 'claude-config'),
+    CODEX_HOME: join(home, 'codex-home'),
+  }
+}
 
 export default defineConfig({
   testDir: './tests',
@@ -29,8 +44,10 @@ export default defineConfig({
         BUSYBOY_TEST_MODE: '1',
         BUSYBOY_TEST_SHELL: '/bin/sh',
         BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
+        ...testHome(port),
       },
-      // Never reuse: another worktree may be serving a different build on the same port.
+      // Never reuse: another worktree may be serving a different build on the same port, or a
+      // server that is not in test mode could write to the real data folder.
       reuseExistingServer: false,
       timeout: 180_000,
     },
@@ -43,6 +60,7 @@ export default defineConfig({
         BUSYBOY_TEST_MODE: '1',
         BUSYBOY_CLAUDE_PATH: join(__dirname, 'tests/fake-claude/claude.sh'),
         FAKE_CLAUDE_PID_FILE: fakeClaudePidFile,
+        ...testHome(fakeClaudePort),
       },
       reuseExistingServer: false,
       timeout: 60_000,
