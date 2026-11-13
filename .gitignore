@@ -10,6 +10,7 @@ out/
 dist/
 build/
 release/
+dist-electron/
 *.tsbuildinfo
 
 # Local agent state

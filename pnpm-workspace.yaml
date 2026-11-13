@@ -1,2 +1,9 @@
 packages:
   - .
+
+allowBuilds:
+  electron: true
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - electron@45.3.2
