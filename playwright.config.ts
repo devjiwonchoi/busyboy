@@ -19,8 +19,14 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && pnpm start',
     url: baseURL,
-    // Agents replay recorded provider scripts instead of calling a model.
-    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1', BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts') },
+    // Agents replay recorded provider scripts instead of calling a model. Codex runs its real
+    // adapter against a fake `codex` that replays tests/provider-scripts/codex/.
+    env: {
+      PORT: String(port),
+      BUSYBOY_TEST_MODE: '1',
+      BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
+      BUSYBOY_CODEX_PATH: join(__dirname, 'tests/fake-codex.mjs'),
+    },
     // Never reuse: another worktree may be serving a different build on the same port.
     reuseExistingServer: false,
     timeout: 180_000,
