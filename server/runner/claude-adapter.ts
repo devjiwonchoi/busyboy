@@ -56,10 +56,6 @@ async function resolveClaude() {
   return process.env[CLAUDE_PATH_ENV] || (await findExecutable('claude'))
 }
 
-function toStringEnv(env: NodeJS.ProcessEnv) {
-  return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined))
-}
-
 function permissionResult(answer: AgentAnswer, input: Record<string, unknown>): PermissionResult {
   if (answer.kind === 'question') return { behavior: 'allow', updatedInput: { ...input, answers: answer.answers } }
   if (answer.allow) return { behavior: 'allow', updatedInput: input }
@@ -103,7 +99,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       options: {
         cwd: options.cwd,
         pathToClaudeCodeExecutable: executable,
-        env: toStringEnv(await agentEnvironment()),
+        env: await agentEnvironment(),
         abortController: abort,
         includePartialMessages: true,
         resume: options.resumeSessionId,
@@ -174,7 +170,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
   try {
     const probe = query({
       prompt: idle,
-      options: { pathToClaudeCodeExecutable: executable, env: toStringEnv(await agentEnvironment()), abortController: abort },
+      options: { pathToClaudeCodeExecutable: executable, env: await agentEnvironment(), abortController: abort },
     })
     const { account } = await probe.initializationResult()
     if (account.apiProvider && account.apiProvider !== 'firstParty') return { state: 'signed-in', account: account.apiProvider }

@@ -45,10 +45,38 @@ export async function findExecutable(name: string): Promise<string | undefined> 
   return searchPath(name, process.env.PATH ?? '') ?? searchPath(name, await readLoginShellPath())
 }
 
-/** The environment agents run with: this process's, with the login-shell PATH appended. */
-export async function agentEnvironment(): Promise<NodeJS.ProcessEnv> {
+/**
+ * Busyboy's own variables, which must never reach an agent or the commands it
+ * runs: the server token would let an agent call this server (answer its own
+ * approvals, start agents, read transcripts), and the server's PORT, HOSTNAME
+ * and NODE_ENV would change how the agent's commands behave.
+ */
+function isServerVariable(name: string) {
+  const upper = name.toUpperCase()
+  return (
+    upper.startsWith('BUSYBOY_') ||
+    upper.startsWith('__NEXT') ||
+    upper === 'PORT' ||
+    upper === 'HOSTNAME' ||
+    upper === 'NODE_ENV' ||
+    upper === 'NEXT_RUNTIME' ||
+    upper === 'ELECTRON_RUN_AS_NODE'
+  )
+}
+
+/**
+ * The environment every agent process runs with. Every adapter must use it:
+ * this process's environment without busyboy's own variables, with the
+ * login-shell PATH appended.
+ */
+export async function agentEnvironment(): Promise<Record<string, string>> {
   const shellPath = await readLoginShellPath()
+  const env: Record<string, string> = {}
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value !== undefined && !isServerVariable(name)) env[name] = value
+  }
   const entries = new Set([...(process.env.PATH ?? '').split(delimiter), ...shellPath.split(delimiter)])
   entries.delete('')
-  return { ...process.env, PATH: [...entries].join(delimiter) }
+  env.PATH = [...entries].join(delimiter)
+  return env
 }

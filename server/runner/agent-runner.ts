@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { SERVER_TOKEN_ENV } from '@/lib/server-token'
 import { claudeAdapter } from './claude-adapter'
 import type {
   AgentAnswer,
@@ -34,10 +35,14 @@ const REGISTRY_KEY = Symbol.for('busyboy.agent-runner')
 const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registry }
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 
-/** With BUSYBOY_PROVIDER_SCRIPTS set, every provider is replaced by the scripted replay. */
+/**
+ * With BUSYBOY_PROVIDER_SCRIPTS set, every provider is replaced by the scripted
+ * replay. The desktop app always starts the server with a token, so a token
+ * means a real install and the variable is ignored.
+ */
 function adapterFor(provider: ProviderId): ProviderAdapter {
   const scripts = process.env[SCRIPTS_ENV]
-  if (scripts) return createScriptedAdapter(scripts)
+  if (scripts && !process.env[SERVER_TOKEN_ENV]) return createScriptedAdapter(scripts)
   if (provider === 'claude') return claudeAdapter
   throw new Error(`The ${provider} provider is not available yet.`)
 }
