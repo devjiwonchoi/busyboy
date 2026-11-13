@@ -24,6 +24,9 @@ import type {
 
 export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
 
+/** Resuming a session id with this prefix fails, like a session the provider no longer has. */
+export const MISSING_SESSION_PREFIX = 'missing-'
+
 /**
  * One step of a scripted turn.
  * - `event`: a normalized contract event, emitted as is.
@@ -251,7 +254,14 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     running = false
   }
 
-  queueMicrotask(() => emit({ type: 'session', sessionId: options.resumeSessionId ?? `scripted-${randomUUID()}` }))
+  if (options.resumeSessionId?.startsWith(MISSING_SESSION_PREFIX)) {
+    // Resuming fails the way it does for a session the provider no longer has.
+    queueMicrotask(() => {
+      stopped = true
+      emit({ type: 'error', code: 'provider', message: `No conversation found with session ID: ${options.resumeSessionId}` })
+      emit({ type: 'stopped', finished: false })
+    })
+  } else queueMicrotask(() => emit({ type: 'session', sessionId: options.resumeSessionId ?? `scripted-${randomUUID()}` }))
 
   return {
     send(text) {

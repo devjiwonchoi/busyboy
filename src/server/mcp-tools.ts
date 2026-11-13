@@ -1,4 +1,9 @@
+import { headers } from 'next/headers'
+import { MCP_PATH, MCP_TOKEN_HEADER, mcpTokenFor, SERVER_TOKEN_ENV } from '@/lib/server-token'
+import { dataFolder, isTestMode, TEST_HOME_COOKIE } from './config'
+import { attachTaskToDirector } from './director/chat'
 import { listProjects } from './projects'
+import type { McpServer } from './runner/contract'
 import { createTask, TaskError } from './tasks'
 
 // The tools busyboy offers its agents over MCP (app/api/mcp/route.ts). Every
@@ -51,6 +56,7 @@ export const MCP_TOOLS: McpTool[] = [
     async run(input) {
       try {
         const task = await createTask({ project: text(input, 'project'), title: text(input, 'title'), request: text(input, 'request') })
+        await attachTaskToDirector(await dataFolder(), task)
         return `Created task ${task.id} in ${task.project} on branch ${task.branch}. Its agent is planning the work now.`
       } catch (error) {
         if (error instanceof TaskError) throw new McpToolError(error.message)
@@ -59,3 +65,18 @@ export const MCP_TOOLS: McpTool[] = [
     },
   },
 ]
+
+/**
+ * How an agent reaches busyboy's MCP endpoint from the current request: the
+ * server's own address, the MCP token (never the server token), and in test
+ * mode the data folder cookie.
+ */
+export async function busyboyMcpServers(): Promise<Record<string, McpServer>> {
+  // The server's own loopback address when it knows its port (desktop app, tests).
+  const host = process.env.PORT ? `127.0.0.1:${process.env.PORT}` : ((await headers()).get('host') ?? '127.0.0.1:3000')
+  const mcpHeaders: Record<string, string> = {}
+  const token = process.env[SERVER_TOKEN_ENV]
+  if (token) mcpHeaders[MCP_TOKEN_HEADER] = mcpTokenFor(token)
+  if (isTestMode()) mcpHeaders.cookie = `${TEST_HOME_COOKIE}=${encodeURIComponent(await dataFolder())}`
+  return { [MCP_SERVER_NAME]: { type: 'http', url: `http://${host}${MCP_PATH}`, headers: mcpHeaders, trusted: true } }
+}
