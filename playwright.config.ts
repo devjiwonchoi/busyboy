@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
@@ -18,7 +19,8 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && node .next/standalone/server.js',
     url: baseURL,
-    env: { PORT: String(port), HOSTNAME: '127.0.0.1' },
+    // Agents replay recorded provider scripts instead of calling a model.
+    env: { PORT: String(port), HOSTNAME: '127.0.0.1', BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts') },
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
