@@ -1,0 +1,39 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: task agents started by the master acknowledge their request.",
+  "turns": [
+    {
+      "prompt": "Add a CONTRIBUTING.md that explains how to run the project.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "I will plan this task with the align skill first."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Add a /health endpoint to the API. (Part of a larger request: \"Add a /health endpoint to @api and show its status in the footer of @web.\" The web app's footer will call this endpoint to display the API's status.)",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "I will plan this task with the align skill first."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Show the API's health status in the footer of the web app, using the API's new /health endpoint. (Part of a larger request: \"Add a /health endpoint to @api and show its status in the footer of @web.\" The /health endpoint is being added to the api project in a separate task.)",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "I will plan this task with the align skill first."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -7,7 +7,7 @@ const QUESTION_PROMPT =
   'Use the AskUserQuestion tool to ask me one question: which color I prefer, with exactly two options, Red and Blue. Then reply with exactly: You picked <the color>.'
 
 async function sendMessage(page: Page, text: string) {
-  await page.goto('/')
+  await page.goto('/agent-console')
   await page.getByRole('textbox', { name: 'Message' }).fill(text)
   await page.getByRole('button', { name: 'Send' }).click()
 }

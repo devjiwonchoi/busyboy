@@ -1,0 +1,171 @@
+{
+  "provider": "claude",
+  "description": "The master splits work across two projects into two tasks.",
+  "recordedAt": "2026-11-13T16:25:49.511Z",
+  "turns": [
+    {
+      "prompt": "Add a /health endpoint to @api and show its status in the footer of @web.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "6be8473a-2f1b-4008-bbed-7f3dad786ba8"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__create_task",
+                  "input": {
+                    "project": "api",
+                    "title": "Add /health endpoint",
+                    "request": "Add a /health endpoint to the API. (Part of a larger request: \"Add a /health endpoint to @api and show its status in the footer of @web.\" The web app's footer will call this endpoint to display the API's status.)"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__create_task",
+                  "input": {
+                    "project": "web",
+                    "title": "Show API health in footer",
+                    "request": "Show the API's health status in the footer of the web app, using the API's new /health endpoint. (Part of a larger request: \"Add a /health endpoint to @api and show its status in the footer of @web.\" The /health endpoint is being added to the api project in a separate task.)"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "I've"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": " started two tasks: one ad"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "ds the"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": " /health endpoint in"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": " api"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": ", and the other shows the API"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "'s health status in the web"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": " footer."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I've started two tasks: one adds the /health endpoint in api, and the other shows the API's health status in the web footer."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false
+          }
+        }
+      ]
+    }
+  ]
+}

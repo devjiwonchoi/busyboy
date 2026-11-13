@@ -1,0 +1,37 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: a slow master reply that a new message interrupts, then the reply to the new message.",
+  "turns": [
+    {
+      "prompt": "Write a long story about a lighthouse.",
+      "steps": [
+        {
+          "event": {
+            "type": "text-delta",
+            "text": "Once upon a time, a lighthouse"
+          }
+        },
+        {
+          "delayMs": 30000
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "The end of the lighthouse story."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Never mind, just say hi.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "Hi!"
+          }
+        }
+      ]
+    }
+  ]
+}

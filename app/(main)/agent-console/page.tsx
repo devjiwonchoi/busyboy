@@ -1,6 +1,7 @@
 import { AgentConsole } from '@/components/agent-console/agent-console'
 
-// Chat area slot. A bare agent console until the master chat replaces it.
-export default function ChatPage() {
+// A bare agent console that exercises the agent runner directly, outside the
+// master chat. Kept for the runner journeys in tests/agent-runner.spec.ts.
+export default function AgentConsolePage() {
   return <AgentConsole />
 }

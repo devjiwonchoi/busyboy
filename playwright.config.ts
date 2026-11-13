@@ -32,6 +32,9 @@ export default defineConfig({
       HOSTNAME: '127.0.0.1',
       BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
       BUSYBOY_TEST_MODE: '1',
+      // Compact the master after 1.5 s of idle time once a chat passes 1000 characters.
+      BUSYBOY_MASTER_IDLE_COMPACT_MS: '1500',
+      BUSYBOY_MASTER_COMPACT_CHARS: '1000',
       BUSYBOY_HOME: defaultHome,
       CLAUDE_CONFIG_DIR: join(defaultHome, 'claude-config'),
       CODEX_HOME: join(defaultHome, 'codex-home'),
