@@ -116,6 +116,7 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
       instructions: agent.input.instructions,
       permissionMode: agent.input.permissionMode ?? 'auto',
       resumeSessionId,
+      mcpServers: agent.input.mcpServers,
       emit: (event) => record(agent, event),
     })
     if (agent.status === 'starting') agent.status = 'idle'

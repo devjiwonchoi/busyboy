@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   query,
   type CanUseTool,
+  type Options,
   type PermissionResult,
   type Query,
   type SDKUserMessage,
@@ -60,6 +61,17 @@ function toStringEnv(env: NodeJS.ProcessEnv) {
   return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined))
 }
 
+/** Busyboy's MCP servers, with every tool they offer allowed without a prompt. */
+function mcpOptions(servers: ProviderStartOptions['mcpServers']): Partial<Options> {
+  if (!servers?.length) return {}
+  return {
+    mcpServers: Object.fromEntries(
+      servers.map(({ name, url, headers }) => [name, { type: 'http' as const, url, headers, alwaysLoad: true }]),
+    ),
+    allowedTools: servers.map(({ name }) => `mcp__${name}`),
+  }
+}
+
 function permissionResult(answer: AgentAnswer, input: Record<string, unknown>): PermissionResult {
   if (answer.kind === 'question') return { behavior: 'allow', updatedInput: { ...input, answers: answer.answers } }
   if (answer.allow) return { behavior: 'allow', updatedInput: input }
@@ -111,6 +123,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         allowDangerouslySkipPermissions: options.permissionMode === 'full-access',
         systemPrompt: { type: 'preset', preset: 'claude_code', append: options.instructions },
         canUseTool,
+        ...mcpOptions(options.mcpServers),
       },
     })
     for await (const message of current) {

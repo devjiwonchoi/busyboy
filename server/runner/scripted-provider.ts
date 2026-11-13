@@ -10,7 +10,7 @@ import {
   type ClaudePermissionRequest,
   type ClaudeRawMessage,
 } from './claude-events'
-import type { AgentAnswer, AgentEvent, ProviderAdapter, ProviderSession, ProviderStartOptions } from './contract'
+import type { AgentAnswer, AgentEvent, McpServerInput, ProviderAdapter, ProviderSession, ProviderStartOptions } from './contract'
 
 export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
 
@@ -18,6 +18,8 @@ export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
  * One step of a scripted turn.
  * - `event`: a normalized contract event, emitted as is.
  * - `raw`: a message in the script provider's own format, mapped by that provider's mapping.
+ *   A Claude `tool_use` block named `mcp__<server>__<tool>`, where `<server>` is one of the
+ *   session's `mcpServers`, really calls that tool, so a replay runs busyboy's own tool code.
  * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question.
  * - `delayMs`: wait before the next step.
  * An approval or question (from `event` or `canUseTool`) pauses the replay until it is
@@ -59,6 +61,38 @@ function answerKey(answer: AgentAnswer) {
 }
 
 class Cancelled extends Error {}
+
+type McpCall = { server: McpServerInput; tool: string; input: Record<string, unknown> }
+
+/** The busyboy MCP tool calls in a recorded Claude assistant message. */
+function mcpCalls(message: ClaudeRawMessage, servers: McpServerInput[] = []): McpCall[] {
+  if (message.type !== 'assistant' || !Array.isArray(message.message?.content)) return []
+  return (message.message.content as { type?: string; name?: string; input?: Record<string, unknown> }[]).flatMap(
+    (block) => {
+      const match = block.type === 'tool_use' && block.name ? /^mcp__(.+?)__(.+)$/.exec(block.name) : null
+      const server = match && servers.find(({ name }) => name === match[1])
+      return server ? [{ server, tool: match[2], input: block.input ?? {} }] : []
+    },
+  )
+}
+
+/** Calls one tool with a plain JSON-RPC `tools/call` request and returns its text. */
+async function callMcpTool({ server, tool, input }: McpCall) {
+  const response = await fetch(server.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...server.headers },
+    body: JSON.stringify({ jsonrpc: '2.0', id: randomUUID(), method: 'tools/call', params: { name: tool, arguments: input } }),
+  })
+  const body = (await response.json().catch(() => null)) as {
+    result?: { isError?: boolean; content?: { text?: string }[] }
+    error?: { message?: string }
+  } | null
+  const text = body?.result?.content?.map((part) => part.text ?? '').join('\n') ?? ''
+  if (!response.ok || body?.error || body?.result?.isError) {
+    throw new Error(`The ${tool} tool failed: ${body?.error?.message ?? (text || response.statusText)}`)
+  }
+  return text
+}
 
 function startScripted(folder: string, options: ProviderStartOptions): ProviderSession {
   const { emit } = options
@@ -108,6 +142,16 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
           const branch = then?.[key]
           if (branch) return playSteps(branch)
         } else emit(event)
+      }
+      if ('raw' in step) {
+        for (const call of mcpCalls(step.raw, options.mcpServers)) {
+          try {
+            await cancellable(callMcpTool(call))
+          } catch (error) {
+            if (error instanceof Cancelled) throw error
+            emit({ type: 'error', code: 'provider', message: error instanceof Error ? error.message : String(error) })
+          }
+        }
       }
     }
   }

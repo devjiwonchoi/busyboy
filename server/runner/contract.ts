@@ -17,6 +17,16 @@ export type StartAgentInput = {
   permissionMode?: PermissionMode
   /** Provider session id to continue instead of starting a new conversation. */
   resumeSessionId?: string
+  /** MCP servers the agent can use, for example busyboy's own endpoint. Their tools need no approval. */
+  mcpServers?: McpServerInput[]
+}
+
+/** A streamable HTTP MCP server. Tools appear to the agent as `mcp__<name>__<tool>`. */
+export type McpServerInput = {
+  name: string
+  url: string
+  /** Sent with every request, for example the per-launch server token. */
+  headers?: Record<string, string>
 }
 
 export type QuestionOption = { label: string; description?: string }
@@ -91,7 +101,7 @@ export type SignInStatus =
 // ---- Provider side -------------------------------------------------------
 
 export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permissionMode'>> &
-  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider'> & {
+  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers'> & {
     /** Every event the provider produces. Call it in order; the runner stamps seq numbers. */
     emit: (event: AgentEvent) => void
   }
