@@ -1,0 +1,62 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: the Director replies with a heading, inline code, a TypeScript code block, a table, a task list, and a link.",
+  "turns": [
+    {
+      "prompt": "Show me the plan as Markdown.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "markdown-reply-session"
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "## Plan\n\nRun `pnpm dev` first, then update the handler:\n\n```ts\nexport function greet(name: string) {\n  return `Hell"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "o, ${name}`\n}\n```\n\n| Step | Command |\n| --- | --- |\n| 1 | `pnpm dev` |\n\n- [x] Read the route\n- [ ] Add the endpoint\n\nSee [the docs](https://example.com/docs)."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "## Plan\n\nRun `pnpm dev` first, then update the handler:\n\n```ts\nexport function greet(name: string) {\n  return `Hello, ${name}`\n}\n```\n\n| Step | Command |\n| --- | --- |\n| 1 | `pnpm dev` |\n\n- [x] Read the route\n- [ ] Add the endpoint\n\nSee [the docs](https://example.com/docs)."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false
+          }
+        }
+      ]
+    }
+  ]
+}
