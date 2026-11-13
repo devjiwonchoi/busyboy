@@ -7,6 +7,7 @@ import { dataFolder } from './config'
 import { getProject, listProjects } from './projects'
 import { defaultProvider } from './providers'
 import { getAgent, sendMessage, startAgent, subscribeToAgent } from './runner/agent-runner'
+import { agentEnvironment } from './runner/find-executable'
 import type { AgentStatus, ProviderId } from './runner/contract'
 
 // A task is one request in one project, worked on by its own agent in its own
@@ -144,9 +145,10 @@ function slug(text: string) {
   )
 }
 
+/** Runs git with the agent environment, so repository hooks never see busyboy's own variables. */
 async function git(cwd: string, ...args: string[]) {
   try {
-    return (await run('git', ['-C', cwd, ...args])).stdout.trim()
+    return (await run('git', ['-C', cwd, ...args], { env: await agentEnvironment() })).stdout.trim()
   } catch (error) {
     const stderr = (error as { stderr?: string }).stderr?.trim()
     throw new TaskError(stderr || (error instanceof Error ? error.message : String(error)))

@@ -1,5 +1,5 @@
 import { headers } from 'next/headers'
-import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from '@/lib/server-token'
+import { MCP_PATH, MCP_TOKEN_HEADER, mcpTokenFor, SERVER_TOKEN_ENV } from '@/lib/server-token'
 import { dataFolder, isTestMode, TEST_HOME_COOKIE } from './config'
 import { attachTaskToMaster } from './master-chat'
 import { listProjects } from './projects'
@@ -11,7 +11,6 @@ import { createTask, TaskError } from './tasks'
 // exactly as they do for the window.
 
 export const MCP_SERVER_NAME = 'busyboy'
-export const MCP_PATH = '/api/mcp'
 
 type JsonSchema = { type: 'object'; properties: Record<string, { type: string; description: string }>; required: string[] }
 
@@ -69,14 +68,15 @@ export const MCP_TOOLS: McpTool[] = [
 
 /**
  * How an agent reaches busyboy's MCP endpoint from the current request: the
- * server's own address, the per-launch token, and in test mode the data folder cookie.
+ * server's own address, the MCP token (never the server token), and in test
+ * mode the data folder cookie.
  */
 export async function busyboyMcpServer(): Promise<McpServerInput> {
   const requestHeaders = await headers()
   const host = requestHeaders.get('host') ?? `127.0.0.1:${process.env.PORT ?? 3000}`
   const mcpHeaders: Record<string, string> = {}
   const token = process.env[SERVER_TOKEN_ENV]
-  if (token) mcpHeaders[SERVER_TOKEN_HEADER] = token
+  if (token) mcpHeaders[MCP_TOKEN_HEADER] = mcpTokenFor(token)
   if (isTestMode()) mcpHeaders.cookie = `${TEST_HOME_COOKIE}=${encodeURIComponent(await dataFolder())}`
   return { name: MCP_SERVER_NAME, url: `http://${host}${MCP_PATH}`, headers: mcpHeaders }
 }
