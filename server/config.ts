@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { cookies } from 'next/headers'
 import { unstable_rethrow } from 'next/navigation'
+import { SERVER_TOKEN_ENV, TEST_MODE_ENV } from '@/lib/server-token'
 import type { ProviderId } from './runner/contract'
 
 // The data folder is shared with the legacy app, which keeps its own files
@@ -13,8 +14,7 @@ import type { ProviderId } from './runner/contract'
 /** Overrides the data folder (`~/.busyboy` by default). */
 export const HOME_ENV = 'BUSYBOY_HOME'
 
-/** Set to `1` by the Playwright config. Enables the test cookies below. */
-export const TEST_MODE_ENV = 'BUSYBOY_TEST_MODE'
+export { TEST_MODE_ENV }
 
 /** Test mode only: a data folder for this browser context, so journeys run in parallel. */
 export const TEST_HOME_COOKIE = 'busyboy-test-home'
@@ -45,7 +45,7 @@ const EMPTY_SETTINGS: Settings = { version: 1, setupCompletedAt: null, defaultPr
 
 /** Test mode never applies to the desktop app, which always starts the server with a token. */
 export function isTestMode() {
-  return process.env[TEST_MODE_ENV] === '1' && !process.env.BUSYBOY_TOKEN
+  return process.env[TEST_MODE_ENV] === '1' && !process.env[SERVER_TOKEN_ENV]
 }
 
 function testHome(cookie: string | undefined) {

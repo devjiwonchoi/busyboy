@@ -24,19 +24,19 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Journeys run against the production standalone server, as the desktop app does.
   webServer: {
-    command: 'pnpm build && node .next/standalone/server.js',
+    command: 'pnpm build && pnpm start',
     url: baseURL,
     // Agents replay recorded provider scripts instead of calling a model.
     env: {
       PORT: String(port),
-      HOSTNAME: '127.0.0.1',
-      BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
       BUSYBOY_TEST_MODE: '1',
+      BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
       BUSYBOY_HOME: defaultHome,
       CLAUDE_CONFIG_DIR: join(defaultHome, 'claude-config'),
       CODEX_HOME: join(defaultHome, 'codex-home'),
     },
-    // Never attach to a server started elsewhere: it may not be in test mode and could write to the real data folder.
+    // Never reuse: another worktree may be serving a different build on the same port, or a
+    // server that is not in test mode could write to the real data folder.
     reuseExistingServer: false,
     timeout: 180_000,
   },
