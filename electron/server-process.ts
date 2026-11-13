@@ -8,6 +8,7 @@ import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from '../lib/server-token'
 const LOOPBACK = '127.0.0.1'
 const READY_TIMEOUT_MS = 30_000
 const STOP_TIMEOUT_MS = 5_000
+const START_ATTEMPTS = 3
 
 export type ServerHandle = {
   url: string
@@ -58,9 +59,9 @@ async function waitUntilReady(url: string, token: string, exited: () => boolean)
   throw new Error(`The Next server was not ready within ${READY_TIMEOUT_MS} ms.`)
 }
 
-/** Starts the standalone Next server on a free loopback port behind a per-launch token. */
-export async function startServer(): Promise<ServerHandle> {
-  const entry = serverEntry()
+type Attempt = { kind: 'ready'; handle: ServerHandle } | { kind: 'exited'; port: number }
+
+async function startOnFreePort(entry: string): Promise<Attempt> {
   const port = await findFreePort()
   const token = randomBytes(32).toString('hex')
   const url = `http://${LOOPBACK}:${port}`
@@ -89,18 +90,39 @@ export async function startServer(): Promise<ServerHandle> {
   try {
     await waitUntilReady(url, token, () => !running)
   } catch (error) {
+    // Exiting before ready is most often a lost race for the port.
+    if (!running) return { kind: 'exited', port }
     child.kill()
     throw error
   }
 
   return {
-    url,
-    token,
-    isRunning: () => running,
-    stop: async () => {
-      if (!running) return
-      child.kill()
-      await Promise.race([exitedPromise, new Promise((resolve) => setTimeout(resolve, STOP_TIMEOUT_MS))])
+    kind: 'ready',
+    handle: {
+      url,
+      token,
+      isRunning: () => running,
+      stop: async () => {
+        if (!running) return
+        child.kill()
+        await Promise.race([exitedPromise, new Promise((resolve) => setTimeout(resolve, STOP_TIMEOUT_MS))])
+      },
     },
   }
+}
+
+/**
+ * Starts the standalone Next server on a free loopback port behind a per-launch
+ * token. Another process can take the port between the probe and the server's
+ * listen, so an early exit is retried on a new port.
+ */
+export async function startServer(): Promise<ServerHandle> {
+  const entry = serverEntry()
+  const triedPorts: number[] = []
+  for (let attempt = 0; attempt < START_ATTEMPTS; attempt++) {
+    const result = await startOnFreePort(entry)
+    if (result.kind === 'ready') return result.handle
+    triedPorts.push(result.port)
+  }
+  throw new Error(`The Next server exited before it was ready on ports ${triedPorts.join(', ')}.`)
 }

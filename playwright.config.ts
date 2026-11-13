@@ -17,11 +17,12 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Journeys run against the production standalone server, as the desktop app does.
   webServer: {
-    command: 'pnpm build && node .next/standalone/server.js',
+    command: 'pnpm build && pnpm start',
     url: baseURL,
     // Agents replay recorded provider scripts instead of calling a model.
-    env: { PORT: String(port), HOSTNAME: '127.0.0.1', BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts') },
-    reuseExistingServer: !process.env.CI,
+    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1', BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts') },
+    // Never reuse: another worktree may be serving a different build on the same port.
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 })

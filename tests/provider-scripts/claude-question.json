@@ -1,6 +1,6 @@
 {
   "provider": "claude",
-  "description": "Claude asks the user a multiple-choice question and uses the answer.",
+  "description": "Claude asks the user a multiple-choice question and uses the answer. Recorded with the answer Blue, so only Blue replays the recorded reply.",
   "recordedAt": "2026-11-13T15:47:26.745Z",
   "turns": [
     {

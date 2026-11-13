@@ -14,7 +14,7 @@ import type {
   SignInStatus,
   StartAgentInput,
 } from './contract'
-import { createScriptedAdapter, SCRIPTS_ENV } from './scripted-provider'
+import { createScriptedAdapter, hasScripts, SCRIPTS_ENV } from './scripted-provider'
 
 type AgentRecord = {
   id: string
@@ -39,13 +39,13 @@ const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registr
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 
 /**
- * With BUSYBOY_PROVIDER_SCRIPTS set, every provider is replaced by the scripted
- * replay. The desktop app always starts the server with a token, so a token
- * means a real install and the variable is ignored.
+ * With BUSYBOY_PROVIDER_SCRIPTS set, each provider that has a script in that
+ * folder is replaced by the scripted replay. The desktop app always starts the
+ * server with a token, so a token means a real install and the variable is ignored.
  */
 function adapterFor(provider: ProviderId): ProviderAdapter {
   const scripts = process.env[SCRIPTS_ENV]
-  if (scripts && !process.env[SERVER_TOKEN_ENV]) return createScriptedAdapter(scripts)
+  if (scripts && !process.env[SERVER_TOKEN_ENV] && hasScripts(scripts, provider)) return createScriptedAdapter(scripts)
   return provider === 'codex' ? codexAdapter : claudeAdapter
 }
 
@@ -169,7 +169,12 @@ export async function interruptAgent(agentId: string) {
   // Only a running turn can be interrupted; otherwise the flag would mark a later turn.
   if (!agent.session || (agent.status !== 'running' && agent.status !== 'waiting')) return
   agent.interrupting = true
-  await agent.session.interrupt()
+  try {
+    await agent.session.interrupt()
+  } catch (error) {
+    agent.interrupting = false
+    throw error
+  }
 }
 
 export async function stopAgent(agentId: string) {

@@ -34,6 +34,11 @@ class MessageQueue implements AsyncIterable<SDKUserMessage> {
     } else this.items.push(message)
   }
 
+  /** Drops messages the CLI has not read yet. */
+  clear() {
+    this.items = []
+  }
+
   close() {
     this.closed = true
     this.waiting?.({ value: undefined, done: true })
@@ -138,7 +143,16 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         resolve({ kind: 'approval', allow: false, message: 'The user interrupted.' })
         emit({ type: 'answered', requestId })
       }
-      await current?.interrupt()
+      if (current) {
+        await current.interrupt()
+        return
+      }
+      // The CLI is still starting and has read nothing: drop the queued message and end the turn here.
+      input.clear()
+      if (inTurn) {
+        inTurn = false
+        emit({ type: 'turn-done' })
+      }
     },
     async compact() {
       inTurn = true
@@ -180,7 +194,9 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
     const { account } = await probe.initializationResult()
     if (account.apiProvider && account.apiProvider !== 'firstParty') return { state: 'signed-in', account: account.apiProvider }
     const hasKey = Boolean(account.apiKeySource) && account.apiKeySource !== 'none'
-    if (account.tokenSource !== 'none' || hasKey || account.email) {
+    // Require a positive signal: a missing tokenSource does not prove a sign-in.
+    const hasToken = Boolean(account.tokenSource) && account.tokenSource !== 'none'
+    if (hasToken || hasKey || account.email) {
       return { state: 'signed-in', account: account.email ?? account.organization }
     }
     return { state: 'signed-out', loginCommand: 'claude /login' }
