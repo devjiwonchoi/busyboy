@@ -97,10 +97,6 @@ function isSignedOut(error: TurnError) {
 export function codexMessageToEvents(message: CodexRawMessage): AgentEvent[] {
   const params = message.params ?? {}
   switch (message.method) {
-    case 'thread/started': {
-      const thread = params.thread as { id?: string } | undefined
-      return thread?.id ? [{ type: 'session', sessionId: thread.id }] : []
-    }
     case 'item/agentMessage/delta':
       return typeof params.delta === 'string' && params.delta ? [{ type: 'text-delta', text: params.delta }] : []
     case 'item/started': {
@@ -174,7 +170,11 @@ export function codexRequestToEvent(
     case 'item/permissions/requestApproval': {
       const permissions = params.permissions as {
         network?: { enabled: boolean | null } | null
-        fileSystem?: { read?: string[] | null; write?: string[] | null } | null
+        fileSystem?: {
+          read?: string[] | null
+          write?: string[] | null
+          entries?: { path: unknown; access: unknown }[]
+        } | null
       }
       return {
         type: 'approval',
@@ -185,6 +185,10 @@ export function codexRequestToEvent(
           permissions?.network?.enabled && 'Network access',
           permissions?.fileSystem?.write?.length && `Write: ${permissions.fileSystem.write.join(', ')}`,
           permissions?.fileSystem?.read?.length && `Read: ${permissions.fileSystem.read.join(', ')}`,
+          // Newer servers describe paths as entries; every entry is granted on Allow, so show them all.
+          ...(permissions?.fileSystem?.entries ?? []).map(
+            (entry) => `${String(entry.access)}: ${typeof entry.path === 'string' ? entry.path : JSON.stringify(entry.path)}`,
+          ),
         ),
       }
     }
@@ -217,7 +221,7 @@ export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswe
   const allow = answer.kind === 'question' || answer.allow
   switch (message.method) {
     case 'item/commandExecution/requestApproval': {
-      // Codex lists the decisions it takes; some prompts offer `cancel` but not `decline`.
+      // Codex lists the decisions it takes. Without `decline`, a denial can only `cancel`, which also ends the turn.
       const offered = Array.isArray(params.availableDecisions) ? params.availableDecisions : undefined
       if (allow) return { decision: 'accept' }
       return { decision: !offered || offered.includes('decline') ? 'decline' : 'cancel' }
@@ -235,7 +239,8 @@ export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswe
       const answers = Object.fromEntries(
         questions
           .filter((question) => answer.answers[question.question] !== undefined)
-          .map((question) => [question.id, { answers: answer.answers[question.question]!.split(', ') }]),
+          // Every question here is single-select, so the label is one answer even when it has a comma.
+          .map((question) => [question.id, { answers: [answer.answers[question.question]!] }]),
       )
       return { answers }
     }

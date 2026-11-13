@@ -12,7 +12,6 @@ import {
   type ClaudePermissionRequest,
   type ClaudeRawMessage,
 } from './claude-events'
-import { codexMessageToEvents, codexRequestToEvent, type CodexRawMessage } from './codex-events'
 import type {
   AgentAnswer,
   AgentEvent,
@@ -32,7 +31,7 @@ export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
  * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question
  *   (Claude scripts only).
  * - `delayMs`: wait before the next step.
- * An approval or question (from `event`, `canUseTool`, or a mapped `raw` step) pauses the replay until it is
+ * An approval or question (from `event` or `canUseTool`) pauses the replay until it is
  * answered. With `then`, the branch named by the answer replaces the rest of the turn:
  * `allow` or `deny` for an approval, the chosen label of the first question for a question.
  */
@@ -58,13 +57,6 @@ export type ProviderScript = {
 
 const RAW_MAPPINGS: Partial<Record<ProviderId, (raw: unknown) => AgentEvent[]>> = {
   claude: (raw) => claudeMessageToEvents(raw as ClaudeRawMessage),
-  // A Codex message with an `id` is a server request (an approval or a question).
-  codex: (raw) => {
-    const message = raw as CodexRawMessage
-    if (message.id === undefined) return codexMessageToEvents(message)
-    const request = codexRequestToEvent(`script-codex-${message.id}`, message)
-    return request ? [request] : []
-  },
 }
 
 function readScripts(folder: string) {

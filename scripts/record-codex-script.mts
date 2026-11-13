@@ -1,10 +1,10 @@
-// Records a short real Codex run as a provider script for the scripted
-// provider (server/runner/scripted-provider.ts). It starts `codex app-server`
+// Records a short real Codex run as a script for the fake Codex
+// (tests/fake-codex.mjs), which replays it to the real adapter in journeys. It starts `codex app-server`
 // in a fresh temporary folder, answers every approval with accept and every
 // question with its first option (or --answer), and keeps only the messages
 // the Codex event mapping reads (server/runner/codex-events.ts).
 //
-//   node scripts/record-codex-script.mts tests/provider-scripts/name.json \
+//   node scripts/record-codex-script.mts tests/provider-scripts/codex/name.json \
 //     --description "What the run shows" [--policy untrusted] [--reviewer user] \
 //     [--sandbox workspace-write] [--plan] [--answer Blue] [--log raw.jsonl] [--timeout-ms 180000] "first prompt" ["second prompt" ...]
 //
@@ -115,7 +115,13 @@ const codex = [...shellPath.split(delimiter), ...(process.env.PATH ?? '').split(
   .find((candidate) => existsSync(candidate))
 if (!codex) throw new Error('The `codex` command was not found on the login-shell PATH.')
 
-const child = spawn(codex, ['app-server'], { cwd, stdio: ['pipe', 'pipe', 'inherit'] })
+// Like the server's agent environment (server/runner/find-executable.ts), busyboy's own variables stay out.
+const env = Object.fromEntries(
+  Object.entries(process.env).filter(
+    ([name]) => !/^(BUSYBOY_|__NEXT)/i.test(name) && !/^(PORT|HOSTNAME|NODE_ENV|NEXT_RUNTIME|ELECTRON_RUN_AS_NODE)$/i.test(name),
+  ),
+)
+const child = spawn(codex, ['app-server'], { cwd, env, stdio: ['pipe', 'pipe', 'inherit'] })
 if (values.log) writeFileSync(values.log, '')
 const pending = new Map<number, (message: Message) => void>()
 let nextId = 1
