@@ -44,6 +44,7 @@ import {
   isoFromMillis,
   isLeadBusy,
   isoMillis,
+  liveBackgroundWork,
   makeIdGenerator,
   makePeriodicGate,
   MINUTE_MS,
@@ -232,10 +233,17 @@ const make = Effect.gen(function* () {
       const lead = task.leadThreadId;
       if (lead === null) return;
       const shell = yield* threads.getThreadShell(lead).pipe(Effect.orElseSucceed(() => null));
+      // Background work counts only while it shows activity: work whose session closed
+      // under it stays marked running forever, and a lead waiting on it would never wake.
+      const background =
+        shell === null
+          ? { live: false, lastActivityAtMs: null }
+          : yield* liveBackgroundWork(threads, shell, nowMs, STALL_WAKE_AFTER_MS);
       const progressAtMs = Math.max(
         isoMillis(task.stageChangedAt),
         millisOf(shell?.latestRunStartedAt) ?? 0,
         millisOf(shell?.latestRunCompletedAt) ?? 0,
+        background.lastActivityAtMs ?? 0,
       );
       const openCards = yield* repository.listOpenAttentionItems({
         projectId: task.projectId,
@@ -244,7 +252,9 @@ const make = Effect.gen(function* () {
       const answer = yield* latestAnswer(task);
       const stalled = liveStallCause({
         task,
-        leadBusy: yield* isLeadBusy(threads, lead),
+        leadBusy:
+          background.live ||
+          (yield* isLeadBusy(threads, lead, undefined, { ignoreBackgroundWork: true })),
         openCards: openCards.length,
         progressAtMs,
         answeredAtMs: answer?.answeredAt == null ? null : isoMillis(answer.answeredAt),

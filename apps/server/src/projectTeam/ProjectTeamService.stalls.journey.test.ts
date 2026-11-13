@@ -33,6 +33,7 @@ import { isoFromMillis, nowIso } from "./common.ts";
 import * as ProjectTeamService from "./ProjectTeamService.ts";
 import { StalledTaskSweep } from "./StalledTaskSweep.ts";
 import { CLOUD_PINNED_NOTE } from "./startFailure.ts";
+import { leadWakeText } from "./stallLedger.ts";
 import * as TaskOutcomeReactor from "./taskOutcomeReactor.ts";
 import {
   attentionContext,
@@ -140,6 +141,38 @@ const cloudLeadFailsToStart = (
     yield* reactor.handle(failedRun(lead, yield* DateTime.now));
     return { task: started.task, lead };
   });
+
+/**
+ * A started lead whose last turn ended with one background subagent it said would carry
+ * on; the provider still lists the subagent and its record says running.
+ */
+const leadWithBackgroundSubagent = (harness: TeamHarness, pm: ThreadId, title: string) =>
+  Effect.gen(function* () {
+    const started = yield* startLead(pm, title, harness.delegate);
+    const lead = started.task.leadThreadId!;
+    const thread = harness.addThread(lead);
+    const now = yield* DateTime.now;
+    thread.shell = {
+      latestRunCompletedAt: now,
+      pendingBackgroundTasks: [
+        { taskId: `agent-${title}`, kind: "subagent", description: "Build the screen" },
+      ],
+    };
+    const subagent = {
+      origin: "provider_native" as const,
+      status: "running" as const,
+      updatedAt: now,
+    };
+    thread.subagents = [subagent];
+    return { task: started.task, lead, subagent };
+  });
+
+const woken = (harness: TeamHarness, lead: ThreadId) =>
+  harness
+    .messagesTo(lead)
+    .pipe(
+      Effect.map((texts) => texts.filter((text) => text === leadWakeText("no_progress")).length),
+    );
 
 describe("stall journey", () => {
   it.effect("refuses a stop without a resume condition", () =>
@@ -321,6 +354,74 @@ describe("stall journey", () => {
           assert.strictEqual(blocked.location, "cloud");
         }),
       { settings: { taskExecution: { location: "local_first" } } },
+    ),
+  );
+
+  it.effect("a lead whose background subagent died is woken at 10 minutes and carded at 20", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const pm = yield* setUpManager;
+        const { task, lead, subagent } = yield* leadWithBackgroundSubagent(
+          harness,
+          pm,
+          "Background screens",
+        );
+        // It reports progress for two minutes, then its session closes under it.
+        yield* minutes(2);
+        subagent.updatedAt = yield* DateTime.now;
+        yield* minutes(9);
+        assert.strictEqual(yield* woken(harness, lead), 0);
+        yield* minutes(1);
+        assert.strictEqual(yield* woken(harness, lead), 1);
+        assert.deepStrictEqual(yield* openCards(task), []);
+        yield* minutes(10);
+        assert.strictEqual((yield* openCards(task)).length, 1);
+        yield* minutes(30);
+        assert.strictEqual(yield* woken(harness, lead), 1);
+        assert.strictEqual((yield* openCards(task)).length, 1);
+      }),
+    ),
+  );
+
+  it.effect("a lead whose background subagent keeps working is not woken", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const pm = yield* setUpManager;
+        const { task, lead, subagent } = yield* leadWithBackgroundSubagent(
+          harness,
+          pm,
+          "Long screens",
+        );
+        for (let minute = 0; minute < 45; minute++) {
+          yield* minutes(1);
+          if (minute % 5 === 0) subagent.updatedAt = yield* DateTime.now;
+        }
+        assert.strictEqual(yield* woken(harness, lead), 0);
+        assert.deepStrictEqual(yield* openCards(task), []);
+      }),
+    ),
+  );
+
+  it.effect("a pull request watch does not keep a running lead busy", () =>
+    withTeam((harness) =>
+      Effect.gen(function* () {
+        const pm = yield* setUpManager;
+        const started = yield* startLead(pm, "Watched lead", harness.delegate);
+        const lead = started.task.leadThreadId!;
+        harness.addThread(lead).shell = {
+          pendingBackgroundTasks: [
+            {
+              taskId: "pull-request-watch:github.com/acme/app#7",
+              kind: "monitor",
+              description: "Watching pull request #7",
+            },
+          ],
+        };
+        yield* minutes(9);
+        assert.strictEqual(yield* woken(harness, lead), 0);
+        yield* minutes(1);
+        assert.strictEqual(yield* woken(harness, lead), 1);
+      }),
     ),
   );
 

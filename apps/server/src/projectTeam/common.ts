@@ -1,6 +1,7 @@
 import {
   type IsoDateTime,
   isOrchestrationV2WorkActive,
+  type OrchestrationV2ThreadShell,
   type ProjectId,
   ProjectTeamError,
   type ThreadId,
@@ -97,3 +98,53 @@ export const isLeadBusy = (
       (child) => child.origin === "app_owned" && isOrchestrationV2WorkActive(child.status),
     );
   }).pipe(Effect.orElseSucceed(() => false));
+
+/** Watching a linked pull request; BusyBoy wakes the lead on its events, so it is not work. */
+const isPullRequestWatch = (taskId: string) => taskId.startsWith("pull-request-watch:");
+
+/**
+ * Whether the background work a thread's provider runs for it (a background subagent,
+ * command or monitor) is still alive: it showed activity within `freshWithinMs`.
+ * A session that closed under its work, e.g. one paused for memory, leaves that work
+ * marked running with no further updates, so a stale record is not live work.
+ * `lastActivityAtMs` is the latest activity seen, or null when there is no such work.
+ * A watched pull request is not work. A failed read counts as no work.
+ */
+export const liveBackgroundWork = (
+  threads: ThreadManagement.ThreadManagementService["Service"],
+  shell: OrchestrationV2ThreadShell,
+  nowMs: number,
+  freshWithinMs: number,
+): Effect.Effect<{ readonly live: boolean; readonly lastActivityAtMs: number | null }> =>
+  Effect.gen(function* () {
+    const pending = (shell.pendingBackgroundTasks ?? []).filter(
+      (task) => !isPullRequestWatch(task.taskId),
+    );
+    if (pending.length === 0) return { live: false, lastActivityAtMs: null };
+    const { subagents, turnItems } = yield* threads.getThreadRecords(
+      shell.id,
+      ["subagents", "turnItems"],
+      {
+        turnItemTypes: ["subagent", "command_execution", "dynamic_tool"],
+        turnItemStatuses: ["pending", "running", "waiting"],
+      },
+    );
+    const times = [
+      ...subagents
+        .filter(
+          (child) =>
+            child.origin === "provider_native" && isOrchestrationV2WorkActive(child.status),
+        )
+        .map((child) => child.updatedAt),
+      ...turnItems
+        .filter((item) => isOrchestrationV2WorkActive(item.status))
+        .map((item) => item.updatedAt),
+      // Work the provider lists without a record of its own started by the last turn's end.
+      shell.latestRunCompletedAt,
+    ].flatMap((at) => (at == null ? [] : [DateTime.toEpochMillis(at)]));
+    const lastActivityAtMs = times.length === 0 ? null : Math.max(...times);
+    return {
+      live: lastActivityAtMs !== null && nowMs - lastActivityAtMs < freshWithinMs,
+      lastActivityAtMs,
+    };
+  }).pipe(Effect.orElseSucceed(() => ({ live: false, lastActivityAtMs: null })));
