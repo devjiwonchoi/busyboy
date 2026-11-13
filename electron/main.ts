@@ -1,5 +1,6 @@
-import { dirname } from 'node:path'
-import { app, BrowserWindow, dialog, session, shell } from 'electron'
+import { dirname, join } from 'node:path'
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
+import { PICK_FOLDERS_CHANNEL } from '../src/lib/desktop-bridge'
 import { SERVER_TOKEN_COOKIE } from '../src/lib/server-token'
 import { createSelfCheck, isolateSelfCheckProfile, SELF_CHECK_TIMEOUT_MS, selfCheckOutputPath } from './self-check'
 import { serverEntry, startServer, type ServerHandle } from './server-process'
@@ -39,6 +40,7 @@ function createWindow(url: string, show: boolean) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: join(__dirname, 'preload.cjs'),
     },
   })
 
@@ -134,6 +136,21 @@ async function launch() {
   })
 }
 
+/** The native folder picker behind the preload bridge. Only app pages may open it. */
+function registerFolderPicker() {
+  ipcMain.handle(PICK_FOLDERS_CHANNEL, async (event) => {
+    if (!isAppOrigin(event.senderFrame?.url)) return []
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      title: 'Add projects',
+      buttonLabel: 'Add',
+      properties: ['openDirectory', 'multiSelections', 'createDirectory'],
+    }
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? [] : result.filePaths
+  })
+}
+
 let stopping = false
 
 function registerAppEvents() {
@@ -157,6 +174,7 @@ function registerAppEvents() {
   })
 
   void app.whenReady().then(async () => {
+    registerFolderPicker()
     if (selfCheckPath) {
       await runSelfCheck(selfCheckPath)
       return

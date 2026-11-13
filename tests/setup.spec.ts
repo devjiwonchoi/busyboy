@@ -110,6 +110,50 @@ test('choosing a default agent should save it', async ({ page, context, baseURL 
   expect(readSettings(home).defaultProvider).toBe('codex')
 })
 
+test('choosing folders in the desktop picker should add them as projects', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+  const picked = [trackRepository(createGitRepository('api')), trackRepository(createGitRepository('web'))]
+  // Stands in for electron/preload.ts: the native dialog returns these folders.
+  await page.addInitScript((paths) => {
+    Object.assign(window, { busyboyDesktop: { pickFolders: async () => paths, pathForFile: () => '' } })
+  }, picked)
+
+  await goToStart(page)
+  await page.getByRole('button', { name: 'Choose folders…' }).click()
+
+  const projects = page.getByRole('list', { name: 'Projects' })
+  await expect(projects.getByRole('listitem')).toHaveText([/api/, /web/])
+  await expect(page.getByRole('button', { name: 'Start chatting' })).toBeEnabled()
+})
+
+test('dropping folders should add them as projects', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
+  const repository = trackRepository(createGitRepository('mobile'))
+  const plain = track(createTempFolder('plain'))
+  // Stands in for electron/preload.ts: Electron reports a dropped folder's path.
+  await page.addInitScript((paths) => {
+    Object.assign(window, {
+      busyboyDesktop: { pickFolders: async () => [], pathForFile: (file: File) => paths[file.name] ?? '' },
+    })
+  }, { mobile: repository, plain } as Record<string, string>)
+
+  await goToStart(page)
+  const dropZone = page.getByText('Drop project folders here')
+  const dataTransfer = await page.evaluateHandle(() => {
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([], 'mobile'))
+    transfer.items.add(new File([], 'plain'))
+    return transfer
+  })
+  await dropZone.dispatchEvent('dragover', { dataTransfer })
+  await dropZone.dispatchEvent('drop', { dataTransfer })
+
+  await expect(page.getByRole('list', { name: 'Projects' })).toContainText('mobile')
+  await expect(page.getByRole('alert').filter({ hasText: plain })).toHaveText(
+    `${plain} is not a git repository. Run git init there, or choose another folder.`,
+  )
+})
+
 test('adding a folder that is not a git repository should show an error', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
   const folder = track(createTempFolder('plain'))

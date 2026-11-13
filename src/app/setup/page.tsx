@@ -5,6 +5,7 @@ import { Suspense } from 'react'
 import { AddProjectForm } from '@/components/setup/add-project-form'
 import { CompanionStep } from '@/components/setup/companion-step'
 import { CopyCommand } from '@/components/setup/copy-command'
+import { FolderPicker } from '@/components/setup/folder-picker'
 import { SetupSteps } from '@/components/setup/setup-steps'
 import { StepFooter } from '@/components/setup/step-footer'
 import { Badge } from '@/components/ui/badge'
@@ -248,6 +249,7 @@ async function StartPage() {
           ))}
         </ItemGroup>
       )}
+      <FolderPicker />
       <AddProjectForm />
       <StepFooter previous={previous} hint={hint}>
         <form action={startChattingAction}>
