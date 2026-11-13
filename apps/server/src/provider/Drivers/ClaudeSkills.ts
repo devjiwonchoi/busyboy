@@ -261,6 +261,52 @@ const resolveClaudeConfigDirPath = Effect.fn("resolveClaudeConfigDirPath")(funct
   return path.join(home, ".claude");
 });
 
+// Unquoted JSON values must not fail the decode and drop ANTHROPIC_BASE_URL with them.
+const SettingsEnv = Schema.Struct({
+  ANTHROPIC_BASE_URL: Schema.optional(Schema.Unknown),
+  CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: Schema.optional(Schema.Unknown),
+  CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS: Schema.optional(Schema.Unknown),
+});
+const decodeSettingsEnv = Schema.decodeUnknownEffect(
+  fromLenientJson(Schema.Struct({ env: Schema.optional(SettingsEnv) })),
+);
+
+/**
+ * The `env` block of the settings files Claude Code reads, later files overriding earlier ones
+ * as the CLI does (user, project, local, managed).
+ */
+export const readClaudeSettingsEnv = Effect.fn("readClaudeSettingsEnv")(function* (
+  config: Pick<ClaudeSettings, "homePath">,
+  cwd?: string,
+  environment?: NodeJS.ProcessEnv,
+): Effect.fn.Return<Readonly<Record<string, unknown>>, never, FileSystem.FileSystem | Path.Path> {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const platform = yield* HostProcess.Platform;
+  const resolvedEnvironment = environment ?? process.env;
+  const configDirPath = yield* resolveClaudeConfigDirPath(config, resolvedEnvironment, cwd);
+  const repositoryRoot = cwd === undefined ? undefined : yield* findRepositoryRoot(cwd);
+  const merged: Record<string, unknown> = {};
+  for (const settingsPath of skillOverrideSettingsPaths(
+    path,
+    configDirPath,
+    cwd,
+    platform,
+    resolvedEnvironment,
+    repositoryRoot,
+  )) {
+    const contents = yield* fileSystem
+      .readFileString(settingsPath)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    if (contents === undefined) continue;
+    const parsed = yield* decodeSettingsEnv(contents).pipe(Effect.orElseSucceed(() => undefined));
+    for (const [key, value] of Object.entries(parsed?.env ?? {})) {
+      if (value !== undefined) merged[key] = value;
+    }
+  }
+  return merged;
+});
+
 /**
  * Roots are listed highest precedence first and the first hit for a name wins,
  * matching Claude Code: verified against the CLI with the same skill name in
