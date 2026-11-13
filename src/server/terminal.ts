@@ -3,6 +3,7 @@ import { chmodSync, existsSync, statSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { dirname, join } from 'node:path'
 import { spawn, type IPty } from 'node-pty'
+import { onServerShutdown } from './shutdown'
 import { isTestMode } from './working-directory'
 
 /** Output kept per terminal so a reconnecting panel can redraw the screen. */
@@ -11,6 +12,8 @@ const SCROLLBACK_LIMIT = 256 * 1024
 const DETACHED_GRACE_MS = 15_000
 /** Waits between SIGHUP, SIGTERM, and SIGKILL when a shell will not exit. */
 const KILL_ESCALATION_MS = 1_000
+/** How long a server shutdown waits for shells to exit. */
+const STOP_ALL_TIMEOUT_MS = 3_000
 const MIN_SIZE = 2
 const MAX_SIZE = 1000
 
@@ -151,6 +154,9 @@ function installExitHook() {
   // their shell lives, so end the shells first or the server never exits.
   process.once('SIGTERM', killAllTerminals)
   process.once('SIGINT', killAllTerminals)
+  // The desktop app asks before it stops the server (on Windows it then
+  // terminates the process, which runs none of the hooks above).
+  onServerShutdown(stopAllTerminals)
 }
 
 export type StartTerminalOptions = { cwd: string; cols: number; rows: number }
@@ -208,7 +214,7 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
 
   // Nobody is listening yet; do not keep a shell nobody ever attaches to.
   scheduleDetachedKill(terminal)
-  return { id, cwd, shell: shell.file }
+  return { id, cwd, shell: shell.file, pid: process_.pid }
 }
 
 function scheduleDetachedKill(terminal: Terminal) {
@@ -322,5 +328,14 @@ export function killTerminal(id: string) {
 export function killAllTerminals() {
   for (const [id, terminal] of [...registry.terminals]) {
     if (!terminal.exited) killTerminal(id)
+  }
+}
+
+/** Kills every terminal and waits, up to a limit, for their processes to exit. */
+async function stopAllTerminals() {
+  killAllTerminals()
+  const deadline = Date.now() + STOP_ALL_TIMEOUT_MS
+  while (registry.dying.size > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50))
   }
 }

@@ -110,6 +110,7 @@ async function runSelfCheck(outputPath: string) {
     await authorizeWindowSession(server)
     const window = createWindow(server.url, false)
     await check.recordPage(window)
+    await check.recordTerminal(server)
     window.destroy()
     await check.recordServerStop(server)
     check.recordServerFolderUnchanged()
