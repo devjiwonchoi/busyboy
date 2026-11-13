@@ -77,7 +77,11 @@ async function runSelfCheck(outputPath: string) {
     check.fail(error)
     await server?.stop()
   }
-  removeDataFolder()
+  try {
+    removeDataFolder()
+  } catch (error) {
+    console.error(error)
+  }
   const ok = check.write(outputPath)
   app.exit(ok ? 0 : 1)
 }

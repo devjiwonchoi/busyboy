@@ -145,9 +145,13 @@ test('going back from setup after signing out should open the main screen', asyn
   await page.getByRole('button', { name: 'Start chatting' }).click()
   await expect(page.getByRole('main', { name: 'Chat' })).toBeVisible()
 
-  await context.addCookies([{ name: 'busyboy-test-sign-in', value: 'claude=signed-out', url: baseURL! }])
+  await context.addCookies([
+    { name: 'busyboy-test-sign-in', value: 'claude=signed-out,codex=signed-out', url: baseURL! },
+  ])
   await page.getByRole('link', { name: 'Setup' }).click()
-  await expect(page.getByRole('list', { name: 'Providers' })).toContainText('Signed out')
+  const providers = page.getByRole('list', { name: 'Providers' })
+  await expect(providers.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Signed out')
+  await expect(providers.getByRole('listitem').filter({ hasText: 'Codex' })).toContainText('Signed out')
 
   await page.getByRole('link', { name: 'Back to chat' }).click()
 

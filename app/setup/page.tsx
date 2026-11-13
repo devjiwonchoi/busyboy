@@ -191,8 +191,8 @@ async function ProjectList() {
 
 async function StartChatting() {
   await connection()
-  const [signedIn, settings] = await Promise.all([signedInProviders(), readSettings()])
-  // Opened later from the title bar: the way back never depends on a sign-in probe.
+  const settings = await readSettings()
+  // Opened later from the title bar: the way back never waits for a sign-in probe.
   if (isSetupComplete(settings)) {
     return (
       <div className="flex justify-end border-t pt-6">
@@ -203,6 +203,7 @@ async function StartChatting() {
     )
   }
   const { projects } = settings
+  const signedIn = await signedInProviders()
   const hint =
     signedIn.length === 0 && projects.length === 0
       ? 'Sign in to a provider and add a project to continue.'
