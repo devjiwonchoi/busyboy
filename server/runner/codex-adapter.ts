@@ -197,7 +197,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         inTurn = false
         interruptPending = false
         emit({ type: 'error', code: 'provider', message: error.message })
-        emit({ type: 'turn-done' })
+        emit(queue.length > 0 ? { type: 'turn-done', more: true } : { type: 'turn-done' })
         startNextTurn()
       })
   }
@@ -234,6 +234,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         inTurn = false
         turnId = undefined
         interruptPending = false
+        // The next queued message starts its turn right after this one.
+        if (queue.length > 0) {
+          emit({ ...event, more: true })
+          continue
+        }
       }
       emit(event)
     }
@@ -267,10 +272,12 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     })()
     ready.catch(async (error: Error) => {
       if (error instanceof AppServerExited) return // Reported below with the process output.
+      let timer: ReturnType<typeof setTimeout> | undefined
       const status = await Promise.race([
         accountStatus(current).catch(() => undefined),
-        new Promise<undefined>((resolve) => setTimeout(resolve, ACCOUNT_CHECK_TIMEOUT_MS)),
+        new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), ACCOUNT_CHECK_TIMEOUT_MS))),
       ])
+      clearTimeout(timer)
       if (status?.state === 'signed-out') fail('Codex is not signed in. Run `codex login`.', 'signed-out')
       else fail(error.message)
       current.kill()
@@ -317,7 +324,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       } catch (error) {
         inTurn = false
         interruptPending = false
-        emit({ type: 'turn-done' })
+        emit(queue.length > 0 ? { type: 'turn-done', more: true } : { type: 'turn-done' })
         startNextTurn()
         throw error
       }
