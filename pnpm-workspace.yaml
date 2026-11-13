@@ -1,0 +1,7 @@
+# This is a single-package repository. The file exists so pnpm treats this
+# folder as the workspace root and stops here instead of walking up into a
+# parent workspace: a worktree created inside another checkout that has its
+# own pnpm-workspace.yaml once installed into, and rewrote the lockfile of,
+# that checkout. pnpm 11 also reads its project settings only from this file.
+packages:
+  - .
