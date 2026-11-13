@@ -80,7 +80,13 @@ export const MCP_TOOLS: McpTool[] = [
     },
     async run(input) {
       try {
-        const task = await createTask({ project: text(input, 'project'), title: text(input, 'title'), request: text(input, 'request') })
+        const task = await createTask({
+          project: text(input, 'project'),
+          title: text(input, 'title'),
+          request: text(input, 'request'),
+          // Bound to the project's stored name, which createTask resolves.
+          taskMcp: (project) => busyboyMcpServers(project),
+        })
         await attachTaskToDirector(await dataFolder(), task)
         return `Created task ${task.id} in ${task.project} on branch ${task.branch}. Its agent is planning the work now.`
       } catch (error) {
