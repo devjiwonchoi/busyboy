@@ -1,0 +1,50 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: a turn made of two batched messages, and a master turn that tries to ask a question with a tool.",
+  "turns": [
+    {
+      "prompt": "First part.\n\nSecond part.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "Got both parts in one message."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Fix the login page.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": {
+              "questions": [
+                {
+                  "question": "Which project has the login page?",
+                  "header": "Project",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "label": "web"
+                    },
+                    {
+                      "label": "api"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "Which project has the login page, web or api?"
+          }
+        }
+      ]
+    }
+  ]
+}

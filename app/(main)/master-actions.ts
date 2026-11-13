@@ -15,7 +15,7 @@ export async function sendToMasterAction(text: string) {
   await sendToMaster({
     folder: await dataFolder(),
     text,
-    provider: await defaultProvider(),
+    resolveProvider: defaultProvider,
     mcp: await busyboyMcpServer(),
   })
 }

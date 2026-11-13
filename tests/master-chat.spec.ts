@@ -12,6 +12,7 @@ const TWO_PROJECT_WORK = 'Add a /health endpoint to @api and show its status in 
 const SLOW_REQUEST = 'Write a long story about a lighthouse.'
 const INTERRUPTING_REQUEST = 'Never mind, just say hi.'
 const LONG_REQUEST = 'Tell me everything about lighthouses.'
+const AMBIGUOUS_REQUEST = 'Fix the login page.'
 
 type StoredTask = { id: string; project: string; title: string; worktree: string; branch: string; agentId: string }
 
@@ -40,11 +41,11 @@ test('asking a question should answer without creating a task', async ({ page, c
 
   const transcript = page.getByRole('log', { name: 'Transcript' })
   await expect(transcript.getByLabel('Your message')).toHaveText(QUESTION)
-  await expect(transcript.getByLabel('Master reply')).toContainText('several working directories at once')
+  await expect(transcript.getByLabel('Master reply')).toContainText('check out more than one branch')
   await expect(transcript).toHaveAttribute('data-status', 'idle')
   await expect(transcript.getByRole('group', { name: 'Tasks' })).toHaveCount(0)
   expect(storedTasks(home)).toEqual([])
-  expect(readFileSync(join(home, 'master', 'transcript.jsonl'), 'utf8')).toContain('several working directories')
+  expect(readFileSync(join(home, 'master', 'transcript.jsonl'), 'utf8')).toContain('check out more than one branch')
 })
 
 test('asking for work should create a worktree and show the task in chat', async ({ page, context, baseURL }) => {
@@ -57,7 +58,7 @@ test('asking for work should create a worktree and show the task in chat', async
   const line = group.getByRole('listitem', { name: 'web · Add CONTRIBUTING.md' })
   await expect(line).toBeVisible()
   await expect(line.locator('[data-status]')).toHaveText(/Running|Idle/)
-  await expect(page.getByLabel('Master reply')).toContainText('I started a task in web')
+  await expect(page.getByLabel('Master reply')).toContainText("I've started a task in @web")
 
   const [task] = storedTasks(home)
   expect(task).toMatchObject({ project: 'web', title: 'Add CONTRIBUTING.md', branch: `busyboy/${task.id}` })
@@ -79,7 +80,7 @@ test('asking for work in two projects should create two tasks', async ({ page, c
   await expect(group.getByRole('listitem')).toHaveCount(2)
   await expect(group.getByRole('listitem', { name: 'api · Add /health endpoint' })).toBeVisible()
   await expect(group.getByRole('listitem', { name: 'web · Show API health in footer' })).toBeVisible()
-  await expect(page.getByLabel('Master reply')).toContainText("I've started two tasks")
+  await expect(page.getByLabel('Master reply')).toContainText('I started two tasks')
 
   const tasks = storedTasks(home)
   expect(tasks.map(({ project }) => project).sort()).toEqual(['api', 'web'])
@@ -134,6 +135,31 @@ test('a message sent while the master is answering should interrupt it', async (
   // The interrupted turn left nothing waiting, and no error was shown.
   await expect(transcript.getByRole('note')).toHaveCount(0)
   expect(readFileSync(join(home, 'master', 'transcript.jsonl'), 'utf8')).toContain('"interrupted":true')
+})
+
+test('two quick messages should reach the master as one turn', async ({ page, context, baseURL }) => {
+  await useProjectsHome(context, baseURL!, ['web'])
+  await openChat(page)
+  const transcript = page.getByRole('log', { name: 'Transcript' })
+
+  await send(page, 'First part.')
+  await send(page, 'Second part.')
+
+  await expect(transcript.getByLabel('Your message')).toHaveText(['First part.', 'Second part.'])
+  // The script only has a turn for the joined text, so one reply means one turn.
+  await expect(transcript.getByLabel('Master reply')).toHaveText('Got both parts in one message.')
+  await expect(transcript.getByRole('note')).toHaveCount(0)
+})
+
+test('a question tool call from the master should not leave it waiting', async ({ page, context, baseURL }) => {
+  await useProjectsHome(context, baseURL!, ['web', 'api'])
+  await openChat(page)
+  const transcript = page.getByRole('log', { name: 'Transcript' })
+
+  await send(page, AMBIGUOUS_REQUEST)
+
+  await expect(transcript.getByLabel('Master reply')).toHaveText('Which project has the login page, web or api?')
+  await expect(transcript).toHaveAttribute('data-status', 'idle')
 })
 
 test('a long chat should compact while idle', async ({ page, context, baseURL }) => {

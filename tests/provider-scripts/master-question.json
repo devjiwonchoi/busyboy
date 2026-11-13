@@ -1,7 +1,7 @@
 {
   "provider": "claude",
   "description": "The master answers a question without creating a task.",
-  "recordedAt": "2026-11-13T16:25:33.551Z",
+  "recordedAt": "2026-11-13T16:39:59.792Z",
   "turns": [
     {
       "prompt": "What does git worktree do? Answer in one sentence.",
@@ -10,7 +10,7 @@
           "raw": {
             "type": "system",
             "subtype": "init",
-            "session_id": "b7ecd46e-983d-4802-9cf4-755f87636cab"
+            "session_id": "7ae976a0-bb6a-4405-adb6-cb565a17995e"
           }
         },
         {
@@ -20,7 +20,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": "`git"
+                "text": "`git worktree"
               }
             }
           }
@@ -32,7 +32,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": " worktree` lets one"
+                "text": "` lets you check out more"
               }
             }
           }
@@ -44,7 +44,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": " repository have several"
+                "text": " than one branch of"
               }
             }
           }
@@ -56,7 +56,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": " working"
+                "text": " the same repository at once, each"
               }
             }
           }
@@ -68,7 +68,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": " directories at once, each with its"
+                "text": " in its own direct"
               }
             }
           }
@@ -80,7 +80,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": " own branch chec"
+                "text": "ory, and"
               }
             }
           }
@@ -92,7 +92,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": "ked out, so you can work on"
+                "text": " they all share one `"
               }
             }
           }
@@ -104,43 +104,7 @@
               "type": "content_block_delta",
               "delta": {
                 "type": "text_delta",
-                "text": " different branches side"
-              }
-            }
-          }
-        },
-        {
-          "raw": {
-            "type": "stream_event",
-            "event": {
-              "type": "content_block_delta",
-              "delta": {
-                "type": "text_delta",
-                "text": " by side without st"
-              }
-            }
-          }
-        },
-        {
-          "raw": {
-            "type": "stream_event",
-            "event": {
-              "type": "content_block_delta",
-              "delta": {
-                "type": "text_delta",
-                "text": "ashing or re"
-              }
-            }
-          }
-        },
-        {
-          "raw": {
-            "type": "stream_event",
-            "event": {
-              "type": "content_block_delta",
-              "delta": {
-                "type": "text_delta",
-                "text": "-cloning."
+                "text": ".git` history."
               }
             }
           }
@@ -152,7 +116,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "`git worktree` lets one repository have several working directories at once, each with its own branch checked out, so you can work on different branches side by side without stashing or re-cloning."
+                  "text": "`git worktree` lets you check out more than one branch of the same repository at once, each in its own directory, and they all share one `.git` history."
                 }
               ]
             }

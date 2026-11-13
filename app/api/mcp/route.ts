@@ -18,6 +18,9 @@ const failure = (id: JsonRpcResponse['id'], code: number, message: string): Json
 })
 
 async function handle(request: JsonRpcRequest): Promise<JsonRpcResponse | undefined> {
+  if (typeof request !== 'object' || request === null || Array.isArray(request) || typeof request.method !== 'string') {
+    return failure(null, -32600, 'Invalid Request')
+  }
   // Notifications (no id) get no response.
   if (request.id === undefined) return undefined
   const { id } = request

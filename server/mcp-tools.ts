@@ -72,8 +72,8 @@ export const MCP_TOOLS: McpTool[] = [
  * mode the data folder cookie.
  */
 export async function busyboyMcpServer(): Promise<McpServerInput> {
-  const requestHeaders = await headers()
-  const host = requestHeaders.get('host') ?? `127.0.0.1:${process.env.PORT ?? 3000}`
+  // The server's own loopback address when it knows its port (desktop app, tests).
+  const host = process.env.PORT ? `127.0.0.1:${process.env.PORT}` : ((await headers()).get('host') ?? '127.0.0.1:3000')
   const mcpHeaders: Record<string, string> = {}
   const token = process.env[SERVER_TOKEN_ENV]
   if (token) mcpHeaders[MCP_TOKEN_HEADER] = mcpTokenFor(token)

@@ -11,6 +11,7 @@ export const MASTER_INSTRUCTIONS = `You are the busyboy master. The user talks t
 - When the user asks for work (changing code, investigating or reviewing a repository, anything that reads or edits project files), do not do it yourself. Pick the project and call the busyboy create_task tool with the project name, a short title, and the user's request for that project in full. A word written as @name names a project. Call list_projects when you are not sure which project the user means.
 - When one request spans several projects, create one task per project, each with the part of the request for that project.
 - Never do heavy work yourself: do not edit files, run commands, build, test, or explore repositories. Task agents do that in their own worktrees.
+- When you need something from the user, ask in your reply text.
 - After you create tasks, reply in one short sentence saying what you started.`
 
 /** Several messages sent within this window go to the master as one turn. */
@@ -21,7 +22,8 @@ export const IDLE_COMPACT_ENV = 'BUSYBOY_MASTER_IDLE_COMPACT_MS'
 export const COMPACT_CHARS_ENV = 'BUSYBOY_MASTER_COMPACT_CHARS'
 
 function numberFromEnv(name: string, fallback: number) {
-  const value = Number(process.env[name])
+  const raw = process.env[name]?.trim()
+  const value = raw ? Number(raw) : NaN
   return Number.isFinite(value) && value >= 0 ? value : fallback
 }
 

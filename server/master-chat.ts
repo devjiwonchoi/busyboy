@@ -3,12 +3,14 @@ import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises
 import { join } from 'node:path'
 import { MASTER_INSTRUCTIONS, masterTiming } from './master-context'
 import {
+  answerAgent,
   compactAgent,
   getAgent,
   interruptAgent,
   resumeAgent,
   sendMessage,
   startAgent,
+  stopAgent,
   subscribeToAgent,
 } from './runner/agent-runner'
 import type { AgentEventEnvelope, McpServerInput, ProviderId } from './runner/contract'
@@ -62,6 +64,8 @@ type Master = {
   /** The tasks entry of the turn in progress, so one turn's tasks share one bubble. */
   turnTasksId?: string
   charsSinceCompact: number
+  /** An error arrived during the compaction in progress. */
+  compactFailed?: boolean
   /** The provider and MCP endpoint from the latest message, used for the next turn. */
   target?: { provider: ProviderId; mcp: McpServerInput }
   writes: Promise<unknown>
@@ -112,7 +116,12 @@ async function load(master: Master) {
   master.entries = [...byId.values()]
   const lastCompaction = master.entries.findLastIndex((entry) => entry.kind === 'note' && entry.compacted)
   master.charsSinceCompact = master.entries.slice(lastCompaction + 1).reduce((sum, entry) => sum + entryLength(entry), 0)
-  master.state = JSON.parse(await readFile(join(folder, STATE_FILE), 'utf8').catch(() => '{}')) as MasterState
+  try {
+    master.state = JSON.parse(await readFile(join(folder, STATE_FILE), 'utf8')) as MasterState
+  } catch {
+    // Missing or unreadable: the next message starts a new provider session.
+    master.state = {}
+  }
 }
 
 function entryLength(entry: ChatEntry) {
@@ -176,6 +185,12 @@ async function ensureAgent(master: Master, provider: ProviderId, mcp: McpServerI
     if (existing.status === 'stopped') resumeAgent(existing.id)
     return existing.id
   }
+  if (existing) {
+    // The default provider changed: its conversation cannot carry over.
+    master.agentId = undefined
+    void stopAgent(existing.id)
+    saveEntry(master, newEntry('note', { text: `Started a new conversation on ${provider}.`, tone: 'info' }))
+  }
   const cwd = masterFolder(master)
   await mkdir(cwd, { recursive: true })
   const agent = startAgent({
@@ -209,13 +224,34 @@ function onAgentEvent(master: Master, agentId: string, { event }: AgentEventEnve
       saveEntry(master, newEntry('master', { text: event.text }))
       setDraft(master, '')
       break
+    // The master has no cards: it asks in its reply text and never runs
+    // actions that need approval, so such requests are answered at once.
+    case 'approval':
+      answerAgent(agentId, event.requestId, {
+        kind: 'approval',
+        allow: false,
+        message: 'The master cannot run this. Create a task for work in a project instead.',
+      })
+      break
+    case 'question':
+      answerAgent(agentId, event.requestId, {
+        kind: 'question',
+        answers: Object.fromEntries(
+          event.questions.map(({ question }) => [question, 'No answer. Ask this in your reply text instead.']),
+        ),
+      })
+      break
     case 'error':
+      if (compacting) master.compactFailed = true
       saveEntry(master, newEntry('note', { text: event.message, tone: 'error' }))
       break
     case 'turn-done':
       if (compacting) {
-        saveEntry(master, newEntry('note', { text: 'Context compacted', tone: 'info', compacted: true }))
-        master.charsSinceCompact = 0
+        if (!master.compactFailed) {
+          saveEntry(master, newEntry('note', { text: 'Context compacted', tone: 'info', compacted: true }))
+          master.charsSinceCompact = 0
+        }
+        master.compactFailed = false
       } else if (master.draft.trim()) {
         saveEntry(master, newEntry('master', { text: master.draft, interrupted: Boolean(event.interrupted) || undefined }))
       }
@@ -265,6 +301,7 @@ function scheduleCompaction(master: Master) {
     if (!agent || agent.status !== 'idle' || master.status !== 'idle' || master.pending.length) return
     if (master.charsSinceCompact < compactChars) return
     setStatus(master, 'compacting')
+    master.compactFailed = false
     compactAgent(agent.id).catch((error: unknown) => {
       saveEntry(master, newEntry('note', { text: error instanceof Error ? error.message : String(error), tone: 'error' }))
       setStatus(master, 'idle')
@@ -278,8 +315,8 @@ function scheduleCompaction(master: Master) {
 export type SendToMasterInput = {
   folder: string
   text: string
-  /** Null when no provider is signed in. */
-  provider: ProviderId | null
+  /** Resolves the provider for the next turn; null when none is signed in. Called after the message shows. */
+  resolveProvider: () => Promise<ProviderId | null>
   mcp: McpServerInput
 }
 
@@ -287,21 +324,24 @@ export type SendToMasterInput = {
  * Shows the message at once, interrupts a reply in progress, and sends the
  * message after the batch window, together with any sent within it.
  */
-export async function sendToMaster({ folder, text, provider, mcp }: SendToMasterInput) {
+export async function sendToMaster({ folder, text, resolveProvider, mcp }: SendToMasterInput) {
   const master = getMaster(folder)
   await master.ready
   const trimmed = text.trim()
   if (!trimmed) return
   saveEntry(master, newEntry('user', { text: trimmed }))
+  clearTimeout(master.idleTimer)
+  master.idleTimer = undefined
+  if (master.status === 'answering' && master.agentId) void interruptAgent(master.agentId)
+  // A failed or slow sign-in probe must not lose the message while the master is alive.
+  const live = master.agentId ? getAgent(master.agentId) : undefined
+  const provider = (await resolveProvider().catch(() => null)) ?? live?.provider ?? null
   if (!provider) {
     saveEntry(master, newEntry('note', { text: 'No provider is signed in. Open Setup to sign in.', tone: 'error' }))
     return
   }
   master.target = { provider, mcp }
-  clearTimeout(master.idleTimer)
-  master.idleTimer = undefined
   master.pending.push(trimmed)
-  if (master.status === 'answering' && master.agentId) void interruptAgent(master.agentId)
   clearTimeout(master.batchTimer)
   master.batchTimer = setTimeout(() => void flush(master), masterTiming().batchMs)
 }

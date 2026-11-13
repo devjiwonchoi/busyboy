@@ -10,7 +10,14 @@ import { Composer } from './composer'
 import { Markdown } from './markdown'
 import { TaskGroup } from './task-group'
 
-type View = { entries: ChatEntry[]; tasks: Map<string, TaskView>; status: MasterStatus; draft: string; connected: boolean }
+type View = {
+  entries: ChatEntry[]
+  tasks: Map<string, TaskView>
+  status: MasterStatus
+  draft: string
+  connected: boolean
+  sendError?: string
+}
 
 const initialView: View = { entries: [], tasks: new Map(), status: 'idle', draft: '', connected: false }
 
@@ -29,7 +36,7 @@ function apply(view: View, update: MasterUpdate): View {
       const entries = [...view.entries]
       if (index === -1) entries.push(update.entry)
       else entries[index] = update.entry
-      return { ...view, entries }
+      return { ...view, entries, sendError: update.entry.kind === 'user' ? undefined : view.sendError }
     }
     case 'draft':
       return { ...view, draft: update.text }
@@ -92,7 +99,19 @@ export function MasterChat({ projects }: { projects: string[] }) {
         </section>
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-4">
-        <Composer projects={projects} onSend={(text) => void sendToMasterAction(text)} />
+        <Composer
+          projects={projects}
+          onSend={(text) =>
+            sendToMasterAction(text).catch(() =>
+              setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' })),
+            )
+          }
+        />
+        {view.sendError && (
+          <p role="alert" className="text-destructive mt-2 text-xs">
+            {view.sendError}
+          </p>
+        )}
       </div>
     </div>
   )
