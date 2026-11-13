@@ -8,7 +8,7 @@
 // (frozen, so exactly the locked versions) as real, hoisted folders. The
 // listed packages and everything they resolve to are copied from there.
 import { execFileSync } from 'node:child_process'
-import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
 import { serverExternalPackages } from '../src/lib/server-external-packages.ts'
@@ -160,6 +160,31 @@ export function installServerPackages(serverDir: string, platform: string, arch:
   } finally {
     rmSync(staging, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   }
+  pointAliasesAtInstalledPackages(serverDir, platform)
+}
+
+/**
+ * The server does not load an external package by its name: Next links
+ * `.next/node_modules/<name>-<hash>` to the traced copy and loads that, which
+ * lacks the native binaries. Point each alias at the whole package instead,
+ * as a relative link, or as a copy on Windows, where the server has no links.
+ */
+function pointAliasesAtInstalledPackages(serverDir: string, platform: string) {
+  const aliases = join(serverDir, '.next', 'node_modules')
+  if (!existsSync(aliases)) return
+  for (const alias of listPackages(aliases)) {
+    const name = serverExternalPackages.find((listed) => new RegExp(`^${escapeRegExp(listed)}-[0-9a-f]+$`).test(alias))
+    if (!name) continue
+    const link = join(aliases, alias)
+    const installedPackage = join(serverDir, 'node_modules', name)
+    rmSync(link, { recursive: true, force: true })
+    if (platform === 'win32') cpSync(installedPackage, link, { recursive: true })
+    else symlinkSync(relative(dirname(link), installedPackage), link)
+  }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 /** True for files, folders, and links (even broken ones). */
