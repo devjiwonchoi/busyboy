@@ -5,8 +5,9 @@
 // The Electron main process goes into app.asar. The standalone Next server is
 // copied next to it into `<Resources>/server`, outside the archive, because
 // `utilityProcess.fork` cannot start a server that lives inside app.asar.
+// The terminal's native module (node-pty) travels inside that server folder.
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, rmSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import builder from 'electron-builder'
 
@@ -34,6 +35,60 @@ run('pnpm', ['build:electron'])
 
 rmSync(outputDir, { recursive: true, force: true })
 
+/**
+ * node-pty ships N-API prebuilds, so one binary works in Node and in
+ * Electron's utility process without a rebuild. Keep only the target
+ * platform's prebuilds, keep a binary compiled into `build/Release` when there
+ * is one, and make sure `spawn-helper` stays executable.
+ *
+ * macOS keeps both architectures so node-pty is ready for a universal
+ * build, which packs x64 and arm64 separately (this hook runs for each) and
+ * requires both apps to hold the same Mach-O files; `x64ArchFiles` lets the
+ * merge keep node-pty's thin binaries as they are. This script does not
+ * build universal apps yet, and other native files in the server (sharp)
+ * would still need the same treatment.
+ */
+function pruneNodePty(serverDir: string, platform: string, arch: string) {
+  const targets = platform === 'darwin' ? ['darwin-x64', 'darwin-arm64'] : [`${platform}-${arch}`]
+  const packages: string[] = []
+  const visit = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      // Symlinks point at folders this walk reaches anyway.
+      if (!entry.isDirectory()) continue
+      const path = join(dir, entry.name)
+      if (/^node-pty(-[0-9a-f]+)?$/.test(entry.name) && existsSync(join(path, 'package.json'))) {
+        packages.push(path)
+        continue
+      }
+      visit(path)
+    }
+  }
+  visit(serverDir)
+  if (packages.length === 0) throw new Error('node-pty is missing from the packaged server.')
+
+  for (const dir of packages) {
+    const prebuilds = join(dir, 'prebuilds')
+    if (existsSync(prebuilds)) {
+      for (const build of readdirSync(prebuilds)) {
+        if (!targets.includes(build)) rmSync(join(prebuilds, build), { recursive: true, force: true })
+      }
+    }
+    const binaryDirs = [join(dir, 'build', 'Release'), ...targets.map((target) => join(prebuilds, target))]
+    for (const binaryDir of binaryDirs) {
+      const helper = join(binaryDir, 'spawn-helper')
+      if (existsSync(helper)) chmodSync(helper, 0o755)
+    }
+    const compiled = existsSync(join(dir, 'build', 'Release', 'pty.node'))
+    const missing = targets.filter((target) => !existsSync(join(prebuilds, target, 'pty.node')))
+    if (!compiled && missing.length > 0) {
+      throw new Error(`node-pty in ${dir} has no binary for ${missing.join(', ')}.`)
+    }
+  }
+}
+
+const NODE_PTY_MAC_PREBUILDS =
+  'Contents/Resources/server/{node_modules/.pnpm/node-pty@*/node_modules/node-pty,node_modules/node-pty,.next/node_modules/node-pty-*}/prebuilds/darwin-*/*'
+
 const platform = targetPlatform()
 
 await builder.build({
@@ -52,6 +107,8 @@ await builder.build({
       category: 'public.app-category.developer-tools',
       // Unsigned until code signing is set up.
       identity: null,
+      // node-pty's thin prebuilds for both architectures (see pruneNodePty).
+      x64ArchFiles: NODE_PTY_MAC_PREBUILDS,
     },
     afterPack: async (context) => {
       const resources =
@@ -65,6 +122,7 @@ await builder.build({
         verbatimSymlinks: context.electronPlatformName !== 'win32',
         dereference: context.electronPlatformName === 'win32',
       })
+      pruneNodePty(join(resources, 'server'), context.electronPlatformName, builder.Arch[context.arch])
     },
   },
 })

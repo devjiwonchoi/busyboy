@@ -3,11 +3,14 @@ import { existsSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { app, utilityProcess, type UtilityProcess } from 'electron'
+import { SHUTDOWN_DONE_MESSAGE, SHUTDOWN_MESSAGE } from '../lib/server-shutdown'
 import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from '../lib/server-token'
 
 const LOOPBACK = '127.0.0.1'
 const READY_TIMEOUT_MS = 30_000
 const STOP_TIMEOUT_MS = 5_000
+/** How long the server gets to end its child processes before it is killed. */
+const SHUTDOWN_TIMEOUT_MS = 4_000
 const START_ATTEMPTS = 3
 const PROBE_TIMEOUT_MS = 2_000
 
@@ -15,7 +18,8 @@ export type ServerHandle = {
   url: string
   token: string
   isRunning: () => boolean
-  stop: () => Promise<void>
+  /** Resolves with whether the server answered the shutdown message after running its shutdown handlers. */
+  stop: () => Promise<{ acknowledged: boolean }>
 }
 
 /** The standalone server sits outside app.asar in packaged builds. */
@@ -107,9 +111,34 @@ async function startOnFreePort(entry: string): Promise<Attempt> {
       token,
       isRunning: () => running,
       stop: async () => {
-        if (!running) return
+        if (!running) return { acknowledged: false }
+        // Let the server end its terminals first: on Windows `kill()` terminates
+        // the process outright and no exit hook in it runs.
+        let acknowledged = false
+        let onMessage: (message: { type?: string } | null) => void = () => {}
+        const shutdownDone = new Promise<void>((resolve) => {
+          onMessage = (message) => {
+            if (message?.type !== SHUTDOWN_DONE_MESSAGE) return
+            acknowledged = true
+            resolve()
+          }
+          child.on('message', onMessage)
+        })
+        let timer: ReturnType<typeof setTimeout> | undefined
+        child.postMessage({ type: SHUTDOWN_MESSAGE })
+        await Promise.race([
+          shutdownDone,
+          exitedPromise,
+          new Promise((resolve) => {
+            timer = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)
+          }),
+        ])
+        clearTimeout(timer)
+        child.off('message', onMessage)
+        if (!running) return { acknowledged }
         child.kill()
         await Promise.race([exitedPromise, new Promise((resolve) => setTimeout(resolve, STOP_TIMEOUT_MS))])
+        return { acknowledged }
       },
     },
   }
