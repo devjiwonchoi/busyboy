@@ -1,8 +1,12 @@
+import { dirname } from 'node:path'
 import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { SERVER_TOKEN_COOKIE } from '../src/lib/server-token'
-import { startServer, type ServerHandle } from './server-process'
+import { createSelfCheck, isolateSelfCheckProfile, SELF_CHECK_TIMEOUT_MS, selfCheckOutputPath } from './self-check'
+import { serverEntry, startServer, type ServerHandle } from './server-process'
 import { installLoginShellPath } from './shell-env'
 
+const selfCheckPath = selfCheckOutputPath(process.argv)
+if (selfCheckPath) isolateSelfCheckProfile()
 let server: ServerHandle | null = null
 
 // Permissions the app's own pages may use; everything else is denied.
@@ -84,6 +88,39 @@ async function authorizeWindowSession(handle: ServerHandle) {
   })
 }
 
+async function runSelfCheck(outputPath: string) {
+  const check = createSelfCheck()
+  let finished = false
+  // Write the result and exit exactly once, whether the check ends, fails, or hangs.
+  const finish = () => {
+    if (finished) return
+    finished = true
+    clearTimeout(watchdog)
+    app.exit(check.write(outputPath) ? 0 : 1)
+  }
+  const watchdog = setTimeout(() => {
+    check.fail(new Error(`The self-check did not finish within ${SELF_CHECK_TIMEOUT_MS} ms.`))
+    finish()
+  }, SELF_CHECK_TIMEOUT_MS)
+  try {
+    check.recordShellPath(await installLoginShellPath())
+    check.snapshotServerFolder(dirname(serverEntry()))
+    server = await startServer()
+    await check.recordServer(server)
+    await authorizeWindowSession(server)
+    const window = createWindow(server.url, false)
+    await check.recordPage(window)
+    window.destroy()
+    await check.recordServerStop(server)
+    check.recordServerFolderUnchanged()
+  } catch (error) {
+    check.fail(error)
+    await server?.stop()
+  } finally {
+    finish()
+  }
+}
+
 async function launch() {
   const shellPath = await installLoginShellPath()
   if (shellPath.error) console.warn(`Using the inherited PATH: ${shellPath.error}`)
@@ -107,7 +144,7 @@ function registerAppEvents() {
   })
 
   app.on('window-all-closed', () => {
-    app.quit()
+    if (!selfCheckPath) app.quit()
   })
 
   // Stop the server before the app exits.
@@ -119,6 +156,10 @@ function registerAppEvents() {
   })
 
   void app.whenReady().then(async () => {
+    if (selfCheckPath) {
+      await runSelfCheck(selfCheckPath)
+      return
+    }
     try {
       await launch()
     } catch (error) {
@@ -132,7 +173,7 @@ function registerAppEvents() {
 }
 
 // A second copy hands focus to the first one and exits without starting anything.
-if (app.requestSingleInstanceLock()) {
+if (selfCheckPath || app.requestSingleInstanceLock()) {
   registerAppEvents()
 } else {
   app.quit()

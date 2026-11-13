@@ -10,8 +10,12 @@ packages:
 allowBuilds:
   # Downloads the Electron binary.
   electron: true
+  # Comes with electron-builder for Squirrel installers, which are not built.
+  electron-winstaller: false
   # Installs its platform binary for bundling the main process.
   esbuild: true
+  # Uses its prebuild or compiles from source when there is none (Linux).
+  node-pty: true
 
 # Electron 45.3.2 was newer than the configured minimum release age when it
 # was pinned for this app; pnpm added the exemption so it could be installed.

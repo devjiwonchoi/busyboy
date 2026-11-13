@@ -19,7 +19,7 @@ export type ServerHandle = {
 }
 
 /** The standalone server sits outside app.asar in packaged builds. */
-function serverEntry() {
+export function serverEntry() {
   const entry = app.isPackaged
     ? join(process.resourcesPath, 'server', 'server.js')
     : join(app.getAppPath(), '.next', 'standalone', 'server.js')

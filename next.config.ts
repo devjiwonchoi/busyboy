@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { serverExternalPackages } from './src/lib/server-external-packages'
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -28,6 +29,15 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   // The desktop app runs .next/standalone/server.js inside Electron.
   output: 'standalone',
+  // Packages that load files by computed paths, so packaging installs them
+  // whole instead of using traced files (see src/lib/server-external-packages.ts).
+  serverExternalPackages,
+  // 'use cache' already defaults to memory. The cache for ISR, route handlers,
+  // fetch, and images defaults to files under .next, inside the packaged app,
+  // so it is kept in memory too (see src/lib/memory-cache-handler.mjs).
+  cacheHandler: require.resolve('./src/lib/memory-cache-handler.mjs'),
+  // Without this, optimized images still go to the file cache under .next.
+  images: { customCacheHandler: true },
   async headers() {
     return [
       {
