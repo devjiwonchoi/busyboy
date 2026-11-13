@@ -23,7 +23,8 @@ type AgentRecord = {
   events: AgentEventEnvelope[]
   listeners: Set<(envelope: AgentEventEnvelope) => void>
   session: ProviderSession | null
-  pending: Set<string>
+  /** Open approvals and questions by request id, with the answer kind each takes. */
+  pending: Map<string, AgentAnswer['kind']>
   interrupting: boolean
 }
 
@@ -76,8 +77,11 @@ function record(agent: AgentRecord, event: AgentEvent) {
       agent.sessionId = event.sessionId
       break
     case 'approval':
+      agent.pending.set(event.requestId, 'approval')
+      agent.status = 'waiting'
+      break
     case 'question':
-      agent.pending.add(event.requestId)
+      agent.pending.set(event.requestId, 'question')
       agent.status = 'waiting'
       break
     case 'answered':
@@ -99,7 +103,7 @@ function record(agent: AgentRecord, event: AgentEvent) {
   }
   if (event.type === 'turn-done' || event.type === 'stopped') {
     // Requests left open by an interrupt or stop can no longer be answered.
-    for (const requestId of agent.pending) push(agent, { type: 'answered', requestId })
+    for (const requestId of agent.pending.keys()) push(agent, { type: 'answered', requestId })
     agent.pending.clear()
   }
   push(agent, event)
@@ -140,7 +144,7 @@ export function startAgent(input: StartAgentInput): AgentSnapshot {
     events: [],
     listeners: new Set(),
     session: null,
-    pending: new Set(),
+    pending: new Map(),
     interrupting: false,
   }
   registry.agents.set(agent.id, agent)
@@ -184,9 +188,15 @@ export async function compactAgent(agentId: string) {
   await agent.session.compact()
 }
 
+/**
+ * Answers an open approval or question. Returns false when it is no longer open;
+ * throws when the answer kind does not match the request.
+ */
 export function answerAgent(agentId: string, requestId: string, answer: AgentAnswer) {
   const agent = getRecord(agentId)
-  if (!agent.session || !agent.pending.has(requestId)) return false
+  const kind = agent.pending.get(requestId)
+  if (!agent.session || !kind) return false
+  if (kind !== answer.kind) throw new Error(`Request ${requestId} takes an answer of kind ${kind}, not ${answer.kind}.`)
   agent.session.answer(requestId, answer)
   record(agent, { type: 'answered', requestId })
   return true
