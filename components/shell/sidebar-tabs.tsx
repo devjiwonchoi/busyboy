@@ -18,7 +18,13 @@ export function SidebarTabs({ tabs }: { tabs: RenderedSidebarTab[] }) {
         ))}
       </TabsList>
       {tabs.map((tab) => (
-        <TabsContent key={tab.id} value={tab.id} className="min-h-0 flex-1 overflow-auto">
+        // Keep inactive tabs mounted so their state (streams, subscriptions) survives switching.
+        <TabsContent
+          key={tab.id}
+          value={tab.id}
+          forceMount
+          className="min-h-0 flex-1 overflow-auto data-[state=inactive]:hidden"
+        >
           {tab.content}
         </TabsContent>
       ))}

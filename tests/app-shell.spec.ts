@@ -34,6 +34,15 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Toggle bottom panel' }).click()
     await expect(panel).toBeHidden()
 
+    // With a Korean input source, Cmd/Ctrl+B reports the key as 'ㅠ' on the physical B key.
+    await page.evaluate(() => {
+      const mac = /Mac/.test(navigator.platform)
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ㅠ', code: 'KeyB', metaKey: mac, ctrlKey: !mac, bubbles: true }),
+      )
+    })
+    await expect(sidebar).toBeHidden()
+
     expect(policyViolations).toEqual([])
 
     await page.screenshot({ path: test.info().outputPath(`shell-${colorScheme}.png`) })
