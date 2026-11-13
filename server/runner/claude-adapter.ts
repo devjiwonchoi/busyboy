@@ -194,7 +194,9 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
     const { account } = await probe.initializationResult()
     if (account.apiProvider && account.apiProvider !== 'firstParty') return { state: 'signed-in', account: account.apiProvider }
     const hasKey = Boolean(account.apiKeySource) && account.apiKeySource !== 'none'
-    if (account.tokenSource !== 'none' || hasKey || account.email) {
+    // Require a positive signal: a missing tokenSource does not prove a sign-in.
+    const hasToken = Boolean(account.tokenSource) && account.tokenSource !== 'none'
+    if (hasToken || hasKey || account.email) {
       return { state: 'signed-in', account: account.email ?? account.organization }
     }
     return { state: 'signed-out', loginCommand: 'claude /login' }
