@@ -1,8 +1,15 @@
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
+import { prepareDefaultHome } from './tests/support/test-home'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
 const baseURL = `http://127.0.0.1:${port}`
+
+// The server never sees the real ~/.busyboy, ~/.claude, or ~/.codex. Journeys
+// that need their own data folder set one per browser context (tests/support/test-home.ts).
+const defaultHome = join(tmpdir(), `busyboy-e2e-default-home-${port}`)
+prepareDefaultHome(defaultHome)
 
 export default defineConfig({
   testDir: './tests',
@@ -20,8 +27,16 @@ export default defineConfig({
     command: 'pnpm build && pnpm start',
     url: baseURL,
     // Agents replay recorded provider scripts instead of calling a model.
-    env: { PORT: String(port), BUSYBOY_TEST_MODE: '1', BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts') },
-    // Never reuse: another worktree may be serving a different build on the same port.
+    env: {
+      PORT: String(port),
+      BUSYBOY_TEST_MODE: '1',
+      BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
+      BUSYBOY_HOME: defaultHome,
+      CLAUDE_CONFIG_DIR: join(defaultHome, 'claude-config'),
+      CODEX_HOME: join(defaultHome, 'codex-home'),
+    },
+    // Never reuse: another worktree may be serving a different build on the same port, or a
+    // server that is not in test mode could write to the real data folder.
     reuseExistingServer: false,
     timeout: 180_000,
   },
