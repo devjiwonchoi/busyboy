@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
-import { accessSync, constants } from 'node:fs'
-import { delimiter, join } from 'node:path'
+import { accessSync, constants, readFileSync } from 'node:fs'
+import { delimiter, dirname, join, resolve } from 'node:path'
 
 const MARKER = '__BUSYBOY_PATH__'
 let loginShellPath: Promise<string> | undefined
@@ -25,16 +25,51 @@ function readLoginShellPath(): Promise<string> {
   return loginShellPath
 }
 
+function isExecutable(candidate: string) {
+  try {
+    accessSync(/*turbopackIgnore: true*/ candidate, process.platform === 'win32' ? constants.F_OK : constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * npm installs a Windows command as a `.cmd` batch shim, which Node cannot
+ * spawn without a shell. The shim names its real target relative to `%dp0%`
+ * (its own folder): a native `.exe` or a `.js` entry script, which the Agent SDK
+ * runs with Node. Return that target.
+ */
+function resolveWindowsShim(shim: string) {
+  let text: string
+  try {
+    text = readFileSync(/*turbopackIgnore: true*/ shim, 'utf8')
+  } catch {
+    return undefined
+  }
+  for (const match of text.matchAll(/"%~?dp0%?\\?([^"%]+?\.(?:exe|js|cjs|mjs))"/gi)) {
+    // npm shims also probe for a bundled `node.exe`; that is the runtime, not the command.
+    if (/(^|\\)node\.exe$/i.test(match[1]!)) continue
+    const target = resolve(dirname(shim), match[1]!)
+    if (isExecutable(target)) return target
+  }
+  return undefined
+}
+
 function searchPath(name: string, pathValue: string) {
-  const extensions = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']
   for (const directory of pathValue.split(delimiter)) {
     if (!directory) continue
-    for (const extension of extensions) {
-      const candidate = join(directory, name + extension)
-      try {
-        accessSync(/*turbopackIgnore: true*/ candidate, constants.X_OK)
-        return candidate
-      } catch {}
+    if (process.platform !== 'win32') {
+      const candidate = join(directory, name)
+      if (isExecutable(candidate)) return candidate
+      continue
+    }
+    const exe = join(directory, `${name}.exe`)
+    if (isExecutable(exe)) return exe
+    const shim = join(directory, `${name}.cmd`)
+    if (isExecutable(shim)) {
+      const target = resolveWindowsShim(shim)
+      if (target) return target
     }
   }
   return undefined
