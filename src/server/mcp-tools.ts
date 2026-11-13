@@ -1,4 +1,5 @@
 import { listProjects } from './projects'
+import { createTask, TaskError } from './tasks'
 
 // The tools busyboy offers its agents over MCP (app/api/mcp/route.ts). Every
 // call runs inside that request, so `dataFolder()` and the providers resolve
@@ -17,6 +18,12 @@ export type McpTool = {
 
 export class McpToolError extends Error {}
 
+function text(input: Record<string, unknown>, key: string) {
+  const value = input[key]
+  if (typeof value !== 'string' || !value.trim()) throw new McpToolError(`\`${key}\` must be a non-empty string.`)
+  return value
+}
+
 export const MCP_TOOLS: McpTool[] = [
   {
     name: 'list_projects',
@@ -26,6 +33,29 @@ export const MCP_TOOLS: McpTool[] = [
       const projects = await listProjects()
       if (projects.length === 0) return 'There are no projects yet. The user adds them in Setup.'
       return JSON.stringify(projects.map(({ name, path }) => ({ name, path })))
+    },
+  },
+  {
+    name: 'create_task',
+    description:
+      'Start a task agent for one project. It gets its own git worktree and branch from the project HEAD, plans with the align skill, and does the work. Create one task per project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'The project name, as list_projects returns it.' },
+        title: { type: 'string', description: 'A short title, a few words.' },
+        request: { type: 'string', description: "The user's request for this project, complete and in the user's words." },
+      },
+      required: ['project', 'title', 'request'],
+    },
+    async run(input) {
+      try {
+        const task = await createTask({ project: text(input, 'project'), title: text(input, 'title'), request: text(input, 'request') })
+        return `Created task ${task.id} in ${task.project} on branch ${task.branch}. Its agent is planning the work now.`
+      } catch (error) {
+        if (error instanceof TaskError) throw new McpToolError(error.message)
+        throw error
+      }
     },
   },
 ]
