@@ -1,4 +1,6 @@
-// Bottom panel slot. The terminal replaces this empty default.
+import { TerminalPanel } from '@/components/terminal/terminal-panel'
+
+// Bottom panel slot: the terminal.
 export default function PanelDefault() {
-  return null
+  return <TerminalPanel />
 }

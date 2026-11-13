@@ -18,7 +18,7 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && node .next/standalone/server.js',
     url: baseURL,
-    env: { PORT: String(port), HOSTNAME: '127.0.0.1' },
+    env: { PORT: String(port), HOSTNAME: '127.0.0.1', BUSYBOY_TEST_MODE: '1' },
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
