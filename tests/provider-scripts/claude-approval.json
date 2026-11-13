@@ -1,0 +1,78 @@
+{
+  "provider": "claude",
+  "description": "Claude asks before running a command that matches an ask rule, then continues once allowed.",
+  "recordedAt": "2026-11-13T15:47:20.931Z",
+  "turns": [
+    {
+      "prompt": "Run the shell command `touch notes.txt` with the Bash tool, then reply with exactly: Created notes.txt.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "baef3c58-b85e-4e6a-ae04-069fcbbef6f8"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "Bash",
+                  "input": {
+                    "command": "touch notes.txt",
+                    "description": "Create empty notes.txt file"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "canUseTool": {
+            "toolName": "Bash",
+            "input": {
+              "command": "touch notes.txt",
+              "description": "Create empty notes.txt file"
+            },
+            "description": "Create empty notes.txt file"
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "Created notes.txt."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Created notes.txt."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false
+          }
+        }
+      ]
+    }
+  ]
+}

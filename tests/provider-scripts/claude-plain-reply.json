@@ -1,0 +1,63 @@
+{
+  "provider": "claude",
+  "description": "Claude answers a short message with plain text.",
+  "recordedAt": "2026-11-13T15:47:09.851Z",
+  "turns": [
+    {
+      "prompt": "Reply with exactly this sentence and nothing else: Hello from busyboy.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "920beea6-3eff-4dac-88bb-05e9f5bf6f94"
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "Hello from busyboy"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "delta": {
+                "type": "text_delta",
+                "text": "."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello from busyboy."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false
+          }
+        }
+      ]
+    }
+  ]
+}
