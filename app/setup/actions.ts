@@ -4,7 +4,7 @@ import { refresh } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { readSettings, updateSettings } from '@/server/config'
 import { addProject, ProjectError, removeProject } from '@/server/projects'
-import { providerState, setDefaultProvider, signedInProviders } from '@/server/providers'
+import { providerState, PROVIDERS, setDefaultProvider, signedInProviders } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 
 export type AddProjectResult = { error?: string; added?: string }
@@ -26,6 +26,8 @@ export async function removeProjectAction(name: string) {
 }
 
 export async function setDefaultProviderAction(provider: ProviderId) {
+  // Server actions are public endpoints, so the argument is checked at runtime.
+  if (!PROVIDERS.some(({ id }) => id === provider)) throw new Error('Unknown provider.')
   await setDefaultProvider(provider)
   refresh()
 }
