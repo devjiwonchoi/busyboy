@@ -10,6 +10,10 @@ All text committed to this repository is English: code, identifiers, comments, U
 
 Do not add research notes, reports, specs, plans, or other documents to the repository, and do not open PRs whose purpose is a document. Deliver them in the conversation instead. Code comments, PR descriptions, and README changes that a code change needs are fine.
 
+## Never edit README.md
+
+The user maintains `README.md`. Do not change it.
+
 ## Use kebab-case file names
 
 Every file and folder name is kebab-case, for example `server-process.ts` or `bottom-panel.tsx`. Files whose names are fixed by a tool (`AGENTS.md`, `README.md`, `page.tsx`, `next.config.ts`) keep those names.
