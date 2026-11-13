@@ -22,12 +22,13 @@ export async function GET(request: Request, { params }: Context) {
           controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
           if (event.type === 'exit') controller.close()
         } catch {
-          // The client already went away.
+          // The client already went away; stop following.
+          detach?.()
         }
       }
       detach = attachTerminal(id, send)
       if (!detach) {
-        send({ type: 'exit', exitCode: -1 })
+        send({ type: 'exit', exitCode: -1, killed: true })
         return
       }
       request.signal.addEventListener('abort', () => detach?.(), { once: true })

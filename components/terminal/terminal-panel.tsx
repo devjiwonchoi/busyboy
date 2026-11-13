@@ -152,6 +152,14 @@ function TerminalView({
       callbacks.current.onEnd(message)
     }
 
+    // Keys typed while the shell starts are held and sent once it is up.
+    let send: ((data: string) => void) | null = null
+    let early = ''
+    term.onData((data) => {
+      if (send) send(data)
+      else early += data
+    })
+
     void (async () => {
       try {
         const started = await startTerminal({ cols: term.cols, rows: term.rows }, abort.signal)
@@ -161,8 +169,9 @@ function TerminalView({
           return
         }
         callbacks.current.onStart(started.cwd)
-        const send = createInputSender(started.id)
-        term.onData(send)
+        send = createInputSender(started.id)
+        if (early) send(early)
+        early = ''
         // The panel may have been resized while the shell started.
         resizeTerminal(started.id, term.cols, term.rows)
         let exited = false
@@ -172,7 +181,7 @@ function TerminalView({
             return
           }
           exited = true
-          end(`The shell exited with code ${event.exitCode}.`)
+          end(event.killed ? 'The shell was stopped.' : `The shell exited with code ${event.exitCode}.`)
         })
         if (!exited && !abort.signal.aborted) end('The connection to the shell closed.')
       } catch (error) {
@@ -200,13 +209,17 @@ function TerminalView({
     current.term.focus()
   }, [active])
 
+  // The fit addon measures the host's box including its padding, so the
+  // padding lives on a wrapper and the host stays exactly the usable area.
   return (
-    <div
-      ref={hostRef}
-      data-slot="terminal"
-      role="region"
-      aria-label="Terminal"
-      className="min-h-0 flex-1 bg-background py-1 pl-3 [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent!"
-    />
+    <div className="flex min-h-0 flex-1 bg-background py-1 pl-3">
+      <div
+        ref={hostRef}
+        data-slot="terminal"
+        role="region"
+        aria-label="Terminal"
+        className="min-h-0 min-w-0 flex-1 [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent!"
+      />
+    </div>
   )
 }

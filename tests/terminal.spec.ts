@@ -3,6 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
+// The journeys type POSIX shell commands into the pinned test shell (/bin/sh).
+test.skip(process.platform === 'win32', 'The terminal journeys need a POSIX shell.')
+
 let worktree: string
 
 test.beforeEach(() => {

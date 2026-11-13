@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, statSync } from 'node:fs'
+import { userInfo } from 'node:os'
 import { dirname, join } from 'node:path'
 import { spawn, type IPty } from 'node-pty'
+import { isTestMode } from './working-directory'
 
 /** Output kept per terminal so a reconnecting panel can redraw the screen. */
 const SCROLLBACK_LIMIT = 256 * 1024
@@ -12,7 +14,10 @@ const KILL_ESCALATION_MS = 1_000
 const MIN_SIZE = 2
 const MAX_SIZE = 1000
 
-export type TerminalEvent = { type: 'data'; data: string } | { type: 'exit'; exitCode: number; signal?: number }
+export type TerminalEvent =
+  | { type: 'data'; data: string }
+  /** `killed` is set when Busyboy ended the shell rather than the shell exiting by itself. */
+  | { type: 'exit'; exitCode: number; signal?: number; killed?: boolean }
 
 type Listener = (event: TerminalEvent) => void
 
@@ -21,7 +26,9 @@ type Terminal = {
   cwd: string
   shell: string
   pty: IPty
-  scrollback: string
+  /** Recent output chunks, whole, so replay never starts inside an escape sequence. */
+  scrollback: string[]
+  scrollbackLength: number
   exited: boolean
   listeners: Set<Listener>
   detachedTimer: ReturnType<typeof setTimeout> | null
@@ -72,12 +79,18 @@ function ensureSpawnHelperExecutable() {
   }
 }
 
-/** The user's login shell and its arguments. */
+/**
+ * The user's login shell and its arguments. Journeys pin a plain shell with
+ * BUSYBOY_TEST_SHELL (test mode only) so the developer's profile cannot
+ * change what they see.
+ */
 export function loginShell(): { file: string; args: string[] } {
+  const testShell = process.env.BUSYBOY_TEST_SHELL
+  if (testShell && isTestMode()) return { file: testShell, args: [] }
   if (process.platform === 'win32') {
     return { file: process.env.COMSPEC || 'cmd.exe', args: [] }
   }
-  const file = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
+  const file = process.env.SHELL || userInfo().shell || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
   return { file, args: ['-l'] }
 }
 
@@ -146,7 +159,8 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
     cwd,
     shell: shell.file,
     pty: process_,
-    scrollback: '',
+    scrollback: [],
+    scrollbackLength: 0,
     exited: false,
     listeners: new Set(),
     detachedTimer: null,
@@ -155,7 +169,11 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
   installExitHook()
 
   process_.onData((data) => {
-    terminal.scrollback = (terminal.scrollback + data).slice(-SCROLLBACK_LIMIT)
+    terminal.scrollback.push(data)
+    terminal.scrollbackLength += data.length
+    while (terminal.scrollbackLength > SCROLLBACK_LIMIT && terminal.scrollback.length > 1) {
+      terminal.scrollbackLength -= terminal.scrollback.shift()!.length
+    }
     emit(terminal, { type: 'data', data })
   })
   process_.onExit(({ exitCode, signal }) => {
@@ -166,7 +184,7 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
 
   // Nobody is listening yet; do not keep a shell nobody ever attaches to.
   scheduleDetachedKill(terminal)
-  return { id, cwd, shell: shell.file }
+  return { id, cwd, shell: shell.file, pid: process_.pid }
 }
 
 function scheduleDetachedKill(terminal: Terminal) {
@@ -188,7 +206,7 @@ export function attachTerminal(id: string, listener: Listener): (() => void) | n
     clearTimeout(terminal.detachedTimer)
     terminal.detachedTimer = null
   }
-  if (terminal.scrollback) listener({ type: 'data', data: terminal.scrollback })
+  if (terminal.scrollback.length > 0) listener({ type: 'data', data: terminal.scrollback.join('') })
   terminal.listeners.add(listener)
   return () => {
     if (!terminal.listeners.delete(listener)) return
@@ -237,7 +255,7 @@ function signal(terminal: Terminal, name?: 'SIGHUP' | 'SIGTERM' | 'SIGKILL') {
 export function killTerminal(id: string) {
   const terminal = registry.terminals.get(id)
   if (!terminal) return false
-  finish(terminal, { type: 'exit', exitCode: -1, signal: 1 })
+  finish(terminal, { type: 'exit', exitCode: -1, killed: true })
   signal(terminal, 'SIGHUP')
   if (process.platform === 'win32' || terminal.exited) return true
   registry.dying.add(terminal)

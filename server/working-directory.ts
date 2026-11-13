@@ -5,10 +5,14 @@ import { SERVER_TOKEN_ENV } from '@/lib/server-token'
 
 /**
  * When set to `1`, journeys may choose the working directory with a `cwd`
- * search parameter. Ignored whenever the server has a launch token, which the
- * desktop app always sets.
+ * search parameter and the shell with BUSYBOY_TEST_SHELL. Ignored whenever the
+ * server has a launch token, which the desktop app always sets.
  */
 export const TEST_MODE_ENV = 'BUSYBOY_TEST_MODE'
+
+export function isTestMode() {
+  return process.env[TEST_MODE_ENV] === '1' && !process.env[SERVER_TOKEN_ENV]
+}
 
 function isDirectory(path: string) {
   return existsSync(path) && statSync(path).isDirectory()
@@ -21,8 +25,7 @@ function isDirectory(path: string) {
  */
 export function currentWorkingDirectory(options: { testOverride?: string | null } = {}): string {
   const override = options.testOverride
-  const testMode = process.env[TEST_MODE_ENV] === '1' && !process.env[SERVER_TOKEN_ENV]
-  if (override && testMode && isAbsolute(override) && isDirectory(override)) {
+  if (override && isTestMode() && isAbsolute(override) && isDirectory(override)) {
     return override
   }
   return homedir()

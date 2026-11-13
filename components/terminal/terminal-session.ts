@@ -57,6 +57,8 @@ export function createInputSender(id: string) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input }),
       })
+    } catch {
+      // The server is gone; the output stream reports that to the panel.
     } finally {
       sending = false
       void flush()
