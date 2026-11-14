@@ -25,9 +25,13 @@ export type StartAgentInput = {
   mcpServers?: Record<string, McpServer>
 }
 
-export type McpServer =
+export type McpServer = (
   | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string> }
   | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
+) & {
+  /** Its tools run without an approval prompt. Only for servers busyboy itself runs. */
+  trusted?: boolean
+}
 
 export type QuestionOption = { label: string; description?: string }
 

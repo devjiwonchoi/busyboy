@@ -1,0 +1,17 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: a Director turn with a text block before a tool call and two after it, the last never streamed.",
+  "turns": [
+    {
+      "prompt": "Check what is in @web.",
+      "steps": [
+        { "event": { "type": "text-delta", "itemId": "msg_1:text:0", "text": "I'll look" } },
+        { "event": { "type": "text-delta", "itemId": "msg_1:text:0", "text": " at @web." } },
+        { "event": { "type": "tool", "label": "Bash: ls" } },
+        { "event": { "type": "text-delta", "itemId": "msg_2:text:0", "text": "It has a README" } },
+        { "event": { "type": "text-delta", "itemId": "msg_2:text:0", "text": " and a src folder." } },
+        { "event": { "type": "text", "itemId": "msg_3:text:0", "text": "Want a task for it?" } }
+      ]
+    }
+  ]
+}

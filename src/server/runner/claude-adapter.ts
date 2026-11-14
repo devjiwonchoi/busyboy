@@ -216,6 +216,11 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         allowDangerouslySkipPermissions: options.permissionMode === 'full-access',
         systemPrompt: { type: 'preset', preset: 'claude_code', append: options.instructions },
         canUseTool,
+        // The servers are added after start (registerMcpServers), but the rule
+        // can name them now: every tool of a trusted server runs without a prompt.
+        allowedTools: Object.entries(options.mcpServers ?? {})
+          .filter(([, server]) => server.trusted)
+          .map(([name]) => `mcp__${name}`),
         spawnClaudeCodeProcess: (spawnOptions) => (cli = spawnClaudeProcess(spawnOptions)),
       },
     })

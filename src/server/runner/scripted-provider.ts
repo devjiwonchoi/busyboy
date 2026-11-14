@@ -15,6 +15,7 @@ import {
 import type {
   AgentAnswer,
   AgentEvent,
+  McpServer,
   ProviderAdapter,
   ProviderId,
   ProviderSession,
@@ -23,11 +24,16 @@ import type {
 
 export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
 
+/** Resuming a session id with this prefix fails, like a session the provider no longer has. */
+export const MISSING_SESSION_PREFIX = 'missing-'
+
 /**
  * One step of a scripted turn.
  * - `event`: a normalized contract event, emitted as is.
  * - `raw`: a message in the script provider's own format, mapped by that provider's
  *   mapper in `RAW_MAPPERS` (a new provider adds its mapper there).
+ *   A Claude `tool_use` block named `mcp__<server>__<tool>`, where `<server>` is one of the
+ *   session's HTTP `mcpServers`, really calls that tool, so a replay runs busyboy's own tool code.
  * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question
  *   (Claude scripts only).
  * - `delayMs`: wait before the next step.
@@ -103,6 +109,39 @@ function answerKey(answer: AgentAnswer) {
 
 class Cancelled extends Error {}
 
+type McpCall = { url: string; headers?: Record<string, string>; tool: string; input: Record<string, unknown> }
+
+/** The calls to the session's HTTP MCP servers in a recorded Claude assistant message. */
+function mcpCalls(message: ClaudeRawMessage, servers: Record<string, McpServer> = {}): McpCall[] {
+  if (message.type !== 'assistant' || !Array.isArray(message.message?.content)) return []
+  return (message.message.content as { type?: string; name?: string; input?: Record<string, unknown> }[]).flatMap(
+    (block) => {
+      const match = block.type === 'tool_use' && block.name ? /^mcp__(.+?)__(.+)$/.exec(block.name) : null
+      const server = match ? servers[match[1]] : undefined
+      if (!match || !server || server.type === 'stdio') return []
+      return [{ url: server.url, headers: server.headers, tool: match[2], input: block.input ?? {} }]
+    },
+  )
+}
+
+/** Calls one tool with a plain JSON-RPC `tools/call` request and returns its text. */
+async function callMcpTool({ url, headers, tool, input }: McpCall) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
+    body: JSON.stringify({ jsonrpc: '2.0', id: randomUUID(), method: 'tools/call', params: { name: tool, arguments: input } }),
+  })
+  const body = (await response.json().catch(() => null)) as {
+    result?: { isError?: boolean; content?: { text?: string }[] }
+    error?: { message?: string }
+  } | null
+  const text = body?.result?.content?.map((part) => part.text ?? '').join('\n') ?? ''
+  if (!response.ok || body?.error || body?.result?.isError) {
+    throw new Error(`The ${tool} tool failed: ${body?.error?.message ?? (text || response.statusText)}`)
+  }
+  return text
+}
+
 function startScripted(folder: string, options: ProviderStartOptions): ProviderSession {
   const { provider } = options
   let turnDone = false
@@ -145,6 +184,17 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       if ('raw' in step) {
         if (!mapper) throw new Error(`Scripts cannot replay raw ${provider} messages yet.`)
         mapper.push(step.raw)
+        if (provider === 'claude') {
+          for (const call of mcpCalls(step.raw as ClaudeRawMessage, options.mcpServers)) {
+            mapper.flush()
+            try {
+              await cancellable(callMcpTool(call))
+            } catch (error) {
+              if (error instanceof Cancelled) throw error
+              emit({ type: 'error', code: 'provider', message: error instanceof Error ? error.message : String(error) })
+            }
+          }
+        }
         continue
       }
       mapper?.flush()
@@ -204,7 +254,14 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     running = false
   }
 
-  queueMicrotask(() => emit({ type: 'session', sessionId: options.resumeSessionId ?? `scripted-${randomUUID()}` }))
+  if (options.resumeSessionId?.startsWith(MISSING_SESSION_PREFIX)) {
+    // Resuming fails the way it does for a session the provider no longer has.
+    queueMicrotask(() => {
+      stopped = true
+      emit({ type: 'error', code: 'provider', message: `No conversation found with session ID: ${options.resumeSessionId}` })
+      emit({ type: 'stopped', finished: false })
+    })
+  } else queueMicrotask(() => emit({ type: 'session', sessionId: options.resumeSessionId ?? `scripted-${randomUUID()}` }))
 
   return {
     send(text) {

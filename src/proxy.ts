@@ -1,6 +1,14 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { SERVER_TOKEN_COOKIE, SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER, TEST_MODE_ENV } from '@/lib/server-token'
+import {
+  MCP_PATH,
+  MCP_TOKEN_HEADER,
+  mcpTokenFor,
+  SERVER_TOKEN_COOKIE,
+  SERVER_TOKEN_ENV,
+  SERVER_TOKEN_HEADER,
+  TEST_MODE_ENV,
+} from '@/lib/server-token'
 import { isSetupComplete, readSettingsAt, resolveDataFolder, TEST_HOME_COOKIE } from '@/server/config'
 
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost'])
@@ -57,9 +65,16 @@ export async function proxy(request: NextRequest) {
     if (!open) return forbidden('token')
   } else {
     const provided = request.cookies.get(SERVER_TOKEN_COOKIE)?.value ?? request.headers.get(SERVER_TOKEN_HEADER)
-    if (!provided || !sameToken(provided, expected)) return forbidden('token')
+    if (!(provided && sameToken(provided, expected)) && !hasMcpToken(request, expected)) return forbidden('token')
   }
   return (await setupRedirect(request)) ?? NextResponse.next()
+}
+
+/** Agents reach only the MCP endpoint, with a token derived from the server token. */
+function hasMcpToken(request: NextRequest, serverToken: string) {
+  if (request.nextUrl.pathname !== MCP_PATH) return false
+  const provided = request.headers.get(MCP_TOKEN_HEADER)
+  return Boolean(provided && sameToken(provided, mcpTokenFor(serverToken)))
 }
 
 // Opening the main screen goes to setup until setup is complete.

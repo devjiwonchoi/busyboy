@@ -44,6 +44,11 @@ export default defineConfig({
         BUSYBOY_TEST_MODE: '1',
         BUSYBOY_TEST_SHELL: '/bin/sh',
         BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
+        // Messages sent within 2 s go to the Director as one turn.
+        BUSYBOY_DIRECTOR_BATCH_MS: '2000',
+        // Compact the Director after 1.5 s of idle time once a chat passes 1000 characters.
+        BUSYBOY_DIRECTOR_IDLE_COMPACT_MS: '1500',
+        BUSYBOY_DIRECTOR_COMPACT_CHARS: '1000',
         ...testHome(port),
       },
       // Never reuse: another worktree may be serving a different build on the same port, or a
