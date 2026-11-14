@@ -89,3 +89,22 @@ test.describe('Claude task agents', () => {
     await expect(pinned(page)).toHaveCount(0)
   })
 })
+
+test.describe('Codex task agents', () => {
+  test.beforeEach(async ({ context, baseURL }) => {
+    // Only Codex is signed in, so the task agent runs on the real Codex adapter.
+    ;({ home } = await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-out' }))
+  })
+
+  test("a force push by a Codex task agent should ask through BusyBoy's hook", async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Force push', FORCE_PUSH_REQUEST)
+
+    const card = pinned(page).getByRole('group', { name: 'Approval from web · Force push' })
+    await expect(card).toContainText('Bash: git push --force origin HEAD')
+    await card.getByRole('button', { name: 'A. Allow' }).click()
+
+    await expect(transcript(page).getByRole('group', { name: 'Card from web · Force push' })).toContainText('A · Allow')
+    await expect(taskRow(page, 'Force push')).toContainText('Idle')
+  })
+})

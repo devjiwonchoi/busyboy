@@ -2,6 +2,8 @@ import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline'
 // Not Claude-specific: it spawns any CLI as the leader of its own process group.
+import { alwaysAskApproval, matchAlwaysAsk } from './always-ask'
+import { folderKey, registerGate, threadKey, trustedHookConfig, type HookDecision } from './codex-always-ask'
 import { spawnClaudeProcess as spawnProcessGroup, type ClaudeProcess as GroupProcess } from './claude-process'
 import {
   CODEX_ANSWERABLE_REQUESTS,
@@ -233,6 +235,48 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   let stopRequested = false
   let failed = false
   let ready: Promise<void> | undefined
+  /** Always-ask approvals waiting for the user, by request id. Null means it was dropped (an interrupt or stop). */
+  const asks = new Map<string, (answer: AgentAnswer | null) => void>()
+  const unregisterGates: (() => void)[] = []
+  const alwaysAsk = !options.noTools && ((options.alwaysAsk?.length ?? 0) > 0 || Boolean(options.privateFolder))
+
+  /** Answers this thread's always-ask hook: allowed at once unless a rule matches, then the user decides. */
+  const gate = async ({ toolName, input, signal }: { toolName: string; input: unknown; signal: AbortSignal }): Promise<HookDecision> => {
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input, folder: options.cwd, privateFolder: options.privateFolder })
+    if (!rule) {
+      return { allow: true, reason: '' }
+    }
+    const requestId = `${requestPrefix}always-ask-${randomUUID()}`
+    const answer = await new Promise<AgentAnswer | null>((resolve) => {
+      // The hook went away, so nobody waits for this answer any more: close its card.
+      signal.addEventListener(
+        'abort',
+        () => {
+          if (asks.delete(requestId)) {
+            resolve(null)
+            emit({ type: 'answered', requestId })
+          }
+        },
+        { once: true },
+      )
+      asks.set(requestId, resolve)
+      mapper.flush()
+      emit(alwaysAskApproval({ requestId, toolName, input, rule }))
+    })
+    asks.delete(requestId)
+    if (answer?.kind === 'approval' && answer.allow) {
+      return { allow: true, reason: '' }
+    }
+    return { allow: false, reason: (answer?.kind === 'approval' && answer.message) || 'The user declined this action.' }
+  }
+
+  const dropAsks = () => {
+    for (const [requestId, resolve] of [...asks.entries()]) {
+      asks.delete(requestId)
+      resolve(null)
+      emit({ type: 'answered', requestId })
+    }
+  }
 
   const fail = (message: string, code: 'provider' | 'signed-out' | 'lost-session' = 'provider') => {
     if (failed || stopRequested) return
@@ -357,11 +401,18 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     if (stopRequested) void current.kill()
     ready = (async () => {
       await current.initialize()
+      // Until Codex names the thread, a hook call is matched to this session by its working folder.
+      if (alwaysAsk) {
+        unregisterGates.push(registerGate({ key: folderKey(options.cwd), gate }))
+      }
+      const hook = alwaysAsk
+        ? await trustedHookConfig({ request: (method, params) => current.request(method, params), cwd: options.cwd, executable })
+        : undefined
       const settings = {
         cwd: options.cwd,
         ...codexThreadSettings(options.permissionMode, options.noTools),
         developerInstructions: options.instructions ?? null,
-        config: options.noTools ? await noToolsConfig(current, options.cwd) : mcp.config,
+        config: options.noTools ? await noToolsConfig(current, options.cwd) : { ...mcp.config, ...hook?.config },
       }
       // The history is not needed: the runner keeps its own transcript. A
       // branch is ephemeral, so nothing is written for it and resuming the
@@ -372,7 +423,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
           ? ['thread/resume', { threadId: options.resumeSessionId, excludeTurns: true, ...settings }]
           : ['thread/start', settings]
       const response = await current.request<{ thread: { id: string } }>(method, params)
+      await hook?.verify(response.thread.id)
       threadId = response.thread.id
+      if (alwaysAsk) {
+        unregisterGates.push(registerGate({ key: threadKey(threadId), gate }))
+      }
       emit({ type: 'session', sessionId: threadId })
       startNextTurn()
     })()
@@ -392,6 +447,10 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       void current.kill()
     })
     const { code, stderr } = await current.exited
+    for (const unregister of unregisterGates) {
+      unregister()
+    }
+    dropAsks()
     // Text that streamed before the exit is still shown.
     mapper.flush()
     mapper.dispose()
@@ -416,6 +475,8 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     send,
     async interrupt() {
       // Messages queued behind the turn stay queued and run next, as with Claude.
+      // A dropped always-ask approval blocks its tool call.
+      dropAsks()
       for (const [requestId, request] of requests) {
         if (request.id !== undefined) connection?.respond(request.id, codexAnswerToResult(request, { kind: 'approval', allow: false }))
         requests.delete(requestId)
@@ -447,6 +508,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       }
     },
     answer(requestId, answer: AgentAnswer) {
+      const ask = asks.get(requestId)
+      if (ask) {
+        ask(answer)
+        return
+      }
       if (requestId.startsWith(CODEX_MESSAGE_QUESTION_PREFIX)) {
         // Codex waits inside the turn (it sleeps) for the answer, which steers the turn. If the turn
         // ended in the meantime, the steer fails and the answer becomes the next message.
