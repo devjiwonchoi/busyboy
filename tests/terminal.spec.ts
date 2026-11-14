@@ -1,7 +1,9 @@
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import { useProjectsHome } from './support/projects-home'
+import { addRecordTask } from './support/record-tasks'
 
 // The journeys type POSIX shell commands into the pinned test shell (/bin/sh).
 test.skip(process.platform === 'win32', 'The terminal journeys need a POSIX shell.')
@@ -9,7 +11,7 @@ test.skip(process.platform === 'win32', 'The terminal journeys need a POSIX shel
 let worktree: string
 
 test.beforeEach(() => {
-  // Stands in for a task worktree until tasks exist.
+  // A folder of its own, passed with ?cwd= (honored only in test mode).
   worktree = realpathSync(mkdtempSync(join(tmpdir(), 'busyboy-terminal-')))
 })
 
@@ -19,6 +21,13 @@ test.afterEach(() => {
 
 async function openTerminal(page: Page) {
   await page.goto(`/?cwd=${encodeURIComponent(worktree)}`)
+  const terminal = await pressOpen(page)
+  await expect(page.getByLabel('Working directory')).toHaveText(worktree)
+  return terminal
+}
+
+/** Opens the bottom panel on the page as it is and waits for the terminal. */
+async function pressOpen(page: Page) {
   const panel = page.getByRole('region', { name: 'Bottom panel' })
   await expect(panel).toBeHidden()
   // A key pressed before hydration is dropped, so press again only while the
@@ -29,7 +38,6 @@ async function openTerminal(page: Page) {
   }).toPass()
   const terminal = page.getByRole('region', { name: 'Terminal' })
   await expect(terminal).toBeVisible()
-  await expect(page.getByLabel('Working directory')).toHaveText(worktree)
   return terminal
 }
 
@@ -75,4 +83,40 @@ test('exiting the shell should offer a new terminal', async ({ page }) => {
   await terminal.click()
   await run(page, 'echo "again-$((1 + 1))"')
   await expect(terminal.locator('.xterm-rows')).toContainText('again-2')
+})
+
+// ---- Task worktrees -----------------------------------------------------------
+
+const HEALTH = { id: 'add-health-endpoint-d4e5f6', title: 'Add a health endpoint' }
+const FOOTER = { id: 'show-health-footer-a1b2c3', title: 'Show API health in the footer' }
+
+test('starting a terminal in a folder that is not a task worktree should be refused', async ({ context, baseURL }) => {
+  const { home, projects } = await useProjectsHome(context, baseURL!, ['api'])
+  const elsewhere = join(home, 'elsewhere')
+  mkdirSync(elsewhere)
+  // A task list edited to point a task at another folder, before any task worktree exists.
+  const file = join(home, 'task-list.json')
+  const task = { id: HEALTH.id, project: 'api', title: HEALTH.title, worktree: elsewhere }
+  writeFileSync(file, JSON.stringify({ version: 1, tasks: [task] }))
+  const start = async () => {
+    const response = await context.request.post('/api/terminal', { data: { taskId: HEALTH.id } })
+    return { status: response.status(), error: ((await response.json()) as { error: string }).error }
+  }
+  const refused = { status: 400, error: `The worktree of "${HEALTH.title}" is not one of BusyBoy's task worktrees.` }
+
+  expect(await start()).toEqual(refused)
+
+  // A folder elsewhere, with real task worktrees next to it.
+  addRecordTask(home, { project: 'api', projectPath: projects.api, ...FOOTER })
+  expect(await start()).toEqual(refused)
+
+  // A link in the task's own place that leads out of the worktrees folder.
+  const link = join(home, 'task-worktrees', 'api', HEALTH.id)
+  symlinkSync(elsewhere, link)
+  writeFileSync(file, JSON.stringify({ version: 1, tasks: [{ ...task, worktree: link }] }))
+  expect(await start()).toEqual(refused)
+
+  const unknown = await context.request.post('/api/terminal', { data: { taskId: 'no-such-task' } })
+  expect(unknown.status()).toBe(400)
+  expect(((await unknown.json()) as { error: string }).error).toBe('That task no longer exists.')
 })
