@@ -19,6 +19,7 @@ export const PROVIDERS: { id: ProviderId; name: string }[] = [
 export const TEST_SIGN_IN_COOKIE = 'busyboy-test-sign-in'
 
 const LOGIN_COMMANDS: Record<ProviderId, string> = { claude: 'claude /login', codex: 'codex login' }
+const UPDATE_COMMANDS: Record<ProviderId, string> = { claude: 'claude update', codex: 'codex update' }
 const CACHE_MS = 30_000
 
 type CacheEntry = { at: number; state: Promise<SignInStatus> }
@@ -46,6 +47,8 @@ async function testOverride(provider: ProviderId): Promise<SignInStatus | undefi
       return { state: 'signed-out', loginCommand: LOGIN_COMMANDS[provider] }
     case 'not-installed':
       return { state: 'not-installed', detail: 'Not installed (test).' }
+    case 'outdated':
+      return { state: 'outdated', detail: 'Too old (test).', updateCommand: UPDATE_COMMANDS[provider] }
   }
   return undefined
 }

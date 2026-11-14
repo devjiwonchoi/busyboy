@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { alwaysAskRulesAt } from '../always-ask-list'
+import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
 import { directorTiming } from './context'
 import { directorPrompt } from './prompt'
 import { PROVIDERS } from '../providers'
@@ -79,6 +81,8 @@ type Director = {
   agentId?: string
   /** The system prompt the running agent was started with. */
   instructions?: string
+  /** The always-ask list the running agent was started with, as JSON. */
+  alwaysAsk?: string
   status: DirectorStatus
   /** The reply streaming in the turn in progress: `blocks` joined, as the user sees it. */
   draft: string
@@ -286,9 +290,10 @@ function saveState(director: Director) {
 
 // ---- The Director agent ----------------------------------------------------------
 
-async function ensureAgent(director: Director, provider: ProviderId, mcp: McpServers, instructions: string) {
+async function ensureAgent(director: Director, provider: ProviderId, mcp: McpServers, instructions: string, alwaysAsk: string[]) {
   const existing = director.agentId ? getAgent(director.agentId) : undefined
-  if (existing && existing.provider === provider && director.instructions === instructions) {
+  const sameSetup = director.instructions === instructions && director.alwaysAsk === JSON.stringify(alwaysAsk)
+  if (existing && existing.provider === provider && sameSetup) {
     if (existing.status === 'stopped') {
       director.unconfirmedResume = Boolean(existing.sessionId)
       resumeAgent(existing.id)
@@ -296,8 +301,8 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
     return existing.id
   }
   if (existing && existing.provider === provider) {
-    // The prompt changed. It is fixed for a provider process, so the agent
-    // restarts on the same session with the new prompt. An unchanged prompt
+    // The prompt or the always-ask list changed. Both are fixed for a provider process, so the
+    // agent restarts on the same session with the new ones. An unchanged prompt
     // keeps the process and its prompt cache.
     director.agentId = undefined
     await stopAgent(existing.id).catch(() => {})
@@ -311,9 +316,14 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
   await mkdir(cwd, { recursive: true })
   const resumeSessionId = director.state.provider === provider ? director.state.sessionId : undefined
   director.unconfirmedResume = Boolean(resumeSessionId)
-  const agent = startAgent({ provider, cwd, instructions, mcpServers: mcp, resumeSessionId })
+  // The Director gets the always-ask list too. Its approvals are always refused (see onAgentEvent),
+  // so an action on the list is never run by the Director, even where Auto mode would run it.
+  // Its folder is inside BusyBoy's data folder, next to the task list and settings, so the rest
+  // of the data folder is private: changing BusyBoy's state goes through BusyBoy's tools.
+  const agent = startAgent({ provider, cwd, instructions, mcpServers: mcp, resumeSessionId, alwaysAsk, privateFolder: director.folder })
   director.agentId = agent.id
   director.instructions = instructions
+  director.alwaysAsk = JSON.stringify(alwaysAsk)
   subscribeToAgent(agent.id, 0, (envelope) => onAgentEvent(director, agent.id, envelope))
   return agent.id
 }
@@ -344,7 +354,9 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
         answerAgent(agentId, event.requestId, {
           kind: 'approval',
           allow: false,
-          message: 'The Director cannot run this. Create a task for work in a project instead.',
+          message: event.detail?.startsWith(BUSYBOY_FILES_RULE)
+            ? "The Director cannot touch BusyBoy's own files. Use BusyBoy's tools to read or change tasks and settings."
+            : 'The Director cannot run this. Create a task for work in a project instead.',
         }),
       )
       break
@@ -455,12 +467,12 @@ async function flush(director: Director) {
   try {
     // Read before every turn: memory or the companion may have changed since
     // the agent started.
-    const instructions = await directorPrompt(director.folder)
+    const [instructions, alwaysAsk] = await Promise.all([directorPrompt(director.folder), alwaysAskRulesAt(director.folder)])
     // Stop was pressed while the prompt was read and stopped the idle agent:
     // its stopped event already ended this turn, and a newer turn may have
     // started. This one neither restarts the agent nor sends.
     if (director.turn !== turn || !isAnswering(director)) return
-    const agentId = await ensureAgent(director, target.provider, target.mcp, instructions)
+    const agentId = await ensureAgent(director, target.provider, target.mcp, instructions, alwaysAsk)
     // Stop was pressed while the agent was starting: the turn is not sent.
     if (director.stopRequested && getAgent(agentId)?.status !== 'stopped') {
       saveEntry(director, newEntry('note', { text: 'Stopped.', tone: 'info' }))

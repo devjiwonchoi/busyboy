@@ -114,6 +114,7 @@ const STATUS_TEXT: Record<SignInStatus['state'], string> = {
   'signed-in': 'Signed in',
   'signed-out': 'Signed out',
   'not-installed': 'Not installed',
+  outdated: 'Update needed',
   unknown: 'Could not check',
 }
 
@@ -137,6 +138,12 @@ async function AgentsPage() {
                 {/* Setup is its own screen outside the app shell, so the terminal panel isn't here; the user copies the command. */}
                 <ItemDescription className="basis-full">Run this in a terminal, then choose Check again.</ItemDescription>
                 <CopyCommand label={`${name} login command`} command={state.loginCommand} />
+              </>
+            )}
+            {state.state === 'outdated' && (
+              <>
+                <ItemDescription className="basis-full line-clamp-none">{state.detail}</ItemDescription>
+                <CopyCommand label={`${name} update command`} command={state.updateCommand} />
               </>
             )}
             {(state.state === 'not-installed' || state.state === 'unknown') && (
