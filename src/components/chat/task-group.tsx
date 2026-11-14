@@ -1,4 +1,11 @@
+'use client'
+
+import { Square } from 'lucide-react'
+import { useState } from 'react'
+import { stopTaskAction } from '@/app/(main)/director-actions'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Message, MessageContent } from '@/components/ui/message'
 import type { TaskStatus, TaskView } from '@/server/tasks'
@@ -17,8 +24,9 @@ const STATUS: Record<TaskStatus, { label: string; variant: 'outline' | 'destruct
   stopped: { label: 'Stopped', variant: 'destructive' },
 }
 
-/** The tasks the Director created in one turn, one `project · task` line each. */
+/** The tasks the Director created in one turn, one `project · task` line each, with Stop while its agent runs. */
 export function TaskGroup({ taskIds, tasks }: { taskIds: string[]; tasks: Map<string, TaskView> }) {
+  const [error, setError] = useState<string | null>(null)
   return (
     <Message>
       <MessageContent>
@@ -43,10 +51,29 @@ export function TaskGroup({ taskIds, tasks }: { taskIds: string[]; tasks: Map<st
                         {status.label}
                       </Badge>
                     )}
+                    {task && task.status !== 'stopped' && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Stop ${task.project} · ${task.title}`}
+                        onClick={() => {
+                          setError(null)
+                          stopTaskAction(task.id).catch(() => setError('The task could not be stopped. Try again.'))
+                        }}
+                      >
+                        <Square />
+                      </Button>
+                    )}
                   </li>
                 )
               })}
             </ul>
+            {error && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
           </BubbleContent>
         </Bubble>
       </MessageContent>
