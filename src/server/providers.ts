@@ -12,9 +12,6 @@ export const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: 'codex', name: 'Codex' },
 ]
 
-/** A provider BusyBoy has no adapter for yet reports `unavailable`. */
-export type ProviderState = SignInStatus | { state: 'unavailable' }
-
 /**
  * Test mode only: forces sign-in states, for example `codex=signed-out`.
  * Scripted providers otherwise always report signed in.
@@ -24,12 +21,12 @@ export const TEST_SIGN_IN_COOKIE = 'busyboy-test-sign-in'
 const LOGIN_COMMANDS: Record<ProviderId, string> = { claude: 'claude /login', codex: 'codex login' }
 const CACHE_MS = 30_000
 
-type CacheEntry = { at: number; state: Promise<ProviderState> }
+type CacheEntry = { at: number; state: Promise<SignInStatus> }
 const CACHE_KEY = Symbol.for('busyboy.provider-states')
 const globalStore = globalThis as typeof globalThis & { [CACHE_KEY]?: Map<ProviderId, CacheEntry> }
 const cache = (globalStore[CACHE_KEY] ??= new Map())
 
-async function testOverride(provider: ProviderId): Promise<ProviderState | undefined> {
+async function testOverride(provider: ProviderId): Promise<SignInStatus | undefined> {
   if (!isTestMode()) return undefined
   let value: string | undefined
   try {
@@ -49,24 +46,20 @@ async function testOverride(provider: ProviderId): Promise<ProviderState | undef
       return { state: 'signed-out', loginCommand: LOGIN_COMMANDS[provider] }
     case 'not-installed':
       return { state: 'not-installed', detail: 'Not installed (test).' }
-    case 'unavailable':
-      return { state: 'unavailable' }
   }
   return undefined
 }
 
-async function probe(provider: ProviderId): Promise<ProviderState> {
+async function probe(provider: ProviderId): Promise<SignInStatus> {
   try {
     return await providerSignInStatus(provider)
   } catch (error) {
-    // No adapter for this provider yet (the runner throws). Anything else is unknown.
-    if (error instanceof Error && /not available/.test(error.message)) return { state: 'unavailable' }
     return { state: 'unknown', detail: error instanceof Error ? error.message : String(error) }
   }
 }
 
 /** Sign-in state of one provider. Probes are cached briefly because the Claude probe starts a process. */
-export async function providerState(provider: ProviderId, { fresh = false } = {}): Promise<ProviderState> {
+export async function providerState(provider: ProviderId, { fresh = false } = {}): Promise<SignInStatus> {
   const override = await testOverride(provider)
   if (override) return override
   const cached = cache.get(provider)

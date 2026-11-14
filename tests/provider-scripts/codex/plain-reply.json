@@ -1,0 +1,91 @@
+{
+  "provider": "codex",
+  "description": "Codex replies with one sentence.",
+  "recordedAt": "2026-11-13T16:09:28.372Z",
+  "turns": [
+    {
+      "prompt": "Reply with exactly this sentence and nothing else: Hello from busyboy.",
+      "steps": [
+        {
+          "raw": {
+            "method": "thread/started",
+            "params": {
+              "thread": {
+                "id": "01a1d5ab-b436-7bc0-9c10-ef5e50237e56"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg-plain-reply-1",
+              "delta": "Hello"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg-plain-reply-1",
+              "delta": " from"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg-plain-reply-1",
+              "delta": " busy"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg-plain-reply-1",
+              "delta": "boy"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg-plain-reply-1",
+              "delta": "."
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/completed",
+            "params": {
+              "item": {
+                "type": "agentMessage",
+                "id": "msg-plain-reply-1",
+                "text": "Hello from busyboy."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": {
+              "turn": {
+                "id": "01a1d5ab-ba27-7a92-baad-4a1ca8608d34",
+                "status": "completed",
+                "error": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

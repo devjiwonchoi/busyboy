@@ -1,0 +1,76 @@
+{
+  "provider": "codex",
+  "description": "Hand-written from the codex-cli 0.167.0 protocol: a slow reply that a new message interrupts, then the reply to the new message.",
+  "turns": [
+    {
+      "prompt": "Write a long story about a lighthouse.",
+      "steps": [
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": {
+              "itemId": "msg-slow-1",
+              "delta": "Once upon a time, a lighthouse"
+            }
+          }
+        },
+        {
+          "delayMs": 30000
+        },
+        {
+          "raw": {
+            "method": "item/completed",
+            "params": {
+              "item": {
+                "type": "agentMessage",
+                "id": "msg-slow-1",
+                "text": "The end of the lighthouse story."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": {
+              "turn": {
+                "id": "turn-slow-1",
+                "status": "completed",
+                "error": null
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Never mind, just say hi.",
+      "steps": [
+        {
+          "raw": {
+            "method": "item/completed",
+            "params": {
+              "item": {
+                "type": "agentMessage",
+                "id": "msg-hi-1",
+                "text": "Hi!"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": {
+              "turn": {
+                "id": "turn-hi-1",
+                "status": "completed",
+                "error": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

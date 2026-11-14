@@ -1,0 +1,41 @@
+{
+  "provider": "codex",
+  "description": "Hand-written from the codex-cli 0.167.0 protocol: an MCP server asks for a form whose fields are all optional with defaults. The fake writes the reply it gets as an agent message.",
+  "turns": [
+    {
+      "prompt": "Clean up old tickets with the tickets MCP server.",
+      "steps": [
+        {
+          "raw": {
+            "id": 0,
+            "method": "mcpServer/elicitation/request",
+            "params": {
+              "serverName": "tickets",
+              "mode": "form",
+              "message": "What should happen to tickets older than a year?",
+              "requestedSchema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "title": "Action",
+                    "oneOf": [
+                      { "const": "keep", "title": "Keep them" },
+                      { "const": "delete", "title": "Delete them" }
+                    ],
+                    "default": "delete"
+                  },
+                  "notify": { "type": "boolean", "title": "Notify the team", "default": true }
+                },
+                "required": []
+              },
+              "_meta": null
+            }
+          },
+          "echoReply": true
+        },
+        { "raw": { "method": "turn/completed", "params": { "turn": { "id": "turn-1", "status": "completed", "error": null } } } }
+      ]
+    }
+  ]
+}

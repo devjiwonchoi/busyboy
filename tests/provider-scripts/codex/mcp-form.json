@@ -1,0 +1,40 @@
+{
+  "provider": "codex",
+  "description": "Hand-written from the codex-cli 0.167.0 protocol: an MCP server asks for a form during the turn. The fake writes the reply it gets as an agent message.",
+  "turns": [
+    {
+      "prompt": "File a ticket with the tickets MCP server.",
+      "steps": [
+        {
+          "raw": {
+            "id": 0,
+            "method": "mcpServer/elicitation/request",
+            "params": {
+              "serverName": "tickets",
+              "mode": "form",
+              "message": "Pick a priority for the new ticket.",
+              "requestedSchema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "string",
+                    "title": "Priority",
+                    "oneOf": [
+                      { "const": "p1", "title": "Urgent" },
+                      { "const": "p3", "title": "Normal" }
+                    ]
+                  },
+                  "notify": { "type": "boolean", "title": "Notify the team", "default": false }
+                },
+                "required": ["priority"]
+              },
+              "_meta": null
+            }
+          },
+          "echoReply": true
+        },
+        { "raw": { "method": "turn/completed", "params": { "turn": { "id": "turn-1", "status": "completed", "error": null } } } }
+      ]
+    }
+  ]
+}
