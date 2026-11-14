@@ -21,6 +21,13 @@ export type Shortcut = {
 
 type Registry = Map<string, Shortcut>
 
+type Keys = Pick<Shortcut, 'key' | 'mod' | 'shift' | 'alt'>
+
+// Cmd+Option+S (Ctrl+Alt+S elsewhere): B stays with the editors and shells the user also runs,
+// and plain Cmd+S stays Save. Defined here so the terminal lets the same keys through.
+export const TOGGLE_SIDEBAR_KEYS = { key: 's', mod: true, alt: true } as const
+export const TOGGLE_PANEL_KEYS = { key: 'j', mod: true } as const
+
 const ShortcutRegistryContext = createContext<Registry | null>(null)
 
 /** True on macOS and iOS, where the shortcut modifier is Cmd instead of Ctrl. */
@@ -34,16 +41,23 @@ function physicalCode(key: string) {
   return null
 }
 
-function matches(shortcut: Shortcut, event: KeyboardEvent, mac: boolean) {
+/** Whether `event` presses `shortcut`; the terminal uses it too, so both agree on every layout. */
+export function matchesShortcut(shortcut: Keys, event: KeyboardEvent, mac: boolean) {
   const mod = mac ? event.metaKey : event.ctrlKey
   const otherMod = mac ? event.ctrlKey : event.metaKey
+  // AltGr (reported as Ctrl+Alt on Windows) types characters such as ś on a Polish layout; a
+  // shortcut must never take them.
+  if (!mac && event.getModifierState?.('AltGraph')) return false
   // Fall back to the physical key only when the layout types a non-ASCII
   // character there (Korean, Cyrillic). On Latin layouts such as Dvorak the
-  // typed letter wins, so Cmd/Ctrl+X on the physical B key stays Cut.
+  // typed letter wins, so Cmd/Ctrl+X on the physical B key stays Cut. With
+  // Option held macOS types another character (S types ß, or an ASCII symbol
+  // on some layouts), so there Alt shortcuts always match by physical key. Ctrl+Alt elsewhere
+  // types the plain letter, which keeps Dvorak users on the letter they see.
   const typesAscii = /^[\x20-\x7e]$/.test(event.key)
-  const sameKey =
-    event.key.toLowerCase() === shortcut.key.toLowerCase() ||
-    (!typesAscii && event.code === physicalCode(shortcut.key))
+  const sameKey = shortcut.alt && mac
+    ? event.code === physicalCode(shortcut.key)
+    : event.key.toLowerCase() === shortcut.key.toLowerCase() || (!typesAscii && event.code === physicalCode(shortcut.key))
   return (
     sameKey &&
     mod === Boolean(shortcut.mod) &&
@@ -64,7 +78,7 @@ export function ShortcutRegistryProvider({ children }: { children: React.ReactNo
       // Plain keys belong to an active input method; modifier shortcuts still apply.
       if (event.isComposing && !event.metaKey && !event.ctrlKey) return
       for (const shortcut of registry.current.values()) {
-        if (!matches(shortcut, event, mac)) continue
+        if (!matchesShortcut(shortcut, event, mac)) continue
         event.preventDefault()
         shortcut.run()
         return

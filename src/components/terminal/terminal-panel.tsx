@@ -6,7 +6,13 @@ import '@xterm/xterm/css/xterm.css'
 import { Plus, RotateCcw, SquareTerminal, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useShellState, useTaskSelection } from '@/components/shell/shell-state'
-import { isMacPlatform, useShortcut } from '@/components/shell/shortcut-registry'
+import {
+  isMacPlatform,
+  matchesShortcut,
+  TOGGLE_PANEL_KEYS,
+  TOGGLE_SIDEBAR_KEYS,
+  useShortcut,
+} from '@/components/shell/shortcut-registry'
 import { Alert, AlertAction, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { createInputSender, followTerminal, killTerminal, resizeTerminal, startTerminal, type StartedTerminal } from './terminal-session'
@@ -17,18 +23,19 @@ const FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Lib
 const toggleFromTerminalKeys = { key: '`', mod: true } as const
 
 /**
- * On macOS the app's Cmd+B and Cmd+J reach the app even from the terminal.
- * Elsewhere Ctrl+B and Ctrl+J belong to the shell (readline, tmux, line feed),
- * so they only work as app shortcuts outside the terminal, and Ctrl+` toggles
- * the panel from inside it so the keyboard is never trapped there.
+ * Keys the terminal passes to the app instead of the shell. The sidebar toggle
+ * works from the terminal everywhere, matched exactly as the app matches it.
+ * Cmd+J does on macOS; elsewhere Ctrl+J is the shell's line feed, so it stays
+ * with the shell and Ctrl+` toggles the panel from inside the terminal so the
+ * keyboard is never trapped there.
  */
 function isAppShortcut(event: KeyboardEvent) {
   const mac = isMacPlatform()
+  if (matchesShortcut(TOGGLE_SIDEBAR_KEYS, event, mac)) return true
   const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
-  if (!mod || event.altKey || event.shiftKey) return false
-  if (event.code === 'Backquote') return true
-  const key = event.key.toLowerCase()
-  return mac && (key === 'b' || key === 'j')
+  if (!mod || event.shiftKey) return false
+  if (event.code === 'Backquote' && !event.altKey) return true
+  return mac && matchesShortcut(TOGGLE_PANEL_KEYS, event, mac)
 }
 
 /**
