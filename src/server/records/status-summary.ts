@@ -46,6 +46,7 @@ function taskLine(task: GraphTask, lastReply: string | null) {
   const parts = [STATUS_WORDS[task.status]]
   if (task.stage) parts.push(`stage ${quote(task.stage)}`)
   if (task.stateText) parts.push(`state ${quote(task.stateText)}`)
+  if (task.note) parts.push(`note ${quote(task.note)}`)
   if (task.todos.length > 0) {
     const done = task.todos.filter(({ status }) => status === 'done').length
     const current = task.todos.find(({ status }) => status === 'running' || status === 'needs-you')

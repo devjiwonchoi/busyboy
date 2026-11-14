@@ -24,6 +24,8 @@ export type GraphTask = {
   status: NodeStatus
   stage: string | null
   stateText: string | null
+  /** Why the task stopped when it could not resume after a restart. */
+  note: string | null
   todos: GraphTodo[]
   /** `found` is false when no task in the graph has that name. */
   buildsOn: (BuildsOn & { found: boolean })[]
@@ -117,6 +119,9 @@ function taskStatus(records: ParsedRecords, agent: TaskStatus): NodeStatus {
   return 'needs-you'
 }
 
+/** A task that could not resume has no agent, whatever its records last said. */
+const resumeFailed = (task: TaskRecord) => Boolean(task.note) && taskView(task).status === 'stopped'
+
 async function readTask(task: TaskRecord) {
   const folder = await recordFolderOf(task)
   const read = folder && 'folder' in folder ? await readRecordTexts(folder.folder) : { texts: {}, changedAt: null }
@@ -129,7 +134,8 @@ async function readTask(task: TaskRecord) {
     branch: task.branch,
     worktree: task.worktree,
     updatedAt: read.changedAt === null ? task.createdAt : new Date(read.changedAt).toISOString(),
-    status: taskStatus(records, taskView(task).status),
+    status: resumeFailed(task) && records.state !== 'done' ? 'stopped' : taskStatus(records, taskView(task).status),
+    note: task.note ?? null,
     stage: records.stage,
     stateText: records.stateText,
     todos: records.todos.map(({ id, title, goal, result, resultText }) => ({ id, title, goal, status: result, resultText })),

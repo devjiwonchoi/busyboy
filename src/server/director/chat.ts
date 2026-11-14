@@ -11,6 +11,7 @@ import {
   compactAgent,
   getAgent,
   interruptAgent,
+  isStoppingAllAgents,
   resumeAgent,
   sendMessage,
   startAgent,
@@ -69,7 +70,22 @@ export type DirectorUpdate =
   | { type: 'card-opened'; card: TaskCard }
   | { type: 'card-closed'; cardId: string }
 
-type DirectorState = { provider?: ProviderId; sessionId?: string }
+type DirectorState = {
+  provider?: ProviderId
+  sessionId?: string
+  /**
+   * Set while a reply is on its way and cleared when the turn ends, so a turn
+   * that BusyBoy quitting or the server dying cut off is noticed on the next start.
+   */
+  turnOpen?: boolean
+}
+
+/**
+ * Shown after a restart cut a reply off. The user is asked to send again
+ * rather than BusyBoy re-sending the turn itself: the cut-off turn may have
+ * created tasks already, and sending it again could create them twice.
+ */
+export const REPLY_CUT_OFF_NOTE = 'BusyBoy restarted before the Director finished replying. Send your message again if you still need an answer.'
 
 type Director = {
   folder: string
@@ -190,6 +206,10 @@ async function load(director: Director) {
       state && PROVIDERS.some(({ id }) => id === state.provider) && typeof state.sessionId === 'string'
         ? { provider: state.provider as ProviderId, sessionId: state.sessionId as string }
         : {}
+    if (state?.turnOpen === true) {
+      saveEntry(director, newEntry('note', { text: REPLY_CUT_OFF_NOTE, tone: 'info' }))
+      saveState(director)
+    }
   } catch {
     // Missing or unreadable: the next message starts a new provider session.
     director.state = {}
@@ -335,7 +355,7 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
     case 'session':
       director.unconfirmedResume = false
       if (director.state.sessionId !== event.sessionId) {
-        director.state = { provider: getAgent(agentId)?.provider, sessionId: event.sessionId }
+        director.state = { ...director.state, provider: getAgent(agentId)?.provider, sessionId: event.sessionId }
         saveState(director)
       }
       break
@@ -426,21 +446,34 @@ function recoverLostSession(director: Director, agentId: string, { resend = true
   director.unconfirmedResume = false
   director.agentId = undefined
   void stopAgent(agentId).catch(() => {})
-  director.state = {}
+  // The session is forgotten, but a turn still waiting for its reply stays open.
+  director.state = { turnOpen: director.state.turnOpen }
   saveState(director)
   saveEntry(director, newEntry('note', { text: 'The previous conversation could not be resumed. Started a new one.', tone: 'info' }))
   if (resend && director.lastSent) director.pending.unshift(director.lastSent)
   endTurn(director)
 }
 
+/** Saves whether a message is waiting for the Director's reply; see `turnOpen`. */
+function markTurnOpen(director: Director, open: boolean) {
+  if (Boolean(director.state.turnOpen) === open) return
+  director.state = { ...director.state, turnOpen: open || undefined }
+  saveState(director)
+}
+
 function endTurn(director: Director) {
+  // A turn ended by quitting stays open on disk, so the next start can say it
+  // was cut off. Messages still queued keep it open for their own turn.
+  if (!isStoppingAllAgents() && director.pending.length === 0) markTurnOpen(director, false)
   // A Stop applies to this turn only.
   director.stopRequested = false
   director.blocks.clear()
   setDraft(director, '')
   director.turnTasksId = undefined
   setStatus(director, 'idle')
-  // Messages still in a sign-in check or batch window are sent when those end.
+  // Messages still in a sign-in check or batch window are sent when those end. While quitting they
+  // stay queued in the open turn rather than starting an agent the stop pass already missed.
+  if (isStoppingAllAgents()) return
   if (director.pending.length && !director.batchTimer && !director.probing) void flush(director)
   else scheduleCompaction(director)
 }
@@ -541,6 +574,9 @@ export async function sendToDirector({ folder, text, resolveProvider, mcp }: Sen
   }
   // Queued before the sign-in check, so messages keep the order they were sent in.
   director.pending.push(trimmed)
+  // Open from the moment a message waits for a reply, so a Quit during the
+  // batch window or the sign-in check is noticed on the next start too.
+  markTurnOpen(director, true)
   // A failed or slow sign-in probe must not lose the message while the Director is alive.
   const live = director.agentId ? getAgent(director.agentId) : undefined
   director.probing++
@@ -556,6 +592,7 @@ export async function sendToDirector({ folder, text, resolveProvider, mcp }: Sen
     if (index !== -1) {
       director.pending.splice(index, 1)
       saveEntry(director, newEntry('note', { text: 'No provider is signed in. Open Setup to sign in.', tone: 'error' }))
+      if (director.status === 'idle' && director.pending.length === 0) markTurnOpen(director, false)
     }
     scheduleCompaction(director)
     return
@@ -578,7 +615,10 @@ export async function stopDirector(folder: string) {
   director.batchTimer = undefined
   director.pending = []
   // Only a reply can be stopped; an idle compaction is the Director's own housekeeping.
-  if (director.status !== 'answering') return
+  if (director.status !== 'answering') {
+    markTurnOpen(director, false)
+    return
+  }
   director.stopRequested = true
   // No agent yet: flush sees the flag before sending.
   const agent = director.agentId ? getAgent(director.agentId) : undefined
