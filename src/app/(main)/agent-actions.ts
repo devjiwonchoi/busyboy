@@ -11,6 +11,8 @@ import {
   stopAgent,
 } from '@/server/runner/agent-runner'
 import type { AgentAnswer, AgentSnapshot } from '@/server/runner/contract'
+import { companionInstructions, currentCompanion } from '@/server/companions'
+import { readSettings } from '@/server/config'
 
 // Minimal actions for the proof-of-runner chat. The Director chat replaces them.
 // Server actions are public endpoints, so every argument is checked at runtime.
@@ -48,7 +50,15 @@ function parseAnswer(value: unknown): AgentAnswer {
 
 export async function startAgentAction(message: unknown): Promise<AgentSnapshot> {
   const body = text(message, 'The message')
-  const agent = startAgent({ provider: 'claude', cwd: homedir() })
+  // The stored choice, not defaultProvider(): that probes sign-in by starting the CLI on every message.
+  const [{ defaultProvider: provider }, companion] = await Promise.all([readSettings(), currentCompanion()])
+  // No project is needed to chat: the agent starts in the home folder and,
+  // following its instructions, asks for a project folder when a task needs one.
+  const agent = startAgent({
+    provider: provider ?? 'claude',
+    cwd: homedir(),
+    instructions: companionInstructions(companion),
+  })
   sendMessage(agent.id, body)
   return agent
 }

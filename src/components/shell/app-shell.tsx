@@ -1,8 +1,10 @@
 'use client'
 
-import { PanelBottom, PanelRight } from 'lucide-react'
+import { PanelBottom, PanelRight, Settings } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { usePanelRef } from 'react-resizable-panels'
+import { buttonVariants } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { Sidebar, SidebarContent, SidebarInset } from '@/components/ui/sidebar'
@@ -93,6 +95,15 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
             onClick={toggleSidebar}
             icon={<PanelRight />}
           />
+          <Tooltip>
+            <TooltipTrigger
+              // A link styled as a button: Base UI's Button would give it role="button".
+              render={<Link href="/setup" aria-label="Setup" className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} />}
+            >
+              <Settings />
+            </TooltipTrigger>
+            <TooltipContent>Setup</TooltipContent>
+          </Tooltip>
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
