@@ -3,13 +3,13 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { RotateCcw, SquareTerminal, X } from 'lucide-react'
+import { Plus, RotateCcw, SquareTerminal, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useShellState } from '@/components/shell/shell-state'
+import { useShellState, useTaskSelection } from '@/components/shell/shell-state'
 import { isMacPlatform, useShortcut } from '@/components/shell/shortcut-registry'
 import { Alert, AlertAction, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { createInputSender, followTerminal, killTerminal, resizeTerminal, startTerminal } from './terminal-session'
+import { createInputSender, followTerminal, killTerminal, resizeTerminal, startTerminal, type StartedTerminal } from './terminal-session'
 import { readTerminalTheme } from './terminal-theme'
 
 const FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
@@ -36,20 +36,32 @@ function isAppShortcut(event: KeyboardEvent) {
  * and lives on while the panel is hidden. Closing the terminal kills it and
  * the next open starts a fresh one. When the shell exits or cannot start, the
  * panel says so and offers a new terminal.
+ *
+ * Each shell starts in the worktree of the task selected at that moment (home
+ * with none). Selecting another task never replaces a running shell: it may
+ * be running a command or hold the user's history and variables, and a click
+ * in the graph should not throw that away. The header keeps naming the
+ * shell's own task, and a "New terminal" button appears while the selection
+ * differs; it, or closing the terminal (its X) and opening it again, starts a
+ * shell in the selected task. Cmd/Ctrl+J only hides the panel, so it keeps
+ * the shell like any other hide.
  */
 export function TerminalPanel() {
   const { panelOpen, setPanelOpen, togglePanel } = useShellState()
   useShortcut({ id: 'toggle-panel-from-terminal', label: 'Toggle bottom panel', ...toggleFromTerminalKeys, run: togglePanel })
   const [generation, setGeneration] = useState(0)
   const [started, setStarted] = useState(false)
-  const [cwd, setCwd] = useState<string | null>(null)
+  const [shell, setShell] = useState<Pick<StartedTerminal, 'cwd' | 'task'> | null>(null)
+  const { selectedTask } = useTaskSelection()
+  // Until the shell reports where it started it is already on its way to the selected task.
+  const selectionDiffers = shell !== null && (selectedTask?.id ?? null) !== (shell.task?.id ?? null)
   const [ended, setEnded] = useState<string | null>(null)
 
   if (panelOpen && !started) setStarted(true)
 
   const restart = () => {
     setEnded(null)
-    setCwd(null)
+    setShell(null)
     setGeneration((value) => value + 1)
   }
 
@@ -64,15 +76,39 @@ export function TerminalPanel() {
       <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs">
         <SquareTerminal className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         <span className="font-medium">Terminal</span>
+        {shell?.task ? (
+          <span data-slot="terminal-task" aria-label="Task" className="max-w-64 shrink-0 truncate">
+            <span className="text-muted-foreground">{shell.task.project} · </span>
+            {shell.task.title}
+          </span>
+        ) : null}
         <span
           data-slot="terminal-cwd"
           aria-label="Working directory"
-          title={cwd ?? undefined}
+          title={shell?.cwd}
           className="min-w-0 truncate font-mono text-muted-foreground"
         >
-          {cwd}
+          {shell?.cwd}
         </span>
-        <Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="Close terminal" onClick={close}>
+        {selectionDiffers && !ended ? (
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto shrink-0"
+            title={selectedTask ? `Start a shell in ${selectedTask.project} · ${selectedTask.title}` : 'Start a shell in the home folder'}
+            onClick={restart}
+          >
+            <Plus />
+            New terminal
+          </Button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className={selectionDiffers && !ended ? 'shrink-0' : 'ml-auto shrink-0'}
+          aria-label="Close terminal"
+          onClick={close}
+        >
           <X />
         </Button>
       </div>
@@ -89,7 +125,7 @@ export function TerminalPanel() {
         </Alert>
       ) : null}
       {started ? (
-        <TerminalView key={generation} active={panelOpen} onStart={setCwd} onEnd={setEnded} />
+        <TerminalView key={generation} active={panelOpen} taskId={selectedTask?.id ?? null} onStart={setShell} onEnd={setEnded} />
       ) : null}
     </div>
   )
@@ -97,16 +133,21 @@ export function TerminalPanel() {
 
 function TerminalView({
   active,
+  taskId,
   onStart,
   onEnd,
 }: {
   active: boolean
-  onStart: (cwd: string) => void
+  /** Read once: a later selection does not move this shell (see TerminalPanel). */
+  taskId: string | null
+  onStart: (shell: Pick<StartedTerminal, 'cwd' | 'task'>) => void
   /** Called once with a short line for the user when the shell is gone. */
   onEnd: (message: string) => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<{ term: Terminal; fit: () => void } | null>(null)
+  // Frozen at mount: a selection change must not re-run the effect below, which would kill the shell.
+  const [startTaskId] = useState(taskId)
   const callbacks = useRef({ onStart, onEnd })
   useEffect(() => {
     callbacks.current = { onStart, onEnd }
@@ -173,13 +214,13 @@ function TerminalView({
 
     void (async () => {
       try {
-        const started = await startTerminal({ cols: term.cols, rows: term.rows, taskId: null }, abort.signal)
+        const started = await startTerminal({ cols: term.cols, rows: term.rows, taskId: startTaskId }, abort.signal)
         id = started.id
         if (abort.signal.aborted) {
           killTerminal(started.id)
           return
         }
-        callbacks.current.onStart(started.cwd)
+        callbacks.current.onStart({ cwd: started.cwd, task: started.task })
         send = createInputSender(started.id)
         if (early) send(early)
         early = ''
@@ -210,7 +251,7 @@ function TerminalView({
       terminalRef.current = null
       term.dispose()
     }
-  }, [])
+  }, [startTaskId])
 
   useEffect(() => {
     if (!active) return
