@@ -173,7 +173,7 @@ function TerminalView({
 
     void (async () => {
       try {
-        const started = await startTerminal({ cols: term.cols, rows: term.rows }, abort.signal)
+        const started = await startTerminal({ cols: term.cols, rows: term.rows, taskId: null }, abort.signal)
         id = started.id
         if (abort.signal.aborted) {
           killTerminal(started.id)
