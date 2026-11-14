@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
-import { PICK_FOLDERS_CHANNEL } from '../src/lib/desktop-bridge'
+import { FOCUS_CHANNEL, PICK_FOLDERS_CHANNEL } from '../src/lib/desktop-bridge'
+import { FOCUS_PARAM, formatFocusTarget, type FocusTarget } from '../src/lib/focus-target'
 import { SERVER_TOKEN_COOKIE } from '../src/lib/server-token'
 import {
   createSelfCheck,
@@ -9,12 +10,17 @@ import {
   SELF_CHECK_TIMEOUT_MS,
   selfCheckOutputPath,
 } from './self-check'
+import { startBackground, type Background } from './background'
 import { serverEntry, startServer, type ServerHandle } from './server-process'
 import { installLoginShellPath } from './shell-env'
 
 const selfCheckPath = selfCheckOutputPath(process.argv)
 if (selfCheckPath) isolateSelfCheckProfile()
 let server: ServerHandle | null = null
+let mainWindow: BrowserWindow | null = null
+let background: Background | null = null
+/** Set once a quit starts; until then closing the window only hides it. */
+let quitting = false
 
 // Permissions the app's own pages may use; everything else is denied.
 const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write'])
@@ -75,9 +81,48 @@ function createWindow(url: string, show: boolean) {
     return { action: 'deny' }
   })
 
+  // Closing the window leaves BusyBoy and its agents working in the tray; only Quit ends them.
+  window.on('close', (event) => {
+    if (quitting) return
+    event.preventDefault()
+    window.hide()
+  })
+  // Windows ends the session (log off, shut down) without \`before-quit\`, so
+  // the hidden-window rule above would keep agents from being stopped.
+  window.on('session-end', () => {
+    quitting = true
+    app.quit()
+  })
+
   if (show) window.once('ready-to-show', () => window.show())
   void window.loadURL(url)
   return window
+}
+
+/** The main screen URL, opened on `target` when given. */
+function screenUrl(base: string, target?: FocusTarget) {
+  if (!target) return base
+  const url = new URL(base)
+  url.searchParams.set(FOCUS_PARAM, formatFocusTarget(target))
+  return url.toString()
+}
+
+/** Brings the one window to the front (making it again if it is gone) and shows `target` in it. */
+function openWindow(target?: FocusTarget) {
+  if (!server || quitting) return
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = createWindow(screenUrl(server.url, target), true)
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  // The open page shows it in place, so a draft in the composer is kept.
+  if (target) mainWindow.webContents.send(FOCUS_CHANNEL, formatFocusTarget(target))
+}
+
+function windowInFront() {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused())
 }
 
 async function authorizeWindowSession(handle: ServerHandle) {
@@ -122,14 +167,20 @@ async function runSelfCheck(outputPath: string) {
     server = await startServer()
     await check.recordServer(server)
     await authorizeWindowSession(server)
-    const window = createWindow(server.url, false)
+    const window = (mainWindow = createWindow(server.url, false))
     await check.recordPage(window)
+    // No notifications: the check may run on the user's own machine.
+    background = startBackground(server, { open: openWindow, quit: () => {}, windowInFront, notify: false })
+    await check.recordBackground(background, window, server)
     await check.recordTerminal(server)
+    background.stop()
+    background = null
     window.destroy()
     await check.recordServerStop(server)
     check.recordServerFolderUnchanged()
   } catch (error) {
     check.fail(error)
+    background?.stop()
     await server?.stop()
   } finally {
     finish()
@@ -141,11 +192,10 @@ async function launch() {
   if (shellPath.error) console.warn(`Using the inherited PATH: ${shellPath.error}`)
   server = await startServer()
   await authorizeWindowSession(server)
-  const url = server.url
-  createWindow(url, true)
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(url, true)
-  })
+  mainWindow = createWindow(server.url, true)
+  background = startBackground(server, { open: openWindow, quit: () => app.quit(), windowInFront })
+  // Clicking the dock icon brings back a window that was closed to the tray.
+  app.on('activate', () => openWindow())
 }
 
 /** The native folder picker behind the preload bridge. Only app pages may open it. */
@@ -163,27 +213,45 @@ function registerFolderPicker() {
   })
 }
 
-let stopping = false
+/** When the server stop began, or 0 before a quit. */
+let stopping = 0
+/** Longer than the server's own stop budget (shutdown message, then kill), so one slow stop is not cut short. */
+const STALLED_SHUTDOWN_MS = 12_000
 
 function registerAppEvents() {
-  app.on('second-instance', () => {
-    const window = BrowserWindow.getAllWindows()[0]
-    if (!window) return
-    if (window.isMinimized()) window.restore()
-    window.focus()
+  app.on('second-instance', () => openWindow())
+
+  // BusyBoy stays in the tray with no window open. Registering the listener
+  // keeps Electron from quitting when the last window closes.
+  app.on('window-all-closed', () => {})
+
+  app.on('browser-window-focus', () => background?.windowFocused())
+  app.on('browser-window-blur', () => background?.windowBlurred())
+
+  app.on('before-quit', () => {
+    quitting = true
   })
 
-  app.on('window-all-closed', () => {
-    if (!selfCheckPath) app.quit()
-  })
-
-  // Stop the server before the app exits.
+  // Stop the server, which stops every agent and terminal, before the app exits.
   app.on('will-quit', (event) => {
-    if (!server?.isRunning() || stopping) return
+    if (!server?.isRunning()) return
     event.preventDefault()
-    stopping = true
-    void server.stop().finally(() => app.quit())
+    // Like T3 Code: a quit asked for again after a stalled shutdown is the
+    // user's only way out short of force quitting, so it exits at once.
+    if (stopping) {
+      if (Date.now() - stopping >= STALLED_SHUTDOWN_MS) app.exit(0)
+      return
+    }
+    stopping = Date.now()
+    background?.stop()
+    background = null
+    // Exit rather than quit again: a server that did not stop in time must
+    // not leave a hidden app with no tray icon and no window.
+    void server.stop().finally(() => app.exit(0))
   })
+
+  // `kill` or Ctrl+C in the terminal that started the app quits it the same way as the menu.
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => app.quit())
 
   void app.whenReady().then(async () => {
     registerFolderPicker()
