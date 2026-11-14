@@ -3,11 +3,13 @@
 import { Square } from 'lucide-react'
 import { useState } from 'react'
 import { stopTaskAction } from '@/app/(main)/director-actions'
+import { useTaskSelection } from '@/components/shell/shell-state'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Message, MessageContent } from '@/components/ui/message'
+import { Toggle } from '@/components/ui/toggle'
 import type { TaskStatus, TaskView } from '@/server/tasks'
 
 // Status colors follow the app's scheme (amber needs you, blue running, gray
@@ -24,8 +26,12 @@ const STATUS: Record<TaskStatus, { label: string; variant: 'outline' | 'destruct
   stopped: { label: 'Stopped', variant: 'destructive' },
 }
 
-/** The tasks the Director created in one turn, one `project · task` line each, with Stop while its agent runs. */
+/**
+ * The tasks the Director created in one turn, one `project · task` line each, with Stop while its agent runs.
+ * Pressing a line selects that task for the terminal; pressing it again clears it.
+ */
 export function TaskGroup({ taskIds, tasks }: { taskIds: string[]; tasks: Map<string, TaskView> }) {
+  const { selectedTask, toggleTask } = useTaskSelection()
   const [error, setError] = useState<string | null>(null)
   return (
     <Message>
@@ -42,10 +48,20 @@ export function TaskGroup({ taskIds, tasks }: { taskIds: string[]; tasks: Map<st
                     aria-label={task ? `${task.project} · ${task.title}` : id}
                     className="flex items-center gap-3"
                   >
-                    <span className="min-w-0 flex-1 truncate">
-                      <span className="text-muted-foreground">{task?.project ?? '…'} · </span>
-                      <span>{task?.title ?? id}</span>
-                    </span>
+                    <Toggle
+                      size="lg"
+                      aria-label={task ? `Select ${task.project} · ${task.title}` : id}
+                      disabled={!task}
+                      pressed={selectedTask?.id === id}
+                      onPressedChange={() => task && toggleTask({ id, project: task.project, title: task.title })}
+                      // A full-width line of text, not a square icon toggle.
+                      className="-mx-2.5 min-w-0 flex-1 justify-start text-sm font-normal"
+                    >
+                      <span className="min-w-0 truncate">
+                        <span className="text-muted-foreground">{task?.project ?? '…'} · </span>
+                        <span>{task?.title ?? id}</span>
+                      </span>
+                    </Toggle>
                     {status && (
                       <Badge variant={status.variant} className={status.className} data-status={task?.status}>
                         {status.label}
