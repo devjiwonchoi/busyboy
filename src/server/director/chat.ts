@@ -16,9 +16,10 @@ import {
   subscribeToAgent,
 } from '../runner/agent-runner'
 import type { AgentEventEnvelope, McpServer, ProviderId } from '../runner/contract'
+import { openCards, replyToCard, subscribeToCards, type TaskCard } from '../task-cards'
+import { listTasksAt, subscribeToTasks, type TaskView } from '../tasks'
 
 type McpServers = Record<string, McpServer>
-import { listTasksAt, subscribeToTasks, type TaskView } from '../tasks'
 
 // The Director: one long-lived agent per data folder that answers the user and
 // creates tasks through busyboy's MCP tools. What the user sees is kept in
@@ -34,28 +35,45 @@ const TRANSCRIPT_FILE = 'transcript.jsonl'
 const STATE_FILE = 'state.json'
 
 export type ChatEntry =
-  | { id: string; at: string; kind: 'user'; text: string }
+  /** `to`: the `project · task` a reply to a card went to, instead of the Director. */
+  | { id: string; at: string; kind: 'user'; text: string; to?: string }
   | { id: string; at: string; kind: 'director'; text: string; interrupted?: boolean }
   /** Tasks the Director created in one turn. */
   | { id: string; at: string; kind: 'tasks'; taskIds: string[] }
   | { id: string; at: string; kind: 'note'; text: string; tone: 'info' | 'error'; compacted?: boolean }
+  /** A task agent's card once it closed: what it asked and how it ended. */
+  | {
+      id: string
+      at: string
+      kind: 'card'
+      cardKind: TaskCard['kind']
+      project: string
+      taskTitle: string
+      title: string
+      outcome: string
+    }
 
 export type DirectorStatus = 'idle' | 'answering' | 'compacting'
 
 export type DirectorUpdate =
-  | { type: 'reset'; entries: ChatEntry[]; tasks: TaskView[]; status: DirectorStatus; draft: string }
+  | { type: 'reset'; entries: ChatEntry[]; tasks: TaskView[]; cards: TaskCard[]; status: DirectorStatus; draft: string }
   /** Appends the entry, or replaces the one with the same id. */
   | { type: 'entry'; entry: ChatEntry }
   /** The Director's reply as it streams; empty when no reply is streaming. */
   | { type: 'draft'; text: string }
   | { type: 'status'; status: DirectorStatus }
   | { type: 'task'; task: TaskView }
+  /** A task agent's card opened; it stays pinned until `card-closed`. */
+  | { type: 'card-opened'; card: TaskCard }
+  | { type: 'card-closed'; cardId: string }
 
 type DirectorState = { provider?: ProviderId; sessionId?: string }
 
 type Director = {
   folder: string
   ready: Promise<void>
+  /** `ready` has settled, so entries can be saved at once. */
+  loaded: boolean
   entries: ChatEntry[]
   state: DirectorState
   agentId?: string
@@ -108,6 +126,7 @@ function getDirector(folder: string): Director {
   director = {
     folder,
     ready: Promise.resolve(),
+    loaded: false,
     entries: [],
     state: {},
     status: 'idle',
@@ -120,8 +139,27 @@ function getDirector(folder: string): Director {
     writes: Promise.resolve(),
     listeners: new Set(),
   }
-  director.ready = load(director)
+  director.ready = load(director).finally(() => {
+    director.loaded = true
+  })
   subscribeToTasks(folder, (task) => broadcast(director, { type: 'task', task }))
+  subscribeToCards(folder, (update) => {
+    if (update.type === 'open') {
+      broadcast(director, { type: 'card-opened', card: update.card })
+      return
+    }
+    const { card, outcome } = update
+    broadcast(director, { type: 'card-closed', cardId: card.id })
+    const title = card.kind === 'align' ? `Plan: ${card.title}` : card.questions.map(({ question }) => question).join(' ')
+    const save = () =>
+      saveEntry(director, newEntry('card', { cardKind: card.kind, project: card.project, taskTitle: card.taskTitle, title, outcome }))
+    // Saved at once when loaded, so a reply to the card (saved right after it closes) follows it in the transcript.
+    if (director.loaded) {
+      save()
+    } else {
+      void director.ready.then(save)
+    }
+  })
   directors.set(folder, director)
   return director
 }
@@ -161,8 +199,14 @@ function isEntry(value: unknown): value is ChatEntry {
   if (typeof entry.id !== 'string' || typeof entry.at !== 'string') return false
   switch (entry.kind) {
     case 'user':
+      return typeof entry.text === 'string' && (entry.to === undefined || typeof entry.to === 'string')
     case 'director':
       return typeof entry.text === 'string'
+    case 'card':
+      return (
+        (entry.cardKind === 'choice' || entry.cardKind === 'align') &&
+        ['project', 'taskTitle', 'title', 'outcome'].every((key) => typeof entry[key] === 'string')
+      )
     case 'note':
       return typeof entry.text === 'string' && (entry.tone === 'info' || entry.tone === 'error')
     case 'tasks':
@@ -172,8 +216,12 @@ function isEntry(value: unknown): value is ChatEntry {
   }
 }
 
+/** What the Director's own conversation grew by; replies to task agents never reached it. */
 function entryLength(entry: ChatEntry) {
-  return entry.kind === 'user' || entry.kind === 'director' ? entry.text.length : 0
+  if (entry.kind === 'user') {
+    return entry.to ? 0 : entry.text.length
+  }
+  return entry.kind === 'director' ? entry.text.length : 0
 }
 
 function broadcast(director: Director, update: DirectorUpdate) {
@@ -531,6 +579,25 @@ export async function stopDirector(folder: string) {
   }
 }
 
+/**
+ * Sends a reply from the composer to the task agent behind an open card. It
+ * shows in the chat as the user's message, marked with where it went, and is
+ * never sent to the Director.
+ */
+export async function replyToTaskCard({ folder, cardId, text }: { folder: string; cardId: string; text: string }) {
+  const director = getDirector(folder)
+  await director.ready
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return
+  }
+  const card = openCards(folder).find(({ id }) => id === cardId)
+  replyToCard({ folder, cardId, text: trimmed })
+  if (card) {
+    saveEntry(director, newEntry('user', { text: trimmed, to: `${card.project} · ${card.taskTitle}` }))
+  }
+}
+
 /** Adds a task the Director just created to its turn's task group. */
 export async function attachTaskToDirector(folder: string, task: TaskView) {
   const director = getDirector(folder)
@@ -550,7 +617,7 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
   const director = getDirector(folder)
   await director.ready
   const tasks = await listTasksAt(folder)
-  listener({ type: 'reset', entries: director.entries, tasks, status: director.status, draft: director.draft })
+  listener({ type: 'reset', entries: director.entries, tasks, cards: openCards(folder), status: director.status, draft: director.draft })
   director.listeners.add(listener)
   return () => {
     director.listeners.delete(listener)

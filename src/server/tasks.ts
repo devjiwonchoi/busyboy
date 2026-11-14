@@ -10,6 +10,7 @@ import { getProject, listProjects } from './projects'
 import { defaultProvider } from './providers'
 import { getAgent, sendMessage, startAgent, stopAgent, subscribeToAgent } from './runner/agent-runner'
 import { agentEnvironment } from './runner/find-executable'
+import { APPROVE_MESSAGE, hasOpenCard, stopTaskAgent, trackTaskCards } from './task-cards'
 import type { AgentStatus, McpServer, ProviderId } from './runner/contract'
 
 // A task is one request in one project, worked on by its own agent in its own
@@ -50,6 +51,13 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
     `You work in the git worktree ${task.worktree} on the branch ${task.branch}. Stay inside this worktree.`,
     'Plan the task with the `align` skill before you change anything, and follow the plan once it is approved.',
     `Keep every record of this task (the plan and any status, verify, or review notes your skills write) under .jwn/${task.id}/ in this worktree.`,
+    '',
+    'Approval:',
+    // BusyBoy turns a draft ALIGN.md at the end of a turn into the user's Align card, so the
+    // plan must be on disk before the agent waits; the align skill alone saves it only after approval.
+    `- When the plan is ready for approval, save it as .jwn/${task.id}/ALIGN.md with "Status: draft", present it, and end your turn. BusyBoy shows it to the user as a plan card.`,
+    `- The message "${APPROVE_MESSAGE}" approves the plan as saved: change its Status line to approved and carry on. Any other reply asks for changes; revise the draft and end your turn again.`,
+    '- Do reversible actions without asking, then say what you did. Ask before irreversible ones.',
     '',
     'Memory:',
     '- The Memory section below is what BusyBoy remembers about the user and this project. Follow it.',
@@ -120,7 +128,9 @@ function statusOf(agentStatus: AgentStatus | undefined): TaskStatus {
 
 export function taskView(task: TaskRecord): TaskView {
   const { id, project, title, branch, createdAt } = task
-  return { id, project, title, branch, createdAt, status: statusOf(getAgent(task.agentId)?.status) }
+  const status = statusOf(getAgent(task.agentId)?.status)
+  // A plan card waits on the user while the agent itself is idle, between turns.
+  return { id, project, title, branch, createdAt, status: status === 'idle' && hasOpenCard(task.agentId) ? 'needs-you' : status }
 }
 
 /** Calls `listener` whenever a task in `folder` is created or changes status. */
@@ -265,9 +275,17 @@ function startError(agentId: string) {
   return message
 }
 
-/** Saves the session id when it arrives and reports status changes. */
+/** Saves the session id when it arrives, reports status changes, and opens the agent's cards. */
 function watchAgent(folder: string, task: TaskRecord) {
   let last = taskView(task).status
+  const report = () => {
+    const status = taskView(task).status
+    if (status !== last) {
+      last = status
+      notify(folder, task)
+    }
+  }
+  trackTaskCards({ folder, task, onChange: report })
   subscribeToAgent(task.agentId, 0, ({ event }) => {
     if (event.type === 'session' && event.sessionId !== task.sessionId) {
       task.sessionId = event.sessionId
@@ -277,10 +295,16 @@ function watchAgent(folder: string, task: TaskRecord) {
       })
     }
     // The runner updates its status before it delivers the event.
-    const status = taskView(task).status
-    if (status !== last) {
-      last = status
-      notify(folder, task)
-    }
+    report()
   })
+}
+
+/** Stops a task's agent. The task, its worktree, and its branch stay. */
+export async function stopTask(taskId: string) {
+  const folder = await dataFolder()
+  const task = (await readTasksAt(folder)).find(({ id }) => id === taskId)
+  if (!task) {
+    throw new TaskError(`There is no task ${taskId}.`)
+  }
+  await stopTaskAgent({ folder, agentId: task.agentId })
 }

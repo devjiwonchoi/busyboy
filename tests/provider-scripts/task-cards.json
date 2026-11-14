@@ -1,0 +1,194 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: task agents that wait on the user with a plan, a question, and an approval, for the card journeys.",
+  "turns": [
+    {
+      "prompt": "Add a footer with the project name to the web app.",
+      "steps": [
+        {
+          "writeFile": {
+            "path": ".jwn/<cwd-name>/ALIGN.md",
+            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: draft\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "plan-1",
+            "text": "The plan is ready for your approval."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Approved.",
+      "context": "Add a footer with the project name to the web app.",
+      "steps": [
+        {
+          "writeFile": {
+            "path": ".jwn/<cwd-name>/ALIGN.md",
+            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: approved by the user on 2026-11-14\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "plan-approved",
+            "text": "Thanks, starting on the footer."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Also show the current year.",
+      "context": "Add a footer with the project name to the web app.",
+      "steps": [
+        {
+          "writeFile": {
+            "path": ".jwn/<cwd-name>/ALIGN.md",
+            "text": "# ALIGN: Add a site footer\n\nVersion: 2 · Status: draft\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name and the current year. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page and the current year\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "plan-2",
+            "text": "I added the year to the plan."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Add a license file to the project.",
+      "steps": [
+        {
+          "event": {
+            "type": "question",
+            "requestId": "license-1",
+            "questions": [
+              {
+                "question": "Which license should the project use?",
+                "header": "License",
+                "multiSelect": false,
+                "options": [
+                  {
+                    "label": "MIT (Recommended)",
+                    "description": "Short and permissive"
+                  },
+                  {
+                    "label": "Apache-2.0",
+                    "description": "Permissive with a patent grant"
+                  }
+                ]
+              }
+            ]
+          },
+          "then": {
+            "MIT": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "license-mit",
+                  "text": "Added an MIT license."
+                }
+              }
+            ],
+            "Apache-2.0": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "license-apache",
+                  "text": "Added an Apache-2.0 license."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Clean up the old build output.",
+      "steps": [
+        {
+          "event": {
+            "type": "approval",
+            "requestId": "clean-1",
+            "title": "Bash: rm -rf dist",
+            "detail": "rm -rf dist",
+            "canAllowForSession": true
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "clean-allow",
+                  "text": "Removed dist."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "clean-deny",
+                  "text": "Left dist in place."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Pick the two theme colors.",
+      "steps": [
+        {
+          "event": {
+            "type": "question",
+            "requestId": "twins-1",
+            "questions": [
+              {
+                "question": "Which color?",
+                "header": "Color",
+                "multiSelect": false,
+                "options": [
+                  {
+                    "label": "Red"
+                  },
+                  {
+                    "label": "Blue"
+                  }
+                ]
+              },
+              {
+                "question": "Which color?",
+                "header": "Color",
+                "multiSelect": false,
+                "options": [
+                  {
+                    "label": "Red"
+                  },
+                  {
+                    "label": "Blue"
+                  }
+                ]
+              }
+            ]
+          },
+          "then": {
+            "Red; Blue": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "twins-done",
+                  "text": "Using red and blue."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
