@@ -127,15 +127,16 @@ export function toolsFor(caller: McpCaller) {
  * How an agent reaches busyboy's MCP endpoint from the current request: the
  * server's own address, an MCP token (never the server token), and in test
  * mode the data folder cookie. A task agent's URL names its project and its
- * token is bound to that project.
+ * token is bound to that project. `folder` names the data folder when it is
+ * not the current request's (a task resumed after a restart).
  */
-export async function busyboyMcpServers(taskProject?: string): Promise<Record<string, McpServer>> {
+export async function busyboyMcpServers(taskProject?: string, folder?: string): Promise<Record<string, McpServer>> {
   // The server's own loopback address when it knows its port (desktop app, tests).
   const host = process.env.PORT ? `127.0.0.1:${process.env.PORT}` : ((await headers()).get('host') ?? '127.0.0.1:3000')
   const mcpHeaders: Record<string, string> = {}
   const token = process.env[SERVER_TOKEN_ENV]
   if (token) mcpHeaders[MCP_TOKEN_HEADER] = taskProject ? taskMcpTokenFor(token, taskProject) : mcpTokenFor(token)
-  if (isTestMode()) mcpHeaders.cookie = `${TEST_HOME_COOKIE}=${encodeURIComponent(await dataFolder())}`
+  if (isTestMode()) mcpHeaders.cookie = `${TEST_HOME_COOKIE}=${encodeURIComponent(folder ?? (await dataFolder()))}`
   const query = taskProject ? `?${MCP_TASK_PROJECT_PARAM}=${encodeURIComponent(taskProject)}` : ''
   return { [MCP_SERVER_NAME]: { type: 'http', url: `http://${host}${MCP_PATH}${query}`, headers: mcpHeaders, trusted: true } }
 }

@@ -29,7 +29,7 @@ export async function startStandaloneServer(env: Record<string, string> = {}) {
   let child: ChildProcess
   let exited: Promise<void>
 
-  const start = async () => {
+  const start = async (override: Record<string, string> = {}) => {
     const childEnv: NodeJS.ProcessEnv = { ...process.env }
     delete childEnv.BUSYBOY_TOKEN
     Object.assign(childEnv, {
@@ -40,6 +40,7 @@ export async function startStandaloneServer(env: Record<string, string> = {}) {
       CLAUDE_CONFIG_DIR: join(home, 'claude-config'),
       CODEX_HOME: join(home, 'codex-home'),
       ...env,
+      ...override,
     })
     child = spawn(process.execPath, [join(root, 'scripts', 'start-standalone.mts')], { cwd: root, env: childEnv, stdio: 'ignore' })
     exited = new Promise((resolve) => child.once('exit', () => resolve()))
@@ -62,7 +63,8 @@ export async function startStandaloneServer(env: Record<string, string> = {}) {
     },
     /** Sends `signal` without waiting, for a server that is expected to stay up for a while. */
     signal: (signal: NodeJS.Signals) => child.kill(signal),
-    restart: start,
+    /** Starts it again, with `override` on top of the first start's environment. */
+    restart: (override?: Record<string, string>) => start(override),
     async dispose() {
       child.kill('SIGKILL')
       await exited
