@@ -1,9 +1,10 @@
 'use client'
 
 import '@xyflow/react/dist/style.css'
-import { BaseEdge, Handle, Position, ReactFlow, type Dimensions, type Edge, type EdgeProps, type EdgeTypes, type NodeProps, type NodeTypes, type ReactFlowProps } from '@xyflow/react'
+import { BaseEdge, Handle, Position, ReactFlow, type Dimensions, type Edge, type ReactFlowInstance, type EdgeProps, type EdgeTypes, type NodeProps, type NodeTypes, type ReactFlowProps } from '@xyflow/react'
 import { FolderGit2, GitBranch, ListTodo, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useShellState } from '@/components/shell/shell-state'
 import { cn } from '@/lib/utils'
 import type { GraphTask, GraphTodo, NodeStatus, ProjectGraph as Graph } from '@/server/records/project-graph'
 import { BaseNode } from '@/components/base-node'
@@ -13,6 +14,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/u
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   layoutProjectGraph,
+  taskNodeId,
   todoLabel,
   type DisplayStatus,
   type GraphNode,
@@ -370,6 +372,14 @@ export function ProjectGraph() {
   const [hovered, setHovered] = useState<string | null>(null)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(leaveTimer.current), [])
+  const [flow, setFlow] = useState<ReactFlowInstance<GraphNode, Edge> | null>(null)
+  // A task opened from the tray or a notification stays highlighted until the user points at another node.
+  const { focusedTask, focusRequest, setFocusedTask } = useShellState()
+  const focusedNode = useMemo(() => {
+    if (!focusedTask) return null
+    const slash = focusedTask.lastIndexOf('/')
+    return taskNodeId(focusedTask.slice(0, slash), focusedTask.slice(slash + 1))
+  }, [focusedTask])
 
   useEffect(() => {
     const source = new EventSource('/api/records/events')
@@ -382,9 +392,16 @@ export function ProjectGraph() {
     if (!layout) return { nodes: [], edges: [] }
     // A node can vanish under the pointer when its record changes, and React fires no mouseleave
     // for it; lighting a missing id would dim the whole graph until the pointer found another node.
-    const lit = hovered && layout.nodes.some((node) => node.id === hovered) ? hovered : null
+    const lit = [hovered, focusedNode].find((id) => id && layout.nodes.some((node) => node.id === id)) ?? null
     return highlight(layout.nodes, layout.edges, pathOf(lit, layout.parentOf))
-  }, [layout, hovered])
+  }, [layout, hovered, focusedNode])
+
+  // Scroll the opened task into view, at full size and with the project's left edge kept in place.
+  const focusedPosition = layout?.nodes.find(({ id }) => id === focusedNode)?.position
+  useEffect(() => {
+    if (!flow || !focusedPosition) return
+    void flow.setViewport({ x: 12, y: Math.min(8, 48 - focusedPosition.y), zoom: 1 }, { duration: 200 })
+  }, [flow, focusedPosition?.y, focusRequest])
 
   if (!graph) return null
   // The graph would be incomplete without the task list or settings, so say so instead of drawing it.
@@ -430,9 +447,11 @@ export function ProjectGraph() {
           zoomOnScroll={false}
           // React Flow's MIT license does not require the attribution banner, which sat over the sidebar's corner.
           proOptions={{ hideAttribution: true }}
+          onInit={setFlow}
           onNodeMouseEnter={(_, node) => {
             clearTimeout(leaveTimer.current)
             setHovered(node.id)
+            if (focusedNode && node.id !== focusedNode) setFocusedTask(null)
           }}
           onNodeMouseLeave={() => {
             clearTimeout(leaveTimer.current)
