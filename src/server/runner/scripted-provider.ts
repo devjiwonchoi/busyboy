@@ -5,8 +5,8 @@
 // See `ProviderScript` for the format.
 import { randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import {
   ClaudeEventMapper,
   claudePermissionToEvent,
@@ -53,6 +53,7 @@ export type ScriptStep =
   | { delayMs: number }
   | { echoInstructions: true }
   | { writeInstructions: string }
+  | { writeFile: { path: string; text: string } }
 
 export type ScriptTurn = {
   /** The user message that plays this turn, matched exactly after trimming. */
@@ -247,6 +248,11 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       mapper?.flush()
       if ('writeInstructions' in step) {
         await cancellable(writeFile(join(options.cwd, step.writeInstructions), options.instructions ?? ''))
+        continue
+      }
+      if ('writeFile' in step) {
+        const file = join(options.cwd, step.writeFile.path.replaceAll('<cwd-name>', basename(options.cwd)))
+        await cancellable(mkdir(dirname(file), { recursive: true }).then(() => writeFile(file, step.writeFile.text)))
         continue
       }
       if ('echoInstructions' in step) {
