@@ -127,6 +127,18 @@ test('continuing without a signed-in agent should not be possible', async ({ pag
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled()
 })
 
+test('an outdated Claude Code should ask for an update before continuing', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'outdated', codex: 'signed-out' }))
+
+  await page.goto('/setup')
+  await chooseCompanion(page, 'Pip')
+
+  const agents = page.getByRole('list', { name: 'Agents' })
+  await expect(agents.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Update needed')
+  await expect(page.getByLabel('Claude Code update command')).toHaveValue('claude update')
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled()
+})
+
 test('choosing a picture over the size limit should show an error', async ({ page, context, baseURL }) => {
   const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
 

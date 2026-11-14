@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { alwaysAskRulesAt } from './always-ask-list'
 import { dataFolder } from './config'
 import { REVERT_AND_REMEMBER } from './director/context'
 import { memoryPrompt } from './memory'
@@ -45,7 +46,7 @@ export class TaskError extends Error {}
 const run = promisify(execFile)
 
 /** The instructions every task agent gets in addition to its provider's own. */
-export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>) {
+export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>, alwaysAsk: string[]) {
   return [
     `You are a busyboy task agent for the project "${task.project}".`,
     `You work in the git worktree ${task.worktree} on the branch ${task.branch}. Stay inside this worktree.`,
@@ -58,6 +59,15 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
     `- When the plan is ready for approval, save it as .jwn/${task.id}/ALIGN.md with "Status: draft", present it, and end your turn. BusyBoy shows it to the user as a plan card.`,
     `- The message "${APPROVE_MESSAGE}" approves the plan as saved: change its Status line to approved and carry on. Any other reply asks for changes; revise the draft and end your turn again.`,
     '- Do reversible actions without asking, then say what you did. Ask before irreversible ones.',
+    // The hooks enforce the list; telling the agent lets it plan for the wait instead of being
+    // refused mid-task. Knowing the rules does not help an agent get around them: the matcher
+    // reads commands through wrappers and quoting and asks when it cannot tell.
+    ...(alwaysAsk.length > 0
+      ? [
+          '- BusyBoy asks the user before every tool call that matches one of these rules, even when the plan approved it, so expect to wait for an answer there:',
+          ...alwaysAsk.map((rule) => `  - ${rule}`),
+        ]
+      : []),
     '',
     'Memory:',
     '- The Memory section below is what BusyBoy remembers about the user and this project. Follow it.',
@@ -68,8 +78,8 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
 }
 
 /** A task agent's system prompt: its instructions, then the global and project facts. */
-async function taskPrompt(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>) {
-  return `${taskInstructions(task)}\n\n${await memoryPrompt(folder, { project: task.project })}`
+async function taskPrompt(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>, alwaysAsk: string[]) {
+  return `${taskInstructions(task, alwaysAsk)}\n\n${await memoryPrompt(folder, { project: task.project })}`
 }
 
 // ---- Task list file ----------------------------------------------------------
@@ -226,11 +236,13 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
 
   let agentId: string | undefined
   try {
+    const alwaysAsk = await alwaysAskRulesAt(folder)
     const agent = startAgent({
       provider,
       cwd: worktree,
-      instructions: await taskPrompt(folder, { id, project: project.name, worktree, branch }),
+      instructions: await taskPrompt(folder, { id, project: project.name, worktree, branch }, alwaysAsk),
       mcpServers: input.taskMcp ? await input.taskMcp(project.name) : undefined,
+      alwaysAsk,
     })
     agentId = agent.id
     if (getAgent(agent.id)?.status === 'stopped') throw new TaskError(`The task agent could not start: ${startError(agent.id)}`)
