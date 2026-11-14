@@ -15,6 +15,7 @@ import type {
   StartAgentInput,
 } from './contract'
 import { createScriptedAdapter, hasScripts, SCRIPTS_ENV } from './scripted-provider'
+import { onServerShutdown } from '../shutdown'
 
 type AgentRecord = {
   id: string
@@ -30,13 +31,35 @@ type AgentRecord = {
   interrupting: boolean
 }
 
-type Registry = { agents: Map<string, AgentRecord> }
+type Registry = { agents: Map<string, AgentRecord>; shutdownHooked?: boolean }
 
 // Kept on globalThis: a module-level Map is re-created when `next dev` reloads
 // this module, which would orphan running agent processes.
 const REGISTRY_KEY = Symbol.for('busyboy.agent-runner')
 const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registry }
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
+
+/**
+ * Ends every agent and what it started. Claude's process-group watcher only
+ * ends the CLI's own group when the server exits; the commands it detached
+ * (background shells, for example) are found and ended only by `stop()`, so
+ * quitting must stop each agent while the server still runs.
+ */
+export async function stopAllAgents() {
+  await Promise.allSettled([...registry.agents.values()].map((agent) => agent.session?.stop()))
+}
+
+function hookShutdown() {
+  if (registry.shutdownHooked) return
+  registry.shutdownHooked = true
+  // The desktop app asks before it stops the server and waits for this.
+  // `pnpm start` and a terminal's Ctrl+C send a signal instead, and Next exits
+  // once its connections close without waiting for other signal handlers, so
+  // there the stop is best effort; the process-group watcher still ends each CLI.
+  onServerShutdown(stopAllAgents)
+  process.once('SIGTERM', () => void stopAllAgents())
+  process.once('SIGINT', () => void stopAllAgents())
+}
 
 /**
  * With BUSYBOY_PROVIDER_SCRIPTS set, each provider that has a script in that
@@ -147,6 +170,7 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
 // ---- Operations ------------------------------------------------------------
 
 export function startAgent(input: StartAgentInput): AgentSnapshot {
+  hookShutdown()
   const agent: AgentRecord = {
     id: randomUUID(),
     input: { ...input, permissionMode: input.permissionMode ?? 'auto' },
