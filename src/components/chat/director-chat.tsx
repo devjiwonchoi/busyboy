@@ -140,7 +140,7 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
 }
 
 /** A message from the Director, shown with the companion's picture and name. */
-function DirectorMessage({ persona, header, children }: { persona: Persona; header?: string; children: React.ReactNode }) {
+export function DirectorMessage({ persona, header, children }: { persona: Persona; header?: string; children: React.ReactNode }) {
   return (
     <Message>
       {persona.companion && (

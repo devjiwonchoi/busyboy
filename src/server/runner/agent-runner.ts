@@ -120,7 +120,7 @@ function push(agent: AgentRecord, event: AgentEvent) {
 function launch(agent: AgentRecord, resumeSessionId?: string) {
   agent.status = 'starting'
   agent.interrupting = false
-  record(agent, { type: 'started', resumed: Boolean(resumeSessionId) })
+  record(agent, { type: 'started', resumed: Boolean(resumeSessionId || agent.input.forkSessionId) })
   try {
     agent.session = adapterFor(agent.input.provider).start({
       provider: agent.input.provider,
@@ -129,6 +129,9 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
       permissionMode: agent.input.permissionMode ?? 'auto',
       resumeSessionId,
       mcpServers: agent.input.mcpServers,
+      // A branch is never resumed itself (it is not kept), so it always forks from the original.
+      forkSessionId: resumeSessionId ? undefined : agent.input.forkSessionId,
+      noTools: agent.input.noTools,
       emit: (event) => record(agent, event),
     })
     if (agent.status === 'starting') agent.status = 'idle'
@@ -188,7 +191,7 @@ export async function stopAgent(agentId: string) {
 export function resumeAgent(agentId: string): AgentSnapshot {
   const agent = getRecord(agentId)
   if (agent.session) return snapshot(agent)
-  launch(agent, agent.sessionId ?? agent.input.resumeSessionId)
+  launch(agent, agent.input.forkSessionId ? undefined : (agent.sessionId ?? agent.input.resumeSessionId))
   return snapshot(agent)
 }
 
@@ -210,6 +213,18 @@ export function answerAgent(agentId: string, requestId: string, answer: AgentAns
   if (kind !== answer.kind) throw new Error(`Request ${requestId} takes an answer of kind ${kind}, not ${answer.kind}.`)
   agent.session.answer(requestId, answer)
   record(agent, { type: 'answered', requestId })
+  return true
+}
+
+/**
+ * Forgets a stopped agent and its events, for agents nobody comes back to.
+ * A running agent is kept. Returns whether the agent was removed.
+ */
+export function removeAgent(agentId: string) {
+  const agent = registry.agents.get(agentId)
+  if (!agent || agent.session) return false
+  agent.listeners.clear()
+  registry.agents.delete(agentId)
   return true
 }
 
