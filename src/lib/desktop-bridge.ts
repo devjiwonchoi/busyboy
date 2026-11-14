@@ -5,6 +5,9 @@
 /** IPC channel of the native folder picker. */
 export const PICK_FOLDERS_CHANNEL = 'busyboy:pick-folders'
 
+/** IPC channel on which the desktop app asks an open window to show a tray or notification item. */
+export const FOCUS_CHANNEL = 'busyboy:focus'
+
 /** Name of the bridge on `window`. */
 export const DESKTOP_BRIDGE_KEY = 'busyboyDesktop'
 
@@ -13,6 +16,12 @@ export type DesktopBridge = {
   pickFolders(): Promise<string[]>
   /** The absolute path of a dropped file or folder (Electron hides `File.path` since v32). */
   pathForFile(file: File): string
+  /**
+   * Calls `listener` with a focus target (src/lib/focus-target.ts, as text)
+   * whenever the user picks an item in the tray or clicks a notification.
+   * Returns the function that stops listening.
+   */
+  onFocus(listener: (target: string) => void): () => void
 }
 
 export function desktopBridge(): DesktopBridge | undefined {
