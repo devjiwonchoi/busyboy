@@ -130,6 +130,28 @@ test.describe('Claude task agents', () => {
     // Nothing went to the Director, and the reply target ended with the card it answered.
     await expect(transcript(page).getByLabel('Your message')).toHaveCount(0)
     await expect(composer).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
+
+    // The next message goes to the Director as usual.
+    await composer.fill('What is running right now?')
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect(transcript(page).getByLabel('Your message')).toHaveText('What is running right now?')
+  })
+
+  test('a card closing before a reply is sent should not send the reply to the Director', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Add a footer', PLAN_REQUEST)
+    const card = pinned(page).getByRole('group', { name: 'Plan from web · Add a footer' })
+    await card.getByRole('button', { name: 'Reply' }).click()
+    const composer = page.getByRole('textbox', { name: 'Message' })
+    await composer.fill('Yes, go ahead.')
+
+    await transcript(page).getByRole('button', { name: 'Stop web · Add a footer' }).click()
+    await expect(pinned(page)).toHaveCount(0)
+    await page.getByRole('button', { name: 'Send' }).click()
+
+    await expect(page.getByRole('alert').filter({ hasText: 'The card you were replying to closed' })).toContainText('Send again to message BusyBoy.')
+    await expect(composer).toHaveText('Yes, go ahead.')
+    await expect(transcript(page).getByLabel('Your message')).toHaveCount(0)
   })
 
   test('a card opening while the user types should leave the composer with the Director', async ({ page, context }) => {
@@ -171,6 +193,18 @@ test.describe('Claude task agents', () => {
     await expect(pinned(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Clean up dist' })).toContainText('Stopped')
     await expect(transcript(page).getByLabel('web · Clean up dist', { exact: true })).toContainText('Stopped')
+  })
+
+  test('clicking Stop in the task group should stop the task and close its card', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Add a footer', PLAN_REQUEST)
+    await expect(pinned(page).getByRole('group', { name: 'Plan from web · Add a footer' })).toBeVisible()
+
+    await transcript(page).getByRole('button', { name: 'Stop web · Add a footer' }).click()
+
+    await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Stopped')
+    await expect(pinned(page)).toHaveCount(0)
+    await expect(transcript(page).getByRole('group', { name: 'Card from web · Add a footer' })).toContainText('Stopped')
   })
 })
 
