@@ -2,8 +2,10 @@ import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import {
   MCP_PATH,
+  MCP_TASK_PROJECT_PARAM,
   MCP_TOKEN_HEADER,
   mcpTokenFor,
+  taskMcpTokenFor,
   SERVER_TOKEN_COOKIE,
   SERVER_TOKEN_ENV,
   SERVER_TOKEN_HEADER,
@@ -74,7 +76,11 @@ export async function proxy(request: NextRequest) {
 function hasMcpToken(request: NextRequest, serverToken: string) {
   if (request.nextUrl.pathname !== MCP_PATH) return false
   const provided = request.headers.get(MCP_TOKEN_HEADER)
-  return Boolean(provided && sameToken(provided, mcpTokenFor(serverToken)))
+  if (!provided) return false
+  if (sameToken(provided, mcpTokenFor(serverToken))) return true
+  // A task agent's token only opens the endpoint for its own project.
+  const project = request.nextUrl.searchParams.get(MCP_TASK_PROJECT_PARAM)
+  return Boolean(project && sameToken(provided, taskMcpTokenFor(serverToken, project)))
 }
 
 // Opening the main screen goes to setup until setup is complete.

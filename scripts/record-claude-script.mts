@@ -8,10 +8,11 @@
 //     --description "What the run shows" [--ask "Bash(touch:*)"] [--answer Blue] \
 //     "first prompt" ["second prompt" ...]
 //
-// With --director, the run gets the Director's instructions and a stand-in for
-// busyboy's MCP tools that knows the projects given by --project and answers
-// task_status with the text of --status-file; replays call the real tools (see
-// `mcpCalls` in src/server/runner/scripted-provider.ts).
+// With --director, the run gets the Director's fixed instructions, as a
+// Director with no companion voice and no saved memory, and a stand-in for
+// busyboy's MCP tools that knows the projects given by --project, answers
+// task_status with the text of --status-file, and remembers nothing. Replays
+// call the real tools (see `mcpCalls` in src/server/runner/scripted-provider.ts).
 import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -92,6 +93,9 @@ const claude = [...shellPath.split(delimiter), ...(process.env.PATH ?? '').split
   .find((candidate) => existsSync(candidate))
 if (!claude) throw new Error('The `claude` command was not found on the login-shell PATH.')
 
+const PROJECT_DESCRIPTION =
+  'The project name for memory about one project. Leave it out for memory that holds in every project. A task agent always writes to its own project.'
+
 let release: () => void = () => {}
 async function* input(): AsyncGenerator<SDKUserMessage> {
   for (const prompt of prompts) {
@@ -102,7 +106,11 @@ async function* input(): AsyncGenerator<SDKUserMessage> {
   }
 }
 
-/** A stand-in for busyboy's MCP endpoint with the same tools, for recording the Director. */
+/**
+ * A stand-in for busyboy's MCP endpoint, for recording the Director. Its tool
+ * definitions copy src/server/mcp-tools.ts and src/server/memory-tools.ts,
+ * which cannot load under plain Node; keep them in step.
+ */
 async function startToolStandIn(projects: string[], status: string) {
   const tools = [
     { name: 'list_projects', description: 'List the projects busyboy can create tasks in, with the folder of each.', inputSchema: { type: 'object', properties: {}, required: [] } },
@@ -130,9 +138,54 @@ async function startToolStandIn(projects: string[], status: string) {
         required: [],
       },
     },
+    {
+      name: 'memory_write',
+      description:
+        'Save to busyboy memory. kind "fact" (default) saves one lasting fact (a user preference, a convention, a rule like "ask before X") that every later agent sees in its prompt; writing the same title again, or passing the id, replaces that fact. kind "log" adds one line to today\'s work log, which is searched but not shown to agents.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', description: '"fact" or "log". Defaults to "fact".' },
+          title: { type: 'string', description: 'For a fact: a short title, a few words. Not used for a log line.' },
+          text: { type: 'string', description: 'The fact, or the log line, in one or two plain sentences.' },
+          project: { type: 'string', description: PROJECT_DESCRIPTION },
+          id: { type: 'string', description: 'For a fact: the id of the fact to replace, as memory_search or the prompt shows it.' },
+        },
+        required: ['text'],
+      },
+    },
+    {
+      name: 'memory_search',
+      description:
+        'Search busyboy memory, facts and the dated work logs, for lines containing every word of the query. Use it to recall past work or decisions. A task agent searches only global memory and its own project.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Words to look for.' },
+          project: { type: 'string', description: 'Search only global memory and this project. Leave it out to search everything. A task agent always searches its own project.' },
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'memory_forget',
+      description: 'Delete one fact from busyboy memory, for example when the user says it is wrong or no longer holds.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'The fact id (its file name without .md).' },
+          project: { type: 'string', description: PROJECT_DESCRIPTION },
+        },
+        required: ['id'],
+      },
+    },
   ]
   const call = (name: string, input: Record<string, string>) => {
     if (name === 'task_status') return status
+    if (name === 'memory_write' && input.kind === 'log') return 'Added to the work log.'
+    if (name === 'memory_write') return `Saved memory ${(input.title ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.`
+    if (name === 'memory_search') return 'Nothing in memory matches.'
+    if (name === 'memory_forget') return `There is no memory ${input.id} there.`
     if (name === 'list_projects') return JSON.stringify(projects.map((project) => ({ name: project, path: `/code/${project}` })))
     const id = `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-a1b2c3`
     return `Created task ${id} in ${input.project} on branch busyboy/${id}. Its agent is planning the work now.`

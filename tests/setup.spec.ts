@@ -263,6 +263,9 @@ test('opening the app after setup should skip setup', async ({ page, context, ba
   await page.getByRole('button', { name: 'Start chatting' }).click()
   await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
 
+  // Closed first, as quitting would. Each open main screen holds the app's event streams, and two
+  // screens fill Chromium's six connections per host, which stalls the next navigation.
+  await page.close()
   const reopened = await context.newPage()
   await reopened.goto('/')
   await expect(reopened).toHaveURL(/\/$/)

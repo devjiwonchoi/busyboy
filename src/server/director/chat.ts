@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { DIRECTOR_INSTRUCTIONS, directorTiming } from './context'
-import { companionInstructions, findCompanion } from '../companions'
-import { readSettingsAt } from '../config'
+import { directorTiming } from './context'
+import { directorPrompt } from './prompt'
 import { PROVIDERS } from '../providers'
 import {
   answerAgent,
@@ -60,6 +59,8 @@ type Director = {
   entries: ChatEntry[]
   state: DirectorState
   agentId?: string
+  /** The system prompt the running agent was started with. */
+  instructions?: string
   status: DirectorStatus
   /** The reply streaming in the turn in progress: `blocks` joined, as the user sees it. */
   draft: string
@@ -75,6 +76,8 @@ type Director = {
   lostSession?: boolean
   /** Sign-in checks in progress; their messages are queued but must wait for them. */
   probing: number
+  /** Counts turns, so a turn that awaited can tell whether it is still the current one. */
+  turn: number
   batchTimer?: NodeJS.Timeout
   idleTimer?: NodeJS.Timeout
   /** The tasks entry of the turn in progress, so one turn's tasks share one bubble. */
@@ -112,6 +115,7 @@ function getDirector(folder: string): Director {
     blocks: new Map(),
     pending: [],
     probing: 0,
+    turn: 0,
     charsSinceCompact: 0,
     writes: Promise.resolve(),
     listeners: new Set(),
@@ -234,16 +238,22 @@ function saveState(director: Director) {
 
 // ---- The Director agent ----------------------------------------------------------
 
-async function ensureAgent(director: Director, provider: ProviderId, mcp: McpServers) {
+async function ensureAgent(director: Director, provider: ProviderId, mcp: McpServers, instructions: string) {
   const existing = director.agentId ? getAgent(director.agentId) : undefined
-  if (existing && existing.provider === provider) {
+  if (existing && existing.provider === provider && director.instructions === instructions) {
     if (existing.status === 'stopped') {
       director.unconfirmedResume = Boolean(existing.sessionId)
       resumeAgent(existing.id)
     }
     return existing.id
   }
-  if (existing) {
+  if (existing && existing.provider === provider) {
+    // The prompt changed. It is fixed for a provider process, so the agent
+    // restarts on the same session with the new prompt. An unchanged prompt
+    // keeps the process and its prompt cache.
+    director.agentId = undefined
+    await stopAgent(existing.id).catch(() => {})
+  } else if (existing) {
     // The default provider changed: its conversation cannot carry over.
     director.agentId = undefined
     void stopAgent(existing.id)
@@ -253,13 +263,9 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
   await mkdir(cwd, { recursive: true })
   const resumeSessionId = director.state.provider === provider ? director.state.sessionId : undefined
   director.unconfirmedResume = Boolean(resumeSessionId)
-  // The companion's voice follows the fixed instructions. It is read when the
-  // agent starts and stays for that agent, so a companion changed later speaks
-  // once the agent starts again (after a server restart or a provider change).
-  const companion = findCompanion((await readSettingsAt(director.folder)).companion)
-  const instructions = `${DIRECTOR_INSTRUCTIONS}\n\n${companionInstructions(companion)}`
   const agent = startAgent({ provider, cwd, instructions, mcpServers: mcp, resumeSessionId })
   director.agentId = agent.id
+  director.instructions = instructions
   subscribeToAgent(agent.id, 0, (envelope) => onAgentEvent(director, agent.id, envelope))
   return agent.id
 }
@@ -376,6 +382,14 @@ function endTurn(director: Director) {
   else scheduleCompaction(director)
 }
 
+/**
+ * Read through a call so TypeScript does not keep `status` narrowed to
+ * 'idle' from before an await, when events may have changed it.
+ */
+function isAnswering(director: Director) {
+  return director.status === 'answering'
+}
+
 /** Sends the batched messages as one turn once the Director is free. */
 async function flush(director: Director) {
   director.batchTimer = undefined
@@ -386,8 +400,16 @@ async function flush(director: Director) {
   director.pending = []
   director.lastSent = text
   setStatus(director, 'answering')
+  const turn = ++director.turn
   try {
-    const agentId = await ensureAgent(director, target.provider, target.mcp)
+    // Read before every turn: memory or the companion may have changed since
+    // the agent started.
+    const instructions = await directorPrompt(director.folder)
+    // Stop was pressed while the prompt was read and stopped the idle agent:
+    // its stopped event already ended this turn, and a newer turn may have
+    // started. This one neither restarts the agent nor sends.
+    if (director.turn !== turn || !isAnswering(director)) return
+    const agentId = await ensureAgent(director, target.provider, target.mcp, instructions)
     // Stop was pressed while the agent was starting: the turn is not sent.
     if (director.stopRequested && getAgent(agentId)?.status !== 'stopped') {
       saveEntry(director, newEntry('note', { text: 'Stopped.', tone: 'info' }))
