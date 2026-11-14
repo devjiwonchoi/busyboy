@@ -1,0 +1,146 @@
+{
+  "provider": "claude",
+  "description": "Claude asks the user a multiple-choice question and uses the answer. Recorded with the answer Blue, so only Blue replays the recorded reply.",
+  "recordedAt": "2026-11-13T20:31:13.814Z",
+  "turns": [
+    {
+      "prompt": "Use the AskUserQuestion tool to ask me one question: which color I prefer, with exactly two options, Red and Blue. Then reply with exactly: You picked <the color>.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "9f4a7aa4-114c-4b88-a719-f72715277b67"
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_011Ch1ZYgG4CxBVAS8fgZzvq"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "id": "msg_011Ch1ZYgG4CxBVAS8fgZzvq",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "AskUserQuestion",
+                  "input": {
+                    "questions": [
+                      {
+                        "question": "Which color do you prefer?",
+                        "header": "Color",
+                        "options": [
+                          {
+                            "label": "Red",
+                            "description": "The color red"
+                          },
+                          {
+                            "label": "Blue",
+                            "description": "The color blue"
+                          }
+                        ],
+                        "multiSelect": false
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": {
+              "questions": [
+                {
+                  "question": "Which color do you prefer?",
+                  "header": "Color",
+                  "options": [
+                    {
+                      "label": "Red",
+                      "description": "The color red"
+                    },
+                    {
+                      "label": "Blue",
+                      "description": "The color blue"
+                    }
+                  ],
+                  "multiSelect": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_011Ch1ZYrhs26vwL5pjAqfFs"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": "You picked Blue."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "id": "msg_011Ch1ZYrhs26vwL5pjAqfFs",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "You picked Blue."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false,
+            "terminal_reason": "completed"
+          }
+        }
+      ]
+    }
+  ]
+}
