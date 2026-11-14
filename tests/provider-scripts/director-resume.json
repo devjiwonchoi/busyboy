@@ -1,0 +1,43 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: the Director remembers an earlier message only in the same provider session, so a restart journey can show the session continued.",
+  "turns": [
+    {
+      "prompt": "Remember the word lighthouse.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "itemId": "word-1",
+            "text": "Noted."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "What word did I ask you to remember?",
+      "context": "Remember the word lighthouse.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "itemId": "word-2",
+            "text": "Lighthouse."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "What word did I ask you to remember?",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "itemId": "word-3",
+            "text": "I do not know which word."
+          }
+        }
+      ]
+    }
+  ]
+}

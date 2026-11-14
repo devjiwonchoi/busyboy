@@ -1,0 +1,119 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: task agents that are resumed after BusyBoy restarts. The long turn runs until the server is killed; the resume messages only play in the session that started the task. The issues turn stands in for a provider that signed out while BusyBoy was closed: like Claude, it says so only in the first reply after resuming.",
+  "turns": [
+    {
+      "prompt": "Write the release notes for this week.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "itemId": "notes-1",
+            "text": "Starting on the release notes."
+          }
+        },
+        {
+          "delayMs": 60000
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "notes-2",
+            "text": "The release notes are written."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "BusyBoy restarted while you were working, so your last step may not have finished. Check what is already done in the worktree before you continue, so nothing runs twice, then carry on with the task.",
+      "context": "Write the release notes for this week.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "itemId": "notes-3",
+            "text": "Picked up where I left off: the release notes are written."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Delete the build folder.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "Bash",
+            "input": {
+              "command": "rm -rf build",
+              "description": "Delete the build folder"
+            },
+            "description": "Delete the build folder"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "build-1",
+            "text": "Deleted the build folder."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "BusyBoy restarted while you were waiting for the user, and your request to them was lost. Ask them again the same way, and do nothing else until they answer.",
+      "context": "Delete the build folder.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "Bash",
+            "input": {
+              "command": "rm -rf build",
+              "description": "Delete the build folder"
+            },
+            "description": "Delete the build folder"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "build-2",
+            "text": "Deleted the build folder."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Summarize the open issues.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "itemId": "issues-1",
+            "text": "Reading the open issues."
+          }
+        },
+        {
+          "delayMs": 60000
+        }
+      ]
+    },
+    {
+      "prompt": "BusyBoy restarted while you were working, so your last step may not have finished. Check what is already done in the worktree before you continue, so nothing runs twice, then carry on with the task.",
+      "context": "Summarize the open issues.",
+      "steps": [
+        {
+          "event": {
+            "type": "error",
+            "code": "signed-out",
+            "message": "Claude is not signed in. Run `claude` and use /login."
+          }
+        },
+        {
+          "event": {
+            "type": "turn-done"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -31,7 +31,12 @@ type AgentRecord = {
   interrupting: boolean
 }
 
-type Registry = { agents: Map<string, AgentRecord>; shutdownHooked?: boolean }
+type Registry = {
+  agents: Map<string, AgentRecord>
+  shutdownHooked?: boolean
+  /** Set once the server stops its agents, so a stop is not mistaken for the user's or a crash. */
+  stoppingAll?: boolean
+}
 
 // Kept on globalThis: a module-level Map is re-created when `next dev` reloads
 // this module, which would orphan running agent processes.
@@ -46,7 +51,22 @@ const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
  * quitting must stop each agent while the server still runs.
  */
 export async function stopAllAgents() {
+  registry.stoppingAll = true
   await Promise.allSettled([...registry.agents.values()].map((agent) => agent.session?.stop()))
+}
+
+/**
+ * Whether an error says the session to resume no longer exists. Codex reports
+ * the `lost-session` code; Claude (and the scripted provider) only says so in
+ * its message.
+ */
+export function isLostSessionError(event: Extract<AgentEvent, { type: 'error' }>) {
+  return event.code === 'lost-session' || /No conversation found with session ID/i.test(event.message)
+}
+
+/** Whether agents are stopping because the server is stopping; their tasks resume on the next start. */
+export function isStoppingAllAgents() {
+  return Boolean(registry.stoppingAll)
 }
 
 function hookShutdown() {
@@ -170,6 +190,8 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
 // ---- Operations ------------------------------------------------------------
 
 export function startAgent(input: StartAgentInput): AgentSnapshot {
+  // An agent started after the stop pass would outlive Quit with whatever it detached.
+  if (registry.stoppingAll) throw new Error('BusyBoy is quitting, so no agent can start.')
   hookShutdown()
   const agent: AgentRecord = {
     id: randomUUID(),

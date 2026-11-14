@@ -4,8 +4,9 @@
 // providers keep their real adapter (for example one pointed at a fake CLI).
 // See `ProviderScript` for the format.
 import { randomUUID } from 'node:crypto'
-import { readdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { alwaysAskApproval, matchAlwaysAsk } from './always-ask'
 import {
@@ -129,21 +130,46 @@ function findTurn(folder: string, provider: ProviderId, text: string, history: r
 
 // The user messages of each scripted session by session id, so resuming or
 // forking one carries its history like a real provider. On globalThis for the
-// same reason as the runner's registry.
+// same reason as the runner's registry, and saved under the system temp folder
+// so a session survives a server restart the way a provider's own session
+// files do (the restart journeys resume through it).
 const HISTORIES_KEY = Symbol.for('busyboy.scripted-histories')
 const globalStore = globalThis as typeof globalThis & { [HISTORIES_KEY]?: Map<string, string[]> }
 const histories = (globalStore[HISTORIES_KEY] ??= new Map())
+const HISTORY_FOLDER = join(tmpdir(), 'busyboy-scripted-sessions')
+
+/** Where a scripted session's history is saved; null for an id that is not a plain scripted one. */
+export function scriptedHistoryFile(sessionId: string) {
+  return /^scripted-[0-9a-f-]+$/.test(sessionId) ? join(HISTORY_FOLDER, `${sessionId}.json`) : null
+}
+
+function loadHistory(sessionId: string): string[] {
+  const cached = histories.get(sessionId)
+  if (cached) return cached
+  const file = scriptedHistoryFile(sessionId)
+  let history: string[] = []
+  try {
+    if (file) history = JSON.parse(readFileSync(file, 'utf8')) as string[]
+  } catch {
+    // Never saved: a new session.
+  }
+  histories.set(sessionId, history)
+  return history
+}
+
+function saveHistory(sessionId: string, history: string[]) {
+  const file = scriptedHistoryFile(sessionId)
+  if (!file || histories.get(sessionId) !== history) return
+  mkdirSync(HISTORY_FOLDER, { recursive: true })
+  writeFileSync(file, JSON.stringify(history))
+}
 
 /** Continues, branches, or starts a session's history, and returns its session id. */
 function openHistory({ resumeSessionId, forkSessionId }: ProviderStartOptions) {
-  if (resumeSessionId) {
-    const history = histories.get(resumeSessionId) ?? []
-    histories.set(resumeSessionId, history)
-    return { sessionId: resumeSessionId, history }
-  }
+  if (resumeSessionId) return { sessionId: resumeSessionId, history: loadHistory(resumeSessionId) }
   // A branch copies the original's history and, like a real fork that is not
   // kept, is never stored, so nothing reaches the original.
-  if (forkSessionId) return { sessionId: `scripted-${randomUUID()}`, history: [...(histories.get(forkSessionId) ?? [])] }
+  if (forkSessionId) return { sessionId: `scripted-${randomUUID()}`, history: [...loadHistory(forkSessionId)] }
   const sessionId = `scripted-${randomUUID()}`
   const history: string[] = []
   histories.set(sessionId, history)
@@ -196,6 +222,9 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   const { sessionId, history } = lost ? { sessionId: lost, history: [] } : openHistory(options)
   let turnDone = false
   const emit = (event: AgentEvent) => {
+    // Like a real provider, nothing follows `stopped`, even when a listener stops the
+    // session in the middle of a step and the script has steps left.
+    if (stopped && event.type !== 'stopped') return
     if (event.type === 'turn-done') turnDone = true
     options.emit(event)
   }
@@ -302,6 +331,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       try {
         const turn = findTurn(folder, provider, text, history)
         history.push(text)
+        saveHistory(sessionId, history)
         if (!turn) {
           emit({ type: 'error', code: 'no-script', message: `No ${provider} script has a turn for: ${text}` })
         } else {
@@ -331,8 +361,11 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   if (lost) {
     // Resuming fails the way it does for a session the provider no longer has.
     queueMicrotask(() => {
-      stopped = true
+      if (stopped) return
       emit({ type: 'error', code: 'provider', message: `No conversation found with session ID: ${lost}` })
+      // A listener may have stopped the session on the error already.
+      if (stopped) return
+      stopped = true
       emit({ type: 'stopped', finished: false })
     })
   } else queueMicrotask(() => emit({ type: 'session', sessionId }))

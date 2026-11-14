@@ -144,6 +144,7 @@ function taskRows(task: GraphTask): [string, React.ReactNode][] {
   const rows: [string, React.ReactNode][] = [['Task', task.title]]
   if (task.stage) rows.push(['Stage', task.stage])
   rows.push(['Status', STATUS_LABELS[task.status]])
+  if (task.note) rows.push(['Note', task.note])
   if (task.stateText) rows.push(['State', task.stateText])
   if (task.todos.length > 0) rows.push(['Todos', `${done} of ${task.todos.length} done`])
   if (passed + failed + pending > 0) rows.push(['Checks', `${passed} passed, ${failed} failed, ${pending} pending`])
