@@ -7,6 +7,14 @@ type PanelState = {
   panelOpen: boolean
   setPanelOpen: (open: boolean) => void
   togglePanel: () => void
+  /** The open sidebar tab's id; null until one is chosen, which shows the first tab. */
+  sidebarTab: string | null
+  setSidebarTab: (id: string) => void
+  /** The task a tray item or notification opened, as `project/task id`; the project graph shows its path. */
+  focusedTask: string | null
+  /** Counts focus requests, so opening the same task again scrolls back to it. */
+  focusRequest: number
+  setFocusedTask: (task: string | null) => void
 }
 
 const PanelStateContext = createContext<PanelState | null>(null)
@@ -28,11 +36,19 @@ const TaskSelectionContext = createContext<TaskSelection | null>(null)
 
 const sidebarStyle = { '--sidebar-width': '20rem' } as React.CSSProperties
 
-/** Owns the right sidebar (shadcn SidebarProvider) and the bottom panel state. */
+/** Owns the right sidebar (shadcn SidebarProvider, its open tab) and the bottom panel state. */
 export function ShellStateProvider({ children }: { children: React.ReactNode }) {
   const [panelOpen, setPanelOpen] = useState(false)
+  const [sidebarTab, setSidebarTab] = useState<string | null>(null)
+  const [focus, setFocus] = useState<{ task: string | null; request: number }>({ task: null, request: 0 })
+  const setFocusedTask = useCallback((task: string | null) => setFocus(({ request }) => ({ task, request: request + 1 })), [])
+  const focusedTask = focus.task
+  const focusRequest = focus.request
   const togglePanel = useCallback(() => setPanelOpen((open) => !open), [])
-  const panel = useMemo(() => ({ panelOpen, setPanelOpen, togglePanel }), [panelOpen, togglePanel])
+  const panel = useMemo(
+    () => ({ panelOpen, setPanelOpen, togglePanel, sidebarTab, setSidebarTab, focusedTask, focusRequest, setFocusedTask }),
+    [panelOpen, togglePanel, sidebarTab, focusedTask, focusRequest, setFocusedTask],
+  )
   const [selectedTask, setSelectedTask] = useState<SelectedTask | null>(null)
   const toggleTask = useCallback(
     (task: SelectedTask) => setSelectedTask((selected) => (selected?.id === task.id ? null : task)),
