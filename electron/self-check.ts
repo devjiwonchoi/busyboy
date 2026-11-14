@@ -1,7 +1,8 @@
 import { lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { app, type BrowserWindow } from 'electron'
+import { app, Notification, type BrowserWindow } from 'electron'
+import type { Background } from './background'
 import { SERVER_TOKEN_HEADER } from '../src/lib/server-token'
 import type { ServerHandle } from './server-process'
 import type { ShellPathResult } from './shell-env'
@@ -26,6 +27,7 @@ function stripAnsi(text: string) {
 }
 
 const PROCESS_EXIT_TIMEOUT_MS = 6_000
+const ATTENTION_TIMEOUT_MS = 10_000
 
 type StartedTerminal = { id: string; cwd: string; shell: string; pid: number }
 
@@ -243,6 +245,22 @@ export function createSelfCheck() {
       result.details.page = page
       result.checks.pageLoaded = page.title === app.getName()
       result.checks.shellRendered = Boolean(page.shell && page.chatArea && page.sidebar && page.bottomPanel)
+    },
+    /**
+     * The tray follows the server's attention stream and shows its menu, and
+     * closing the window hides it while the server keeps running.
+     */
+    async recordBackground(background: Background, window: BrowserWindow, server: ServerHandle) {
+      const deadline = Date.now() + ATTENTION_TIMEOUT_MS
+      while (background.updates() === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+      result.checks.attentionStreamConnected = background.updates() > 0
+      const labels = background.tray.menuLabels()
+      result.details.trayMenu = labels
+      result.checks.trayMenuShown = ['Nothing needs you', 'Open BusyBoy', 'Quit BusyBoy'].every((label) => labels.includes(label))
+      result.details.notificationsSupported = Notification.isSupported()
+      window.close()
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      result.checks.closeKeepsRunning = !window.isDestroyed() && !window.isVisible() && server.isRunning()
     },
     /** Call before the server starts; `recordServerFolderUnchanged` compares after it stops. */
     snapshotServerFolder(dir: string) {
