@@ -14,12 +14,18 @@
 // `thread/fork` answers like `thread/start`, and an `echoThread` step writes
 // what the branch was started with, so journeys can check a side question's
 // thread. `config/read` lists no MCP servers.
+// Hooks: `thread/start` with `ephemeral` answers with a probe thread whose
+// PreToolUse hooks `hooks/list` reports, with a fake hash of each command. A
+// later thread runs only the hooks its config trusts with that hash in
+// `hooks.state.<key>.trusted_hash`, as Codex does. A `preToolUse` step runs
+// them with the tool call on stdin and plays its `then.deny` steps when one
+// denies, else `then.allow`.
 // The prompt in START_CHILDREN_PROMPT starts two long-running children (one in
 // this process group, one detached into a session of its own, as Codex runs
 // commands), writes their pids to $FAKE_CODEX_PID_FILE, and from then on
 // ignores SIGTERM and the end of its input, so only a forced kill ends it. No model is called.
 import { spawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -43,6 +49,38 @@ let nextRequestId = 0
 const waitingReplies = new Map()
 /** The running turn: its id, a way to end it early, and a waiting question to resolve. */
 let current
+/** PreToolUse hooks of probe threads, by thread id. */
+const probeHooks = new Map()
+/** The PreToolUse hooks of the thread as `hooks/list` reports them, and its folder. */
+let threadHooks = []
+let threadCwd = process.cwd()
+
+/** Each PreToolUse hook in a thread config, with the key and hash Codex lists it under. */
+function listHooks(hooks) {
+  return (hooks?.PreToolUse ?? []).flatMap((group, groupIndex) =>
+    group.hooks.map((handler, handlerIndex) => ({
+      key: `/<session-flags>/config.toml:pre_tool_use:${groupIndex}:${handlerIndex}`,
+      command: handler.command,
+      source: 'sessionFlags',
+      currentHash: `sha256:${createHash('sha256').update(handler.command).digest('hex')}`,
+      trustStatus: 'untrusted',
+    })),
+  )
+}
+
+/** Runs the trusted hooks for a tool call; true when one of them denies it. */
+async function hooksDeny(call) {
+  const trusted = threadHooks.filter(({ trustStatus }) => trustStatus === 'trusted').map(({ command }) => command)
+  for (const command of trusted) {
+    const child = spawn(command, { shell: true, cwd: threadCwd, stdio: ['pipe', 'pipe', 'inherit'] })
+    let output = ''
+    child.stdout.on('data', (chunk) => (output += chunk))
+    child.stdin.end(JSON.stringify({ session_id: threadId, cwd: threadCwd, hook_event_name: 'PreToolUse', ...call }))
+    await new Promise((resolve) => child.on('close', resolve))
+    if (output.trim() && JSON.parse(output).hookSpecificOutput?.permissionDecision === 'deny') return true
+  }
+  return false
+}
 
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`)
 const notify = (method, params) => send({ method, params: { threadId, ...(current ? { turnId: current.id } : {}), ...params } })
@@ -92,8 +130,14 @@ function say(text) {
 
 async function playTurn(turn) {
   const own = current
-  for (const { raw, echoReply, delayMs, echoThread } of turn.steps) {
+  for (const { raw, echoReply, delayMs, echoThread, preToolUse, then } of turn.steps) {
     if (own.ended) return
+    if (preToolUse) {
+      const branch = then?.[(await hooksDeny(preToolUse)) ? 'deny' : 'allow']
+      if (own.ended) return
+      if (branch) return playTurn({ steps: branch })
+      continue
+    }
     if (echoThread) {
       say(fork ? `Branched from ${fork.from}. Shell tool: ${fork.shell}. Approvals: ${fork.approvals}. Sandbox: ${fork.sandbox}.` : 'Not a branch.')
       continue
@@ -168,7 +212,22 @@ function handle(message) {
       }
       send({ id, result: { thread: { id: threadId } } })
       return notify('thread/started', { thread: { id: threadId } })
+    case 'hooks/list': {
+      const hooks = probeHooks.get(params.threadId) ?? (params.threadId === threadId ? threadHooks : [])
+      return send({ id, result: { data: [{ cwd: threadCwd, hooks, warnings: [], errors: [] }] } })
+    }
     case 'thread/start':
+      if (params.ephemeral) {
+        const probe = randomUUID()
+        probeHooks.set(probe, listHooks(params.config?.hooks))
+        return send({ id, result: { thread: { id: probe } } })
+      }
+      threadCwd = params.cwd ?? threadCwd
+      threadHooks = listHooks(params.config?.hooks).map((hook) => ({
+        ...hook,
+        trustStatus: params.config?.hooks?.state?.[hook.key]?.trusted_hash === hook.currentHash ? 'trusted' : 'untrusted',
+      }))
+    // falls through
     case 'thread/resume':
       if (method === 'thread/resume' && params.threadId.startsWith('missing-')) {
         return send({ id, error: { code: -32600, message: `no rollout found for thread id ${params.threadId}` } })

@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import {
   query,
   type CanUseTool,
+  type HookCallback,
   type McpServerConfig,
   type Options,
   type PermissionResult,
@@ -9,6 +11,7 @@ import {
   type Query,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
+import { alwaysAskApproval, matchAlwaysAsk } from './always-ask'
 import { ClaudeEventMapper, claudePermissionToEvent, type ClaudeRawMessage } from './claude-events'
 import { spawnClaudeProcess, type ClaudeProcess } from './claude-process'
 import type {
@@ -25,6 +28,8 @@ import { agentEnvironment, findExecutable } from './find-executable'
 /** Overrides the `claude` executable that is otherwise looked up on PATH. */
 export const CLAUDE_PATH_ENV = 'BUSYBOY_CLAUDE_PATH'
 const SIGN_IN_TIMEOUT_MS = 20_000
+/** How long an always-ask approval may wait for the user: a day, so a waiting card never times out into running the action. */
+const ALWAYS_ASK_TIMEOUT_S = 24 * 60 * 60
 
 /** Streaming input for `query()`: user messages are pushed as the user sends them. */
 class MessageQueue implements AsyncIterable<SDKUserMessage> {
@@ -151,6 +156,52 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   let cli: ClaudeProcess | undefined
   let inTurn = false
   let stopRequested = false
+  /** Always-ask approvals waiting for the user, by request id. Null means it was dropped (an interrupt). */
+  const asks = new Map<string, (answer: AgentAnswer | null) => void>()
+
+  /**
+   * Checks each tool call against the always-ask list before it runs. It is a
+   * PreToolUse hook rather than part of canUseTool because Auto mode calls
+   * canUseTool only for calls it would ask about itself, and it does not ask
+   * about some irreversible ones; a hook runs for every call.
+   */
+  const alwaysAsk: HookCallback = async (hookInput, toolUseID, { signal }) => {
+    if (hookInput.hook_event_name !== 'PreToolUse') {
+      return {}
+    }
+    const { tool_name: toolName, tool_input: toolInput } = hookInput
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input: toolInput, folder: options.cwd, privateFolder: options.privateFolder })
+    if (!rule) {
+      return {}
+    }
+
+    const requestId = `always-ask-${toolUseID ?? randomUUID()}`
+    const answer = await new Promise<AgentAnswer | null>((resolve) => {
+      const onAbort = () => {
+        asks.delete(requestId)
+        resolve(null)
+        emit({ type: 'answered', requestId })
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      asks.set(requestId, (value) => {
+        signal.removeEventListener('abort', onAbort)
+        asks.delete(requestId)
+        resolve(value)
+      })
+      mapper.flush()
+      emit(alwaysAskApproval({ requestId, toolName, input: toolInput, rule }))
+    })
+    const allowed = answer?.kind === 'approval' && answer.allow
+    const declined = (answer?.kind === 'approval' && answer.message) || 'The user declined this action.'
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        // Allowed by the user, so Auto mode does not ask a second time.
+        permissionDecision: allowed ? 'allow' : 'deny',
+        permissionDecisionReason: allowed ? 'The user approved this action.' : declined,
+      },
+    }
+  }
 
   const canUseTool: CanUseTool = (
     toolName,
@@ -199,7 +250,12 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   const registerMcpServers = async (run: Query) => {
     try {
       if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
-        await run.initializationResult()
+        try {
+          await run.initializationResult()
+        } catch {
+          // The session itself failed to start; run() reports why.
+          return
+        }
         const result = await run.setMcpServers(toSdkMcpServers(options.mcpServers))
         // Errors can echo headers or tokens; report only the server names.
         const failed = Object.keys(result.errors)
@@ -241,6 +297,11 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         allowDangerouslySkipPermissions: options.permissionMode === 'full-access',
         systemPrompt: { type: 'preset', preset: 'claude_code', append: options.instructions },
         canUseTool,
+        // `block`: a hook that fails or times out stops the tool call instead of letting it run unasked.
+        hooks:
+          (options.alwaysAsk?.length || options.privateFolder) && !options.noTools
+            ? { PreToolUse: [{ hooks: [alwaysAsk], timeout: ALWAYS_ASK_TIMEOUT_S, onFailure: 'block' }] }
+            : undefined,
         // The servers are added after start (registerMcpServers), but the rule
         // can name them now: every tool of a trusted server runs without a prompt.
         allowedTools: Object.entries(options.mcpServers ?? {})
@@ -288,6 +349,11 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         request.resolve({ behavior: 'deny', message: 'The user interrupted.', interrupt: true })
         emit({ type: 'answered', requestId })
       }
+      // A dropped always-ask approval denies its tool call; the interrupt below then ends the turn.
+      for (const [requestId, resolve] of [...asks.entries()]) {
+        resolve(null)
+        emit({ type: 'answered', requestId })
+      }
       if (open.length > 0) return
       if (!input.isHeld) {
         await current?.interrupt()
@@ -306,6 +372,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       input.push('/compact')
     },
     answer(requestId, answer) {
+      asks.get(requestId)?.(answer)
       const request = requests.get(requestId)
       request?.resolve(permissionResult(answer, request))
     },
@@ -318,6 +385,21 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       abort.abort()
     },
   }
+}
+
+/**
+ * `claude update` only updates the native install. A Homebrew cask can lag
+ * behind the release the SDK needs, so its users get the native build instead,
+ * which `claude install` puts ahead of brew on a login shell's PATH.
+ */
+function updateCommandFor(executable: string) {
+  let resolved = executable
+  try {
+    resolved = realpathSync(executable)
+  } catch {
+    // Keep the path as found on PATH.
+  }
+  return resolved.includes('/Caskroom/claude-code/') ? 'claude install latest' : 'claude update'
 }
 
 /**
@@ -342,7 +424,22 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
       prompt: idle,
       options: { pathToClaudeCodeExecutable: executable, env: agentEnvironment(), abortController: abort },
     })
-    const { account } = await probe.initializationResult()
+    const { account, hook_on_failure_supported, claude_code_version } = await probe.initializationResult()
+    // Task agents and the Director run with a PreToolUse hook set to `onFailure: 'block'`
+    // so an always-ask check that fails stops the action. A CLI that predates the option
+    // would let it run, so the SDK refuses every session on it: report that here instead
+    // of as signed in, or Setup passes and every turn fails. The check holds even when
+    // the always-ask list is empty: the list is on by default and can change between
+    // turns, and an agent that starts working and then stops on the next edit is worse
+    // than Setup asking for an update once.
+    if (hook_on_failure_supported !== true) {
+      const version = claude_code_version ? ` ${claude_code_version}` : ''
+      return {
+        state: 'outdated',
+        detail: `Claude Code${version} is too old to keep the always-ask list. Update it the way you installed it, then choose Check again.`,
+        updateCommand: updateCommandFor(executable),
+      }
+    }
     if (account.apiProvider && account.apiProvider !== 'firstParty') return { state: 'signed-in', account: account.apiProvider }
     const hasKey = Boolean(account.apiKeySource) && account.apiKeySource !== 'none'
     // Require a positive signal: a missing tokenSource does not prove a sign-in.

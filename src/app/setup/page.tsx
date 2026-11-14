@@ -3,6 +3,7 @@ import { connection } from 'next/server'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { AddProjectForm } from '@/components/setup/add-project-form'
+import { AlwaysAskForm } from '@/components/setup/always-ask-form'
 import { CompanionStep } from '@/components/setup/companion-step'
 import { CopyCommand } from '@/components/setup/copy-command'
 import { FolderPicker } from '@/components/setup/folder-picker'
@@ -15,11 +16,18 @@ import { Field, FieldContent, FieldLabel, FieldTitle } from '@/components/ui/fie
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
+import { alwaysAskRules } from '@/server/always-ask-list'
 import { COMPANIONS, companionImageUrl, currentCompanion } from '@/server/companions'
 import { isSetupComplete, readSettings } from '@/server/config'
 import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsState } from '@/server/providers'
 import type { SignInStatus } from '@/server/runner/contract'
-import { continueFromAgentsAction, recheckProvidersAction, removeProjectAction, startChattingAction } from './actions'
+import {
+  continueFromAgentsAction,
+  recheckProvidersAction,
+  removeProjectAction,
+  restoreAlwaysAskAction,
+  startChattingAction,
+} from './actions'
 import { neighborSteps, parseStep, stepHref, STEPS, type StepId } from './steps'
 
 export const metadata: Metadata = { title: 'Setup · BusyBoy' }
@@ -69,6 +77,11 @@ const HEADINGS: Record<StepId, { title: string; description: string }> = {
     title: 'Add skills',
     description: 'Agents work best with the jwn plugin from devjiwonchoi/skills. You can skip this and add it later.',
   },
+  approvals: {
+    title: 'Always ask before',
+    description:
+      'Agents do reversible work on their own and tell you what they did. Before any action on this list a task agent asks you first, every time, even in Auto mode, and your director never runs one: it hands that work to a task.',
+  },
   start: {
     title: 'Add projects',
     description:
@@ -96,6 +109,7 @@ async function CurrentStep({ searchParams }: Pick<PageProps<'/setup'>, 'searchPa
       {step === 'companion' && <CompanionPage />}
       {step === 'agents' && <AgentsPage />}
       {step === 'skills' && <SkillsPage />}
+      {step === 'approvals' && <ApprovalsPage />}
       {step === 'start' && <StartPage />}
     </>
   )
@@ -114,6 +128,7 @@ const STATUS_TEXT: Record<SignInStatus['state'], string> = {
   'signed-in': 'Signed in',
   'signed-out': 'Signed out',
   'not-installed': 'Not installed',
+  outdated: 'Update needed',
   unknown: 'Could not check',
 }
 
@@ -137,6 +152,12 @@ async function AgentsPage() {
                 {/* Setup is its own screen outside the app shell, so the terminal panel isn't here; the user copies the command. */}
                 <ItemDescription className="basis-full">Run this in a terminal, then choose Check again.</ItemDescription>
                 <CopyCommand label={`${name} login command`} command={state.loginCommand} />
+              </>
+            )}
+            {state.state === 'outdated' && (
+              <>
+                <ItemDescription className="basis-full line-clamp-none">{state.detail}</ItemDescription>
+                <CopyCommand label={`${name} update command`} command={state.updateCommand} />
               </>
             )}
             {(state.state === 'not-installed' || state.state === 'unknown') && (
@@ -225,6 +246,34 @@ async function SkillsPage() {
         <Link href={nextHref} className={buttonVariants()}>
           Continue
         </Link>
+      </StepFooter>
+    </>
+  )
+}
+
+// ---- Approvals --------------------------------------------------------------
+
+const APPROVALS_FORM = 'approvals-form'
+
+async function ApprovalsPage() {
+  const { previous, next } = neighborSteps('approvals')
+  const rules = await alwaysAskRules()
+  return (
+    <>
+      {/* Keyed by the list, so Restore defaults shows the restored text in the box. */}
+      <AlwaysAskForm key={rules.join('\n')} id={APPROVALS_FORM} rules={rules} />
+      <StepFooter previous={previous}>
+        <form action={restoreAlwaysAskAction}>
+          <Button type="submit" variant="ghost">
+            Restore defaults
+          </Button>
+        </form>
+        <Link href={stepHref(next!)} className={buttonVariants({ variant: 'ghost' })}>
+          Skip
+        </Link>
+        <Button type="submit" form={APPROVALS_FORM}>
+          Continue
+        </Button>
       </StepFooter>
     </>
   )

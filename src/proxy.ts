@@ -1,6 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import {
+  ALWAYS_ASK_PATH,
+  alwaysAskTokenFor,
   MCP_PATH,
   MCP_TASK_PROJECT_PARAM,
   MCP_TOKEN_HEADER,
@@ -72,8 +74,15 @@ export async function proxy(request: NextRequest) {
   return (await setupRedirect(request)) ?? NextResponse.next()
 }
 
-/** Agents reach only the MCP endpoint, with a token derived from the server token. */
+/**
+ * Agents reach only the MCP endpoint, and Codex's always-ask hook only its own
+ * endpoint, each with its own token derived from the server token.
+ */
 function hasMcpToken(request: NextRequest, serverToken: string) {
+  if (request.nextUrl.pathname === ALWAYS_ASK_PATH) {
+    const provided = request.headers.get(MCP_TOKEN_HEADER)
+    return Boolean(provided && sameToken(provided, alwaysAskTokenFor(serverToken)))
+  }
   if (request.nextUrl.pathname !== MCP_PATH) return false
   const provided = request.headers.get(MCP_TOKEN_HEADER)
   if (!provided) return false

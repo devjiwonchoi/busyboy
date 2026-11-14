@@ -1,0 +1,239 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: task agents that run actions on the always-ask list, and one that only deletes inside its own folder.",
+  "turns": [
+    {
+      "prompt": "Force push the branch to origin.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "git push --force origin HEAD"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "push-allow",
+                  "text": "Force pushed the branch."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "push-deny",
+                  "text": "I did not force push."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Run the release script.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "./release.sh --publish"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "release-allow",
+                  "text": "Released."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "release-deny",
+                  "text": "I did not release."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Remove the build folder.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "rm -rf dist"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "clean-allow",
+                  "text": "Removed dist."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "clean-deny",
+                  "text": "I could not remove dist."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Force push the main branch yourself.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "git push --force origin main"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-push-allow",
+                  "text": "Force pushed main."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-push-deny",
+                  "text": "I could not run that, so a task will have to do it."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Clear the task list file yourself.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Write",
+            "input": {
+              "file_path": "../task-list.json",
+              "content": "[]\n"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-task-list-allow",
+                  "text": "Cleared the task list."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-task-list-deny",
+                  "text": "BusyBoy kept me out of its task list."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Show the settings file with a command.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "cat ../app-settings.json"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-settings-allow",
+                  "text": "Here are the settings."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-settings-deny",
+                  "text": "BusyBoy kept me out of its settings."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Keep a note in your own folder.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Write",
+            "input": {
+              "file_path": "notes.md",
+              "content": "Remember the release.\n"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-note-allow",
+                  "text": "Saved the note."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "director-note-deny",
+                  "text": "I could not save the note."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

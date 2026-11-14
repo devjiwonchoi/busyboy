@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
+import { alwaysAskApproval, matchAlwaysAsk } from './always-ask'
 import {
   ClaudeEventMapper,
   claudePermissionToEvent,
@@ -54,6 +55,7 @@ export type ScriptStep =
   | { echoInstructions: true }
   | { writeInstructions: string }
   | { writeFile: { path: string; text: string } }
+  | { toolCall: { name: string; input: Record<string, unknown> }; then?: Record<string, ScriptStep[]> }
 
 export type ScriptTurn = {
   /** The user message that plays this turn, matched exactly after trimming. */
@@ -248,6 +250,16 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       mapper?.flush()
       if ('writeInstructions' in step) {
         await cancellable(writeFile(join(options.cwd, step.writeInstructions), options.instructions ?? ''))
+        continue
+      }
+      if ('toolCall' in step) {
+        const { name, input } = step.toolCall
+        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, privateFolder: options.privateFolder })
+        const key = rule
+          ? answerKey(await pause(alwaysAskApproval({ requestId: `script-${++requestCount}`, toolName: name, input, rule })))
+          : 'allow'
+        const branch = step.then?.[key]
+        if (branch) return playSteps(branch)
         continue
       }
       if ('writeFile' in step) {

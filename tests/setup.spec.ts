@@ -39,12 +39,19 @@ async function chooseCompanion(page: Page, name: string) {
   await expect(page.getByRole('heading', { name: 'Sign in to an agent' })).toBeVisible()
 }
 
-/** From the companion step to the start step, skipping skills. */
+/** Skips the always-ask step with the list as it is. */
+async function skipApprovals(page: Page) {
+  await expect(page.getByRole('heading', { name: 'Always ask before' })).toBeVisible()
+  await page.getByRole('link', { name: 'Skip' }).click()
+}
+
+/** From the companion step to the start step, skipping skills and approvals. */
 async function goToStart(page: Page, companion = 'Nori') {
   await page.goto('/setup')
   await chooseCompanion(page, companion)
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('link', { name: 'Skip' }).click()
+  await skipApprovals(page)
   await expect(page.getByRole('heading', { name: 'Add projects' })).toBeVisible()
 }
 
@@ -73,6 +80,7 @@ test('finishing setup should open the main screen', async ({ page, context, base
 
   await expect(page.getByRole('heading', { name: 'Add skills' })).toBeVisible()
   await page.getByRole('link', { name: 'Continue' }).click()
+  await skipApprovals(page)
 
   await typeFolder(page, repository)
   await expect(page.getByRole('list', { name: 'Projects' })).toContainText('shop')
@@ -94,6 +102,7 @@ test("choosing a companion should carry it into the Director's greeting", async 
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('link', { name: 'Skip' }).click()
+  await skipApprovals(page)
   await page.getByRole('button', { name: 'Start without a project' }).click()
 
   const chat = page.getByRole('region', { name: 'Chat' })
@@ -124,6 +133,18 @@ test('continuing without a signed-in agent should not be possible', async ({ pag
 
   await expect(page.getByLabel('Claude Code login command')).toHaveValue('claude /login')
   await expect(page.getByText('Sign in to an agent to continue.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled()
+})
+
+test('an outdated Claude Code should ask for an update before continuing', async ({ page, context, baseURL }) => {
+  track(await useTestHome(context, baseURL!, { claude: 'outdated', codex: 'signed-out' }))
+
+  await page.goto('/setup')
+  await chooseCompanion(page, 'Pip')
+
+  const agents = page.getByRole('list', { name: 'Agents' })
+  await expect(agents.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Update needed')
+  await expect(page.getByLabel('Claude Code update command')).toHaveValue('claude update')
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled()
 })
 
@@ -233,6 +254,7 @@ test('setting a companion picture should show it in the greeting', async ({ page
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('link', { name: 'Skip' }).click()
+  await skipApprovals(page)
   await page.getByRole('button', { name: 'Start without a project' }).click()
 
   const chat = page.getByRole('region', { name: 'Chat' })
@@ -273,7 +295,7 @@ test('opening the app after setup should skip setup', async ({ page, context, ba
 
   await reopened.getByRole('link', { name: 'Setup' }).click()
   await expect(reopened).toHaveURL(/\/setup$/)
-  await reopened.getByRole('link', { name: '4 Start' }).click()
+  await reopened.getByRole('link', { name: '5 Start' }).click()
   await expect(reopened.getByRole('list', { name: 'Projects' })).toContainText('api')
 })
 
@@ -308,6 +330,7 @@ test('opening the app with a corrupt settings file should show setup again', asy
   await chooseCompanion(page, 'Pip')
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('link', { name: 'Skip' }).click()
+  await skipApprovals(page)
   await page.getByRole('button', { name: 'Start without a project' }).click()
   await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
 })
