@@ -178,7 +178,8 @@ export async function readProjectGraph(folder: string): Promise<ProjectGraph> {
     return { projects: [], error: 'The task list could not be read: an entry is missing its id, project, or worktree.' }
   }
   const projects = new Map<string, Awaited<ReturnType<typeof readTask>>[]>(names.map((name) => [name, []]))
-  for (const task of await Promise.all(tasks.map(readTask))) {
+  // A subagent runs in the project's own checkout and writes no records; any `.jwn` there is the user's.
+  for (const task of await Promise.all(tasks.filter(({ kind }) => kind !== 'subagent').map(readTask))) {
     // A task whose project was removed from settings still shows under its own name.
     let list = projects.get(task.project)
     if (!list) projects.set(task.project, (list = []))

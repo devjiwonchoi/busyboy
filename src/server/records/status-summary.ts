@@ -74,3 +74,28 @@ export function summarizeGraph(graph: ProjectGraph, project?: string, lastReplyO
   const lines = projects.map(({ name, tasks }) => (tasks.length === 0 ? `${name}: no tasks` : [`${name}:`, ...tasks.map((task) => taskLine(task, lastReplyOf(task)))].join('\n')))
   return [RECORD_TEXT_NOTICE, ...lines].join('\n')
 }
+
+const SUBAGENT_STATUS: Record<'running' | 'needs-you' | 'idle' | 'stopped', string> = {
+  running: 'running',
+  'needs-you': 'needs the user',
+  idle: 'finished',
+  stopped: 'stopped',
+}
+
+/**
+ * Subagents write no records, so they are not in the graph: one line each with its status and
+ * reply, quoted like any agent text. Empty when there are none.
+ */
+export function summarizeSubagents(
+  subagents: { id: string; project: string; title: string; status: keyof typeof SUBAGENT_STATUS; reply: string | null }[],
+  project?: string,
+) {
+  const wanted = project?.trim().replace(/^@/, '').toLowerCase()
+  const shown = wanted ? subagents.filter((subagent) => subagent.project.toLowerCase() === wanted) : subagents
+  if (shown.length === 0) return ''
+  const lines = shown.map(({ id, project, title, status, reply }) => {
+    const parts = [SUBAGENT_STATUS[status], ...(reply ? [`last reply ${quote(reply, MAX_REPLY)}`] : [])]
+    return `- ${plain(id)} ${quote(title)} in ${plain(project)}: ${parts.join('; ')}`
+  })
+  return ['Subagents:', ...lines].join('\n')
+}

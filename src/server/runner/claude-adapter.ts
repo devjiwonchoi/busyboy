@@ -171,7 +171,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       return {}
     }
     const { tool_name: toolName, tool_input: toolInput } = hookInput
-    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input: toolInput, folder: options.cwd, privateFolder: options.privateFolder })
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input: toolInput, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
     if (!rule) {
       return {}
     }
@@ -306,7 +306,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         canUseTool,
         // `block`: a hook that fails or times out stops the tool call instead of letting it run unasked.
         hooks:
-          (options.alwaysAsk?.length || options.privateFolder) && !options.noTools
+          (options.alwaysAsk?.length || options.privateFolder || options.noFileEdits) && !options.noTools
             ? { PreToolUse: [{ hooks: [alwaysAsk], timeout: ALWAYS_ASK_TIMEOUT_S, onFailure: 'block' }] }
             : undefined,
         // The servers are added after start (registerMcpServers), but the rule

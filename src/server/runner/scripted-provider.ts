@@ -284,7 +284,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       }
       if ('toolCall' in step) {
         const { name, input } = step.toolCall
-        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, privateFolder: options.privateFolder })
+        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
         let key = 'allow'
         const call = { toolName: name, input, rule: rule ?? '', cwd: options.cwd }
         if (rule && !allowedCalls.has(call)) {
