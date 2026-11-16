@@ -43,6 +43,8 @@ export type StartAgentInput = {
    * always-ask list (see BUSYBOY_FILES_RULE in `always-ask.ts`).
    */
   privateFolder?: string
+  /** Ask before anything that could change the folder (see SUBAGENT_EDIT_RULE in `always-ask.ts`). */
+  noFileEdits?: boolean
 }
 
 export type McpServer = (
@@ -143,7 +145,7 @@ export type SignInStatus =
 // ---- Provider side -------------------------------------------------------
 
 export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permissionMode'>> &
-  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder'> & {
+  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder' | 'noFileEdits'> & {
     /** Every event the provider produces. Call it in order; the runner stamps seq numbers. */
     emit: (event: AgentEvent) => void
   }

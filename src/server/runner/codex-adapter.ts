@@ -239,11 +239,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   const asks = new Map<string, (answer: AgentAnswer | null) => void>()
   const allowedCalls = createAllowedCalls()
   const unregisterGates: (() => void)[] = []
-  const alwaysAsk = !options.noTools && ((options.alwaysAsk?.length ?? 0) > 0 || Boolean(options.privateFolder))
+  const alwaysAsk = !options.noTools && ((options.alwaysAsk?.length ?? 0) > 0 || Boolean(options.privateFolder) || Boolean(options.noFileEdits))
 
   /** Answers this thread's always-ask hook: allowed at once unless a rule matches, then the user decides. */
   const gate = async ({ toolName, input, cwd, signal }: { toolName: string; input: unknown; cwd?: string; signal: AbortSignal }): Promise<HookDecision> => {
-    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input, folder: options.cwd, privateFolder: options.privateFolder })
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
     // The folder the hook reports the call runs in; a folder named in the input is part of the key too.
     const call = { toolName, input, rule: rule ?? '', cwd: cwd || options.cwd }
     if (!rule || allowedCalls.has(call)) {
@@ -406,7 +406,9 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     ready = (async () => {
       await current.initialize()
       // Until Codex names the thread, a hook call is matched to this session by its working folder.
-      if (alwaysAsk) {
+      // Not for a subagent: its folder is the project checkout, where other agents work too, and
+      // their hook calls must not reach this session's cards. It is matched by its thread only.
+      if (alwaysAsk && !options.noFileEdits) {
         unregisterGates.push(registerGate({ key: folderKey(options.cwd), gate }))
       }
       const hook = alwaysAsk

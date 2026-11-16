@@ -13,6 +13,7 @@ import {
   getAgent,
   isLostSessionError,
   isStoppingAllAgents,
+  lastAgentReply,
   sendMessage,
   startAgent,
   stopAgent,
@@ -26,6 +27,10 @@ import type { AgentEvent, AgentStatus, McpServer, ProviderId } from './runner/co
 // git worktree. The list lives in TASKS_FILE; worktrees live under
 // WORKTREES_FOLDER. Both names are new, so the legacy app's `worktrees/` and
 // other files in the data folder are never touched.
+//
+// A subagent is a task for one short action (merge a PR, check CI, run a command). It runs in
+// the project's own checkout with no worktree or branch, asks before anything that could change it, plans nothing,
+// and its reply shows in the chat. Anything that changes files is a task.
 
 export const TASKS_FILE = 'task-list.json'
 export const WORKTREES_FOLDER = 'task-worktrees'
@@ -39,9 +44,14 @@ export type TaskRecord = {
   agentId: string
   /** Set once the provider reports it; used to resume the agent later. */
   sessionId: string | null
+  /** The task's worktree; a subagent's is the project folder itself. */
   worktree: string
+  /** Empty for a subagent. */
   branch: string
   createdAt: string
+  kind?: 'subagent'
+  /** A subagent's last reply, saved when its turn ends: its result, kept after its process ends. */
+  reply?: string | null
   /**
    * The agent's last status, kept across restarts: a task that was running or
    * waiting when the server stopped or died resumes on the next start. A stop
@@ -55,7 +65,13 @@ export type TaskRecord = {
 /** `idle`: the agent finished its turn and waits for a message. `stopped`: its process is gone. */
 export type TaskStatus = 'running' | 'needs-you' | 'idle' | 'stopped'
 
-export type TaskView = Pick<TaskRecord, 'id' | 'project' | 'title' | 'branch' | 'createdAt'> & { status: TaskStatus; note: string | null }
+export type TaskView = Pick<TaskRecord, 'id' | 'project' | 'title' | 'branch' | 'createdAt'> & {
+  status: TaskStatus
+  note: string | null
+  subagent: boolean
+  /** A subagent's last reply once it has finished its turn: its result, shown in the chat. */
+  reply: string | null
+}
 
 export class TaskError extends Error {}
 
@@ -93,9 +109,22 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
   ].join('\n')
 }
 
+/** The instructions a subagent gets in addition to its provider's own. */
+export function subagentInstructions(task: Pick<TaskRecord, 'project' | 'worktree'>, alwaysAsk: string[]) {
+  return [
+    `You are a busyboy subagent for the project "${task.project}", started for one short action such as merging a pull request, checking CI, or running a command.`,
+    `You run in the project's own checkout, ${task.worktree}, which the user works in. Do not edit files, switch branches, or change the checkout: BusyBoy asks the user before any tool call that could. If the request needs file changes, stop and say it needs a task.`,
+    'Do the action without planning, then reply in one or two sentences with the result. The user sees that reply.',
+    ...(alwaysAsk.length > 0
+      ? ['BusyBoy asks the user before every tool call that matches one of these rules, so expect to wait for an answer there:', ...alwaysAsk.map((rule) => `- ${rule}`)]
+      : []),
+  ].join('\n')
+}
+
 /** A task agent's system prompt: its instructions, then the global and project facts. */
-async function taskPrompt(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>, alwaysAsk: string[]) {
-  return `${taskInstructions(task, alwaysAsk)}\n\n${await memoryPrompt(folder, { project: task.project })}`
+async function taskPrompt(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch' | 'kind'>, alwaysAsk: string[]) {
+  const instructions = task.kind === 'subagent' ? subagentInstructions(task, alwaysAsk) : taskInstructions(task, alwaysAsk)
+  return `${instructions}\n\n${await memoryPrompt(folder, { project: task.project })}`
 }
 
 // ---- Task list file ----------------------------------------------------------
@@ -155,8 +184,10 @@ function statusOf(agentStatus: AgentStatus | undefined): TaskStatus {
 export function taskView(task: TaskRecord): TaskView {
   const { id, project, title, branch, createdAt } = task
   const agent = getAgent(task.agentId)
-  // An idle task is not resumed at start (see resumeTasks); it shows as idle, not stopped.
-  const status = !agent && task.activity === 'idle' ? 'idle' : statusOf(agent?.status)
+  // An idle task is not resumed at start (see resumeTasks); it shows as idle, not stopped. A
+  // subagent's process ends once it has answered (see watchAgent), and it stays done.
+  const ended = !agent || (task.kind === 'subagent' && agent.status === 'stopped')
+  const status = ended && task.activity === 'idle' ? 'idle' : statusOf(agent?.status)
   // A plan card waits on the user while the agent itself is idle, between turns.
   return {
     id,
@@ -166,6 +197,8 @@ export function taskView(task: TaskRecord): TaskView {
     createdAt,
     status: status === 'idle' && hasOpenCard(task.agentId) ? 'needs-you' : status,
     note: task.note ?? null,
+    subagent: task.kind === 'subagent',
+    reply: task.kind === 'subagent' ? (task.reply ?? (status === 'idle' ? lastAgentReply(task.agentId) : null)) : null,
   }
 }
 
@@ -224,6 +257,8 @@ export type CreateTaskInput = {
   title: string
   request: string
   provider?: ProviderId
+  /** Start a subagent: no worktree, no file tools (see the note at the top). */
+  subagent?: boolean
   /** Busyboy's MCP endpoint for this task's agent (memory tools), given the project's stored name. */
   taskMcp?: (project: string) => Promise<Record<string, McpServer>>
 }
@@ -258,10 +293,13 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
     throw new TaskError(`${project.name} cannot be read as a git repository: ${error.message}`)
   })
   const id = `${slug(title)}-${randomBytes(3).toString('hex')}`
-  const branch = `busyboy/${id}`
-  const worktree = join(folder, WORKTREES_FOLDER, project.name, id)
-  await mkdir(dirname(worktree), { recursive: true })
-  await git(project.path, 'worktree', 'add', '-b', branch, '--', worktree, head)
+  const kind = input.subagent ? ('subagent' as const) : undefined
+  const branch = kind ? '' : `busyboy/${id}`
+  const worktree = kind ? project.path : join(folder, WORKTREES_FOLDER, project.name, id)
+  if (!kind) {
+    await mkdir(dirname(worktree), { recursive: true })
+    await git(project.path, 'worktree', 'add', '-b', branch, '--', worktree, head)
+  }
 
   let agentId: string | undefined
   try {
@@ -269,9 +307,10 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
     const agent = startAgent({
       provider,
       cwd: worktree,
-      instructions: await taskPrompt(folder, { id, project: project.name, worktree, branch }, alwaysAsk),
+      instructions: await taskPrompt(folder, { id, project: project.name, worktree, branch, kind }, alwaysAsk),
       mcpServers: input.taskMcp ? await input.taskMcp(project.name) : undefined,
       alwaysAsk,
+      noFileEdits: Boolean(kind),
     })
     agentId = agent.id
     if (getAgent(agent.id)?.status === 'stopped') throw new TaskError(`The task agent could not start: ${startError(agent.id)}`)
@@ -287,6 +326,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
       branch,
       createdAt: new Date().toISOString(),
       activity: 'running',
+      ...(kind ? { kind } : {}),
     }
     await updateTasksAt(folder, (tasks) => void tasks.push(task))
     watchAgent(folder, task)
@@ -296,8 +336,11 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
   } catch (error) {
     // Leave nothing behind for a task whose agent failed at once.
     if (agentId) await stopAgent(agentId).catch(() => {})
-    await git(project.path, 'worktree', 'remove', '--force', '--', worktree).catch(() => {})
-    await git(project.path, 'branch', '-D', '--', branch).catch(() => {})
+    // A subagent made no worktree: its folder is the project itself.
+    if (!kind) {
+      await git(project.path, 'worktree', 'remove', '--force', '--', worktree).catch(() => {})
+      await git(project.path, 'branch', '-D', '--', branch).catch(() => {})
+    }
     await updateTasksAt(folder, (tasks) => void tasks.splice(0, tasks.length, ...tasks.filter((task) => task.id !== id))).catch(
       () => {},
     )
@@ -347,6 +390,10 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
   // unusable: Claude reports signed-out only inside its first reply, after the session.
   let checkingStart = fromRestart
   let startFailed = false
+  /** A subagent that answered: its process is ended on purpose and it stays done. */
+  let finished = false
+  /** The error a subagent's current turn reported, so a failed turn is not shown as done. */
+  let turnError: string | null = null
   const report = () => {
     const status = taskView(task).status
     if (status !== last) {
@@ -354,7 +401,7 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
       // Agents the server stops on its way down, and restarted agents whose provider
       // could not start (not installed, signed out), keep their activity and resume
       // on the next start.
-      const keep = startFailed || (status === 'stopped' && isStoppingAllAgents())
+      const keep = startFailed || finished || (status === 'stopped' && isStoppingAllAgents())
       if (!keep) void saveTask(folder, task, { activity: status })
       notify(folder, task)
     }
@@ -387,6 +434,23 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
       void stopAgent(task.agentId).catch(() => {})
     }
     if (event.type === 'turn-done') checkingStart = false
+    // A subagent does one action: once it has answered, its reply is saved as its result and its
+    // process ends, so finished subagents do not each keep a provider process (and its hook gate).
+    if (event.type === 'error') turnError = event.message
+    if (event.type === 'turn-done' && task.kind === 'subagent' && !finished && getAgent(task.agentId)?.status === 'idle') {
+      finished = true
+      const reply = lastAgentReply(task.agentId)
+      const failed = turnError
+      void (async () => {
+        // The user may have pressed Stop as the turn ended; that stop stands.
+        const stored = (await readTasksAt(folder)).find(({ id }) => id === task.id)
+        if (stored?.activity === 'stopped') return
+        await saveTask(folder, task, failed ? { activity: 'stopped', note: failed, reply } : { activity: 'idle', reply })
+        await stopAgent(task.agentId)
+        if (failed) notify(folder, task)
+      })().catch(() => {})
+    }
+    if (event.type === 'turn-done') turnError = null
     // The runner updates its status before it delivers the event.
     report()
   })
@@ -455,6 +519,12 @@ export function resumeTasks(folder: string): Promise<void> {
         const task = (await readTasksAt(folder).catch(() => [] as TaskRecord[])).find(({ id }) => id === listed.id)
         // A live agent belongs to this process already (a dev reload of this module).
         if (!task || getAgent(task.agentId) || (task.activity !== 'running' && task.activity !== 'needs-you')) continue
+        if (task.kind === 'subagent') {
+          // Its action may have run already (a merge, a push); running it again could do it twice.
+          await saveTask(folder, task, { activity: 'stopped', note: 'BusyBoy restarted before this subagent finished. Ask again if it is still needed.' })
+          notify(folder, task)
+          continue
+        }
         await resumeTask(folder, task).catch((error: unknown) => {
           // Shown now, but the activity is kept: a read error may pass, so the next start tries again.
           task.note = resumeNote(error instanceof Error ? error.message : String(error))

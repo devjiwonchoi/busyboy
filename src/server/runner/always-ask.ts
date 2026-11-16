@@ -43,6 +43,94 @@ const BUILT_IN_RULES = [FORCE_PUSH_RULE, DEFAULT_BRANCH_RULE, DEPLOY_RULE, DELET
  */
 export const BUSYBOY_FILES_RULE = "Change BusyBoy's own files"
 
+/**
+ * Not a rule on the list either: a subagent runs a short command in the project's own
+ * checkout, which the user works in, so anything that could change it asks: file tools, and
+ * any shell command not known to only read (READ_ONLY_COMMANDS). Changes go through a task.
+ */
+export const SUBAGENT_EDIT_RULE = 'Change the project checkout as a subagent'
+
+/** Commands that only read, by name; `find`, `git`, `gh`, and `curl` are checked further in onlyReads. */
+const READ_ONLY_COMMANDS = new Set([
+  'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'rg', 'jq', 'echo', 'printf', 'pwd', 'which', 'date', 'sort', 'uniq',
+  'cut', 'tr', 'basename', 'dirname', 'realpath', 'stat', 'file', 'tree', 'du', 'df', 'uname', 'whoami', 'sleep',
+  'true', 'false', 'test', '[', 'find', 'git', 'gh', 'curl',
+])
+
+/** git subcommands that only read the repository (fetch updates remote refs only, not the checkout). */
+const GIT_READS = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'fetch', 'ls-files', 'ls-remote', 'describe', 'blame', 'shortlog', 'grep', 'rev-list', 'cat-file'])
+
+/** gh subcommands that write into the local checkout, its git config, or the file system. */
+const GH_LOCAL_WRITES = new Set([
+  'checkout', 'clone', 'download', 'sync', 'install', 'upgrade', 'create', 'fork', 'set-default', 'codespace', 'develop', 'rename',
+  'setup-git', 'login', 'logout', 'refresh', 'switch',
+])
+
+/** gh command groups; any other first word may be an alias (`gh co` is `gh pr checkout`). */
+const GH_GROUPS = new Set(['pr', 'issue', 'run', 'workflow', 'repo', 'release', 'api', 'search', 'status', 'browse', 'label', 'cache', 'auth', 'gist', 'project', 'secret', 'variable', 'ruleset', 'org'])
+
+/** `git fetch` options that only update remote-tracking refs; `--prune-tags` and `--set-upstream` change local state. */
+const FETCH_OPTIONS = /^(-q|--quiet|-v|--verbose|--all|-p|--prune|-t|--tags|--no-tags|--dry-run|--depth=\d+|--no-recurse-submodules)$/
+
+/** Whether a command only reads: a read-only command, used without options that write. */
+function onlyReads({ argv, written }: Fact) {
+  const [name, ...args] = argv.map(({ text }) => text)
+  if (!READ_ONLY_COMMANDS.has(name)) return false
+  // `sort -o` and `tree -o` write their output to a file; `uniq in out` writes to its second file.
+  // GNU takes any unambiguous start of a long option (`--out=f`), so every `--o…` counts.
+  if ((name === 'sort' || name === 'tree') && args.some((arg) => /^(-[a-zA-Z]*o|--o)/.test(arg))) return false
+  if (name === 'uniq' && args.filter((arg) => arg === '-' || !arg.startsWith('-')).length > 1) return false
+  if (name === 'find') return !args.some((arg) => /^-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)$/.test(arg))
+  if (name === 'curl') {
+    return !args.some((arg) => /^(-[a-zA-Z]*[oOD]|-c$|--(output|remote-name|create-dirs|dump-header|cookie-jar|trace|stderr|libcurl|etag-save|hsts|alt-svc))/.test(arg))
+  }
+  if (name === 'git') {
+    // Global options (-C, -c, --no-pager) come before the subcommand.
+    // A `-c` config value can name a command git runs (core.pager, core.fsmonitor). The matcher
+    // takes git's global options off `argv`, so they are looked for as written.
+    if (written.some(({ text }) => /^-c|^--config-env/.test(text))) return false
+    let index = 0
+    while (index < args.length && args[index].startsWith('-')) {
+      if (/^-c|^--config-env/.test(args[index])) return false
+      index += args[index] === '-C' ? 2 : 1
+    }
+    const command = args[index]
+    const rest = args.slice(index + 1)
+    const names = rest.filter((arg) => !arg.startsWith('-'))
+    // These name a program git runs on the other side of a fetch or ls-remote.
+    if (rest.some((arg) => /upload-pack|receive-pack|^--exec|^-u$/.test(arg))) return false
+    if (command === 'branch') return rest.every((arg) => /^-(a|r|v|vv|l|-list|-all|-remotes|-show-current|-contains|-merged|-no-merged)$/.test(arg))
+    if (command === 'remote') {
+      return rest.length === 0 || (rest.length === 1 && rest[0] === '-v') || (rest.length === 2 && (rest[0] === 'show' || rest[0] === 'get-url') && !rest[1].startsWith('-'))
+    }
+    if (command === 'stash') return rest[0] === 'list' || rest[0] === 'show'
+    if (command === 'tag') return rest.length === 0 || rest[0] === '-l' || rest[0] === '--list'
+    if (command === 'config') return rest[0] === '--get' || rest[0] === '--list' || rest[0] === '-l' || rest[0] === '--get-all'
+    if (command === 'worktree') return rest[0] === 'list'
+    // `git fetch origin main:main` moves a local branch.
+    if (command === 'fetch') return !names.some((arg) => arg.includes(':')) && rest.every((arg) => !arg.startsWith('-') || FETCH_OPTIONS.test(arg))
+    // `git grep -O<command>` opens the matches in a command.
+    if (command === 'grep') return !rest.some((arg) => /^(-[a-zA-Z]*O|--open-files-in-pager)/.test(arg))
+    return GIT_READS.has(command) && !rest.some((arg) => /^--output(=|$)/.test(arg))
+  }
+  // `gh pr merge --delete-branch` also switches the checkout and deletes the local branch.
+  if (name === 'gh' && args[0] === 'pr' && args[1] === 'merge' && args.some((arg) => /^(-[a-zA-Z]*d|--delete-branch)(=|$)/.test(arg))) return false
+  if (name === 'gh') return GH_GROUPS.has(args[0]) && !args.some((arg) => GH_LOCAL_WRITES.has(arg))
+  return true
+}
+
+/** Redirections that write somewhere other than the terminal or /dev/null, in a script with its quoted text taken out. */
+const WRITE_REDIRECT = />>?(?!\s*(?:&\s*[\d-](?![\w./])|\/dev\/null\b))/
+// Escaped characters go first, so `\'` is not taken for a quote that hides a real `>`.
+const unquoted = (script: string) => script.replace(/\\./g, 'x').replace(/'[^']*'|"[^"]*"/g, "''")
+
+/** Whether a subagent's tool call could change its checkout, so it asks with SUBAGENT_EDIT_RULE. */
+function subagentChanges({ toolName, script, facts, unknown }: { toolName: string; script: string | null; facts: Fact[]; unknown: string | null }) {
+  if (toolName in FILE_TOOLS || toolName === 'apply_patch') return true
+  if (script === null) return false
+  return unknown !== null || WRITE_REDIRECT.test(unquoted(script).replace(/\d?>&\d/g, '')) || !facts.every(onlyReads)
+}
+
 /** How a card names a command that matching could not read. */
 export const UNREADABLE = 'BusyBoy cannot tell what this command runs'
 
@@ -1344,6 +1432,7 @@ export function matchAlwaysAsk({
   input,
   folder,
   privateFolder,
+  noFileEdits,
 }: {
   rules: string[]
   toolName: string
@@ -1351,6 +1440,8 @@ export function matchAlwaysAsk({
   folder: string
   /** A folder the agent may not change outside `folder` (see BUSYBOY_FILES_RULE). */
   privateFolder?: string
+  /** The agent asks before anything that could change its folder (see SUBAGENT_EDIT_RULE). */
+  noFileEdits?: boolean
 }) {
   const valid = rules.map((rule) => rule.trim()).filter((rule) => rule && !rule.startsWith('#') && !ruleError(rule))
   const script = shellCommand(toolName, input)
@@ -1368,6 +1459,9 @@ export function matchAlwaysAsk({
     // A folder that does not exist yet is compared as given.
   }
 
+  if (noFileEdits && subagentChanges({ toolName, script, facts, unknown })) {
+    return SUBAGENT_EDIT_RULE
+  }
   if (privateFolder && touchesPrivateFolder({ toolName, input, script, facts, folder, privateFolder })) {
     return BUSYBOY_FILES_RULE
   }
@@ -1477,14 +1571,14 @@ type AllowedCall = { toolName: string; input: unknown; rule: string; cwd: string
  */
 export function alwaysAskApproval({ requestId, toolName, input, rule }: { requestId: string; toolName: string; input: unknown; rule: string }) {
   const script = shellCommand(toolName, input)
-  const reason = rule.startsWith(UNREADABLE) || rule === BUSYBOY_FILES_RULE ? `${rule}.` : `On your always-ask list: ${rule}`
+  const reason = rule.startsWith(UNREADABLE) || rule === BUSYBOY_FILES_RULE || rule === SUBAGENT_EDIT_RULE ? `${rule}.` : `On your always-ask list: ${rule}`
   const event: Extract<AgentEvent, { type: 'approval' }> = {
     type: 'approval',
     requestId,
     title: script === null ? toolName : `${toolName}: ${script}`,
     detail: `${reason}${script === null ? `\n${JSON.stringify(input ?? {}, null, 2)}` : ''}`,
     // BusyBoy's own files are never the user's to open up, so that rule asks every time.
-    canAllowForSession: rule !== BUSYBOY_FILES_RULE,
+    canAllowForSession: rule !== BUSYBOY_FILES_RULE && rule !== SUBAGENT_EDIT_RULE,
     allowForSessionLabel: `Always allow this exact ${script === null ? 'call' : 'command'}`,
   }
   return event

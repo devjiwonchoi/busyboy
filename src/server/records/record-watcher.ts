@@ -118,6 +118,8 @@ function rewatch(hub: Hub, tasks: TaskRecord[] | null) {
   for (const task of tasks) {
     // A hand-edited entry without a worktree has nothing to watch; the graph reports it.
     if (typeof task?.worktree !== 'string') continue
+    // A subagent's folder is the project checkout, whose records are not BusyBoy's (see readProjectGraph).
+    if (task.kind === 'subagent') continue
     // Only `.jwn` itself appearing or going away matters at the top of a worktree.
     want(task.worktree, false, (name) => name === null || name === RECORDS_FOLDER)
     want(join(task.worktree, RECORDS_FOLDER), true, () => true)
