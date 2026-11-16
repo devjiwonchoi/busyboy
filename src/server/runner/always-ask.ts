@@ -26,7 +26,9 @@ import type { AgentEvent } from './contract'
 //
 // Known limits: code a command runs that is not a command line (a Node or Python
 // script file, git hooks, build scripts, test configs) is not read, and a
-// redirection that overwrites a file is not a delete.
+// redirection that overwrites a file is not a delete. Code given on the command
+// line (`node -e`, `python3 -c`) is read by a word list, not parsed: it asks unless
+// nothing in it can run a command, load code, reach the network, or delete.
 
 export const FORCE_PUSH_RULE = 'Force push or delete a remote branch'
 export const DEFAULT_BRANCH_RULE = 'Push to the default branch'
@@ -75,6 +77,9 @@ const FETCH_OPTIONS = /^(-q|--quiet|-v|--verbose|--all|-p|--prune|-t|--tags|--no
 /** Whether a command only reads: a read-only command, used without options that write. */
 function onlyReads({ argv, written }: Fact) {
   const [name, ...args] = argv.map(({ text }) => text)
+  // Inline code is a fact only once it is known to run no command; here it must not write either.
+  const code = inlineCode(name, argv.slice(1), true)
+  if (typeof code === 'string') return !INLINE_WRITES.test(code)
   if (!READ_ONLY_COMMANDS.has(name)) return false
   // `sort -o` and `tree -o` write their output to a file; `uniq in out` writes to its second file.
   // GNU takes any unambiguous start of a long option (`--out=f`), so every `--o…` counts.
@@ -770,19 +775,128 @@ function analyze(script: string, context: Context): Analysis {
 /** Commands that only read the arguments xargs adds, so `… | xargs <command>` can run without asking. */
 const XARGS_SAFE = new Set(['grep', 'egrep', 'fgrep', 'rg', 'wc', 'cat', 'head', 'tail', 'ls', 'echo', 'stat', 'file', 'basename', 'dirname', 'printf', 'sort', 'uniq', 'du', 'md5', 'md5sum', 'shasum', 'sha256sum', 'realpath', 'readlink', 'test', 'true'])
 
-/** Interpreters and the options that make them run code given on the command line. */
-const INLINE_CODE: Record<string, string[]> = {
-  node: ['-e', '-p', '--eval', '--print'],
-  bun: ['-e', '--eval', '-p', '--print'],
-  deno: ['eval'],
-  python: ['-c'],
-  python3: ['-c'],
-  python2: ['-c'],
-  perl: ['-e', '-E'],
-  ruby: ['-e'],
-  php: ['-r'],
-  osascript: ['-e'],
-  lua: ['-e'],
+/**
+ * Interpreters that run code given on the command line. `flags`: the options that take the code.
+ * `before`: the one-letter options that may share a word with the code's (`perl -lne`, `node -pe`,
+ * `python3 -uc`). `modules`: what the code may load and still be read, since these only compute,
+ * format, and tell the time; any other module could bring in a way to run a command. The lists are
+ * per language because a name safe in one (`util` in Node) is a project file in another.
+ * AppleScript has no entry to read by (osascript always asks): it drives other apps in plain
+ * words no word list covers.
+ */
+const INLINE_CODE: Record<string, { flags: string[]; before?: string; modules?: string[] }> = {
+  node: { flags: ['-e', '-p', '--eval', '--print'], before: 'ep', modules: ['path', 'util', 'url', 'crypto', 'assert'] },
+  deno: { flags: ['eval'] },
+  python: {
+    flags: ['-c'],
+    before: 'uBsSEIOq',
+    modules: [
+      'json', 'sys', 'time', 're', 'math', 'datetime', 'base64', 'hashlib', 'random', 'collections', 'itertools', 'functools', 'string',
+      'textwrap', 'statistics', 'decimal', 'fractions', 'uuid', 'html', 'unicodedata', 'pprint', 'operator', 'binascii', 'struct',
+      'calendar', 'zlib', 'csv', 'difflib',
+    ],
+  },
+  // `-n`, `-p`, `-l`, `-a`, and `-0` loop over input lines; `-i` edits the files given in place.
+  perl: { flags: ['-e', '-E'], before: 'nplawi0-7', modules: ['strict', 'warnings', 'utf8', 'feature', 'Time::HiRes', 'JSON::PP', 'List::Util', 'Data::Dumper'] },
+  ruby: { flags: ['-e'], before: 'nplawi0-7', modules: ['json', 'time', 'date', 'set'] },
+  php: { flags: ['-r'] },
+  osascript: { flags: ['-e'] },
+  lua: { flags: ['-e'] },
+}
+
+/** `python3.12` and `python3` are `python`; Bun and the TypeScript runners take Node's options. */
+const interpreterOf = (name: string) => {
+  const plain = name.replace(/[\d.]+$/, '')
+  return plain === 'bun' || plain === 'tsx' || plain === 'ts-node' ? 'node' : plain
+}
+
+/**
+ * Words that let inline code run a command, load code, reach the network, or delete: the ways
+ * it could do what the list asks about. This is a word list, not a parser, for the same agent
+ * the rest of the list guards (one acting from habit, not one hiding what it does); whatever it
+ * catches asks as before, so a harmless word caught here costs a card and nothing else.
+ */
+const INLINE_RUNS =
+  /exec|system|spawn|popen|proc_open|readpipe|\bfork|eval|subprocess|child_process|shutil|link\b|remove|delete|rmtree|rmdir|sock|http|fetch|urllib|request|ctypes|pickle|marshal|syscall|passthru|dofile|loadfile|loadstring|\bload\s*\(?\s*['"]|include|getattr|globals|builtins|binding|dlopen|\bkill|kill\b|worker|constructor|mainmodule|\bimport|require|open[^;]*\||__|`|qx|%x|\b(?:use|do|os|fs|io|net|tls|dns|dgram|cluster|repl|inspector|vm|sh|deno|bun|mail|rm\w*|mv|cp)\b/i
+
+/** JavaScript's `Function('code')`, told apart from a `function (x) {}` callback by its capital. */
+const INLINE_FUNCTION = /\bFunction\s*\(/
+
+/** Words that let inline code change a file, which a subagent may not do without asking. */
+const INLINE_WRITES = /open|write|append|truncate|rename|copy|move|mkdir|chmod|chown|touch|put_contents|utime|file\.new|splfileobject/i
+
+/**
+ * The code an interpreter is given on its command line, with the module loads, file reads, and
+ * terminal writes known to be harmless taken out. Undefined when the command gives no code this
+ * way, and null when the code cannot be read: built when it runs, given with an option not known
+ * here (`node -r`, `perl -M`), or loading any other module. `strict`: only where the interpreter
+ * itself takes the option, before its first plain word, so `node gen.mjs -p 3000` is not code.
+ */
+function inlineCode(name: string, args: Word[], strict = false) {
+  const interpreter = interpreterOf(name)
+  const known = INLINE_CODE[interpreter]
+  if (!known) {
+    return undefined
+  }
+  const { flags, before, modules = [] } = known
+  const letters = flags.filter((flag) => /^-\w$/.test(flag)).map((flag) => flag[1]).join('')
+  const bundled = before && letters ? new RegExp(`^-([${before}]*)[${letters}]$`) : null
+  const loop = before && letters ? new RegExp(`^-[${before}]+$`) : null
+  const codes: string[] = []
+  let operand = false
+  let unreadable = false
+  for (let index = 0; index < args.length; index++) {
+    const { text } = args[index]
+    const long = flags.find((flag) => flag.startsWith('--') && text.startsWith(`${flag}=`))
+    const exact = interpreter === 'deno' ? index === 0 && text === 'eval' : flags.includes(text)
+    const switches = operand ? null : (bundled?.exec(text)?.[1] ?? (loop?.test(text) ? text.slice(1) : null))
+    if (long) {
+      // `--eval=code` carries its code in the option itself.
+      codes.push(text.slice(long.length + 1))
+    } else if (exact || (switches !== null && bundled?.test(text))) {
+      if (operand && strict) {
+        return undefined
+      }
+      codes.push(args[++index]?.text ?? '')
+    } else if (!operand && letters && new RegExp(`^-[${letters}].`).test(text)) {
+      // `-e'code'` reaches here as one word, `-ecode`.
+      codes.push(text.slice(2))
+    } else if (switches === null && text.startsWith('-') && !operand) {
+      unreadable = true
+    } else if (!text.startsWith('-')) {
+      // The words after this are the code's own arguments, or files a line loop reads.
+      operand = true
+    }
+    if (switches?.includes('i') && (interpreter === 'perl' || interpreter === 'ruby')) {
+      codes.push('write')
+    }
+  }
+  if (codes.length === 0 || (strict && interpreter === 'deno' && args[0]?.text !== 'eval')) {
+    return undefined
+  }
+  if (interpreter === 'osascript' || unreadable || args.some((word) => word.dynamic)) {
+    return null
+  }
+  let unknownModule = false
+  const load = (...loaded: string[]) => {
+    // A JSON file holds no code, whichever package it is in.
+    unknownModule ||= loaded.some((module) => !modules.includes(module.replace(/^node:/, '')) && !/^[\w@./-]+\.json$/.test(module))
+    return ' '
+  }
+  const code = codes
+    .join('\n')
+    // Reading a file the usual ways (Python's one-argument open, Node's readFileSync), and
+    // printing through the terminal's own streams.
+    .replace(/\bopen\(\s*(['"])[^'"|<>]*\1\s*\)/g, ' ')
+    .replace(/\brequire\((['"])(?:node:)?fs\1\)\.readFileSync\b/g, ' ')
+    .replace(/\bstd(?:out|err)\.write\b/g, ' ')
+    .replace(/\bfrom\s+([\w.]+)\s+import\b/g, (_, module: string) => load(module))
+    .replace(/\bimport\s+([\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*)/g, (_, list: string) =>
+      load(...list.split(',').map((item) => item.trim().split(/\s+/)[0])),
+    )
+    .replace(/\brequire\s*\(?\s*(['"])([^'"]+)\1\s*\)?/g, (_, _quote: string, module: string) => load(module))
+    .replace(/\buse\s+([\w:]+)/g, (_, module: string) => load(module))
+  return unknownModule ? null : code
 }
 
 /** Git's global options, which come before the subcommand; any other option there cannot be read. */
@@ -837,8 +951,11 @@ function analyzeCommands(commands: Word[][], context: Context): Analysis {
       // xargs adds arguments read from its input, which cannot be seen here (`xargs git` could push).
       results.push(unknownOnly('xargs adds arguments BusyBoy cannot see'))
     }
-    if (INLINE_CODE[name]?.some((flag) => args.some(({ text }) => text === flag || (flag.startsWith('--') && text.startsWith(`${flag}=`))))) {
-      results.push(unknownOnly(`${name} runs inline code BusyBoy does not read`))
+    // Inline code that only computes, prints, reads, and waits (a JSON one-liner, a short sleep
+    // in a polling loop) runs like a script file does; anything more asks.
+    const code = inlineCode(name, args)
+    if (code === null || (code !== undefined && (INLINE_RUNS.test(code) || INLINE_FUNCTION.test(code)))) {
+      results.push(unknownOnly(`${name} runs inline code BusyBoy cannot tell is harmless`))
       continue
     }
     if ((name === 'awk' || name === 'gawk' || name === 'nawk') && args.some(({ text }) => /system\s*\(|\|\s*"|"\s*\|/.test(text))) {
