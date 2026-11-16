@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { alwaysAskRulesAt } from './always-ask-list'
@@ -32,9 +32,19 @@ import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } 
 // A subagent is a task for one short action (merge a PR, check CI, run a command). It runs in
 // the project's own checkout with no worktree or branch, asks before anything that could change it, plans nothing,
 // and its reply shows in the chat. Anything that changes files is a task.
+//
+// An archived task is out of the way, not gone: it leaves the project graph and the status
+// summary, its agent ends, and its worktree is removed unless it has changed or untracked files.
+// Its branch, its provider session, and its records are kept, so restoring it brings those back.
+// Files git ignores (installed packages, build output, a local env file) go with the worktree:
+// keeping every worktree that has a node_modules would keep nearly all of them.
 
 export const TASKS_FILE = 'task-list.json'
 export const WORKTREES_FOLDER = 'task-worktrees'
+/** Where an archived task's records wait while its worktree is gone: `<project>/<task>/.jwn`. */
+export const ARCHIVE_FOLDER = 'task-archive'
+/** The folder in a worktree that holds the task's records (see records/project-graph.ts). */
+const RECORDS_FOLDER = '.jwn'
 
 export type TaskRecord = {
   id: string
@@ -61,6 +71,8 @@ export type TaskRecord = {
   activity?: TaskStatus
   /** Why the task stopped when it could not resume, shown with the task. */
   note?: string | null
+  /** Set while the task is archived. */
+  archivedAt?: string | null
 }
 
 /** `idle`: the agent finished its turn and waits for a message. `stopped`: its process is gone. */
@@ -72,6 +84,7 @@ export type TaskView = Pick<TaskRecord, 'id' | 'project' | 'title' | 'branch' | 
   subagent: boolean
   /** A subagent's last reply once it has finished its turn: its result, shown in the chat. */
   reply: string | null
+  archived: boolean
 }
 
 export class TaskError extends Error {}
@@ -200,6 +213,7 @@ export function taskView(task: TaskRecord): TaskView {
     note: task.note ?? null,
     subagent: task.kind === 'subagent',
     reply: task.kind === 'subagent' ? (task.reply ?? (status === 'idle' ? lastAgentReply(task.agentId) : null)) : null,
+    archived: Boolean(task.archivedAt),
   }
 }
 
@@ -541,7 +555,8 @@ export function resumeTasks(folder: string): Promise<void> {
           // Read again: the user may have stopped this task while earlier ones were resuming.
           const task = (await readTasksAt(folder).catch(() => [] as TaskRecord[])).find(({ id }) => id === listed.id)
           // A live agent belongs to this process already (a dev reload of this module).
-          if (!task || getAgent(task.agentId) || (task.activity !== 'running' && task.activity !== 'needs-you')) return
+          // An archived task stays put away until it is restored.
+          if (!task || task.archivedAt || getAgent(task.agentId) || (task.activity !== 'running' && task.activity !== 'needs-you')) return
           if (task.kind === 'subagent') {
             // Its action may have run already (a merge, a push); running it again could do it twice.
             await saveTask(folder, task, { activity: 'stopped', note: 'BusyBoy restarted before this subagent finished. Ask again if it is still needed.' })
@@ -626,7 +641,7 @@ const ORDER_KEY = Symbol.for('busyboy.task-order')
 const orderStore = globalThis as typeof globalThis & { [ORDER_KEY]?: Map<string, Promise<unknown>> }
 const taskQueues = (orderStore[ORDER_KEY] ??= new Map())
 
-/** Runs `work` after everything queued earlier for the same task: a message, a stop, a resume. */
+/** Runs `work` after everything queued earlier for the same task: messages, archive, restore. */
 function inTaskOrder<T>(folder: string, taskId: string, work: () => Promise<T>): Promise<T> {
   const key = `${folder}\n${taskId}`
   const next = (taskQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(work)
@@ -673,6 +688,8 @@ async function deliverMessage(folder: string, taskId: string, text: string): Pro
   const task = (await readTasksAt(folder)).find(({ id }) => id === taskId)
   if (!task) throw new TaskError(`There is no task ${taskId}.`)
   const name = `${task.project} · ${task.title}`
+  // More work for an archived task means it is wanted again.
+  if (task.archivedAt && task.kind !== 'subagent') await restore(folder, task)
   if (task.kind === 'subagent') throw new TaskError(`${name} is a subagent: it does one action and takes no further messages. Start a new one.`)
   // An open card is the agent's own question; a message beside it would leave the card unanswered.
   if (hasOpenCard(task.agentId)) throw new TaskError(`${name} is waiting on a card. Answer or reply to that card instead.`)
@@ -717,4 +734,125 @@ async function deliverMessage(folder: string, taskId: string, text: string): Pro
 
 export async function messageTask(taskId: string, text: string) {
   return messageTaskAt(await dataFolder(), taskId, text)
+}
+
+// ---- Archive ------------------------------------------------------------------
+
+const exists = (path: string) =>
+  lstat(path).then(
+    () => true,
+    () => false,
+  )
+
+/**
+ * Archives a task that is not working. Returns the task and whether its worktree was kept:
+ * git refuses to remove a worktree with changed or untracked files, and that refusal is what
+ * keeps uncommitted work from being lost.
+ */
+export async function archiveTask(taskId: string): Promise<{ task: TaskView; worktreeKept: boolean }> {
+  const folder = await dataFolder()
+  return inTaskOrder(folder, taskId, async () => {
+    const task = (await readTasksAt(folder)).find(({ id }) => id === taskId)
+    if (!task) throw new TaskError(`There is no task ${taskId}.`)
+    if (task.archivedAt) return { task: taskView(task), worktreeKept: task.kind !== 'subagent' && (await exists(task.worktree)) }
+    const { status } = taskView(task)
+    if (status === 'running' || status === 'needs-you') {
+      throw new TaskError(`${task.project} · ${task.title} is still working. Stop it before archiving it.`)
+    }
+    // An idle agent still has a provider process. Its `stopped` event comes after the stop
+    // call returns; once it has, nothing reads the agent's events any more.
+    await stopTaskAgent({ folder, agentId: task.agentId })
+    await agentEnded(task.agentId)
+    removeAgent(task.agentId)
+    const worktreeKept = task.kind !== 'subagent' && !(await removeWorktree(folder, task))
+    // A task whose provider could not start after a restart keeps `running` so the next start
+    // tries again; archived, it must not be started then.
+    const activity = task.activity === 'running' || task.activity === 'needs-you' ? 'stopped' : task.activity
+    await saveTask(folder, task, { archivedAt: new Date().toISOString(), activity })
+    notify(folder, task)
+    return { task: taskView(task), worktreeKept }
+  })
+}
+
+/**
+ * Removes the task's worktree unless that would lose work. Returns whether it is gone.
+ * The branch stays, so everything committed stays.
+ */
+async function removeWorktree(folder: string, task: TaskRecord) {
+  // Not a worktree any more (removed by hand): gone if the folder is, kept if something is left in it.
+  if (!(await exists(join(task.worktree, '.git')))) return !(await exists(task.worktree))
+  const records = join(task.worktree, RECORDS_FOLDER)
+  const shelf = join(folder, ARCHIVE_FOLDER, task.project, task.id, RECORDS_FOLDER)
+  let shelved = false
+  try {
+    // The agent's records are untracked files, which would make git refuse every archive, and
+    // forcing the removal would delete the plan. They wait in the data folder instead. Records
+    // a project commits are on the branch already and stay where they are.
+    const tracked = (await git(task.worktree, 'ls-files', '--', RECORDS_FOLDER)) !== ''
+    const isFolder = await lstat(records).then(
+      (stats) => stats.isDirectory(),
+      () => false,
+    )
+    // Records already waiting there are from an archive that could not put them back; they are
+    // never overwritten. The records then stay in the worktree, and git keeps it.
+    if (!tracked && isFolder && !(await exists(shelf))) {
+      await mkdir(dirname(shelf), { recursive: true })
+      await rename(records, shelf)
+      shelved = true
+    }
+    // Asked of the repository, not the worktree: git cannot remove the folder it runs in.
+    const repository = await git(task.worktree, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    await run('git', [`--git-dir=${repository}`, 'worktree', 'remove', '--', task.worktree], { env: agentEnvironment() as NodeJS.ProcessEnv })
+    return true
+  } catch {
+    // Changed or untracked files (or a worktree git cannot read): keep it as it is.
+    if (shelved) {
+      // Only when the records are back: a failed move leaves them on the shelf, where restore finds them.
+      const back = await rename(shelf, records).then(
+        () => true,
+        () => false,
+      )
+      if (back) await rm(dirname(shelf), { recursive: true, force: true })
+    }
+    return false
+  }
+}
+
+/** Brings an archived task back: its worktree on its branch, and its records. */
+export async function restoreTask(taskId: string): Promise<TaskView> {
+  const folder = await dataFolder()
+  return inTaskOrder(folder, taskId, async () => {
+    const task = (await readTasksAt(folder)).find(({ id }) => id === taskId)
+    if (!task) throw new TaskError(`There is no task ${taskId}.`)
+    if (task.archivedAt) await restore(folder, task)
+    return taskView(task)
+  })
+}
+
+async function restore(folder: string, task: TaskRecord) {
+  const name = `${task.project} · ${task.title}`
+  if (task.kind !== 'subagent' && !(await exists(join(task.worktree, '.git')))) {
+    const project = await getProject(task.project)
+    if (!project) throw new TaskError(`${name} cannot be restored: the project ${task.project} is no longer in BusyBoy.`)
+    try {
+      // Forget the removed worktree first, in case it was deleted by hand rather than by git.
+      await git(project.path, 'worktree', 'prune')
+      await mkdir(dirname(task.worktree), { recursive: true })
+      await git(project.path, 'worktree', 'add', '--', task.worktree, task.branch)
+    } catch (error) {
+      throw new TaskError(`${name} cannot be restored: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (task.kind !== 'subagent') {
+    // Also for a worktree that was kept: an archive that could not put the records back left them waiting.
+    const records = join(task.worktree, RECORDS_FOLDER)
+    const shelf = join(folder, ARCHIVE_FOLDER, task.project, task.id)
+    if ((await exists(join(shelf, RECORDS_FOLDER))) && !(await exists(records))) {
+      await rename(join(shelf, RECORDS_FOLDER), records)
+      await rm(shelf, { recursive: true, force: true })
+    }
+  }
+  task.archivedAt = null
+  await saveTask(folder, task, { archivedAt: null })
+  notify(folder, task)
 }

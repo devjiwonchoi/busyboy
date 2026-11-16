@@ -121,7 +121,8 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
   const replyCardId = replyCard?.id ?? null
   // A task that started waiting on a card is answered on that card, so the choice no longer applies.
   const chosenTask = messageChoice && !replyCard ? view.tasks.get(messageChoice) : undefined
-  const messageTask = chosenTask && !chosenTask.subagent && chosenTask.status !== 'needs-you' ? chosenTask : undefined
+  const messageTask =
+    chosenTask && !chosenTask.subagent && !chosenTask.archived && chosenTask.status !== 'needs-you' ? chosenTask : undefined
   // The choice ends when it stops applying, so the composer never points back at the task by itself later.
   const choiceEnded = messageChoice !== null && view.connected && !messageTask && !replyCard
   useEffect(() => {

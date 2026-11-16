@@ -6,7 +6,7 @@ import { busyboyMcpServers } from '@/server/mcp-tools'
 import { defaultProvider, providerState } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 import { answerCard, approveCard } from '@/server/task-cards'
-import { stopTask, TaskError } from '@/server/tasks'
+import { archiveTask, restoreTask, stopTask, TaskError } from '@/server/tasks'
 
 const MAX_MESSAGE_LENGTH = 100_000
 
@@ -88,6 +88,28 @@ export async function messageTaskAction(taskId: string, text: string): Promise<{
   }
   try {
     await sendToTask({ folder: await dataFolder(), taskId, text })
+    return {}
+  } catch (error) {
+    if (error instanceof TaskError) return { error: error.message }
+    throw error
+  }
+}
+
+/** Archives a task. `worktreeKept` says its worktree stayed because it has uncommitted changes. */
+export async function archiveTaskAction(taskId: string): Promise<{ error?: string; worktreeKept?: boolean }> {
+  checkId(taskId, 'The task')
+  try {
+    return { worktreeKept: (await archiveTask(taskId)).worktreeKept }
+  } catch (error) {
+    if (error instanceof TaskError) return { error: error.message }
+    throw error
+  }
+}
+
+export async function restoreTaskAction(taskId: string): Promise<{ error?: string }> {
+  checkId(taskId, 'The task')
+  try {
+    await restoreTask(taskId)
     return {}
   } catch (error) {
     if (error instanceof TaskError) return { error: error.message }
