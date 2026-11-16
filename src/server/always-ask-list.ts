@@ -1,7 +1,7 @@
 import { readSettings, readSettingsAt, updateSettings } from './config'
 import { DEFAULT_ALWAYS_ASK } from './runner/always-ask'
 
-// The user's always-ask list, kept in app-settings.json and edited in Setup.
+// The user's always-ask list, kept in app-settings.json and edited in setup and settings.
 
 /** The rules in `folder`'s settings, or the defaults while the user has not edited them. */
 export async function alwaysAskRulesAt(folder: string) {

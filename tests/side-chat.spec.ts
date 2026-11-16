@@ -157,7 +157,7 @@ test('closing side chat should end its agent', async ({ page, context, baseURL }
   expect(await eventsAfterStop(page, agent)).toContain('"type":"stopped"')
 })
 
-test('returning from setup should show the side answer once', async ({ page, context, baseURL }) => {
+test('returning from settings should show the side answer once', async ({ page, context, baseURL }) => {
   await useProjectsHome(context, baseURL!, ['web'])
   await startMainChat(page)
   await askSide(page, SIDE_QUESTION)
@@ -165,23 +165,23 @@ test('returning from setup should show the side answer once', async ({ page, con
   await expect(side.getByLabel('Side answer')).toHaveText('It is called Bluebird.')
 
   // Next hides the main screen instead of unmounting it, so the side chat keeps its answer.
-  await page.getByRole('link', { name: 'Setup' }).click()
-  await expect(page.getByRole('main', { name: 'Setup' })).toBeVisible()
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await expect(page.getByRole('main', { name: 'Settings' })).toBeVisible()
   await page.getByRole('link', { name: 'Back to chat' }).click()
 
   await expect(side.getByLabel('Side answer')).toHaveText('It is called Bluebird.')
   await expect(side.getByLabel('Your side question')).toHaveCount(1)
 })
 
-test('returning from setup while an answer streams should show it once', async ({ page, context, baseURL }) => {
+test('returning from settings while an answer streams should show it once', async ({ page, context, baseURL }) => {
   await useProjectsHome(context, baseURL!, ['web'])
   await startMainChat(page)
   await askSide(page, SLOW_SIDE_QUESTION)
   const side = page.getByRole('log', { name: 'Side chat' })
   await expect(side.getByLabel('Side answer')).toHaveText('B-l-u-e')
 
-  await page.getByRole('link', { name: 'Setup' }).click()
-  await expect(page.getByRole('main', { name: 'Setup' })).toBeVisible()
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await expect(page.getByRole('main', { name: 'Settings' })).toBeVisible()
   await page.getByRole('link', { name: 'Back to chat' }).click()
 
   // The stream starts over from the question, so the text is replaced, not added again.

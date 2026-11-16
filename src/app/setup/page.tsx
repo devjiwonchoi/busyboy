@@ -23,6 +23,7 @@ import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsSta
 import type { SignInStatus } from '@/server/runner/contract'
 import {
   continueFromAgentsAction,
+  continueFromApprovalsAction,
   recheckProvidersAction,
   removeProjectAction,
   restoreAlwaysAskAction,
@@ -261,7 +262,7 @@ async function ApprovalsPage() {
   return (
     <>
       {/* Keyed by the list, so Restore defaults shows the restored text in the box. */}
-      <AlwaysAskForm key={rules.join('\n')} id={APPROVALS_FORM} rules={rules} />
+      <AlwaysAskForm key={rules.join('\n')} id={APPROVALS_FORM} rules={rules} save={continueFromApprovalsAction} />
       <StepFooter previous={previous}>
         <form action={restoreAlwaysAskAction}>
           <Button type="submit" variant="ghost">
