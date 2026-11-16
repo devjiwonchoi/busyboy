@@ -33,6 +33,8 @@ export const MISSING_SESSION_PREFIX = 'missing-'
 /**
  * One step of a scripted turn.
  * - `event`: a normalized contract event, emitted as is.
+ * - `repeat`: emit `event` `count` times (1 to 20000). `{{n}}` in the event's
+ *   JSON is replaced with the zero-based index, so a journey can fill a buffer.
  * - `raw`: a message in the script provider's own format, mapped by that provider's
  *   mapper in `RAW_MAPPERS` (a new provider adds its mapper there).
  *   A Claude `tool_use` block named `mcp__<server>__<tool>`, where `<server>` is one of the
@@ -57,6 +59,7 @@ export type ScriptStep =
   | { writeInstructions: string }
   | { writeFile: { path: string; text: string } }
   | { toolCall: { name: string; input: Record<string, unknown> }; then?: Record<string, ScriptStep[]> }
+  | { repeat: { count: number; event: AgentEvent } }
 
 export type ScriptTurn = {
   /** The user message that plays this turn, matched exactly after trimming. */
@@ -261,6 +264,19 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     for (const step of steps) {
       await cancellable(new Promise((resolve) => setTimeout(resolve, 'delayMs' in step ? step.delayMs : 0)))
       if ('delayMs' in step) continue
+      if ('repeat' in step) {
+        const { count, event } = step.repeat
+        if (!Number.isInteger(count) || count < 1 || count > 20_000) {
+          throw new Error(`A repeat step needs a count from 1 to 20000, not ${String(count)}.`)
+        }
+        const template = JSON.stringify(event)
+        for (let index = 0; index < count; index += 1) {
+          emit(JSON.parse(template.replaceAll('{{n}}', String(index))) as AgentEvent)
+          // Let the event loop flush listeners, so a long replay does not stall the server.
+          if (index % 500 === 499) await cancellable(new Promise((resolve) => setImmediate(resolve)))
+        }
+        continue
+      }
       if ('raw' in step) {
         if (!mapper) throw new Error(`Scripts cannot replay raw ${provider} messages yet.`)
         mapper.push(step.raw)

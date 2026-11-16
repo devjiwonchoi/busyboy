@@ -109,7 +109,11 @@ export type AgentEvent =
 export type AgentErrorCode = 'signed-out' | 'not-installed' | 'no-script' | 'provider' | 'lost-session'
 
 export type AgentEventEnvelope = {
-  /** Increases by one per agent, starting at 1. Use it to resume a stream. */
+  /**
+   * Increases by one per agent, starting at 1. Use it to resume a stream.
+   * The runner only keeps the newest events for replay, so a seq below that
+   * window is no longer delivered.
+   */
   seq: number
   at: number
   agentId: string
@@ -131,6 +135,7 @@ export type AgentSnapshot = {
   permissionMode: PermissionMode
   status: AgentStatus
   sessionId?: string
+  /** Highest seq recorded. Earlier events may already have been dropped from the replay buffer. */
   lastSeq: number
 }
 
