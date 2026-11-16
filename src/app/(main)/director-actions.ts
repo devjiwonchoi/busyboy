@@ -2,6 +2,7 @@
 
 import { dataFolder } from '@/server/config'
 import { replyToTaskCard, sendToDirector, sendToTask, stopDirector } from '@/server/director/chat'
+import { getManagerAt } from '@/server/managers'
 import { busyboyMcpServers } from '@/server/mcp-tools'
 import { defaultProvider, providerState } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
@@ -22,21 +23,31 @@ async function resolveDirectorProvider(current?: ProviderId): Promise<ProviderId
   return null
 }
 
-export async function sendToDirectorAction(text: string) {
+/** The manager a chat id names, or null for the Director's chat. Throws for a manager that does not exist. */
+async function checkChat(chat: unknown) {
+  if (chat === null || chat === undefined) return null
+  if (typeof chat !== 'string' || !(await getManagerAt(await dataFolder(), chat))) throw new Error('That manager no longer exists.')
+  return chat
+}
+
+/** Sends a message to the Director, or to the manager `chat`. */
+export async function sendToDirectorAction(text: string, chat?: string | null) {
   // Server actions are public endpoints, so the argument is checked at runtime.
   if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) {
     throw new Error('A message must be non-empty text of at most 100,000 characters.')
   }
+  const manager = await checkChat(chat)
   await sendToDirector({
     folder: await dataFolder(),
+    chat: manager,
     text,
     resolveProvider: resolveDirectorProvider,
-    mcp: await busyboyMcpServers(),
+    mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
   })
 }
 
-export async function stopDirectorAction() {
-  await stopDirector(await dataFolder())
+export async function stopDirectorAction(chat?: string | null) {
+  await stopDirector(await dataFolder(), await checkChat(chat))
 }
 
 // Server actions are public endpoints, so every argument is checked at runtime.

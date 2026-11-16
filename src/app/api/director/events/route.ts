@@ -1,13 +1,16 @@
 import { connection } from 'next/server'
 import { dataFolder } from '@/server/config'
 import { subscribeToDirector, type DirectorUpdate } from '@/server/director/chat'
+import { getManagerAt } from '@/server/managers'
 
 const HEARTBEAT_MS = 15_000
 
-/** Server-sent events for the Director chat: a `reset` with the whole chat, then every change. */
+/** Server-sent events for the Director chat, or the manager chat `?chat=<id>`: a `reset` with the whole chat, then every change. */
 export async function GET(request: Request) {
   await connection()
   const folder = await dataFolder()
+  const chat = new URL(request.url).searchParams.get('chat')
+  if (chat && !(await getManagerAt(folder, chat))) return new Response('That manager no longer exists.', { status: 404 })
   const encoder = new TextEncoder()
   let cleanup = () => {}
 
@@ -17,7 +20,7 @@ export async function GET(request: Request) {
       const send = (update: DirectorUpdate) => {
         if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(update)}\n\n`))
       }
-      const unsubscribe = await subscribeToDirector(folder, send)
+      const unsubscribe = await subscribeToDirector(folder, send, chat)
       const heartbeat = setInterval(() => !closed && controller.enqueue(encoder.encode(': keep-alive\n\n')), HEARTBEAT_MS)
       cleanup = () => {
         closed = true

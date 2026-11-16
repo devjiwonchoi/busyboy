@@ -1,7 +1,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { MCP_TASK_PROJECT_PARAM, MCP_TOKEN_HEADER, SERVER_TOKEN_ENV, taskMcpTokenFor } from '@/lib/server-token'
+import { MCP_MANAGER_PARAM, MCP_TASK_PROJECT_PARAM, MCP_TOKEN_HEADER, managerMcpTokenFor, SERVER_TOKEN_ENV, taskMcpTokenFor } from '@/lib/server-token'
+import { listManagers } from '@/server/managers'
 import { McpToolError, toolsFor, type McpCaller } from '@/server/mcp-tools'
 
 // Busyboy's MCP endpoint (streamable HTTP, stateless, JSON responses only),
@@ -27,13 +28,26 @@ function rpcError(code: number, message: string) {
  * valid). Without a server token (tests, `next dev`) the URL is trusted, as
  * every request is let in anyway.
  */
-function callerOf(request: Request): McpCaller {
-  const project = new URL(request.url).searchParams.get(MCP_TASK_PROJECT_PARAM)
-  if (!project) return { kind: 'director' }
+async function callerOf(request: Request): Promise<McpCaller> {
+  const params = new URL(request.url).searchParams
   const serverToken = process.env[SERVER_TOKEN_ENV]
-  if (!serverToken) return { kind: 'task', project }
-  return request.headers.get(MCP_TOKEN_HEADER) === taskMcpTokenFor(serverToken, project) ? { kind: 'task', project } : { kind: 'director' }
+  const provided = request.headers.get(MCP_TOKEN_HEADER)
+  const project = params.get(MCP_TASK_PROJECT_PARAM)
+  if (project) {
+    if (!serverToken) return { kind: 'task', project }
+    return provided === taskMcpTokenFor(serverToken, project) ? { kind: 'task', project } : { kind: 'director' }
+  }
+  // A manager's URL names it the same way, with a token bound to it. A manager
+  // removed since its agent started is refused rather than treated as the Director.
+  const id = params.get(MCP_MANAGER_PARAM)
+  if (!id) return { kind: 'director' }
+  if (serverToken && provided !== managerMcpTokenFor(serverToken, id)) return { kind: 'director' }
+  const manager = (await listManagers()).find((entry) => entry.id === id)
+  if (!manager) throw new RemovedManagerError()
+  return { kind: 'manager', manager: manager.id, project: manager.project }
 }
+
+class RemovedManagerError extends Error {}
 
 /**
  * A new server per request: stateless, it keeps nothing between requests, and
@@ -101,7 +115,14 @@ async function forTransport(request: Request) {
 
 export async function POST(incoming: Request) {
   const { request, parsedBody } = await forTransport(incoming)
-  const server = busyboyServer(callerOf(incoming))
+  let caller: McpCaller
+  try {
+    caller = await callerOf(incoming)
+  } catch (error) {
+    if (error instanceof RemovedManagerError) return new Response('This manager was removed.', { status: 403 })
+    throw error
+  }
+  const server = busyboyServer(caller)
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
   await server.connect(transport)
   try {

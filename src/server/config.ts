@@ -29,6 +29,15 @@ export type ProjectEntry = {
   addedAt: string
 }
 
+/** A manager: a chat of its own that looks after one project (see server/managers.ts). */
+export type ManagerEntry = {
+  id: string
+  name: string
+  /** The name of the project it manages. */
+  project: string
+  createdAt: string
+}
+
 export type Settings = {
   /** 1 for files this version writes. A higher version from a newer BusyBoy is kept as is. */
   version: number
@@ -41,6 +50,7 @@ export type Settings = {
   /** File name of the user's own companion picture inside the data folder. */
   companionImage: string | null
   projects: ProjectEntry[]
+  managers: ManagerEntry[]
   /**
    * The always-ask rules task agents start with, one per entry (see
    * runner/always-ask.ts). Null until the user edits them, so a newer BusyBoy's
@@ -58,6 +68,7 @@ const EMPTY_SETTINGS: Settings = {
   companion: null,
   companionImage: null,
   projects: [],
+  managers: [],
   alwaysAsk: null,
 }
 
@@ -134,6 +145,12 @@ function parseSettings(text: string): Settings | undefined {
       ? value.projects.filter(
           (project): project is ProjectEntry =>
             isRecord(project) && typeof project.name === 'string' && typeof project.path === 'string',
+        )
+      : [],
+    managers: Array.isArray(value.managers)
+      ? value.managers.filter(
+          (manager): manager is ManagerEntry =>
+            isRecord(manager) && typeof manager.id === 'string' && typeof manager.name === 'string' && typeof manager.project === 'string',
         )
       : [],
     alwaysAsk:

@@ -93,6 +93,12 @@ export async function currentCompanion() {
   return findCompanion((await readSettings()).companion)
 }
 
+/** Who the Director appears as: the chosen companion with the user's picture, or BusyBoy itself before one is chosen. */
+export async function directorPersona(): Promise<{ name: string; mark?: string; imageUrl?: string }> {
+  const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()])
+  return companion ? { name: companion.name, mark: companion.emoji, imageUrl } : { name: 'BusyBoy' }
+}
+
 export async function chooseCompanion(id: string) {
   if (!findCompanion(id)) throw new Error('Unknown companion.')
   await updateSettings((settings) => {
