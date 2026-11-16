@@ -27,8 +27,9 @@ async function openChat(page: Page) {
   await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
 }
 
-const pinned = (page: Page) => page.getByRole('region', { name: 'Waiting for you' })
 const transcript = (page: Page) => page.getByRole('log', { name: 'Transcript' })
+const openCard = (page: Page, name: string) => transcript(page).getByRole('group', { name })
+const openCards = (page: Page) => transcript(page).getByRole('group', { name: /^(Question|Approval|Plan|Progress|Done|Pull requests) from / })
 const taskRow = (page: Page, title: string) => transcript(page).getByLabel(`web · ${title}`, { exact: true })
 
 test.describe('Claude question formats', () => {
@@ -40,7 +41,7 @@ test.describe('Claude question formats', () => {
     await openChat(page)
     await createTask(context.request, 'Pick a license', ENCODED_QUESTION)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Pick a license' })
+    const card = openCard(page, 'Question from web · Pick a license')
     await expect(card).toContainText('License: Which license should the project use?')
     await expect(card.getByRole('button', { name: 'A. MIT (Recommended)' })).toBeVisible()
     await expect(card.getByRole('button', { name: 'B. Apache-2.0' })).toBeVisible()
@@ -54,7 +55,7 @@ test.describe('Claude question formats', () => {
     await openChat(page)
     await createTask(context.request, 'Pick a color', OBJECT_QUESTION)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Pick a color' })
+    const card = openCard(page, 'Question from web · Pick a color')
     await expect(card).toContainText('Color: Which color do you prefer?')
     await expect(card.getByRole('button', { name: 'A. Red (Recommended)' })).toContainText('A warm color')
     await card.getByRole('button', { name: 'A. Red (Recommended)' }).click()
@@ -67,7 +68,7 @@ test.describe('Claude question formats', () => {
     await openChat(page)
     await createTask(context.request, 'Pick checks', MULTI_QUESTION)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Pick checks' })
+    const card = openCard(page, 'Question from web · Pick checks')
     await expect(card).toContainText('Checks: Which checks should run?')
     await card.getByRole('button', { name: 'A. Lint' }).click()
     await card.getByRole('button', { name: 'B. Typecheck' }).click()
@@ -81,9 +82,9 @@ test.describe('Claude question formats', () => {
     await openChat(page)
     await createTask(context.request, 'Ask anyway', UNREADABLE_QUESTION)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Ask anyway' })
+    const card = openCard(page, 'Question from web · Ask anyway')
     await expect(card).toContainText('Claude asked a question BusyBoy could not read. Reply with the answer.')
-    await expect(pinned(page).getByRole('group', { name: /Approval from/ })).toHaveCount(0)
+    await expect(openCard(page, 'Approval from web · Ask anyway')).toHaveCount(0)
     await card.getByRole('button', { name: 'Stop task' }).click()
     await expect(taskRow(page, 'Ask anyway')).toContainText('Stopped')
   })
@@ -93,7 +94,7 @@ test.describe('Claude question formats', () => {
     await createTask(context.request, 'Summarize the change', PROSE_QUESTION)
 
     await expect(taskRow(page, 'Summarize the change')).toContainText('Idle')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
   })
 })
 
@@ -106,7 +107,7 @@ test.describe('Codex question formats', () => {
     await openChat(page)
     await createTask(context.request, 'Pick a color', CODEX_LABELED_QUESTION)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Pick a color' })
+    const card = openCard(page, 'Question from web · Pick a color')
     await expect(card).toContainText('Color: Which color do you prefer?')
     await expect(card.getByRole('button', { name: 'A. Red (Recommended)' })).toContainText('A warm color')
     await expect(card.getByRole('button', { name: 'B. Blue' })).toContainText('A cool color')
@@ -120,7 +121,7 @@ test.describe('Codex question formats', () => {
     await openChat(page)
     await createTask(context.request, 'Pick a title color', CODEX_TITLE_QUESTION)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Pick a title color' })
+    const card = openCard(page, 'Question from web · Pick a title color')
     await expect(card).toContainText('Color: Which color do you prefer?')
     await expect(card.getByRole('button', { name: 'A. Red' })).toBeVisible()
     await expect(card.getByRole('button', { name: 'B. Blue' })).toBeVisible()
@@ -135,6 +136,6 @@ test.describe('Codex question formats', () => {
     await createTask(context.request, 'Summarize the change', CODEX_PROSE)
 
     await expect(taskRow(page, 'Summarize the change')).toContainText('Idle')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
   })
 })

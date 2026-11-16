@@ -114,7 +114,7 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Delete notes', 'Delete the notes file outside this task with a patch.')
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Delete notes' })
+    const card = openCard(page, 'Approval from web · Delete notes')
     await expect(card).toContainText('On your always-ask list: Delete outside the task folder')
     await card.getByRole('button', { name: 'C. Deny' }).click()
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Delete notes' })).toContainText('C · Deny')
@@ -126,14 +126,14 @@ test.describe('Claude task agents', () => {
     await createTask(context.request, 'Update footer', 'Update the footer, and mention the force push in the diff.')
 
     await expect(taskRow(page, 'Update footer')).toContainText('Idle')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
   })
 
   test('a force push sent as shell_command with cmd should ask', async ({ page, context }) => {
     await openChat(page)
     await createTask(context.request, 'Shell push', 'Force push using the shell_command tool.')
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Shell push' })
+    const card = openCard(page, 'Approval from web · Shell push')
     await expect(card).toContainText('shell_command: git push --force origin HEAD')
     await expect(card).toContainText('On your always-ask list: Force push or delete a remote branch')
     await card.getByRole('button', { name: 'C. Deny' }).click()
@@ -144,7 +144,7 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Argv push', 'Force push, with the command passed as one argument.')
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Argv push' })
+    const card = openCard(page, 'Approval from web · Argv push')
     await expect(card).toContainText('Bash: git push --force origin feature')
     await card.getByRole('button', { name: 'C. Deny' }).click()
     await expect(taskRow(page, 'Argv push')).toContainText('Idle')
