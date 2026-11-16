@@ -25,6 +25,8 @@ import {
 
 type AppShellProps = {
   children: React.ReactNode
+  /** The chat list on the left. */
+  chats: React.ReactNode
   sidebar: React.ReactNode
   panel: React.ReactNode
 }
@@ -71,7 +73,7 @@ function useBottomPanel(panelOpen: boolean, setPanelOpen: (open: boolean) => voi
 
 // The title bar is a layout region rather than a control, so it stays a plain
 // element around library parts.
-function ShellLayout({ children, sidebar, panel }: AppShellProps) {
+function ShellLayout({ children, chats, sidebar, panel }: AppShellProps) {
   const { sidebarOpen, panelOpen, setPanelOpen, toggleSidebar, togglePanel } = useShellState()
   const bottomPanel = useBottomPanel(panelOpen, setPanelOpen)
 
@@ -114,6 +116,7 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
+        {chats}
         <SidebarInset className="min-h-0 min-w-0">
           <ResizablePanelGroup orientation="vertical">
             <ResizablePanel id="chat" minSize={160}>

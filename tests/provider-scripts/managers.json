@@ -1,0 +1,37 @@
+{
+  "provider": "claude",
+  "description": "A manager answers from its own prompt and creates a task in its project without naming it. Hand-written.",
+  "turns": [
+    {
+      "prompt": "What do you manage?",
+      "steps": [
+        { "raw": { "type": "system", "subtype": "init", "session_id": "manager-question-session" } },
+        { "echoInstructions": true }
+      ]
+    },
+    {
+      "prompt": "Add a contributing guide.",
+      "steps": [
+        { "raw": { "type": "system", "subtype": "init", "session_id": "manager-task-session" } },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__create_task",
+                  "input": {
+                    "title": "Contributing guide",
+                    "request": "Add a CONTRIBUTING.md that explains how to run the project."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        { "event": { "type": "text", "text": "I started a task for the contributing guide." } }
+      ]
+    }
+  ]
+}
