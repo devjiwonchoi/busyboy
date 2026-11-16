@@ -16,6 +16,8 @@ import {
   formatShortcut,
   isMacPlatform,
   ShortcutRegistryProvider,
+  TOGGLE_PANEL_KEYS,
+  TOGGLE_SIDEBAR_KEYS,
   useShortcut,
   type Shortcut,
 } from './shortcut-registry'
@@ -38,8 +40,6 @@ export function AppShell(props: AppShellProps) {
   )
 }
 
-const toggleSidebarKeys = { key: 'b', mod: true } as const
-const togglePanelKeys = { key: 'j', mod: true } as const
 
 // The sidebar holds the project graph, which needs room to read; 20rem (shell-state.tsx) is the default.
 const SIDEBAR_RESIZE = { minWidth: 256, maxWidth: 720, storageKey: 'busyboy:sidebar-width' }
@@ -74,8 +74,8 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
   const { sidebarOpen, panelOpen, setPanelOpen, toggleSidebar, togglePanel } = useShellState()
   const bottomPanel = useBottomPanel(panelOpen, setPanelOpen)
 
-  useShortcut({ id: 'toggle-sidebar', label: 'Toggle sidebar', ...toggleSidebarKeys, run: toggleSidebar })
-  useShortcut({ id: 'toggle-panel', label: 'Toggle bottom panel', ...togglePanelKeys, run: togglePanel })
+  useShortcut({ id: 'toggle-sidebar', label: 'Toggle sidebar', ...TOGGLE_SIDEBAR_KEYS, run: toggleSidebar })
+  useShortcut({ id: 'toggle-panel', label: 'Toggle bottom panel', ...TOGGLE_PANEL_KEYS, run: togglePanel })
 
   return (
     <div data-slot="app-shell" className="flex min-h-0 flex-1 flex-col">
@@ -88,14 +88,14 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
         <div className="ml-auto flex items-center gap-1 [app-region:no-drag]">
           <ToggleButton
             label="Toggle bottom panel"
-            shortcut={togglePanelKeys}
+            shortcut={TOGGLE_PANEL_KEYS}
             pressed={panelOpen}
             onClick={togglePanel}
             icon={<PanelBottom />}
           />
           <ToggleButton
             label="Toggle sidebar"
-            shortcut={toggleSidebarKeys}
+            shortcut={TOGGLE_SIDEBAR_KEYS}
             pressed={sidebarOpen}
             onClick={toggleSidebar}
             icon={<PanelRight />}

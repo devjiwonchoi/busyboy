@@ -36,7 +36,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     const appliedScheme = await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)
     expect(appliedScheme).toBe(colorScheme)
 
-    await page.keyboard.press('ControlOrMeta+b')
+    await page.keyboard.press('ControlOrMeta+Alt+s')
     await expectSidebarClosed()
     await page.keyboard.press('ControlOrMeta+j')
     await expect(panel).toBeVisible()
@@ -46,24 +46,28 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Toggle bottom panel' }).click()
     await expect(panel).toBeHidden()
 
-    const pressOnLayout = (key: string, code: string) =>
+    const pressOnLayout = (key: string, code: string, altKey = false) =>
       page.evaluate(
-        ([key, code]) => {
+        ([key, code, altKey]) => {
           const mac = /Mac/.test(navigator.platform)
-          const event = new KeyboardEvent('keydown', { key, code, metaKey: mac, ctrlKey: !mac, bubbles: true, cancelable: true })
+          const event = new KeyboardEvent('keydown', { key, code, altKey, metaKey: mac, ctrlKey: !mac, bubbles: true, cancelable: true })
           window.dispatchEvent(event)
           // A handled shortcut prevents the default action.
           return event.defaultPrevented
         },
-        [key, code],
+        [key, code, altKey] as const,
       )
 
-    // Dvorak types 'x' on the physical B key: Cmd/Ctrl+X must stay Cut.
-    expect(await pressOnLayout('x', 'KeyB')).toBe(false)
+    // Plain Cmd/Ctrl+S stays Save, and Option on macOS types 'ß' on the S key: matched by position.
+    expect(await pressOnLayout('s', 'KeyS')).toBe(false)
+    await expectSidebarShown()
+    expect(await pressOnLayout('ß', 'KeyS', true)).toBe(true)
+    await expectSidebarClosed()
+    expect(await pressOnLayout('ß', 'KeyS', true)).toBe(true)
     await expectSidebarShown()
 
-    // A Korean input source types 'ㅠ' on the physical B key: Cmd/Ctrl+B still toggles.
-    expect(await pressOnLayout('ㅠ', 'KeyB')).toBe(true)
+    // A Korean input source types 'ㄴ' on the physical S key: the shortcut still toggles.
+    expect(await pressOnLayout('ㄴ', 'KeyS', true)).toBe(true)
     await expectSidebarClosed()
 
     expect(policyViolations).toEqual([])
