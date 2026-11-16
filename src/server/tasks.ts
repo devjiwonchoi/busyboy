@@ -9,10 +9,18 @@ import { REVERT_AND_REMEMBER } from './director/context'
 import { memoryPrompt } from './memory'
 import { getProject, listProjects } from './projects'
 import { defaultProvider } from './providers'
-import { getAgent, sendMessage, startAgent, stopAgent, subscribeToAgent } from './runner/agent-runner'
+import {
+  getAgent,
+  isLostSessionError,
+  isStoppingAllAgents,
+  sendMessage,
+  startAgent,
+  stopAgent,
+  subscribeToAgent,
+} from './runner/agent-runner'
 import { agentEnvironment } from './runner/find-executable'
 import { APPROVE_MESSAGE, hasOpenCard, stopTaskAgent, trackTaskCards } from './task-cards'
-import type { AgentStatus, McpServer, ProviderId } from './runner/contract'
+import type { AgentEvent, AgentStatus, McpServer, ProviderId } from './runner/contract'
 
 // A task is one request in one project, worked on by its own agent in its own
 // git worktree. The list lives in TASKS_FILE; worktrees live under
@@ -34,12 +42,20 @@ export type TaskRecord = {
   worktree: string
   branch: string
   createdAt: string
+  /**
+   * The agent's last status, kept across restarts: a task that was running or
+   * waiting when the server stopped or died resumes on the next start. A stop
+   * made by the server itself is not saved, so quitting keeps it.
+   */
+  activity?: TaskStatus
+  /** Why the task stopped when it could not resume, shown with the task. */
+  note?: string | null
 }
 
 /** `idle`: the agent finished its turn and waits for a message. `stopped`: its process is gone. */
 export type TaskStatus = 'running' | 'needs-you' | 'idle' | 'stopped'
 
-export type TaskView = Pick<TaskRecord, 'id' | 'project' | 'title' | 'branch' | 'createdAt'> & { status: TaskStatus }
+export type TaskView = Pick<TaskRecord, 'id' | 'project' | 'title' | 'branch' | 'createdAt'> & { status: TaskStatus; note: string | null }
 
 export class TaskError extends Error {}
 
@@ -138,13 +154,25 @@ function statusOf(agentStatus: AgentStatus | undefined): TaskStatus {
 
 export function taskView(task: TaskRecord): TaskView {
   const { id, project, title, branch, createdAt } = task
-  const status = statusOf(getAgent(task.agentId)?.status)
+  const agent = getAgent(task.agentId)
+  // An idle task is not resumed at start (see resumeTasks); it shows as idle, not stopped.
+  const status = !agent && task.activity === 'idle' ? 'idle' : statusOf(agent?.status)
   // A plan card waits on the user while the agent itself is idle, between turns.
-  return { id, project, title, branch, createdAt, status: status === 'idle' && hasOpenCard(task.agentId) ? 'needs-you' : status }
+  return {
+    id,
+    project,
+    title,
+    branch,
+    createdAt,
+    status: status === 'idle' && hasOpenCard(task.agentId) ? 'needs-you' : status,
+    note: task.note ?? null,
+  }
 }
 
 /** Calls `listener` whenever a task in `folder` is created or changes status. */
 export function subscribeToTasks(folder: string, listener: (task: TaskView) => void) {
+  // Whatever shows tasks (the window, the tray) is the first sign the data folder is in use.
+  void resumeTasks(folder)
   let set = listeners.get(folder)
   if (!set) listeners.set(folder, (set = new Set()))
   set.add(listener)
@@ -159,6 +187,7 @@ function notify(folder: string, task: TaskRecord) {
 // ---- Operations --------------------------------------------------------------
 
 export async function listTasksAt(folder: string): Promise<TaskView[]> {
+  void resumeTasks(folder)
   return (await readTasksAt(folder)).map(taskView)
 }
 
@@ -247,16 +276,17 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
     agentId = agent.id
     if (getAgent(agent.id)?.status === 'stopped') throw new TaskError(`The task agent could not start: ${startError(agent.id)}`)
     const task: TaskRecord = {
-    id,
-    project: project.name,
-    title,
-    request,
-    provider,
+      id,
+      project: project.name,
+      title,
+      request,
+      provider,
       agentId: agent.id,
       sessionId: null,
       worktree,
       branch,
       createdAt: new Date().toISOString(),
+      activity: 'running',
     }
     await updateTasksAt(folder, (tasks) => void tasks.push(task))
     watchAgent(folder, task)
@@ -278,6 +308,15 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
   }
 }
 
+/** Whether the agent already reported that its provider cannot run (Claude reports a missing CLI while starting). */
+function startFailedAlready(agentId: string) {
+  let failed = false
+  subscribeToAgent(agentId, 0, ({ event }) => {
+    if (event.type === 'error' && isStartFailure(event)) failed = true
+  })?.()
+  return failed
+}
+
 /** The error a task agent reported while starting. */
 function startError(agentId: string) {
   let message = 'unknown error'
@@ -287,29 +326,76 @@ function startError(agentId: string) {
   return message
 }
 
-/** Saves the session id when it arrives, reports status changes, and opens the agent's cards. */
-function watchAgent(folder: string, task: TaskRecord) {
+/** Applies `change` to the stored copy of `task` and to `task` itself. */
+function saveTask(folder: string, task: TaskRecord, change: Partial<TaskRecord>) {
+  Object.assign(task, change)
+  return updateTasksAt(folder, (tasks) => {
+    const stored = tasks.find(({ id }) => id === task.id)
+    if (stored) Object.assign(stored, change)
+  }).catch((error: unknown) => console.error(`busyboy: could not save task ${task.id}`, error))
+}
+
+/**
+ * Saves the session id when it arrives, keeps the task's activity for resume,
+ * and reports status changes. A resumed agent whose session turns out to be
+ * gone stops the task with a note.
+ */
+function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRestart = false } = {}) {
   let last = taskView(task).status
+  let confirmed = !resumed
+  // Until its first turn ends well, a restarted agent may still find its provider
+  // unusable: Claude reports signed-out only inside its first reply, after the session.
+  let checkingStart = fromRestart
+  let startFailed = false
   const report = () => {
     const status = taskView(task).status
     if (status !== last) {
       last = status
+      // Agents the server stops on its way down, and restarted agents whose provider
+      // could not start (not installed, signed out), keep their activity and resume
+      // on the next start.
+      const keep = startFailed || (status === 'stopped' && isStoppingAllAgents())
+      if (!keep) void saveTask(folder, task, { activity: status })
       notify(folder, task)
     }
   }
   trackTaskCards({ folder, task, onChange: report })
   subscribeToAgent(task.agentId, 0, ({ event }) => {
-    if (event.type === 'session' && event.sessionId !== task.sessionId) {
-      task.sessionId = event.sessionId
-      void updateTasksAt(folder, (tasks) => {
-        const stored = tasks.find(({ id }) => id === task.id)
-        if (stored) stored.sessionId = event.sessionId
-      })
+    if (event.type === 'session') {
+      confirmed = true
+      if (event.sessionId !== task.sessionId) void saveTask(folder, task, { sessionId: event.sessionId })
     }
+    // Only a session the provider no longer has is a failed resume. Other
+    // errors (an MCP server that did not start) leave a working agent, and
+    // Claude confirms a resumed session only with its first reply, so an idle
+    // resumed agent can stay unconfirmed for a long time.
+    if (event.type === 'error' && !confirmed && isLostSessionError(event)) {
+      confirmed = true
+      void saveTask(folder, task, {
+        activity: 'stopped',
+        note: resumeNote('the provider no longer has its conversation'),
+      }).then(() => notify(folder, task))
+      // A lost session never recovers; stop now instead of waiting for the process.
+      void stopAgent(task.agentId).catch(() => {})
+      last = 'stopped'
+      return
+    }
+    if (event.type === 'error' && checkingStart && !startFailed && isStartFailure(event)) {
+      startFailed = true
+      void saveTask(folder, task, { note: resumeNote(`${event.message} It is tried again the next time BusyBoy starts`) })
+      // The provider cannot work until the user fixes it; end the process instead of leaving it idle.
+      void stopAgent(task.agentId).catch(() => {})
+    }
+    if (event.type === 'turn-done') checkingStart = false
     // The runner updates its status before it delivers the event.
     report()
   })
 }
+
+/** The provider cannot run at all yet; the user can fix it (install, sign in) before the next start. */
+const isStartFailure = (event: Extract<AgentEvent, { type: 'error' }>) => event.code === 'not-installed' || event.code === 'signed-out'
+
+const resumeNote = (reason: string) => `Could not resume after BusyBoy restarted: ${reason.replace(/\.$/, '')}.`
 
 /** Stops a task's agent. The task, its worktree, and its branch stay. */
 export async function stopTask(taskId: string) {
@@ -318,5 +404,117 @@ export async function stopTask(taskId: string) {
   if (!task) {
     throw new TaskError(`There is no task ${taskId}.`)
   }
+  // Saved before the agent stops: a Quit right after would otherwise suppress
+  // the save of its stopped event, and the task would resume on the next start.
+  await updateTasksAt(folder, (tasks) => {
+    const stored = tasks.find(({ id }) => id === taskId)
+    if (stored) stored.activity = 'stopped'
+  })
+  task.activity = 'stopped'
+  // A task that was not resumed has no agent to report the stop, so report it here.
+  if (!getAgent(task.agentId)) notify(folder, task)
   await stopTaskAgent({ folder, agentId: task.agentId })
+}
+
+// ---- Resume after a restart -------------------------------------------------
+
+/**
+ * Sent to an agent resumed mid-turn. Its last step may or may not have
+ * finished, and only the agent can tell from the worktree, so it checks
+ * instead of BusyBoy sending the request again.
+ */
+export const RESUME_WORKING_MESSAGE =
+  'BusyBoy restarted while you were working, so your last step may not have finished. Check what is already done in the worktree before you continue, so nothing runs twice, then carry on with the task.'
+
+/** Sent to an agent resumed while it waited on the user: the open request died with the old process. */
+export const RESUME_WAITING_MESSAGE =
+  'BusyBoy restarted while you were waiting for the user, and your request to them was lost. Ask them again the same way, and do nothing else until they answer.'
+
+const RESUMES_KEY = Symbol.for('busyboy.task-resumes')
+const resumeStore = globalThis as typeof globalThis & { [RESUMES_KEY]?: Map<string, Promise<void>> }
+const resumes = (resumeStore[RESUMES_KEY] ??= new Map())
+
+/**
+ * Brings back the tasks in `folder` that were running or waiting on the user
+ * (a question, an approval, or a plan card) when the server last stopped or
+ * died. Runs once per data folder per server process.
+ *
+ * Idle tasks are left alone: a finished task stays idle for good, and starting
+ * a provider process for each of them on every launch would load a small
+ * machine for nothing. An idle task keeps its session id and shows as idle.
+ * Nothing starts it again yet; the user can stop it.
+ */
+export function resumeTasks(folder: string): Promise<void> {
+  let resume = resumes.get(folder)
+  if (!resume) {
+    resume = (async () => {
+      const tasks = await readTasksAt(folder).catch(() => [] as TaskRecord[])
+      for (const listed of tasks) {
+        if (isStoppingAllAgents()) return
+        // Read again: the user may have stopped this task while earlier ones were resuming.
+        const task = (await readTasksAt(folder).catch(() => [] as TaskRecord[])).find(({ id }) => id === listed.id)
+        // A live agent belongs to this process already (a dev reload of this module).
+        if (!task || getAgent(task.agentId) || (task.activity !== 'running' && task.activity !== 'needs-you')) continue
+        await resumeTask(folder, task).catch((error: unknown) => {
+          // Shown now, but the activity is kept: a read error may pass, so the next start tries again.
+          task.note = resumeNote(error instanceof Error ? error.message : String(error))
+          void saveTask(folder, task, { note: task.note })
+          notify(folder, task)
+        })
+      }
+    })()
+    resumes.set(folder, resume)
+  }
+  return resume
+}
+
+async function resumeTask(folder: string, task: TaskRecord) {
+  // Read before the agent starts: its session event updates `task` while this awaits.
+  const { activity, sessionId } = task
+  try {
+    await readFile(join(task.worktree, '.git'))
+  } catch {
+    // Gone for good, unlike the errors resumeTasks retries on the next start.
+    await saveTask(folder, task, { activity: 'stopped', note: resumeNote(`its worktree ${task.worktree} is gone`) })
+    notify(folder, task)
+    return
+  }
+  // Read through a dynamic import: mcp-tools creates tasks, so a static import would be circular.
+  const { busyboyMcpServers } = await import('./mcp-tools')
+  // Read the list again: the user may have edited it while BusyBoy was closed.
+  const alwaysAsk = await alwaysAskRulesAt(folder)
+  const agent = startAgent({
+    provider: task.provider,
+    cwd: task.worktree,
+    instructions: await taskPrompt(folder, task, alwaysAsk),
+    mcpServers: await busyboyMcpServers(task.project, folder),
+    resumeSessionId: sessionId ?? undefined,
+    alwaysAsk,
+  })
+  task.agentId = agent.id
+  // The adapter threw while starting: shown, and like a missing CLI, tried again on the next start.
+  if (getAgent(agent.id)?.status === 'stopped') {
+    await saveTask(folder, task, { agentId: agent.id, note: resumeNote(startError(agent.id)) })
+    notify(folder, task)
+    return
+  }
+  // Clear the last start's note first: the watcher replays this agent's events
+  // at once and may write a new one (a missing CLI). Both writes are queued in order.
+  const saved = saveTask(folder, task, { agentId: agent.id, note: null })
+  watchAgent(folder, task, { resumed: Boolean(sessionId), fromRestart: true })
+  await saved
+  notify(folder, task)
+  // A lost session or a missing CLI may already have ended the agent; the watcher has noted why.
+  if (getAgent(agent.id)?.status === 'stopped' || startFailedAlready(agent.id)) return
+  try {
+    // No stored session means the provider never took the request, so sending it again runs it once.
+    // Claude reports its session with its first reply and the save is queued, so a crash in
+    // between can still send the request twice; that window is the length of one file write.
+    if (!sessionId) sendMessage(agent.id, task.request)
+    else if (activity === 'running') sendMessage(agent.id, RESUME_WORKING_MESSAGE)
+    else if (activity === 'needs-you') sendMessage(agent.id, RESUME_WAITING_MESSAGE)
+  } catch (error) {
+    // It stopped in between; its events already say why.
+    console.error(`busyboy: could not message resumed task ${task.id}`, error)
+  }
 }
