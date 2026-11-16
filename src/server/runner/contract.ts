@@ -32,6 +32,17 @@ export type StartAgentInput = {
   forkSessionId?: string
   /** Start with no tools, so the agent can only answer in text and never asks for approval. */
   noTools?: boolean
+  /**
+   * Rules for tool calls that always need the user's approval, even where Auto
+   * mode would run them (see `always-ask.ts`). The adapter checks each tool call
+   * before it runs and emits an `approval` for a match.
+   */
+  alwaysAsk?: string[]
+  /**
+   * A folder the agent may not touch outside its own `cwd`, checked like the
+   * always-ask list (see BUSYBOY_FILES_RULE in `always-ask.ts`).
+   */
+  privateFolder?: string
 }
 
 export type McpServer = (
@@ -75,8 +86,10 @@ export type AgentEvent =
   /**
    * The agent waits until `answer()` is called with an `approval` answer.
    * `canAllowForSession`: the provider can remember an allow for the rest of the session.
+   * `allowForSessionLabel`: how a card names that option when what is remembered is
+   * narrower than every matching request (an always-ask command is remembered exactly).
    */
-  | { type: 'approval'; requestId: string; title: string; detail?: string; canAllowForSession: boolean }
+  | { type: 'approval'; requestId: string; title: string; detail?: string; canAllowForSession: boolean; allowForSessionLabel?: string }
   /** The agent waits until `answer()` is called with a `question` answer. */
   | { type: 'question'; requestId: string; questions: Question[] }
   /** A pending approval or question was answered (or dropped by an interrupt or stop). */
@@ -123,12 +136,14 @@ export type SignInStatus =
   | { state: 'signed-in'; account?: string }
   | { state: 'signed-out'; loginCommand: string }
   | { state: 'not-installed'; detail: string }
+  /** Installed and maybe signed in, but too old for BusyBoy to run safely. */
+  | { state: 'outdated'; detail: string; updateCommand: string }
   | { state: 'unknown'; detail: string }
 
 // ---- Provider side -------------------------------------------------------
 
 export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permissionMode'>> &
-  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools'> & {
+  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder'> & {
     /** Every event the provider produces. Call it in order; the runner stamps seq numbers. */
     emit: (event: AgentEvent) => void
   }

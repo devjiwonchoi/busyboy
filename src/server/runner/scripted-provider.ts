@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
+import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from './always-ask'
 import {
   ClaudeEventMapper,
   claudePermissionToEvent,
@@ -54,6 +55,7 @@ export type ScriptStep =
   | { echoInstructions: true }
   | { writeInstructions: string }
   | { writeFile: { path: string; text: string } }
+  | { toolCall: { name: string; input: Record<string, unknown> }; then?: Record<string, ScriptStep[]> }
 
 export type ScriptTurn = {
   /** The user message that plays this turn, matched exactly after trimming. */
@@ -208,6 +210,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   let inTurn = false
   let stopped = false
   let requestCount = 0
+  const allowedCalls = createAllowedCalls()
 
   const cancellable = <T>(promise: Promise<T>) =>
     new Promise<T>((resolve, reject) => {
@@ -248,6 +251,20 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       mapper?.flush()
       if ('writeInstructions' in step) {
         await cancellable(writeFile(join(options.cwd, step.writeInstructions), options.instructions ?? ''))
+        continue
+      }
+      if ('toolCall' in step) {
+        const { name, input } = step.toolCall
+        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, privateFolder: options.privateFolder })
+        let key = 'allow'
+        const call = { toolName: name, input, rule: rule ?? '', cwd: options.cwd }
+        if (rule && !allowedCalls.has(call)) {
+          const answer = await pause(alwaysAskApproval({ requestId: `script-${++requestCount}`, toolName: name, input, rule }))
+          if (answer.kind === 'approval' && answer.allow && answer.forSession) allowedCalls.add(call)
+          key = answerKey(answer)
+        }
+        const branch = step.then?.[key]
+        if (branch) return playSteps(branch)
         continue
       }
       if ('writeFile' in step) {

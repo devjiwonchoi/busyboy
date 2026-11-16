@@ -120,7 +120,7 @@ function requestCard(task: CardTask, event: Extract<AgentEvent, { type: 'approva
     return { ...source, kind: 'choice', approval: false, detail: undefined, questions: event.questions.map(toCardQuestion) }
   }
 
-  const labels = event.canAllowForSession ? [ALLOW, ALLOW_FOR_SESSION, DENY] : [ALLOW, DENY]
+  const labels = event.canAllowForSession ? [ALLOW, event.allowForSessionLabel ?? ALLOW_FOR_SESSION, DENY] : [ALLOW, DENY]
   const options = labels.map((label) => ({ label, description: undefined, recommended: false }))
   return {
     ...source,
@@ -299,7 +299,8 @@ export function answerCard({ folder, cardId, choices }: { folder: string; cardId
   let answer: AgentAnswer
   if (card.approval) {
     const [label] = picked[0].labels
-    answer = { kind: 'approval', allow: label !== DENY, forSession: label === ALLOW_FOR_SESSION }
+    // The middle option remembers the allow, whatever the request named it.
+    answer = { kind: 'approval', allow: label !== DENY, forSession: label !== ALLOW && label !== DENY }
   } else {
     // The providers key answers by question text, so questions that share their text share one answer, listing both choices.
     const answers: Record<string, string> = {}

@@ -133,6 +133,8 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
       // A branch is never resumed itself (it is not kept), so it always forks from the original.
       forkSessionId: resumeSessionId ? undefined : agent.input.forkSessionId,
       noTools: agent.input.noTools,
+      alwaysAsk: agent.input.alwaysAsk,
+      privateFolder: agent.input.privateFolder,
       emit: (event) => record(agent, event),
     })
     if (agent.status === 'starting') agent.status = 'idle'

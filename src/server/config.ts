@@ -41,6 +41,12 @@ export type Settings = {
   /** File name of the user's own companion picture inside the data folder. */
   companionImage: string | null
   projects: ProjectEntry[]
+  /**
+   * The always-ask rules task agents start with, one per entry (see
+   * runner/always-ask.ts). Null until the user edits them, so a newer BusyBoy's
+   * defaults still apply to a user who never changed the list.
+   */
+  alwaysAsk: string[] | null
   /** Keys this version does not know are kept when saving. */
   [unknownKey: string]: unknown
 }
@@ -52,6 +58,7 @@ const EMPTY_SETTINGS: Settings = {
   companion: null,
   companionImage: null,
   projects: [],
+  alwaysAsk: null,
 }
 
 /** Test mode never applies to the desktop app, which always starts the server with a token. */
@@ -129,6 +136,8 @@ function parseSettings(text: string): Settings | undefined {
             isRecord(project) && typeof project.name === 'string' && typeof project.path === 'string',
         )
       : [],
+    alwaysAsk:
+      Array.isArray(value.alwaysAsk) && value.alwaysAsk.every((rule) => typeof rule === 'string') ? value.alwaysAsk : null,
   }
 }
 

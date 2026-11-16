@@ -5,6 +5,7 @@ export const STEPS = [
   { id: 'companion', title: 'Companion' },
   { id: 'agents', title: 'Agents' },
   { id: 'skills', title: 'Skills' },
+  { id: 'approvals', title: 'Approvals' },
   { id: 'start', title: 'Start' },
 ] as const
 
