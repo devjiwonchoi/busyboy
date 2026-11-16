@@ -5,7 +5,7 @@ import { alwaysAskRulesAt } from '../always-ask-list'
 import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
 import { directorTiming } from './context'
 import { directorPrompt, managerPrompt } from './prompt'
-import { getManagerAt, isRemovedManager, listManagersAt, subscribeToManagers } from '../managers'
+import { getManagerAt, isListedManager, listManagersAt, subscribeToManagers } from '../managers'
 import { PROVIDERS } from '../providers'
 import {
   answerAgent,
@@ -113,6 +113,8 @@ type Director = {
   folder: string
   /** The manager this chat belongs to; null for the Director. */
   chat: string | null
+  /** The manager was removed: nothing more is sent, and an agent that was just starting is ended. */
+  closed?: boolean
   ready: Promise<void>
   /** `ready` has settled, so entries can be saved at once. */
   loaded: boolean
@@ -165,9 +167,9 @@ const directors = (globalStore[DIRECTORS_KEY] ??= new Map())
 const directorFolder = (director: Director) =>
   director.chat ? join(director.folder, MANAGERS_FOLDER, director.chat) : join(director.folder, DIRECTOR_FOLDER)
 
-/** The chat that shows a task or card of `owner`: its manager's, or the Director's once that manager is removed. */
+/** The chat that shows a task or card of `owner`: its manager's, or the Director's once that manager is gone from the list. */
 function chatOf(folder: string, owner: string | null | undefined) {
-  return owner && !isRemovedManager(folder, owner) ? owner : null
+  return owner && isListedManager(folder, owner) ? owner : null
 }
 
 const WATCHED_KEY = Symbol.for('busyboy.director-folders')
@@ -178,6 +180,8 @@ const watched = (watchedStore[WATCHED_KEY] ??= new Set())
 function watchFolder(folder: string) {
   if (watched.has(folder)) return
   watched.add(folder)
+  // Read once, so cards are routed by the real list from the start (see isListedManager).
+  void listManagersAt(folder).catch(() => {})
   subscribeToTasks(folder, (task) => {
     // Every loaded chat gets every task: a chat shows only the tasks its transcript names.
     for (const director of directors.values()) {
@@ -574,6 +578,11 @@ async function flush(director: Director) {
     // started. This one neither restarts the agent nor sends.
     if (director.turn !== turn || !isAnswering(director)) return
     const agentId = await ensureAgent(director, target.provider, target.mcp, instructions, alwaysAsk)
+    if (director.closed) {
+      director.agentId = undefined
+      void stopAgent(agentId).catch(() => {})
+      return
+    }
     // Stop was pressed while the agent was starting: the turn is not sent.
     if (director.stopRequested && getAgent(agentId)?.status !== 'stopped') {
       saveEntry(director, newEntry('note', { text: 'Stopped.', tone: 'info' }))
@@ -845,10 +854,22 @@ export async function subscribeToChats(folder: string, listener: (chats: ChatSum
   }
 }
 
+/**
+ * Shows the tasks of a removed manager in the Director's chat: a chat shows only
+ * the tasks its transcript names, and the manager's transcript is no longer shown.
+ */
+export async function adoptTasks(folder: string, taskIds: string[]) {
+  if (taskIds.length === 0) return
+  const director = getDirector(folder)
+  await director.ready
+  saveEntry(director, newEntry('tasks', { taskIds }))
+}
+
 /** Ends the agent of a removed manager. Its transcript stays on disk. */
 export async function closeChat(folder: string, chat: string) {
   const director = directors.get(`${folder}\n${chat}`)
   if (!director) return
+  director.closed = true
   clearTimeout(director.batchTimer)
   clearTimeout(director.idleTimer)
   director.pending = []

@@ -239,7 +239,7 @@ function notify(folder: string, task: TaskRecord) {
 
 // ---- Operations --------------------------------------------------------------
 
-/** Hands the tasks of a removed manager to the Director's chat. */
+/** Hands the tasks of a removed manager to the Director's chat. Returns the ones still in use. */
 export async function releaseTasksOf(folder: string, chat: string) {
   const released = await updateTasksAt(folder, (tasks) => {
     const own = tasks.filter((task) => task.chat === chat)
@@ -247,6 +247,7 @@ export async function releaseTasksOf(folder: string, chat: string) {
     return own
   })
   for (const task of released) notify(folder, task)
+  return released.filter(({ archivedAt }) => !archivedAt).map(({ id }) => id)
 }
 
 export async function listTasksAt(folder: string): Promise<TaskView[]> {

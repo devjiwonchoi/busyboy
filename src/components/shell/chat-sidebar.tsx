@@ -159,6 +159,9 @@ function NewManager({ projects }: { projects: string[] }) {
     const result = await createManagerAction(previous, form)
     if (result.id) {
       setOpen(false)
+      // The next manager starts from an empty form, not this one's project.
+      setProject(null)
+      setFolder('')
       // Refreshed too: a repository added with the manager is a new project for the next form.
       router.push(managerHref(result.id))
       router.refresh()

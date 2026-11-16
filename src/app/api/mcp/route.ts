@@ -1,7 +1,15 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { MCP_MANAGER_PARAM, MCP_TASK_PROJECT_PARAM, MCP_TOKEN_HEADER, managerMcpTokenFor, SERVER_TOKEN_ENV, taskMcpTokenFor } from '@/lib/server-token'
+import {
+  MCP_MANAGER_PARAM,
+  MCP_TASK_PROJECT_PARAM,
+  MCP_TOKEN_HEADER,
+  managerMcpTokenFor,
+  mcpTokenFor,
+  SERVER_TOKEN_ENV,
+  taskMcpTokenFor,
+} from '@/lib/server-token'
 import { listManagers } from '@/server/managers'
 import { McpToolError, toolsFor, type McpCaller } from '@/server/mcp-tools'
 
@@ -33,21 +41,29 @@ async function callerOf(request: Request): Promise<McpCaller> {
   const serverToken = process.env[SERVER_TOKEN_ENV]
   const provided = request.headers.get(MCP_TOKEN_HEADER)
   const project = params.get(MCP_TASK_PROJECT_PARAM)
-  if (project) {
-    if (!serverToken) return { kind: 'task', project }
-    return provided === taskMcpTokenFor(serverToken, project) ? { kind: 'task', project } : { kind: 'director' }
-  }
-  // A manager's URL names it the same way, with a token bound to it. A manager
-  // removed since its agent started is refused rather than treated as the Director.
   const id = params.get(MCP_MANAGER_PARAM)
-  if (!id) return { kind: 'director' }
-  if (serverToken && provided !== managerMcpTokenFor(serverToken, id)) return { kind: 'director' }
+  if (!serverToken) {
+    if (project) return { kind: 'task', project }
+    return id ? managerCaller(id) : { kind: 'director' }
+  }
+  // The token decides who calls, never the URL alone: the proxy lets a manager's
+  // token in for its own `manager` parameter, whatever else the URL carries, so a
+  // URL that also names a project must not make that manager anything more.
+  if (provided && project && provided === taskMcpTokenFor(serverToken, project)) return { kind: 'task', project }
+  if (provided && id && provided === managerMcpTokenFor(serverToken, id)) return managerCaller(id)
+  // The Director's token, or no MCP token at all: the proxy let the window's own token in.
+  if (!provided || provided === mcpTokenFor(serverToken)) return { kind: 'director' }
+  throw new RefusedCallerError('This token cannot be used here.')
+}
+
+/** A manager removed since its agent started is refused rather than treated as the Director. */
+async function managerCaller(id: string): Promise<McpCaller> {
   const manager = (await listManagers()).find((entry) => entry.id === id)
-  if (!manager) throw new RemovedManagerError()
+  if (!manager) throw new RefusedCallerError('This manager was removed.')
   return { kind: 'manager', manager: manager.id, project: manager.project }
 }
 
-class RemovedManagerError extends Error {}
+class RefusedCallerError extends Error {}
 
 /**
  * A new server per request: stateless, it keeps nothing between requests, and
@@ -119,7 +135,7 @@ export async function POST(incoming: Request) {
   try {
     caller = await callerOf(incoming)
   } catch (error) {
-    if (error instanceof RemovedManagerError) return new Response('This manager was removed.', { status: 403 })
+    if (error instanceof RefusedCallerError) return new Response(error.message, { status: 403 })
     throw error
   }
   const server = busyboyServer(caller)

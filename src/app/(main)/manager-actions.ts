@@ -1,7 +1,7 @@
 'use server'
 
 import { dataFolder } from '@/server/config'
-import { closeChat } from '@/server/director/chat'
+import { adoptTasks, closeChat } from '@/server/director/chat'
 import { createManager, ManagerError, removeManager } from '@/server/managers'
 import { releaseTasksOf } from '@/server/tasks'
 
@@ -33,5 +33,5 @@ export async function removeManagerAction(id: string) {
   const folder = await dataFolder()
   await removeManager(id)
   await closeChat(folder, id)
-  await releaseTasksOf(folder, id)
+  await adoptTasks(folder, await releaseTasksOf(folder, id))
 }

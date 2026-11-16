@@ -159,9 +159,14 @@ test("a manager's tools should take no project and refuse another project's task
   expect((await rpc(context.request, 'nobody', 'tools/list')).status).toBe(403)
 })
 
-test('removing a manager should take it off the list and go back to the Director', async ({ page, context, baseURL }) => {
+test("removing a manager should take it off the list and show its tasks in the Director's chat", async ({ page, context, baseURL }) => {
   const { home } = await useProjectsHome(context, baseURL!, ['web'])
   addManager(home, { id: 'webby', name: 'Webby', project: 'web' })
+  const created = await rpc(context.request, 'webby', 'tools/call', {
+    name: 'create_task',
+    arguments: { title: 'Contributing guide', request: 'Add a CONTRIBUTING.md that explains how to run the project.' },
+  })
+  expect(created.body.result.isError).toBeFalsy()
   await openChat(page, 'webby')
 
   const item = chatList(page).getByRole('listitem', { name: 'Webby' })
@@ -171,6 +176,9 @@ test('removing a manager should take it off the list and go back to the Director
 
   await expect(chatList(page).getByText('No managers yet.')).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Message' })).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
+  // Its task shows in the Director's chat from now on.
+  await expect(transcript(page).getByRole('group', { name: 'Tasks' }).getByRole('listitem', { name: 'Contributing guide' })).toBeVisible()
+  expect(storedTasks(home)).toMatchObject([{ title: 'Contributing guide', chat: null }])
   expect(settingsOf(home).managers).toEqual([])
   expect(settingsOf(home).projects.map(({ name }) => name)).toEqual(['web'])
 })

@@ -44,11 +44,11 @@ const newChat = (): Chat => ({ key: crypto.randomUUID() })
 export function SideChat({ persona, managers }: { persona: Persona; managers: { id: string; name: string }[] }) {
   // The side chat branches from the chat on screen: the Director's, or the open manager's.
   const open = useSearchParams().get('manager')
-  const manager = managers.find(({ id }) => id === open)
+  // `managers` is from when the screen loaded, so a manager made since then is not in it. The
+  // side chat still branches from that manager's conversation, never from the Director's.
+  const name = managers.find(({ id }) => id === open)?.name ?? 'Manager'
   // A key per chat: switching chats starts the side chats over, as they belong to the other conversation.
-  return (
-    <SideChatTabs key={manager?.id ?? ''} persona={manager ? managerPersona(manager.name) : persona} chat={manager?.id ?? null} />
-  )
+  return <SideChatTabs key={open ?? ''} persona={open ? managerPersona(name) : persona} chat={open} />
 }
 
 function SideChatTabs({ persona, chat: mainChat }: { persona: Persona; chat: string | null }) {

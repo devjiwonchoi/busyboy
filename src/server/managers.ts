@@ -16,17 +16,19 @@ export class ManagerError extends Error {}
 
 const MAX_NAME_LENGTH = 40
 
-// Kept on globalThis so `next dev` reloads keep the listeners and the removed ids.
-const STORE_KEY = Symbol.for('busyboy.managers')
-type Store = { listeners: Map<string, Set<() => void>>; removed: Set<string> }
+// Kept on globalThis so `next dev` reloads keep the listeners and the known ids.
+const STORE_KEY = Symbol.for('busyboy.managers.v2')
+type Store = { listeners: Map<string, Set<() => void>>; known: Map<string, Set<string>> }
 const globalStore = globalThis as typeof globalThis & { [STORE_KEY]?: Store }
-const store = (globalStore[STORE_KEY] ??= { listeners: new Map(), removed: new Set() })
+const store = (globalStore[STORE_KEY] ??= { listeners: new Map(), known: new Map() })
 
 /** The managers whose project still exists, oldest first. A manager of a removed project is hidden, not deleted. */
 export async function listManagersAt(folder: string): Promise<Manager[]> {
   const { managers, projects } = await readSettingsAt(folder)
   const names = new Set(projects.map(({ name }) => name.toLowerCase()))
-  return managers.filter(({ project }) => names.has(project.toLowerCase()))
+  const listed = managers.filter(({ project }) => names.has(project.toLowerCase()))
+  store.known.set(folder, new Set(listed.map(({ id }) => id)))
+  return listed
 }
 
 export async function listManagers() {
@@ -38,11 +40,13 @@ export async function getManagerAt(folder: string, id: string) {
 }
 
 /**
- * Whether this manager was removed since the server started. A card that was
- * open at that moment still names it, and shows in the Director's chat instead.
+ * Whether `id` is a manager in the list as it was last read. A task or an open
+ * card can still name a manager that was removed, or whose project was; those
+ * show in the Director's chat. True until the list is first read, which
+ * whatever shows chats does at once.
  */
-export function isRemovedManager(folder: string, id: string) {
-  return store.removed.has(`${folder}\n${id}`)
+export function isListedManager(folder: string, id: string) {
+  return store.known.get(folder)?.has(id) ?? true
 }
 
 /** Calls `listener` whenever a manager in `folder` is created or removed. */
@@ -88,7 +92,9 @@ export async function createManager(input: { name?: string; project?: string; fo
     settings.managers.push(entry)
     return entry
   })
-  notify(await dataFolder())
+  const folder = await dataFolder()
+  await listManagersAt(folder)
+  notify(folder)
   return manager
 }
 
@@ -98,6 +104,6 @@ export async function removeManager(id: string) {
   await updateSettings((settings) => {
     settings.managers = settings.managers.filter((manager) => manager.id !== id)
   })
-  store.removed.add(`${folder}\n${id}`)
+  await listManagersAt(folder)
   notify(folder)
 }
