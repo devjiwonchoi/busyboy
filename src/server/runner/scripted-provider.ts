@@ -5,6 +5,7 @@
 // See `ProviderScript` for the format.
 import { randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   ClaudeEventMapper,
@@ -37,6 +38,10 @@ export const MISSING_SESSION_PREFIX = 'missing-'
  * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question
  *   (Claude scripts only).
  * - `delayMs`: wait before the next step.
+ * - `echoInstructions`: reply with the instructions the agent was started with, so a
+ *   journey can check what reached the prompt (for example memory).
+ * - `writeInstructions`: write those instructions to this file in the agent's working
+ *   folder, for an agent whose replies no screen shows yet (a task agent).
  * An approval or question (from `event` or `canUseTool`) pauses the replay until it is
  * answered. With `then`, the branch named by the answer replaces the rest of the turn:
  * `allow` or `deny` for an approval, the chosen label of the first question for a question.
@@ -46,6 +51,8 @@ export type ScriptStep =
   | { raw: unknown }
   | { canUseTool: ClaudePermissionRequest; then?: Record<string, ScriptStep[]> }
   | { delayMs: number }
+  | { echoInstructions: true }
+  | { writeInstructions: string }
 
 export type ScriptTurn = {
   /** The user message that plays this turn, matched exactly after trimming. */
@@ -198,6 +205,14 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         continue
       }
       mapper?.flush()
+      if ('writeInstructions' in step) {
+        await cancellable(writeFile(join(options.cwd, step.writeInstructions), options.instructions ?? ''))
+        continue
+      }
+      if ('echoInstructions' in step) {
+        emit({ type: 'text', itemId: `script-instructions-${++requestCount}`, text: options.instructions ?? '' })
+        continue
+      }
       let events: AgentEvent[]
       let then: Record<string, ScriptStep[]> | undefined
       if ('canUseTool' in step) {

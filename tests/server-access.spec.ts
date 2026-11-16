@@ -9,14 +9,16 @@ import { createTempFolder, prepareDefaultHome, removeFolder } from './support/te
 const root = process.cwd()
 const testPort = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
 
-type Reply = { status: number; headers: Record<string, string | string[] | undefined> }
+type Reply = { status: number; headers: Record<string, string | string[] | undefined>; body: string }
 
 /** Sends a raw HTTP request so the Host and Origin headers can be set freely. */
 function get(port: number, headers: Record<string, string>, path = '/', method = 'GET', body?: string): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const req = httpRequest({ host: '127.0.0.1', port, path, method, headers }, (res) => {
-      res.resume()
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers }))
+      let text = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk: string) => (text += chunk))
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: text }))
     })
     req.on('error', reject)
     req.end(body)
@@ -124,6 +126,25 @@ test('the MCP token should open only the MCP endpoint', async () => {
     // The MCP token is not the server token: every other route stays closed.
     expect((await get(port, { host, 'x-busyboy-mcp-token': mcpToken })).status).toBe(403)
     expect((await get(port, { host, 'x-busyboy-mcp-token': mcpToken }, '/api/companion-image')).status).toBe(403)
+  } finally {
+    child.kill()
+  }
+})
+
+test("a task agent's MCP token should open only its own project's endpoint", async () => {
+  const token = 'journey-token'
+  const webToken = createHmac('sha256', token).update('busyboy-mcp-task:web').digest('hex')
+  const { port, child } = await startServer({ BUSYBOY_TOKEN: token })
+  try {
+    const host = `127.0.0.1:${port}`
+    const call = (path: string) =>
+      get(port, { host, 'content-type': 'application/json', 'x-busyboy-mcp-token': webToken }, path, 'POST', '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+    const own = await call('/api/mcp?project=web')
+    expect(own.status).toBe(200)
+    expect(JSON.parse(own.body).result.tools.map(({ name }: { name: string }) => name)).not.toContain('create_task')
+    // Not the Director's endpoint, and not another project's.
+    expect((await call('/api/mcp')).status).toBe(403)
+    expect((await call('/api/mcp?project=api')).status).toBe(403)
   } finally {
     child.kill()
   }

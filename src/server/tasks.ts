@@ -4,11 +4,13 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { dataFolder } from './config'
+import { REVERT_AND_REMEMBER } from './director/context'
+import { memoryPrompt } from './memory'
 import { getProject, listProjects } from './projects'
 import { defaultProvider } from './providers'
 import { getAgent, sendMessage, startAgent, stopAgent, subscribeToAgent } from './runner/agent-runner'
 import { agentEnvironment } from './runner/find-executable'
-import type { AgentStatus, ProviderId } from './runner/contract'
+import type { AgentStatus, McpServer, ProviderId } from './runner/contract'
 
 // A task is one request in one project, worked on by its own agent in its own
 // git worktree. The list lives in TASKS_FILE; worktrees live under
@@ -48,7 +50,18 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
     `You work in the git worktree ${task.worktree} on the branch ${task.branch}. Stay inside this worktree.`,
     'Plan the task with the `align` skill before you change anything, and follow the plan once it is approved.',
     `Keep every record of this task (the plan and any status, verify, or review notes your skills write) under .jwn/${task.id}/ in this worktree.`,
+    '',
+    'Memory:',
+    '- The Memory section below is what BusyBoy remembers about the user and this project. Follow it.',
+    `- Save what later tasks in ${task.project} need (a user preference, a convention of this project) with the busyboy memory_write tool as soon as you learn it. Your writes always go to this project's memory.`,
+    '- When the task ends, add one memory_write line with kind "log" saying what was done and where.',
+    REVERT_AND_REMEMBER,
   ].join('\n')
+}
+
+/** A task agent's system prompt: its instructions, then the global and project facts. */
+async function taskPrompt(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>) {
+  return `${taskInstructions(task)}\n\n${await memoryPrompt(folder, { project: task.project })}`
 }
 
 // ---- Task list file ----------------------------------------------------------
@@ -157,7 +170,14 @@ async function git(cwd: string, ...args: string[]) {
   }
 }
 
-export type CreateTaskInput = { project: string; title: string; request: string; provider?: ProviderId }
+export type CreateTaskInput = {
+  project: string
+  title: string
+  request: string
+  provider?: ProviderId
+  /** Busyboy's MCP endpoint for this task's agent (memory tools), given the project's stored name. */
+  taskMcp?: (project: string) => Promise<Record<string, McpServer>>
+}
 
 /**
  * Makes a worktree on a new branch from the project's current HEAD and starts
@@ -196,7 +216,12 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
 
   let agentId: string | undefined
   try {
-    const agent = startAgent({ provider, cwd: worktree, instructions: taskInstructions({ id, project: project.name, worktree, branch }) })
+    const agent = startAgent({
+      provider,
+      cwd: worktree,
+      instructions: await taskPrompt(folder, { id, project: project.name, worktree, branch }),
+      mcpServers: input.taskMcp ? await input.taskMcp(project.name) : undefined,
+    })
     agentId = agent.id
     if (getAgent(agent.id)?.status === 'stopped') throw new TaskError(`The task agent could not start: ${startError(agent.id)}`)
     const task: TaskRecord = {

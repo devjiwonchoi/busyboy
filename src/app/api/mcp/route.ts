@@ -1,7 +1,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { MCP_TOOLS, McpToolError } from '@/server/mcp-tools'
+import { MCP_TASK_PROJECT_PARAM, MCP_TOKEN_HEADER, SERVER_TOKEN_ENV, taskMcpTokenFor } from '@/lib/server-token'
+import { McpToolError, toolsFor, type McpCaller } from '@/server/mcp-tools'
 
 // Busyboy's MCP endpoint (streamable HTTP, stateless, JSON responses only),
 // served by the MCP SDK: it handles JSON-RPC, batches, `initialize` version
@@ -20,13 +21,32 @@ function rpcError(code: number, message: string) {
   return Object.assign(new Error(message), { code })
 }
 
-/** A new server per request: stateless, it keeps nothing between requests. */
-function busyboyServer() {
+/**
+ * A request is a task agent's when its URL names a project and, in the desktop
+ * app, its token is that project's task token (proxy.ts already checked it is
+ * valid). Without a server token (tests, `next dev`) the URL is trusted, as
+ * every request is let in anyway.
+ */
+function callerOf(request: Request): McpCaller {
+  const project = new URL(request.url).searchParams.get(MCP_TASK_PROJECT_PARAM)
+  if (!project) return { kind: 'director' }
+  const serverToken = process.env[SERVER_TOKEN_ENV]
+  if (!serverToken) return { kind: 'task', project }
+  return request.headers.get(MCP_TOKEN_HEADER) === taskMcpTokenFor(serverToken, project) ? { kind: 'task', project } : { kind: 'director' }
+}
+
+/**
+ * A new server per request: stateless, it keeps nothing between requests, and
+ * it offers only the tools this caller may use.
+ */
+function busyboyServer(caller: McpCaller) {
+  const tools = toolsFor(caller)
   const server = new Server({ name: 'busyboy', version: '0.0.0' }, { capabilities: { tools: {} } })
   server.setRequestHandler(ListToolsRequestSchema, () => ({
     // Always loaded: Claude otherwise defers MCP tools behind tool search,
-    // and the Director must see create_task from its first turn.
-    tools: MCP_TOOLS.map(({ name, description, inputSchema }) => ({
+    // and the Director must see create_task, and a task agent its memory
+    // tools, from the first turn.
+    tools: tools.map(({ name, description, inputSchema }) => ({
       name,
       description,
       inputSchema,
@@ -34,10 +54,10 @@ function busyboyServer() {
     })),
   }))
   server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
-    const tool = MCP_TOOLS.find((candidate) => candidate.name === params.name)
+    const tool = tools.find((candidate) => candidate.name === params.name)
     if (!tool) throw rpcError(ErrorCode.InvalidParams, `Unknown tool: ${params.name}`)
     try {
-      return { content: [{ type: 'text', text: await tool.run(params.arguments ?? {}) }] }
+      return { content: [{ type: 'text', text: await tool.run(params.arguments ?? {}, caller) }] }
     } catch (error) {
       if (!(error instanceof McpToolError)) console.error(`busyboy MCP tool ${tool.name} failed`, error)
       return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }
@@ -81,7 +101,7 @@ async function forTransport(request: Request) {
 
 export async function POST(incoming: Request) {
   const { request, parsedBody } = await forTransport(incoming)
-  const server = busyboyServer()
+  const server = busyboyServer(callerOf(incoming))
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
   await server.connect(transport)
   try {
