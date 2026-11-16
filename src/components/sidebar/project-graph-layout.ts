@@ -69,6 +69,9 @@ export function layoutProjectGraph(graph: ProjectGraph): ProjectGraphLayout {
         data: { task, status, dimmed: false },
         ariaLabel: `Task ${task.title}`,
         domAttributes: { 'data-status': status } as Node['domAttributes'],
+        // A task's pill is a toggle that selects it for the terminal. A press on the pane starts
+        // a pan, which swallows the click, so task nodes opt out of panning.
+        className: 'nopan',
       })
       parentOf.set(id, rootId)
       edges.push(treeEdge(rootId, id, status))

@@ -1,16 +1,23 @@
 import type { TerminalEvent } from '@/server/terminal'
+import type { WorkingDirectory } from '@/server/working-directory'
 
-export type StartedTerminal = { id: string; cwd: string; shell: string }
+export type StartedTerminal = { id: string; cwd: string; shell: string; task: WorkingDirectory['task'] }
 
 const endpoint = (id: string) => `/api/terminal/${encodeURIComponent(id)}`
 
-/** Starts a pty on the server. The `cwd` override is only honored in test mode. */
-export async function startTerminal(size: { cols: number; rows: number }, signal: AbortSignal) {
+/**
+ * Starts a pty on the server in the worktree of `taskId`, or in the home
+ * folder when it is null. The `cwd` override is only honored in test mode.
+ */
+export async function startTerminal(
+  { cols, rows, taskId }: { cols: number; rows: number; taskId: string | null },
+  signal: AbortSignal,
+) {
   const cwd = new URL(window.location.href).searchParams.get('cwd') ?? undefined
   const response = await fetch('/api/terminal', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...size, cwd }),
+    body: JSON.stringify({ cols, rows, cwd, taskId }),
     signal,
   })
   const body = (await response.json()) as StartedTerminal | { error: string }

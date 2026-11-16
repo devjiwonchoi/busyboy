@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { GraphTask, GraphTodo, NodeStatus, ProjectGraph as Graph } from '@/server/records/project-graph'
 import { BaseNode } from '@/components/base-node'
+import { useTaskSelection } from '@/components/shell/shell-state'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
@@ -68,6 +69,8 @@ function Pill({
   status,
   dimmed,
   buildsOn,
+  selected,
+  onToggle,
 }: {
   icon: LucideIcon
   label: string
@@ -77,6 +80,10 @@ function Pill({
   status?: string
   dimmed: boolean
   buildsOn?: boolean
+  /** The task the terminal opens in; ringed so the user can see which one it is. */
+  selected?: boolean
+  /** Makes the pill a toggle button that selects or clears the task. */
+  onToggle?: () => void
 }) {
   return (
     <BaseNode
@@ -86,7 +93,20 @@ function Pill({
         maxWidth,
         tone,
         dimmed && 'opacity-35',
+        onToggle && 'cursor-pointer',
+        selected && 'ring-ring ring-2 ring-offset-1 ring-offset-background',
       )}
+      {...(onToggle && {
+        role: 'button',
+        'aria-pressed': selected,
+        onClick: onToggle,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onToggle()
+          }
+        },
+      })}
     >
       <Handles buildsOn={buildsOn} />
       <Icon aria-hidden className="size-3.5 shrink-0" />
@@ -173,6 +193,7 @@ function NodeDetails({ trigger, children }: { trigger: React.ReactNode; children
 
 function TaskNode({ data }: NodeProps<TaskFlowNode>) {
   const { task, status, dimmed } = data
+  const { selectedTask, toggleTask } = useTaskSelection()
   return (
     <NodeDetails
       trigger={
@@ -184,6 +205,8 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
           status={STATUS_LABELS[status]}
           dimmed={dimmed}
           buildsOn
+          selected={selectedTask?.id === task.id}
+          onToggle={() => toggleTask({ id: task.id, project: task.project, title: task.title })}
         />
       }
     >
