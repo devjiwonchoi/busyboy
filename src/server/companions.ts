@@ -80,15 +80,15 @@ export const COMPANIONS: Companion[] = [
     greeting: "Hello, I'm Yam. Whatever you're working on, we'll get there together.",
   },
   {
-    id: 'peroming',
-    name: 'Peroming',
+    id: 'jjeromming',
+    name: 'Jjeromming',
     animal: 'squirrel',
     emoji: '🐿️',
     tone: 'bg-violet-200 text-violet-950',
     speech: 'Direct · quick',
     personality: 'Quick and decisive. Gets straight to work.',
     voice: 'Be brisk and action-first. Lead with what you are doing next and skip pleasantries.',
-    greeting: "Peroming, ready to go. What's first?",
+    greeting: "Jjeromming, ready to go. What's first?",
   },
 ]
 

@@ -189,7 +189,7 @@ test('choosing a default agent should save it', async ({ page, context, baseURL 
   const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in', codex: 'signed-in' }))
 
   await page.goto('/setup')
-  await chooseCompanion(page, 'Peroming')
+  await chooseCompanion(page, 'Jjeromming')
   await page.getByRole('radio', { name: 'Use Codex by default' }).click()
   await page.getByRole('button', { name: 'Continue' }).click()
 
