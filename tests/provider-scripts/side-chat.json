@@ -1,0 +1,112 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: the main chat names a release, and side chats branched from it can tell the name. A side chat remembers its own earlier question. The slow turn stays open so a side agent can be ended mid-answer.",
+  "turns": [
+    {
+      "prompt": "Let's call the next release Bluebird.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "Noted: the next release is Bluebird."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "What is the next release called?",
+      "context": "Bluebird",
+      "steps": [
+        {
+          "event": {
+            "type": "text-delta",
+            "text": "It is called "
+          }
+        },
+        {
+          "delayMs": 200
+        },
+        {
+          "event": {
+            "type": "text-delta",
+            "text": "Bluebird."
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "It is called Bluebird."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Who picked the name?",
+      "context": "Bluebird",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "You did, in the main chat."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Spell the release name slowly.",
+      "context": "Bluebird",
+      "steps": [
+        {
+          "event": {
+            "type": "text-delta",
+            "text": "B-l-u-e"
+          }
+        },
+        {
+          "delayMs": 60000
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "B-l-u-e-b-i-r-d."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "What was my last question?",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "You asked to call the next release Bluebird."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "What was my last question?",
+      "context": "What is the next release called?",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "You asked what the next release is called."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "What did I just ask you?",
+      "context": "What is the next release called?",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "You asked what the next release is called."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: a Director turn that tries to ask a question with a tool.",
+  "turns": [
+    {
+      "prompt": "Fix the login page.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": {
+              "questions": [
+                {
+                  "question": "Which project has the login page?",
+                  "header": "Project",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "label": "web"
+                    },
+                    {
+                      "label": "api"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "Which project has the login page, web or api?"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: the Director starts subagents for short actions, and the subagents run them.",
+  "turns": [
+    {
+      "prompt": "Merge the open pull request in @web.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "subagent-merge"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__run_subagent",
+                  "input": {
+                    "project": "web",
+                    "title": "Merge the PR",
+                    "request": "Merge the open pull request."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "director-merge",
+            "text": "I started a subagent in @web to merge it."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Merge the open pull request.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "gh pr merge 12 --squash"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "merge-allow",
+                  "text": "Merged pull request 12."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "merge-deny",
+                  "text": "I did not merge pull request 12."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Fix the README typo in @web with a subagent.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "subagent-typo"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__run_subagent",
+                  "input": {
+                    "project": "web",
+                    "title": "Fix the typo",
+                    "request": "Fix the README typo."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "director-typo",
+            "text": "I started a subagent in @web for the typo."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Fix the README typo.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Write",
+            "input": {
+              "file_path": "README.md",
+              "content": "Fixed\n"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "typo-allow",
+                  "text": "Fixed the typo."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "toolCall": {
+                  "name": "Bash",
+                  "input": {
+                    "command": "sed -i '' s/teh/the/ README.md"
+                  }
+                },
+                "then": {
+                  "allow": [
+                    {
+                      "event": {
+                        "type": "text",
+                        "itemId": "typo-sed-allow",
+                        "text": "Fixed the typo with sed."
+                      }
+                    }
+                  ],
+                  "deny": [
+                    {
+                      "event": {
+                        "type": "text",
+                        "itemId": "typo-deny",
+                        "text": "I cannot edit files here, so the typo needs a task."
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Check CI in @web.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "subagent-ci"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__run_subagent",
+                  "input": {
+                    "project": "web",
+                    "title": "Check CI",
+                    "request": "Check CI."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "director-ci",
+            "text": "I started a subagent in @web to check CI."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Check CI.",
+      "steps": [
+        {
+          "event": {
+            "type": "error",
+            "code": "provider",
+            "message": "The provider stopped answering."
+          }
+        }
+      ]
+    }
+  ]
+}

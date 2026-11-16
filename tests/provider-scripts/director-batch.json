@@ -1,0 +1,17 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: one Director turn made of two messages sent within the batch window.",
+  "turns": [
+    {
+      "prompt": "First part.\n\nSecond part.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "Got both parts in one message."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 name: Release
 
 # Cuts the next patch release of the macOS and Windows apps from main:
-#   pnpm release            (or Actions → Release → Run workflow)
-# The first release is v0.0.0; each later one bumps the latest vX.Y.Z tag's
-# patch. Installed apps pick the release up through the in-app updater.
-# With dry_run, the builds are kept as run artifacts and nothing is published.
+#   Actions → Release → Run workflow
+# The version is the latest vX.Y.Z tag with its patch raised by one. Installed
+# apps pick the release up through their updater, including BusyBoy 0.0.22 and
+# earlier (see scripts/release-feed.mts for what those check).
+# With dry_run, the installers stay as run artifacts and nothing is published.
 on:
   workflow_dispatch:
     inputs:
@@ -19,74 +20,57 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  NODE_VERSION: '24.x'
 
 jobs:
   version:
     name: Resolve next patch version
+    # The release environment, which holds the key that signs the update manifest, only allows main.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # Nothing here pushes with git; don't leave the token on disk.
           persist-credentials: false
-
       - id: version
-        name: Resolve next patch version
         run: |
-          latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+          # Only plain vX.Y.Z tags count: a tag such as v0.0.23-rc.1 is not a release, and
+          # nothing but digits may reach the arithmetic below.
+          latest="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
           if [ -z "$latest" ]; then
-            version="0.0.0"
-          else
-            IFS=. read -r major minor patch <<< "${latest#v}"
-            version="$major.$minor.$((patch + 1))"
+            echo "::error::No vX.Y.Z tag to count from."
+            exit 1
           fi
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          version="$major.$minor.$((patch + 1))"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Releasing v$version (previous: $latest)"
 
   macos:
     name: Build macOS release
     needs: version
+    # Apple Silicon, like every release so far.
     runs-on: macos-latest
     timeout-minutes: 60
-    permissions:
-      contents: read
-    # The signing secrets live in the "release" environment, which only main
-    # can deploy to (Settings → Environments → release).
     environment: release
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # The Computer Use helper builds with cargo, like the resource monitor.
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch, 2026-11-05
-        with:
-          toolchain: stable
-          targets: aarch64-apple-darwin
-
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: |
-            native/computer-use -> target
-            native/resource-monitor -> target
+      - run: pnpm install --frozen-lockfile
 
       - name: Check release secrets
         env:
@@ -96,77 +80,48 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          # Fail before packaging if any required GitHub Actions secret is missing.
           for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER; do
             if [ -z "${!name}" ]; then
-              echo "::error::Missing secret $name in the release environment (Settings → Environments → release)"
+              echo "::error::Missing secret $name"
               exit 1
             fi
           done
 
-      # The build signs the Computer Use helper before electron-builder sets up
-      # its own keychain from CSC_LINK, so put the same Developer ID in a
-      # keychain of our own first. The helper's caller check needs team 5PA4R2B5FF.
-      - name: Import Developer ID for the Computer Use helper
-        env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: |
-          umask 077
-          keychain="$RUNNER_TEMP/busyboy-helper-signing.keychain-db"
-          keychain_password="$(openssl rand -hex 24)"
-          p12="$(mktemp "$RUNNER_TEMP/developer-id.XXXXXX")"
-          trap 'rm -f "$p12"' EXIT
-          printf '%s' "$CSC_LINK" | base64 --decode > "$p12"
-
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$p12" -f pkcs12 -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
-          # The intermediate that issued the Developer ID, so the identity counts as valid.
-          intermediate="$RUNNER_TEMP/DeveloperIDG2CA.cer"
-          curl -fsSL --retry 3 -o "$intermediate" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
-          security import "$intermediate" -k "$keychain" || true
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
-          existing="$(security list-keychains -d user | tr -d '"')"
-          # shellcheck disable=SC2086
-          security list-keychains -d user -s "$keychain" $existing
-
-          # Sign by certificate hash so a second copy of the identity can't make codesign ambiguous.
-          identity="$(security find-identity -v -p codesigning "$keychain" | awk '/"Developer ID Application: .*\(5PA4R2B5FF\)"/ { print $2; exit }')"
-          if [ -z "$identity" ]; then
-            echo "::error::CSC_LINK has no Developer ID Application identity for team 5PA4R2B5FF"
-            exit 1
-          fi
-          echo "BUSYBOY_CU_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
-          echo "HELPER_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
-
-      # electron-builder signs with the Developer ID .p12 (CSC_LINK) and
+      # electron-builder signs with the Developer ID .p12 in CSC_LINK and
       # notarizes with an App Store Connect API key, which it reads from a file.
-      # --computer-use bundles the helper, already signed above, and keeps
-      # electron-builder from re-signing it; notarization covers both.
-      - name: Build, sign, and notarize DMG and ZIP
+      # The build then asks Gatekeeper about the app and runs the signature
+      # check an installed BusyBoy runs on an update.
+      - name: Build, sign, and notarize the DMG and ZIP
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          umask 077
-          key="$(mktemp "$RUNNER_TEMP/AuthKey.XXXXXX")"
-          trap 'rm -f "$key"' EXIT
+          key="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
           printf '%s' "$APPLE_API_KEY_P8" > "$key"
           unset APPLE_API_KEY_P8
+          APPLE_API_KEY="$key" node scripts/build-desktop.mts --release --version "$VERSION"
+          rm -f "$key"
 
-          APPLE_API_KEY="$key" node scripts/build-desktop-release.ts --version "${{ needs.version.outputs.version }}" --out release --computer-use
-
-      - name: Remove helper signing keychain
-        if: always()
+      # The signed app, with the hardened runtime on, must still start its server and open its window.
+      - name: Run the packaged app's self-check
         run: |
-          if [ -n "${HELPER_SIGNING_KEYCHAIN:-}" ]; then
-            security delete-keychain "$HELPER_SIGNING_KEYCHAIN" || true
-          fi
+          app="$(node -p 'require("./release/desktop-build.json").executable')"
+          result="$RUNNER_TEMP/self-check.json"
+          status=0
+          "$app" --self-check="$result" || status=$?
+          echo "Exit code: $status"
+          cat "$result"
+          node -e '
+            const result = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))
+            if (result.ok !== true) {
+              console.error("The self-check did not pass.")
+              process.exit(1)
+            }
+          ' "$result"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -174,19 +129,19 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.blockmap
+            release/latest-mac.yml
           if-no-files-found: error
+          # Signed and notarized even in a dry run, so not kept longer than it takes to look at them.
+          retention-days: 3
 
-  # Same packaging as upstream T3 Code: one NSIS installer per arch, each built
-  # natively on its own runner. Signed with Azure Trusted Signing when all of
-  # its secrets are in the release environment, unsigned otherwise.
+  # Unsigned, like every Windows release so far. Each architecture builds on
+  # its own runner, because the server's native modules are built for the host.
   windows:
     name: Build Windows release (${{ matrix.arch }})
     needs: version
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    permissions:
-      contents: read
-    environment: release
     strategy:
       fail-fast: false
       matrix:
@@ -195,59 +150,26 @@ jobs:
             runner: windows-latest
           - arch: arm64
             runner: windows-11-arm
-    env:
-      # The install below skips the mobile app; without this, pnpm reinstalls
-      # it before the build script's `pnpm build`.
-      pnpm_config_verify_deps_before_run: "false"
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-
-      # Defender scans every file written on windows-11-arm and can't be turned
-      # off there, so restoring the whole pnpm store is slower than downloading
-      # just what the install needs. x64 restores it in seconds.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
-          cache: ${{ matrix.arch == 'x64' && 'pnpm' || '' }}
-
-      # The desktop build doesn't need the Expo app, about half of node_modules.
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter '!@t3tools/mobile'
-
-      # The resource monitor builds with cargo.
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch, 2026-11-05
-        with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: native/resource-monitor -> target
-
-      # electron-builder reads AZURE_TENANT_ID, AZURE_CLIENT_ID and
-      # AZURE_CLIENT_SECRET itself; the build script reads the rest. With none
-      # of them set, the installer is built unsigned.
-      - name: Build NSIS installer
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the installer
         env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
-        run: node scripts/build-desktop-release.ts --version "${{ needs.version.outputs.version }}" --arch "${{ matrix.arch }}" --out release
-
-      # Each arch writes its own latest.yml; the publish job merges them.
-      - name: Name the update manifest by arch
+          VERSION: ${{ needs.version.outputs.version }}
+        run: node scripts/build-desktop.mts --release --version "$VERSION"
+      # Each architecture writes its own latest.yml; the publish job merges them.
+      - name: Name the update feed by architecture
         run: mv release/latest.yml "release/latest-${{ matrix.arch }}.yml"
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-windows-${{ matrix.arch }}
@@ -256,51 +178,47 @@ jobs:
             release/*.blockmap
             release/latest-*.yml
           if-no-files-found: error
+          # Signed and notarized even in a dry run, so not kept longer than it takes to look at them.
+          retention-days: 3
 
   publish:
     name: Publish GitHub release
     needs: [version, macos, windows]
-    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
-    # UPDATE_SIGNING_KEY lives in the release environment, like the build secrets.
+    # UPDATE_SIGNING_KEY lives in the release environment.
     environment: release
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
-
+          node-version: ${{ env.NODE_VERSION }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-*
           path: release
           merge-multiple: true
 
-      # electron-updater on Windows reads one latest.yml and picks the
-      # installer whose name contains its arch.
-      - name: Merge Windows update manifests
-        run: |
-          node scripts/merge-windows-update-manifests.ts release/latest.yml release/latest-x64.yml release/latest-arm64.yml
-          rm release/latest-x64.yml release/latest-arm64.yml
-
-      # Installed apps (from the first signed release on) refuse an update that this
-      # Ed25519-signed manifest doesn't cover. The key is a PKCS#8 PEM made with
-      # `openssl genpkey -algorithm ed25519`; its public key is in
-      # apps/desktop/src/updates/updateSignature.ts.
-      - name: Sign the update manifest
+      # Merges the Windows feeds, signs the update manifest, and checks both the
+      # way an installed BusyBoy does. A dry run does this too, so it shows
+      # whether installed apps would accept the release.
+      - name: Prepare and check the update feed
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        run: node scripts/sign-update-manifest.ts "${{ needs.version.outputs.version }}" release
+          VERSION: ${{ needs.version.outputs.version }}
+        run: node scripts/release-feed.mts "$VERSION" release
 
-      # The release stays a draft until every asset is uploaded, so the in-app
-      # updater never sees a release without its ZIP or latest.yml.
+      - name: List what would be published
+        run: ls -l release
+
+      # The release stays a draft until every file is uploaded, so an installed
+      # app never sees a release without its ZIP or its feed files.
       - name: Publish GitHub release
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ needs.version.outputs.version }}
@@ -308,8 +226,8 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null | grep -q true; then
             gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
           fi
-          gh release create "$TAG" release/*.dmg release/*.zip release/*.exe release/*.blockmap release/latest.yml \
-            release/busyboy-update.json release/busyboy-update.json.sig \
+          gh release create "$TAG" release/*.dmg release/*.zip release/*.exe release/*.blockmap \
+            release/latest.yml release/latest-mac.yml release/busyboy-update.json release/busyboy-update.json.sig \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "BusyBoy $TAG" \

@@ -1,0 +1,49 @@
+{
+  "provider": "codex",
+  "description": "Hand-written: a Codex task agent whose force push goes through BusyBoy's always-ask hook.",
+  "turns": [
+    {
+      "prompt": "Force push the branch to origin.",
+      "steps": [
+        {
+          "preToolUse": {
+            "tool_name": "Bash",
+            "tool_input": {
+              "command": "git push --force origin HEAD"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "raw": {
+                  "method": "item/completed",
+                  "params": {
+                    "item": {
+                      "type": "agentMessage",
+                      "id": "push-allow",
+                      "text": "Force pushed the branch."
+                    }
+                  }
+                }
+              }
+            ],
+            "deny": [
+              {
+                "raw": {
+                  "method": "item/completed",
+                  "params": {
+                    "item": {
+                      "type": "agentMessage",
+                      "id": "push-deny",
+                      "text": "I did not force push."
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

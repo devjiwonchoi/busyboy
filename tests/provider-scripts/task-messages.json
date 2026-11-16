@@ -1,0 +1,63 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: task agents that get another message after their first request. Each follow-up only plays in the session that got the request named in its context.",
+  "turns": [
+    {
+      "prompt": "Also add a section on running the tests.",
+      "context": "Add a CONTRIBUTING.md that explains how to run the project.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "Added a section on running the tests."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Now delete the build folder.",
+      "context": "Add a CONTRIBUTING.md that explains how to run the project.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "Bash",
+            "input": {
+              "command": "rm -rf build",
+              "description": "Delete the build folder"
+            },
+            "description": "Delete the build folder"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "Deleted the build folder."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "List the fixes only.",
+      "context": "Write the release notes for this week.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "The release notes now list the fixes only."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Say which branch is checked out.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "main is checked out."
+          }
+        }
+      ]
+    }
+  ]
+}

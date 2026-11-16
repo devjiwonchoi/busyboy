@@ -1,0 +1,86 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: the Director saves a preference and starts a task; the Director replies with its prompt and the task agent writes its prompt to its worktree, so journeys can see the memory in each.",
+  "turns": [
+    {
+      "prompt": "Remember that I prefer pnpm over npm.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "director-memory-session"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__memory_write",
+                  "input": {
+                    "title": "Prefers pnpm",
+                    "text": "The user prefers pnpm over npm."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "Saved: you prefer pnpm over npm."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "In @web, set up the package manager.",
+      "steps": [
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__create_task",
+                  "input": {
+                    "project": "web",
+                    "title": "Set up package manager",
+                    "request": "Set up the package manager."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "text": "I started a task in @web to set up the package manager."
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Show me your prompt.",
+      "steps": [
+        {
+          "echoInstructions": true
+        }
+      ]
+    },
+    {
+      "prompt": "Set up the package manager.",
+      "steps": [
+        {
+          "writeInstructions": "busyboy-prompt.txt"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,284 @@
+'use client'
+
+import { FitAddon } from '@xterm/addon-fit'
+import { Terminal } from '@xterm/xterm'
+import '@xterm/xterm/css/xterm.css'
+import { Plus, RotateCcw, SquareTerminal, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useShellState, useTaskSelection } from '@/components/shell/shell-state'
+import {
+  isMacPlatform,
+  matchesShortcut,
+  TOGGLE_PANEL_KEYS,
+  TOGGLE_SIDEBAR_KEYS,
+  useShortcut,
+} from '@/components/shell/shortcut-registry'
+import { Alert, AlertAction, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { createInputSender, followTerminal, killTerminal, resizeTerminal, startTerminal, type StartedTerminal } from './terminal-session'
+import { readTerminalTheme } from './terminal-theme'
+
+const FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
+
+const toggleFromTerminalKeys = { key: '`', mod: true } as const
+
+/**
+ * Keys the terminal passes to the app instead of the shell. The sidebar toggle
+ * works from the terminal everywhere, matched exactly as the app matches it.
+ * Cmd+J does on macOS; elsewhere Ctrl+J is the shell's line feed, so it stays
+ * with the shell and Ctrl+` toggles the panel from inside the terminal so the
+ * keyboard is never trapped there.
+ */
+function isAppShortcut(event: KeyboardEvent) {
+  const mac = isMacPlatform()
+  if (matchesShortcut(TOGGLE_SIDEBAR_KEYS, event, mac)) return true
+  const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
+  if (!mod || event.shiftKey) return false
+  if (event.code === 'Backquote' && !event.altKey) return true
+  return mac && matchesShortcut(TOGGLE_PANEL_KEYS, event, mac)
+}
+
+/**
+ * The bottom panel's terminal. A shell starts the first time the panel opens
+ * and lives on while the panel is hidden. Closing the terminal kills it and
+ * the next open starts a fresh one. When the shell exits or cannot start, the
+ * panel says so and offers a new terminal.
+ *
+ * Each shell starts in the worktree of the task selected at that moment (home
+ * with none). Selecting another task never replaces a running shell: it may
+ * be running a command or hold the user's history and variables, and a click
+ * in the graph should not throw that away. The header keeps naming the
+ * shell's own task, and a "New terminal" button appears while the selection
+ * differs; it, or closing the terminal (its X) and opening it again, starts a
+ * shell in the selected task. Cmd/Ctrl+J only hides the panel, so it keeps
+ * the shell like any other hide.
+ */
+export function TerminalPanel() {
+  const { panelOpen, setPanelOpen, togglePanel } = useShellState()
+  useShortcut({ id: 'toggle-panel-from-terminal', label: 'Toggle bottom panel', ...toggleFromTerminalKeys, run: togglePanel })
+  const [generation, setGeneration] = useState(0)
+  const [started, setStarted] = useState(false)
+  const [shell, setShell] = useState<Pick<StartedTerminal, 'cwd' | 'task'> | null>(null)
+  const { selectedTask } = useTaskSelection()
+  // Until the shell reports where it started it is already on its way to the selected task.
+  const selectionDiffers = shell !== null && (selectedTask?.id ?? null) !== (shell.task?.id ?? null)
+  const [ended, setEnded] = useState<string | null>(null)
+
+  if (panelOpen && !started) setStarted(true)
+
+  const restart = () => {
+    setEnded(null)
+    setShell(null)
+    setGeneration((value) => value + 1)
+  }
+
+  const close = () => {
+    restart()
+    setStarted(false)
+    setPanelOpen(false)
+  }
+
+  return (
+    <div data-slot="terminal-panel" className="flex h-full flex-col">
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs">
+        <SquareTerminal className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="font-medium">Terminal</span>
+        {shell?.task ? (
+          <span data-slot="terminal-task" aria-label="Task" className="max-w-64 shrink-0 truncate">
+            <span className="text-muted-foreground">{shell.task.project} · </span>
+            {shell.task.title}
+          </span>
+        ) : null}
+        <span
+          data-slot="terminal-cwd"
+          aria-label="Working directory"
+          title={shell?.cwd}
+          className="min-w-0 truncate font-mono text-muted-foreground"
+        >
+          {shell?.cwd}
+        </span>
+        {selectionDiffers && !ended ? (
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto shrink-0"
+            title={selectedTask ? `Start a shell in ${selectedTask.project} · ${selectedTask.title}` : 'Start a shell in the home folder'}
+            onClick={restart}
+          >
+            <Plus />
+            New terminal
+          </Button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className={selectionDiffers && !ended ? 'shrink-0' : 'ml-auto shrink-0'}
+          aria-label="Close terminal"
+          onClick={close}
+        >
+          <X />
+        </Button>
+      </div>
+      {ended ? (
+        // A shell that ended is news, not an emergency, so this alert is a polite status.
+        <Alert role="status" className="shrink-0 rounded-none border-x-0 border-t-0 px-3">
+          <AlertDescription>{ended}</AlertDescription>
+          <AlertAction className="top-1 right-3">
+            <Button variant="outline" size="xs" onClick={restart}>
+              <RotateCcw />
+              New terminal
+            </Button>
+          </AlertAction>
+        </Alert>
+      ) : null}
+      {started ? (
+        <TerminalView key={generation} active={panelOpen} taskId={selectedTask?.id ?? null} onStart={setShell} onEnd={setEnded} />
+      ) : null}
+    </div>
+  )
+}
+
+function TerminalView({
+  active,
+  taskId,
+  onStart,
+  onEnd,
+}: {
+  active: boolean
+  /** Read once: a later selection does not move this shell (see TerminalPanel). */
+  taskId: string | null
+  onStart: (shell: Pick<StartedTerminal, 'cwd' | 'task'>) => void
+  /** Called once with a short line for the user when the shell is gone. */
+  onEnd: (message: string) => void
+}) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const terminalRef = useRef<{ term: Terminal; fit: () => void } | null>(null)
+  // Frozen at mount: a selection change must not re-run the effect below, which would kill the shell.
+  const [startTaskId] = useState(taskId)
+  const callbacks = useRef({ onStart, onEnd })
+  useEffect(() => {
+    callbacks.current = { onStart, onEnd }
+  })
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const abort = new AbortController()
+    let id: string | null = null
+
+    const term = new Terminal({
+      fontFamily: FONT_FAMILY,
+      fontSize: 12,
+      lineHeight: 1.2,
+      cursorBlink: true,
+      scrollback: 5000,
+      allowProposedApi: false,
+      theme: readTerminalTheme(host),
+    })
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    term.attachCustomKeyEventHandler((event) => !isAppShortcut(event))
+    term.open(host)
+
+    let lastSize = ''
+    const fit = () => {
+      // A hidden panel has no size; fitting it would shrink the shell to nothing.
+      if (host.clientWidth === 0 || host.clientHeight === 0) return
+      fitAddon.fit()
+      const size = `${term.cols}x${term.rows}`
+      if (size === lastSize) return
+      lastSize = size
+      if (id) resizeTerminal(id, term.cols, term.rows)
+    }
+    terminalRef.current = { term, fit }
+    fit()
+
+    const observer = new ResizeObserver(() => fit())
+    observer.observe(host)
+
+    const scheme = window.matchMedia('(prefers-color-scheme: dark)')
+    const onSchemeChange = () => {
+      // The tokens switch with the media query; read them after styles update.
+      requestAnimationFrame(() => {
+        term.options.theme = readTerminalTheme(host)
+      })
+    }
+    scheme.addEventListener('change', onSchemeChange)
+
+    const end = (message: string) => {
+      term.options.disableStdin = true
+      term.options.cursorBlink = false
+      callbacks.current.onEnd(message)
+    }
+
+    // Keys typed while the shell starts are held and sent once it is up.
+    let send: ((data: string) => void) | null = null
+    let early = ''
+    term.onData((data) => {
+      if (send) send(data)
+      else early += data
+    })
+
+    void (async () => {
+      try {
+        const started = await startTerminal({ cols: term.cols, rows: term.rows, taskId: startTaskId }, abort.signal)
+        id = started.id
+        if (abort.signal.aborted) {
+          killTerminal(started.id)
+          return
+        }
+        callbacks.current.onStart({ cwd: started.cwd, task: started.task })
+        send = createInputSender(started.id)
+        if (early) send(early)
+        early = ''
+        // The panel may have been resized while the shell started.
+        resizeTerminal(started.id, term.cols, term.rows)
+        let exited = false
+        await followTerminal(started.id, abort.signal, (event) => {
+          if (event.type === 'data') {
+            term.write(event.data)
+            return
+          }
+          exited = true
+          end(event.killed ? 'The shell was stopped.' : `The shell exited with code ${event.exitCode}.`)
+        })
+        if (!exited && !abort.signal.aborted) end('The connection to the shell closed.')
+      } catch (error) {
+        if (abort.signal.aborted) return
+        if (id) end('The connection to the shell closed.')
+        else end(`The shell could not start: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    })()
+
+    return () => {
+      abort.abort()
+      if (id) killTerminal(id)
+      observer.disconnect()
+      scheme.removeEventListener('change', onSchemeChange)
+      terminalRef.current = null
+      term.dispose()
+    }
+  }, [startTaskId])
+
+  useEffect(() => {
+    if (!active) return
+    const current = terminalRef.current
+    if (!current) return
+    current.fit()
+    current.term.focus()
+  }, [active])
+
+  // The fit addon measures the host's box including its padding, so the
+  // padding lives on a wrapper and the host stays exactly the usable area.
+  return (
+    <div className="flex min-h-0 flex-1 bg-background py-1 pl-3">
+      <div
+        ref={hostRef}
+        data-slot="terminal"
+        role="region"
+        aria-label="Terminal"
+        className="min-h-0 min-w-0 flex-1 [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent!"
+      />
+    </div>
+  )
+}

@@ -1,0 +1,91 @@
+{
+  "provider": "claude",
+  "description": "Claude answers a short message with plain text.",
+  "recordedAt": "2026-11-13T20:31:01.504Z",
+  "turns": [
+    {
+      "prompt": "Reply with exactly this sentence and nothing else: Hello from busyboy.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "099dba9c-7ec2-4b14-8479-204a12968774"
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_011Ch1ZXxHCHC2PZBFrnSwhh"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": "Hello from busyboy"
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "stream_event",
+            "event": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": "."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "id": "msg_011Ch1ZXxHCHC2PZBFrnSwhh",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello from busyboy."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false,
+            "terminal_reason": "completed"
+          }
+        }
+      ]
+    }
+  ]
+}
