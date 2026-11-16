@@ -1,21 +1,25 @@
-import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
-import type { GraphTask, GraphTodo, ProjectGraph } from '@/server/records/project-graph'
+import type { GraphTask, GraphTodo, NodeStatus, ProjectGraph } from '@/server/records/project-graph'
 
-// Turns the project graph into React Flow nodes: one labeled group per
-// project, laid out left to right by dagre inside it (task → todos), groups
-// stacked top to bottom, and dashed edges for "builds on" links between tasks.
+// Turns the project graph into React Flow nodes: per project an indented tree
+// of pills (project → tasks → todos), one pill per row, each level a step to
+// the right of its parent, with elbow edges from a parent's bottom to its
+// children's left side. A column per level pushed todos past the edge of a
+// 20rem sidebar; indented rows keep the whole tree readable at sidebar width
+// while still reading left to right. Projects stack top to bottom. Dashed
+// edges mark either a tree child that has not started yet or a task that
+// builds on another.
 
-export const TASK_SIZE = { width: 220, height: 64 }
-export const TODO_SIZE = { width: 200, height: 44 }
-const EMPTY_SIZE = { width: 220, height: 40 }
-/** Room for the group's label above its nodes. */
-const GROUP_PADDING = { top: 44, side: 16, bottom: 16 }
-const GROUP_GAP = 32
+const ROW_HEIGHT = 36
+/** How far each level sits to the right of its parent. */
+const INDENT = 24
+const PROJECT_GAP = 12
 
-export type ProjectNodeData = { name: string; empty: boolean }
-export type TaskNodeData = { task: GraphTask }
-export type TodoNodeData = { todo: GraphTodo; task: GraphTask }
+export type DisplayStatus = NodeStatus | 'error'
+
+export type ProjectNodeData = { name: string; empty: boolean; dimmed: boolean }
+export type TaskNodeData = { task: GraphTask; status: DisplayStatus; dimmed: boolean }
+export type TodoNodeData = { todo: GraphTodo; task: GraphTask; dimmed: boolean }
 
 export type ProjectFlowNode = Node<ProjectNodeData, 'project'>
 export type TaskFlowNode = Node<TaskNodeData, 'task'>
@@ -26,94 +30,66 @@ export const projectNodeId = (name: string) => `project:${name}`
 export const taskNodeId = (project: string, task: string) => `task:${project}/${task}`
 const todoNodeId = (project: string, task: string, todo: string) => `todo:${project}/${task}/${todo}`
 
-export function layoutProjectGraph(graph: ProjectGraph): { nodes: GraphNode[]; edges: Edge[] } {
+export const todoLabel = (todo: GraphTodo) => `${todo.id} · ${todo.title}`
+
+export type ProjectGraphLayout = {
+  nodes: GraphNode[]
+  edges: Edge[]
+  /** Each node's parent in the tree, for highlighting a node's path back to its project. */
+  parentOf: Map<string, string>
+}
+
+export function layoutProjectGraph(graph: ProjectGraph): ProjectGraphLayout {
   const nodes: GraphNode[] = []
   const edges: Edge[] = []
-  let top = 0
-  let widest = 0
-  const groups: ProjectFlowNode[] = []
+  const parentOf = new Map<string, string>()
+  let row = 0
+  let gaps = 0
+  // Nodes are sized by their content (React Flow measures them), so only rows and levels are placed here.
+  const at = (level: number) => ({ x: level * INDENT, y: row++ * ROW_HEIGHT + gaps * PROJECT_GAP })
 
   for (const project of graph.projects) {
-    const layout = new dagre.graphlib.Graph()
-    layout.setGraph({ rankdir: 'LR', nodesep: 12, ranksep: 40, marginx: 0, marginy: 0 })
-    layout.setDefaultEdgeLabel(() => ({}))
-    const children: GraphNode[] = []
-
+    const rootId = projectNodeId(project.name)
+    nodes.push({
+      id: rootId,
+      type: 'project',
+      position: at(0),
+      data: { name: project.name, empty: project.tasks.length === 0, dimmed: false },
+      ariaLabel: `Project ${project.name}`,
+      selectable: false,
+    })
     for (const task of project.tasks) {
       const id = taskNodeId(project.name, task.id)
-      layout.setNode(id, { ...TASK_SIZE })
       // The status is also on the DOM node, so it can be read without relying on color.
-      const status = task.errors.length > 0 ? 'error' : task.status
-      children.push({
+      const status: DisplayStatus = task.errors.length > 0 ? 'error' : task.status
+      nodes.push({
         id,
         type: 'task',
-        position: { x: 0, y: 0 },
-        data: { task },
+        position: at(1),
+        data: { task, status, dimmed: false },
         ariaLabel: `Task ${task.title}`,
         domAttributes: { 'data-status': status } as Node['domAttributes'],
-        ...TASK_SIZE,
       })
+      parentOf.set(id, rootId)
+      edges.push(treeEdge(rootId, id, status))
       // An error node stands alone: todos from a record that did not parse could be wrong.
-      if (task.errors.length > 0) continue
+      if (status === 'error') continue
       for (const todo of task.todos) {
         const todoId = todoNodeId(project.name, task.id, todo.id)
-        layout.setNode(todoId, { ...TODO_SIZE })
-        layout.setEdge(id, todoId)
-        children.push({
+        nodes.push({
           id: todoId,
           type: 'todo',
-          position: { x: 0, y: 0 },
-          data: { todo, task },
-          ariaLabel: `Todo ${todo.id} · ${todo.title}`,
+          position: at(2),
+          data: { todo, task, dimmed: false },
+          ariaLabel: `Todo ${todoLabel(todo)}`,
           domAttributes: { 'data-status': todo.status } as Node['domAttributes'],
-          ...TODO_SIZE,
         })
-        edges.push({ id: `${id}->${todoId}`, source: id, target: todoId })
+        parentOf.set(todoId, id)
+        edges.push(treeEdge(id, todoId, todo.status))
       }
     }
-
-    let width = EMPTY_SIZE.width
-    let height = EMPTY_SIZE.height
-    if (children.length > 0) {
-      dagre.layout(layout)
-      const size = layout.graph()
-      width = size.width ?? 0
-      height = size.height ?? 0
-      for (const child of children) {
-        // dagre gives centers; React Flow wants top-left corners relative to the group.
-        const { x, y } = layout.node(child.id)
-        child.position = {
-          x: GROUP_PADDING.side + x - (child.width ?? 0) / 2,
-          y: GROUP_PADDING.top + y - (child.height ?? 0) / 2,
-        }
-        child.parentId = projectNodeId(project.name)
-        child.extent = 'parent'
-      }
-      // dagre may stack a task's todos in any order; put them back in record order, top to bottom.
-      for (const task of project.tasks) {
-        const todos = children.filter((child) => child.type === 'todo' && child.data.task.id === task.id)
-        const slots = todos.map(({ position }) => position.y).sort((a, b) => a - b)
-        todos.forEach((todo, index) => (todo.position = { ...todo.position, y: slots[index] }))
-      }
-    }
-    const group: ProjectFlowNode = {
-      id: projectNodeId(project.name),
-      type: 'project',
-      position: { x: 0, y: top },
-      data: { name: project.name, empty: children.length === 0 },
-      ariaLabel: `Project ${project.name}`,
-      width: width + GROUP_PADDING.side * 2,
-      height: height + GROUP_PADDING.top + GROUP_PADDING.bottom,
-      selectable: false,
-    }
-    groups.push(group)
-    widest = Math.max(widest, group.width ?? 0)
-    // React Flow needs a parent before its children in the list.
-    nodes.push(group, ...children)
-    top += (group.height ?? 0) + GROUP_GAP
+    gaps++
   }
-  // Same width for every group, so the stack reads as one column.
-  for (const group of groups) group.width = widest
 
   const known = new Set(nodes.map(({ id }) => id))
   for (const project of graph.projects) {
@@ -126,6 +102,9 @@ export function layoutProjectGraph(graph: ProjectGraph): { nodes: GraphNode[]; e
           id: `builds-on:${source}->${target}`,
           source,
           target,
+          // Both ends on the right, so the link loops beside the trees instead of crossing them.
+          sourceHandle: 'builds-on-out',
+          targetHandle: 'builds-on-in',
           label: 'builds on',
           style: { strokeDasharray: '6 4' },
           className: 'builds-on',
@@ -133,5 +112,19 @@ export function layoutProjectGraph(graph: ProjectGraph): { nodes: GraphNode[]; e
       }
     }
   }
-  return { nodes, edges }
+  return { nodes, edges, parentOf }
+}
+
+/** An elbow down from the parent and across to the child: solid once the child has started, dashed while it waits. */
+function treeEdge(source: string, target: string, status: DisplayStatus): Edge {
+  const pending = status === 'not-started'
+  return {
+    id: `${source}->${target}`,
+    source,
+    target,
+    sourceHandle: 'tree-out',
+    type: 'elbow',
+    className: pending ? 'pending' : 'active',
+    style: pending ? { strokeDasharray: '4 3' } : undefined,
+  }
 }

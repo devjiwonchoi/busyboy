@@ -206,6 +206,8 @@ function Sidebar({
         data-slot="sidebar-gap"
         className={cn(
           "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+          // busyboy: follow the pointer while SidebarRail resizes, instead of easing behind it.
+          "in-data-[resizing=true]:transition-none",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -217,6 +219,8 @@ function Sidebar({
         data-slot="sidebar-container"
         data-side={side}
         className={cn(
+          // busyboy: follow the pointer while SidebarRail resizes, instead of easing behind it.
+          "in-data-[resizing=true]:transition-none",
           "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
           // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
@@ -264,17 +268,156 @@ function SidebarTrigger({
   )
 }
 
-function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
+type SidebarResize = {
+  /** Narrowest and widest the sidebar can be dragged, in pixels. */
+  minWidth: number
+  maxWidth: number
+  /** localStorage key that remembers the dragged width. */
+  storageKey: string
+}
+
+/** A `--sidebar-width` value (`20rem` from the provider, or `320px` once set here) in pixels. */
+function lengthInPixels(value: string) {
+  const number = Number.parseFloat(value)
+  if (!number) return null
+  if (!value.trim().endsWith("rem")) return number
+  return number * Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+}
+
+function clampWidth(width: number, { minWidth, maxWidth }: SidebarResize) {
+  // Never wider than most of the window, so the main area keeps room on a small window.
+  const max = Math.min(maxWidth, Math.max(minWidth, window.innerWidth * 0.6))
+  return Math.round(Math.min(max, Math.max(minWidth, width)))
+}
+
+/**
+ * busyboy: shadcn's rail only toggles the sidebar. Like T3 Code's sidebar, it
+ * also resizes it here: dragging sets `--sidebar-width` on the wrapper, and the
+ * width is remembered per user in localStorage. The variable is set on the DOM
+ * node rather than in React state so dragging does not re-render the app; the
+ * provider's own style object never changes, so React does not overwrite it.
+ */
+function useSidebarResize(resize: SidebarResize | undefined) {
+  const railRef = React.useRef<HTMLButtonElement>(null)
+  const drag = React.useRef<{ startX: number; startWidth: number; moved: boolean } | null>(null)
+  const justDragged = React.useRef(false)
+  // The width the user wants: the saved or dragged width, else the default. A narrow window
+  // clamps what is shown, never this, so widening the window brings the sidebar back to it.
+  const preferredWidth = React.useRef<number | null>(null)
+
+  const wrapper = () => railRef.current?.closest<HTMLElement>('[data-slot="sidebar-wrapper"]') ?? null
+  const side = () => railRef.current?.closest<HTMLElement>('[data-slot="sidebar"]')?.dataset.side
+
+  // A layout effect, so the remembered width replaces the server-rendered default before the
+  // first paint after hydration (the server cannot read localStorage, so that first HTML paint
+  // still shows the default).
+  React.useLayoutEffect(() => {
+    if (!resize) return
+    const element = wrapper()
+    if (!element) return
+    const apply = (width: number) => {
+      // Without the resizing flag the sidebar would animate to the new width.
+      element.setAttribute("data-resizing", "true")
+      element.style.setProperty("--sidebar-width", `${clampWidth(width, resize)}px`)
+      // Reading layout applies the width while transitions are off; otherwise the flag would be
+      // gone by the time the browser restyles and the width would still animate.
+      void element.offsetWidth
+      element.removeAttribute("data-resizing")
+    }
+    let saved: number | null = null
+    try {
+      // Storage can be unavailable (private mode, blocked site data); the default width is fine then.
+      saved = Number(window.localStorage.getItem(resize.storageKey)) || null
+    } catch {}
+    // Read before anything is applied, so it is the provider's default.
+    preferredWidth.current = saved ?? lengthInPixels(element.style.getPropertyValue("--sidebar-width"))
+    if (saved) apply(saved)
+    // A narrower window lowers the limit, so a wide sidebar shrinks with it, and a wider one
+    // lets it grow back. Clamping the shown width instead would read the default `20rem` as
+    // 20 pixels and shrink the sidebar to its minimum.
+    const onWindowResize = () => {
+      if (preferredWidth.current) apply(preferredWidth.current)
+    }
+    window.addEventListener("resize", onWindowResize)
+    return () => window.removeEventListener("resize", onWindowResize)
+  }, [resize])
+
+  if (!resize) return { railRef, handlers: {}, justDragged }
+
+  const handlers: React.ComponentProps<"button"> = {
+    onPointerDown(event) {
+      if (event.button !== 0) return
+      const container = railRef.current?.closest('[data-slot="sidebar"]')?.querySelector('[data-slot="sidebar-container"]')
+      if (!container) return
+      event.preventDefault()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      drag.current = { startX: event.clientX, startWidth: container.getBoundingClientRect().width, moved: false }
+      wrapper()?.setAttribute("data-resizing", "true")
+    },
+    onPointerMove(event) {
+      const current = drag.current
+      if (!current) return
+      const delta = side() === "right" ? current.startX - event.clientX : event.clientX - current.startX
+      // A few pixels of wobble is still a click, which toggles the sidebar as before.
+      if (Math.abs(delta) > 2) current.moved = true
+      if (!current.moved) return
+      wrapper()?.style.setProperty("--sidebar-width", `${clampWidth(current.startWidth + delta, resize)}px`)
+    },
+    onPointerUp(event) {
+      const current = drag.current
+      if (!current) return
+      drag.current = null
+      event.currentTarget.releasePointerCapture(event.pointerId)
+      const element = wrapper()
+      element?.removeAttribute("data-resizing")
+      justDragged.current = current.moved
+      if (!current.moved || !element) return
+      const width = Number.parseFloat(element.style.getPropertyValue("--sidebar-width"))
+      if (width) preferredWidth.current = width
+      try {
+        if (width) window.localStorage.setItem(resize.storageKey, String(width))
+      } catch {}
+    },
+    onPointerCancel() {
+      drag.current = null
+      wrapper()?.removeAttribute("data-resizing")
+    },
+    // Capture can also end without a cancel (the window loses focus mid-drag); a drag must not outlive it.
+    onLostPointerCapture() {
+      if (!drag.current) return
+      drag.current = null
+      wrapper()?.removeAttribute("data-resizing")
+    },
+  }
+  return { railRef, handlers, justDragged }
+}
+
+function SidebarRail({
+  className,
+  resize,
+  ...props
+}: React.ComponentProps<"button"> & { resize?: SidebarResize }) {
   const { toggleSidebar } = useSidebar()
+  const { railRef, handlers, justDragged } = useSidebarResize(resize)
+  const label = resize ? "Resize Sidebar" : "Toggle Sidebar"
 
   return (
     <button
+      ref={railRef}
       data-sidebar="rail"
       data-slot="sidebar-rail"
-      aria-label="Toggle Sidebar"
+      aria-label={label}
       tabIndex={-1}
-      onClick={toggleSidebar}
-      title="Toggle Sidebar"
+      onClick={() => {
+        // The click that ends a drag must not also close the sidebar.
+        if (justDragged.current) {
+          justDragged.current = false
+          return
+        }
+        toggleSidebar()
+      }}
+      title={resize ? "Drag to resize, click to toggle" : label}
+      {...handlers}
       className={cn(
         "absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",

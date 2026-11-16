@@ -7,7 +7,7 @@ import { usePanelRef } from 'react-resizable-panels'
 import { buttonVariants } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
-import { Sidebar, SidebarContent, SidebarInset } from '@/components/ui/sidebar'
+import { Sidebar, SidebarContent, SidebarInset, SidebarRail } from '@/components/ui/sidebar'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ShellStateProvider, useShellState } from './shell-state'
@@ -39,6 +39,9 @@ export function AppShell(props: AppShellProps) {
 
 const toggleSidebarKeys = { key: 'b', mod: true } as const
 const togglePanelKeys = { key: 'j', mod: true } as const
+
+// The sidebar holds the project graph, which needs room to read; 20rem (shell-state.tsx) is the default.
+const SIDEBAR_RESIZE = { minWidth: 256, maxWidth: 720, storageKey: 'busyboy:sidebar-width' }
 
 const PANEL_DEFAULT_SIZE = 288
 const PANEL_MIN_SIZE = 120
@@ -139,6 +142,7 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
           className="top-10 h-[calc(100svh-2.5rem)]"
         >
           <SidebarContent>{sidebar}</SidebarContent>
+          <SidebarRail resize={SIDEBAR_RESIZE} />
         </Sidebar>
       </div>
     </div>

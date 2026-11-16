@@ -60,17 +60,30 @@ test('a malformed record should show an error node', async ({ page, context, bas
   await expect(graph.getByRole('group', { name: `Task ${HEALTH.title}` })).toHaveAttribute('data-status', 'done')
 })
 
-test('hovering a task node should show its details', async ({ page, context, baseURL }) => {
-  await useRecordHome(context, baseURL!)
+test('hovering a task should highlight its path and show its details', async ({ page, context, baseURL }) => {
+  const { footer } = await useRecordHome(context, baseURL!)
   const graph = await openGraph(page)
-  await expect(graph.getByRole('group', { name: 'Project web' })).toBeVisible()
-  await expect(graph.getByRole('group', { name: 'Project api' })).toBeVisible()
+  const web = graph.getByRole('group', { name: 'Project web' })
+  const api = graph.getByRole('group', { name: 'Project api' })
+  await expect(web).toBeVisible()
+  await expect(api).toBeVisible()
+  await expect(graph.getByLabel('Graph summary')).toHaveText('2 tasks 1 waiting 5 todos')
   const task = graph.getByRole('group', { name: `Task ${FOOTER.title}` })
 
   await task.hover()
 
-  const details = page.locator('.react-flow__node-toolbar').filter({ hasText: 'Branch' })
+  // The task and its project stay lit; its todos and the other project dim.
+  await expect(task).toHaveAttribute('data-dimmed', 'false')
+  await expect(web).toHaveAttribute('data-dimmed', 'false')
+  await expect(api).toHaveAttribute('data-dimmed', 'true')
+  await expect(graph.getByRole('group', { name: 'Todo 2 · Fetch the status' })).toHaveAttribute('data-dimmed', 'true')
+  await expect(graph.locator('.react-flow__edge.on-path')).toHaveCount(1)
+
+  const details = page.getByRole('group', { name: 'Task details' })
   await expect(details).toBeVisible()
+  await expect(details).toContainText('StatusNeeds you')
+  await expect(details).toContainText(`Worktree${footer.worktree}`)
+  await expect(details).toContainText('Updated')
   await expect(details).toContainText(`busyboy/${FOOTER.id}`)
   await expect(details).toContainText('StageIterate')
   await expect(details).toContainText('needing the user to choose how often to poll')
@@ -85,6 +98,48 @@ test('hovering a task node should show its details', async ({ page, context, bas
 
   await page.mouse.move(0, 0)
   await expect(details).toBeHidden()
+  await expect(api).not.toHaveAttribute('data-dimmed', 'true')
+})
+
+test('hovering a project should keep its own tasks lit', async ({ page, context, baseURL }) => {
+  await useRecordHome(context, baseURL!)
+  const graph = await openGraph(page)
+  const web = graph.getByRole('group', { name: 'Project web' })
+
+  await web.hover()
+
+  await expect(web).toHaveAttribute('data-dimmed', 'false')
+  await expect(graph.getByRole('group', { name: `Task ${FOOTER.title}` })).toHaveAttribute('data-dimmed', 'false')
+  await expect(graph.getByRole('group', { name: 'Todo 2 · Fetch the status' })).toHaveAttribute('data-dimmed', 'false')
+  await expect(graph.getByRole('group', { name: 'Project api' })).toHaveAttribute('data-dimmed', 'true')
+})
+
+test('hovering a todo should highlight its path back to the project', async ({ page, context, baseURL }) => {
+  await useRecordHome(context, baseURL!)
+  const graph = await openGraph(page)
+  const todo = graph.getByRole('group', { name: 'Todo 2 · Fetch the status' })
+
+  await todo.hover()
+
+  await expect(todo).toHaveAttribute('data-dimmed', 'false')
+  await expect(graph.getByRole('group', { name: `Task ${FOOTER.title}` })).toHaveAttribute('data-dimmed', 'false')
+  await expect(graph.getByRole('group', { name: 'Project web' })).toHaveAttribute('data-dimmed', 'false')
+  await expect(graph.getByRole('group', { name: 'Todo 1 · Footer component' })).toHaveAttribute('data-dimmed', 'true')
+  await expect(graph.locator('.react-flow__edge.on-path')).toHaveCount(2)
+  const details = page.getByRole('group', { name: 'Todo details' })
+  await expect(details).toContainText('Todo2 · Fetch the status')
+  await expect(details).toContainText(`Task${FOOTER.title}`)
+})
+
+test('a project without tasks should show only its pill and a hint', async ({ page, context, baseURL }) => {
+  await useProjectsHome(context, baseURL!, ['web'])
+  const graph = await openGraph(page)
+
+  await expect(graph.getByRole('group', { name: 'Project web' })).toHaveText('webNo tasks yet')
+  await expect(graph.getByRole('group', { name: /^Task / })).toHaveCount(0)
+  await expect(graph.getByLabel('Graph summary')).toHaveText('0 tasks 0 todos')
+  // Pan and zoom stay as gestures; the zoom buttons are gone.
+  await expect(graph.locator('.react-flow__controls')).toHaveCount(0)
 })
 
 // tests/provider-scripts/director-status.json was recorded from real Claude with this

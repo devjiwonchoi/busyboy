@@ -18,6 +18,9 @@ export type GraphTask = {
   project: string
   title: string
   branch: string
+  worktree: string
+  /** When a record file last changed, or when the task was created if it has none (ISO 8601). */
+  updatedAt: string
   status: NodeStatus
   stage: string | null
   stateText: string | null
@@ -69,22 +72,27 @@ export async function recordFolderOf(task: Pick<TaskRecord, 'id' | 'worktree'>):
   return { error: `There is no ${RECORDS_FOLDER}/${task.id}/ folder, and several others hold records: ${withRecords.join(', ')}.` }
 }
 
-async function readRecordTexts(recordFolder: string): Promise<RecordTexts> {
+async function readRecordTexts(recordFolder: string): Promise<{ texts: RecordTexts; changedAt: number | null }> {
   const texts: RecordTexts = {}
+  let changedAt: number | null = null
   await Promise.all(
     RECORD_FILES.map(async (file) => {
       const path = join(recordFolder, file)
       try {
         // Records are the agent's own files in its worktree; a link could point anywhere on the machine.
-        if ((await lstat(path)).isSymbolicLink()) texts[file] = { error: 'it is a symbolic link' }
-        else texts[file] = await readFile(path, 'utf8')
+        const stats = await lstat(path)
+        if (stats.isSymbolicLink()) texts[file] = { error: 'it is a symbolic link' }
+        else {
+          texts[file] = await readFile(path, 'utf8')
+          changedAt = Math.max(changedAt ?? 0, stats.mtimeMs)
+        }
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code
         if (code !== 'ENOENT') texts[file] = { error: code ?? String(error) }
       }
     }),
   )
-  return texts
+  return { texts, changedAt }
 }
 
 /**
@@ -111,13 +119,16 @@ function taskStatus(records: ParsedRecords, agent: TaskStatus): NodeStatus {
 
 async function readTask(task: TaskRecord) {
   const folder = await recordFolderOf(task)
-  const records = parseRecords(folder && 'folder' in folder ? await readRecordTexts(folder.folder) : {})
+  const read = folder && 'folder' in folder ? await readRecordTexts(folder.folder) : { texts: {}, changedAt: null }
+  const records = parseRecords(read.texts)
   if (folder && 'error' in folder) records.errors.push({ file: RECORDS_FOLDER, message: folder.error })
   return {
     id: task.id,
     project: task.project,
     title: task.title,
     branch: task.branch,
+    worktree: task.worktree,
+    updatedAt: read.changedAt === null ? task.createdAt : new Date(read.changedAt).toISOString(),
     status: taskStatus(records, taskView(task).status),
     stage: records.stage,
     stateText: records.stateText,
