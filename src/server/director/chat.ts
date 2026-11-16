@@ -20,6 +20,7 @@ import {
   subscribeToAgent,
 } from '../runner/agent-runner'
 import type { AgentEventEnvelope, McpServer, ProviderId } from '../runner/contract'
+import { cardRecordTitle, isStoredCardKind, type StoredCardKind } from '../cards/model'
 import { openCards, replyToCard, subscribeToCards, type TaskCard } from '../task-cards'
 import { listTasksAt, messageTaskAt, subscribeToTasks, type TaskView } from '../tasks'
 
@@ -57,7 +58,7 @@ export type ChatEntry =
       id: string
       at: string
       kind: 'card'
-      cardKind: TaskCard['kind']
+      cardKind: StoredCardKind
       project: string
       taskTitle: string
       title: string
@@ -74,7 +75,7 @@ export type DirectorUpdate =
   | { type: 'draft'; text: string }
   | { type: 'status'; status: DirectorStatus }
   | { type: 'task'; task: TaskView }
-  /** A task agent's card opened; it stays pinned until `card-closed`. */
+  /** A task agent's card opened; it stays in the timeline until `card-closed`. */
   | { type: 'card-opened'; card: TaskCard }
   | { type: 'card-closed'; cardId: string }
 
@@ -198,7 +199,7 @@ function watchFolder(folder: string) {
     }
     const { card, outcome } = update
     broadcast(director, { type: 'card-closed', cardId: card.id })
-    const title = card.kind === 'align' ? `Plan: ${card.title}` : card.questions.map(({ question }) => question).join(' ')
+    const title = cardRecordTitle(card)
     const save = () =>
       saveEntry(director, newEntry('card', { cardKind: card.kind, project: card.project, taskTitle: card.taskTitle, title, outcome }))
     // Saved at once when loaded, so a reply to the card (saved right after it closes) follows it in the transcript.
@@ -300,7 +301,7 @@ function isEntry(value: unknown): value is ChatEntry {
       return typeof entry.text === 'string'
     case 'card':
       return (
-        (entry.cardKind === 'choice' || entry.cardKind === 'align') &&
+        isStoredCardKind(entry.cardKind) &&
         ['project', 'taskTitle', 'title', 'outcome'].every((key) => typeof entry[key] === 'string')
       )
     case 'note':

@@ -21,7 +21,9 @@ async function send(page: Page, text: string) {
   await page.getByRole('button', { name: 'Send' }).click()
 }
 
-const pinned = (page: Page) => page.getByRole('region', { name: 'Waiting for you' })
+
+const transcript = (page: Page) => page.getByRole('log', { name: 'Transcript' })
+const openCard = (page: Page, name: string) => transcript(page).getByRole('group', { name })
 
 test('asking for a merge should start a subagent in the project that asks before merging and shows its result', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
@@ -29,7 +31,7 @@ test('asking for a merge should start a subagent in the project that asks before
 
   const line = page.getByRole('group', { name: 'Tasks' }).getByRole('listitem', { name: 'web · Merge the PR' })
   await expect(line).toContainText('Subagent')
-  const card = pinned(page).getByRole('group', { name: 'Approval from web · Merge the PR' })
+  const card = openCard(page, 'Approval from web · Merge the PR')
   await expect(card).toContainText('Bash: gh pr merge 12 --squash')
   await card.getByRole('button', { name: 'A. Allow' }).click()
 
@@ -52,7 +54,7 @@ test('a subagent changing a file with a file tool or the shell should ask first,
   await useProjectsHome(context, baseURL!, ['web'])
   await send(page, TYPO_REQUEST)
 
-  const card = pinned(page).getByRole('group', { name: 'Approval from web · Fix the typo' })
+  const card = openCard(page, 'Approval from web · Fix the typo')
   await expect(card).toContainText('Change the project checkout as a subagent.')
   await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BDeny'])
   await card.getByRole('button', { name: 'B. Deny' }).click()
@@ -72,7 +74,7 @@ test('a finished subagent should end its process and still show its result after
     const { home } = await useProjectsHome(context, server.baseURL, ['web'])
     const page = await context.newPage()
     await send(page, MERGE_REQUEST)
-    await pinned(page).getByRole('group', { name: 'Approval from web · Merge the PR' }).getByRole('button', { name: 'A. Allow' }).click()
+    await openCard(page, 'Approval from web · Merge the PR').getByRole('button', { name: 'A. Allow' }).click()
     const line = page.getByRole('group', { name: 'Tasks' }).getByRole('listitem', { name: 'web · Merge the PR' })
     await expect(line.getByLabel('Result')).toHaveText('Merged pull request 12.')
     // Done, with nothing left to stop: its process has ended.

@@ -1,7 +1,7 @@
 'use client'
 
 import { ArrowUp, Square } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Composer,
@@ -29,6 +29,7 @@ export function ChatComposer({
   onStop,
   label = 'Message',
   sendLabel = 'Send',
+  leading,
 }: {
   projects: string[]
   placeholder: string
@@ -39,6 +40,8 @@ export function ChatComposer({
   /** Accessible names, so a second composer on the screen (the side chat) is told apart. */
   label?: string
   sendLabel?: string
+  /** Rendered at the start of the box. The reply chip uses this slot. */
+  leading?: ReactNode
 }) {
   const [value, setValue] = useState<ComposerValue>([])
   // A chosen project becomes a mention token. getComposerText turns it back
@@ -59,6 +62,7 @@ export function ChatComposer({
 
   return (
     <Composer value={value} onValueChange={setValue} onSubmit={send} triggers={[{ character: '@', items }]}>
+      {leading && <div className="px-1 pt-1">{leading}</div>}
       <ComposerInput aria-label={label} placeholder={placeholder} />
       <ComposerPopup>
         <ComposerList aria-label="Choose a project">

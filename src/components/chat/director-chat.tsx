@@ -4,17 +4,18 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { messageTaskAction, replyToCardAction, sendToDirectorAction, stopDirectorAction } from '@/app/(main)/director-actions'
 import { cn } from '@/lib/utils'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
-import type { TaskCard } from '@/server/task-cards'
+import type { TaskCard } from '@/server/cards/model'
 import type { TaskView } from '@/server/tasks'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Message, MessageAvatar, MessageContent, MessageFooter, MessageHeader } from '@/components/ui/message'
+import { ClosedCard } from './cards/closed-card'
+import { OpenCard } from './cards/open-card'
+import { mergeTimeline } from './cards/timeline'
 import { ChatComposer } from './composer'
 import { Markdown } from './markdown'
 import { PersonaAvatar, type Persona } from './persona'
-import { TaskCardView } from './task-card'
+import { ReplyTarget } from './reply-target'
 import { TaskGroup } from './task-group'
 
 type View = {
@@ -128,7 +129,7 @@ export function DirectorChat({
   useLayoutEffect(() => {
     const element = scroller.current
     if (element) element.scrollTop = element.scrollHeight
-  }, [view.entries, view.draft, view.tasks])
+  }, [view.entries, view.draft, view.tasks, view.cards])
 
   const thinking = view.status === 'answering' && !view.draft
   const replyCard = view.cards.find(({ id }) => id === replyChoice)
@@ -165,23 +166,38 @@ export function DirectorChat({
               <BubbleContent>{greeting}</BubbleContent>
             </Bubble>
           </DirectorMessage>
-          {view.entries.map((entry) => (
-            <EntryView
-              key={entry.id}
-              entry={entry}
-              tasks={view.tasks}
-              persona={persona}
-              messaging={messageTask?.id ?? null}
-              onMessage={(taskId) => {
-                // One target at a time: a task replaces a card reply.
-                choice.current = null
-                setReplyChoice(null)
-                setReplyLost(false)
-                setMessageLost(false)
-                setMessageChoice(taskId)
-              }}
-            />
-          ))}
+          {mergeTimeline(view.entries, view.cards).map((row) =>
+            row.type === 'card' ? (
+              <OpenCard
+                key={row.key}
+                card={row.card}
+                replying={row.card.id === replyCardId}
+                onReplyChange={(replying) => {
+                  choice.current = replying ? row.card.id : null
+                  setReplyLost(false)
+                  setReplyChoice(choice.current)
+                  setMessageLost(false)
+                  if (replying) setMessageChoice(null)
+                }}
+              />
+            ) : (
+              <EntryView
+                key={row.key}
+                entry={row.entry}
+                tasks={view.tasks}
+                persona={persona}
+                messaging={messageTask?.id ?? null}
+                onMessage={(taskId) => {
+                  // One target at a time: a task replaces a card reply.
+                  choice.current = null
+                  setReplyChoice(null)
+                  setReplyLost(false)
+                  setMessageLost(false)
+                  setMessageChoice(taskId)
+                }}
+              />
+            ),
+          )}
           {view.draft && (
             <DirectorMessage persona={persona}>
               <Bubble variant="muted" role="group" aria-label="Reply in progress" aria-busy>
@@ -199,45 +215,22 @@ export function DirectorChat({
         </section>
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-4">
-        {view.cards.length > 0 && (
-          <section aria-label="Waiting for you" className="flex max-h-[50vh] flex-col gap-3 overflow-y-auto pb-3">
-            {view.cards.map((card) => (
-              <TaskCardView
-                key={card.id}
-                card={card}
-                replying={card.id === replyCardId}
-                onReplyChange={(replying) => {
-                  choice.current = replying ? card.id : null
-                  setReplyLost(false)
-                  setReplyChoice(choice.current)
-                  setMessageLost(false)
-                  if (replying) setMessageChoice(null)
-                }}
-              />
-            ))}
-          </section>
-        )}
-        {target && (
-          <div className="flex items-center gap-2 pb-2">
-            <Badge variant="outline" className="min-w-0 truncate">
-              {replyCard ? 'Replying to' : 'Messaging'} {target}
-            </Badge>
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              onClick={() => {
-                setReplyChoice(null)
-                setMessageChoice(null)
-                setMessageLost(false)
-              }}
-            >
-              Message {name} instead
-            </Button>
-          </div>
-        )}
         <ChatComposer
           projects={projects}
+          leading={
+            target ? (
+              <ReplyTarget
+                mode={replyCard ? 'reply' : 'message'}
+                target={target}
+                directorName={name}
+                onClear={() => {
+                  setReplyChoice(null)
+                  setMessageChoice(null)
+                  setMessageLost(false)
+                }}
+              />
+            ) : undefined
+          }
           placeholder={target ? `${replyCard ? 'Reply to' : 'Message'} ${target}` : `Message ${name}`}
           onStop={
             view.status === 'answering'
@@ -367,21 +360,7 @@ function EntryView({
     case 'tasks':
       return <TaskGroup taskIds={entry.taskIds} tasks={tasks} messaging={messaging} onMessage={onMessage} />
     case 'card':
-      return (
-        <Message>
-          <MessageContent>
-            <MessageHeader>
-              {entry.project} · {entry.taskTitle}
-            </MessageHeader>
-            <Bubble variant="muted" role="group" aria-label={`Card from ${entry.project} · ${entry.taskTitle}`}>
-              <BubbleContent className="space-y-1">
-                <p className="line-clamp-3">{entry.title}</p>
-                <Badge variant="outline">{entry.outcome}</Badge>
-              </BubbleContent>
-            </Bubble>
-          </MessageContent>
-        </Message>
-      )
+      return <ClosedCard entry={entry} />
     case 'note':
       return (
         <p

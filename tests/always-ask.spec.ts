@@ -41,8 +41,10 @@ async function openApprovals(page: Page) {
   return list
 }
 
-const pinned = (page: Page) => page.getByRole('region', { name: 'Waiting for you' })
 const transcript = (page: Page) => page.getByRole('log', { name: 'Transcript' })
+const openCard = (page: Page, name: string) => transcript(page).getByRole('group', { name })
+const openCards = (page: Page) =>
+  transcript(page).getByRole('group', { name: /^(Question|Approval|Plan|Progress|Done|Pull requests) from / })
 const taskRow = (page: Page, title: string) => transcript(page).getByLabel(`web · ${title}`, { exact: true })
 
 test.describe('Claude task agents', () => {
@@ -54,7 +56,7 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Force push', FORCE_PUSH_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Force push' })
+    const card = openCard(page, 'Approval from web · Force push')
     await expect(card).toContainText('Bash: git push --force origin HEAD')
     await expect(card).toContainText('On your always-ask list: Force push or delete a remote branch')
     await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BAlways allow this exact command', 'CDeny'])
@@ -68,14 +70,14 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Force push', FORCE_PUSH_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Force push' })
+    const card = openCard(page, 'Approval from web · Force push')
     await expect(card).toContainText('Bash: git push --force origin HEAD')
     await card.getByRole('button', { name: 'B. Always allow this exact command' }).click()
 
     // The agent runs the same push again, which passes without a card, then pushes another branch.
     await expect(card).toContainText('Bash: git push --force origin release')
     await card.getByRole('button', { name: 'C. Deny' }).click()
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     await expect(taskRow(page, 'Force push')).toContainText('Idle')
   })
 
@@ -85,7 +87,7 @@ test.describe('Claude task agents', () => {
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(transcript(page).getByRole('group', { name: 'Reply' })).toHaveText('I could not run that, so a task will have to do it.')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
   })
 
   test("the Director changing BusyBoy's task list or reading its settings with a command should be refused", async ({ page }) => {
@@ -98,7 +100,7 @@ test.describe('Claude task agents', () => {
     await page.getByRole('textbox', { name: 'Message' }).fill('Show the settings file with a command.')
     await page.getByRole('button', { name: 'Send' }).click()
     await expect(reply.last()).toHaveText('BusyBoy kept me out of its settings.')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
   })
 
   test('the Director writing in its own folder should run without asking', async ({ page }) => {
@@ -113,7 +115,7 @@ test.describe('Claude task agents', () => {
     await createTask(context.request, 'Clean build', CLEAN_REQUEST)
 
     await expect(taskRow(page, 'Clean build')).toContainText('Idle')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
   })
 
   test('adding a rule in Setup should make task agents ask before that action', async ({ page, context }) => {
@@ -127,7 +129,7 @@ test.describe('Claude task agents', () => {
 
     await openChat(page)
     await createTask(context.request, 'Release', RELEASE_REQUEST)
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Release' })
+    const card = openCard(page, 'Approval from web · Release')
     await expect(card).toContainText('On your always-ask list: Bash(./release.sh*)')
     await card.getByRole('button', { name: 'A. Allow' }).click()
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Release' })).toContainText('A · Allow')
@@ -170,7 +172,7 @@ test.describe('Codex task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Force push', FORCE_PUSH_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Force push' })
+    const card = openCard(page, 'Approval from web · Force push')
     await expect(card).toContainText('Bash: git push --force origin HEAD')
     await card.getByRole('button', { name: 'A. Allow' }).click()
 
