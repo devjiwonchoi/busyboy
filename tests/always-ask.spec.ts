@@ -110,6 +110,46 @@ test.describe('Claude task agents', () => {
     await expect(transcript(page).getByRole('group', { name: 'Reply' })).toHaveText('Saved the note.')
   })
 
+  test('deleting a file outside the task with an apply_patch heredoc should ask', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Delete notes', 'Delete the notes file outside this task with a patch.')
+
+    const card = pinned(page).getByRole('group', { name: 'Approval from web · Delete notes' })
+    await expect(card).toContainText('On your always-ask list: Delete outside the task folder')
+    await card.getByRole('button', { name: 'C. Deny' }).click()
+    await expect(transcript(page).getByRole('group', { name: 'Card from web · Delete notes' })).toContainText('C · Deny')
+    await expect(taskRow(page, 'Delete notes')).toContainText('Idle')
+  })
+
+  test('updating a file whose diff mentions a force push should not ask', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Update footer', 'Update the footer, and mention the force push in the diff.')
+
+    await expect(taskRow(page, 'Update footer')).toContainText('Idle')
+    await expect(pinned(page)).toHaveCount(0)
+  })
+
+  test('a force push sent as shell_command with cmd should ask', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Shell push', 'Force push using the shell_command tool.')
+
+    const card = pinned(page).getByRole('group', { name: 'Approval from web · Shell push' })
+    await expect(card).toContainText('shell_command: git push --force origin HEAD')
+    await expect(card).toContainText('On your always-ask list: Force push or delete a remote branch')
+    await card.getByRole('button', { name: 'C. Deny' }).click()
+    await expect(taskRow(page, 'Shell push')).toContainText('Idle')
+  })
+
+  test('a force push passed as one command-line argument should ask', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Argv push', 'Force push, with the command passed as one argument.')
+
+    const card = pinned(page).getByRole('group', { name: 'Approval from web · Argv push' })
+    await expect(card).toContainText('Bash: git push --force origin feature')
+    await card.getByRole('button', { name: 'C. Deny' }).click()
+    await expect(taskRow(page, 'Argv push')).toContainText('Idle')
+  })
+
   test('a delete inside the task folder should run without a card', async ({ page, context }) => {
     await openChat(page)
     await createTask(context.request, 'Clean build', CLEAN_REQUEST)

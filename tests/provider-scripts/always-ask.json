@@ -111,6 +111,102 @@
       ]
     },
     {
+      "prompt": "Delete the notes file outside this task with a patch.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: ../other-project/notes.txt\n*** End Patch\nEOF"
+            }
+          },
+          "then": {
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "patch-delete-deny",
+                  "text": "I did not delete the notes."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Update the footer, and mention the force push in the diff.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: src/app.ts\n@@\n-old\n+git push --force origin main\n*** End Patch\nEOF"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "patch-update",
+                  "text": "Updated the footer."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Force push using the shell_command tool.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "shell_command",
+            "input": {
+              "cmd": "git push --force origin HEAD"
+            }
+          },
+          "then": {
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "shell-command-deny",
+                  "text": "I did not force push."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Force push, with the command passed as one argument.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": ["git push --force origin feature"]
+            }
+          },
+          "then": {
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "argv-deny",
+                  "text": "I did not force push."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "prompt": "Remove the build folder.",
       "steps": [
         {

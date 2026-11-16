@@ -11,7 +11,8 @@ import {
   unfillableFields,
   type ElicitationSchema,
 } from './codex-elicitation'
-import type { AgentAnswer, AgentEvent, Question } from './contract'
+import { parseAskedQuestions } from './asked-questions'
+import type { AgentAnswer, AgentEvent } from './contract'
 
 /** A JSON-RPC message from the app server: a notification, or a server request when `id` is set. */
 export type CodexRawMessage = { id?: string | number; method: string; params?: Record<string, unknown> }
@@ -30,21 +31,18 @@ type ThreadItem = {
   questions?: AsyncQuestion[] | null
 }
 
-/** A question Codex puts in an agent message in Default mode, where `request_user_input` is unavailable. */
-type AsyncQuestion = { title: string; options: string[] | null }
+/**
+ * A question Codex puts in an agent message in Default mode, where `request_user_input`
+ * is unavailable. `title` and string options are that tool's shape; `question` and
+ * `{ label, description }` options are the other tool's, which the model also sends here.
+ */
+type AsyncQuestion = { title?: string; question?: string; options?: unknown }
 
 /** Request ids of questions asked in agent messages; they are answered by steering the turn. */
 export const CODEX_MESSAGE_QUESTION_PREFIX = 'codex-ask-'
 
 type Turn = { id: string; status: 'completed' | 'interrupted' | 'failed' | 'inProgress'; error?: TurnError | null }
 type TurnError = { message: string; codexErrorInfo?: unknown; additionalDetails?: string | null }
-
-type UserInputQuestion = {
-  id: string
-  header: string
-  question: string
-  options: { label: string; description: string }[] | null
-}
 
 /** A path in a permission request, as the 0.167.0 protocol shapes it. */
 type SandboxPath =
@@ -317,11 +315,9 @@ export class CodexEventMapper {
       this.send({
         type: 'question',
         requestId: `${CODEX_MESSAGE_QUESTION_PREFIX}${itemId}`,
-        questions: item.questions.map((question) => ({
-          question: question.title,
-          multiSelect: false,
-          options: (question.options ?? []).map((label) => ({ label })),
-        })),
+        questions: parseAskedQuestions(item.questions) ?? [
+          { question: 'Codex asked a question BusyBoy could not read. Reply with the answer.', multiSelect: false, options: [] },
+        ],
       })
     }
   }
@@ -419,12 +415,11 @@ export function codexRequestToEvent(
       }
     }
     case 'item/tool/requestUserInput': {
-      const questions: Question[] = (params.questions as UserInputQuestion[]).map((question) => ({
-        question: question.question,
-        header: question.header || undefined,
-        multiSelect: false,
-        options: (question.options ?? []).map(({ label, description }) => ({ label, description: description || undefined })),
-      }))
+      // `title` with string options, and `question` with labeled options, are both sent here.
+      const questions = parseAskedQuestions(params.questions) ??
+        parseAskedQuestions(params) ?? [
+          { question: 'Codex asked a question BusyBoy could not read. Reply with the answer.', multiSelect: false, options: [] },
+        ]
       return { type: 'question', requestId, questions }
     }
     case 'mcpServer/elicitation/request': {
@@ -469,13 +464,19 @@ export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswe
       return { permissions: allow ? granted : {}, scope: forSession ? 'session' : 'turn' }
     }
     case 'item/tool/requestUserInput': {
-      const questions = params.questions as UserInputQuestion[]
+      const questions = Array.isArray(params.questions) ? params.questions : []
       if (answer.kind !== 'question') return { answers: {} }
       const answers = Object.fromEntries(
-        questions
-          .filter((question) => answer.answers[question.question] !== undefined)
+        questions.flatMap((item) => {
+          if (!item || typeof item !== 'object') return []
+          const id = (item as { id?: unknown }).id
+          // The same reading as the card, so the answer is stored under the question the user saw.
+          const key = parseAskedQuestions(item)?.[0]?.question
+          const value = key === undefined ? undefined : answer.answers[key]
+          if (typeof id !== 'string' || value === undefined) return []
           // Every question here is single-select, so the label is one answer even when it has a comma.
-          .map((question) => [question.id, { answers: [answer.answers[question.question]!] }]),
+          return [[id, { answers: [value] }]]
+        }),
       )
       return { answers }
     }
