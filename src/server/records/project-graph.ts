@@ -179,7 +179,8 @@ export async function readProjectGraph(folder: string): Promise<ProjectGraph> {
   }
   const projects = new Map<string, Awaited<ReturnType<typeof readTask>>[]>(names.map((name) => [name, []]))
   // A subagent runs in the project's own checkout and writes no records; any `.jwn` there is the user's.
-  for (const task of await Promise.all(tasks.filter(({ kind }) => kind !== 'subagent').map(readTask))) {
+  // An archived task is out of the way until it is restored.
+  for (const task of await Promise.all(tasks.filter(({ kind, archivedAt }) => kind !== 'subagent' && !archivedAt).map(readTask))) {
     // A task whose project was removed from settings still shows under its own name.
     let list = projects.get(task.project)
     if (!list) projects.set(task.project, (list = []))

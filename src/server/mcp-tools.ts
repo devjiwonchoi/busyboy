@@ -9,7 +9,7 @@ import { readProjectGraph } from './records/project-graph'
 import { lastAgentReply } from './runner/agent-runner'
 import { summarizeGraph, summarizeSubagents } from './records/status-summary'
 import type { McpServer } from './runner/contract'
-import { createTask, messageTask, readTasksAt, TaskError, taskView } from './tasks'
+import { archiveTask, createTask, messageTask, readTasksAt, TaskError, taskView } from './tasks'
 
 // The tools busyboy offers its agents over MCP (app/api/mcp/route.ts). Every
 // call runs inside that request, so `dataFolder()` and the providers resolve
@@ -129,7 +129,7 @@ export const MCP_TOOLS: McpTool[] = [
   {
     name: 'message_task',
     description:
-      "Send an existing task's agent another message: a review comment to address, a change on the same branch, a question about its work. The agent carries on in the task's own worktree and branch with its conversation so far, and is started again when it had ended. Use this instead of create_task for follow-up work on a task. Does not work for subagents or while the task waits on a card.",
+      "Send an existing task's agent another message: a review comment to address, a change on the same branch, a question about its work. The agent carries on in the task's own worktree and branch with its conversation so far, and is started again when it had ended. Use this instead of create_task for follow-up work on a task. An archived task is restored first. Does not work for subagents or while the task waits on a card.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -142,6 +142,25 @@ export const MCP_TOOLS: McpTool[] = [
       try {
         const task = await messageTask(text(input, 'task'), text(input, 'message'))
         return `Sent to task ${task.id} in ${task.project}. Its agent is working on it now.`
+      } catch (error) {
+        if (error instanceof TaskError) throw new McpToolError(error.message)
+        throw error
+      }
+    },
+  },
+  {
+    name: 'archive_task',
+    description:
+      "Put away a task or subagent that is finished or no longer wanted, so it leaves the project graph and task_status. Its agent ends and its worktree is removed unless it has uncommitted changes (files git ignores go with it); its branch, records, and conversation are kept, and message_task brings it back. A task that is still working must be stopped by the user first.",
+    inputSchema: {
+      type: 'object',
+      properties: { task: { type: 'string', description: 'The task id, as create_task and task_status give it.' } },
+      required: ['task'],
+    },
+    async run(input) {
+      try {
+        const { task, worktreeKept } = await archiveTask(text(input, 'task'))
+        return `Archived task ${task.id} in ${task.project}.${worktreeKept ? ' Its worktree was kept because it has changes that are not committed.' : ''}`
       } catch (error) {
         if (error instanceof TaskError) throw new McpToolError(error.message)
         throw error
@@ -168,7 +187,7 @@ export const MCP_TOOLS: McpTool[] = [
       })
       const subagents = summarizeSubagents(
         tasks
-          .filter(({ kind }) => kind === 'subagent')
+          .filter(({ kind, archivedAt }) => kind === 'subagent' && !archivedAt)
           .map((task) => ({ ...taskView(task), reply: task.reply ?? lastAgentReply(task.agentId) })),
         project,
       )

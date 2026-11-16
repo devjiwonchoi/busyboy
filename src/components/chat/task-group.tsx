@@ -1,8 +1,8 @@
 'use client'
 
-import { MessageSquare, Square } from 'lucide-react'
+import { Archive, ArchiveRestore, MessageSquare, Square } from 'lucide-react'
 import { useState } from 'react'
-import { stopTaskAction } from '@/app/(main)/director-actions'
+import { archiveTaskAction, restoreTaskAction, stopTaskAction } from '@/app/(main)/director-actions'
 import { useTaskSelection } from '@/components/shell/shell-state'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -27,11 +27,13 @@ const STATUS: Record<TaskStatus, { label: string; variant: 'outline' | 'destruct
 }
 
 const DONE = { label: 'Done', variant: 'outline' as const, className: undefined }
+const ARCHIVED = { label: 'Archived', variant: 'outline' as const, className: 'text-muted-foreground' }
 
 /**
  * The tasks the Director created in one turn, one `project · task` line each, with Stop while its agent runs.
  * Pressing a line selects that task for the terminal; pressing it again clears it. Message points the
  * composer at the task's agent for one message; pressing it again points it back at the Director.
+ * A task that is not working can be archived, and an archived one restored.
  */
 export function TaskGroup({
   taskIds,
@@ -47,6 +49,19 @@ export function TaskGroup({
 }) {
   const { selectedTask, toggleTask } = useTaskSelection()
   const [error, setError] = useState<string | null>(null)
+  // Said once after an archive that could not remove the worktree.
+  const [notice, setNotice] = useState<string | null>(null)
+  const act = (action: Promise<{ error?: string; worktreeKept?: boolean }>, failure: string) => {
+    setError(null)
+    setNotice(null)
+    action.then(
+      (result) => {
+        if (result.error) setError(result.error)
+        else if (result.worktreeKept) setNotice('Archived. Its worktree was kept because it has changes that are not committed.')
+      },
+      () => setError(failure),
+    )
+  }
   return (
     <Message>
       <MessageContent>
@@ -56,7 +71,9 @@ export function TaskGroup({
               {taskIds.map((id) => {
                 const task = tasks.get(id)
                 // A subagent that finished its turn has done its one action.
-                const status = task ? (task.subagent && task.status === 'idle' ? DONE : STATUS[task.status]) : undefined
+                const done = Boolean(task?.subagent && task.status === 'idle')
+                const status = task ? (task.archived ? ARCHIVED : done ? DONE : STATUS[task.status]) : undefined
+                const working = task?.status === 'running' || task?.status === 'needs-you'
                 return (
                   <li key={id} aria-label={task ? `${task.project} · ${task.title}` : id} className="space-y-1">
                     <div className="flex items-center gap-3">
@@ -70,7 +87,8 @@ export function TaskGroup({
                         <Toggle
                           size="lg"
                           aria-label={task ? `Select ${task.project} · ${task.title}` : id}
-                          disabled={!task}
+                          // An archived task usually has no worktree to open a terminal in.
+                          disabled={!task || task.archived}
                           pressed={selectedTask?.id === id}
                           onPressedChange={() => task && toggleTask({ id, project: task.project, title: task.title })}
                           // A full-width line of text, not a square icon toggle.
@@ -89,7 +107,7 @@ export function TaskGroup({
                         </Badge>
                       )}
                       {/* A subagent does one action, and a task that waits on a card is answered on that card. */}
-                      {task && !task.subagent && task.status !== 'needs-you' && (
+                      {task && !task.subagent && !task.archived && task.status !== 'needs-you' && (
                         <Toggle
                           size="sm"
                           aria-label={`Message ${task.project} · ${task.title}`}
@@ -99,7 +117,29 @@ export function TaskGroup({
                           <MessageSquare />
                         </Toggle>
                       )}
-                      {task && task.status !== 'stopped' && status !== DONE && (
+                      {task && !task.archived && !working && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`Archive ${task.project} · ${task.title}`}
+                          onClick={() => act(archiveTaskAction(task.id), 'The task could not be archived. Try again.')}
+                        >
+                          <Archive />
+                        </Button>
+                      )}
+                      {task?.archived && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`Restore ${task.project} · ${task.title}`}
+                          onClick={() => act(restoreTaskAction(task.id), 'The task could not be restored. Try again.')}
+                        >
+                          <ArchiveRestore />
+                        </Button>
+                      )}
+                      {task && !task.archived && task.status !== 'stopped' && !done && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -124,6 +164,11 @@ export function TaskGroup({
                 )
               })}
             </ul>
+            {notice && (
+              <Alert className="mt-2">
+                <AlertDescription>{notice}</AlertDescription>
+              </Alert>
+            )}
             {error && (
               <Alert variant="destructive" className="mt-2">
                 <AlertDescription>{error}</AlertDescription>
