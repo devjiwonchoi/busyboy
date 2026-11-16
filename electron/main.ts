@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
-import { FOCUS_CHANNEL, PICK_FOLDERS_CHANNEL } from '../src/lib/desktop-bridge'
+import { FOCUS_CHANNEL, INSTALL_UPDATE_CHANNEL, PICK_FOLDERS_CHANNEL, UPDATE_READY_CHANNEL, UPDATE_STATE_CHANNEL } from '../src/lib/desktop-bridge'
 import { FOCUS_PARAM, formatFocusTarget, type FocusTarget } from '../src/lib/focus-target'
 import { SERVER_TOKEN_COOKIE } from '../src/lib/server-token'
 import {
@@ -13,12 +13,14 @@ import {
 import { startBackground, type Background } from './background'
 import { serverEntry, startServer, type ServerHandle } from './server-process'
 import { installLoginShellPath } from './shell-env'
+import { startUpdates, type Updates } from './updates'
 
 const selfCheckPath = selfCheckOutputPath(process.argv)
 if (selfCheckPath) isolateSelfCheckProfile()
 let server: ServerHandle | null = null
 let mainWindow: BrowserWindow | null = null
 let background: Background | null = null
+let updates: Updates | null = null
 /** Set once a quit starts; until then closing the window only hides it. */
 let quitting = false
 
@@ -170,7 +172,7 @@ async function runSelfCheck(outputPath: string) {
     const window = (mainWindow = createWindow(server.url, false))
     await check.recordPage(window)
     // No notifications: the check may run on the user's own machine.
-    background = startBackground(server, { open: openWindow, quit: () => {}, windowInFront, notify: false })
+    background = startBackground(server, { open: openWindow, quit: () => {}, installUpdate: () => {}, windowInFront, notify: false })
     await check.recordBackground(background, window, server)
     await check.recordTerminal(server)
     background.stop()
@@ -193,7 +195,34 @@ async function launch() {
   server = await startServer()
   await authorizeWindowSession(server)
   mainWindow = createWindow(server.url, true)
-  background = startBackground(server, { open: openWindow, quit: () => app.quit(), windowInFront })
+  background = startBackground(server, {
+    open: openWindow,
+    quit: () => app.quit(),
+    installUpdate: () => void updates?.install(),
+    windowInFront,
+  })
+  updates = startUpdates({
+    onReady: (version) => {
+      background?.updateReady(version)
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(UPDATE_READY_CHANNEL, version)
+    },
+    // The updater closes the windows before it quits; from here that close is a real one.
+    // The server stops first, as in any quit, and tasks that were working resume when
+    // the new version starts.
+    beforeInstall: async () => {
+      quitting = true
+      updates?.stop()
+      background?.stop()
+      background = null
+      await server?.stop()
+    },
+    // No server, no tray, and windows that no longer reopen: start the same version again
+    // rather than leave an app the user cannot reach. The update stays downloaded.
+    installFailed: () => {
+      app.relaunch()
+      app.exit(0)
+    },
+  })
   // Clicking the dock icon brings back a window that was closed to the tray.
   app.on('activate', () => openWindow())
 }
@@ -210,6 +239,14 @@ function registerFolderPicker() {
     }
     const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
     return result.canceled ? [] : result.filePaths
+  })
+}
+
+/** The update actions behind the preload bridge. Only app pages may use them. */
+function registerUpdateActions() {
+  ipcMain.handle(UPDATE_STATE_CHANNEL, (event) => (isAppOrigin(event.senderFrame?.url) ? (updates?.readyVersion() ?? null) : null))
+  ipcMain.handle(INSTALL_UPDATE_CHANNEL, (event) => {
+    if (isAppOrigin(event.senderFrame?.url)) void updates?.install()
   })
 }
 
@@ -243,6 +280,7 @@ function registerAppEvents() {
       return
     }
     stopping = Date.now()
+    updates?.stop()
     background?.stop()
     background = null
     // Exit rather than quit again: a server that did not stop in time must
@@ -255,6 +293,7 @@ function registerAppEvents() {
 
   void app.whenReady().then(async () => {
     registerFolderPicker()
+    registerUpdateActions()
     if (selfCheckPath) {
       await runSelfCheck(selfCheckPath)
       return

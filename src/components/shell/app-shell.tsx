@@ -12,6 +12,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FocusHandler } from './focus-handler'
 import { ShellStateProvider, useShellState } from './shell-state'
+import { UpdateButton } from './update-button'
 import {
   formatShortcut,
   isMacPlatform,
@@ -86,6 +87,7 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
       >
         <span className="text-sm font-medium">BusyBoy</span>
         <div className="ml-auto flex items-center gap-1 [app-region:no-drag]">
+          <UpdateButton />
           <ToggleButton
             label="Toggle bottom panel"
             shortcut={TOGGLE_PANEL_KEYS}

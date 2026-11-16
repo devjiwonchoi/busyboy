@@ -9,11 +9,14 @@ export type TrayState = {
   tasks: AttentionTask[]
   /** The Director replied while the window was not in front, and the user has not looked since. */
   directorReplied: boolean
+  /** The version of a downloaded update that is ready to install. */
+  updateVersion?: string | null
 }
 
 export type TrayActions = {
   open: (target?: FocusTarget) => void
   quit: () => void
+  installUpdate: () => void
 }
 
 export function shorten(text: string, limit = LABEL_LIMIT) {
@@ -76,8 +79,9 @@ export function trayMenuTemplate(state: TrayState, actions: TrayActions): MenuIt
       items.push({ label: taskLabel(task), click: () => actions.open({ kind: 'task', project: task.project, taskId: task.taskId }) })
     }
   }
+  items.push({ type: 'separator' })
+  if (state.updateVersion) items.push({ label: `Restart to update to ${state.updateVersion}`, click: () => actions.installUpdate() })
   items.push(
-    { type: 'separator' },
     { label: 'Open BusyBoy', click: () => actions.open() },
     { type: 'separator' },
     { label: 'Quit BusyBoy', click: () => actions.quit() },

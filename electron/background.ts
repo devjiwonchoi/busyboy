@@ -8,6 +8,7 @@ import { attentionCount, createTray, setBadge } from './tray'
 export type BackgroundOptions = {
   open: (target?: FocusTarget) => void
   quit: () => void
+  installUpdate: () => void
   /** Whether the user is looking at the window now; notifications are only for when they are not. */
   windowInFront: () => boolean
   /** The self-check observes updates without showing notifications on the machine it runs on. */
@@ -19,7 +20,7 @@ export type BackgroundOptions = {
  * shows what needs them, and a notification says when something new does.
  */
 export function startBackground(server: ServerHandle, options: BackgroundOptions) {
-  const tray = createTray({ open: options.open, quit: options.quit })
+  const tray = createTray({ open: options.open, quit: options.quit, installUpdate: options.installUpdate })
   let updates = 0
 
   const refreshBadge = () => setBadge(options.windowInFront() ? 0 : attentionCount(tray.state()))
@@ -54,6 +55,8 @@ export function startBackground(server: ServerHandle, options: BackgroundOptions
     /** The window went to the background: what waits shows on the dock again. */
     // Electron may still report the window as focused while it emits the blur.
     windowBlurred: () => void setImmediate(refreshBadge),
+    /** An update finished downloading: the tray menu offers to restart into it. */
+    updateReady: (version: string) => tray.update({ updateVersion: version }),
     stop() {
       stopFollowing()
       setBadge(0)

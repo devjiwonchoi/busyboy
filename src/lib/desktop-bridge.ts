@@ -8,6 +8,15 @@ export const PICK_FOLDERS_CHANNEL = 'busyboy:pick-folders'
 /** IPC channel on which the desktop app asks an open window to show a tray or notification item. */
 export const FOCUS_CHANNEL = 'busyboy:focus'
 
+/** IPC channel on which the desktop app tells an open window that an update was downloaded. */
+export const UPDATE_READY_CHANNEL = 'busyboy:update-ready'
+
+/** IPC channel that answers with the version of the downloaded update, or null. */
+export const UPDATE_STATE_CHANNEL = 'busyboy:update-state'
+
+/** IPC channel that restarts the app into the downloaded update. */
+export const INSTALL_UPDATE_CHANNEL = 'busyboy:install-update'
+
 /** Name of the bridge on `window`. */
 export const DESKTOP_BRIDGE_KEY = 'busyboyDesktop'
 
@@ -22,6 +31,12 @@ export type DesktopBridge = {
    * Returns the function that stops listening.
    */
   onFocus(listener: (target: string) => void): () => void
+  /** The version of an update that is downloaded and ready to install, or null. */
+  readyUpdate(): Promise<string | null>
+  /** Calls `listener` with the version when an update finishes downloading. Returns the function that stops listening. */
+  onUpdateReady(listener: (version: string) => void): () => void
+  /** Restarts the app into the downloaded update. */
+  installUpdate(): Promise<void>
 }
 
 export function desktopBridge(): DesktopBridge | undefined {
