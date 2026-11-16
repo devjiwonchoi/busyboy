@@ -293,9 +293,9 @@ test('opening the app after setup should skip setup', async ({ page, context, ba
   await expect(reopened).toHaveURL(/\/$/)
   await expect(reopened.getByRole('region', { name: 'Chat' })).toBeVisible()
 
-  await reopened.getByRole('link', { name: 'Setup' }).click()
-  await expect(reopened).toHaveURL(/\/setup$/)
-  await reopened.getByRole('link', { name: '5 Start' }).click()
+  await reopened.getByRole('link', { name: 'Settings' }).click()
+  await expect(reopened).toHaveURL(/\/settings$/)
+  await reopened.getByRole('link', { name: 'Projects' }).click()
   await expect(reopened.getByRole('list', { name: 'Projects' })).toContainText('api')
 })
 
@@ -347,7 +347,7 @@ test('adding a folder named @scope should add the project', async ({ page, conte
   await expect(page.getByRole('alert').filter({ hasText: 'project name' })).toBeHidden()
 })
 
-test('going back from setup after signing out should open the main screen', async ({ page, context, baseURL }) => {
+test('going back from settings after signing out should open the main screen', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
 
   await goToStart(page)
@@ -357,8 +357,8 @@ test('going back from setup after signing out should open the main screen', asyn
   await context.addCookies([
     { name: 'busyboy-test-sign-in', value: 'claude=signed-out,codex=signed-out', url: baseURL! },
   ])
-  await page.getByRole('link', { name: 'Setup' }).click()
-  await page.getByRole('link', { name: '2 Agents' }).click()
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await page.getByRole('link', { name: 'Agents' }).click()
   const agents = page.getByRole('list', { name: 'Agents' })
   await expect(agents.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Signed out')
 

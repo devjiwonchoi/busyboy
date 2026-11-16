@@ -97,9 +97,10 @@ function hasMcpToken(request: NextRequest, serverToken: string) {
   return Boolean(manager && sameToken(provided, managerMcpTokenFor(serverToken, manager)))
 }
 
-// Opening the main screen goes to setup until setup is complete.
+// Opening the main screen or settings goes to setup until setup is complete. Settings checks
+// too, but by then its header has been sent; here it is a plain redirect.
 async function setupRedirect(request: NextRequest) {
-  if (request.nextUrl.pathname !== '/' || request.method !== 'GET') return undefined
+  if ((request.nextUrl.pathname !== '/' && request.nextUrl.pathname !== '/settings') || request.method !== 'GET') return undefined
   const folder = resolveDataFolder(request.cookies.get(TEST_HOME_COOKIE)?.value)
   if (isSetupComplete(await readSettingsAt(folder))) return undefined
   return NextResponse.redirect(new URL('/setup', request.url))

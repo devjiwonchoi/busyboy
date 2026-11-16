@@ -107,11 +107,11 @@ function ShellLayout({ children, chats, sidebar, panel }: AppShellProps) {
           <Tooltip>
             <TooltipTrigger
               // A link styled as a button: Base UI's Button would give it role="button".
-              render={<Link href="/setup" aria-label="Setup" className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} />}
+              render={<Link href="/settings" aria-label="Settings" className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} />}
             >
               <Settings />
             </TooltipTrigger>
-            <TooltipContent>Setup</TooltipContent>
+            <TooltipContent>Settings</TooltipContent>
           </Tooltip>
         </div>
       </header>

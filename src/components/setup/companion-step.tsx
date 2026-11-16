@@ -28,29 +28,7 @@ export function CompanionStep({
   return (
     <>
       <form id={FORM_ID} action={action} className="space-y-3">
-        <RadioGroup
-          name="companion"
-          aria-label="Companion"
-          // null, not undefined, keeps the group controlled before the first choice.
-          value={value ?? null}
-          onValueChange={(next) => setValue(next as string)}
-          className="grid-cols-1 sm:grid-cols-2"
-        >
-          {companions.map((companion) => (
-            <FieldLabel key={companion.id} htmlFor={`companion-${companion.id}`}>
-              <Field orientation="horizontal">
-                <CompanionAvatar companion={companion} imageUrl={companion.id === value ? imageUrl : undefined} />
-                <FieldContent>
-                  <FieldTitle>
-                    {companion.name} the {companion.animal}
-                  </FieldTitle>
-                  <FieldDescription>{companion.personality}</FieldDescription>
-                </FieldContent>
-                <RadioGroupItem value={companion.id} id={`companion-${companion.id}`} />
-              </Field>
-            </FieldLabel>
-          ))}
-        </RadioGroup>
+        <CompanionChoices companions={companions} value={value} imageUrl={imageUrl} onChange={setValue} />
         {state.error && <FieldError>{state.error}</FieldError>}
       </form>
       <CompanionImageForm hasImage={Boolean(imageUrl)} />
@@ -63,8 +41,47 @@ export function CompanionStep({
   )
 }
 
+/** The companions as a radio grid, shared by setup (saved on Continue) and settings (saved on choice). */
+export function CompanionChoices({
+  companions,
+  value,
+  imageUrl,
+  onChange,
+}: {
+  companions: Companion[]
+  value?: string
+  imageUrl?: string
+  onChange: (id: string) => void
+}) {
+  return (
+    <RadioGroup
+      name="companion"
+      aria-label="Companion"
+      // null, not undefined, keeps the group controlled before the first choice.
+      value={value ?? null}
+      onValueChange={(next) => onChange(next as string)}
+      className="grid-cols-1 sm:grid-cols-2"
+    >
+      {companions.map((companion) => (
+        <FieldLabel key={companion.id} htmlFor={`companion-${companion.id}`}>
+          <Field orientation="horizontal">
+            <CompanionAvatar companion={companion} imageUrl={companion.id === value ? imageUrl : undefined} />
+            <FieldContent>
+              <FieldTitle>
+                {companion.name} the {companion.animal}
+              </FieldTitle>
+              <FieldDescription>{companion.personality}</FieldDescription>
+            </FieldContent>
+            <RadioGroupItem value={companion.id} id={`companion-${companion.id}`} />
+          </Field>
+        </FieldLabel>
+      ))}
+    </RadioGroup>
+  )
+}
+
 /** An optional picture of the user's own for their companion. It stays in the data folder. */
-function CompanionImageForm({ hasImage }: { hasImage: boolean }) {
+export function CompanionImageForm({ hasImage }: { hasImage: boolean }) {
   const [state, action, pending] = useActionState(setCompanionImageAction, {})
   const [tooLarge, setTooLarge] = useState(false)
   // Checked before sending: a body over the server action limit fails before the action can explain why.
