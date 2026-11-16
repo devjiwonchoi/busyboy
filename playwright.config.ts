@@ -2,6 +2,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 import { fakeClaudePidFile, fakeClaudePort, fakeClaudeURL } from './tests/fake-claude/fake-claude'
+import { fakeCodexPidFile } from './tests/fake-codex/fake-codex'
 import { prepareDefaultHome } from './tests/support/test-home'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
@@ -38,7 +39,8 @@ export default defineConfig({
       command: 'pnpm build && pnpm start',
       url: baseURL,
       // Test mode lets the server run without the desktop app's token (see src/proxy.ts).
-      // Agents replay recorded provider scripts instead of calling a model.
+      // Agents replay recorded provider scripts instead of calling a model. Codex runs its real
+      // adapter against a fake `codex` that replays tests/provider-scripts/codex/.
       env: {
         PORT: String(port),
         BUSYBOY_TEST_MODE: '1',
@@ -50,6 +52,8 @@ export default defineConfig({
         BUSYBOY_DIRECTOR_IDLE_COMPACT_MS: '1500',
         BUSYBOY_DIRECTOR_COMPACT_CHARS: '1000',
         ...testHome(port),
+        BUSYBOY_CODEX_PATH: join(__dirname, 'tests/fake-codex/codex.mjs'),
+        FAKE_CODEX_PID_FILE: fakeCodexPidFile,
       },
       // Never reuse: another worktree may be serving a different build on the same port, or a
       // server that is not in test mode could write to the real data folder.

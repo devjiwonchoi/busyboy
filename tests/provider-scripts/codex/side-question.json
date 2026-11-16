@@ -1,0 +1,26 @@
+{
+  "provider": "codex",
+  "description": "Hand-written from the codex-cli 0.167.0 protocol: a side question whose answer says how its thread was started.",
+  "turns": [
+    {
+      "prompt": "How was this thread started?",
+      "steps": [
+        {
+          "echoThread": true
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": {
+              "turn": {
+                "id": "turn-side-1",
+                "status": "completed",
+                "error": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
