@@ -9,7 +9,7 @@ export type { CardOption, CardQuestion, TaskCard } from './cards/model'
 // plan that waits for approval. They live only while the agent waits. The
 // Director chat shows open ones in the timeline and writes each one to its
 // transcript once it closes. Progress, done, and pull-request cards use the
-// same store through presentCard.
+// same store through presentCard. A Director connector approval uses it too.
 
 export type CardUpdate = { type: 'open'; card: TaskCard } | { type: 'close'; card: TaskCard; outcome: string }
 
@@ -155,6 +155,45 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
         break
     }
   })
+}
+
+/** Shows a Director approval in the chat that owns `chat`, answered through the Director's agent. */
+export function openDirectorApproval({
+  folder,
+  chat,
+  agentId,
+  event,
+}: {
+  folder: string
+  chat: string | null
+  agentId: string
+  event: Extract<AgentEvent, { type: 'approval' }>
+}) {
+  const server = /^mcp__(.+?)__/.exec(event.title)?.[1] ?? 'connector'
+  const labels = event.canAllowForSession ? [ALLOW, event.allowForSessionLabel ?? ALLOW_FOR_SESSION, DENY] : [ALLOW, DENY]
+  const card: TaskCard = {
+    id: `${agentId}:${event.requestId}`,
+    taskId: agentId,
+    chat,
+    project: 'Director',
+    taskTitle: server,
+    openedAt: new Date().toISOString(),
+    stopsTask: false,
+    kind: 'approval',
+    detail: event.detail,
+    questions: [{ question: event.title, header: undefined, options: labels.map((label) => ({ label, description: undefined, recommended: false })), multiSelect: false }],
+  }
+  openCard(storeFor(folder), { card, agentId, requestId: event.requestId })
+}
+
+/** Closes a Director approval that was answered or whose turn ended. */
+export function closeDirectorApproval(folder: string, agentId: string, requestId?: string) {
+  const store = storeFor(folder)
+  for (const [id, entry] of [...store.open]) {
+    if (entry.agentId !== agentId || entry.card.stopsTask !== false) continue
+    if (requestId !== undefined && id !== `${agentId}:${requestId}`) continue
+    closeCard(store, id)
+  }
 }
 
 export function openCards(folder: string) {

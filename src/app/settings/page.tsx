@@ -3,6 +3,7 @@ import { connection } from 'next/server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
+import { ConnectorAddForm } from '@/components/settings/connector-add-form'
 import { CompanionSettings } from '@/components/settings/companion-settings'
 import { DefaultAgent } from '@/components/settings/default-agent'
 import { AddProjectForm } from '@/components/setup/add-project-form'
@@ -17,6 +18,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { alwaysAskRules } from '@/server/always-ask-list'
+import { listConnectors, type ConnectorStatus } from '@/server/connectors'
 import { COMPANIONS, companionImageUrl, currentCompanion } from '@/server/companions'
 import { isSetupComplete, readSettings } from '@/server/config'
 import { defaultProvider, PROVIDERS, providerState, skillsState } from '@/server/providers'
@@ -87,6 +89,10 @@ const HEADINGS: Record<SectionId, { title: string; description: string }> = {
     title: 'Agents',
     description: 'BusyBoy uses the Claude Code and Codex CLIs you already have. It never signs in for you.',
   },
+  connectors: {
+    title: 'Connectors',
+    description: 'MCP servers configured for Claude Code and Codex. BusyBoy uses those sign-ins and does not keep a token of its own.',
+  },
   approvals: {
     title: 'Approvals',
     description: 'Before any action on this list a task agent asks you first, every time, even in Auto mode.',
@@ -107,6 +113,7 @@ function Section({ id }: { id: SectionId }) {
       </div>
       {id === 'companion' && <CompanionSection />}
       {id === 'agents' && <AgentsSection />}
+      {id === 'connectors' && <ConnectorsSection />}
       {id === 'approvals' && <ApprovalsSection />}
       {id === 'projects' && <ProjectsSection />}
     </>
@@ -185,6 +192,57 @@ async function AgentsSection() {
       </form>
       {signedIn.length > 1 && <DefaultAgent agents={signedIn.map(({ id, name }) => ({ id, name }))} selected={current ?? undefined} />}
     </>
+  )
+}
+
+const CONNECTOR_STATUS: Record<ConnectorStatus, string> = {
+  connected: 'Connected',
+  'needs-login': 'Needs login',
+  failed: 'Failed',
+}
+
+async function ConnectorsSection() {
+  const harnesses = await listConnectors()
+  return (
+    <div className="space-y-8">
+      {harnesses.map((harness) => (
+        <section key={harness.provider} aria-label={`${harness.name} connectors`} className="space-y-4">
+          <h2 className="text-sm font-medium">{harness.name}</h2>
+          {harness.servers.length === 0 ? (
+            <Empty className="border p-4">
+              <EmptyHeader>
+                <EmptyDescription>No connectors yet.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <ItemGroup aria-label={`${harness.name} servers`} className="gap-2">
+              {harness.servers.map((server) => (
+                <Item key={server.name} role="listitem" aria-label={server.name} variant="outline">
+                  <ItemContent>
+                    <ItemTitle>{server.name}</ItemTitle>
+                    {server.detail && <ItemDescription className="line-clamp-none">{server.detail}</ItemDescription>}
+                  </ItemContent>
+                  <ItemActions>
+                    <Badge variant={server.status === 'failed' ? 'destructive' : 'secondary'} data-status={server.status}>
+                      {CONNECTOR_STATUS[server.status]}
+                    </Badge>
+                  </ItemActions>
+                  {server.loginCommand && <CopyCommand label={`${server.name} login command`} command={server.loginCommand} />}
+                </Item>
+              ))}
+            </ItemGroup>
+          )}
+          {harness.add.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-muted-foreground text-sm">Add a connector</h3>
+              {harness.add.map((offer) => (
+                <ConnectorAddForm key={offer.name} provider={harness.provider} name={offer.name} title={offer.title} command={offer.command} />
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
+    </div>
   )
 }
 

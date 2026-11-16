@@ -23,6 +23,8 @@ export type ClaudeRawMessage = {
   }
   message?: { id?: string; content?: unknown }
   parent_tool_use_id?: string | null
+  /** MCP servers Claude reports on `system` `init`, including ones inherited from the user's config. */
+  mcp_servers?: { name?: string; status?: string }[]
 }
 
 /** A `canUseTool` call, as the adapter receives it and as recordings store it. */
@@ -66,6 +68,15 @@ const INTERRUPTED_REASONS = new Set(['aborted_streaming', 'aborted_tools'])
 function shorten(value: string) {
   const line = value.replace(/\s+/g, ' ').trim()
   return line.length > LABEL_LIMIT ? `${line.slice(0, LABEL_LIMIT - 1)}…` : line
+}
+
+/** A startup problem for an MCP server Claude inherited or was given, or undefined when it connected. */
+export function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
+  const name = server.name?.trim()
+  if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return undefined
+  if (server.status === 'failed') return `The MCP server ${name} failed to start.`
+  if (server.status === 'needs-auth') return `The MCP server ${name} needs a login. Run \`claude mcp login ${name}\`.`
+  return undefined
 }
 
 /** A short label such as `Bash: pnpm test` or `Read: app/page.tsx`. */
@@ -127,7 +138,13 @@ export class ClaudeEventMapper {
     if (message.parent_tool_use_id) return
     switch (message.type) {
       case 'system':
-        if (message.subtype === 'init' && message.session_id) this.send({ type: 'session', sessionId: message.session_id })
+        if (message.subtype === 'init') {
+          if (message.session_id) this.send({ type: 'session', sessionId: message.session_id })
+          for (const server of message.mcp_servers ?? []) {
+            const notice = claudeMcpStartupNotice(server)
+            if (notice) this.send({ type: 'error', code: 'provider', message: notice })
+          }
+        }
         return
       case 'stream_event':
         this.streamEvent(message.event ?? {})

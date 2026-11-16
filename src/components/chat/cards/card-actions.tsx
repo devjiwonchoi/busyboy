@@ -82,15 +82,17 @@ export function CardTrailingActions() {
       <Button type="button" size="sm" variant="ghost" aria-pressed={replying} onClick={() => onReplyChange(!replying)}>
         Reply
       </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={pending}
-        onClick={() => run(() => stopTaskAction(card.taskId), 'The task could not be stopped. Try again.')}
-      >
-        Stop task
-      </Button>
+      {card.stopsTask !== false && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => run(() => stopTaskAction(card.taskId), 'The task could not be stopped. Try again.')}
+        >
+          Stop task
+        </Button>
+      )}
     </>
   )
 }

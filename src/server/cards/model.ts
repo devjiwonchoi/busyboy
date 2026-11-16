@@ -23,7 +23,16 @@ export type CardOption = { label: string; description: string | undefined; recom
 export type CardQuestion = { question: string; header: string | undefined; options: CardOption[]; multiSelect: boolean }
 
 /** `chat`: the manager whose chat shows the card; null for the Director's. */
-type CardBase = { id: string; taskId: string; chat: string | null; project: string; taskTitle: string; openedAt: string }
+type CardBase = {
+  id: string
+  taskId: string
+  chat: string | null
+  project: string
+  taskTitle: string
+  openedAt: string
+  /** Set when the card is not a task's, so the timeline does not offer Stop task. */
+  stopsTask?: false
+}
 
 export type ProgressStepState = 'done' | 'running' | 'pending'
 

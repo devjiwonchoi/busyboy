@@ -1,0 +1,45 @@
+{
+  "provider": "codex",
+  "description": "Hand-written: a user MCP server fails to start during a Codex turn.",
+  "turns": [
+    {
+      "prompt": "Check the Slack connector.",
+      "steps": [
+        {
+          "raw": {
+            "method": "mcpServer/startupStatus/updated",
+            "params": {
+              "name": "slack",
+              "status": "failed",
+              "error": "connection refused"
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/completed",
+            "params": {
+              "item": {
+                "type": "agentMessage",
+                "id": "mcp-startup",
+                "text": "Slack did not start."
+              }
+            }
+          }
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": {
+              "turn": {
+                "id": "mcp-startup-turn",
+                "status": "completed",
+                "error": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

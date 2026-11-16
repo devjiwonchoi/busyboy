@@ -23,7 +23,7 @@ import {
 } from '../runner/agent-runner'
 import type { AgentEventEnvelope, McpServer, ProviderId } from '../runner/contract'
 import { cardRecordTitle, isStoredCardKind, type StoredCardKind } from '../cards/model'
-import { openCards, replyToCard, subscribeToCards, type TaskCard } from '../task-cards'
+import { closeDirectorApproval, openCards, openDirectorApproval, replyToCard, subscribeToCards, type TaskCard } from '../task-cards'
 import { listTasksAt, messageTaskAt, subscribeToTasks, type TaskView } from '../tasks'
 
 type McpServers = Record<string, McpServer>
@@ -415,8 +415,8 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
   await mkdir(cwd, { recursive: true })
   const resumeSessionId = director.state.provider === provider ? director.state.sessionId : undefined
   director.unconfirmedResume = Boolean(resumeSessionId)
-  // The Director gets the always-ask list too. Its approvals are always refused (see onAgentEvent),
-  // so an action on the list is never run by the Director, even where Auto mode would run it.
+  // The Director gets the always-ask list too. A connector write waits for the user (see onAgentEvent).
+  // Every other match is refused, so the Director never runs it, even where Auto mode would.
   // Its folder is inside BusyBoy's data folder, next to the task list and settings, so the rest
   // of the data folder is private: changing BusyBoy's state goes through BusyBoy's tools.
   const agent = startAgent({ provider, cwd, instructions, mcpServers: mcp, resumeSessionId, alwaysAsk, privateFolder: director.folder })
@@ -445,10 +445,13 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
     case 'text':
       if (!compacting) setBlock(director, event.itemId, event.text)
       break
-    // The Director has no cards: it asks in its reply text and never runs
-    // actions that need approval, so such requests are answered at once.
-    // Answered after the runner has delivered the request to every listener.
+    // A connector write waits on a card. Other approvals are refused: the Director
+    // does not edit BusyBoy's files or run project work itself.
     case 'approval':
+      if (event.title.startsWith('mcp__') && !event.detail?.startsWith(BUSYBOY_FILES_RULE)) {
+        openDirectorApproval({ folder: director.folder, chat: director.chat, agentId, event })
+        break
+      }
       queueMicrotask(() =>
         answerAgent(agentId, event.requestId, {
           kind: 'approval',
@@ -458,6 +461,9 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
             : `The ${roleOf(director)} cannot run this. Create a task for work in a project instead.`,
         }),
       )
+      break
+    case 'answered':
+      closeDirectorApproval(director.folder, agentId, event.requestId)
       break
     case 'question':
       queueMicrotask(() =>
@@ -480,6 +486,7 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
       saveEntry(director, newEntry('note', { text: event.message, tone: 'error' }))
       break
     case 'turn-done':
+      closeDirectorApproval(director.folder, agentId)
       if (director.lostSession) {
         recoverLostSession(director, agentId)
         break
@@ -498,6 +505,7 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
       endTurn(director)
       break
     case 'stopped':
+      closeDirectorApproval(director.folder, agentId)
       if (director.lostSession) {
         // A Stop wins over recovery: the session is still forgotten, but the turn is not sent again.
         recoverLostSession(director, agentId, { resend: !director.stopRequested })
