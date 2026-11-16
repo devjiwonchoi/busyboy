@@ -57,6 +57,12 @@ export type ScriptStep =
 export type ScriptTurn = {
   /** The user message that plays this turn, matched exactly after trimming. */
   prompt: string
+  /**
+   * Plays only when an earlier user message in the same session contains this
+   * text, so a replay can show that a resumed or forked session kept its history.
+   * A turn with a context wins over one with the same prompt and none.
+   */
+  context?: string
   steps: ScriptStep[]
 }
 
@@ -94,19 +100,51 @@ export function hasScripts(folder: string, provider: ProviderId) {
   return readScripts(folder).some(({ script }) => script.provider === provider)
 }
 
-/** The provider's turns by prompt. Two scripts may not record the same prompt. */
-function loadTurns(folder: string, provider: ProviderId) {
-  const turns = new Map<string, { file: string; turn: ScriptTurn }>()
+/**
+ * The provider's turn for this message given the session's earlier messages.
+ * Two scripts may not record the same prompt with the same context.
+ */
+function findTurn(folder: string, provider: ProviderId, text: string, history: readonly string[]) {
+  const prompt = text.trim()
+  const seen = new Map<string, string>()
+  let plain: ScriptTurn | undefined
+  let withContext: ScriptTurn | undefined
   for (const { file, script } of readScripts(folder)) {
     if (script.provider !== provider) continue
     for (const turn of script.turns) {
-      const prompt = turn.prompt.trim()
-      const existing = turns.get(prompt)
-      if (existing) throw new Error(`${existing.file} and ${file} both have a turn for: ${prompt}`)
-      turns.set(prompt, { file, turn })
+      if (turn.prompt.trim() !== prompt) continue
+      const key = turn.context ?? ''
+      const existing = seen.get(key)
+      if (existing) throw new Error(`${existing} and ${file} both have a turn for: ${prompt}`)
+      seen.set(key, file)
+      if (!turn.context) plain = turn
+      else if (history.some((earlier) => earlier.includes(turn.context!))) withContext = turn
     }
   }
-  return turns
+  return withContext ?? plain
+}
+
+// The user messages of each scripted session by session id, so resuming or
+// forking one carries its history like a real provider. On globalThis for the
+// same reason as the runner's registry.
+const HISTORIES_KEY = Symbol.for('busyboy.scripted-histories')
+const globalStore = globalThis as typeof globalThis & { [HISTORIES_KEY]?: Map<string, string[]> }
+const histories = (globalStore[HISTORIES_KEY] ??= new Map())
+
+/** Continues, branches, or starts a session's history, and returns its session id. */
+function openHistory({ resumeSessionId, forkSessionId }: ProviderStartOptions) {
+  if (resumeSessionId) {
+    const history = histories.get(resumeSessionId) ?? []
+    histories.set(resumeSessionId, history)
+    return { sessionId: resumeSessionId, history }
+  }
+  // A branch copies the original's history and, like a real fork that is not
+  // kept, is never stored, so nothing reaches the original.
+  if (forkSessionId) return { sessionId: `scripted-${randomUUID()}`, history: [...(histories.get(forkSessionId) ?? [])] }
+  const sessionId = `scripted-${randomUUID()}`
+  const history: string[] = []
+  histories.set(sessionId, history)
+  return { sessionId, history }
 }
 
 function answerKey(answer: AgentAnswer) {
@@ -151,6 +189,8 @@ async function callMcpTool({ url, headers, tool, input }: McpCall) {
 
 function startScripted(folder: string, options: ProviderStartOptions): ProviderSession {
   const { provider } = options
+  const lost = [options.resumeSessionId, options.forkSessionId].find((id) => id?.startsWith(MISSING_SESSION_PREFIX))
+  const { sessionId, history } = lost ? { sessionId: lost, history: [] } : openHistory(options)
   let turnDone = false
   const emit = (event: AgentEvent) => {
     if (event.type === 'turn-done') turnDone = true
@@ -242,7 +282,8 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       inTurn = true
       turnDone = false
       try {
-        const turn = loadTurns(folder, provider).get(text.trim())?.turn
+        const turn = findTurn(folder, provider, text, history)
+        history.push(text)
         if (!turn) {
           emit({ type: 'error', code: 'no-script', message: `No ${provider} script has a turn for: ${text}` })
         } else {
@@ -269,14 +310,14 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     running = false
   }
 
-  if (options.resumeSessionId?.startsWith(MISSING_SESSION_PREFIX)) {
+  if (lost) {
     // Resuming fails the way it does for a session the provider no longer has.
     queueMicrotask(() => {
       stopped = true
-      emit({ type: 'error', code: 'provider', message: `No conversation found with session ID: ${options.resumeSessionId}` })
+      emit({ type: 'error', code: 'provider', message: `No conversation found with session ID: ${lost}` })
       emit({ type: 'stopped', finished: false })
     })
-  } else queueMicrotask(() => emit({ type: 'session', sessionId: options.resumeSessionId ?? `scripted-${randomUUID()}` }))
+  } else queueMicrotask(() => emit({ type: 'session', sessionId }))
 
   return {
     send(text) {
@@ -287,6 +328,8 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       cancelTurn?.()
     },
     async compact() {
+      // The history is kept: unlike a real provider's summary, it still holds
+      // every earlier message, so `context` turns keep matching after a compaction.
       emit({ type: 'turn-done' })
     },
     answer(requestId, answer) {

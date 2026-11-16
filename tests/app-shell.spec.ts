@@ -30,6 +30,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expectSidebarShown()
     await expect(sidebar.getByRole('tab', { name: 'Projects' })).toBeVisible()
     await expect(sidebar.getByRole('tab', { name: 'Memory' })).toBeVisible()
+    await expect(sidebar.getByRole('tab', { name: 'Side chat' })).toBeVisible()
     await expect(panel).toBeHidden()
 
     const appliedScheme = await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)

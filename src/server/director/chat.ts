@@ -553,3 +553,19 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
     director.listeners.delete(listener)
   }
 }
+
+/**
+ * The Director's provider session, working directory, and system prompt, so a
+ * side question can branch from the conversation. No session yet when the
+ * Director never answered.
+ */
+export async function directorSession(folder: string): Promise<{
+  cwd: string
+  instructions: string
+  provider?: ProviderId
+  sessionId?: string
+}> {
+  const director = getDirector(folder)
+  await director.ready
+  return { cwd: directorFolder(director), instructions: await directorPrompt(folder), ...director.state }
+}

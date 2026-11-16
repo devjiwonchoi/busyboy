@@ -3,6 +3,7 @@ import {
   query,
   type CanUseTool,
   type McpServerConfig,
+  type Options,
   type PermissionResult,
   type PermissionUpdate,
   type Query,
@@ -121,6 +122,25 @@ function toSdkMcpServers(servers: Record<string, McpServer>): Record<string, Mcp
   )
 }
 
+/**
+ * Continue, branch, or start a session. A branch (`forkSessionId`) is
+ * `resume` + `forkSession`, which copies the history into a new session id
+ * and leaves the original file untouched, plus `persistSession: false`, so no
+ * file is written for the branch at all.
+ */
+function sessionOptions({ resumeSessionId, forkSessionId }: ProviderStartOptions): Partial<Options> {
+  if (forkSessionId) return { resume: forkSessionId, forkSession: true, persistSession: false }
+  return { resume: resumeSessionId }
+}
+
+/**
+ * No tools at all. `tools: []` turns off only the built-in ones; the user's
+ * own MCP servers (settings, plugins, connectors) would still load, so they
+ * are left out and refused too. Verified with CLI 2.1.311: a branch of a
+ * session that used tools still answers with no tools defined.
+ */
+const NO_TOOLS: Partial<Options> = { tools: [], strictMcpConfig: true, disallowedTools: ['mcp__*'] }
+
 function startClaude(options: ProviderStartOptions): ProviderSession {
   const { emit } = options
   const input = new MessageQueue()
@@ -211,8 +231,13 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         env: agentEnvironment(),
         abortController: abort,
         includePartialMessages: true,
-        resume: options.resumeSessionId,
-        permissionMode: options.permissionMode === 'full-access' ? 'bypassPermissions' : 'auto',
+        ...sessionOptions(options),
+        ...(options.noTools ? NO_TOOLS : {}),
+        permissionMode: options.noTools
+          ? 'dontAsk'
+          : options.permissionMode === 'full-access'
+            ? 'bypassPermissions'
+            : 'auto',
         allowDangerouslySkipPermissions: options.permissionMode === 'full-access',
         systemPrompt: { type: 'preset', preset: 'claude_code', append: options.instructions },
         canUseTool,

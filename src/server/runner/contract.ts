@@ -23,6 +23,15 @@ export type StartAgentInput = {
    * credentials in them stay out of process listings and child processes.
    */
   mcpServers?: Record<string, McpServer>
+  /**
+   * Provider session to branch from: the agent starts with that conversation's
+   * history in a new session, and nothing it does is written back to the
+   * original. The branch is not kept after the process ends, so resuming the
+   * agent branches from the original again. Must run in the original's `cwd`.
+   */
+  forkSessionId?: string
+  /** Start with no tools, so the agent can only answer in text and never asks for approval. */
+  noTools?: boolean
 }
 
 export type McpServer = (
@@ -115,7 +124,7 @@ export type SignInStatus =
 // ---- Provider side -------------------------------------------------------
 
 export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permissionMode'>> &
-  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers'> & {
+  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools'> & {
     /** Every event the provider produces. Call it in order; the runner stamps seq numbers. */
     emit: (event: AgentEvent) => void
   }
