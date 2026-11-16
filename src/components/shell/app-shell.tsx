@@ -10,6 +10,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { Sidebar, SidebarContent, SidebarInset, SidebarRail } from '@/components/ui/sidebar'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { FocusHandler } from './focus-handler'
 import { ShellStateProvider, useShellState } from './shell-state'
 import {
   formatShortcut,
@@ -78,6 +79,7 @@ function ShellLayout({ children, sidebar, panel }: AppShellProps) {
 
   return (
     <div data-slot="app-shell" className="flex min-h-0 flex-1 flex-col">
+      <FocusHandler />
       <header
         data-slot="title-bar"
         className="flex h-10 shrink-0 items-center gap-1 border-b pr-2 pl-[var(--title-bar-inset,0.75rem)] [app-region:drag]"
