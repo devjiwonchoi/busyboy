@@ -368,6 +368,126 @@ export function codexAutoReply(message: CodexRawMessage): { result: unknown; not
   return { result: decline, notice: `The MCP server ${params.serverName} asked for a ${params.mode} check BusyBoy does not support, so it was declined.` }
 }
 
+/**
+ * A command decision as Codex sends it in `availableDecisions` and expects it back.
+ * Unit variants are strings (`accept`, `decline`, …). Persistent variants are externally
+ * tagged objects, for example `{ acceptWithExecpolicyAmendment: { execpolicy_amendment } }`.
+ * Matching the strings with `includes` misses the objects and can answer with a decision
+ * the request did not offer.
+ */
+type ListedDecision = { name: string; value: unknown }
+
+const COMMAND_DECISIONS = new Set([
+  'accept',
+  'acceptForSession',
+  'acceptWithExecpolicyAmendment',
+  'applyNetworkPolicyAmendment',
+  'decline',
+  'cancel',
+])
+
+/** The decisions a command approval lists, or undefined when Codex did not send the list. */
+function listedDecisions(offered: unknown): ListedDecision[] | undefined {
+  if (!Array.isArray(offered)) return undefined
+  const decisions: ListedDecision[] = []
+  for (const value of offered) {
+    if (typeof value === 'string' && COMMAND_DECISIONS.has(value)) {
+      decisions.push({ name: value, value })
+      continue
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const [name] = Object.keys(value).filter((key) => COMMAND_DECISIONS.has(key))
+    if (name) decisions.push({ name, value })
+  }
+  return decisions
+}
+
+/** The listed decision, or the bare name when Codex sent no list (those names are always valid then). */
+function listedValue(decisions: ListedDecision[] | undefined, name: string): unknown {
+  if (!decisions) return name
+  return decisions.find((decision) => decision.name === name)?.value
+}
+
+/** The command prefix a persistent execpolicy decision remembers, hidden when it is not one line. */
+function execpolicyPrefix(value: unknown): string | undefined {
+  const amendment =
+    value && typeof value === 'object'
+      ? (value as { acceptWithExecpolicyAmendment?: { execpolicy_amendment?: unknown } }).acceptWithExecpolicyAmendment?.execpolicy_amendment
+      : undefined
+  const text = Array.isArray(amendment)
+    ? amendment.filter((part): part is string => typeof part === 'string').join(' ')
+    : amendment && typeof amendment === 'object' && typeof (amendment as { command?: unknown }).command === 'string'
+      ? (amendment as { command: string }).command
+      : typeof amendment === 'string'
+        ? amendment
+        : ''
+  const prefix = text.trim()
+  // Codex's own prompt hides an amendment that spans lines; echoing it would not match that prompt.
+  if (!prefix || /[\r\n]/.test(prefix)) return undefined
+  return prefix
+}
+
+function networkAmendment(value: unknown): { host?: string; action?: string } | undefined {
+  const amendment =
+    value && typeof value === 'object'
+      ? (value as { applyNetworkPolicyAmendment?: { network_policy_amendment?: { host?: unknown; action?: unknown } } }).applyNetworkPolicyAmendment
+          ?.network_policy_amendment
+      : undefined
+  if (!amendment || typeof amendment !== 'object') return undefined
+  return {
+    host: typeof amendment.host === 'string' ? amendment.host : undefined,
+    action: typeof amendment.action === 'string' ? amendment.action : undefined,
+  }
+}
+
+/**
+ * Whether the card may offer a remembered allow, and how to name it.
+ * A `humanCommand` checkpoint accepts only this once (`accept`, `decline`, `cancel`).
+ */
+function sessionChoice(params: Record<string, unknown>): { offered: boolean; label?: string } {
+  if (params.kind === 'humanCommand') return { offered: false }
+  const decisions = listedDecisions(params.availableDecisions)
+  if (!decisions) return { offered: true }
+  if (decisions.some((decision) => decision.name === 'acceptForSession')) return { offered: true }
+  const prefix = decisions.find((decision) => decision.name === 'acceptWithExecpolicyAmendment')
+  const command = prefix ? execpolicyPrefix(prefix.value) : undefined
+  if (command) return { offered: true, label: `Always allow commands starting with ${shorten(command)}` }
+  const network = decisions.find((decision) => decision.name === 'applyNetworkPolicyAmendment')
+  const rule = network ? networkAmendment(network.value) : undefined
+  if (rule && rule.action !== 'deny') return { offered: true, label: rule.host ? `Always allow ${rule.host}` : 'Always allow this host' }
+  return { offered: false }
+}
+
+/**
+ * The `decision` value that answers a command approval: one Codex listed, echoed in the
+ * shape it was sent. A one-time allow is `accept`. Remembering it is `acceptForSession`
+ * or the execpolicy or network object. A denial is `decline`, or `cancel` when that is
+ * the only refusal, because `cancel` also ends the turn.
+ */
+function commandApprovalDecision(params: Record<string, unknown>, allow: boolean, forSession: boolean): unknown {
+  const human = params.kind === 'humanCommand'
+  const decisions = listedDecisions(params.availableDecisions)
+  if (allow && forSession && !human) {
+    const session = listedValue(decisions, 'acceptForSession')
+    // No list: `acceptForSession` is valid. A list that omits it must not be answered with it.
+    if (!decisions || decisions.some((decision) => decision.name === 'acceptForSession')) return session
+    const prefix = listedValue(decisions, 'acceptWithExecpolicyAmendment')
+    if (prefix !== undefined && execpolicyPrefix(prefix)) return prefix
+    const network = listedValue(decisions, 'applyNetworkPolicyAmendment')
+    if (network !== undefined && networkAmendment(network)?.action !== 'deny') return network
+  }
+  if (allow) {
+    const once = listedValue(decisions, 'accept')
+    if (once !== undefined) return once
+    return 'accept'
+  }
+  const decline = listedValue(decisions, 'decline')
+  if (decline !== undefined) return decline
+  const cancel = listedValue(decisions, 'cancel')
+  if (cancel !== undefined) return cancel
+  return 'decline'
+}
+
 /** The approval or question for an answerable server request, or undefined for any other request. */
 export function codexRequestToEvent(
   requestId: string,
@@ -379,7 +499,6 @@ export function codexRequestToEvent(
     case 'item/commandExecution/requestApproval': {
       const command = displayCommand(params.command, params.commandActions)
       const network = params.networkApprovalContext as { host?: string; protocol?: string } | null | undefined
-      const offered = Array.isArray(params.availableDecisions) ? params.availableDecisions : undefined
       // `writeStdin` sends input to a command that is already running.
       const title =
         params.kind === 'writeStdin'
@@ -387,6 +506,7 @@ export function codexRequestToEvent(
           : command
             ? `Allow Shell: ${shorten(command)}?`
             : 'Allow a shell command?'
+      const session = sessionChoice(params)
       return {
         type: 'approval',
         requestId,
@@ -398,7 +518,8 @@ export function codexRequestToEvent(
           network?.host && `Network: ${network.host}`,
           ...permissionLines(params.additionalPermissions as PermissionProfile | null | undefined),
         ),
-        canAllowForSession: !offered || offered.includes('acceptForSession'),
+        canAllowForSession: session.offered,
+        ...(session.label ? { allowForSessionLabel: session.label } : {}),
       }
     }
     case 'item/fileChange/requestApproval':
@@ -455,12 +576,10 @@ export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswe
   const allow = answer.kind === 'question' || answer.allow
   const forSession = answer.kind === 'approval' && answer.allow && Boolean(answer.forSession)
   switch (message.method) {
-    case 'item/commandExecution/requestApproval': {
-      // Codex lists the decisions it takes. Without `decline`, a denial can only `cancel`, which also ends the turn.
-      const offered = Array.isArray(params.availableDecisions) ? params.availableDecisions : undefined
-      if (allow) return { decision: forSession && (!offered || offered.includes('acceptForSession')) ? 'acceptForSession' : 'accept' }
-      return { decision: !offered || offered.includes('decline') ? 'decline' : 'cancel' }
-    }
+    case 'item/commandExecution/requestApproval':
+      // Echo a listed decision, including an object Codex offered. A string check would miss those
+      // and answer `acceptForSession` or `cancel` when the request offered something else.
+      return { decision: commandApprovalDecision(params, allow, forSession) }
     case 'item/fileChange/requestApproval':
       return { decision: allow ? (forSession ? 'acceptForSession' : 'accept') : 'decline' }
     case 'item/permissions/requestApproval': {
