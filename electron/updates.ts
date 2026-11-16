@@ -10,7 +10,9 @@ import { autoUpdater } from 'electron-updater'
 // one that was downloaded is also installed when the user quits.
 
 const FIRST_CHECK_MS = 10_000
-const CHECK_EVERY_MS = 4 * 60 * 60_000
+// Often enough that a release shows up while the user is still at the desk, as it did in
+// 0.0.22 and earlier. Each check is one small request to GitHub's release feed.
+const CHECK_EVERY_MS = 5 * 60_000
 
 /** How long an install may take to close the app before it counts as not having happened. */
 const INSTALL_TIMEOUT_MS = 60_000
