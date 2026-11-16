@@ -1,0 +1,15 @@
+{
+  "provider": "claude",
+  "description": "A task agent that answers in streamed text only, the way real providers do, and writes no records.",
+  "turns": [
+    {
+      "prompt": "Report the first line of `gh pr merge --help`. Change no files.",
+      "steps": [
+        { "event": { "type": "text-delta", "itemId": "msg_1:text:0", "text": "Running the command now." } },
+        { "event": { "type": "tool", "label": "Bash: gh pr merge --help" } },
+        { "event": { "type": "text-delta", "itemId": "msg_2:text:0", "text": "The first line is: " } },
+        { "event": { "type": "text-delta", "itemId": "msg_2:text:0", "text": "Merge a pull request on GitHub." } }
+      ]
+    }
+  ]
+}
