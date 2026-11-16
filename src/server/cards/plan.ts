@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-// Reading a draft ALIGN.md. The plan follow-up fills `criteria` from the same
-// document; the card shows `summary` while `criteria` is empty.
+// Reading a draft ALIGN.md. `criteria` are its end-state items: the Success
+// criteria headings in the full form, or each todo's Done when line in the
+// light form, where those lines are the criteria.
 
 /**
  * The plan's own status, at the start of a line or after `Version: <n> ·` as the
@@ -10,7 +11,73 @@ import { join } from 'node:path'
  */
 const APPROVED = /^(?:\W*Version:[^·\n]*·)?\W*Status:\s*approved\b/im
 
+const FENCE = /^\s*(```|~~~)/
+
+/** A success criterion heading: `## 1 · Show the project name on every page`. */
+const CRITERION = /^##\s+\d+[a-z]?\s*·\s*(.+?)\s*#*\s*$/i
+
+const DONE_WHEN = /^\s*-\s*Done when:\s*(.*?)\s*$/i
+
 type PlanTask = { id: string; title: string; worktree: string }
+
+function headingOf(line: string) {
+  const match = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
+  return match ? { level: match[1].length, title: match[2].trim() } : null
+}
+
+/**
+ * Lines under the first top-level `# name` heading, up to the next one.
+ * Fenced code is left out, so a heading or Done when line inside a diagram
+ * or a file tree is not an end-state item.
+ */
+function sectionLines(text: string, name: string) {
+  const lines = text.split(/\r?\n/)
+  const wanted = name.toLowerCase()
+  let inFence = false
+  let start = -1
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]
+    if (FENCE.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const heading = headingOf(line)
+    if (heading?.level === 1 && heading.title.toLowerCase() === wanted) {
+      start = index + 1
+      break
+    }
+  }
+  if (start === -1) return []
+
+  const body: string[] = []
+  inFence = false
+  for (let index = start; index < lines.length; index++) {
+    const line = lines[index]
+    if (FENCE.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    if (headingOf(line)?.level === 1) break
+    body.push(line)
+  }
+  return body
+}
+
+function captured(lines: string[], pattern: RegExp) {
+  return lines.map((line) => pattern.exec(line)?.[1].trim() ?? '').filter((item) => item.length > 0)
+}
+
+/**
+ * End-state items for the plan card. The full form numbers them as Success
+ * criteria. The light form folds them into each todo's Done when line.
+ */
+export function alignCriteria(plan: string) {
+  const criteria = captured(sectionLines(plan, 'Success criteria'), CRITERION)
+  if (criteria.length > 0) return criteria
+  return captured(sectionLines(plan, 'Todos'), DONE_WHEN)
+}
 
 /**
  * The body of a top-level `# <name>` section, up to the next top-level heading.
@@ -54,5 +121,5 @@ export async function readDraftPlan(task: PlanTask) {
   }
 
   const title = /^#\s+ALIGN:\s*(.+?)\s*$/m.exec(plan)?.[1] ?? task.title
-  return { title, plan, summary: alignSummary(plan), criteria: [] as string[] }
+  return { title, plan, summary: alignSummary(plan), criteria: alignCriteria(plan) }
 }
