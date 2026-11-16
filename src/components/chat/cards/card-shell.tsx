@@ -1,14 +1,17 @@
 'use client'
 
+import { CornerUpLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
+import { useCardActionsOptional } from './card-actions'
 
 /**
  * The timeline card: a container, a header, a body, and a bottom-right action
  * row, composed from the Card primitive. Omit a part the card does not need.
- * `hoverActions` sits on the corner while the pointer is over the card; the
- * reply follow-up fills it and does not add a control to each kind.
+ * `hoverActions` sits on the corner while the pointer is over the card. Reply
+ * is filled in there for an open card, so a kind does not add its own control.
  */
 export function CardShell({
   label,
@@ -24,6 +27,21 @@ export function CardShell({
   hoverActions?: ReactNode
   children: ReactNode
 }) {
+  const actions = useCardActionsOptional()
+  const replyHover = actions ? (
+    <Button
+      type="button"
+      size="xs"
+      variant="outline"
+      className="bg-popover! shadow-sm"
+      aria-pressed={actions.replying}
+      onClick={() => actions.onReplyChange(!actions.replying)}
+    >
+      <CornerUpLeft />
+      Reply
+    </Button>
+  ) : null
+  const corner = replyHover || hoverActions
   return (
     <Card
       role="group"
@@ -37,11 +55,12 @@ export function CardShell({
         replying && 'ring-ring/50 ring-2',
       )}
     >
-      {hoverActions && (
+      {corner && (
         <div
           data-slot="card-hover-actions"
-          className="absolute top-2 right-2 z-10 opacity-0 transition-opacity group-focus-within/timeline-card:opacity-100 group-hover/timeline-card:opacity-100"
+          className="pointer-events-none absolute top-3 right-3 z-20 flex items-center gap-1 opacity-0 transition-opacity group-focus-within/timeline-card:pointer-events-auto group-focus-within/timeline-card:opacity-100 group-hover/timeline-card:pointer-events-auto group-hover/timeline-card:opacity-100"
         >
+          {replyHover}
           {hoverActions}
         </div>
       )}

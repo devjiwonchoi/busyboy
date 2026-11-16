@@ -1,11 +1,12 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
+import { Quote, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * The composer target: a reply to a card, or a message to a task. Rendered in
- * the composer's leading slot. The reply follow-up turns this into the chip.
+ * The composer target, in the composer's leading slot: a compact chip. A reply
+ * quotes the card; a message to a task names it. The dismiss control returns
+ * the composer to the Director.
  */
 export function ReplyTarget({
   mode,
@@ -18,13 +19,17 @@ export function ReplyTarget({
   directorName: string
   onClear: () => void
 }) {
+  const replying = mode === 'reply'
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <Badge variant="outline" className="min-w-0 truncate">
-        {mode === 'reply' ? 'Replying to' : 'Messaging'} {target}
-      </Badge>
-      <Button type="button" size="xs" variant="ghost" onClick={onClear}>
-        Message {directorName} instead
+    <div
+      role="group"
+      aria-label={replying ? `Replying to ${target}` : `Messaging ${target}`}
+      className="bg-muted text-foreground flex min-w-0 items-center gap-1.5 rounded-md py-0.5 pr-0.5 pl-2 text-xs ring-1 ring-foreground/10"
+    >
+      {replying && <Quote className="text-muted-foreground size-3 shrink-0" aria-hidden />}
+      <span className="min-w-0 truncate">{replying ? `“${target}”` : `Messaging ${target}`}</span>
+      <Button type="button" size="icon-xs" variant="ghost" aria-label={`Message ${directorName} instead`} onClick={onClear}>
+        <X />
       </Button>
     </div>
   )

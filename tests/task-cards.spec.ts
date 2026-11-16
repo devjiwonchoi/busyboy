@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect as baseExpect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
 // Task agents that wait on the user, played from tests/provider-scripts/task-cards.json
@@ -33,6 +33,12 @@ async function openChat(page: Page) {
 
 const transcript = (page: Page) => page.getByRole('log', { name: 'Transcript' })
 const openCard = (page: Page, name: string) => transcript(page).getByRole('group', { name })
+
+/** Reply is a hover action on the card's corner, not a button on its action row. */
+async function chooseReply(card: Locator) {
+  await card.hover()
+  await card.getByRole('button', { name: 'Reply' }).click()
+}
 const openCards = (page: Page) =>
   transcript(page).getByRole('group', { name: /^(Question|Approval|Plan|Progress|Done|Pull requests) from / })
 
@@ -106,16 +112,36 @@ test.describe('Claude task agents', () => {
     await expect(openCards(page)).toHaveCount(0)
   })
 
-  test('clicking Reply on an Align card and sending should send the change to its task agent', async ({ page, context }) => {
+  test('hovering Reply on a card should quote it above the composer, and sending should reach its task agent', async ({ page, context }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
     const card = openCard(page, 'Plan from web · Add a footer')
     await expect(card).toBeVisible()
+    await expect(card.locator('[data-slot="card-footer"]').getByRole('button', { name: 'Reply' })).toHaveCount(0)
+    await expect(card.getByRole('button', { name: 'Stop task' })).toBeVisible()
 
     const composer = page.getByRole('textbox', { name: 'Message' })
-    // The card does not take the composer; the user picks it.
+    const hoverActions = card.locator('[data-slot="card-hover-actions"]')
+    // The card does not take the composer; the user picks Reply when it is shown.
     await expect(composer).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
+    await expect(hoverActions).toHaveCSS('opacity', '0')
+    await card.hover()
+    await expect(hoverActions).toHaveCSS('opacity', '1')
+    mkdirSync('test-results', { recursive: true })
+    await card.screenshot({ path: 'test-results/reply-hover.png' })
     await card.getByRole('button', { name: 'Reply' }).click()
+    const chip = page.getByRole('group', { name: 'Replying to web · Add a footer' })
+    await expect(chip).toBeVisible()
+    await expect(chip).toContainText('“web · Add a footer”')
+    await expect(composer).toHaveAttribute('aria-placeholder', 'Reply to web · Add a footer')
+    await page.getByTestId('chat').screenshot({ path: 'test-results/reply-chat.png' })
+    await page.getByTestId('chat').locator('[data-slot="composer"]').screenshot({ path: 'test-results/reply-chip.png' })
+    await chip.getByRole('button', { name: 'Message BusyBoy instead' }).click()
+    await expect(chip).toHaveCount(0)
+    await expect(composer).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
+
+    await chooseReply(card)
     await expect(composer).toHaveAttribute('aria-placeholder', 'Reply to web · Add a footer')
     await composer.fill('Also show the current year.')
     await page.getByRole('button', { name: 'Send' }).click()
@@ -144,7 +170,7 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
     const card = openCard(page, 'Plan from web · Add a footer')
-    await card.getByRole('button', { name: 'Reply' }).click()
+    await chooseReply(card)
     const composer = page.getByRole('textbox', { name: 'Message' })
     await composer.fill('Yes, go ahead.')
 

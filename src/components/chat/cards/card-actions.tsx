@@ -17,8 +17,13 @@ type CardActionState = {
 
 const CardActionContext = createContext<CardActionState | null>(null)
 
+/** Null on a closed card, which uses the shell without this provider. */
+export function useCardActionsOptional() {
+  return useContext(CardActionContext)
+}
+
 export function useCardActions() {
-  const value = useContext(CardActionContext)
+  const value = useCardActionsOptional()
   if (!value) {
     throw new Error('Card actions are only available inside an open timeline card.')
   }
@@ -72,25 +77,20 @@ export function CardActionError() {
 }
 
 /**
- * Reply and Stop, on every open card's action row. The reply follow-up
- * replaces Reply here; kind cards keep rendering this component.
+ * Stop, on every open card's action row. Reply is the shell's hover action,
+ * so a kind card keeps rendering this and does not grow its own reply control.
  */
 export function CardTrailingActions() {
-  const { card, replying, pending, onReplyChange, run } = useCardActions()
+  const { card, pending, run } = useCardActions()
   return (
-    <>
-      <Button type="button" size="sm" variant="ghost" aria-pressed={replying} onClick={() => onReplyChange(!replying)}>
-        Reply
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={pending}
-        onClick={() => run(() => stopTaskAction(card.taskId), 'The task could not be stopped. Try again.')}
-      >
-        Stop task
-      </Button>
-    </>
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      disabled={pending}
+      onClick={() => run(() => stopTaskAction(card.taskId), 'The task could not be stopped. Try again.')}
+    >
+      Stop task
+    </Button>
   )
 }
