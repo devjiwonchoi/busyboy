@@ -1,0 +1,236 @@
+name: Release
+
+# Cuts the next patch release of the macOS and Windows apps from main:
+#   Actions → Release → Run workflow
+# The version is the latest vX.Y.Z tag with its patch raised by one. Installed
+# apps pick the release up through their updater, including BusyBoy 0.0.22 and
+# earlier (see scripts/release-feed.mts for what those check).
+# With dry_run, the installers stay as run artifacts and nothing is published.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build everything but publish nothing (installers stay as run artifacts)
+        type: boolean
+        default: false
+
+# Each run computes its version from the tags the previous run published.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24.x'
+
+jobs:
+  version:
+    name: Resolve next patch version
+    # The release environment, which holds the key that signs the update manifest, only allows main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # Nothing here pushes with git; don't leave the token on disk.
+          persist-credentials: false
+      - id: version
+        run: |
+          # Only plain vX.Y.Z tags count: a tag such as v0.0.23-rc.1 is not a release, and
+          # nothing but digits may reach the arithmetic below.
+          latest="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if [ -z "$latest" ]; then
+            echo "::error::No vX.Y.Z tag to count from."
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          version="$major.$minor.$((patch + 1))"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$version (previous: $latest)"
+
+  macos:
+    name: Build macOS release
+    needs: version
+    # Apple Silicon, like every release so far.
+    runs-on: macos-latest
+    timeout-minutes: 60
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check release secrets
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing secret $name"
+              exit 1
+            fi
+          done
+
+      # electron-builder signs with the Developer ID .p12 in CSC_LINK and
+      # notarizes with an App Store Connect API key, which it reads from a file.
+      # The build then asks Gatekeeper about the app and runs the signature
+      # check an installed BusyBoy runs on an update.
+      - name: Build, sign, and notarize the DMG and ZIP
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+          printf '%s' "$APPLE_API_KEY_P8" > "$key"
+          unset APPLE_API_KEY_P8
+          APPLE_API_KEY="$key" node scripts/build-desktop.mts --release --version "$VERSION"
+          rm -f "$key"
+
+      # The signed app, with the hardened runtime on, must still start its server and open its window.
+      - name: Run the packaged app's self-check
+        run: |
+          app="$(node -p 'require("./release/desktop-build.json").executable')"
+          result="$RUNNER_TEMP/self-check.json"
+          status=0
+          "$app" --self-check="$result" || status=$?
+          echo "Exit code: $status"
+          cat "$result"
+          node -e '
+            const result = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))
+            if (result.ok !== true) {
+              console.error("The self-check did not pass.")
+              process.exit(1)
+            }
+          ' "$result"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-macos
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/latest-mac.yml
+          if-no-files-found: error
+          # Signed and notarized even in a dry run, so not kept longer than it takes to look at them.
+          retention-days: 3
+
+  # Unsigned, like every Windows release so far. Each architecture builds on
+  # its own runner, because the server's native modules are built for the host.
+  windows:
+    name: Build Windows release (${{ matrix.arch }})
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the installer
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: node scripts/build-desktop.mts --release --version "$VERSION"
+      # Each architecture writes its own latest.yml; the publish job merges them.
+      - name: Name the update feed by architecture
+        run: mv release/latest.yml "release/latest-${{ matrix.arch }}.yml"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest-*.yml
+          if-no-files-found: error
+          # Signed and notarized even in a dry run, so not kept longer than it takes to look at them.
+          retention-days: 3
+
+  publish:
+    name: Publish GitHub release
+    needs: [version, macos, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    # UPDATE_SIGNING_KEY lives in the release environment.
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      # Merges the Windows feeds, signs the update manifest, and checks both the
+      # way an installed BusyBoy does. A dry run does this too, so it shows
+      # whether installed apps would accept the release.
+      - name: Prepare and check the update feed
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: node scripts/release-feed.mts "$VERSION" release
+
+      - name: List what would be published
+        run: ls -l release
+
+      # The release stays a draft until every file is uploaded, so an installed
+      # app never sees a release without its ZIP or its feed files.
+      - name: Publish GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.version.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null | grep -q true; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+          fi
+          gh release create "$TAG" release/*.dmg release/*.zip release/*.exe release/*.blockmap \
+            release/latest.yml release/latest-mac.yml release/busyboy-update.json release/busyboy-update.json.sig \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "BusyBoy $TAG" \
+            --generate-notes \
+            --draft
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

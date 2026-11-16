@@ -1,10 +1,19 @@
 // Packages the desktop app with electron-builder.
 //
-//   node scripts/build-desktop.mts [--skip-next] [--version <x.y.z>] [--mac | --win | --linux]
+//   node scripts/build-desktop.mts [--skip-next] [--version <x.y.z>] [--mac | --win | --linux] [--release]
 //
 // package.json stays at 0.0.0; a release passes its version with --version.
 // The result, including the path of the packaged executable, is written to
 // release/desktop-build.json for CI and other scripts.
+//
+// Without --release the app is packaged unsigned into a folder, which is what
+// CI and `pnpm build:desktop` check. With --release it becomes what users
+// install (.github/workflows/release.yml):
+//   macOS    a DMG and a ZIP, signed with the Developer ID in CSC_LINK /
+//            CSC_KEY_PASSWORD (or the keychain) and notarized with
+//            APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER
+//   Windows  an NSIS installer and its latest.yml, unsigned
+// together with the update feed files that installed apps read.
 //
 // The platform flag must match the machine; cross-packaging is refused.
 //
@@ -14,8 +23,9 @@
 // packages in src/lib/server-external-packages.ts are then installed into it as
 // whole folders, and the build fails unless that server works on its own.
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import builder from 'electron-builder'
 import { checkPackagedServer } from './check-packaged-server.mts'
 import { installServerPackages } from './install-server-packages.mts'
@@ -54,6 +64,22 @@ function targetPlatform() {
 // Check the arguments before building, so a typo neither costs a build nor deletes the last release.
 const platform = targetPlatform()
 const version = releaseVersion()
+const release = args.has('--release')
+const mac = process.platform === 'darwin'
+
+// The identity every release has used. Apps already installed only accept an
+// update signed by this team with this bundle id, so neither may change.
+const APP_ID = 'dev.jiwon.busyboy'
+const DEVELOPER_TEAM = '5PA4R2B5FF'
+/** The requirement BusyBoy 0.0.22 and earlier check before they install an update. */
+const SIGNATURE_REQUIREMENT = `anchor apple generic and identifier "${APP_ID}" and certificate leaf[subject.OU] = "${DEVELOPER_TEAM}"`
+
+if (release && mac) {
+  // electron-builder would skip notarization without these and ship an app Gatekeeper refuses.
+  const missing = ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER'].filter((name) => !process.env[name])
+  if (missing.length > 0) throw new Error(`A macOS release needs ${missing.join(', ')} to notarize the app.`)
+}
+if (release && process.platform === 'linux') throw new Error('Releases are built for macOS and Windows only.')
 
 if (!args.has('--skip-next')) run('pnpm', ['build'])
 if (!existsSync(join(standalone, 'server.js'))) {
@@ -66,12 +92,39 @@ rmSync(outputDir, { recursive: true, force: true })
 let packagedServer: string | undefined
 let executable: string | undefined
 
+const entitlements = join(root, 'electron', 'entitlements.mac.plist')
+
 await builder.build({
-  targets: platform.createTarget('dir'),
+  targets: platform.createTarget(release ? (mac ? ['dmg', 'zip'] : ['nsis']) : 'dir'),
+  // Nothing is uploaded from here; the release workflow publishes the files.
+  publish: 'never',
   config: {
     // Same identity as the previous app, so a release replaces it on install.
-    appId: 'dev.jiwon.busyboy',
+    appId: APP_ID,
     productName: manifest.productName,
+    ...(release
+      ? {
+          // BusyBoy-0.0.23-arm64.zip: the name installed apps look for in a release.
+          artifactName: '${productName}-${version}-${arch}.${ext}',
+          // Makes electron-builder write the update feed files (latest.yml,
+          // latest-mac.yml) and the app-update.yml that tells the app where they are.
+          publish: [{ provider: 'github' as const, owner: 'devjiwonchoi', repo: 'busyboy', releaseType: 'release' as const }],
+          // macOS: fail instead of shipping an unsigned app when no Developer ID is found.
+          forceCodeSigning: mac,
+          nsis: {
+            artifactName: '${productName}-Setup-${version}-${arch}.${ext}',
+            // The blockmap lets an installed app download only the blocks that changed.
+            differentialPackage: true,
+          },
+          dmg: {
+            title: `${manifest.productName} ${version}`,
+            contents: [
+              { x: 166, y: 214, type: 'file' as const },
+              { x: 474, y: 214, type: 'link' as const, path: '/Applications' },
+            ],
+          },
+        }
+      : {}),
     extraMetadata: { version },
     directories: { output: outputDir },
     // Only the bundled main process goes into app.asar; the server brings its own node_modules.
@@ -83,10 +136,22 @@ await builder.build({
     nodeGypRebuild: false,
     // The UI is English only, so Chromium's other locale files are dropped.
     electronLanguages: ['en'],
+    // electron-builder makes the macOS .icns from the PNG.
+    win: { icon: join(root, 'electron', 'icons', 'icon.ico') },
+    linux: { icon: join(root, 'electron', 'icons', 'icon.png') },
     mac: {
+      icon: join(root, 'electron', 'icons', 'icon.png'),
       category: 'public.app-category.developer-tools',
-      // Unsigned until code signing is set up.
-      identity: null,
+      ...(release
+        ? {
+            // Notarization requires the hardened runtime; the entitlements are what V8 needs under it.
+            hardenedRuntime: true,
+            entitlements,
+            entitlementsInherit: entitlements,
+            notarize: true,
+          }
+        : // Local and CI builds are not signed.
+          { identity: null }),
     },
     afterPack: async (context) => {
       const { productFilename } = context.packager.appInfo
@@ -116,6 +181,26 @@ await builder.build({
 
 if (!packagedServer || !executable) throw new Error('electron-builder did not run the afterPack step.')
 await checkPackagedServer(packagedServer)
+
+if (release && mac) {
+  // `…/BusyBoy.app/Contents/MacOS/BusyBoy` → `…/BusyBoy.app`
+  const appBundle = join(executable, '..', '..', '..')
+  // Gatekeeper's own check that the app is signed and notarized.
+  execFileSync('spctl', ['--assess', '--type', 'execute', '-vv', appBundle], { stdio: 'inherit' })
+  // What an installed BusyBoy 0.0.22 does with an update before it replaces itself: unpack
+  // the ZIP with ditto and check the app inside against this requirement. Checked on the
+  // ZIP, not the build folder, so an archive that loses a symlink or a signature fails here.
+  const zip = join(outputDir, `${manifest.productName}-${version}-${builder.Arch[builder.archFromString(process.arch)]}.zip`)
+  const unpacked = mkdtempSync(join(tmpdir(), 'busyboy-update-check-'))
+  try {
+    execFileSync('ditto', ['-x', '-k', zip, unpacked], { stdio: 'inherit' })
+    execFileSync('codesign', ['--verify', '--deep', '--strict', `-R=${SIGNATURE_REQUIREMENT}`, join(unpacked, basename(appBundle))], {
+      stdio: 'inherit',
+    })
+  } finally {
+    rmSync(unpacked, { recursive: true, force: true })
+  }
+}
 writeFileSync(
   join(outputDir, 'desktop-build.json'),
   `${JSON.stringify({ productName: manifest.productName, version, executable, server: packagedServer }, null, 2)}\n`,

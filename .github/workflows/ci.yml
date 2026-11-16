@@ -1,11 +1,11 @@
 name: CI
 
 on:
-  # Every PR in the v2 stack targets v2 or another v2-* branch.
+  # A PR targets main, or v2 and the v2-* branches stacked on it until v2 is merged into main.
   pull_request:
-    branches: [v2, 'v2-*']
+    branches: [main, v2, 'v2-*']
   push:
-    branches: [v2]
+    branches: [main, v2]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
