@@ -1,6 +1,6 @@
 {
   "provider": "claude",
-  "description": "Hand-written: the main chat names a release, and side chats branched from it can tell the name. A side chat remembers its own earlier question. The slow turn stays open so a side agent can be ended mid-answer.",
+  "description": "Hand-written: the main chat names a release, and side chats branched from it can tell the name. A side chat remembers its own earlier question. The slow turn stays open so a side agent can be ended mid-answer. The flood turn emits more events than the runner keeps.",
   "turns": [
     {
       "prompt": "Let's call the next release Bluebird.",
@@ -105,6 +105,29 @@
             "type": "text",
             "text": "You asked what the next release is called."
           }
+        }
+      ]
+    },
+    {
+      "prompt": "Count out six thousand marks.",
+      "steps": [
+        {
+          "repeat": {
+            "count": 6000,
+            "event": { "type": "tool", "label": "mark-{{n}}" }
+          }
+        },
+        {
+          "event": { "type": "text", "itemId": "flood", "text": "Counted six thousand marks." }
+        }
+      ]
+    },
+    {
+      "prompt": "Are the earliest marks still in memory?",
+      "context": "Count out six thousand marks.",
+      "steps": [
+        {
+          "event": { "type": "text", "itemId": "flood-follow", "text": "No. The latest marks are kept." }
         }
       ]
     }

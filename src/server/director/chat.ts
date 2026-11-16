@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { appendTranscriptLine, readTranscript, type TranscriptCursor } from './transcript-log'
 import { alwaysAskRulesAt } from '../always-ask-list'
 import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
 import { directorTiming } from './context'
@@ -31,9 +32,10 @@ type McpServers = Record<string, McpServer>
 // its own transcript file, so it never depends on what the provider session
 // still holds after compaction or a lost session.
 //
-//   <data>/director/transcript.jsonl   display transcript, one entry per line
-//   <data>/director/state.json         provider and session id for resume
-//   <data>/director/                   also the Director agent's working directory
+//   <data>/director/transcript.jsonl     active display transcript, one entry per line
+//   <data>/director/transcript.<n>.jsonl earlier segments, oldest first, each about 20MB
+//   <data>/director/state.json           provider and session id for resume
+//   <data>/director/                     also the Director agent's working directory
 //
 // A manager (server/managers.ts) is the same kind of chat for one project, with
 // its own agent, transcript, and state in <data>/managers/<manager id>/. In this
@@ -43,7 +45,6 @@ type McpServers = Record<string, McpServer>
 
 export const DIRECTOR_FOLDER = 'director'
 export const MANAGERS_FOLDER = 'managers'
-const TRANSCRIPT_FILE = 'transcript.jsonl'
 const STATE_FILE = 'state.json'
 
 export type ChatEntry =
@@ -157,6 +158,8 @@ type Director = {
   /** The provider and MCP endpoint from the latest message, used for the next turn. */
   target?: { provider: ProviderId; mcp: McpServers }
   writes: Promise<unknown>
+  /** Bytes in the active transcript file, so rotation does not stat on every entry. */
+  transcriptFile: TranscriptCursor
   listeners: Set<(update: DirectorUpdate) => void>
 }
 
@@ -235,6 +238,7 @@ function getDirector(folder: string, chat: string | null = null): Director {
     turn: 0,
     charsSinceCompact: 0,
     writes: Promise.resolve(),
+    transcriptFile: {},
     listeners: new Set(),
   }
   director.ready = load(director).finally(() => {
@@ -258,7 +262,7 @@ async function promptOf(director: Director) {
 
 async function load(director: Director) {
   const folder = directorFolder(director)
-  const lines = (await readFile(join(folder, TRANSCRIPT_FILE), 'utf8').catch(() => '')).split('\n')
+  const lines = (await readTranscript(folder).catch(() => '')).split('\n')
   const byId = new Map<string, ChatEntry>()
   for (const line of lines) {
     if (!line.trim()) continue
@@ -345,7 +349,7 @@ function setDraft(director: Director, text: string) {
   broadcast(director, { type: 'draft', text })
 }
 
-/** Appends a new entry, or replaces the one with the same id (the file keeps the last line per id). */
+/** Appends a new entry, or replaces the one with the same id (a later line, including one in a newer segment, wins). */
 function saveEntry(director: Director, entry: ChatEntry) {
   const index = director.entries.findIndex(({ id }) => id === entry.id)
   if (index === -1) {
@@ -356,10 +360,7 @@ function saveEntry(director: Director, entry: ChatEntry) {
   const folder = directorFolder(director)
   director.writes = director.writes
     .catch(() => {})
-    .then(async () => {
-      await mkdir(folder, { recursive: true })
-      await appendFile(join(folder, TRANSCRIPT_FILE), `${JSON.stringify(entry)}\n`)
-    })
+    .then(() => appendTranscriptLine(folder, `${JSON.stringify(entry)}\n`, director.transcriptFile))
     .catch((error: unknown) => console.error(`busyboy: could not save the ${roleOf(director)} transcript`, error))
 }
 

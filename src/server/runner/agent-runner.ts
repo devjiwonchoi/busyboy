@@ -17,12 +17,17 @@ import type {
 import { createScriptedAdapter, hasScripts, SCRIPTS_ENV } from './scripted-provider'
 import { onServerShutdown } from '../shutdown'
 
+/** Newest events kept per agent for replay. Live listeners still receive every event. */
+const MAX_RETAINED_EVENTS = 5_000
+
 type AgentRecord = {
   id: string
   input: StartAgentInput
   status: AgentStatus
   sessionId?: string
   events: AgentEventEnvelope[]
+  /** Highest seq assigned. Stays monotonic after old events are dropped. */
+  lastSeq: number
   listeners: Set<(envelope: AgentEventEnvelope) => void>
   session: ProviderSession | null
   /** Open approvals and questions by request id, with the answer kind each takes. */
@@ -106,7 +111,7 @@ function snapshot(record: AgentRecord): AgentSnapshot {
     permissionMode: record.input.permissionMode ?? 'auto',
     status: record.status,
     sessionId: record.sessionId,
-    lastSeq: record.events.length,
+    lastSeq: record.lastSeq,
   }
 }
 
@@ -156,8 +161,11 @@ function record(agent: AgentRecord, event: AgentEvent) {
 }
 
 function push(agent: AgentRecord, event: AgentEvent) {
-  const envelope: AgentEventEnvelope = { seq: agent.events.length + 1, at: Date.now(), agentId: agent.id, event }
+  const envelope: AgentEventEnvelope = { seq: agent.lastSeq + 1, at: Date.now(), agentId: agent.id, event }
+  agent.lastSeq = envelope.seq
   agent.events.push(envelope)
+  const extra = agent.events.length - MAX_RETAINED_EVENTS
+  if (extra > 0) agent.events.splice(0, extra)
   for (const listener of agent.listeners) listener(envelope)
 }
 
@@ -199,6 +207,7 @@ export function startAgent(input: StartAgentInput): AgentSnapshot {
     input: { ...input, permissionMode: input.permissionMode ?? 'auto' },
     status: 'starting',
     events: [],
+    lastSeq: 0,
     listeners: new Set(),
     session: null,
     pending: new Map(),
@@ -288,7 +297,9 @@ export function listAgents(): AgentSnapshot[] {
 }
 
 /**
- * Replays events after `afterSeq`, then delivers new ones as they happen.
+ * Replays retained events after `afterSeq`, then delivers new ones as they happen.
+ * Only the newest events are kept (see MAX_RETAINED_EVENTS), so a subscriber that
+ * fell further behind receives that tail (a gap before it) and then live events.
  * Returns the unsubscribe function, or null for an unknown agent.
  */
 export function subscribeToAgent(
@@ -298,7 +309,9 @@ export function subscribeToAgent(
 ): (() => void) | null {
   const agent = registry.agents.get(agentId)
   if (!agent) return null
-  for (const envelope of agent.events.slice(Math.max(0, afterSeq))) listener(envelope)
+  for (const envelope of agent.events) {
+    if (envelope.seq > afterSeq) listener(envelope)
+  }
   agent.listeners.add(listener)
   return () => agent.listeners.delete(listener)
 }
@@ -307,6 +320,8 @@ export function subscribeToAgent(
  * The agent's latest reply text, or null. A task agent may finish without
  * writing records, so this is how the Director learns what it said. Replies
  * usually arrive only as deltas; a `text` event for the same item replaces them.
+ * Only retained events are visible, which is the whole reply unless that one
+ * reply emitted more events than the buffer holds.
  */
 export function lastAgentReply(agentId: string): string | null {
   const agent = registry.agents.get(agentId)
