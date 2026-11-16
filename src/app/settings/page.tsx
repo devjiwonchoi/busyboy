@@ -20,6 +20,7 @@ import { alwaysAskRules } from '@/server/always-ask-list'
 import { COMPANIONS, companionImageUrl, currentCompanion } from '@/server/companions'
 import { isSetupComplete, readSettings } from '@/server/config'
 import { defaultProvider, PROVIDERS, providerState, skillsState } from '@/server/providers'
+import { DEFAULT_ALWAYS_ASK } from '@/server/runner/always-ask'
 import type { SignInStatus } from '@/server/runner/contract'
 import { recheckProvidersAction, removeProjectAction, restoreAlwaysAskAction } from '@/app/setup/actions'
 import { saveAlwaysAskAction } from './actions'
@@ -187,26 +188,9 @@ async function AgentsSection() {
   )
 }
 
-const APPROVALS_FORM = 'approvals-form'
-
 async function ApprovalsSection() {
   const rules = await alwaysAskRules()
-  return (
-    <>
-      {/* Keyed by the list, so Restore defaults shows the restored text in the box. */}
-      <AlwaysAskForm key={rules.join('\n')} id={APPROVALS_FORM} rules={rules} save={saveAlwaysAskAction} />
-      <div className="flex justify-end gap-2">
-        <form action={restoreAlwaysAskAction}>
-          <Button type="submit" variant="ghost">
-            Restore defaults
-          </Button>
-        </form>
-        <Button type="submit" form={APPROVALS_FORM}>
-          Save
-        </Button>
-      </div>
-    </>
-  )
+  return <AlwaysAskForm id="approvals-form" rules={rules} save={saveAlwaysAskAction} restore={{ rules: DEFAULT_ALWAYS_ASK, action: restoreAlwaysAskAction }} />
 }
 
 async function ProjectsSection() {

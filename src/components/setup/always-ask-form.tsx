@@ -1,6 +1,7 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useState, useTransition } from 'react'
+import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -9,23 +10,35 @@ export type AlwaysAskResult = { error?: string; saved?: boolean }
 /**
  * The always-ask list, one rule per line. The text is kept in state because a
  * form action resets its fields, which would throw away the user's edits when
- * a line is refused. A button outside the form submits it through `id`: setup's
- * Continue, which saves and goes on, or settings' Save, which stays.
+ * a line is refused. In setup a button outside the form submits it through `id`
+ * (Continue, which saves and goes on). Given `restore`, the form has its own
+ * Restore defaults and Save buttons and stays on the page, as in settings.
  */
 export function AlwaysAskForm({
   id,
   rules,
   save,
+  restore,
 }: {
   id: string
   rules: string[]
   save: (previous: AlwaysAskResult, form: FormData) => Promise<AlwaysAskResult>
+  /** The default list and the action that goes back to it. */
+  restore?: { rules: string[]; action: () => Promise<void> }
 }) {
   const [text, setText] = useState(rules.join('\n'))
-  const [state, action] = useActionState<AlwaysAskResult, FormData>(save, {})
+  // What the last Save or Restore did, cleared by the next edit so it never describes unsaved text.
+  const [note, setNote] = useState<string | null>(null)
+  const [state, action, saving] = useActionState<AlwaysAskResult, FormData>(async (previous, form) => {
+    const result = await save(previous, form)
+    setNote(result.saved ? 'Saved.' : null)
+    return result
+  }, {})
+  const [restoring, startRestore] = useTransition()
+  const error = note === null ? state.error : undefined
   return (
-    <form id={id} action={action}>
-      <Field data-invalid={Boolean(state.error)}>
+    <form id={id} action={action} className="space-y-4">
+      <Field data-invalid={Boolean(error)}>
         <FieldLabel htmlFor="always-ask-rules">Always-ask list</FieldLabel>
         <Textarea
           id="always-ask-rules"
@@ -33,15 +46,18 @@ export function AlwaysAskForm({
           rows={14}
           spellCheck={false}
           value={text}
-          onChange={(event) => setText(event.target.value)}
-          aria-invalid={Boolean(state.error)}
-          aria-describedby={state.error ? 'always-ask-error' : undefined}
+          onChange={(event) => {
+            setText(event.target.value)
+            setNote(null)
+          }}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'always-ask-error' : undefined}
           className="font-mono"
         />
-        {state.error && <FieldError id="always-ask-error">{state.error}</FieldError>}
-        {state.saved && !state.error && (
+        {error && <FieldError id="always-ask-error">{error}</FieldError>}
+        {note && (
           <p role="status" className="text-muted-foreground text-sm">
-            Saved.
+            {note}
           </p>
         )}
         <FieldDescription>
@@ -49,6 +65,29 @@ export function AlwaysAskForm({
           branch, or Delete outside the task folder. * matches anything. Changes apply to tasks started after you save.
         </FieldDescription>
       </Field>
+      {restore && (
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={restoring || saving}
+            onClick={() =>
+              startRestore(async () => {
+                await restore.action()
+                // Set here, not by remounting on new props: after a Save the page's props still
+                // hold the list it first rendered, so they would not change.
+                setText(restore.rules.join('\n'))
+                setNote('Restored the defaults.')
+              })
+            }
+          >
+            Restore defaults
+          </Button>
+          <Button type="submit" disabled={restoring || saving}>
+            Save
+          </Button>
+        </div>
+      )}
     </form>
   )
 }

@@ -46,13 +46,11 @@ export function CompanionChoices({
   companions,
   value,
   imageUrl,
-  disabled,
   onChange,
 }: {
   companions: Companion[]
   value?: string
   imageUrl?: string
-  disabled?: boolean
   onChange: (id: string) => void
 }) {
   return (
@@ -62,7 +60,6 @@ export function CompanionChoices({
       // null, not undefined, keeps the group controlled before the first choice.
       value={value ?? null}
       onValueChange={(next) => onChange(next as string)}
-      disabled={disabled}
       className="grid-cols-1 sm:grid-cols-2"
     >
       {companions.map((companion) => (

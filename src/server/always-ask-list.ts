@@ -1,5 +1,5 @@
 import { readSettings, readSettingsAt, updateSettings } from './config'
-import { DEFAULT_ALWAYS_ASK } from './runner/always-ask'
+import { DEFAULT_ALWAYS_ASK, ruleError } from './runner/always-ask'
 
 // The user's always-ask list, kept in app-settings.json and edited in setup and settings.
 
@@ -28,4 +28,12 @@ export async function resetAlwaysAsk() {
   await updateSettings((settings) => {
     settings.alwaysAsk = null
   })
+}
+
+const MAX_ALWAYS_ASK_LENGTH = 20_000
+
+/** Why the list's text cannot be saved, or undefined when it can: too long, or a line that could never match. */
+export function alwaysAskError(text: unknown) {
+  if (typeof text !== 'string' || text.length > MAX_ALWAYS_ASK_LENGTH) return 'Keep the list under 20,000 characters.'
+  return text.split('\n').map(ruleError).find(Boolean) ?? undefined
 }

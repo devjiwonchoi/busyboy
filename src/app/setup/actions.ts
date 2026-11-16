@@ -2,11 +2,10 @@
 
 import { refresh } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { resetAlwaysAsk, saveAlwaysAsk } from '@/server/always-ask-list'
+import { alwaysAskError, resetAlwaysAsk, saveAlwaysAsk } from '@/server/always-ask-list'
 import { readSettings, updateSettings } from '@/server/config'
 import { chooseCompanion, CompanionImageError, findCompanion, removeCompanionImage, saveCompanionImage } from '@/server/companions'
 import { addProject, ProjectError, removeProject } from '@/server/projects'
-import { ruleError } from '@/server/runner/always-ask'
 import { providerState, PROVIDERS, setDefaultProvider, signedInProviders } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 import { stepHref } from './steps'
@@ -99,19 +98,14 @@ export async function startChattingAction() {
   redirect('/')
 }
 
-const MAX_ALWAYS_ASK_LENGTH = 20_000
-
 /** Saves the always-ask list from its text box, one rule per line, and goes on. A line that could never match is refused. */
 export async function continueFromApprovalsAction(_previous: FormResult, form: FormData): Promise<FormResult> {
   const text = form.get('rules')
-  if (typeof text !== 'string' || text.length > MAX_ALWAYS_ASK_LENGTH) {
-    return { error: 'Keep the list under 20,000 characters.' }
-  }
-  const error = text.split('\n').map(ruleError).find(Boolean)
+  const error = alwaysAskError(text)
   if (error) {
     return { error }
   }
-  await saveAlwaysAsk(text)
+  await saveAlwaysAsk(text as string)
   redirect(stepHref('start'))
 }
 

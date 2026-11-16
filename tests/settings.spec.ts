@@ -51,6 +51,27 @@ test('saving the always-ask list in settings should keep the page open and save 
   await expect.poll(() => readSettings(home).alwaysAsk).toEqual(['Bash(vercel deploy*)'])
 })
 
+test('restoring the defaults after saving in settings should show the defaults again', async ({ page, context, baseURL }) => {
+  const { home, projects } = await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-in' })
+  folders.push(home, ...Object.values(projects).map((path) => dirname(path)))
+  await openSettings(page)
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Approvals' }).click()
+  const list = page.getByRole('textbox', { name: 'Always-ask list' })
+  await expect.poll(() => list.evaluate((element) => Object.keys(element).some((key) => key.startsWith('__reactProps$')))).toBe(true)
+  await list.fill('Bash(vercel deploy*)')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('status')).toHaveText('Saved.')
+
+  await page.getByRole('button', { name: 'Restore defaults' }).click()
+
+  await expect(page.getByRole('status')).toHaveText('Restored the defaults.')
+  await expect(list).toHaveValue(/^Force push or delete a remote branch\n/)
+  await expect.poll(() => readSettings(home).alwaysAsk).toBeNull()
+
+  await list.fill('Bash(x*)')
+  await expect(page.getByRole('status')).toHaveCount(0)
+})
+
 test('removing a project in settings should keep its folder', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-in' })
   folders.push(home, ...Object.values(projects).map((path) => dirname(path)))
