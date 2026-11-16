@@ -320,7 +320,15 @@ export async function stopTaskAgent({ folder, agentId }: { folder: string; agent
   }
 }
 
-/** Whether a task agent waits on one of its cards, including a plan card while the agent itself is idle. */
+/**
+ * Whether a task agent waits on a question, an approval, or a plan, including a
+ * plan card while the agent itself is idle. Progress, done, and pull-request
+ * cards stay on the timeline without taking the task: the user can still message it.
+ */
 export function hasOpenCard(agentId: string) {
-  return [...stores.values()].some((store) => [...store.open.values()].some((entry) => entry.agentId === agentId))
+  return [...stores.values()].some((store) =>
+    [...store.open.values()].some(
+      (entry) => entry.agentId === agentId && (entry.card.kind === 'question' || entry.card.kind === 'approval' || entry.card.kind === 'plan'),
+    ),
+  )
 }

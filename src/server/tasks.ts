@@ -21,6 +21,7 @@ import {
   subscribeToAgent,
 } from './runner/agent-runner'
 import { agentEnvironment } from './runner/find-executable'
+import { trackWorkCards } from './cards/work-cards'
 import { APPROVE_MESSAGE, hasOpenCard, stopTaskAgent, trackTaskCards } from './task-cards'
 import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } from './runner/contract'
 
@@ -109,6 +110,8 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
     `- When the plan is ready for approval, save it as .jwn/${task.id}/ALIGN.md with "Status: draft", present it, and end your turn. BusyBoy shows it to the user as a plan card.`,
     `- The message "${APPROVE_MESSAGE}" approves the plan as saved: change its Status line to approved and carry on. Any other reply asks for changes; revise the draft and end your turn again.`,
     '- Do reversible actions without asking, then say what you did. Ask before irreversible ones.',
+    `- Record progress in .jwn/${task.id}/STATUS.md as you go: a State line (running, or done when the task is finished) and a "| Todo | Result |" table whose rows match the plan's todos. BusyBoy shows a progress card from that table, and a one-line done card once State is done.`,
+    '- When you open pull requests, add a "# Pull requests" table to that STATUS.md with columns Number, Title, URL, Check, and Review. One row per pull request, in stack order, the base of the stack first. BusyBoy lists them on a card and does not merge them.',
     // The hooks enforce the list; telling the agent lets it plan for the wait instead of being
     // refused mid-task. Knowing the rules does not help an agent get around them: the matcher
     // reads commands through wrappers and quoting and asks when it cannot tell.
@@ -442,6 +445,7 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
     }
   }
   trackTaskCards({ folder, task, onChange: report })
+  trackWorkCards({ folder, task })
   subscribeToAgent(task.agentId, 0, ({ event }) => {
     if (event.type === 'session') {
       confirmed = true
