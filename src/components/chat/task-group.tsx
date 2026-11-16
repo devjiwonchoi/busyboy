@@ -1,6 +1,6 @@
 'use client'
 
-import { Square } from 'lucide-react'
+import { MessageSquare, Square } from 'lucide-react'
 import { useState } from 'react'
 import { stopTaskAction } from '@/app/(main)/director-actions'
 import { useTaskSelection } from '@/components/shell/shell-state'
@@ -30,9 +30,21 @@ const DONE = { label: 'Done', variant: 'outline' as const, className: undefined 
 
 /**
  * The tasks the Director created in one turn, one `project · task` line each, with Stop while its agent runs.
- * Pressing a line selects that task for the terminal; pressing it again clears it.
+ * Pressing a line selects that task for the terminal; pressing it again clears it. Message points the
+ * composer at the task's agent for one message; pressing it again points it back at the Director.
  */
-export function TaskGroup({ taskIds, tasks }: { taskIds: string[]; tasks: Map<string, TaskView> }) {
+export function TaskGroup({
+  taskIds,
+  tasks,
+  messaging,
+  onMessage,
+}: {
+  taskIds: string[]
+  tasks: Map<string, TaskView>
+  /** The task the composer's next message goes to, if any. */
+  messaging: string | null
+  onMessage: (taskId: string | null) => void
+}) {
   const { selectedTask, toggleTask } = useTaskSelection()
   const [error, setError] = useState<string | null>(null)
   return (
@@ -75,6 +87,17 @@ export function TaskGroup({ taskIds, tasks }: { taskIds: string[]; tasks: Map<st
                         <Badge variant={status.variant} className={status.className} data-status={task?.status}>
                           {status.label}
                         </Badge>
+                      )}
+                      {/* A subagent does one action, and a task that waits on a card is answered on that card. */}
+                      {task && !task.subagent && task.status !== 'needs-you' && (
+                        <Toggle
+                          size="sm"
+                          aria-label={`Message ${task.project} · ${task.title}`}
+                          pressed={messaging === id}
+                          onPressedChange={(pressed) => onMessage(pressed ? id : null)}
+                        >
+                          <MessageSquare />
+                        </Toggle>
                       )}
                       {task && task.status !== 'stopped' && status !== DONE && (
                         <Button

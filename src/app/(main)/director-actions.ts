@@ -1,12 +1,12 @@
 'use server'
 
 import { dataFolder } from '@/server/config'
-import { replyToTaskCard, sendToDirector, stopDirector } from '@/server/director/chat'
+import { replyToTaskCard, sendToDirector, sendToTask, stopDirector } from '@/server/director/chat'
 import { busyboyMcpServers } from '@/server/mcp-tools'
 import { defaultProvider, providerState } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 import { answerCard, approveCard } from '@/server/task-cards'
-import { stopTask } from '@/server/tasks'
+import { stopTask, TaskError } from '@/server/tasks'
 
 const MAX_MESSAGE_LENGTH = 100_000
 
@@ -74,4 +74,23 @@ export async function replyToCardAction(cardId: string, text: string) {
 export async function stopTaskAction(taskId: string) {
   checkId(taskId, 'The task')
   await stopTask(taskId)
+}
+
+/**
+ * Sends a composer message to a task's agent instead of the Director. A refusal the user can act
+ * on (the task waits on a card, its worktree is gone) comes back as `error`: a thrown error's
+ * message does not reach the window in a production build.
+ */
+export async function messageTaskAction(taskId: string, text: string): Promise<{ error?: string }> {
+  checkId(taskId, 'The task')
+  if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) {
+    throw new Error('A message must be non-empty text of at most 100,000 characters.')
+  }
+  try {
+    await sendToTask({ folder: await dataFolder(), taskId, text })
+    return {}
+  } catch (error) {
+    if (error instanceof TaskError) return { error: error.message }
+    throw error
+  }
 }
