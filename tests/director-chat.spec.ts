@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
 // Director prompts recorded from real Claude runs (tests/provider-scripts/director-*.json);
-// the question-tool, interrupt, batch, long-chat, and text-blocks scripts are hand-written.
+// the question-tool, interrupt, batch, long-chat, text-blocks, and markdown scripts are hand-written.
 const QUESTION = 'What does git worktree do? Answer in one sentence.'
 const ONE_PROJECT_WORK = 'In @web, add a CONTRIBUTING.md that explains how to run the project.'
 const TWO_PROJECT_WORK = 'Add a /health endpoint to @api and show its status in the footer of @web.'
@@ -14,6 +14,7 @@ const INTERRUPTING_REQUEST = 'Never mind, just say hi.'
 const LONG_REQUEST = 'Tell me everything about lighthouses.'
 const AMBIGUOUS_REQUEST = 'Fix the login page.'
 const MULTI_BLOCK_REQUEST = 'Check what is in @web.'
+const MARKDOWN_REQUEST = 'Show me the plan as Markdown.'
 
 type StoredTask = { id: string; project: string; title: string; worktree: string; branch: string; agentId: string }
 
@@ -249,4 +250,39 @@ test('a long chat should compact while idle', async ({ page, context, baseURL })
   await expect(transcript.getByLabel('Your message')).toHaveText(LONG_REQUEST)
   await expect(reply.getByRole('listitem')).toHaveCount(12)
   await expect(transcript.getByRole('note')).toHaveText('Context compacted')
+})
+
+test('a Director reply with Markdown should show highlighted code and matched text sizes', async ({ page, context, baseURL }) => {
+  await useProjectsHome(context, baseURL!, ['web'])
+  // The app follows the system theme; check that code takes Shiki's dark colors, not the light ones.
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await openChat(page)
+
+  await send(page, MARKDOWN_REQUEST)
+
+  const reply = page.getByRole('log', { name: 'Transcript' }).getByLabel('Reply', { exact: true })
+  const fontSize = (selector: string) => reply.locator(selector).first().evaluate((node) => parseFloat(getComputedStyle(node).fontSize))
+  const keyword = reply.locator('[data-streamdown=code-block-body] span', { hasText: /^export$/ })
+  // github-dark colors keywords #F97583; github-light would give #D73A49.
+  await expect(keyword).toHaveCSS('color', 'rgb(249, 117, 131)')
+
+  const body = await fontSize('p')
+  const heading = await fontSize('h2')
+  const inlineCode = await fontSize('[data-streamdown=inline-code]')
+  const blockCode = await fontSize('[data-streamdown=code-block-body]')
+  const tableCell = await fontSize('td')
+  expect(heading).toBeGreaterThan(body)
+  expect(heading).toBeLessThanOrEqual(body * 1.25)
+  expect(inlineCode).toBeLessThanOrEqual(body)
+  expect(blockCode).toBeLessThanOrEqual(body)
+  expect(tableCell).toBe(body)
+
+  const tasks = reply.getByRole('listitem').filter({ has: page.getByRole('checkbox') })
+  await expect(tasks).toHaveCount(2)
+  await expect(tasks.first()).toHaveCSS('list-style-type', 'none')
+  // A plain link: the desktop app opens it in the browser, so no Streamdown link check.
+  await expect(reply.getByRole('link', { name: 'the docs' })).toHaveAttribute('href', 'https://example.com/docs')
+  // Only the code block's copy button; the table and the link get no Streamdown controls.
+  await expect(reply.getByRole('button')).toHaveCount(1)
+  await expect(reply.getByRole('button', { name: /copy/i })).toHaveCount(1)
 })
