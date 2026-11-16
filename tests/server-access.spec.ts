@@ -3,6 +3,7 @@ import { request as httpRequest } from 'node:http'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { createTempFolder, prepareDefaultHome, removeFolder } from './support/test-home'
 
 const root = process.cwd()
 const testPort = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
@@ -32,18 +33,29 @@ function freePort(): Promise<number> {
   })
 }
 
-/** Starts the built standalone server the way `pnpm start` does, outside test mode. */
+/**
+ * Starts the built standalone server the way `pnpm start` does, outside test mode.
+ * It gets its own data folder with setup complete, so it never reads the real ~/.busyboy.
+ */
 async function startServer(env: Record<string, string>): Promise<{ port: number; child: ChildProcess }> {
   const port = await freePort()
+  const home = createTempFolder('server-home')
+  prepareDefaultHome(home)
   const childEnv: NodeJS.ProcessEnv = { ...process.env }
   delete childEnv.BUSYBOY_TEST_MODE
   delete childEnv.BUSYBOY_TOKEN
-  Object.assign(childEnv, env, { PORT: String(port) })
+  Object.assign(childEnv, env, {
+    PORT: String(port),
+    BUSYBOY_HOME: home,
+    CLAUDE_CONFIG_DIR: join(home, 'claude-config'),
+    CODEX_HOME: join(home, 'codex-home'),
+  })
   const child = spawn(process.execPath, [join(root, 'scripts', 'start-standalone.mts')], {
     cwd: root,
     env: childEnv,
     stdio: 'ignore',
   })
+  child.once('exit', () => removeFolder(home))
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
     try {
