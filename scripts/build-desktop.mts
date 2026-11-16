@@ -174,6 +174,10 @@ await builder.build({
         verbatimSymlinks: context.electronPlatformName !== 'win32',
         dereference: context.electronPlatformName === 'win32',
       })
+      // Repository files have no place in the app: they are not used, and macOS cannot
+      // sign a .git folder. next.config.ts keeps them out; this fails the build if one comes back.
+      const strays = ['.git', 'tests', 'release', 'scripts', 'electron'].filter((name) => existsSync(join(packagedServer as string, name)))
+      if (strays.length > 0) throw new Error(`The packaged server contains repository files: ${strays.join(', ')}.`)
       installServerPackages(packagedServer, context.electronPlatformName, builder.Arch[context.arch])
     },
   },

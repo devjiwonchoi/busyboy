@@ -29,6 +29,13 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   // The desktop app runs .next/standalone/server.js inside Electron.
   output: 'standalone',
+  // The server reads files by paths built at run time, so file tracing cannot tell which
+  // project files it needs and copies some of everything into the standalone server:
+  // tests, an earlier packaged app under release/, and in a plain checkout the whole .git
+  // folder. None of it is used at run time, and the release build cannot sign it.
+  outputFileTracingExcludes: {
+    '*': ['.git', '.git/**', 'tests/**', 'test-results/**', 'release/**', 'dist-electron/**', 'electron/**', 'scripts/**', '.github/**', '*.md'],
+  },
   // Packages that load files by computed paths, so packaging installs them
   // whole instead of using traced files (see src/lib/server-external-packages.ts).
   serverExternalPackages,
