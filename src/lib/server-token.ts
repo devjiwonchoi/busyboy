@@ -42,6 +42,17 @@ export function taskMcpTokenFor(serverToken: string, project: string) {
   return createHmac('sha256', serverToken).update(`busyboy-mcp-task:${project}`).digest('hex')
 }
 
+/** Query parameter that names a manager on the MCP endpoint URL. */
+export const MCP_MANAGER_PARAM = 'manager'
+
+/**
+ * A manager's MCP token, bound to that manager. With it the endpoint creates and
+ * reaches tasks only in the manager's own project.
+ */
+export function managerMcpTokenFor(serverToken: string, manager: string) {
+  return createHmac('sha256', serverToken).update(`busyboy-mcp-manager:${manager}`).digest('hex')
+}
+
 /**
  * The token Codex's always-ask hook sends, derived from the server token. It
  * opens only ALWAYS_ASK_PATH, never the MCP endpoint: the hook reads it from a

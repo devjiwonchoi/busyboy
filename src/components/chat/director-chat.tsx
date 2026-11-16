@@ -3,11 +3,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { messageTaskAction, replyToCardAction, sendToDirectorAction, stopDirectorAction } from '@/app/(main)/director-actions'
 import { cn } from '@/lib/utils'
-import type { Companion } from '@/server/companions'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
 import type { TaskCard } from '@/server/task-cards'
 import type { TaskView } from '@/server/tasks'
-import { CompanionAvatar } from '@/components/companion/companion-avatar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +13,7 @@ import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Message, MessageAvatar, MessageContent, MessageFooter, MessageHeader } from '@/components/ui/message'
 import { ChatComposer } from './composer'
 import { Markdown } from './markdown'
+import { PersonaAvatar, type Persona } from './persona'
 import { TaskCardView } from './task-card'
 import { TaskGroup } from './task-group'
 
@@ -62,11 +61,26 @@ function apply(view: View, update: DirectorUpdate): View {
   }
 }
 
-/** Who the Director appears as: the companion chosen in setup, or BusyBoy itself before one is chosen. */
-export type Persona = { companion: Companion | null; imageUrl?: string }
-
-/** The Director chat: the companion's greeting, the transcript, the reply being written, and the composer. */
-export function DirectorChat({ projects, persona }: { projects: string[]; persona: Persona }) {
+/**
+ * A chat with the Director, or with the manager `chat`: the greeting, the
+ * transcript, the reply being written, and the composer. The page gives each
+ * chat its own key, so switching chats starts this component over.
+ */
+export function DirectorChat({
+  projects,
+  persona,
+  chat = null,
+  header,
+  greeting,
+}: {
+  projects: string[]
+  persona: Persona
+  /** The manager's id; null for the Director. */
+  chat?: string | null
+  /** Shown above the greeting in place of the name. */
+  header?: string
+  greeting: string
+}) {
   const [view, setView] = useState(initialView)
   // The card the composer replies to, picked only by the user with a card's Reply. A card
   // never takes the composer by itself: a message typed for the Director must not reach a
@@ -86,10 +100,10 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
   // the message was sent. Like a lost card reply, that message is refused, not sent to the Director.
   const [messageLost, setMessageLost] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
-  const name = persona.companion?.name ?? 'BusyBoy'
+  const name = persona.name
 
   useEffect(() => {
-    const source = new EventSource('/api/director/events')
+    const source = new EventSource(chat ? `/api/director/events?chat=${encodeURIComponent(chat)}` : '/api/director/events')
     source.onmessage = (message) => {
       const update = JSON.parse(message.data) as DirectorUpdate
       setView((current) => apply(current, update))
@@ -107,7 +121,7 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
     }
     source.onerror = () => setView((current) => ({ ...current, connected: false }))
     return () => source.close()
-  }, [])
+  }, [chat])
 
   // Keep the newest message in view. Set scrollTop directly (scrollIntoView
   // returns a Promise in this Chromium, which an effect must not return).
@@ -146,9 +160,9 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
           data-status={view.status}
           className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-6 py-6"
         >
-          <DirectorMessage persona={persona} header={persona.companion ? `${name}, your director` : undefined}>
+          <DirectorMessage persona={persona} header={header}>
             <Bubble variant="muted">
-              <BubbleContent>{persona.companion?.greeting ?? 'BusyBoy is ready. What should we work on?'}</BubbleContent>
+              <BubbleContent>{greeting}</BubbleContent>
             </Bubble>
           </DirectorMessage>
           {view.entries.map((entry) => (
@@ -228,7 +242,7 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
           onStop={
             view.status === 'answering'
               ? () =>
-                  void stopDirectorAction().catch(() =>
+                  void stopDirectorAction(chat).catch(() =>
                     setView((current) => ({ ...current, sendError: 'The reply could not be stopped. Try again.' })),
                   )
               : undefined
@@ -281,7 +295,7 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
                 },
               )
             }
-            return sendToDirectorAction(text).catch((error: unknown) => {
+            return sendToDirectorAction(text, chat).catch((error: unknown) => {
               setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
               throw error
             })
@@ -297,17 +311,17 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
   )
 }
 
-/** A message from the Director, shown with the companion's picture and name. */
+/** A message from the Director or a manager, shown with its picture and name. */
 export function DirectorMessage({ persona, header, children }: { persona: Persona; header?: string; children: React.ReactNode }) {
   return (
     <Message>
-      {persona.companion && (
+      {persona.mark && (
         <MessageAvatar>
-          <CompanionAvatar companion={persona.companion} imageUrl={persona.imageUrl} className="size-8 text-base" />
+          <PersonaAvatar persona={persona} />
         </MessageAvatar>
       )}
       <MessageContent>
-        <MessageHeader>{header ?? persona.companion?.name ?? 'BusyBoy'}</MessageHeader>
+        <MessageHeader>{header ?? persona.name}</MessageHeader>
         {children}
       </MessageContent>
     </Message>

@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { alwaysAskRulesAt } from '../always-ask-list'
 import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
 import { directorTiming } from './context'
-import { directorPrompt } from './prompt'
+import { directorPrompt, managerPrompt } from './prompt'
+import { getManagerAt, isListedManager, listManagersAt, subscribeToManagers } from '../managers'
 import { PROVIDERS } from '../providers'
 import {
   answerAgent,
@@ -32,8 +33,15 @@ type McpServers = Record<string, McpServer>
 //   <data>/director/transcript.jsonl   display transcript, one entry per line
 //   <data>/director/state.json         provider and session id for resume
 //   <data>/director/                   also the Director agent's working directory
+//
+// A manager (server/managers.ts) is the same kind of chat for one project, with
+// its own agent, transcript, and state in <data>/managers/<manager id>/. In this
+// file `chat` names one: a manager's id, or null for the Director. A task and
+// its cards show in the chat of the manager that created the task, and in the
+// Director's chat otherwise.
 
 export const DIRECTOR_FOLDER = 'director'
+export const MANAGERS_FOLDER = 'managers'
 const TRANSCRIPT_FILE = 'transcript.jsonl'
 const STATE_FILE = 'state.json'
 
@@ -87,8 +95,26 @@ type DirectorState = {
  */
 export const REPLY_CUT_OFF_NOTE = 'BusyBoy restarted before the Director finished replying. Send your message again if you still need an answer.'
 
+/** One line of the chat list: the Director first, then each manager. */
+export type ChatSummary = {
+  /** The manager's id; null for the Director. */
+  chat: string | null
+  name: string
+  /** The manager's project; null for the Director. */
+  project: string | null
+  /** The start of the latest message, or empty before the first one. */
+  preview: string
+  status: DirectorStatus
+  /** Open cards waiting for the user in this chat. */
+  waiting: number
+}
+
 type Director = {
   folder: string
+  /** The manager this chat belongs to; null for the Director. */
+  chat: string | null
+  /** The manager was removed: nothing more is sent, and an agent that was just starting is ended. */
+  closed?: boolean
   ready: Promise<void>
   /** `ready` has settled, so entries can be saved at once. */
   loaded: boolean
@@ -138,13 +164,64 @@ const DIRECTORS_KEY = Symbol.for('busyboy.directors')
 const globalStore = globalThis as typeof globalThis & { [DIRECTORS_KEY]?: Map<string, Director> }
 const directors = (globalStore[DIRECTORS_KEY] ??= new Map())
 
-const directorFolder = (director: Director) => join(director.folder, DIRECTOR_FOLDER)
+const directorFolder = (director: Director) =>
+  director.chat ? join(director.folder, MANAGERS_FOLDER, director.chat) : join(director.folder, DIRECTOR_FOLDER)
 
-function getDirector(folder: string): Director {
-  let director = directors.get(folder)
+/** The chat that shows a task or card of `owner`: its manager's, or the Director's once that manager is gone from the list. */
+function chatOf(folder: string, owner: string | null | undefined) {
+  return owner && isListedManager(folder, owner) ? owner : null
+}
+
+const WATCHED_KEY = Symbol.for('busyboy.director-folders')
+const watchedStore = globalThis as typeof globalThis & { [WATCHED_KEY]?: Set<string> }
+const watched = (watchedStore[WATCHED_KEY] ??= new Set())
+
+/** Follows a data folder's tasks and cards once, however many chats it has. */
+function watchFolder(folder: string) {
+  if (watched.has(folder)) return
+  watched.add(folder)
+  // Read once, so cards are routed by the real list from the start (see isListedManager).
+  void listManagersAt(folder).catch(() => {})
+  subscribeToTasks(folder, (task) => {
+    // Every loaded chat gets every task: a chat shows only the tasks its transcript names.
+    for (const director of directors.values()) {
+      if (director.folder === folder) broadcast(director, { type: 'task', task })
+    }
+  })
+  subscribeToCards(folder, (update) => {
+    // The owning chat is loaded here if it was not yet, so a card that closes
+    // before its chat was ever opened is still written to that transcript.
+    const director = getDirector(folder, chatOf(folder, update.card.chat))
+    if (update.type === 'open') {
+      broadcast(director, { type: 'card-opened', card: update.card })
+      return
+    }
+    const { card, outcome } = update
+    broadcast(director, { type: 'card-closed', cardId: card.id })
+    const title = card.kind === 'align' ? `Plan: ${card.title}` : card.questions.map(({ question }) => question).join(' ')
+    const save = () =>
+      saveEntry(director, newEntry('card', { cardKind: card.kind, project: card.project, taskTitle: card.taskTitle, title, outcome }))
+    // Saved at once when loaded, so a reply to the card (saved right after it closes) follows it in the transcript.
+    if (director.loaded) {
+      save()
+    } else {
+      void director.ready.then(save)
+    }
+  })
+}
+
+/** The open cards that show in this chat. */
+function cardsOf(director: Director) {
+  return openCards(director.folder).filter((card) => chatOf(director.folder, card.chat) === director.chat)
+}
+
+function getDirector(folder: string, chat: string | null = null): Director {
+  const key = chat ? `${folder}\n${chat}` : folder
+  let director = directors.get(key)
   if (director) return director
   director = {
     folder,
+    chat,
     ready: Promise.resolve(),
     loaded: false,
     entries: [],
@@ -162,26 +239,20 @@ function getDirector(folder: string): Director {
   director.ready = load(director).finally(() => {
     director.loaded = true
   })
-  subscribeToTasks(folder, (task) => broadcast(director, { type: 'task', task }))
-  subscribeToCards(folder, (update) => {
-    if (update.type === 'open') {
-      broadcast(director, { type: 'card-opened', card: update.card })
-      return
-    }
-    const { card, outcome } = update
-    broadcast(director, { type: 'card-closed', cardId: card.id })
-    const title = card.kind === 'align' ? `Plan: ${card.title}` : card.questions.map(({ question }) => question).join(' ')
-    const save = () =>
-      saveEntry(director, newEntry('card', { cardKind: card.kind, project: card.project, taskTitle: card.taskTitle, title, outcome }))
-    // Saved at once when loaded, so a reply to the card (saved right after it closes) follows it in the transcript.
-    if (director.loaded) {
-      save()
-    } else {
-      void director.ready.then(save)
-    }
-  })
-  directors.set(folder, director)
+  directors.set(key, director)
+  watchFolder(folder)
   return director
+}
+
+/** What the user calls the agent of this chat in notes. */
+const roleOf = (director: Director) => (director.chat ? 'manager' : 'Director')
+
+/** The chat's system prompt. A manager that was removed meanwhile has none. */
+async function promptOf(director: Director) {
+  if (!director.chat) return directorPrompt(director.folder)
+  const manager = await getManagerAt(director.folder, director.chat)
+  if (!manager) throw new Error('This manager was removed.')
+  return managerPrompt(director.folder, manager)
 }
 
 async function load(director: Director) {
@@ -207,7 +278,8 @@ async function load(director: Director) {
         ? { provider: state.provider as ProviderId, sessionId: state.sessionId as string }
         : {}
     if (state?.turnOpen === true) {
-      saveEntry(director, newEntry('note', { text: REPLY_CUT_OFF_NOTE, tone: 'info' }))
+      const text = director.chat ? REPLY_CUT_OFF_NOTE.replace('the Director', 'the manager') : REPLY_CUT_OFF_NOTE
+      saveEntry(director, newEntry('note', { text, tone: 'info' }))
       saveState(director)
     }
   } catch {
@@ -287,7 +359,7 @@ function saveEntry(director: Director, entry: ChatEntry) {
       await mkdir(folder, { recursive: true })
       await appendFile(join(folder, TRANSCRIPT_FILE), `${JSON.stringify(entry)}\n`)
     })
-    .catch((error: unknown) => console.error('busyboy: could not save the Director transcript', error))
+    .catch((error: unknown) => console.error(`busyboy: could not save the ${roleOf(director)} transcript`, error))
 }
 
 function newEntry<K extends ChatEntry['kind']>(kind: K, fields: Omit<Extract<ChatEntry, { kind: K }>, 'id' | 'at' | 'kind'>) {
@@ -375,8 +447,8 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
           kind: 'approval',
           allow: false,
           message: event.detail?.startsWith(BUSYBOY_FILES_RULE)
-            ? "The Director cannot touch BusyBoy's own files. Use BusyBoy's tools to read or change tasks and settings."
-            : 'The Director cannot run this. Create a task for work in a project instead.',
+            ? `The ${roleOf(director)} cannot touch BusyBoy's own files. Use BusyBoy's tools to read or change tasks and settings.`
+            : `The ${roleOf(director)} cannot run this. Create a task for work in a project instead.`,
         }),
       )
       break
@@ -500,12 +572,17 @@ async function flush(director: Director) {
   try {
     // Read before every turn: memory or the companion may have changed since
     // the agent started.
-    const [instructions, alwaysAsk] = await Promise.all([directorPrompt(director.folder), alwaysAskRulesAt(director.folder)])
+    const [instructions, alwaysAsk] = await Promise.all([promptOf(director), alwaysAskRulesAt(director.folder)])
     // Stop was pressed while the prompt was read and stopped the idle agent:
     // its stopped event already ended this turn, and a newer turn may have
     // started. This one neither restarts the agent nor sends.
     if (director.turn !== turn || !isAnswering(director)) return
     const agentId = await ensureAgent(director, target.provider, target.mcp, instructions, alwaysAsk)
+    if (director.closed) {
+      director.agentId = undefined
+      void stopAgent(agentId).catch(() => {})
+      return
+    }
     // Stop was pressed while the agent was starting: the turn is not sent.
     if (director.stopRequested && getAgent(agentId)?.status !== 'stopped') {
       saveEntry(director, newEntry('note', { text: 'Stopped.', tone: 'info' }))
@@ -547,6 +624,8 @@ function scheduleCompaction(director: Director) {
 
 export type SendToDirectorInput = {
   folder: string
+  /** The manager to send to; leave out for the Director. */
+  chat?: string | null
   text: string
   /**
    * Resolves the provider for the next turn, after the message shows, given the
@@ -560,8 +639,8 @@ export type SendToDirectorInput = {
  * Shows the message at once, interrupts a reply in progress, and sends the
  * message after the batch window, together with any sent within it.
  */
-export async function sendToDirector({ folder, text, resolveProvider, mcp }: SendToDirectorInput) {
-  const director = getDirector(folder)
+export async function sendToDirector({ folder, chat, text, resolveProvider, mcp }: SendToDirectorInput) {
+  const director = getDirector(folder, chat ?? null)
   await director.ready
   const trimmed = text.trim()
   if (!trimmed) return
@@ -608,8 +687,8 @@ export async function sendToDirector({ folder, text, resolveProvider, mcp }: Sen
  * provider that no longer responds stops. Messages not sent yet are dropped;
  * the next message resumes the same conversation.
  */
-export async function stopDirector(folder: string) {
-  const director = getDirector(folder)
+export async function stopDirector(folder: string, chat: string | null = null) {
+  const director = getDirector(folder, chat)
   await director.ready
   clearTimeout(director.batchTimer)
   director.batchTimer = undefined
@@ -637,13 +716,14 @@ export async function stopDirector(folder: string) {
  * never sent to the Director.
  */
 export async function replyToTaskCard({ folder, cardId, text }: { folder: string; cardId: string; text: string }) {
-  const director = getDirector(folder)
-  await director.ready
   const trimmed = text.trim()
   if (!trimmed) {
     return
   }
   const card = openCards(folder).find(({ id }) => id === cardId)
+  // The reply shows where its card does.
+  const director = getDirector(folder, chatOf(folder, card?.chat))
+  await director.ready
   replyToCard({ folder, cardId, text: trimmed })
   if (card) {
     saveEntry(director, newEntry('user', { text: trimmed, to: `${card.project} · ${card.taskTitle}` }))
@@ -656,19 +736,20 @@ export async function replyToTaskCard({ folder, cardId, text }: { folder: string
  * the Director.
  */
 export async function sendToTask({ folder, taskId, text }: { folder: string; taskId: string; text: string }) {
-  const director = getDirector(folder)
-  await director.ready
   const trimmed = text.trim()
   if (!trimmed) {
     return
   }
   const task = await messageTaskAt(folder, taskId, trimmed)
+  // The message shows in the chat that shows the task.
+  const director = getDirector(folder, chatOf(folder, task.chat))
+  await director.ready
   saveEntry(director, newEntry('user', { text: trimmed, to: `${task.project} · ${task.title}` }))
 }
 
-/** Adds a task the Director just created to its turn's task group. */
-export async function attachTaskToDirector(folder: string, task: TaskView) {
-  const director = getDirector(folder)
+/** Adds a task the Director, or the manager `chat`, just created to its turn's task group. */
+export async function attachTaskToDirector(folder: string, task: TaskView, chat: string | null = null) {
+  const director = getDirector(folder, chat)
   await director.ready
   const current = director.turnTasksId && director.entries.find(({ id }) => id === director.turnTasksId)
   if (current && current.kind === 'tasks') {
@@ -681,11 +762,11 @@ export async function attachTaskToDirector(folder: string, task: TaskView) {
 }
 
 /** Sends the current chat, then every change, until the returned function is called. */
-export async function subscribeToDirector(folder: string, listener: (update: DirectorUpdate) => void) {
-  const director = getDirector(folder)
+export async function subscribeToDirector(folder: string, listener: (update: DirectorUpdate) => void, chat: string | null = null) {
+  const director = getDirector(folder, chat)
   await director.ready
   const tasks = await listTasksAt(folder)
-  listener({ type: 'reset', entries: director.entries, tasks, cards: openCards(folder), status: director.status, draft: director.draft })
+  listener({ type: 'reset', entries: director.entries, tasks, cards: cardsOf(director), status: director.status, draft: director.draft })
   director.listeners.add(listener)
   return () => {
     director.listeners.delete(listener)
@@ -697,13 +778,103 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
  * side question can branch from the conversation. No session yet when the
  * Director never answered.
  */
-export async function directorSession(folder: string): Promise<{
+export async function directorSession(
+  folder: string,
+  chat: string | null = null,
+): Promise<{
   cwd: string
   instructions: string
   provider?: ProviderId
   sessionId?: string
 }> {
+  const director = getDirector(folder, chat)
+  await director.ready
+  return { cwd: directorFolder(director), instructions: await promptOf(director), ...director.state }
+}
+
+// ---- The chat list ----------------------------------------------------------------
+
+const PREVIEW_LENGTH = 120
+
+function previewOf(director: Director) {
+  const last = director.entries.findLast((entry) => entry.kind === 'user' || entry.kind === 'director')
+  const text = last && 'text' in last ? last.text.replace(/\s+/g, ' ').trim() : ''
+  return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH)}…` : text
+}
+
+async function chatSummaries(folder: string): Promise<{ chats: ChatSummary[]; directors: Director[] }> {
+  const managers = await listManagersAt(folder)
+  const all = [getDirector(folder), ...managers.map(({ id }) => getDirector(folder, id))]
+  await Promise.all(all.map(({ ready }) => ready))
+  const chats = all.map((director, index) => ({
+    chat: director.chat,
+    name: index === 0 ? '' : managers[index - 1].name,
+    project: index === 0 ? null : managers[index - 1].project,
+    preview: previewOf(director),
+    status: director.status,
+    waiting: cardsOf(director).length,
+  }))
+  return { chats, directors: all }
+}
+
+/**
+ * Sends the chat list (the Director, then every manager), and sends it again
+ * whenever a chat gets a message, changes status, opens or closes a card, or a
+ * manager is created or removed, until the returned function is called.
+ */
+export async function subscribeToChats(folder: string, listener: (chats: ChatSummary[]) => void) {
+  let closed = false
+  let following: Director[] = []
+  let queued = false
+  const onUpdate = (update: DirectorUpdate) => {
+    // A streaming reply and task status changes do not show in the list.
+    if (update.type !== 'draft' && update.type !== 'task') refresh()
+  }
+  const send = async () => {
+    queued = false
+    const { chats, directors: current } = await chatSummaries(folder)
+    if (closed) return
+    for (const director of following) director.listeners.delete(onUpdate)
+    following = current
+    for (const director of following) director.listeners.add(onUpdate)
+    listener(chats)
+  }
+  // Several updates in one tick (a card closing writes an entry too) send the list once.
+  const refresh = () => {
+    if (queued || closed) return
+    queued = true
+    queueMicrotask(() => void send().catch((error: unknown) => console.error('busyboy: could not read the chat list', error)))
+  }
+  const unsubscribe = subscribeToManagers(folder, refresh)
+  await send()
+  return () => {
+    closed = true
+    unsubscribe()
+    for (const director of following) director.listeners.delete(onUpdate)
+  }
+}
+
+/**
+ * Shows the tasks of a removed manager in the Director's chat: a chat shows only
+ * the tasks its transcript names, and the manager's transcript is no longer shown.
+ */
+export async function adoptTasks(folder: string, taskIds: string[]) {
+  if (taskIds.length === 0) return
   const director = getDirector(folder)
   await director.ready
-  return { cwd: directorFolder(director), instructions: await directorPrompt(folder), ...director.state }
+  saveEntry(director, newEntry('tasks', { taskIds }))
+}
+
+/** Ends the agent of a removed manager. Its transcript stays on disk. */
+export async function closeChat(folder: string, chat: string) {
+  const director = directors.get(`${folder}\n${chat}`)
+  if (!director) return
+  director.closed = true
+  clearTimeout(director.batchTimer)
+  clearTimeout(director.idleTimer)
+  director.pending = []
+  const agentId = director.agentId
+  director.agentId = undefined
+  if (agentId) await stopAgent(agentId).catch(() => {})
+  directors.delete(`${folder}\n${chat}`)
 }

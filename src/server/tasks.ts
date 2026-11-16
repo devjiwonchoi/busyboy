@@ -73,6 +73,8 @@ export type TaskRecord = {
   note?: string | null
   /** Set while the task is archived. */
   archivedAt?: string | null
+  /** The manager that created the task, whose chat shows it; unset for the Director's. */
+  chat?: string | null
 }
 
 /** `idle`: the agent finished its turn and waits for a message. `stopped`: its process is gone. */
@@ -85,6 +87,8 @@ export type TaskView = Pick<TaskRecord, 'id' | 'project' | 'title' | 'branch' | 
   /** A subagent's last reply once it has finished its turn: its result, shown in the chat. */
   reply: string | null
   archived: boolean
+  /** The manager whose chat shows the task; null for the Director's. */
+  chat: string | null
 }
 
 export class TaskError extends Error {}
@@ -214,6 +218,7 @@ export function taskView(task: TaskRecord): TaskView {
     subagent: task.kind === 'subagent',
     reply: task.kind === 'subagent' ? (task.reply ?? (status === 'idle' ? lastAgentReply(task.agentId) : null)) : null,
     archived: Boolean(task.archivedAt),
+    chat: task.chat ?? null,
   }
 }
 
@@ -233,6 +238,17 @@ function notify(folder: string, task: TaskRecord) {
 }
 
 // ---- Operations --------------------------------------------------------------
+
+/** Hands the tasks of a removed manager to the Director's chat. Returns the ones still in use. */
+export async function releaseTasksOf(folder: string, chat: string) {
+  const released = await updateTasksAt(folder, (tasks) => {
+    const own = tasks.filter((task) => task.chat === chat)
+    for (const task of own) task.chat = null
+    return own
+  })
+  for (const task of released) notify(folder, task)
+  return released.filter(({ archivedAt }) => !archivedAt).map(({ id }) => id)
+}
 
 export async function listTasksAt(folder: string): Promise<TaskView[]> {
   void resumeTasks(folder)
@@ -276,6 +292,8 @@ export type CreateTaskInput = {
   subagent?: boolean
   /** Busyboy's MCP endpoint for this task's agent (memory tools), given the project's stored name. */
   taskMcp?: (project: string) => Promise<Record<string, McpServer>>
+  /** The manager creating the task; its chat shows the task and its cards. */
+  chat?: string
 }
 
 /**
@@ -342,6 +360,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
       createdAt: new Date().toISOString(),
       activity: 'running',
       ...(kind ? { kind } : {}),
+      ...(input.chat ? { chat: input.chat } : {}),
     }
     await updateTasksAt(folder, (tasks) => void tasks.push(task))
     watchAgent(folder, task)

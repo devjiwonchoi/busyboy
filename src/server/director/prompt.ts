@@ -1,7 +1,7 @@
 import { companionInstructions, findCompanion } from '../companions'
 import { readSettingsAt } from '../config'
 import { memoryPrompt } from '../memory'
-import { DIRECTOR_INSTRUCTIONS } from './context'
+import { DIRECTOR_INSTRUCTIONS, managerInstructions } from './context'
 
 /**
  * The Director's system prompt: its instructions, the chosen companion's
@@ -11,4 +11,12 @@ import { DIRECTOR_INSTRUCTIONS } from './context'
 export async function directorPrompt(folder: string) {
   const companion = findCompanion((await readSettingsAt(folder)).companion)
   return `${DIRECTOR_INSTRUCTIONS}\n\n${companionInstructions(companion)}\n\n${await memoryPrompt(folder, { projectIndexes: true })}`
+}
+
+/**
+ * A manager's system prompt: its instructions, then the global facts and its
+ * project's fact count. A manager speaks in its own name, not the companion's voice.
+ */
+export async function managerPrompt(folder: string, manager: { name: string; project: string }) {
+  return `${managerInstructions(manager.name, manager.project)}\n\n${await memoryPrompt(folder, { projectIndexes: true })}`
 }

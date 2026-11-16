@@ -4,7 +4,9 @@ import { Plus, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { askSideQuestionAction, closeSideChatAction } from '@/app/(main)/side-chat-actions'
 import { ChatComposer } from '@/components/chat/composer'
-import { DirectorMessage, type Persona } from '@/components/chat/director-chat'
+import { useSearchParams } from 'next/navigation'
+import { DirectorMessage } from '@/components/chat/director-chat'
+import { managerPersona, type Persona } from '@/components/chat/persona'
 import { Markdown } from '@/components/chat/markdown'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Button } from '@/components/ui/button'
@@ -39,7 +41,17 @@ const newChat = (): Chat => ({ key: crypto.randomUUID() })
  * come from the same companion as the main chat, and nothing here is ever part
  * of the main chat. Tabs stay in this component only: a reload starts over.
  */
-export function SideChat({ persona }: { persona: Persona }) {
+export function SideChat({ persona, managers }: { persona: Persona; managers: { id: string; name: string }[] }) {
+  // The side chat branches from the chat on screen: the Director's, or the open manager's.
+  const open = useSearchParams().get('manager')
+  // `managers` is from when the screen loaded, so a manager made since then is not in it. The
+  // side chat still branches from that manager's conversation, never from the Director's.
+  const name = managers.find(({ id }) => id === open)?.name ?? 'Manager'
+  // A key per chat: switching chats starts the side chats over, as they belong to the other conversation.
+  return <SideChatTabs key={open ?? ''} persona={open ? managerPersona(name) : persona} chat={open} />
+}
+
+function SideChatTabs({ persona, chat: mainChat }: { persona: Persona; chat: string | null }) {
   const [chats, setChats] = useState<Chat[]>(() => [newChat()])
   const [active, setActive] = useState(() => chats[0].key)
   const agents = useRef(new Map<string, string>())
@@ -94,6 +106,7 @@ export function SideChat({ persona }: { persona: Persona }) {
         <TabsContent key={chat.key} value={chat.key} keepMounted className="min-h-0 flex-1 data-hidden:hidden">
           <SideChatThread
             persona={persona}
+            mainChat={mainChat}
             onTitle={(title) => patch(chat.key, { title })}
             onAgent={(agentId) => {
               if (agentId && !open.current.has(chat.key)) {
@@ -113,10 +126,13 @@ export function SideChat({ persona }: { persona: Persona }) {
 /** One side chat's conversation and its composer. */
 function SideChatThread({
   persona,
+  mainChat,
   onTitle,
   onAgent,
 }: {
   persona: Persona
+  /** The manager whose conversation this branches from; null for the Director's. */
+  mainChat: string | null
   onTitle: (title: string) => void
   onAgent: (agentId: string | undefined) => void
 }) {
@@ -211,7 +227,7 @@ function SideChatThread({
     if (exchanges.length === 0) onTitle(question)
     setExchanges((list) => [...list, { id, question, answer: '', draft: '', state: 'asking' }])
     try {
-      const result = await askSideQuestionAction(question, agent.current)
+      const result = await askSideQuestionAction(question, agent.current, mainChat)
       if ('error' in result) {
         update(id, () => ({ state: 'failed', error: result.error }))
         return
@@ -253,7 +269,7 @@ function SideChatThread({
         <ChatComposer
           projects={[]}
           label="Side question"
-          placeholder={`Ask ${persona.companion?.name ?? 'BusyBoy'} a side question`}
+          placeholder={`Ask ${persona.name} a side question`}
           sendLabel="Ask"
           onSend={ask}
           onStop={current?.state === 'asking' ? stop : undefined}
@@ -294,7 +310,7 @@ function ExchangeView({ exchange, persona }: { exchange: Exchange; persona: Pers
       )}
       {exchange.state === 'asking' && !text && (
         <p role="status" className="text-muted-foreground animate-pulse text-xs">
-          {persona.companion?.name ?? 'BusyBoy'} is thinking…
+          {persona.name} is thinking…
         </p>
       )}
       {exchange.state === 'ended' && (

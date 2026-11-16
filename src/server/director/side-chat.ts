@@ -53,10 +53,10 @@ function endWhenIdle(agentId: string) {
 }
 
 /** Starts a side chat in a new branch of the Director's session. */
-async function startSideChat(folder: string) {
+async function startSideChat(folder: string, chat: string | null) {
   // Branches from the session as the provider last saved it; a question asked
   // mid-turn is not covered by a journey or a recorded run.
-  const { cwd, instructions, provider, sessionId } = await directorSession(folder)
+  const { cwd, instructions, provider, sessionId } = await directorSession(folder, chat)
   if (!provider || !sessionId) throw new Error('Start a conversation in the main chat first.')
   // The branch runs in the Director's folder: Claude finds sessions by working directory.
   const agent = startAgent({
@@ -104,10 +104,10 @@ function stopError(agentId: string) {
  * context). Returns the side agent's id and the last event before the
  * question, so the caller streams only this answer.
  */
-export async function askSideQuestion(folder: string, text: string, agentId?: string) {
+export async function askSideQuestion(folder: string, text: string, agentId?: string, chat: string | null = null) {
   const live = agentId ? sideAgents.live.get(agentId) : undefined
   const continues = live?.folder === folder && agentId !== undefined && getAgent(agentId)?.status !== 'stopped'
-  const id = continues ? agentId : await startSideChat(folder)
+  const id = continues ? agentId : await startSideChat(folder, chat)
   // A provider that fails to start has already recorded `stopped`; streaming after it would wait forever.
   if (getAgent(id)?.status === 'stopped') throw new Error(stopError(id))
   // Armed now as well as after each answer, so an answer that never finishes cannot keep the process.

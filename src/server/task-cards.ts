@@ -12,7 +12,8 @@ export type CardOption = { label: string; description: string | undefined; recom
 
 export type CardQuestion = { question: string; header: string | undefined; options: CardOption[]; multiSelect: boolean }
 
-type CardSource = { id: string; taskId: string; project: string; taskTitle: string; openedAt: string }
+/** `chat`: the manager whose chat shows the card; null for the Director's. */
+type CardSource = { id: string; taskId: string; chat: string | null; project: string; taskTitle: string; openedAt: string }
 
 export type TaskCard = CardSource &
   (
@@ -37,7 +38,7 @@ export type TaskCard = CardSource &
 export type CardUpdate = { type: 'open'; card: TaskCard } | { type: 'close'; card: TaskCard; outcome: string }
 
 /** The task fields a card needs; matches `TaskRecord` without importing tasks.ts. */
-type CardTask = { id: string; project: string; title: string; agentId: string; worktree: string }
+type CardTask = { id: string; project: string; title: string; agentId: string; worktree: string; chat?: string | null }
 
 /** What the agent receives when the user clicks Approve on an Align card. */
 export const APPROVE_MESSAGE = 'Approved.'
@@ -112,6 +113,7 @@ function requestCard(task: CardTask, event: Extract<AgentEvent, { type: 'approva
   const source = {
     id: `${task.agentId}:${event.requestId}`,
     taskId: task.id,
+    chat: task.chat ?? null,
     project: task.project,
     taskTitle: task.title,
     openedAt: new Date().toISOString(),
@@ -216,6 +218,7 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
             const card: TaskCard = {
               id: alignId,
               taskId: task.id,
+              chat: task.chat ?? null,
               project: task.project,
               taskTitle: task.title,
               openedAt: new Date().toISOString(),

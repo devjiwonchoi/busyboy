@@ -23,6 +23,8 @@ function requiredText(input: Record<string, unknown>, key: string) {
  * Where a write, forget, or search goes. A task agent writes only its own
  * project's memory: it reads untrusted repository content, which must not
  * reach every later prompt. Its search covers global memory and that project.
+ * A manager is not bound: like the Director it takes its words from the user
+ * alone, and what the user asks it to remember is often global.
  */
 function callerScope(input: Record<string, unknown>, caller: McpCaller) {
   return caller.kind === 'task' ? caller.project : optionalText(input, 'project')

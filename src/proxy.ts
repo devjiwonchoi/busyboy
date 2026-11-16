@@ -3,9 +3,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 import {
   ALWAYS_ASK_PATH,
   alwaysAskTokenFor,
+  MCP_MANAGER_PARAM,
   MCP_PATH,
   MCP_TASK_PROJECT_PARAM,
   MCP_TOKEN_HEADER,
+  managerMcpTokenFor,
   mcpTokenFor,
   taskMcpTokenFor,
   SERVER_TOKEN_COOKIE,
@@ -89,7 +91,10 @@ function hasMcpToken(request: NextRequest, serverToken: string) {
   if (sameToken(provided, mcpTokenFor(serverToken))) return true
   // A task agent's token only opens the endpoint for its own project.
   const project = request.nextUrl.searchParams.get(MCP_TASK_PROJECT_PARAM)
-  return Boolean(project && sameToken(provided, taskMcpTokenFor(serverToken, project)))
+  if (project && sameToken(provided, taskMcpTokenFor(serverToken, project))) return true
+  // A manager's token only opens the endpoint as that manager.
+  const manager = request.nextUrl.searchParams.get(MCP_MANAGER_PARAM)
+  return Boolean(manager && sameToken(provided, managerMcpTokenFor(serverToken, manager)))
 }
 
 // Opening the main screen goes to setup until setup is complete.
