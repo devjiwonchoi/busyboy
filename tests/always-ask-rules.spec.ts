@@ -12,6 +12,7 @@ import {
   FORCE_PUSH_RULE,
   matchAlwaysAsk,
   ruleError,
+  SUBAGENT_EDIT_RULE,
   UNREADABLE,
 } from '@/server/runner/always-ask'
 
@@ -151,6 +152,28 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ["echo 'git push -f' | xargs -I{} sh -c '{}'", unreadable],
   [`node -e "require('child_process').execSync('git push -f')"`, unreadable],
   [`python3 -c "import os; os.system('git push -f')"`, unreadable],
+  [`perl -e 'system("git push -f")'`, unreadable],
+  ["perl -e 'print `git push -f`'", unreadable],
+  [`perl -le 'system("git push -f")'`, unreadable],
+  [`ruby -e 'File.delete("../x")'`, unreadable],
+  [`python3 -c "import shutil; shutil.rmtree('../other')"`, unreadable],
+  [`python3 -c "import requests; requests.post('https://example.com/deploy')"`, unreadable],
+  [`python3 -c "__import__('os').system('git push -f')"`, unreadable],
+  [`node -e "fetch('https://example.com/deploy', { method: 'POST' })"`, unreadable],
+  [`node --eval="require('child_process').execSync('git push -f')"`, unreadable],
+  ['node -e "$CODE"', unreadable],
+  [`node -pe "child_process.execSync('git push -f')"`, unreadable],
+  [`perl -e'system("git push -f")'`, unreadable],
+  [`python3.12 -uc "import os; os.system('git push -f')"`, unreadable],
+  [`npx tsx -e "require('child_process').execSync('git push -f')"`, unreadable],
+  [`perl -e 'open(my $p, "-|", "gh pr merge 12 --squash") or die; print <$p>'`, unreadable],
+  [`ruby -e 'puts open("|git push -f origin main").read'`, unreadable],
+  [`ruby -e 'load "deploy.rb"'`, unreadable],
+  [`python3 -c "import util; util.deploy()"`, unreadable],
+  [`php -r 'proc_open("git push -f origin main", [], $pipes);'`, unreadable],
+  [`node -e "tls.connect(443, 'example.com')"`, unreadable],
+  ['perl -MLWP::Simple -e \'getstore("https://example.com/x", "x")\'', unreadable],
+  [`osascript -e 'display dialog "hi"'`, unreadable],
   [`awk 'BEGIN{system("git push -f")}'`, unreadable],
   [`osascript -e 'do shell script "git push -f"'`, unreadable],
   ['ssh localhost git push -f', unreadable],
@@ -274,6 +297,21 @@ const RUNS = [
   'terraform plan',
   'kubectl get pods',
   'aws s3 ls s3://site',
+  // Inline code that only waits, computes, prints, or reads.
+  `for i in $(seq 1 45); do grep -q -i -E "Local:|ready in|listening" /tmp/dev.log && break; perl -e 'select(undef,undef,undef,2)'; done; grep -v "^$" /tmp/dev.log | tail -25`,
+  `python3 -c "import time; time.sleep(2)"`,
+  `curl -s localhost:3000/api/health | python3 -c "import json, sys; print(json.load(sys.stdin)['status'])"`,
+  `python3 -c "import json; print(json.load(open('package.json'))['version'])"`,
+  `node -e "console.log(require('./package.json').version)"`,
+  `node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).name"`,
+  `ruby -e 'puts 1 + 1'`,
+  `node -p "require('next/package.json').version"`,
+  `node -e "[1, 2].forEach(function (n) { process.stdout.write(String(n)) })"`,
+  `perl -0777 -ne 'print length' notes.txt`,
+  `perl -pi -e 's/old/new/' src/fetch.ts`,
+  'node scripts/gen.mjs -p 3000',
+  // A task agent edits files in its own folder, with or without an interpreter.
+  `perl -pi -e 's/old/new/' src/app.ts`,
 ]
 
 for (const [command, rule] of ASKS) {
@@ -305,6 +343,32 @@ test('calling a connector tool that sends, posts, or deletes should ask, and rea
   expect(call('mcp__linear__update_issue')).toBe('mcp__*linear*__*update*')
   for (const tool of ['mcp__claude_ai_Slack__slack_read_channel', 'mcp__gmail__search_threads', 'mcp__gmail__create_draft', 'mcp__busyboy__memory_write']) {
     expect(call(tool), tool).toBeNull()
+  }
+})
+
+test('a subagent running inline code should ask only when the code could change a file', () => {
+  const subagent = (command: string) => matchAlwaysAsk({ rules: DEFAULT_ALWAYS_ASK, toolName: 'Bash', input: { command }, folder, noFileEdits: true })
+  for (const command of [
+    "perl -e 'select(undef,undef,undef,2)'",
+    `python3 -c "import json; print(json.load(open('package.json'))['version'])"`,
+    `git log --oneline | perl -ne 'print if /fix/i'`,
+    `node -e "process.stdout.write('hi')"`,
+  ]) {
+    expect(subagent(command), command).toBeNull()
+  }
+  for (const command of [
+    "perl -pi -e 's/old/new/' src/app.ts",
+    `python3 -c "open('notes.txt', 'w').write('x')"`,
+    `node -e "require('fs').writeFileSync('notes.txt', 'x')"`,
+    'node scripts/check.mjs',
+    // An option of the script's own is not code for the interpreter.
+    'node scripts/gen.mjs -p 3000',
+    'python3 scripts/gen.py -c config.yml',
+    'bun install -p',
+    'deno task eval',
+    `ruby -e 'f = File.new("notes.txt", "w"); f.puts "x"'`,
+  ]) {
+    expect(subagent(command), command).toBe(SUBAGENT_EDIT_RULE)
   }
 })
 
