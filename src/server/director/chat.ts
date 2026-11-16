@@ -20,7 +20,7 @@ import {
 } from '../runner/agent-runner'
 import type { AgentEventEnvelope, McpServer, ProviderId } from '../runner/contract'
 import { openCards, replyToCard, subscribeToCards, type TaskCard } from '../task-cards'
-import { listTasksAt, subscribeToTasks, type TaskView } from '../tasks'
+import { listTasksAt, messageTaskAt, subscribeToTasks, type TaskView } from '../tasks'
 
 type McpServers = Record<string, McpServer>
 
@@ -648,6 +648,22 @@ export async function replyToTaskCard({ folder, cardId, text }: { folder: string
   if (card) {
     saveEntry(director, newEntry('user', { text: trimmed, to: `${card.project} · ${card.taskTitle}` }))
   }
+}
+
+/**
+ * Sends a message from the composer to a task's agent, starting the agent again when it has
+ * ended. Like a card reply, it shows in the chat marked with where it went and never reaches
+ * the Director.
+ */
+export async function sendToTask({ folder, taskId, text }: { folder: string; taskId: string; text: string }) {
+  const director = getDirector(folder)
+  await director.ready
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return
+  }
+  const task = await messageTaskAt(folder, taskId, trimmed)
+  saveEntry(director, newEntry('user', { text: trimmed, to: `${task.project} · ${task.title}` }))
 }
 
 /** Adds a task the Director just created to its turn's task group. */

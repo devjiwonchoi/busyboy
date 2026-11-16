@@ -14,6 +14,7 @@ import {
   isLostSessionError,
   isStoppingAllAgents,
   lastAgentReply,
+  removeAgent,
   sendMessage,
   startAgent,
   stopAgent,
@@ -21,7 +22,7 @@ import {
 } from './runner/agent-runner'
 import { agentEnvironment } from './runner/find-executable'
 import { APPROVE_MESSAGE, hasOpenCard, stopTaskAgent, trackTaskCards } from './task-cards'
-import type { AgentEvent, AgentStatus, McpServer, ProviderId } from './runner/contract'
+import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } from './runner/contract'
 
 // A task is one request in one project, worked on by its own agent in its own
 // git worktree. The list lives in TASKS_FILE; worktrees live under
@@ -383,12 +384,13 @@ function saveTask(folder: string, task: TaskRecord, change: Partial<TaskRecord>)
  * and reports status changes. A resumed agent whose session turns out to be
  * gone stops the task with a note.
  */
-function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRestart = false } = {}) {
+function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRestart = false, fromMessage = false } = {}) {
   let last = taskView(task).status
   let confirmed = !resumed
-  // Until its first turn ends well, a restarted agent may still find its provider
-  // unusable: Claude reports signed-out only inside its first reply, after the session.
-  let checkingStart = fromRestart
+  // Until its first turn ends well, an agent started again on a stored session may still find
+  // its provider unusable: Claude reports signed-out only inside its first reply, after the session.
+  let checkingStart = fromRestart || fromMessage
+  const cannot = fromMessage ? continueNote : resumeNote
   let startFailed = false
   /** A subagent that answered: its process is ended on purpose and it stays done. */
   let finished = false
@@ -418,9 +420,12 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
     // resumed agent can stay unconfirmed for a long time.
     if (event.type === 'error' && !confirmed && isLostSessionError(event)) {
       confirmed = true
+      // The session is forgotten, so the next message starts a new conversation with the
+      // request instead of asking the provider for the same lost one again.
       void saveTask(folder, task, {
         activity: 'stopped',
-        note: resumeNote('the provider no longer has its conversation'),
+        sessionId: null,
+        note: cannot('the provider no longer has its conversation'),
       }).then(() => notify(folder, task))
       // A lost session never recovers; stop now instead of waiting for the process.
       void stopAgent(task.agentId).catch(() => {})
@@ -429,7 +434,15 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
     }
     if (event.type === 'error' && checkingStart && !startFailed && isStartFailure(event)) {
       startFailed = true
-      void saveTask(folder, task, { note: resumeNote(`${event.message} It is tried again the next time BusyBoy starts`) })
+      // A restart tries again on the next start. A message the user sent is not kept for later:
+      // the task stops with the reason, and the user sends it again once the provider works.
+      void saveTask(
+        folder,
+        task,
+        fromMessage
+          ? { activity: 'stopped', note: cannot(event.message) }
+          : { note: cannot(`${event.message} It is tried again the next time BusyBoy starts`) },
+      )
       // The provider cannot work until the user fixes it; end the process instead of leaving it idle.
       void stopAgent(task.agentId).catch(() => {})
     }
@@ -461,9 +474,17 @@ const isStartFailure = (event: Extract<AgentEvent, { type: 'error' }>) => event.
 
 const resumeNote = (reason: string) => `Could not resume after BusyBoy restarted: ${reason.replace(/\.$/, '')}.`
 
+/** Why a task whose agent had ended could not take the user's next message. */
+const continueNote = (reason: string) => `Could not continue: ${reason.replace(/\.$/, '')}.`
+
 /** Stops a task's agent. The task, its worktree, and its branch stay. */
 export async function stopTask(taskId: string) {
   const folder = await dataFolder()
+  // After a message that is starting the task's agent again, so the stop reaches the new agent.
+  return inTaskOrder(folder, taskId, () => stopTaskNow(folder, taskId))
+}
+
+async function stopTaskNow(folder: string, taskId: string) {
   const task = (await readTasksAt(folder)).find(({ id }) => id === taskId)
   if (!task) {
     throw new TaskError(`There is no task ${taskId}.`)
@@ -515,22 +536,25 @@ export function resumeTasks(folder: string): Promise<void> {
       const tasks = await readTasksAt(folder).catch(() => [] as TaskRecord[])
       for (const listed of tasks) {
         if (isStoppingAllAgents()) return
-        // Read again: the user may have stopped this task while earlier ones were resuming.
-        const task = (await readTasksAt(folder).catch(() => [] as TaskRecord[])).find(({ id }) => id === listed.id)
-        // A live agent belongs to this process already (a dev reload of this module).
-        if (!task || getAgent(task.agentId) || (task.activity !== 'running' && task.activity !== 'needs-you')) continue
-        if (task.kind === 'subagent') {
-          // Its action may have run already (a merge, a push); running it again could do it twice.
-          await saveTask(folder, task, { activity: 'stopped', note: 'BusyBoy restarted before this subagent finished. Ask again if it is still needed.' })
-          notify(folder, task)
-          continue
-        }
-        await resumeTask(folder, task).catch((error: unknown) => {
-          // Shown now, but the activity is kept: a read error may pass, so the next start tries again.
-          task.note = resumeNote(error instanceof Error ? error.message : String(error))
-          void saveTask(folder, task, { note: task.note })
-          notify(folder, task)
-        })
+        // In the task's own order: a message sent while this pass runs must not start a second agent.
+        await inTaskOrder(folder, listed.id, async () => {
+          // Read again: the user may have stopped this task while earlier ones were resuming.
+          const task = (await readTasksAt(folder).catch(() => [] as TaskRecord[])).find(({ id }) => id === listed.id)
+          // A live agent belongs to this process already (a dev reload of this module).
+          if (!task || getAgent(task.agentId) || (task.activity !== 'running' && task.activity !== 'needs-you')) return
+          if (task.kind === 'subagent') {
+            // Its action may have run already (a merge, a push); running it again could do it twice.
+            await saveTask(folder, task, { activity: 'stopped', note: 'BusyBoy restarted before this subagent finished. Ask again if it is still needed.' })
+            notify(folder, task)
+            return
+          }
+          await resumeTask(folder, task).catch((error: unknown) => {
+            // Shown now, but the activity is kept: a read error may pass, so the next start tries again.
+            task.note = resumeNote(error instanceof Error ? error.message : String(error))
+            void saveTask(folder, task, { note: task.note })
+            notify(folder, task)
+          })
+        }).catch((error: unknown) => console.error(`busyboy: could not resume task ${listed.id}`, error))
       }
     })()
     resumes.set(folder, resume)
@@ -549,18 +573,9 @@ async function resumeTask(folder: string, task: TaskRecord) {
     notify(folder, task)
     return
   }
-  // Read through a dynamic import: mcp-tools creates tasks, so a static import would be circular.
-  const { busyboyMcpServers } = await import('./mcp-tools')
-  // Read the list again: the user may have edited it while BusyBoy was closed.
-  const alwaysAsk = await alwaysAskRulesAt(folder)
-  const agent = startAgent({
-    provider: task.provider,
-    cwd: task.worktree,
-    instructions: await taskPrompt(folder, task, alwaysAsk),
-    mcpServers: await busyboyMcpServers(task.project, folder),
-    resumeSessionId: sessionId ?? undefined,
-    alwaysAsk,
-  })
+  // Started in the same tick as the checks below: an agent whose session is gone reports it
+  // right after starting, and the watcher must be the one to see that.
+  const agent = startAgent(await startAgainInput(folder, task))
   task.agentId = agent.id
   // The adapter threw while starting: shown, and like a missing CLI, tried again on the next start.
   if (getAgent(agent.id)?.status === 'stopped') {
@@ -587,4 +602,119 @@ async function resumeTask(folder: string, task: TaskRecord) {
     // It stopped in between; its events already say why.
     console.error(`busyboy: could not message resumed task ${task.id}`, error)
   }
+}
+
+/** What starts a new agent for a stored task: its provider session, in its worktree. */
+async function startAgainInput(folder: string, task: TaskRecord): Promise<StartAgentInput> {
+  // Read through a dynamic import: mcp-tools creates tasks, so a static import would be circular.
+  const { busyboyMcpServers } = await import('./mcp-tools')
+  // Read the list again: the user may have edited it since the task's last agent started.
+  const alwaysAsk = await alwaysAskRulesAt(folder)
+  return {
+    provider: task.provider,
+    cwd: task.worktree,
+    instructions: await taskPrompt(folder, task, alwaysAsk),
+    mcpServers: await busyboyMcpServers(task.project, folder),
+    resumeSessionId: task.sessionId ?? undefined,
+    alwaysAsk,
+  }
+}
+
+// ---- Messages after the first request -----------------------------------------
+
+const ORDER_KEY = Symbol.for('busyboy.task-order')
+const orderStore = globalThis as typeof globalThis & { [ORDER_KEY]?: Map<string, Promise<unknown>> }
+const taskQueues = (orderStore[ORDER_KEY] ??= new Map())
+
+/** Runs `work` after everything queued earlier for the same task: a message, a stop, a resume. */
+function inTaskOrder<T>(folder: string, taskId: string, work: () => Promise<T>): Promise<T> {
+  const key = `${folder}\n${taskId}`
+  const next = (taskQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(work)
+  taskQueues.set(key, next)
+  void next.catch(() => {}).finally(() => {
+    if (taskQueues.get(key) === next) taskQueues.delete(key)
+  })
+  return next
+}
+
+/**
+ * Sends the task's agent another message: a review comment to address, a change on the same
+ * branch. An agent that is still alive gets it at once (after its current turn, when one runs).
+ * An agent that has ended (the task was stopped, or BusyBoy restarted while it was idle) is
+ * started again on its stored session in the same worktree first, so the work carries on where
+ * it was instead of in a new task from the project's HEAD.
+ */
+export function messageTaskAt(folder: string, taskId: string, text: string): Promise<TaskView> {
+  // One at a time per task: two messages to an ended agent must not start two agents.
+  return inTaskOrder(folder, taskId, () => deliverMessage(folder, taskId, text))
+}
+
+/** Resolves once the agent's process has ended, or after a few seconds if it does not end. */
+function agentEnded(agentId: string, timeoutMs = 5000): Promise<void> {
+  if ((getAgent(agentId)?.status ?? 'stopped') === 'stopped') return Promise.resolve()
+  return new Promise((resolve) => {
+    let unsubscribe: (() => void) | null = null
+    const done = () => {
+      clearTimeout(timer)
+      unsubscribe?.()
+      resolve()
+    }
+    const timer = setTimeout(done, timeoutMs)
+    unsubscribe = subscribeToAgent(agentId, getAgent(agentId)?.lastSeq ?? 0, ({ event }) => {
+      if (event.type === 'stopped') done()
+    })
+    if ((getAgent(agentId)?.status ?? 'stopped') === 'stopped') done()
+  })
+}
+
+async function deliverMessage(folder: string, taskId: string, text: string): Promise<TaskView> {
+  const message = text.trim()
+  if (!message) throw new TaskError('Give the message to send.')
+  const task = (await readTasksAt(folder)).find(({ id }) => id === taskId)
+  if (!task) throw new TaskError(`There is no task ${taskId}.`)
+  const name = `${task.project} · ${task.title}`
+  if (task.kind === 'subagent') throw new TaskError(`${name} is a subagent: it does one action and takes no further messages. Start a new one.`)
+  // An open card is the agent's own question; a message beside it would leave the card unanswered.
+  if (hasOpenCard(task.agentId)) throw new TaskError(`${name} is waiting on a card. Answer or reply to that card instead.`)
+  // Stop saves `stopped` before the agent's process has ended. A message written to that
+  // closing agent would be lost, so wait for it to end and start a new one.
+  if (task.activity === 'stopped') await agentEnded(task.agentId)
+  const live = getAgent(task.agentId)
+  if (live && live.status !== 'stopped') {
+    sendMessage(task.agentId, message)
+    return taskView(task)
+  }
+
+  try {
+    await readFile(join(task.worktree, '.git'))
+  } catch {
+    throw new TaskError(`${name} cannot continue: its worktree ${task.worktree} is gone.`)
+  }
+  // Read before the agent starts: its session event updates `task` while this awaits.
+  const { sessionId, agentId: ended } = task
+  const agent = startAgent(await startAgainInput(folder, task))
+  if (getAgent(agent.id)?.status === 'stopped') {
+    const reason = startError(agent.id)
+    removeAgent(agent.id)
+    throw new TaskError(`${name} could not start again: ${reason}`)
+  }
+  task.agentId = agent.id
+  const saved = saveTask(folder, task, { agentId: agent.id, note: null })
+  watchAgent(folder, task, { resumed: Boolean(sessionId), fromMessage: true })
+  await saved
+  // Nothing reads the ended agent's events any more.
+  removeAgent(ended)
+  try {
+    // Without a stored session the provider never kept the request, so the new conversation gets it first.
+    sendMessage(agent.id, sessionId ? message : `${task.request}\n\n${message}`)
+  } catch {
+    // It stopped in between (a lost session, a missing CLI); the watcher has noted why.
+    throw new TaskError(`${name} could not start again: ${startError(agent.id)}`)
+  }
+  notify(folder, task)
+  return taskView(task)
+}
+
+export async function messageTask(taskId: string, text: string) {
+  return messageTaskAt(await dataFolder(), taskId, text)
 }

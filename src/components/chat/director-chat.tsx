@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { replyToCardAction, sendToDirectorAction, stopDirectorAction } from '@/app/(main)/director-actions'
+import { messageTaskAction, replyToCardAction, sendToDirectorAction, stopDirectorAction } from '@/app/(main)/director-actions'
 import { cn } from '@/lib/utils'
 import type { Companion } from '@/server/companions'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
@@ -79,6 +79,12 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
   useEffect(() => {
     choice.current = replyChoice
   }, [replyChoice])
+  // The task the composer messages, picked only by the user with a task's Message, for one message.
+  // Like a card, a task never takes the composer by itself.
+  const [messageChoice, setMessageChoice] = useState<string | null>(null)
+  // Set when the chosen task stopped taking messages (it opened a card, or was archived) before
+  // the message was sent. Like a lost card reply, that message is refused, not sent to the Director.
+  const [messageLost, setMessageLost] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const name = persona.companion?.name ?? 'BusyBoy'
 
@@ -113,6 +119,21 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
   const thinking = view.status === 'answering' && !view.draft
   const replyCard = view.cards.find(({ id }) => id === replyChoice)
   const replyCardId = replyCard?.id ?? null
+  // A task that started waiting on a card is answered on that card, so the choice no longer applies.
+  const chosenTask = messageChoice && !replyCard ? view.tasks.get(messageChoice) : undefined
+  const messageTask = chosenTask && !chosenTask.subagent && chosenTask.status !== 'needs-you' ? chosenTask : undefined
+  // The choice ends when it stops applying, so the composer never points back at the task by itself later.
+  const choiceEnded = messageChoice !== null && view.connected && !messageTask && !replyCard
+  useEffect(() => {
+    if (!choiceEnded) return
+    setMessageChoice(null)
+    setMessageLost(true)
+  }, [choiceEnded])
+  const target = replyCard
+    ? `${replyCard.project} · ${replyCard.taskTitle}`
+    : messageTask
+      ? `${messageTask.project} · ${messageTask.title}`
+      : null
 
   return (
     <div className="flex h-full flex-col">
@@ -130,7 +151,21 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
             </Bubble>
           </DirectorMessage>
           {view.entries.map((entry) => (
-            <EntryView key={entry.id} entry={entry} tasks={view.tasks} persona={persona} />
+            <EntryView
+              key={entry.id}
+              entry={entry}
+              tasks={view.tasks}
+              persona={persona}
+              messaging={messageTask?.id ?? null}
+              onMessage={(taskId) => {
+                // One target at a time: a task replaces a card reply.
+                choice.current = null
+                setReplyChoice(null)
+                setReplyLost(false)
+                setMessageLost(false)
+                setMessageChoice(taskId)
+              }}
+            />
           ))}
           {view.draft && (
             <DirectorMessage persona={persona}>
@@ -160,24 +195,35 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
                   choice.current = replying ? card.id : null
                   setReplyLost(false)
                   setReplyChoice(choice.current)
+                  setMessageLost(false)
+                  if (replying) setMessageChoice(null)
                 }}
               />
             ))}
           </section>
         )}
-        {replyCard && (
+        {target && (
           <div className="flex items-center gap-2 pb-2">
             <Badge variant="outline" className="min-w-0 truncate">
-              Replying to {replyCard.project} · {replyCard.taskTitle}
+              {replyCard ? 'Replying to' : 'Messaging'} {target}
             </Badge>
-            <Button type="button" size="xs" variant="ghost" onClick={() => setReplyChoice(null)}>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              onClick={() => {
+                setReplyChoice(null)
+                setMessageChoice(null)
+                setMessageLost(false)
+              }}
+            >
               Message {name} instead
             </Button>
           </div>
         )}
         <ChatComposer
           projects={projects}
-          placeholder={replyCard ? `Reply to ${replyCard.project} · ${replyCard.taskTitle}` : `Message ${name}`}
+          placeholder={target ? `${replyCard ? 'Reply to' : 'Message'} ${target}` : `Message ${name}`}
           onStop={
             view.status === 'answering'
               ? () =>
@@ -195,6 +241,16 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
               }))
               return Promise.reject(new Error('The reply card closed.'))
             }
+            // Also when the choice ended in this very render, before the effect above ran.
+            if (messageLost || choiceEnded) {
+              setMessageLost(false)
+              setMessageChoice(null)
+              setView((current) => ({
+                ...current,
+                sendError: `The task you were messaging stopped taking messages, so this was not sent. Send again to message ${name}.`,
+              }))
+              return Promise.reject(new Error('The task stopped taking messages.'))
+            }
             if (replyCard) {
               // A delivered reply closes its card; that close must not count as a lost reply.
               return replyToCardAction(replyCard.id, text).then(
@@ -202,6 +258,21 @@ export function DirectorChat({ projects, persona }: { projects: string[]; person
                   choice.current = null
                   setReplyChoice(null)
                   setReplyLost(false)
+                },
+                (error: unknown) => {
+                  setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
+                  throw error
+                },
+              )
+            }
+            if (messageTask) {
+              return messageTaskAction(messageTask.id, text).then(
+                ({ error }) => {
+                  if (error) {
+                    setView((current) => ({ ...current, sendError: error }))
+                    throw new Error(error)
+                  }
+                  setMessageChoice(null)
                 },
                 (error: unknown) => {
                   setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
@@ -242,7 +313,19 @@ export function DirectorMessage({ persona, header, children }: { persona: Person
   )
 }
 
-function EntryView({ entry, tasks, persona }: { entry: ChatEntry; tasks: Map<string, TaskView>; persona: Persona }) {
+function EntryView({
+  entry,
+  tasks,
+  persona,
+  messaging,
+  onMessage,
+}: {
+  entry: ChatEntry
+  tasks: Map<string, TaskView>
+  persona: Persona
+  messaging: string | null
+  onMessage: (taskId: string | null) => void
+}) {
   switch (entry.kind) {
     case 'user':
       return (
@@ -267,7 +350,7 @@ function EntryView({ entry, tasks, persona }: { entry: ChatEntry; tasks: Map<str
         </DirectorMessage>
       )
     case 'tasks':
-      return <TaskGroup taskIds={entry.taskIds} tasks={tasks} />
+      return <TaskGroup taskIds={entry.taskIds} tasks={tasks} messaging={messaging} onMessage={onMessage} />
     case 'card':
       return (
         <Message>

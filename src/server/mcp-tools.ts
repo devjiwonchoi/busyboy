@@ -9,7 +9,7 @@ import { readProjectGraph } from './records/project-graph'
 import { lastAgentReply } from './runner/agent-runner'
 import { summarizeGraph, summarizeSubagents } from './records/status-summary'
 import type { McpServer } from './runner/contract'
-import { createTask, readTasksAt, TaskError, taskView } from './tasks'
+import { createTask, messageTask, readTasksAt, TaskError, taskView } from './tasks'
 
 // The tools busyboy offers its agents over MCP (app/api/mcp/route.ts). Every
 // call runs inside that request, so `dataFolder()` and the providers resolve
@@ -120,6 +120,28 @@ export const MCP_TOOLS: McpTool[] = [
         })
         await attachTaskToDirector(await dataFolder(), task)
         return `Started subagent ${task.id} in ${task.project}. Its result will show in the chat; task_status reports it too.`
+      } catch (error) {
+        if (error instanceof TaskError) throw new McpToolError(error.message)
+        throw error
+      }
+    },
+  },
+  {
+    name: 'message_task',
+    description:
+      "Send an existing task's agent another message: a review comment to address, a change on the same branch, a question about its work. The agent carries on in the task's own worktree and branch with its conversation so far, and is started again when it had ended. Use this instead of create_task for follow-up work on a task. Does not work for subagents or while the task waits on a card.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: { type: 'string', description: 'The task id, as create_task and task_status give it.' },
+        message: { type: 'string', description: "What the agent should do next, complete and in the user's words." },
+      },
+      required: ['task', 'message'],
+    },
+    async run(input) {
+      try {
+        const task = await messageTask(text(input, 'task'), text(input, 'message'))
+        return `Sent to task ${task.id} in ${task.project}. Its agent is working on it now.`
       } catch (error) {
         if (error instanceof TaskError) throw new McpToolError(error.message)
         throw error
